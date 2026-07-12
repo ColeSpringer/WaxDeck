@@ -1,0 +1,19 @@
+name: waxdeck_api
+description: >
+  Hand-written repository layer over the generated WaxDeck API client.
+  App code imports this package only, never waxdeck_api_gen directly.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  dio: ^5.7.0
+  waxdeck_api_gen:
+    path: ../waxdeck_api_gen
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

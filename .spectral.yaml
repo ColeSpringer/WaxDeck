@@ -1,0 +1,7 @@
+extends: ["spectral:oas"]
+rules:
+  # Style choices for this API, enforced at warn-as-fail severity in CI.
+  operation-tags: error
+  operation-operationId: error
+  operation-description: error
+  oas3-unused-component: error

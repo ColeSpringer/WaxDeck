@@ -1,0 +1,99 @@
+# WaxDeck production stack (skeleton).
+#
+# Topology: waxdeck is the single published port (4420) of the whole stack;
+# everything else lives on the private `internal` network. Copy .env.example
+# to .env beside this file before `docker compose up`.
+#
+# Exposure note (mirrors WaxFlow ADR-0007): the containers listen on 0.0.0.0
+# *inside* the network namespace. Put TLS in front (reverse proxy) before
+# exposing port 4420 beyond your LAN.
+
+name: waxdeck
+
+services:
+  waxdeck:
+    image: ghcr.io/colespringer/waxdeck:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      # The ONLY published port of the stack.
+      - "4420:4420"
+    environment:
+      WAXDECK_ADDR: 0.0.0.0:4420
+      WAXDECK_DATA_DIR: /data
+      # WaxFlow is reached over the internal network only.
+      WAXDECK_FLOW_URL: http://waxflow:4418
+      # Must be one of the keys in WAXFLOW_API_KEYS below (see .env.example).
+      WAXDECK_FLOW_API_KEY: ${WAXDECK_FLOW_API_KEY:?set WAXDECK_FLOW_API_KEY (must match a key in WAXFLOW_API_KEYS)}
+    volumes:
+      # Holds waxbin.db + waxdeck.db (and their -wal/-shm sidecars).
+      - waxdeck-data:/data
+      # WaxDeck manages the library (imports, sidecars, organization): read-write.
+      - ${WAXDECK_LIBRARY:-./library}:/library
+    networks: [internal]
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # read_only is intentionally NOT set yet: WaxDeck writes temp files during
+    # import/transcode before the atomic rename into /data or /library.
+    # Revisit once the write paths are pinned down.
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  waxflow:
+    # Env contract per WaxFlow's own compose.base.yaml / compose.full.yaml.
+    image: ghcr.io/colespringer/waxflow:latest
+    # No `ports:`, internal network only; WaxDeck proxies anything clients need.
+    environment:
+      WAXFLOW_ADDR: 0.0.0.0:4418
+      # WaxFlow fails closed: a non-loopback listen address requires API keys.
+      WAXFLOW_API_KEYS: ${WAXFLOW_API_KEYS:?set WAXFLOW_API_KEYS (comma-separated; generate with openssl rand -hex 24)}
+      WAXFLOW_ROOTS: lib=/library
+    volumes:
+      # Same library as waxdeck, but WaxFlow only reads it.
+      - ${WAXDECK_LIBRARY:-./library}:/library:ro
+      - waxflow-data:/data
+      - waxflow-cache:/cache
+    networks: [internal]
+    # Hardening mirrored from WaxFlow's compose.base.yaml.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- future profiles (documented topology; services come later) ---
+  #
+  # youtube (profile: youtube) - WaxFlow's yt-dlp sidecar / source package.
+  #   Internal network only; WAXFLOW_* wiring extends the waxflow service.
+  #
+  # similarity (profile: similarity) - sonic-similarity analysis worker.
+  #   Reads /library:ro, writes embeddings to its own named volume.
+  #
+  # jukebox (profile: jukebox) - shared-queue party mode companion.
+  #   Talks to waxdeck over `internal`; no published ports.
+  #
+  # cast (profile: cast) - Chromecast/DLNA bridge. The only candidate for a
+  #   second published port (SSDP/mDNS may instead require host networking);
+  #   decide when it lands.
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  waxdeck-data:
+  waxflow-data:
+  waxflow-cache:

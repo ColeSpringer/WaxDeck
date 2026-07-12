@@ -1,0 +1,132 @@
+# Desktop packaging matrix (unsigned artifacts). Built now so packaging
+# never becomes a late surprise; signing/notarization land later.
+name: Package
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.44.6"
+  PACK_VERSION: 0.1.0-ci.${{ github.run_number }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter config --enable-windows-desktop
+      - name: Pub get (workspace root)
+        run: cd app; flutter pub get
+      - name: Build windows release
+        run: cd app/app; flutter build windows --release
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk
+      - name: Velopack pack
+        shell: pwsh
+        run: |
+          $releaseDir = "app/app/build/windows/x64/runner/Release"
+          # The runner exe is named after the Flutter app package (expected: waxdeck.exe);
+          # detect it instead of hard-coding.
+          $exe = (Get-ChildItem $releaseDir -Filter *.exe | Select-Object -First 1).Name
+          if (-not $exe) { throw "no .exe found in $releaseDir" }
+          Write-Host "Packing main exe: $exe"
+          vpk pack --packId WaxDeck --packVersion $env:PACK_VERSION `
+            --packDir $releaseDir --mainExe $exe --outputDir dist-velopack
+      - name: Zip raw release dir
+        shell: pwsh
+        run: Compress-Archive -Path app/app/build/windows/x64/runner/Release/* -DestinationPath waxdeck-windows-x64.zip
+      - name: Create MSIX (unsigned; config in app/app/pubspec.yaml)
+        run: cd app/app; dart run msix:create
+      - uses: actions/upload-artifact@v4
+        with:
+          name: waxdeck-windows-msix
+          path: app/app/build/windows/x64/runner/Release/*.msix
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: waxdeck-windows-velopack
+          path: dist-velopack
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: waxdeck-windows-zip
+          path: waxdeck-windows-x64.zip
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter config --enable-macos-desktop
+      - name: Pub get (workspace root)
+        run: cd app && flutter pub get
+      - name: Build macos release (unsigned)
+        run: cd app/app && flutter build macos --release
+      - name: Create DMG
+        run: |
+          APP_PATH=$(ls -d app/app/build/macos/Build/Products/Release/*.app | head -n 1)
+          if [ -z "$APP_PATH" ]; then echo "no .app bundle found" >&2; exit 1; fi
+          echo "Packaging $APP_PATH"
+          hdiutil create -volname WaxDeck -srcfolder "$APP_PATH" -ov -format UDZO waxdeck-macos.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: waxdeck-macos-dmg
+          path: waxdeck-macos.dmg
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install linux desktop build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config libgtk-3-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter config --enable-linux-desktop
+      - name: Pub get (workspace root)
+        run: cd app && flutter pub get
+      - name: Build linux release
+        run: cd app/app && flutter build linux --release
+      - name: Tar bundle
+        run: tar -czf waxdeck-linux-x64.tar.gz -C app/app/build/linux/x64/release/bundle .
+      - name: Validate flatpak manifest
+        run: |
+          python3 - <<'EOF'
+          import yaml
+          m = yaml.safe_load(open("deploy/flatpak/com.colespringer.WaxDeck.yml"))
+          for key in ("app-id", "runtime", "runtime-version", "sdk", "command", "modules"):
+              assert key in m, f"flatpak manifest missing key: {key}"
+          assert m["app-id"] == "com.colespringer.WaxDeck"
+          print("flatpak manifest parses and has the required keys")
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: waxdeck-linux-tar
+          path: waxdeck-linux-x64.tar.gz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: waxdeck-flatpak-manifest
+          path: deploy/flatpak/com.colespringer.WaxDeck.yml
+          if-no-files-found: error

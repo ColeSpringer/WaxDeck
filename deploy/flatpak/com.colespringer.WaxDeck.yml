@@ -1,0 +1,38 @@
+# Flatpak manifest for the WaxDeck desktop client (skeleton).
+#
+# Bundles the prebuilt Flutter linux release bundle (built in CI with
+# `flutter build linux --release`); it does not build Flutter inside the
+# sandbox. Run flatpak-builder from the repo root so the relative source
+# path below resolves:
+#   flatpak-builder --force-clean build-dir deploy/flatpak/com.colespringer.WaxDeck.yml
+#
+# NOTE: gapless/local playback via libmpv comes later; at that point add a
+# libmpv module (or switch runtime) and revisit finish-args.
+app-id: com.colespringer.WaxDeck
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: waxdeck
+
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  # Audio output.
+  - --socket=pulseaudio
+  # Talks to a (possibly remote) WaxDeck server.
+  - --share=network
+
+modules:
+  - name: waxdeck
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/waxdeck /app/bin
+      - cp -r bundle/* /app/waxdeck/
+      # Flutter's linux runner binary is named after the app package.
+      - ln -s /app/waxdeck/waxdeck /app/bin/waxdeck
+    sources:
+      - type: dir
+        path: ../../app/app/build/linux/x64/release/bundle
+        dest: bundle

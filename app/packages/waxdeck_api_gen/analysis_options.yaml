@@ -1,0 +1,7 @@
+# Generated package (make generate): lints relaxed for generator output.
+analyzer:
+  errors:
+    unused_import: ignore
+    unused_element: ignore
+    unused_field: ignore
+    deprecated_member_use: ignore

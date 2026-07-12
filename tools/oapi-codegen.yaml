@@ -1,0 +1,11 @@
+# oapi-codegen v2 config: Go server stubs from api/openapi.yaml.
+# Run via `make gen-go` (uses the `tool` directive in server/go.mod).
+package: api
+output: internal/api/gen.go
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+  embedded-spec: true
+output-options:
+  skip-prune: false

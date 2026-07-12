@@ -1,0 +1,11 @@
+# WaxDeck Flutter workspace root (Dart pub workspace).
+# Members resolve together; run `flutter pub get` here.
+name: waxdeck_workspace
+publish_to: none
+environment:
+  sdk: ^3.12.0
+
+workspace:
+  - app
+  - packages/waxdeck_api
+  - packages/waxdeck_api_gen

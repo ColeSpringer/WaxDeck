@@ -1,0 +1,484 @@
+openapi: 3.0.3
+info:
+  title: WaxDeck API
+  version: 0.1.0
+  description: |
+    First-party REST API for WaxDeck: the self-hosted player, library manager,
+    and metadata completer for music, podcasts, and audiobooks.
+
+    Current scope: health, an authentication stub, library browse, item detail,
+    and play-info. Every surface here is a real contract that later work extends.
+    The shapes (keyset pagination, typed PIDs, the structured error model,
+    relative media URLs) are load-bearing from day one.
+
+    Conventions:
+    - All endpoints live under `/api/v1` (this document's `servers` entry).
+    - Item identifiers (`pid`) are type-prefixed ULIDs (`tr-` track, `al-` album,
+      `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook).
+    - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
+      never offsets.
+    - Errors are always the `Error` schema. `code` is a stable machine-readable
+      string; currently defined codes: `invalid-request`, `unauthenticated`,
+      `forbidden`, `not-found`, `conflict`, `internal`, and (reserved for the
+      streaming bridge) `stream-stale`. New codes may appear; clients must treat
+      unknown codes as opaque.
+    - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
+      server origin, the same origin that serves this API and the web UI.
+  contact:
+    name: WaxDeck
+    url: https://github.com/ColeSpringer/WaxDeck
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: /api/v1
+    description: Same-origin API root.
+
+tags:
+  - name: system
+    description: Health and server metadata.
+  - name: auth
+    description: Session authentication (development stub; real accounts come later).
+  - name: library
+    description: Browse and inspect library items.
+  - name: playback
+    description: Resolve playable streams for items.
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness and version probe
+      description: >
+        Unauthenticated liveness probe. Reports the server version and the API
+        version it serves.
+      tags: [system]
+      security: []
+      responses:
+        "200":
+          description: Server is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /auth/login:
+    post:
+      operationId: login
+      summary: Log in and establish a session
+      description: >
+        Establishes a session and sets the `waxdeck_session` HttpOnly cookie.
+        Native clients use the same endpoint and read the bearer token from the
+        response body instead of the cookie. Development stub: any non-empty
+        credentials are accepted and map to the built-in development user. Real
+        account storage, roles, and OIDC come later.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Session established.
+          headers:
+            Set-Cookie:
+              description: "`waxdeck_session` HttpOnly SameSite=Lax session cookie."
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: End the current session
+      description: >
+        Revokes the presented session (cookie or bearer token) and clears the
+        session cookie. Succeeds even if no session is active.
+      tags: [auth]
+      responses:
+        "204":
+          description: Session ended.
+          headers:
+            Set-Cookie:
+              description: Expired `waxdeck_session` cookie.
+              schema:
+                type: string
+
+  /auth/session:
+    get:
+      operationId: getSession
+      summary: Inspect the current session
+      description: >
+        Returns whether the caller is authenticated and, if so, the session's
+        user. Unauthenticated callers get `authenticated: false`, not a 401.
+        Clients use this at startup to decide whether to show the login screen.
+      tags: [auth]
+      security: []
+      responses:
+        "200":
+          description: Current session state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionInfo"
+
+  /library/items:
+    get:
+      operationId: listItems
+      summary: Browse library items
+      description: >
+        Keyset-paginated list of library items, optionally filtered by media
+        type. Ordering is stable (title, then pid) so cursors never skip or
+        duplicate. Development stub: serves a small built-in catalog. The
+        WaxBin-backed catalog replaces it once the library integration lands.
+      tags: [library]
+      parameters:
+        - name: mediaType
+          in: query
+          description: Restrict results to one media type.
+          schema:
+            $ref: "#/components/schemas/MediaType"
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum items per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /items/{pid}:
+    get:
+      operationId: getItem
+      summary: Get one item's detail
+      description: Full detail for a single library item.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /items/{pid}/play-info:
+    get:
+      operationId: getPlayInfo
+      summary: Resolve a playable stream for an item
+      description: >
+        Returns everything a client needs to start playback: a short-TTL,
+        origin-relative stream URL (media-token authenticated, so it is playable
+        by bare `<audio>` elements, cast devices, and DLNA renderers that cannot
+        send headers), the served format, and expiry. Clients re-request
+        play-info when a stream URL expires or the server signals
+        `stream-stale`. Development stub: returns a well-formed response whose
+        URL points at the not-yet-implemented `/media/stream`. The WaxFlow
+        bridge fills it in once streaming lands.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: Stream resolution for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayInfo"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: waxdeck_session
+      description: HttpOnly SameSite=Lax session cookie (web).
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Per-device rotating bearer token (native clients).
+
+  parameters:
+    Pid:
+      name: pid
+      in: path
+      required: true
+      description: Type-prefixed item PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE`).
+      schema:
+        type: string
+        pattern: "^[a-z]{2}-[0-9A-HJKMNP-TV-Z]{26}$"
+
+  responses:
+    InvalidRequest:
+      description: Malformed request (bad cursor, invalid parameter, bad body).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthenticated:
+      description: No valid session or token was presented.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: No item with that PID is visible to the caller.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Health:
+      type: object
+      description: Liveness and version information.
+      required: [status, version, apiVersion]
+      properties:
+        status:
+          type: string
+          description: Always `ok` when the server can respond.
+          example: ok
+        version:
+          type: string
+          description: Server build version.
+          example: 0.1.0-dev
+        apiVersion:
+          type: integer
+          description: Major API version served under `/api/v1`.
+          example: 1
+
+    Error:
+      type: object
+      description: >
+        Structured error. `code` is a stable machine-readable string (see the
+        API-level description for defined codes); `message` is human-readable
+        and not stable.
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+          example: not-found
+        message:
+          type: string
+          description: Human-readable explanation (not stable, do not parse).
+          example: no item with pid tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE
+
+    LoginRequest:
+      type: object
+      description: Credentials for local-account login.
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          description: Account username.
+          example: admin
+        password:
+          type: string
+          minLength: 1
+          format: password
+          description: Account password.
+
+    LoginResponse:
+      type: object
+      description: Established session plus a bearer token for native clients.
+      required: [user, token]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+          description: >
+            Opaque bearer token equivalent to the session cookie. Native
+            clients store it in the OS keychain; web clients ignore it and rely
+            on the cookie.
+
+    SessionInfo:
+      type: object
+      description: Whether the caller is authenticated, and as whom.
+      required: [authenticated]
+      properties:
+        authenticated:
+          type: boolean
+          description: True when a valid session or token was presented.
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      description: A WaxDeck account as visible to its owner.
+      required: [id, username, roles]
+      properties:
+        id:
+          type: string
+          description: Stable user identifier.
+          example: us-01JZX5N8QW3F4V9T2B7KDEXAMPLE
+        username:
+          type: string
+          description: Login name.
+          example: admin
+        displayName:
+          type: string
+          description: Optional display name; falls back to `username`.
+        roles:
+          type: array
+          description: Assigned roles (`admin`, `user`).
+          items:
+            type: string
+            example: admin
+
+    MediaType:
+      type: string
+      description: The three first-class media types.
+      enum: [music, podcast, audiobook]
+
+    ItemSummary:
+      type: object
+      description: >
+        Compact item representation used by list endpoints and client-side
+        library mirrors (~summary row).
+      required: [pid, mediaType, title, durationMs]
+      properties:
+        pid:
+          type: string
+          description: Type-prefixed ULID.
+          example: tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        title:
+          type: string
+          description: Display title.
+          example: Prancing Pony Blues
+        artist:
+          type: string
+          description: Primary display artist / author / show name.
+        album:
+          type: string
+          description: Album / series / podcast title, when applicable.
+        durationMs:
+          type: integer
+          format: int64
+          description: Duration in milliseconds.
+          example: 214000
+        artUrl:
+          type: string
+          description: Origin-relative URL of the item's artwork, when present.
+          example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE/art
+
+    Item:
+      allOf:
+        - $ref: "#/components/schemas/ItemSummary"
+        - type: object
+          description: Extended detail fields beyond the summary row.
+          properties:
+            genres:
+              type: array
+              description: Display genres.
+              items:
+                type: string
+                example: blues
+            year:
+              type: integer
+              description: Release / publication year.
+              example: 2024
+            trackNumber:
+              type: integer
+              description: Track position within its disc (music).
+            discNumber:
+              type: integer
+              description: Disc number within a multi-disc release (music).
+            addedAt:
+              type: string
+              format: date-time
+              description: When the item entered the library.
+      description: Full detail for a single library item.
+
+    ItemPage:
+      type: object
+      description: One keyset-paginated page of items.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: Items in stable order.
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+        nextCursor:
+          type: string
+          description: >
+            Opaque cursor for the next page. Absent on the last page.
+
+    PlayInfo:
+      type: object
+      description: Everything a client needs to begin playback of one item.
+      required: [pid, url, mimeType, durationMs, seekable, expiresAt]
+      properties:
+        pid:
+          type: string
+          description: The resolved item's PID.
+          example: tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE
+        url:
+          type: string
+          description: >
+            Origin-relative, media-token-authenticated stream URL. Short TTL;
+            re-request play-info on expiry or a `stream-stale` error.
+          example: /media/stream?pid=tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE&mt=abc123
+        mimeType:
+          type: string
+          description: MIME type the stream will be served as.
+          example: audio/flac
+        durationMs:
+          type: integer
+          format: int64
+          description: Duration in milliseconds.
+          example: 214000
+        seekable:
+          type: boolean
+          description: Whether the stream supports sample-exact seeking.
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the embedded media token stops being accepted.

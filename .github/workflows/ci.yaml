@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.x"
+  FLUTTER_VERSION: "3.44.6"
+  NODE_VERSION: "24"
+
+jobs:
+  # OpenAPI lint; on PRs also the breaking-change gate against the base ref.
+  spec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # oasdiff reads the spec from the base ref
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: make spec-lint
+      - uses: actions/setup-go@v5
+        if: github.event_name == 'pull_request'
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false # oasdiff is a one-shot `go run`; no go.sum at repo root
+      - name: Breaking-change check (oasdiff)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }} # via env, never inlined into the script
+        run: |
+          if git cat-file -e "origin/${BASE_REF}:api/openapi.yaml" 2>/dev/null; then
+            make oasdiff BASE="origin/${BASE_REF}"
+          else
+            echo "::notice::base ref has no api/openapi.yaml yet; skipping oasdiff"
+          fi
+
+  # Regenerate Go + Dart clients from the spec and fail if committed code drifts.
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-java@v4 # openapi-generator-cli (dart-dio) needs a JRE
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: subosito/flutter-action@v2 # gen-dart runs pub get + build_runner
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: make drift-check
+
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: server/go.sum
+      - name: Vet and gofmt
+        run: cd server && go vet ./... && test -z "$(gofmt -l .)"
+      - name: Test (race)
+        run: cd server && go test -race ./...
+
+  fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false # fixtures module may legitimately have no go.sum
+      # Tests skip ffmpeg-dependent cases gracefully, but install it to cover more.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Vet and test
+        run: cd fixtures && go vet ./... && go test ./...
+
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Pub get (workspace root)
+        run: cd app && flutter pub get
+      - name: Analyze (whole workspace)
+        run: cd app && flutter analyze --no-pub
+      - name: Test
+        run: cd app/app && flutter test
+      - name: Build web (wasm)
+        run: cd app/app && flutter build web --wasm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: app/app/build/web
+          if-no-files-found: error
+
+  # Validates the production image assembles; nothing is pushed.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: false
+          tags: waxdeck:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [flutter]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: server/go.sum
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: server/internal/web/dist
+      - name: Build server with embedded web
+        run: cd server && go build -tags withweb -o waxdeck ./cmd/waxdeck
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Playwright smoke tests
+        run: |
+          cd e2e
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 7

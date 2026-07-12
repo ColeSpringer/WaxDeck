@@ -1,0 +1,32 @@
+name: waxdeck
+description: WaxDeck is a player, library manager, and metadata completer for music, podcasts, and audiobooks.
+publish_to: none
+version: 0.1.0+1
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  waxdeck_api:
+    path: ../packages/waxdeck_api
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  msix: ^3.16.8
+
+flutter:
+  uses-material-design: true
+
+# Unsigned MSIX for the CI packaging matrix (signing comes later).
+msix_config:
+  display_name: WaxDeck
+  publisher_display_name: WaxDeck
+  identity_name: com.colespringer.waxdeck
+  msix_version: 0.1.0.0
+  capabilities: internetClient
+  sign_msix: false
