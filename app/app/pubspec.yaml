@@ -26,6 +26,9 @@ flutter:
 msix_config:
   display_name: WaxDeck
   publisher_display_name: WaxDeck
+  # Publisher DN. Required by msix when sign_msix is false; replace with the
+  # signing certificate subject once signing lands.
+  publisher: CN=WaxDeck
   identity_name: com.colespringer.waxdeck
   msix_version: 0.1.0.0
   capabilities: internetClient
