@@ -3,8 +3,8 @@
 //
 //  1. --web-dir (dev): a directory on disk, for hot iteration against
 //     `flutter build web` output without re-embedding.
-//  2. The embedded Flutter build (builds with `-tags withweb`, whose
-//     go:embed of dist/ is populated by `make web`).
+//  2. The embedded Flutter build (builds with `-tags withweb`; `make web`
+//     populates the dist/ tree that go:embed bundles).
 //  3. A committed placeholder page (plain builds: keeps `go build ./...`
 //     working without a Flutter toolchain).
 package web
