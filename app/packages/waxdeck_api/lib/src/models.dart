@@ -453,3 +453,146 @@ class SearchResults {
   /// True when any group was capped at the requested limit.
   final bool truncated;
 }
+
+/// One mirrored catalog change: an upsert carrying the item's current
+/// summary, or a delete tombstone. Tombstone pids identify the item by
+/// ULID; the prefix is not significant once the item is gone, so
+/// mirrors match deletes on the ULID part.
+class CatalogSyncEntry {
+  const CatalogSyncEntry({required this.op, required this.pid, this.item});
+
+  /// `upsert` or `delete`. Entries with an unrecognized op are dropped.
+  final String op;
+  final String pid;
+  final ItemSummary? item;
+}
+
+/// One page of catalog sync entries (snapshot or delta).
+class CatalogSyncPage {
+  const CatalogSyncPage({
+    this.entries = const [],
+    this.nextCursor,
+    required this.nextSince,
+    this.more = false,
+  });
+
+  final List<CatalogSyncEntry> entries;
+
+  /// Keyset cursor for the next snapshot page; null on the last
+  /// snapshot page and on delta pages.
+  final String? nextCursor;
+
+  /// Opaque change cursor to sync from next.
+  final String nextSince;
+
+  /// True when another delta page should be fetched immediately.
+  final bool more;
+}
+
+/// One change to the calling user's server-side state, hydrated fresh.
+class ServerSyncEvent {
+  const ServerSyncEvent({
+    required this.kind,
+    this.pid,
+    this.playState,
+    this.prefs,
+  });
+
+  /// `play-state` or `prefs`; events with an unrecognized kind are
+  /// skipped.
+  final String kind;
+  final String? pid;
+  final PlayState? playState;
+  final Prefs? prefs;
+}
+
+/// One page of the caller's server-side state changes.
+class ServerSyncPage {
+  const ServerSyncPage({
+    this.events = const [],
+    required this.nextSince,
+    this.more = false,
+  });
+
+  final List<ServerSyncEvent> events;
+  final String nextSince;
+  final bool more;
+}
+
+/// One downloadable backing file of an item.
+class DownloadFileInfo {
+  const DownloadFileInfo({
+    required this.url,
+    required this.mimeType,
+    required this.sizeBytes,
+    required this.fileName,
+    required this.essenceHash,
+    required this.etag,
+  });
+
+  /// Media-token-authenticated download URL, resolved against the
+  /// client base URL.
+  final String url;
+  final String mimeType;
+  final int sizeBytes;
+  final String fileName;
+
+  /// Content hash of the audio essence: the download-store key, stable
+  /// across retags and moves.
+  final String essenceHash;
+
+  /// Strong validator of the exact file bytes; a mismatch means restart
+  /// this file's transfer instead of resuming a range.
+  final String etag;
+}
+
+/// Everything needed to download one item's original bytes.
+class DownloadInfo {
+  const DownloadInfo({
+    required this.pid,
+    required this.files,
+    this.spanStartMs,
+    this.spanEndMs,
+    required this.expiresAt,
+  });
+
+  final String pid;
+
+  /// Backing files in playback order (one per part for a multi-file
+  /// audiobook).
+  final List<DownloadFileInfo> files;
+
+  /// Playback window for items carved out of a larger file (CUE-backed
+  /// virtual tracks); offline playback plays the window.
+  final int? spanStartMs;
+  final int? spanEndMs;
+  final DateTime expiresAt;
+}
+
+/// One app password, without its secret.
+class AppPassword {
+  const AppPassword({
+    required this.id,
+    required this.label,
+    required this.createdAt,
+    this.lastUsedAt,
+  });
+
+  final String id;
+  final String label;
+  final DateTime createdAt;
+  final DateTime? lastUsedAt;
+}
+
+/// A newly created app password; [secret] is visible exactly once.
+class AppPasswordCreated extends AppPassword {
+  const AppPasswordCreated({
+    required super.id,
+    required super.label,
+    required super.createdAt,
+    super.lastUsedAt,
+    required this.secret,
+  });
+
+  final String secret;
+}

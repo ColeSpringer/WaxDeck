@@ -5,3 +5,12 @@ rules:
   operation-operationId: error
   operation-description: error
   oas3-unused-component: error
+overrides:
+  # The WebSocket frame schemas ride the event channel (api/events.md), not a
+  # REST path, so no path references them; they are still real contract DTOs
+  # that both generated clients carry.
+  - files:
+      - "api/openapi.yaml#/components/schemas/WsSubscribeFrame"
+      - "api/openapi.yaml#/components/schemas/WsEventFrame"
+    rules:
+      oas3-unused-component: "off"

@@ -1,0 +1,33 @@
+name: waxdeck_data
+description: "Offline-first data layer: drift catalog mirror, delta sync engine, mutation outbox, and downloads."
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
+
+# Community plugins are pinned exactly and wrapped behind WaxDeck-owned
+# interfaces (repo policy). sqlite3_flutter_libs is marked end-of-life
+# upstream; its successor (sqlite3_native_assets) is still pre-1.0, so
+# the proven package stays until the successor stabilizes.
+dependencies:
+  flutter:
+    sdk: flutter
+  drift: 2.34.2
+  sqlite3_flutter_libs: 0.6.0+eol
+  path_provider: 2.1.6
+  path: 1.9.1
+  web_socket_channel: 3.0.3
+  web: 1.1.1
+  background_downloader: 9.5.6
+  waxdeck_api:
+    path: ../waxdeck_api
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  drift_dev: 2.34.0
+  build_runner: 2.15.1
+  flutter_lints: ^6.0.0

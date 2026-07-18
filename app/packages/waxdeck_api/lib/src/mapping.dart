@@ -245,3 +245,74 @@ SearchResults searchResultsFromGen(gen.SearchResults results) {
     truncated: results.truncated ?? false,
   );
 }
+
+CatalogSyncPage catalogSyncPageFromGen(
+  gen.CatalogSyncPage page, {
+  String baseUrl = '',
+}) {
+  return CatalogSyncPage(
+    entries: page.entries
+        .map(
+          (e) => CatalogSyncEntry(
+            op: e.op,
+            pid: e.pid,
+            item: e.item == null
+                ? null
+                : itemSummaryFromGen(e.item!, baseUrl: baseUrl),
+          ),
+        )
+        .toList(),
+    nextCursor: page.nextCursor,
+    nextSince: page.nextSince,
+    more: page.more ?? false,
+  );
+}
+
+ServerSyncPage serverSyncPageFromGen(gen.ServerSyncPage page) {
+  return ServerSyncPage(
+    events: page.events
+        .map(
+          (e) => ServerSyncEvent(
+            kind: e.kind,
+            pid: e.pid,
+            playState: e.playState == null
+                ? null
+                : playStateFromGen(e.playState!),
+            prefs: e.prefs == null ? null : prefsFromGen(e.prefs!),
+          ),
+        )
+        .toList(),
+    nextSince: page.nextSince,
+    more: page.more ?? false,
+  );
+}
+
+DownloadInfo downloadInfoFromGen(gen.DownloadInfo info, {String baseUrl = ''}) {
+  return DownloadInfo(
+    pid: info.pid,
+    files: info.files
+        .map(
+          (f) => DownloadFileInfo(
+            url: resolveMediaUrl(baseUrl, f.url),
+            mimeType: f.mimeType,
+            sizeBytes: f.sizeBytes,
+            fileName: f.fileName,
+            essenceHash: f.essenceHash,
+            etag: f.etag,
+          ),
+        )
+        .toList(),
+    spanStartMs: info.spanStartMs,
+    spanEndMs: info.spanEndMs,
+    expiresAt: info.expiresAt,
+  );
+}
+
+AppPassword appPasswordFromGen(gen.AppPassword ap) {
+  return AppPassword(
+    id: ap.id,
+    label: ap.label,
+    createdAt: ap.createdAt,
+    lastUsedAt: ap.lastUsedAt,
+  );
+}

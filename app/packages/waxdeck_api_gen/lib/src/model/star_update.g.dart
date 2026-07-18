@@ -9,11 +9,13 @@ part of 'star_update.dart';
 class _$StarUpdate extends StarUpdate {
   @override
   final bool starred;
+  @override
+  final DateTime? recordedAt;
 
   factory _$StarUpdate([void Function(StarUpdateBuilder)? updates]) =>
       (StarUpdateBuilder()..update(updates))._build();
 
-  _$StarUpdate._({required this.starred}) : super._();
+  _$StarUpdate._({required this.starred, this.recordedAt}) : super._();
   @override
   StarUpdate rebuild(void Function(StarUpdateBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -24,22 +26,26 @@ class _$StarUpdate extends StarUpdate {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is StarUpdate && starred == other.starred;
+    return other is StarUpdate &&
+        starred == other.starred &&
+        recordedAt == other.recordedAt;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, starred.hashCode);
+    _$hash = $jc(_$hash, recordedAt.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'StarUpdate',
-    )..add('starred', starred)).toString();
+    return (newBuiltValueToStringHelper(r'StarUpdate')
+          ..add('starred', starred)
+          ..add('recordedAt', recordedAt))
+        .toString();
   }
 }
 
@@ -50,6 +56,10 @@ class StarUpdateBuilder implements Builder<StarUpdate, StarUpdateBuilder> {
   bool? get starred => _$this._starred;
   set starred(bool? starred) => _$this._starred = starred;
 
+  DateTime? _recordedAt;
+  DateTime? get recordedAt => _$this._recordedAt;
+  set recordedAt(DateTime? recordedAt) => _$this._recordedAt = recordedAt;
+
   StarUpdateBuilder() {
     StarUpdate._defaults(this);
   }
@@ -58,6 +68,7 @@ class StarUpdateBuilder implements Builder<StarUpdate, StarUpdateBuilder> {
     final $v = _$v;
     if ($v != null) {
       _starred = $v.starred;
+      _recordedAt = $v.recordedAt;
       _$v = null;
     }
     return this;
@@ -85,6 +96,7 @@ class StarUpdateBuilder implements Builder<StarUpdate, StarUpdateBuilder> {
             r'StarUpdate',
             'starred',
           ),
+          recordedAt: recordedAt,
         );
     replace(_$result);
     return _$result;

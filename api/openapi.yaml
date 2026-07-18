@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: WaxDeck API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     First-party REST API for WaxDeck: the self-hosted player, library manager,
     and metadata completer for music, podcasts, and audiobooks.
@@ -10,25 +10,29 @@ info:
     user administration with roles and per-library visibility, per-user
     preferences, library browse and search, item detail, artwork, lyrics,
     play-info, playback state (resume, stars, ratings), listen session
-    ingest, and library scanning. The shapes (keyset pagination, typed
-    PIDs, the structured error model, relative media URLs) are load-bearing
-    from day one.
+    ingest, library scanning, delta sync for offline-first clients (with
+    the WebSocket event channel specified in `api/events.md`; its frame
+    payloads are components in this document), offline downloads of
+    original files, and app passwords for the compatibility APIs. The
+    shapes (keyset pagination, typed PIDs, the structured error model,
+    relative media URLs) are load-bearing from day one.
 
     Conventions:
     - All endpoints live under `/api/v1` (this document's `servers` entry).
     - Identifiers (`pid`) are type-prefixed ULIDs (`tr-` track, `al-` album,
       `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook, `jb-` job,
-      `lb-` library, `us-` user, `se-` session).
+      `lb-` library, `us-` user, `se-` session, `ap-` app password).
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
       string; currently defined codes: `invalid-request`, `unauthenticated`,
       `forbidden`, `not-found`, `conflict`, `internal`, `rate-limited` (too
       many attempts; retry later), `stream-stale` (a stream URL no longer
-      matches the file on disk; re-request play-info), and
-      `catalog-maintenance` (the catalog is temporarily handed to a
-      maintenance operation; retry shortly). New codes may appear; clients
-      must treat unknown codes as opaque.
+      matches the file on disk; re-request play-info), `catalog-maintenance`
+      (the catalog is temporarily handed to a maintenance operation; retry
+      shortly), and `sync-reset` (a sync cursor predates the retained change
+      history; drop the local mirror and re-mirror from a fresh snapshot).
+      New codes may appear; clients must treat unknown codes as opaque.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
     - Cross-site request forgery: state-changing requests (POST, PUT, PATCH,
@@ -72,6 +76,10 @@ tags:
     description: Browse, search, and inspect library items.
   - name: playback
     description: Resolve playable streams, playback state, and listen accounting.
+  - name: sync
+    description: >
+      Delta sync for offline-first clients: snapshot and changed-since
+      mirroring of the catalog and of the caller's own server-side state.
   - name: admin
     description: Library maintenance operations.
 
@@ -653,7 +661,9 @@ paths:
         only one that survives. An administrator resetting another
         account's password omits `currentPassword`, and every one of
         that account's sessions is revoked. Setting a password on an
-        OIDC-provisioned account enables local login for it.
+        OIDC-provisioned account enables local login for it. App
+        passwords are separate credentials and survive a password
+        change; revoke them individually.
       tags: [users]
       parameters:
         - $ref: "#/components/parameters/UserId"
@@ -741,6 +751,82 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+
+  /users/me/app-passwords:
+    get:
+      operationId: listAppPasswords
+      summary: List the caller's app passwords
+      description: >
+        The calling user's app passwords, newest first. App passwords are
+        dedicated per-client credentials for the compatibility APIs
+        (Subsonic and, later, gpodder), which require the server to hold a
+        recoverable secret; the login password is never usable there. The
+        secret itself is only ever returned by creation. App passwords
+        stop authenticating the moment their account is disabled, and are
+        deliberately independent of the login password: changing or
+        resetting it leaves them working (revoke them here). Unpaginated:
+        a user's app passwords are a small, bounded set.
+      tags: [users]
+      responses:
+        "200":
+          description: The caller's app passwords.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppPasswordList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    post:
+      operationId: createAppPassword
+      summary: Create an app password
+      description: >
+        Generates a new app password for the calling user and returns the
+        secret exactly once; it is not recoverable through the API
+        afterwards. The secret is 26 characters of server-generated
+        randomness (at least 128 bits); users never choose it. The client
+        using it authenticates against the compatibility APIs with the
+        account's username and this secret. The label distinguishes
+        entries in the list (for example the client app's name); labels
+        need not be unique. An account holds at most 50 app passwords;
+        creating past the cap answers `conflict`.
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppPasswordCreate"
+      responses:
+        "201":
+          description: App password created; the secret appears only here.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppPasswordCreated"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /users/me/app-passwords/{appPasswordId}:
+    delete:
+      operationId: revokeAppPassword
+      summary: Revoke an app password
+      description: >
+        Revokes one of the calling user's app passwords. Clients holding it
+        fail their next compatibility-API request immediately.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/AppPasswordId"
+      responses:
+        "204":
+          description: App password revoked.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /libraries:
     get:
@@ -1004,6 +1090,49 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /items/{pid}/download-info:
+    get:
+      operationId: getDownloadInfo
+      summary: Resolve an offline download for an item
+      description: >
+        Returns everything a client needs to download the item's original
+        bytes for offline playback: one entry per backing file (a track
+        has one; a multi-file audiobook lists every part in reading
+        order), each with a short-TTL, origin-relative,
+        media-token-authenticated URL serving the untranscoded file with
+        range support, so interrupted downloads resume. The download
+        responses carry a `Content-Disposition` derived from each entry's
+        `fileName` and an `ETag` equal to the entry's `etag`, a strong
+        validator of the exact file bytes: resume ranges with
+        `If-Range: <etag>`, and when it no longer matches (the file was
+        retagged, replaced, or upgraded) restart that file's transfer.
+        The separate `essenceHash` identifies the audio content
+        independently of tags and location; clients key their download
+        store on it, so a retag or move never forces a re-download of
+        audio they already hold (the restarted transfer replaces the
+        stored file under the same key). Items carved out of a larger
+        file (CUE-backed virtual tracks) resolve to their containing
+        file plus a `spanStartMs`/`spanEndMs` playback window. When a
+        URL expires mid-download, re-request download-info and resume by
+        range against the fresh URL. A download URL whose file changed
+        on disk answers `stream-stale`; re-request download-info.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: Download resolution for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadInfo"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /items/{pid}/art:
     get:
       operationId: getItemArt
@@ -1212,6 +1341,40 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /play-states:
+    post:
+      operationId: listPlayStates
+      summary: Read the caller's playback state for many items
+      description: >
+        Batch read of the calling user's playback state, for hydrating a
+        client mirror without one request per item (a device restoring
+        thousands of downloads asks in pages of 500). A POST because the
+        PID list rides the body; nothing changes server-side. The
+        response carries states only for requested items the caller can
+        see and has ever touched; an absent PID means a zero state (or no
+        visibility, which looks identical by design). Order is not
+        significant.
+      tags: [playback]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayStateQuery"
+      responses:
+        "200":
+          description: The caller's states for the requested items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayStateList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /listens:
     post:
       operationId: reportListens
@@ -1244,6 +1407,126 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /sync/catalog:
+    get:
+      operationId: syncCatalog
+      summary: Mirror the catalog (snapshot or changed-since delta)
+      description: >
+        The catalog half of delta sync, feeding client-side library mirrors
+        with hydrated item summaries. Two modes. Without `since`: a
+        snapshot, keyset-paged via `cursor`; every page carries
+        `nextSince`, an opaque change cursor captured at or before the
+        first page's read, which the client stores and syncs from after
+        mirroring every page (changes landing mid-snapshot are covered by
+        the first delta). With `since`: the changes after that cursor, as
+        `upsert` entries carrying fresh summaries and `delete` tombstones
+        for items that no longer exist or whose change left them outside
+        the caller's library visibility (a file re-homed under an
+        ungranted root keeps its item PID; a tombstone for an item never
+        mirrored is a no-op); entries are coalesced within a page (an item may
+        recur on later pages; application is idempotent, latest wins).
+        The returned `nextSince` advances the cursor, and `more` signals
+        another page should be fetched immediately. Snapshots contain
+        only items the caller can see, and a change to the caller's
+        visibility grants invalidates their catalog cursors, so the next
+        delta answers 410 `sync-reset` and the re-snapshot reflects the
+        new grants. 410 likewise answers any cursor the server can no
+        longer serve contiguously (pruned change history, a rebuilt
+        catalog): drop the mirror and snapshot again. Snapshot-minted
+        cursors stay serviceable for at least the server's change
+        retention horizon. The WebSocket channel (`api/events.md`)
+        signals when to pull deltas; polling works without it.
+      tags: [sync]
+      parameters:
+        - name: since
+          in: query
+          description: >
+            Opaque change cursor from a previous response's `nextSince`.
+            Mutually exclusive with `cursor`.
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous snapshot page's
+            `nextCursor`. Omit together with `since` for the first
+            snapshot page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum entries per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 500
+      responses:
+        "200":
+          description: One page of the snapshot or delta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogSyncPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "410":
+          $ref: "#/components/responses/SyncReset"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /sync/server:
+    get:
+      operationId: syncServer
+      summary: Mirror the caller's server-side state (changed-since delta)
+      description: >
+        The server half of delta sync: the calling user's own state
+        changes (playback state, preferences), on the server change
+        cursor. Without `since` it mints a fresh cursor (`nextSince` with
+        no events): new mirrors start there and hydrate the play states
+        they care about through `/play-states`, since play states are
+        only meaningful for items a client holds. With `since` it returns
+        the caller's events after that cursor with freshly hydrated
+        state, coalesced within a page (an item may recur on later pages;
+        application is idempotent), plus `more` for immediate
+        continuation. Only the caller's own state ever appears here. A
+        `since` the server can no longer serve contiguously answers 410
+        `sync-reset`: re-mint and re-hydrate.
+      tags: [sync]
+      parameters:
+        - name: since
+          in: query
+          description: >
+            Opaque server change cursor from a previous response's
+            `nextSince`. Omit to mint a fresh cursor.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum events per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 500
+      responses:
+        "200":
+          description: One page of the caller's state changes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerSyncPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "410":
+          $ref: "#/components/responses/SyncReset"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1284,6 +1567,14 @@ components:
       schema:
         type: string
         pattern: "^se-[0-9A-HJKMNP-TV-Z]{26}$"
+    AppPasswordId:
+      name: appPasswordId
+      in: path
+      required: true
+      description: App password PID (e.g. `ap-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^ap-[0-9A-HJKMNP-TV-Z]{26}$"
 
   responses:
     InvalidRequest:
@@ -1329,6 +1620,15 @@ components:
             $ref: "#/components/schemas/Error"
     RateLimited:
       description: Too many attempts (code `rate-limited`). Back off and retry later.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    SyncReset:
+      description: >
+        The sync cursor predates the retained change history or belongs to
+        a previous catalog generation (code `sync-reset`). Drop the local
+        mirror and re-mirror from a fresh snapshot.
       content:
         application/json:
           schema:
@@ -1753,6 +2053,68 @@ components:
           enum: [system, dark, light, oled]
           description: Preferred app theme.
 
+    AppPassword:
+      type: object
+      description: One app password, without its secret.
+      required: [id, label, createdAt]
+      properties:
+        id:
+          type: string
+          description: App password PID.
+          example: ap-01JZX5N8QW3F4V9T2B7KD3M9R6
+        label:
+          type: string
+          description: Human-readable label given at creation.
+          example: Symfonium on Pixel 9
+        createdAt:
+          type: string
+          format: date-time
+          description: When the app password was created.
+        lastUsedAt:
+          type: string
+          format: date-time
+          description: >
+            When the app password last authenticated a request (coarse,
+            minutes). Absent when it has never been used.
+
+    AppPasswordList:
+      type: object
+      description: The caller's app passwords, newest first.
+      required: [appPasswords]
+      properties:
+        appPasswords:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppPassword"
+
+    AppPasswordCreate:
+      type: object
+      description: A new app password.
+      required: [label]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: >
+            Label shown in the app password list, usually the client app
+            this password is for.
+          example: Symfonium on Pixel 9
+
+    AppPasswordCreated:
+      allOf:
+        - $ref: "#/components/schemas/AppPassword"
+        - type: object
+          required: [secret]
+          properties:
+            secret:
+              type: string
+              description: >
+                The generated password, shown exactly once. The client
+                authenticates against the compatibility APIs with the
+                account's username and this value.
+      description: A newly created app password, including its one-time-visible secret.
+
     Library:
       type: object
       description: One catalog library (a scanned root).
@@ -1791,6 +2153,15 @@ components:
         starred:
           type: boolean
           description: The new star state.
+        recordedAt:
+          type: string
+          format: date-time
+          description: >
+            When the change was made on the client, sent only when
+            replaying an offline queue. The server skips the write when
+            the item's star changed more recently than this, so a stale
+            offline toggle never resurrects an undone state. Live
+            mutations omit it and always apply.
 
     RatingUpdate:
       type: object
@@ -1803,6 +2174,14 @@ components:
           minimum: 0
           maximum: 100
           description: The new rating (0 to 100), or null to clear it.
+        recordedAt:
+          type: string
+          format: date-time
+          description: >
+            When the change was made on the client, sent only when
+            replaying an offline queue. The server skips the write when
+            the item's rating changed more recently than this. Live
+            mutations omit it and always apply.
 
     MediaType:
       type: string
@@ -1980,6 +2359,33 @@ components:
           format: date-time
           description: When this state last changed.
 
+    PlayStateQuery:
+      type: object
+      description: A batch play-state read request.
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          description: Items to read the caller's state for.
+          items:
+            type: string
+            example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    PlayStateList:
+      type: object
+      description: The caller's playback states for a requested batch.
+      required: [states]
+      properties:
+        states:
+          type: array
+          description: >
+            One entry per requested item with recorded state; items with
+            zero state are absent.
+          items:
+            $ref: "#/components/schemas/PlayState"
+
     PlayStateUpdate:
       type: object
       description: A resume-position checkpoint.
@@ -1990,6 +2396,24 @@ components:
           format: int64
           minimum: 0
           description: Playback position in milliseconds.
+        recordedAt:
+          type: string
+          format: date-time
+          description: >
+            When the checkpoint was recorded on the client, sent only when
+            replaying an offline queue. The server reconciles replays per
+            medium: audiobooks and long tracks are recency-primary (the
+            most recently recorded position wins, so a stale replay never
+            drags a 14-hour book backward or forward), while music and
+            podcast episodes are furthest-position-wins with a recency
+            guard (the further position wins unless the nearer one is
+            substantially more recent, honoring a deliberate rewind).
+            Future-dated values are clamped to the server clock. Live
+            checkpoints omit it and always apply. The response does not
+            reveal whether a replay was applied or skipped: after
+            flushing an offline queue, clients learn the winning state
+            through `/sync/server` (a skipped replay means the winner is
+            already in the event stream).
 
     ListenSession:
       type: object
@@ -2185,6 +2609,234 @@ components:
             The effective shuffle seed. Present only on `random` browse
             pages; pass it back together with `nextCursor` so later pages
             keep the same order.
+
+    CatalogSyncEntry:
+      type: object
+      description: >
+        One mirrored catalog change: an `upsert` carrying the item's
+        current summary, or a `delete` tombstone carrying only the PID.
+        Snapshot pages contain only upserts. `op` is a string, not a
+        closed enum, so new operations can appear; clients must drop
+        entries whose `op` they do not recognize.
+      required: [op, pid]
+      properties:
+        op:
+          type: string
+          description: >
+            What the mirror should do with this entry: `upsert` (store
+            `item`) or `delete` (remove the PID).
+          example: upsert
+        pid:
+          type: string
+          description: The item the entry is about.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        item:
+          $ref: "#/components/schemas/ItemSummary"
+
+    CatalogSyncPage:
+      type: object
+      description: One page of catalog sync entries (snapshot or delta).
+      required: [entries, nextSince]
+      properties:
+        entries:
+          type: array
+          description: Mirror entries, coalesced within the page.
+          items:
+            $ref: "#/components/schemas/CatalogSyncEntry"
+        nextCursor:
+          type: string
+          description: >
+            Keyset cursor for the next snapshot page. Absent on the last
+            snapshot page and on delta pages.
+        nextSince:
+          type: string
+          description: >
+            Opaque change cursor to sync from next. On snapshot pages it
+            repeats the cursor captured at the snapshot's start; on delta
+            pages it advances past this page's changes.
+        more:
+          type: boolean
+          description: >
+            True when another delta page is already available; fetch it
+            immediately with `since` set to this page's `nextSince`.
+            Absent in snapshot mode (`nextCursor` plays that role).
+
+    ServerSyncEvent:
+      type: object
+      description: >
+        One change to the calling user's server-side state, with the
+        current value hydrated fresh. `kind` is a string, not a closed
+        enum, so new kinds can appear; clients must skip events whose
+        `kind` they do not recognize.
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          description: >
+            What changed: `play-state` (carries `pid` and `playState`) or
+            `prefs` (carries `prefs`).
+          example: play-state
+        pid:
+          type: string
+          description: The item whose state changed (`play-state` only).
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        playState:
+          $ref: "#/components/schemas/PlayState"
+        prefs:
+          $ref: "#/components/schemas/Prefs"
+
+    ServerSyncPage:
+      type: object
+      description: One page of the caller's server-side state changes.
+      required: [events, nextSince]
+      properties:
+        events:
+          type: array
+          description: State changes, coalesced within the page.
+          items:
+            $ref: "#/components/schemas/ServerSyncEvent"
+        nextSince:
+          type: string
+          description: Opaque server change cursor to sync from next.
+        more:
+          type: boolean
+          description: >
+            True when another page is already available; fetch it
+            immediately with `since` set to this page's `nextSince`.
+
+    WsSubscribeFrame:
+      type: object
+      description: >
+        The WebSocket subscribe frame, sent by the client as the first and
+        only client-to-server message on the event channel (transport in
+        `api/events.md`). Clients pass the cursors their mirror is at; a
+        client with no mirror yet omits them, receives only live
+        invalidations, and snapshots through the sync endpoints (before
+        or after subscribing; both orders are sound because invalidations
+        carry no data).
+      properties:
+        catalogSince:
+          type: string
+          description: The client's opaque catalog change cursor.
+        serverSince:
+          type: string
+          description: The client's opaque server change cursor.
+        topics:
+          type: array
+          description: >
+            Topics to receive (`catalog`, `user`). Omit for all topics.
+            Unknown topic names are ignored.
+          items:
+            type: string
+            example: catalog
+
+    WsEventFrame:
+      type: object
+      description: >
+        One server-to-client frame on the WebSocket event channel
+        (transport in `api/events.md`). An `invalidate` frame tells the
+        client the named stream moved: pull the matching sync endpoint
+        (`catalog` topic, `/sync/catalog`; `user` topic, `/sync/server`)
+        from the client's own cursor. Invalidations are coalesced
+        server-side, so one frame can cover many changes, and carry no
+        data, so a redundant pull is harmless. A `resync` frame means
+        continuity was lost for the named stream, or for every stream
+        when `topic` is absent (client queue overflow, pruned history):
+        drop the affected mirror halves, re-mirror through the sync
+        endpoints, then close the socket, reconnect, and resubscribe
+        with the fresh cursors. `type` and `topic` are strings, not
+        closed enums; clients must ignore frames whose `type` they do
+        not recognize.
+      required: [type]
+      properties:
+        type:
+          type: string
+          description: "Frame discriminator: `invalidate` or `resync`."
+          example: invalidate
+        topic:
+          type: string
+          description: >
+            Which stream the frame is about (`catalog` or `user`).
+            Always present on `invalidate`; on `resync` its absence
+            means every stream.
+          example: catalog
+
+    DownloadFile:
+      type: object
+      description: One downloadable backing file of an item.
+      required: [url, mimeType, sizeBytes, fileName, essenceHash, etag]
+      properties:
+        url:
+          type: string
+          description: >
+            Origin-relative, media-token-authenticated download URL serving
+            this file's original bytes with range support.
+          example: /media/download?pid=tr-01JZX5N8QW3F4V9T2B7KD3M9R6&mt=abc123
+        mimeType:
+          type: string
+          description: MIME type of the file.
+          example: audio/flac
+        sizeBytes:
+          type: integer
+          format: int64
+          description: Exact size of the file in bytes.
+        fileName:
+          type: string
+          description: >
+            Suggested file name (the original base name), also sent as the
+            download's `Content-Disposition`.
+          example: 03 Prancing Pony Blues.flac
+        essenceHash:
+          type: string
+          description: >
+            Content hash of the file's audio essence, stable across retags
+            and moves: the download-store key.
+        etag:
+          type: string
+          description: >
+            Strong validator of the exact file bytes, served as the
+            download's `ETag`. Changes on any rewrite of the file,
+            including retags that leave `essenceHash` unchanged; a
+            mismatch means restart this file's transfer instead of
+            resuming a range.
+
+    DownloadInfo:
+      type: object
+      description: Everything a client needs to download one item's original bytes.
+      required: [pid, files, expiresAt]
+      properties:
+        pid:
+          type: string
+          description: The resolved item's PID.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        files:
+          type: array
+          minItems: 1
+          description: >
+            The item's backing files in playback order. One entry for a
+            track or single-file book; one per part for a multi-file
+            audiobook; exactly one (the containing file) for an item
+            carved out of a larger file.
+          items:
+            $ref: "#/components/schemas/DownloadFile"
+        spanStartMs:
+          type: integer
+          format: int64
+          description: >
+            Start of the item's playback window within its single backing
+            file, in milliseconds. Present only for items carved out of a
+            larger file (CUE-backed virtual tracks); offline playback
+            plays the window, not the whole file.
+        spanEndMs:
+          type: integer
+          format: int64
+          description: >
+            End of the playback window in milliseconds, exclusive.
+            Present exactly when `spanStartMs` is.
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the embedded media tokens stop being accepted.
 
     PlayInfo:
       type: object

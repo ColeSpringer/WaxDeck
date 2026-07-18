@@ -9,11 +9,14 @@ import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
 import 'package:waxdeck_api_gen/src/api_util.dart';
+import 'package:waxdeck_api_gen/src/model/download_info.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/listen_ingest_result.dart';
 import 'package:waxdeck_api_gen/src/model/listen_report.dart';
 import 'package:waxdeck_api_gen/src/model/play_info.dart';
 import 'package:waxdeck_api_gen/src/model/play_state.dart';
+import 'package:waxdeck_api_gen/src/model/play_state_list.dart';
+import 'package:waxdeck_api_gen/src/model/play_state_query.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_update.dart';
 import 'package:waxdeck_api_gen/src/model/rating_update.dart';
 import 'package:waxdeck_api_gen/src/model/star_update.dart';
@@ -25,6 +28,92 @@ class PlaybackApi {
   final Serializers _serializers;
 
   const PlaybackApi(this._dio, this._serializers);
+
+  /// Resolve an offline download for an item
+  /// Returns everything a client needs to download the item&#39;s original bytes for offline playback: one entry per backing file (a track has one; a multi-file audiobook lists every part in reading order), each with a short-TTL, origin-relative, media-token-authenticated URL serving the untranscoded file with range support, so interrupted downloads resume. The download responses carry a &#x60;Content-Disposition&#x60; derived from each entry&#39;s &#x60;fileName&#x60; and an &#x60;ETag&#x60; equal to the entry&#39;s &#x60;etag&#x60;, a strong validator of the exact file bytes: resume ranges with &#x60;If-Range: &lt;etag&gt;&#x60;, and when it no longer matches (the file was retagged, replaced, or upgraded) restart that file&#39;s transfer. The separate &#x60;essenceHash&#x60; identifies the audio content independently of tags and location; clients key their download store on it, so a retag or move never forces a re-download of audio they already hold (the restarted transfer replaces the stored file under the same key). Items carved out of a larger file (CUE-backed virtual tracks) resolve to their containing file plus a &#x60;spanStartMs&#x60;/&#x60;spanEndMs&#x60; playback window. When a URL expires mid-download, re-request download-info and resume by range against the fresh URL. A download URL whose file changed on disk answers &#x60;stream-stale&#x60;; re-request download-info. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [DownloadInfo] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<DownloadInfo>> getDownloadInfo({ 
+    required String pid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/download-info'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    DownloadInfo? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(DownloadInfo),
+      ) as DownloadInfo;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<DownloadInfo>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
 
   /// Resolve a playable stream for an item
   /// Returns everything a client needs to start playback: a short-TTL, origin-relative stream URL (media-token authenticated, so it is playable by bare &#x60;&lt;audio&gt;&#x60; elements, cast devices, and DLNA renderers that cannot send headers), the served format, and expiry. Clients re-request play-info when a stream URL expires or the server signals &#x60;stream-stale&#x60;. 
@@ -187,6 +276,112 @@ class PlaybackApi {
     }
 
     return Response<PlayState>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Read the caller&#39;s playback state for many items
+  /// Batch read of the calling user&#39;s playback state, for hydrating a client mirror without one request per item (a device restoring thousands of downloads asks in pages of 500). A POST because the PID list rides the body; nothing changes server-side. The response carries states only for requested items the caller can see and has ever touched; an absent PID means a zero state (or no visibility, which looks identical by design). Order is not significant. 
+  ///
+  /// Parameters:
+  /// * [playStateQuery] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [PlayStateList] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<PlayStateList>> listPlayStates({ 
+    required PlayStateQuery playStateQuery,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/play-states';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(PlayStateQuery);
+      _bodyData = _serializers.serialize(playStateQuery, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    PlayStateList? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(PlayStateList),
+      ) as PlayStateList;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<PlayStateList>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

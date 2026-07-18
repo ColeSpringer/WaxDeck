@@ -62,5 +62,6 @@ func (l *Library) PutPrefs(ctx context.Context, uc *UserCtx, p Prefs) (Prefs, er
 	if err := l.db.PutPrefsJSON(ctx, uc.ID, string(doc)); err != nil {
 		return Prefs{}, &Error{Kind: KindInternal, Err: err}
 	}
+	l.emitUserEvent(ctx, uc.ID, eventPrefs, "")
 	return p, nil
 }

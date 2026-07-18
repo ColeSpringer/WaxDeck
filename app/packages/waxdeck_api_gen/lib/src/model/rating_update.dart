@@ -12,11 +12,16 @@ part 'rating_update.g.dart';
 ///
 /// Properties:
 /// * [rating] - The new rating (0 to 100), or null to clear it.
+/// * [recordedAt] - When the change was made on the client, sent only when replaying an offline queue. The server skips the write when the item's rating changed more recently than this. Live mutations omit it and always apply. 
 @BuiltValue()
 abstract class RatingUpdate implements Built<RatingUpdate, RatingUpdateBuilder> {
   /// The new rating (0 to 100), or null to clear it.
   @BuiltValueField(wireName: r'rating')
   int? get rating;
+
+  /// When the change was made on the client, sent only when replaying an offline queue. The server skips the write when the item's rating changed more recently than this. Live mutations omit it and always apply. 
+  @BuiltValueField(wireName: r'recordedAt')
+  DateTime? get recordedAt;
 
   RatingUpdate._();
 
@@ -46,6 +51,13 @@ class _$RatingUpdateSerializer implements PrimitiveSerializer<RatingUpdate> {
       object.rating,
       specifiedType: const FullType.nullable(int),
     );
+    if (object.recordedAt != null) {
+      yield r'recordedAt';
+      yield serializers.serialize(
+        object.recordedAt,
+        specifiedType: const FullType(DateTime),
+      );
+    }
   }
 
   @override
@@ -76,6 +88,13 @@ class _$RatingUpdateSerializer implements PrimitiveSerializer<RatingUpdate> {
           ) as int?;
           if (valueDes == null) continue;
           result.rating = valueDes;
+          break;
+        case r'recordedAt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(DateTime),
+          ) as DateTime;
+          result.recordedAt = valueDes;
           break;
         default:
           unhandled.add(key);

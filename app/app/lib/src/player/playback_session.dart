@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
 /// Drives one item's playback through the engine port and owns the server
@@ -17,6 +18,8 @@ class PlaybackSession {
     required this.engine,
     required this.item,
     required this.clientId,
+    this.sync,
+    this.downloads,
     this.checkpointInterval = const Duration(seconds: 5),
   });
 
@@ -24,6 +27,13 @@ class PlaybackSession {
   final AudioEnginePort engine;
   final ItemSummary item;
   final String clientId;
+
+  /// The sync engine, when this platform runs one: offline mutations
+  /// queue through it instead of being dropped.
+  final SyncEngine? sync;
+
+  /// Downloaded originals, for playback when the server is unreachable.
+  final DownloadManagerPort? downloads;
   final Duration checkpointInterval;
 
   /// Position deltas above this are treated as seeks, not listening.
@@ -52,25 +62,44 @@ class PlaybackSession {
       engine.duration ?? Duration(milliseconds: _playInfo?.durationMs ?? 0);
 
   /// Fetches play-info and saved state, loads the stream at the saved resume
-  /// position when there is one, and starts playing.
+  /// position when there is one, and starts playing. When the server is
+  /// unreachable and the item's original is downloaded, playback runs
+  /// from the local file with the mirrored resume position instead.
   Future<void> start() async {
     _engineOwners[engine] = this;
-    final info = await repository.getPlayInfo(item.pid);
-    final saved = await repository.getPlayState(item.pid);
-    _playInfo = info;
-    final resumeAt = saved.positionMs > 0
-        ? Duration(milliseconds: saved.positionMs)
-        : null;
-    await engine.load(
-      info.url,
-      mimeType: info.mimeType,
-      initialPosition: resumeAt,
-    );
+    String url;
+    String? mimeType;
+    int savedMs;
+    try {
+      final info = await repository.getPlayInfo(item.pid);
+      final saved = await repository.getPlayState(item.pid);
+      _playInfo = info;
+      url = info.url;
+      mimeType = info.mimeType;
+      savedMs = saved.positionMs;
+    } on WaxDeckApiException catch (e) {
+      final local = await _localFallback(e);
+      if (local == null) rethrow;
+      url = Uri.file(local.paths.first).toString();
+      final saved = await sync?.localPlayState(item.pid);
+      savedMs = saved?.positionMs ?? 0;
+    }
+    final resumeAt = savedMs > 0 ? Duration(milliseconds: savedMs) : null;
+    await engine.load(url, mimeType: mimeType, initialPosition: resumeAt);
     _lastPosition = engine.position;
     _positionSub = engine.positionStream.listen(_onPosition);
     _playingSub = engine.playingStream.listen(_onPlayingChanged);
     _completedSub = engine.completed.listen((_) => _onCompleted());
     await engine.play();
+  }
+
+  /// The downloaded original, but only for failures that smell like
+  /// unreachability; a real API rejection (404, 401) propagates.
+  Future<LocalPlayback?> _localFallback(WaxDeckApiException e) async {
+    final port = downloads;
+    if (port == null) return null;
+    if (e.statusCode != null && e.statusCode != 503) return null;
+    return port.localFor(item.pid);
   }
 
   Future<void> toggle() async {
@@ -151,11 +180,17 @@ class PlaybackSession {
   }
 
   Future<void> _checkpoint({Duration? at}) async {
+    final position = at ?? engine.position;
     try {
-      final position = at ?? engine.position;
       await repository.putPlayState(item.pid, position.inMilliseconds);
     } on WaxDeckApiException {
-      // Checkpoints are best effort; the next one will catch up.
+      // ANY failure queues, deliberately broader than the reachability
+      // gate elsewhere: queued checkpoints replay with recordedAt and
+      // reconcile server-side, flushOutbox drops permanent rejections,
+      // and a transient auth failure would otherwise silently lose the
+      // position. Without an engine (web), best effort stands and the
+      // next checkpoint catches up.
+      await sync?.queueCheckpoint(item.pid, position.inMilliseconds);
     }
   }
 
@@ -181,7 +216,12 @@ class PlaybackSession {
     try {
       await repository.reportListens([session]);
     } on WaxDeckApiException {
-      _pendingRetry = session;
+      final engine = sync;
+      if (engine != null) {
+        await engine.queueListen(session);
+      } else {
+        _pendingRetry = session;
+      }
     }
   }
 
@@ -192,7 +232,8 @@ class PlaybackSession {
     try {
       await repository.reportListens([retry]);
     } on WaxDeckApiException {
-      // Gone for good once the session ends; offline queueing comes later.
+      // Web only (native queues instead of retrying): gone for good
+      // once the session ends.
     }
   }
 }

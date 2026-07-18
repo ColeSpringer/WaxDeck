@@ -14,10 +14,18 @@ import 'package:built_value/iso_8601_date_time_serializer.dart';
 import 'package:waxdeck_api_gen/src/date_serializer.dart';
 import 'package:waxdeck_api_gen/src/model/date.dart';
 
+import 'package:waxdeck_api_gen/src/model/app_password.dart';
+import 'package:waxdeck_api_gen/src/model/app_password_create.dart';
+import 'package:waxdeck_api_gen/src/model/app_password_created.dart';
+import 'package:waxdeck_api_gen/src/model/app_password_list.dart';
 import 'package:waxdeck_api_gen/src/model/bootstrap_request.dart';
 import 'package:waxdeck_api_gen/src/model/bootstrap_status.dart';
+import 'package:waxdeck_api_gen/src/model/catalog_sync_entry.dart';
+import 'package:waxdeck_api_gen/src/model/catalog_sync_page.dart';
 import 'package:waxdeck_api_gen/src/model/device_session.dart';
 import 'package:waxdeck_api_gen/src/model/discovery_list.dart';
+import 'package:waxdeck_api_gen/src/model/download_file.dart';
+import 'package:waxdeck_api_gen/src/model/download_info.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/health.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
@@ -41,6 +49,8 @@ import 'package:waxdeck_api_gen/src/model/oidc_providers.dart';
 import 'package:waxdeck_api_gen/src/model/password_change.dart';
 import 'package:waxdeck_api_gen/src/model/play_info.dart';
 import 'package:waxdeck_api_gen/src/model/play_state.dart';
+import 'package:waxdeck_api_gen/src/model/play_state_list.dart';
+import 'package:waxdeck_api_gen/src/model/play_state_query.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_update.dart';
 import 'package:waxdeck_api_gen/src/model/prefs.dart';
 import 'package:waxdeck_api_gen/src/model/rating_update.dart';
@@ -48,6 +58,8 @@ import 'package:waxdeck_api_gen/src/model/rejected_listen.dart';
 import 'package:waxdeck_api_gen/src/model/role.dart';
 import 'package:waxdeck_api_gen/src/model/search_hit.dart';
 import 'package:waxdeck_api_gen/src/model/search_results.dart';
+import 'package:waxdeck_api_gen/src/model/server_sync_event.dart';
+import 'package:waxdeck_api_gen/src/model/server_sync_page.dart';
 import 'package:waxdeck_api_gen/src/model/session_info.dart';
 import 'package:waxdeck_api_gen/src/model/session_list.dart';
 import 'package:waxdeck_api_gen/src/model/star_update.dart';
@@ -57,14 +69,24 @@ import 'package:waxdeck_api_gen/src/model/user_account.dart';
 import 'package:waxdeck_api_gen/src/model/user_create.dart';
 import 'package:waxdeck_api_gen/src/model/user_page.dart';
 import 'package:waxdeck_api_gen/src/model/user_update.dart';
+import 'package:waxdeck_api_gen/src/model/ws_event_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_subscribe_frame.dart';
 
 part 'serializers.g.dart';
 
 @SerializersFor([
+  AppPassword,$AppPassword,
+  AppPasswordCreate,
+  AppPasswordCreated,
+  AppPasswordList,
   BootstrapRequest,
   BootstrapStatus,
+  CatalogSyncEntry,
+  CatalogSyncPage,
   DeviceSession,
   DiscoveryList,
+  DownloadFile,
+  DownloadInfo,
   Error,
   Health,
   Item,
@@ -88,6 +110,8 @@ part 'serializers.g.dart';
   PasswordChange,
   PlayInfo,
   PlayState,
+  PlayStateList,
+  PlayStateQuery,
   PlayStateUpdate,
   Prefs,
   RatingUpdate,
@@ -95,6 +119,8 @@ part 'serializers.g.dart';
   Role,
   SearchHit,
   SearchResults,
+  ServerSyncEvent,
+  ServerSyncPage,
   SessionInfo,
   SessionList,
   StarUpdate,
@@ -104,8 +130,11 @@ part 'serializers.g.dart';
   UserCreate,
   UserPage,
   UserUpdate,
+  WsEventFrame,
+  WsSubscribeFrame,
 ])
 Serializers serializers = (_$serializers.toBuilder()
+      ..add(AppPassword.serializer)
       ..add(ItemSummary.serializer)
       ..add(User.serializer)
       ..add(const OneOfSerializer())

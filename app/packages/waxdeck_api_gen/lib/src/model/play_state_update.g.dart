@@ -9,11 +9,13 @@ part of 'play_state_update.dart';
 class _$PlayStateUpdate extends PlayStateUpdate {
   @override
   final int positionMs;
+  @override
+  final DateTime? recordedAt;
 
   factory _$PlayStateUpdate([void Function(PlayStateUpdateBuilder)? updates]) =>
       (PlayStateUpdateBuilder()..update(updates))._build();
 
-  _$PlayStateUpdate._({required this.positionMs}) : super._();
+  _$PlayStateUpdate._({required this.positionMs, this.recordedAt}) : super._();
   @override
   PlayStateUpdate rebuild(void Function(PlayStateUpdateBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -24,22 +26,26 @@ class _$PlayStateUpdate extends PlayStateUpdate {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is PlayStateUpdate && positionMs == other.positionMs;
+    return other is PlayStateUpdate &&
+        positionMs == other.positionMs &&
+        recordedAt == other.recordedAt;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, positionMs.hashCode);
+    _$hash = $jc(_$hash, recordedAt.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'PlayStateUpdate',
-    )..add('positionMs', positionMs)).toString();
+    return (newBuiltValueToStringHelper(r'PlayStateUpdate')
+          ..add('positionMs', positionMs)
+          ..add('recordedAt', recordedAt))
+        .toString();
   }
 }
 
@@ -51,6 +57,10 @@ class PlayStateUpdateBuilder
   int? get positionMs => _$this._positionMs;
   set positionMs(int? positionMs) => _$this._positionMs = positionMs;
 
+  DateTime? _recordedAt;
+  DateTime? get recordedAt => _$this._recordedAt;
+  set recordedAt(DateTime? recordedAt) => _$this._recordedAt = recordedAt;
+
   PlayStateUpdateBuilder() {
     PlayStateUpdate._defaults(this);
   }
@@ -59,6 +69,7 @@ class PlayStateUpdateBuilder
     final $v = _$v;
     if ($v != null) {
       _positionMs = $v.positionMs;
+      _recordedAt = $v.recordedAt;
       _$v = null;
     }
     return this;
@@ -86,6 +97,7 @@ class PlayStateUpdateBuilder
             r'PlayStateUpdate',
             'positionMs',
           ),
+          recordedAt: recordedAt,
         );
     replace(_$result);
     return _$result;

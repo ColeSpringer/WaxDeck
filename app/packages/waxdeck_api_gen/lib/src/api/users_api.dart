@@ -9,6 +9,9 @@ import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
 import 'package:waxdeck_api_gen/src/api_util.dart';
+import 'package:waxdeck_api_gen/src/model/app_password_create.dart';
+import 'package:waxdeck_api_gen/src/model/app_password_created.dart';
+import 'package:waxdeck_api_gen/src/model/app_password_list.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/password_change.dart';
 import 'package:waxdeck_api_gen/src/model/prefs.dart';
@@ -24,6 +27,112 @@ class UsersApi {
   final Serializers _serializers;
 
   const UsersApi(this._dio, this._serializers);
+
+  /// Create an app password
+  /// Generates a new app password for the calling user and returns the secret exactly once; it is not recoverable through the API afterwards. The secret is 26 characters of server-generated randomness (at least 128 bits); users never choose it. The client using it authenticates against the compatibility APIs with the account&#39;s username and this secret. The label distinguishes entries in the list (for example the client app&#39;s name); labels need not be unique. An account holds at most 50 app passwords; creating past the cap answers &#x60;conflict&#x60;. 
+  ///
+  /// Parameters:
+  /// * [appPasswordCreate] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [AppPasswordCreated] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<AppPasswordCreated>> createAppPassword({ 
+    required AppPasswordCreate appPasswordCreate,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/users/me/app-passwords';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(AppPasswordCreate);
+      _bodyData = _serializers.serialize(appPasswordCreate, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    AppPasswordCreated? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AppPasswordCreated),
+      ) as AppPasswordCreated;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AppPasswordCreated>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
 
   /// Create an account
   /// Creates a local account. Administrators only. Usernames are unique case-insensitively; a taken name answers &#x60;conflict&#x60;. The account is immediately able to log in with the given password. 
@@ -359,6 +468,90 @@ class UsersApi {
     );
   }
 
+  /// List the caller&#39;s app passwords
+  /// The calling user&#39;s app passwords, newest first. App passwords are dedicated per-client credentials for the compatibility APIs (Subsonic and, later, gpodder), which require the server to hold a recoverable secret; the login password is never usable there. The secret itself is only ever returned by creation. App passwords stop authenticating the moment their account is disabled, and are deliberately independent of the login password: changing or resetting it leaves them working (revoke them here). Unpaginated: a user&#39;s app passwords are a small, bounded set. 
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [AppPasswordList] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<AppPasswordList>> listAppPasswords({ 
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/users/me/app-passwords';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    AppPasswordList? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(AppPasswordList),
+      ) as AppPasswordList;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<AppPasswordList>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// List accounts
   /// Keyset-paginated list of all accounts, ordered by username. Administrators only. 
   ///
@@ -559,6 +752,64 @@ class UsersApi {
     );
   }
 
+  /// Revoke an app password
+  /// Revokes one of the calling user&#39;s app passwords. Clients holding it fail their next compatibility-API request immediately. 
+  ///
+  /// Parameters:
+  /// * [appPasswordId] - App password PID (e.g. `ap-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future]
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<void>> revokeAppPassword({ 
+    required String appPasswordId,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/users/me/app-passwords/{appPasswordId}'.replaceAll('{' r'appPasswordId' '}', encodeQueryParameter(_serializers, appPasswordId, const FullType(String)).toString());
+    final _options = Options(
+      method: r'DELETE',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    return _response;
+  }
+
   /// Revoke all of an account&#39;s sessions
   /// Signs the account out everywhere by revoking every live session it has. When callers target their own account, the session making this request survives. Administrators can target any account; everyone else only their own. 
   ///
@@ -618,7 +869,7 @@ class UsersApi {
   }
 
   /// Set an account&#39;s password
-  /// Changes the account&#39;s password and revokes the account&#39;s sessions. Changing your own password always requires &#x60;currentPassword&#x60; (administrators included); a wrong value answers &#x60;forbidden&#x60;, and the session making the request is the only one that survives. An administrator resetting another account&#39;s password omits &#x60;currentPassword&#x60;, and every one of that account&#39;s sessions is revoked. Setting a password on an OIDC-provisioned account enables local login for it. 
+  /// Changes the account&#39;s password and revokes the account&#39;s sessions. Changing your own password always requires &#x60;currentPassword&#x60; (administrators included); a wrong value answers &#x60;forbidden&#x60;, and the session making the request is the only one that survives. An administrator resetting another account&#39;s password omits &#x60;currentPassword&#x60;, and every one of that account&#39;s sessions is revoked. Setting a password on an OIDC-provisioned account enables local login for it. App passwords are separate credentials and survive a password change; revoke them individually. 
   ///
   /// Parameters:
   /// * [userId] - User PID (e.g. `us-01JZX5N8QW3F4V9T2B7KD3M9R6`).

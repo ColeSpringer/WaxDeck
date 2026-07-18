@@ -5,7 +5,9 @@ import 'auth/auth_controller.dart';
 import 'auth/login_screen.dart';
 import 'auth/setup_screen.dart';
 import 'library/library_screen.dart';
+import 'prototype/editing_prototype_screen.dart';
 import 'settings/prefs_controller.dart';
+import 'sync/sync_providers.dart';
 
 class WaxDeckApp extends ConsumerWidget {
   const WaxDeckApp({super.key});
@@ -28,6 +30,15 @@ class WaxDeckApp extends ConsumerWidget {
       darkTheme: _theme(Brightness.dark),
       themeMode: ref.watch(themeModeProvider),
       home: const RootGate(),
+      // Deep-linkable prototypes and tools live behind explicit routes;
+      // everything else stays on the home gate.
+      onGenerateRoute: (settings) => switch (settings.name) {
+        EditingPrototypeScreen.routeName => MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const EditingPrototypeScreen(),
+        ),
+        _ => null,
+      },
     );
   }
 }
@@ -42,8 +53,18 @@ class RootGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
+    final authenticated = switch (auth) {
+      AsyncData(:final value) => value.authenticated,
+      _ => false,
+    };
+    if (authenticated) {
+      // Bind the sync machinery to the signed-in lifetime: the engine
+      // (or the web invalidation listener) starts here and stops when
+      // this subtree goes away on sign-out.
+      ref.watch(syncBinderProvider);
+      return const LibraryScreen();
+    }
     return switch (auth) {
-      AsyncData(:final value) when value.authenticated => const LibraryScreen(),
       AsyncLoading() => const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       ),

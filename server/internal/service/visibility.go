@@ -141,6 +141,25 @@ func (l *Library) itemVisible(ctx context.Context, uc *UserCtx, pid model.PID) b
 	return uc.Libraries[libPID]
 }
 
+// viewVisible is itemVisible for callers already holding a fresh item
+// view: it attributes the view's own primary path, bypassing the
+// located-path cache. The sync paths need this because the cache
+// invalidates on a poll, and a delta racing that poll would decide a
+// tombstone from a stale path.
+func (l *Library) viewVisible(ctx context.Context, uc *UserCtx, it *model.ItemView) bool {
+	if uc.AllLibraries {
+		return true
+	}
+	if len(it.Path) == 0 {
+		return false
+	}
+	libPID, err := l.libraryForPath(ctx, string(it.Path))
+	if err != nil || libPID == "" {
+		return false
+	}
+	return uc.Libraries[libPID]
+}
+
 // getVisibleItem is getItem plus the visibility check: an item outside
 // the caller's scope behaves exactly as if it did not exist.
 func (l *Library) getVisibleItem(ctx context.Context, uc *UserCtx, apiItemPID string) (*model.ItemView, error) {

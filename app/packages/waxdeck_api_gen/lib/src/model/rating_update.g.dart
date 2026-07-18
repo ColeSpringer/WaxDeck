@@ -9,11 +9,13 @@ part of 'rating_update.dart';
 class _$RatingUpdate extends RatingUpdate {
   @override
   final int? rating;
+  @override
+  final DateTime? recordedAt;
 
   factory _$RatingUpdate([void Function(RatingUpdateBuilder)? updates]) =>
       (RatingUpdateBuilder()..update(updates))._build();
 
-  _$RatingUpdate._({this.rating}) : super._();
+  _$RatingUpdate._({this.rating, this.recordedAt}) : super._();
   @override
   RatingUpdate rebuild(void Function(RatingUpdateBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -24,22 +26,26 @@ class _$RatingUpdate extends RatingUpdate {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is RatingUpdate && rating == other.rating;
+    return other is RatingUpdate &&
+        rating == other.rating &&
+        recordedAt == other.recordedAt;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, rating.hashCode);
+    _$hash = $jc(_$hash, recordedAt.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'RatingUpdate',
-    )..add('rating', rating)).toString();
+    return (newBuiltValueToStringHelper(r'RatingUpdate')
+          ..add('rating', rating)
+          ..add('recordedAt', recordedAt))
+        .toString();
   }
 }
 
@@ -51,6 +57,10 @@ class RatingUpdateBuilder
   int? get rating => _$this._rating;
   set rating(int? rating) => _$this._rating = rating;
 
+  DateTime? _recordedAt;
+  DateTime? get recordedAt => _$this._recordedAt;
+  set recordedAt(DateTime? recordedAt) => _$this._recordedAt = recordedAt;
+
   RatingUpdateBuilder() {
     RatingUpdate._defaults(this);
   }
@@ -59,6 +69,7 @@ class RatingUpdateBuilder
     final $v = _$v;
     if ($v != null) {
       _rating = $v.rating;
+      _recordedAt = $v.recordedAt;
       _$v = null;
     }
     return this;
@@ -78,7 +89,8 @@ class RatingUpdateBuilder
   RatingUpdate build() => _build();
 
   _$RatingUpdate _build() {
-    final _$result = _$v ?? _$RatingUpdate._(rating: rating);
+    final _$result =
+        _$v ?? _$RatingUpdate._(rating: rating, recordedAt: recordedAt);
     replace(_$result);
     return _$result;
   }

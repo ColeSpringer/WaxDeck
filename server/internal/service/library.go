@@ -14,6 +14,7 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/pidpath"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
@@ -33,7 +34,9 @@ type Config struct {
 	Roots []Root
 	// ScanOnStart launches a scan as soon as the service is up.
 	ScanOnStart bool
-	Logger      *slog.Logger
+	// Sealer encrypts recoverable secrets (app passwords) at rest.
+	Sealer *auth.Sealer
+	Logger *slog.Logger
 }
 
 // Library is the catalog service over an embedded WaxBin library. It
@@ -50,6 +53,19 @@ type Library struct {
 	// procCtx outlives any one request: async catalog jobs launch on it
 	// so a scan survives the 202 that reported it started.
 	procCtx context.Context
+	// feed is the catalog change stream's identity and position;
+	// serverGen names the event_log stream's generation.
+	feed      syncFeed
+	serverGen string
+	// catalogWake and userWake are the lossy wakeup hints the event hub
+	// fans out as invalidation frames.
+	catalogWake chan struct{}
+	userWake    chan string
+	// sealer and appSecrets back the app-password credential store.
+	sealer     *auth.Sealer
+	appSecrets appSecretCache
+	// trackFacts caches the compatibility surface's track sweep.
+	trackFacts trackFactsCache
 }
 
 // SocketFileName is the IPC socket beside the catalog DB. It is a local
@@ -85,13 +101,27 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		return nil, fmt.Errorf("service: pid path cache: %w", err)
 	}
 
-	l := &Library{lib: lib, paths: paths, db: store, roots: cfg.Roots, log: log, procCtx: ctx}
+	l := &Library{
+		lib: lib, paths: paths, db: store, roots: cfg.Roots, log: log, procCtx: ctx,
+		catalogWake: make(chan struct{}, 1),
+		userWake:    make(chan string, 64),
+		sealer:      cfg.Sealer,
+	}
+	if err := l.initSync(ctx); err != nil {
+		paths.Close()
+		lib.Close()
+		return nil, fmt.Errorf("service: sync state: %w", err)
+	}
 
 	// The CLI-through-server proxy: host side is one call, alive for the
 	// process lifetime. Serve returns nil on ctx cancel.
 	group.Go(ctx, "waxbin-serve", func(ctx context.Context) error {
 		return l.lib.Serve(ctx, socket)
 	})
+
+	// The change-feed consumer: subscribes, primes, follows, and feeds
+	// the event hub's invalidation fan-out.
+	group.Go(ctx, "catalog-feed", l.runCatalogFeed)
 
 	if cfg.ScanOnStart {
 		group.GoOnce(ctx, "startup-scan", func(ctx context.Context) error {

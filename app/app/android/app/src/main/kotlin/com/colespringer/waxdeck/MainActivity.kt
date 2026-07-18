@@ -1,5 +1,7 @@
 package com.colespringer.waxdeck
 
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 
-class MainActivity : FlutterActivity()
+// audio_service hosts the Flutter engine inside its media service so
+// playback survives the activity; the activity base class comes from it.
+class MainActivity : AudioServiceActivity()

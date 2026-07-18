@@ -22,6 +22,8 @@ dependencies:
   web: 1.1.1
   waxdeck_api:
     path: ../packages/waxdeck_api
+  waxdeck_data:
+    path: ../packages/waxdeck_data
   waxdeck_player:
     path: ../packages/waxdeck_player
 

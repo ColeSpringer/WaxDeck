@@ -18,9 +18,11 @@ import (
 
 	"github.com/colespringer/waxdeck/fixtures"
 
+	"github.com/colespringer/waxdeck/server/internal/adapter/subsonic"
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/events"
 	"github.com/colespringer/waxdeck/server/internal/service"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
@@ -32,10 +34,12 @@ type harness struct {
 	ts      *httptest.Server
 	token   string
 	library string
+	svc     *service.Library
+	store   *db.DB
 	flowReq struct{ apiKey, format string } // captured by the fake sidecar
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t *testing.T, extraRoots ...service.Root) *harness {
 	t.Helper()
 	h := &harness{}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -54,17 +58,26 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.store = store
 	t.Cleanup(func() { store.Close() })
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	sealer, err := auth.NewSealer(secret, "waxdeck-app-password-v1")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	group := supervise.NewGroup(log)
 	svc, err := service.Open(ctx, service.Config{
 		DataDir: dataDir,
-		Roots:   []service.Root{{Name: "lib", Path: h.library}},
+		Roots:   append([]service.Root{{Name: "lib", Path: h.library}}, extraRoots...),
+		Sealer:  sealer,
 		Logger:  log,
 	}, store, group)
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.svc = svc
 	t.Cleanup(func() {
 		cancel()
 		group.Wait()
@@ -103,12 +116,12 @@ func newHarness(t *testing.T) *harness {
 	}))
 	t.Cleanup(fakeFlow.Close)
 
-	secret := []byte("0123456789abcdef0123456789abcdef")
+	media := auth.NewMediaTokens(secret, 0)
 	bridge, err := flow.New(ctx, flow.Config{
 		BaseURL:  fakeFlow.URL,
 		APIKey:   "test-flow-key",
 		Roots:    []flow.Root{{Name: "lib", Path: h.library}},
-		Tokens:   auth.NewMediaTokens(secret, 0),
+		Tokens:   media,
 		Resolver: svc,
 		Logger:   log,
 	})
@@ -116,10 +129,14 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 
+	hub := events.New(svc)
+	group.Go(ctx, "event-hub", hub.Run)
+
 	srv := NewServer("test", Options{
 		Service:  svc,
 		Bridge:   bridge,
 		Sessions: auth.NewSessions(store),
+		Media:    media,
 	})
 	apiHandler := HandlerWithOptions(
 		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
@@ -133,6 +150,9 @@ func newHarness(t *testing.T) *harness {
 	)
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/", apiHandler)
+	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
+	mux.HandleFunc("GET /media/download", srv.ServeDownload)
+	mux.Handle("/rest/", subsonic.New(svc, bridge, "test"))
 	mux.HandleFunc("/media/stream", bridge.ServeStream)
 	h.ts = httptest.NewServer(mux)
 	t.Cleanup(h.ts.Close)

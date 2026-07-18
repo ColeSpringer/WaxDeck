@@ -12,11 +12,16 @@ part 'star_update.g.dart';
 ///
 /// Properties:
 /// * [starred] - The new star state.
+/// * [recordedAt] - When the change was made on the client, sent only when replaying an offline queue. The server skips the write when the item's star changed more recently than this, so a stale offline toggle never resurrects an undone state. Live mutations omit it and always apply. 
 @BuiltValue()
 abstract class StarUpdate implements Built<StarUpdate, StarUpdateBuilder> {
   /// The new star state.
   @BuiltValueField(wireName: r'starred')
   bool get starred;
+
+  /// When the change was made on the client, sent only when replaying an offline queue. The server skips the write when the item's star changed more recently than this, so a stale offline toggle never resurrects an undone state. Live mutations omit it and always apply. 
+  @BuiltValueField(wireName: r'recordedAt')
+  DateTime? get recordedAt;
 
   StarUpdate._();
 
@@ -46,6 +51,13 @@ class _$StarUpdateSerializer implements PrimitiveSerializer<StarUpdate> {
       object.starred,
       specifiedType: const FullType(bool),
     );
+    if (object.recordedAt != null) {
+      yield r'recordedAt';
+      yield serializers.serialize(
+        object.recordedAt,
+        specifiedType: const FullType(DateTime),
+      );
+    }
   }
 
   @override
@@ -75,6 +87,13 @@ class _$StarUpdateSerializer implements PrimitiveSerializer<StarUpdate> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.starred = valueDes;
+          break;
+        case r'recordedAt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(DateTime),
+          ) as DateTime;
+          result.recordedAt = valueDes;
           break;
         default:
           unhandled.add(key);

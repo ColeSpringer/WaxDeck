@@ -436,7 +436,7 @@ func (s *Server) SetStar(ctx context.Context, req SetStarRequestObject) (SetStar
 	if req.Body == nil {
 		return SetStar400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
-	st, err := s.svc.SetStar(ctx, uc, req.Pid, req.Body.Starred)
+	st, err := s.svc.SetStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
 	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return SetStar404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
@@ -454,7 +454,7 @@ func (s *Server) SetRating(ctx context.Context, req SetRatingRequestObject) (Set
 	if req.Body == nil {
 		return SetRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
-	st, err := s.svc.SetRating(ctx, uc, req.Pid, req.Body.Rating)
+	st, err := s.svc.SetRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindNotFound:

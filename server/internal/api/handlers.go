@@ -29,7 +29,11 @@ type Server struct {
 	sessions *auth.Sessions
 	oidc     *auth.OIDC
 	limiter  *auth.RateLimiter
-	log      logger
+	// media mints and verifies the query-string tokens the offline
+	// download endpoint uses (the streaming bridge holds its own
+	// reference to the same instance).
+	media *auth.MediaTokens
+	log   logger
 	// cookieSecure marks session cookies Secure; set whenever the
 	// deployed origin is HTTPS, never on the plain-HTTP LAN default.
 	cookieSecure bool
@@ -52,6 +56,7 @@ type Options struct {
 	Sessions     *auth.Sessions
 	OIDC         *auth.OIDC
 	Limiter      *auth.RateLimiter
+	Media        *auth.MediaTokens
 	Logger       logger
 	CookieSecure bool
 	PublicBase   string
@@ -75,6 +80,7 @@ func NewServer(version string, opts Options) *Server {
 		sessions:     opts.Sessions,
 		oidc:         opts.OIDC,
 		limiter:      opts.Limiter,
+		media:        opts.Media,
 		log:          opts.Logger,
 		cookieSecure: opts.CookieSecure,
 		publicBase:   opts.PublicBase,
@@ -480,7 +486,7 @@ func (s *Server) PutPlayState(ctx context.Context, req PutPlayStateRequestObject
 	if err != nil {
 		return nil, err
 	}
-	err = s.svc.Checkpoint(ctx, uc, req.Pid, req.Body.PositionMs)
+	err = s.svc.Checkpoint(ctx, uc, req.Pid, req.Body.PositionMs, req.Body.RecordedAt)
 	switch service.KindOf(err) {
 	case "":
 		return PutPlayState204Response{}, nil
@@ -846,6 +852,8 @@ func ResponseErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 		writeError(w, http.StatusBadRequest, "invalid-request", kindMessage(err, "invalid request"))
 	case service.KindConflict:
 		writeError(w, http.StatusConflict, "conflict", kindMessage(err, "a conflicting operation is running"))
+	case service.KindGone:
+		writeError(w, http.StatusGone, "sync-reset", kindMessage(err, "re-mirror from a fresh snapshot"))
 	default:
 		var se *service.Error
 		if errors.As(err, &se) && se.Msg != "" && se.Kind == service.KindInternal {

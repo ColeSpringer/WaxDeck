@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../media_icons.dart';
 import '../providers.dart';
+import '../sync/sync_providers.dart';
 import 'play_state_controller.dart';
 import 'playback_session.dart';
 
@@ -32,6 +33,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       engine: ref.read(audioEngineProvider),
       item: widget.item,
       clientId: listenClientId,
+      sync: ref.read(syncEngineProvider),
+      downloads: ref.read(downloadManagerProvider),
     );
     _starting = _session.start();
   }
@@ -48,7 +51,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Widget build(BuildContext context) {
     final item = widget.item;
     return Scaffold(
-      appBar: AppBar(title: Text(item.title)),
+      appBar: AppBar(
+        title: Text(item.title),
+        actions: [_DownloadButton(pid: item.pid)],
+      ),
       body: FutureBuilder<void>(
         future: _starting,
         builder: (context, snapshot) {
@@ -244,10 +250,15 @@ class _StarRatingRow extends ConsumerWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        // excludeSemantics collapses the control to one accessibility
+        // node: the wrapper's label plus the button's own (tooltip-fed)
+        // node would otherwise announce twice.
         Semantics(
           identifier: 'star-button',
           label: starred ? 'Unstar' : 'Star',
           button: true,
+          excludeSemantics: true,
+          onTap: playState == null ? null : () => notifier.setStarred(!starred),
           child: IconButton(
             key: const Key('star-button'),
             tooltip: starred ? 'Unstar' : 'Star',
@@ -264,6 +275,10 @@ class _StarRatingRow extends ConsumerWidget {
             identifier: 'rating-$n',
             label: '$n star rating',
             button: true,
+            excludeSemantics: true,
+            onTap: playState == null
+                ? null
+                : () => notifier.rate(n == stars ? null : n * 20),
             child: IconButton(
               key: Key('rating-$n'),
               visualDensity: VisualDensity.compact,
@@ -275,6 +290,98 @@ class _StarRatingRow extends ConsumerWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Downloads the item's original for offline playback. Hidden on
+/// platforms without a download manager (web). Three states: not
+/// downloaded, transferring, on disk.
+class _DownloadButton extends ConsumerStatefulWidget {
+  const _DownloadButton({required this.pid});
+
+  final String pid;
+
+  @override
+  ConsumerState<_DownloadButton> createState() => _DownloadButtonState();
+}
+
+class _DownloadButtonState extends ConsumerState<_DownloadButton> {
+  bool? _complete;
+  bool _inFlight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _probe();
+  }
+
+  Future<void> _probe() async {
+    final port = ref.read(downloadManagerProvider);
+    if (port == null) return;
+    final complete = await port.isComplete(widget.pid);
+    if (mounted) setState(() => _complete = complete);
+  }
+
+  Future<void> _download() async {
+    final port = ref.read(downloadManagerProvider);
+    if (port == null) return;
+    setState(() => _inFlight = true);
+    try {
+      // Listen before enqueuing so a fast completion cannot slip past,
+      // and stop on failure too; waiting on the complete event alone
+      // would spin forever when a file fails.
+      final done = Completer<void>();
+      final sub = port.progress.listen((p) {
+        if (p.pid == widget.pid &&
+            (p.complete || p.failed) &&
+            !done.isCompleted) {
+          done.complete();
+        }
+      });
+      try {
+        await port.download(widget.pid);
+        // Everything may already be on disk (an early tap before the
+        // probe landed, or a server-side retag): nothing was enqueued,
+        // so no event will ever come.
+        if (!await port.isComplete(widget.pid)) {
+          await done.future;
+        }
+      } finally {
+        await sub.cancel();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _inFlight = false);
+      }
+      await _probe();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (ref.watch(downloadManagerProvider) == null) {
+      return const SizedBox.shrink();
+    }
+    final complete = _complete ?? false;
+    return Semantics(
+      identifier: 'download-button',
+      label: complete ? 'Downloaded' : 'Download',
+      button: true,
+      excludeSemantics: true,
+      onTap: complete || _inFlight ? null : _download,
+      child: IconButton(
+        key: const Key('download-button'),
+        tooltip: complete ? 'Downloaded' : 'Download for offline playback',
+        onPressed: complete || _inFlight ? null : _download,
+        icon: _inFlight
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(complete ? Icons.download_done : Icons.download_outlined),
+      ),
     );
   }
 }

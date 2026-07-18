@@ -13,6 +13,7 @@ import 'package:waxdeck_api_gen/src/api/admin_api.dart';
 import 'package:waxdeck_api_gen/src/api/auth_api.dart';
 import 'package:waxdeck_api_gen/src/api/library_api.dart';
 import 'package:waxdeck_api_gen/src/api/playback_api.dart';
+import 'package:waxdeck_api_gen/src/api/sync_api.dart';
 import 'package:waxdeck_api_gen/src/api/system_api.dart';
 import 'package:waxdeck_api_gen/src/api/users_api.dart';
 
@@ -92,6 +93,12 @@ class WaxdeckApiGen {
   /// by doing that all interceptors will not be executed
   PlaybackApi getPlaybackApi() {
     return PlaybackApi(dio, serializers);
+  }
+
+  /// Get SyncApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  SyncApi getSyncApi() {
+    return SyncApi(dio, serializers);
   }
 
   /// Get SystemApi instance, base route and serializer can be overridden by a given but be careful,

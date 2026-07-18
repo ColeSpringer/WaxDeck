@@ -1,6 +1,6 @@
 module github.com/colespringer/waxdeck/server
 
-go 1.26.3
+go 1.26
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
@@ -13,7 +13,10 @@ require (
 	golang.org/x/oauth2 v0.36.0
 )
 
-require github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+require (
+	github.com/coder/websocket v1.8.15 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+)
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect

@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../providers.dart';
+import '../sync/sync_providers.dart';
 
 /// Media-type filter shown above the grid.
 enum LibraryFilter {
@@ -65,6 +67,16 @@ class LibraryController extends AsyncNotifier<LibraryState> {
   Future<LibraryState> build() async {
     _generation++;
     final filter = ref.watch(libraryFilterProvider);
+    // Offline, the local mirror serves the listing (native builds with
+    // a started engine only; everything else stays server-backed).
+    if (ref.watch(offlineProvider)) {
+      final page = await mirrorItemsPage(
+        ref.read(mirrorDatabaseProvider)!,
+        mediaType: filter.mediaType,
+        limit: pageSize,
+      );
+      return LibraryState(items: page.items, nextCursor: page.nextCursor);
+    }
     final page = await ref
         .watch(repositoryProvider)
         .listItems(mediaType: filter.mediaType, limit: pageSize);
@@ -79,13 +91,24 @@ class LibraryController extends AsyncNotifier<LibraryState> {
     final generation = _generation;
     state = AsyncData(current.copyWith(loadingMore: true));
     try {
-      final page = await ref
-          .read(repositoryProvider)
-          .listItems(
-            mediaType: ref.read(libraryFilterProvider).mediaType,
-            cursor: current.nextCursor,
-            limit: pageSize,
-          );
+      final cursor = current.nextCursor;
+      final ItemPage page;
+      if (cursor != null && isMirrorCursor(cursor)) {
+        page = await mirrorItemsPage(
+          ref.read(mirrorDatabaseProvider)!,
+          mediaType: ref.read(libraryFilterProvider).mediaType,
+          cursor: cursor,
+          limit: pageSize,
+        );
+      } else {
+        page = await ref
+            .read(repositoryProvider)
+            .listItems(
+              mediaType: ref.read(libraryFilterProvider).mediaType,
+              cursor: cursor,
+              limit: pageSize,
+            );
+      }
       if (generation != _generation) return;
       state = AsyncData(
         LibraryState(

@@ -22,10 +22,12 @@ import (
 	// containers with no zoneinfo on disk.
 	_ "time/tzdata"
 
+	"github.com/colespringer/waxdeck/server/internal/adapter/subsonic"
 	"github.com/colespringer/waxdeck/server/internal/api"
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/events"
 	"github.com/colespringer/waxdeck/server/internal/service"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 	"github.com/colespringer/waxdeck/server/internal/web"
@@ -97,6 +99,11 @@ func run() error {
 	}
 	defer store.Close()
 
+	sealer, err := auth.NewSealer(secret, "waxdeck-app-password-v1")
+	if err != nil {
+		return err
+	}
+
 	svcRoots := make([]service.Root, len(roots))
 	for i, r := range roots {
 		svcRoots[i] = service.Root{Name: r.Name, Path: r.Path}
@@ -105,12 +112,21 @@ func run() error {
 		DataDir:     *dataDir,
 		Roots:       svcRoots,
 		ScanOnStart: *scanStart && len(roots) > 0,
+		Sealer:      sealer,
 		Logger:      log,
 	}, store, group)
 	if err != nil {
 		return err
 	}
 	defer svc.Close()
+
+	// The event hub fans the service's change wakeups out to WebSocket
+	// subscribers as coalesced invalidation frames.
+	hub := events.New(svc)
+	group.Go(ctx, "event-hub", hub.Run)
+
+	// One media-token instance signs both streaming and download URLs.
+	media := auth.NewMediaTokens(secret, 0)
 
 	// The WaxFlow bridge is optional in development: without it every
 	// catalog surface works and play-info reports streaming unavailable.
@@ -126,7 +142,7 @@ func run() error {
 			BaseURL:  *flowURL,
 			APIKey:   *flowAPIKey,
 			Roots:    flowRoots,
-			Tokens:   auth.NewMediaTokens(secret, 0),
+			Tokens:   media,
 			Resolver: svc,
 			Logger:   log,
 		})
@@ -182,6 +198,7 @@ func run() error {
 		Bridge:       bridge,
 		Sessions:     sessions,
 		OIDC:         oidc,
+		Media:        media,
 		Logger:       log,
 		CookieSecure: *cookieSec,
 		PublicBase:   *publicBase,
@@ -202,6 +219,17 @@ func run() error {
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/", apiHandler)
+	// The event channel and the download endpoint live outside the
+	// generated router: a WebSocket upgrade and a ranged file server do
+	// not fit the strict-handler shape. The event channel runs behind
+	// the same auth middleware as the rest of the API; downloads
+	// authenticate by media token like /media/stream.
+	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
+	mux.HandleFunc("GET /media/download", srv.ServeDownload)
+	// The read-only OpenSubsonic compatibility surface. App-password
+	// authenticated; third-party clients browse and stream while the
+	// first-party clients mature.
+	mux.Handle("/rest/", subsonic.New(svc, bridge, version))
 	if bridge != nil {
 		mux.HandleFunc("/media/stream", bridge.ServeStream)
 	} else {

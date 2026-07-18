@@ -8,4 +8,6 @@ generate:
   strict-server: true
   embedded-spec: true
 output-options:
-  skip-prune: false
+  # Keep schemas no REST path references: the WebSocket frame DTOs are carried
+  # by the event channel (api/events.md) and must still generate.
+  skip-prune: true

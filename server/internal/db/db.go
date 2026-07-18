@@ -111,6 +111,47 @@ var migrations = []string{
 		created_at_ns INTEGER NOT NULL,
 		expires_at_ns INTEGER NOT NULL
 	);`,
+
+	// Sync and compatibility-API state. event_log is the server change
+	// stream (the serverSeq cursor): one row per user-scoped state
+	// change, written by the sole writer (the service) at mutation time.
+	// play_state_stamps carry the per-field change times offline replay
+	// reconciliation compares against; WaxBin's play_state row has only
+	// one UpdatedAt, which position checkpoints bump constantly.
+	// sync_state is a small key-value table for stream generations,
+	// floors, cursors, and per-user grant epochs. app_passwords hold the
+	// recoverable per-client secrets the Subsonic scheme demands,
+	// sealed with the server key; secret_hash serves apiKey lookup.
+	`CREATE TABLE event_log (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id       TEXT    NOT NULL,
+		kind          TEXT    NOT NULL,
+		item_pid      TEXT    NOT NULL DEFAULT '',
+		created_at_ns INTEGER NOT NULL
+	);
+	CREATE INDEX event_log_by_user ON event_log (user_id, id);
+	CREATE TABLE play_state_stamps (
+		user_id     TEXT    NOT NULL,
+		item_pid    TEXT    NOT NULL,
+		position_ns INTEGER NOT NULL DEFAULT 0,
+		star_ns     INTEGER NOT NULL DEFAULT 0,
+		rating_ns   INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (user_id, item_pid)
+	);
+	CREATE TABLE sync_state (
+		key   TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	);
+	CREATE TABLE app_passwords (
+		id            TEXT    PRIMARY KEY,
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		label         TEXT    NOT NULL,
+		secret_enc    BLOB    NOT NULL,
+		secret_hash   BLOB    NOT NULL UNIQUE,
+		created_at_ns INTEGER NOT NULL,
+		last_used_ns  INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE INDEX app_passwords_by_user ON app_passwords (user_id, created_at_ns);`,
 }
 
 // Open opens (creating if needed) the database at path and applies

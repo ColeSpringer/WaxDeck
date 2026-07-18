@@ -17,6 +17,9 @@ const (
 	KindConflict    ErrorKind = "conflict"
 	KindMaintenance ErrorKind = "catalog-maintenance"
 	KindInternal    ErrorKind = "internal"
+	// KindGone marks a sync cursor the stream can no longer serve
+	// contiguously (410 sync-reset at the API).
+	KindGone ErrorKind = "sync-reset"
 )
 
 // Error is a classified service failure.

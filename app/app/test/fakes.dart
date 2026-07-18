@@ -59,6 +59,15 @@ class FakeRepository implements WaxDeckRepository {
   /// changes, to exercise the optimistic rollback path.
   WaxDeckApiException? playStateError;
 
+  /// When set, listing calls fail with it (a dead network in tests).
+  WaxDeckApiException? listError;
+
+  /// When set, play-info resolution fails with it.
+  WaxDeckApiException? playInfoError;
+
+  /// When set, position checkpoints fail with it.
+  WaxDeckApiException? putPlayStateError;
+
   final List<({String username, String password, String? deviceName})>
   loginCalls = [];
   final List<({String username, String password, String? displayName})>
@@ -179,6 +188,8 @@ class FakeRepository implements WaxDeckRepository {
     String? cursor,
     int? limit,
   }) async {
+    final error = listError;
+    if (error != null) throw error;
     final filtered = mediaType == null
         ? libraryItems
         : libraryItems.where((i) => i.mediaType == mediaType).toList();
@@ -224,14 +235,18 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<PlayInfo> getPlayInfo(String pid) async => PlayInfo(
-    pid: pid,
-    url: '/media/stream?pid=$pid&mt=test-token',
-    mimeType: 'audio/flac',
-    durationMs: 214000,
-    seekable: true,
-    expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
-  );
+  Future<PlayInfo> getPlayInfo(String pid) async {
+    final error = playInfoError;
+    if (error != null) throw error;
+    return PlayInfo(
+      pid: pid,
+      url: '/media/stream?pid=$pid&mt=test-token',
+      mimeType: 'audio/flac',
+      durationMs: 214000,
+      seekable: true,
+      expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+    );
+  }
 
   @override
   Future<PlayState> getPlayState(String pid) async => PlayState(
@@ -245,13 +260,19 @@ class FakeRepository implements WaxDeckRepository {
   );
 
   @override
-  Future<void> putPlayState(String pid, int positionMs) async {
+  Future<void> putPlayState(
+    String pid,
+    int positionMs, {
+    DateTime? recordedAt,
+  }) async {
+    final error = putPlayStateError;
+    if (error != null) throw error;
     putPlayStateCalls.add((pid: pid, positionMs: positionMs));
     playPositions[pid] = positionMs;
   }
 
   @override
-  Future<PlayState> setStar(String pid, bool starred) {
+  Future<PlayState> setStar(String pid, bool starred, {DateTime? recordedAt}) {
     final error = playStateError;
     if (error != null) return _failLikeANetwork(error);
     starredByPid[pid] = starred;
@@ -259,12 +280,71 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<PlayState> setRating(String pid, int? rating) {
+  Future<PlayState> setRating(String pid, int? rating, {DateTime? recordedAt}) {
     final error = playStateError;
     if (error != null) return _failLikeANetwork(error);
     ratingByPid[pid] = rating;
     return getPlayState(pid);
   }
+
+  @override
+  Future<List<PlayState>> listPlayStates(List<String> pids) async {
+    return [for (final pid in pids) await getPlayState(pid)];
+  }
+
+  @override
+  Future<CatalogSyncPage> syncCatalog({
+    String? since,
+    String? cursor,
+    int? limit,
+  }) async {
+    return CatalogSyncPage(
+      entries: [
+        for (final item in libraryItems)
+          CatalogSyncEntry(op: 'upsert', pid: item.pid, item: item),
+      ],
+      nextSince: 'fake-catalog-cursor',
+    );
+  }
+
+  @override
+  Future<ServerSyncPage> syncServer({String? since, int? limit}) async {
+    return const ServerSyncPage(nextSince: 'fake-server-cursor');
+  }
+
+  @override
+  Future<DownloadInfo> getDownloadInfo(String pid) async {
+    return DownloadInfo(
+      pid: pid,
+      files: [
+        DownloadFileInfo(
+          url: '/media/download?pid=$pid&mt=test-token',
+          mimeType: 'audio/flac',
+          sizeBytes: 1024,
+          fileName: '$pid.flac',
+          essenceHash: 'essence-$pid',
+          etag: '1024-1',
+        ),
+      ],
+      expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+    );
+  }
+
+  @override
+  Future<List<AppPassword>> listAppPasswords() async => const [];
+
+  @override
+  Future<AppPasswordCreated> createAppPassword(String label) async {
+    return AppPasswordCreated(
+      id: 'ap-01JZX5N8QW3F4V9T2B7KD3M9R6',
+      label: label,
+      createdAt: DateTime.now().toUtc(),
+      secret: 'FAKESECRETFAKESECRETFAKESE',
+    );
+  }
+
+  @override
+  Future<void> revokeAppPassword(String id) async {}
 
   // A beat of latency before the failure, so tests can observe the
   // optimistic frame a real network round trip would leave on screen.

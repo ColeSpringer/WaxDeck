@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../media_icons.dart';
 import '../player/player_screen.dart';
 import '../settings/settings_screen.dart';
+import '../sync/sync_providers.dart';
 import 'library_controller.dart';
 
 /// Artwork grid over the whole library with a media-type filter, cursor
@@ -43,6 +44,28 @@ class LibraryScreen extends ConsumerWidget {
       ),
       body: Column(
         children: [
+          if (ref.watch(offlineProvider))
+            Semantics(
+              identifier: 'offline-banner',
+              child: Container(
+                width: double.infinity,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.cloud_off, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Offline: showing the local library',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: SizedBox(

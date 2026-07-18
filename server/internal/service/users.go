@@ -200,12 +200,16 @@ func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdat
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
 	losesAdmin := false
+	visibilityChanged := false
 	if upd.Roles != nil {
 		roles, err := normalizeRoles(upd.Roles)
 		if err != nil {
 			return nil, err
 		}
 		losesAdmin = hasRole(u.Roles, "admin") && !hasRole(roles, "admin")
+		// Admin status short-circuits library visibility, so a role
+		// change is a visibility change.
+		visibilityChanged = hasRole(u.Roles, "admin") != hasRole(roles, "admin")
 		u.Roles = roles
 	}
 	if upd.Disabled != nil {
@@ -226,6 +230,13 @@ func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdat
 		if err := l.db.SetLibraryGrants(ctx, u.ID, grants); err != nil {
 			return nil, &Error{Kind: KindInternal, Err: err}
 		}
+		visibilityChanged = true
+	}
+	if visibilityChanged {
+		// Outstanding catalog sync cursors are scoped to the old grant
+		// set; retiring them makes the next delta answer sync-reset and
+		// the re-snapshot reflect the new visibility.
+		l.bumpGrantEpoch(ctx, u.ID)
 	}
 	if err := l.db.UpdateUser(ctx, u, losesAdmin); err != nil {
 		if errors.Is(err, wdb.ErrConflict) {

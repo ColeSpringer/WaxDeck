@@ -59,10 +59,53 @@ func (l *Library) playStateFor(ctx context.Context, uc *UserCtx, apiItemPID stri
 	return out, nil
 }
 
+// recencyGuard bounds how much older a replayed further position may be
+// and still beat a more recent nearer one (furthest-wins media): past
+// it, the nearer position was a deliberate recent rewind and wins.
+const recencyGuard = 10 * time.Minute
+
+// clampRecorded normalizes a client-reported change time: future values
+// (skewed clocks) clamp to the server clock.
+func clampRecorded(t time.Time) int64 {
+	now := time.Now()
+	if t.After(now) {
+		t = now
+	}
+	return t.UnixNano()
+}
+
+// recencyPrimary reports whether the item's resume conflicts resolve on
+// recency alone: audiobooks always, and long tracks, where a stale
+// furthest position permanently losing your place is the unforgivable
+// case. Episodes stay furthest-wins regardless of length.
+func recencyPrimary(it *model.ItemView) bool {
+	if it.Kind == model.KindBook {
+		return true
+	}
+	return it.Kind == model.KindTrack && it.DurationMS >= musicLongTrack.Milliseconds()
+}
+
+// applyReplayedPosition is the per-medium replay decision, pure so the
+// policy is testable in isolation: recency-primary media apply only
+// newer-than-stamp replays; furthest-wins media additionally apply an
+// older-but-further replay unless the current position is substantially
+// more recent (a deliberate rewind).
+func applyReplayedPosition(recencyPrim bool, positionMS, recNS, curPositionMS, stampNS int64) bool {
+	if recNS > stampNS {
+		return true
+	}
+	if recencyPrim {
+		return false
+	}
+	return positionMS > curPositionMS && stampNS-recNS <= recencyGuard.Nanoseconds()
+}
+
 // Checkpoint persists the user's resume position for the item. WaxBin
 // buffers high-frequency progress internally; Checkpoint writes
-// through, which is what clients call at their coarse interval.
-func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64) error {
+// through, which is what clients call at their coarse interval. A nil
+// recordedAt is a live checkpoint and always applies; a non-nil one is
+// an offline replay, reconciled per medium against the position stamp.
+func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, recordedAt *time.Time) error {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return err
@@ -70,28 +113,82 @@ func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string
 	if positionMS < 0 {
 		return errInvalid("positionMs must not be negative")
 	}
+	stampNS := time.Now().UnixNano()
+	if recordedAt != nil {
+		recNS := clampRecorded(*recordedAt)
+		stamp, err := l.db.PlayStamp(ctx, uc.ID, string(it.PID))
+		if err != nil {
+			return &Error{Kind: KindInternal, Err: err}
+		}
+		var curPos int64
+		if !recencyPrimary(it) {
+			cur, err := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), it.PID)
+			if err != nil {
+				return classify(err)
+			}
+			if cur != nil {
+				curPos = cur.PositionMS
+			}
+		}
+		if !applyReplayedPosition(recencyPrimary(it), positionMS, recNS, curPos, stamp.PositionNS) {
+			// Skipped replays answer success: the winning state is
+			// already in the event stream for this client to pull.
+			return nil
+		}
+		stampNS = recNS
+		if stamp.PositionNS > stampNS {
+			// A further-but-older replay wins the position but must not
+			// rewind the stamp: replays recorded between the two times
+			// would then read as newer than the newest observation and
+			// apply unconditionally.
+			stampNS = stamp.PositionNS
+		}
+	}
 	if err := l.lib.Playback().Checkpoint(ctx, model.PID(uc.CatalogPID), it.PID, positionMS); err != nil {
 		return classify(err)
 	}
+	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), wdb.StampPosition, stampNS); err != nil {
+		l.log.Warn("stamping position", "pid", apiItemPID, "err", err)
+	}
+	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
 	return nil
 }
 
 // SetStar stars or unstars the item for the acting user and returns the
-// resulting state.
-func (l *Library) SetStar(ctx context.Context, uc *UserCtx, apiItemPID string, starred bool) (PlayState, error) {
+// resulting state. Replayed offline toggles (recordedAt set) are
+// skipped when the star changed more recently: the stamp is written on
+// set and on clear, so a stale replay never resurrects an undone state.
+func (l *Library) SetStar(ctx context.Context, uc *UserCtx, apiItemPID string, starred bool, recordedAt *time.Time) (PlayState, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return PlayState{}, err
 	}
+	stampNS := time.Now().UnixNano()
+	if recordedAt != nil {
+		recNS := clampRecorded(*recordedAt)
+		stamp, err := l.db.PlayStamp(ctx, uc.ID, string(it.PID))
+		if err != nil {
+			return PlayState{}, &Error{Kind: KindInternal, Err: err}
+		}
+		if stamp.StarNS > recNS {
+			return l.playStateFor(ctx, uc, apiItemPID, it.PID)
+		}
+		stampNS = recNS
+	}
 	if err := l.lib.Playback().SetStar(ctx, model.PID(uc.CatalogPID), it.PID, starred); err != nil {
 		return PlayState{}, classify(err)
 	}
+	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), wdb.StampStar, stampNS); err != nil {
+		l.log.Warn("stamping star", "pid", apiItemPID, "err", err)
+	}
+	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
 	return l.playStateFor(ctx, uc, apiItemPID, it.PID)
 }
 
 // SetRating sets (0..100) or clears (nil) the acting user's rating and
-// returns the resulting state.
-func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string, rating *int) (PlayState, error) {
+// returns the resulting state. Replayed offline changes are skipped
+// when the rating changed more recently.
+func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string, rating *int, recordedAt *time.Time) (PlayState, error) {
 	if rating != nil && (*rating < 0 || *rating > 100) {
 		return PlayState{}, errInvalid("rating must be between 0 and 100")
 	}
@@ -99,9 +196,25 @@ func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string,
 	if err != nil {
 		return PlayState{}, err
 	}
+	stampNS := time.Now().UnixNano()
+	if recordedAt != nil {
+		recNS := clampRecorded(*recordedAt)
+		stamp, err := l.db.PlayStamp(ctx, uc.ID, string(it.PID))
+		if err != nil {
+			return PlayState{}, &Error{Kind: KindInternal, Err: err}
+		}
+		if stamp.RatingNS > recNS {
+			return l.playStateFor(ctx, uc, apiItemPID, it.PID)
+		}
+		stampNS = recNS
+	}
 	if err := l.lib.Playback().SetRating(ctx, model.PID(uc.CatalogPID), it.PID, rating); err != nil {
 		return PlayState{}, classify(err)
 	}
+	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), wdb.StampRating, stampNS); err != nil {
+		l.log.Warn("stamping rating", "pid", apiItemPID, "err", err)
+	}
+	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
 	return l.playStateFor(ctx, uc, apiItemPID, it.PID)
 }
 
@@ -162,7 +275,9 @@ func (l *Library) IngestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 		}
 		res.Accepted++
 		if crossedPlayedThreshold(mediaTypeForKind(it.Kind), s.MsPlayed, it.DurationMS) || s.Finished {
-			if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, s.Finished); err != nil {
+			if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, s.Finished); err == nil {
+				l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
+			} else {
 				err = classify(err)
 				switch KindOf(err) {
 				case KindNotFound, KindInvalid:

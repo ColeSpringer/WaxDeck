@@ -103,20 +103,55 @@ abstract interface class WaxDeckRepository {
   /// `GET /items/{pid}/play-state`: the caller's resume state for one item.
   Future<PlayState> getPlayState(String pid);
 
+  /// `POST /play-states`: the caller's states for a batch of items (at
+  /// most 500). Items with zero state are absent from the result.
+  Future<List<PlayState>> listPlayStates(List<String> pids);
+
   /// `PUT /items/{pid}/play-state`: checkpoints the resume position.
-  Future<void> putPlayState(String pid, int positionMs);
+  /// [recordedAt] marks an offline-queue replay; the server reconciles
+  /// it per medium instead of applying it blindly.
+  Future<void> putPlayState(String pid, int positionMs, {DateTime? recordedAt});
 
   /// `PUT /items/{pid}/star`: stars or unstars one item, returning the
-  /// updated play state.
-  Future<PlayState> setStar(String pid, bool starred);
+  /// updated play state. [recordedAt] marks an offline-queue replay.
+  Future<PlayState> setStar(String pid, bool starred, {DateTime? recordedAt});
 
   /// `PUT /items/{pid}/rating`: rates one item, 0 to 100, or clears the
-  /// rating with null. Returns the updated play state.
-  Future<PlayState> setRating(String pid, int? rating);
+  /// rating with null. Returns the updated play state. [recordedAt]
+  /// marks an offline-queue replay.
+  Future<PlayState> setRating(String pid, int? rating, {DateTime? recordedAt});
 
   /// `POST /listens`: reports listen sessions. Idempotent per session ID, so
   /// retrying a failed batch is always safe.
   Future<ListenOutcome> reportListens(List<ListenSession> sessions);
+
+  /// `GET /sync/catalog`: snapshot (no [since]) or changed-since delta
+  /// of the catalog, feeding the client mirror. A `sync-reset` error
+  /// means drop the mirror and snapshot again.
+  Future<CatalogSyncPage> syncCatalog({
+    String? since,
+    String? cursor,
+    int? limit,
+  });
+
+  /// `GET /sync/server`: the caller's own server-side state changes.
+  /// Without [since] it mints a fresh cursor and returns no events.
+  Future<ServerSyncPage> syncServer({String? since, int? limit});
+
+  /// `GET /items/{pid}/download-info`: resolves an offline download of
+  /// the item's original bytes. URLs are resolved against the client
+  /// base URL.
+  Future<DownloadInfo> getDownloadInfo(String pid);
+
+  /// `GET /users/me/app-passwords`: the caller's app passwords.
+  Future<List<AppPassword>> listAppPasswords();
+
+  /// `POST /users/me/app-passwords`: creates an app password; the
+  /// returned secret is visible exactly once.
+  Future<AppPasswordCreated> createAppPassword(String label);
+
+  /// `DELETE /users/me/app-passwords/{id}`: revokes an app password.
+  Future<void> revokeAppPassword(String id);
 
   /// `GET /users/me/prefs`: the caller's synced preferences.
   Future<Prefs> getPrefs();
@@ -375,29 +410,115 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<void> putPlayState(String pid, int positionMs) => _guard(() async {
+  Future<List<PlayState>> listPlayStates(List<String> pids) => _guard(() async {
+    final response = await _gen.getPlaybackApi().listPlayStates(
+      playStateQuery: gen.PlayStateQuery((b) => b..pids.addAll(pids)),
+    );
+    return _require(response.data).states.map(playStateFromGen).toList();
+  });
+
+  @override
+  Future<void> putPlayState(
+    String pid,
+    int positionMs, {
+    DateTime? recordedAt,
+  }) => _guard(() async {
     await _gen.getPlaybackApi().putPlayState(
       pid: pid,
-      playStateUpdate: gen.PlayStateUpdate((b) => b..positionMs = positionMs),
+      playStateUpdate: gen.PlayStateUpdate(
+        (b) => b
+          ..positionMs = positionMs
+          ..recordedAt = recordedAt?.toUtc(),
+      ),
     );
   });
 
   @override
-  Future<PlayState> setStar(String pid, bool starred) => _guard(() async {
-    final response = await _gen.getPlaybackApi().setStar(
-      pid: pid,
-      starUpdate: gen.StarUpdate((b) => b..starred = starred),
-    );
-    return playStateFromGen(_require(response.data));
-  });
+  Future<PlayState> setStar(String pid, bool starred, {DateTime? recordedAt}) =>
+      _guard(() async {
+        final response = await _gen.getPlaybackApi().setStar(
+          pid: pid,
+          starUpdate: gen.StarUpdate(
+            (b) => b
+              ..starred = starred
+              ..recordedAt = recordedAt?.toUtc(),
+          ),
+        );
+        return playStateFromGen(_require(response.data));
+      });
 
   @override
-  Future<PlayState> setRating(String pid, int? rating) => _guard(() async {
+  Future<PlayState> setRating(
+    String pid,
+    int? rating, {
+    DateTime? recordedAt,
+  }) => _guard(() async {
     final response = await _gen.getPlaybackApi().setRating(
       pid: pid,
-      ratingUpdate: gen.RatingUpdate((b) => b..rating = rating),
+      ratingUpdate: gen.RatingUpdate(
+        (b) => b
+          ..rating = rating
+          ..recordedAt = recordedAt?.toUtc(),
+      ),
     );
     return playStateFromGen(_require(response.data));
+  });
+
+  @override
+  Future<CatalogSyncPage> syncCatalog({
+    String? since,
+    String? cursor,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getSyncApi().syncCatalog(
+      since: since,
+      cursor: cursor,
+      limit: limit,
+    );
+    return catalogSyncPageFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<ServerSyncPage> syncServer({String? since, int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getSyncApi().syncServer(
+          since: since,
+          limit: limit,
+        );
+        return serverSyncPageFromGen(_require(response.data));
+      });
+
+  @override
+  Future<DownloadInfo> getDownloadInfo(String pid) => _guard(() async {
+    final response = await _gen.getPlaybackApi().getDownloadInfo(pid: pid);
+    return downloadInfoFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<List<AppPassword>> listAppPasswords() => _guard(() async {
+    final body = _require((await _gen.getUsersApi().listAppPasswords()).data);
+    return body.appPasswords.map(appPasswordFromGen).toList();
+  });
+
+  @override
+  Future<AppPasswordCreated> createAppPassword(String label) =>
+      _guard(() async {
+        final response = await _gen.getUsersApi().createAppPassword(
+          appPasswordCreate: gen.AppPasswordCreate((b) => b..label = label),
+        );
+        final body = _require(response.data);
+        return AppPasswordCreated(
+          id: body.id,
+          label: body.label,
+          createdAt: body.createdAt,
+          lastUsedAt: body.lastUsedAt,
+          secret: body.secret,
+        );
+      });
+
+  @override
+  Future<void> revokeAppPassword(String id) => _guard(() async {
+    await _gen.getUsersApi().revokeAppPassword(appPasswordId: id);
   });
 
   @override
