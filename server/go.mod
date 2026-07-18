@@ -5,6 +5,7 @@ go 1.26
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/colespringer/waxdeck/fixtures v0.0.0-00010101000000-000000000000
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/getkin/kin-openapi v0.135.0
@@ -13,10 +14,7 @@ require (
 	golang.org/x/oauth2 v0.36.0
 )
 
-require (
-	github.com/coder/websocket v1.8.15 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
-)
+require github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
