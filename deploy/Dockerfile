@@ -21,8 +21,12 @@ RUN cd app/app && flutter build web --wasm
 FROM golang:1.26 AS build
 
 ENV CGO_ENABLED=0
+WORKDIR /src
+# The server module replaces the sibling fixtures module by relative
+# path, so both trees are needed to resolve the build list.
+COPY server/ server/
+COPY fixtures/ fixtures/
 WORKDIR /src/server
-COPY server/ ./
 # The web build is embedded via go:embed when built with -tags withweb.
 COPY --from=web /src/app/app/build/web/ internal/web/dist/
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -33,9 +37,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 ## --- stage 3: runtime ----------------------------------------------------------
 FROM debian:bookworm-slim
 
-# ffmpeg: transcoding/probing. libchromaprint-tools: fpcalc for AcoustID.
+# libchromaprint-tools: fpcalc for AcoustID fingerprinting, the single
+# external tool this image ships. Decode and DSP are pure Go (WaxFlow
+# codec packages); there is no ffmpeg anywhere in the stack.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates ffmpeg libchromaprint-tools \
+    && apt-get install -y --no-install-recommends ca-certificates libchromaprint-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # UID 10001 matches the Wax* container convention (see WaxFlow).

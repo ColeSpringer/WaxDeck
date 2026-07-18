@@ -4,7 +4,8 @@ Test-media generator for WaxDeck. The repository policy is **no binary
 media in git**: every audio file a test needs is synthesized at
 test-setup from a `Spec`: a deterministic sine tone (440 Hz per
 channel, times the channel index) encoded into the requested
-codec/container. The same spec always produces the same bytes.
+codec/container through WaxFlow's own encoders and muxers. No external
+tools are involved, and the same spec always produces the same bytes.
 
 It is a Go module usable as a library and as a CLI.
 
@@ -13,7 +14,7 @@ It is a Go module usable as a library and as a CLI.
 ```go
 import "github.com/colespringer/waxdeck/fixtures"
 
-// Everything WaxFlow encodes natively (no ffmpeg needed).
+// The full supported matrix.
 paths, err := fixtures.Generate(dir, fixtures.DefaultLibrary()...)
 
 // One custom file.
@@ -34,37 +35,32 @@ Opus 48000), `Channels` (default 2), `Corrupt`, `Tags`, `Chapters`,
 ## CLI
 
 ```sh
-go run ./cmd/fixturegen -out testdata/media              # default preset
-go run ./cmd/fixturegen -out testdata/media -preset all  # + ffmpeg formats
+go run ./cmd/fixturegen -out testdata/media                # codec/container matrix
+go run ./cmd/fixturegen -out testdata/media -preset demo   # titled demo album
+go run ./cmd/fixturegen -out testdata/media -preset all    # both
 ```
 
-Presets: `default` (native only), `ffmpeg`, `all`. The written paths
-print to stdout, one per line.
+The written paths print to stdout, one per line. The demo preset
+(`DemoLibrary()`) is a small tagged album with human-findable titles;
+end-to-end harnesses scan it alongside the matrix.
 
 ## Coverage
 
-| Route | Codec / container | Produced by |
-| --- | --- | --- |
-| Native | PCM in WAV, PCM in AIFF, FLAC, MP3, AAC in ADTS, Opus in Ogg | WaxFlow encoders + muxers |
-| ffmpeg | Vorbis in Ogg, FLAC in Matroska, AAC in MP4, ALAC in MP4 | host `ffmpeg` |
-| Corrupt | `CorruptTruncated` (valid encode cut at half), `CorruptGarbage` (deterministic junk bytes) | synthesized |
+| Route | Codec / container |
+| --- | --- |
+| Valid | PCM in WAV, PCM in AIFF, FLAC, FLAC in Matroska, MP3, AAC in ADTS, AAC in MP4, ALAC in MP4, Opus in Ogg, Vorbis in Ogg |
+| Corrupt | `CorruptTruncated` (valid encode cut at half), `CorruptGarbage` (deterministic junk bytes) |
 
-The MP4 routes go through ffmpeg because WaxFlow's native MP4 output is
-fragmented, which its own format registry cannot demux back (it reads
-progressive sample tables only). ALAC-in-fMP4 native output, and the
-vendored WMA/APE/WavPack samples the plan of record mentions, are
-deferred for now.
-
-ffmpeg is **never hard-required**: it is looked up on `PATH` at
-runtime. Specs that need it fail with an error matching
-`fixtures.ErrNeedsFFmpeg` when it is absent, and tests skip them
-(`fixtures.FFmpegAvailable()` / `Spec.NeedsFFmpeg()` let callers filter
-up front). `DefaultLibrary()` never needs it.
+The MP4 routes use WaxFlow's progressive container override, producing
+flat moov+mdat files its format registry demuxes back; the default MP4
+form is fragmented CMAF, which exists for streaming rather than for
+files. The vendored WMA/APE/WavPack samples the plan of record allows
+as the one binary-media exception are deferred for now.
 
 ## Tests
 
-`go test ./...` generates the libraries into temp dirs, decodes every
+`go test ./...` generates the library into temp dirs, decodes every
 valid file back through WaxFlow's format registry (asserting container,
 codec, rate, channels, and decoded length), checks byte-determinism
 across two generations, and asserts the corrupt flavors fail the way
-robustness tests rely on. It passes with or without ffmpeg installed.
+robustness tests rely on.

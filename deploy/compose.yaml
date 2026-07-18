@@ -22,6 +22,9 @@ services:
     environment:
       WAXDECK_ADDR: 0.0.0.0:4420
       WAXDECK_DATA_DIR: /data
+      # Root names must match WAXFLOW_ROOTS below: streams address
+      # sources as <name>/<relpath> against the sidecar.
+      WAXDECK_LIBRARY_ROOTS: lib=/library
       # WaxFlow is reached over the internal network only.
       WAXDECK_FLOW_URL: http://waxflow:4418
       # Must be one of the keys in WAXFLOW_API_KEYS below (see .env.example).
@@ -46,17 +49,30 @@ services:
         max-file: "3"
 
   waxflow:
-    # Env contract per WaxFlow's own compose.base.yaml / compose.full.yaml.
-    image: ghcr.io/colespringer/waxflow:latest
+    # WaxDeck's flavored WaxFlow build (stock CLI + a catalog resolver
+    # for pid: sources). Env contract per WaxFlow's own compose files.
+    image: ghcr.io/colespringer/waxdeck-waxflow:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.waxflow
     # No `ports:`, internal network only; WaxDeck proxies anything clients need.
     environment:
       WAXFLOW_ADDR: 0.0.0.0:4418
       # WaxFlow fails closed: a non-loopback listen address requires API keys.
       WAXFLOW_API_KEYS: ${WAXFLOW_API_KEYS:?set WAXFLOW_API_KEYS (comma-separated; generate with openssl rand -hex 24)}
       WAXFLOW_ROOTS: lib=/library
+      # The catalog resolver behind pid: sources reads waxbin.db.
+      WAXFLOW_CATALOG_DB: /catalog/waxbin.db
     volumes:
       # Same library as waxdeck, but WaxFlow only reads it.
       - ${WAXDECK_LIBRARY:-./library}:/library:ro
+      # WaxDeck's data volume for pid resolution. The resolver opens the
+      # catalog read-only, but the mount stays writable: SQLite WAL
+      # readers need write access to the -shm/-wal sidecar files while
+      # WaxDeck holds the database open in WAL mode. That write access
+      # works because both images deliberately run as UID 10001; keep the
+      # Dockerfiles' user IDs in lockstep or this mount breaks.
+      - waxdeck-data:/catalog
       - waxflow-data:/data
       - waxflow-cache:/cache
     networks: [internal]

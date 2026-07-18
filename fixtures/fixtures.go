@@ -1,10 +1,9 @@
 // Package fixtures synthesizes the tiny audio files WaxDeck's tests run
 // against. The repository policy is "no binary media in git": every test
 // asset is generated at test-setup from a Spec: a deterministic sine
-// tone encoded through WaxFlow's own encoders where they exist, and
-// through a host ffmpeg for the formats they cannot produce (Vorbis,
-// Matroska). Output is byte-deterministic: the same Spec always yields
-// the same file.
+// tone encoded through WaxFlow's own encoders and muxers. No external
+// tools are involved. Output is byte-deterministic: the same Spec
+// always yields the same file.
 //
 // Library use:
 //
@@ -41,7 +40,7 @@ const (
 	CodecAAC    Codec = "aac"
 	CodecALAC   Codec = "alac"
 	CodecOpus   Codec = "opus"
-	CodecVorbis Codec = "vorbis" // ffmpeg-only: WaxFlow decodes but does not encode Vorbis
+	CodecVorbis Codec = "vorbis"
 )
 
 // Container names the file container a Spec's codec is muxed into.
@@ -59,7 +58,7 @@ const (
 	ContainerMP4      Container = "mp4"
 	ContainerADTS     Container = "adts"
 	ContainerOgg      Container = "ogg"
-	ContainerMatroska Container = "mka" // ffmpeg-only: WaxFlow demuxes but does not mux Matroska
+	ContainerMatroska Container = "mka"
 )
 
 // Corruption selects a deliberately malformed flavor of a Spec, for
@@ -120,61 +119,43 @@ type Spec struct {
 // tiny; anything longer is a misuse this package refuses.
 const MaxDuration = 10 * time.Second
 
-// route describes how one codec+container pair is produced: through
-// WaxFlow's Transcode (format, variant) or through ffmpeg (ffArgs).
+// route describes how one codec+container pair is produced through
+// WaxFlow's Transcode: the output format name and, where the pair is
+// not the format's default form, the container override.
 type route struct {
 	ext     string
-	format  string   // WaxFlow TranscodeOptions.Format
-	variant string   // WaxFlow TranscodeOptions.Container override
-	ffArgs  []string // ffmpeg codec+mux arguments; non-nil marks an ffmpeg route
-	// ffAlt is a second ffmpeg argument set tried when ffArgs fails
-	// (builds without libvorbis fall back to the built-in encoder).
-	ffAlt []string
+	format  string // WaxFlow TranscodeOptions.Format
+	variant string // WaxFlow TranscodeOptions.Container override
 }
 
-// routes is the supported codec/container matrix.
+// routes is the supported codec/container matrix. The MP4 routes use
+// WaxFlow's "progressive" container override: flat moov+mdat files its
+// own format registry demuxes back, where the default MP4 form is
+// fragmented CMAF.
 var routes = map[Codec]map[Container]route{
 	CodecPCM: {
 		ContainerWAV:  {ext: "wav", format: "wav"},
 		ContainerAIFF: {ext: "aiff", format: "aiff"},
 	},
 	CodecFLAC: {
-		ContainerFLAC: {ext: "flac", format: "flac"},
-		ContainerMatroska: {
-			ext:    "mka",
-			ffArgs: []string{"-c:a", "flac", "-f", "matroska"},
-		},
+		ContainerFLAC:     {ext: "flac", format: "flac"},
+		ContainerMatroska: {ext: "mka", format: "flac", variant: "mka"},
 	},
 	CodecMP3: {
 		ContainerMP3: {ext: "mp3", format: "mp3"},
 	},
-	// WaxFlow's native MP4 output is fragmented, which its own demuxer
-	// cannot read back (it reads progressive sample tables only), so
-	// AAC's native route is the ADTS stream and the MP4 routes go
-	// through ffmpeg's always-built-in aac/alac encoders to get
-	// progressive, registry-decodable files.
 	CodecAAC: {
 		ContainerADTS: {ext: "aac", format: "aac", variant: "adts"},
-		ContainerMP4: {
-			ext:    "m4a",
-			ffArgs: []string{"-c:a", "aac", "-f", "mp4"},
-		},
+		ContainerMP4:  {ext: "m4a", format: "aac", variant: "progressive"},
 	},
 	CodecALAC: {
-		ContainerMP4: {
-			ext:    "m4a",
-			ffArgs: []string{"-c:a", "alac", "-f", "mp4"},
-		},
+		ContainerMP4: {ext: "m4a", format: "alac", variant: "progressive"},
 	},
 	CodecOpus: {
 		ContainerOgg: {ext: "opus", format: "opus"},
 	},
 	CodecVorbis: {
-		ContainerOgg: {
-			ext:    "ogg",
-			ffArgs: []string{"-c:a", "libvorbis", "-f", "ogg"},
-			ffAlt:  []string{"-c:a", "vorbis", "-strict", "-2", "-f", "ogg"},
-		},
+		ContainerOgg: {ext: "ogg", format: "vorbis"},
 	},
 }
 
@@ -240,15 +221,6 @@ func (s Spec) validate() error {
 	return nil
 }
 
-// NeedsFFmpeg reports whether generating this spec shells out to ffmpeg:
-// true only for what WaxFlow cannot produce itself (Vorbis, Matroska,
-// progressive MP4), and never for garbage flavors, which need no
-// encoder at all.
-func (s Spec) NeedsFFmpeg() bool {
-	r, err := s.withDefaults().route()
-	return err == nil && r.ffArgs != nil && s.Corrupt != CorruptGarbage
-}
-
 // Filename is the deterministic base name Generate writes the spec to,
 // extension included. An unsupported codec/container pair yields a
 // ".bin" placeholder name; Generate rejects such specs with an error.
@@ -276,12 +248,12 @@ func (s Spec) Filename() string {
 	return base + "." + ext
 }
 
-// DefaultLibrary is the preset covering every codec/container pair
-// WaxFlow both encodes natively and can decode back through its format
-// registry (PCM in WAV and AIFF, FLAC, MP3, AAC in ADTS, and Opus), plus
-// one truncated and one garbage flavor. Generating it never needs
-// ffmpeg. Specs are fully spelled out (no zero-value defaults) so
-// callers can read expected properties off them.
+// DefaultLibrary is the preset covering the full supported
+// codec/container matrix (PCM in WAV and AIFF, FLAC in its stream form
+// and in Matroska, MP3, AAC in ADTS and MP4, ALAC in MP4, Opus in Ogg,
+// and Vorbis in Ogg), plus one truncated and one garbage flavor. Specs
+// are fully spelled out (no zero-value defaults) so callers can read
+// expected properties off them.
 func DefaultLibrary() []Spec {
 	full := func(codec Codec, c Container, corrupt Corruption) Spec {
 		rate := 44100
@@ -304,28 +276,57 @@ func DefaultLibrary() []Spec {
 		full(CodecPCM, ContainerWAV, CorruptNone),
 		full(CodecPCM, ContainerAIFF, CorruptNone),
 		full(CodecFLAC, ContainerDefault, CorruptNone),
+		full(CodecFLAC, ContainerMatroska, CorruptNone),
 		full(CodecMP3, ContainerDefault, CorruptNone),
 		full(CodecAAC, ContainerADTS, CorruptNone),
+		full(CodecAAC, ContainerMP4, CorruptNone),
+		full(CodecALAC, ContainerMP4, CorruptNone),
 		full(CodecOpus, ContainerDefault, CorruptNone),
+		full(CodecVorbis, ContainerDefault, CorruptNone),
 		full(CodecFLAC, ContainerDefault, CorruptTruncated),
 		full(CodecFLAC, ContainerDefault, CorruptGarbage),
 	}
 }
 
-// FFmpegLibrary is the preset covering formats WaxFlow decodes but
-// cannot produce itself: Vorbis in Ogg, FLAC in Matroska, and AAC/ALAC
-// in progressive MP4. Generating it requires ffmpeg on PATH; without
-// one, Generate returns ErrNeedsFFmpeg and tests skip these specs.
-func FFmpegLibrary() []Spec {
-	sec := func(codec Codec, c Container) Spec {
-		return Spec{Codec: codec, Container: c, Duration: time.Second, SampleRate: 44100, Channels: 2}
+// DemoLibrary is a small tagged album: one track per commonly streamed
+// codec, titled so tests and humans can find them by name. End-to-end
+// harnesses scan it alongside DefaultLibrary. Durations are distinct on
+// purpose: a catalog's fingerprint dedup would otherwise merge these
+// with the matrix files, which synthesize the same tone at the same
+// length.
+func DemoLibrary() []Spec {
+	track := func(name, title string, codec Codec, d time.Duration) Spec {
+		return Spec{
+			Name:     name,
+			Codec:    codec,
+			Duration: d,
+			Tags: map[string]string{
+				"TITLE":  title,
+				"ARTIST": "Fixture Artist",
+				"ALBUM":  "Fixture Album",
+			},
+		}
 	}
 	return []Spec{
-		sec(CodecVorbis, ContainerOgg),
-		sec(CodecFLAC, ContainerMatroska),
-		sec(CodecAAC, ContainerMP4),
-		sec(CodecALAC, ContainerMP4),
+		track("alpha", "Alpha Song", CodecFLAC, 2*time.Second),
+		track("bravo", "Bravo Song", CodecMP3, 2500*time.Millisecond),
+		track("charlie", "Charlie Song", CodecOpus, 3*time.Second),
+		track("delta", "Delta Song", CodecVorbis, 3500*time.Millisecond),
 	}
+}
+
+// ConformanceMedia returns the single tone the audio-engine conformance
+// suite plays against real engines: long enough that mid-file seek
+// targets are meaningfully far apart, still under the duration cap.
+func ConformanceMedia() []Spec {
+	return []Spec{{
+		Name:       "conformance-tone",
+		Codec:      CodecFLAC,
+		Container:  ContainerFLAC,
+		Duration:   8 * time.Second,
+		SampleRate: 44100,
+		Channels:   2,
+	}}
 }
 
 // engine is the shared WaxFlow entry point; it is safe for concurrent use.
@@ -333,9 +334,7 @@ var engine = waxflow.New()
 
 // Generate synthesizes each spec into dir (created if absent) and
 // returns the written paths, in spec order. It stops at the first
-// failure, returning the paths written so far alongside the error; a
-// spec that needs an absent ffmpeg fails with an error matching
-// ErrNeedsFFmpeg.
+// failure, returning the paths written so far alongside the error.
 func Generate(dir string, specs ...Spec) ([]string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("fixtures: creating %s: %w", dir, err)
@@ -379,16 +378,12 @@ func generateOne(dir string, spec Spec) (string, error) {
 	return path, nil
 }
 
-// render encodes the spec's synthesized tone into its target format:
-// natively through WaxFlow's Transcode, or through ffmpeg for the
-// formats WaxFlow cannot encode.
+// render encodes the spec's synthesized tone into its target format
+// through WaxFlow's Transcode.
 func (s Spec) render(r route) ([]byte, error) {
 	wav, err := buildSourceWAV(s)
 	if err != nil {
 		return nil, err
-	}
-	if r.ffArgs != nil {
-		return renderFFmpeg(wav, r)
 	}
 	dst := &memWriteSeeker{}
 	opts := waxflow.TranscodeOptions{

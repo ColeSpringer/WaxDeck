@@ -11,11 +11,13 @@ class _$ItemPage extends ItemPage {
   final BuiltList<ItemSummary> items;
   @override
   final String? nextCursor;
+  @override
+  final int? seed;
 
   factory _$ItemPage([void Function(ItemPageBuilder)? updates]) =>
       (ItemPageBuilder()..update(updates))._build();
 
-  _$ItemPage._({required this.items, this.nextCursor}) : super._();
+  _$ItemPage._({required this.items, this.nextCursor, this.seed}) : super._();
   @override
   ItemPage rebuild(void Function(ItemPageBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -28,7 +30,8 @@ class _$ItemPage extends ItemPage {
     if (identical(other, this)) return true;
     return other is ItemPage &&
         items == other.items &&
-        nextCursor == other.nextCursor;
+        nextCursor == other.nextCursor &&
+        seed == other.seed;
   }
 
   @override
@@ -36,6 +39,7 @@ class _$ItemPage extends ItemPage {
     var _$hash = 0;
     _$hash = $jc(_$hash, items.hashCode);
     _$hash = $jc(_$hash, nextCursor.hashCode);
+    _$hash = $jc(_$hash, seed.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -44,7 +48,8 @@ class _$ItemPage extends ItemPage {
   String toString() {
     return (newBuiltValueToStringHelper(r'ItemPage')
           ..add('items', items)
-          ..add('nextCursor', nextCursor))
+          ..add('nextCursor', nextCursor)
+          ..add('seed', seed))
         .toString();
   }
 }
@@ -61,6 +66,10 @@ class ItemPageBuilder implements Builder<ItemPage, ItemPageBuilder> {
   String? get nextCursor => _$this._nextCursor;
   set nextCursor(String? nextCursor) => _$this._nextCursor = nextCursor;
 
+  int? _seed;
+  int? get seed => _$this._seed;
+  set seed(int? seed) => _$this._seed = seed;
+
   ItemPageBuilder() {
     ItemPage._defaults(this);
   }
@@ -70,6 +79,7 @@ class ItemPageBuilder implements Builder<ItemPage, ItemPageBuilder> {
     if ($v != null) {
       _items = $v.items.toBuilder();
       _nextCursor = $v.nextCursor;
+      _seed = $v.seed;
       _$v = null;
     }
     return this;
@@ -92,7 +102,12 @@ class ItemPageBuilder implements Builder<ItemPage, ItemPageBuilder> {
     _$ItemPage _$result;
     try {
       _$result =
-          _$v ?? _$ItemPage._(items: items.build(), nextCursor: nextCursor);
+          _$v ??
+          _$ItemPage._(
+            items: items.build(),
+            nextCursor: nextCursor,
+            seed: seed,
+          );
     } catch (_) {
       late String _$failedField;
       try {

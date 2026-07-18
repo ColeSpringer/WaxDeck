@@ -20,17 +20,29 @@ part 'item.g.dart';
 /// * [artist] - Primary display artist / author / show name.
 /// * [album] - Album / series / podcast title, when applicable.
 /// * [durationMs] - Duration in milliseconds.
-/// * [artUrl] - Origin-relative URL of the item's artwork, when present.
+/// * [artUrl] - Origin-relative URL of the item's artwork endpoint. Always populated; the endpoint itself returns 404 for items with no artwork, so clients keep a placeholder ready. 
 /// * [genres] - Display genres.
 /// * [year] - Release / publication year.
 /// * [trackNumber] - Track position within its disc (music).
 /// * [discNumber] - Disc number within a multi-disc release (music).
+/// * [codec] - Source audio codec.
+/// * [container] - Source file container.
+/// * [sampleRate] - Source sample rate in Hz.
+/// * [bitrate] - Source bitrate in bits per second, when known.
 /// * [addedAt] - When the item entered the library.
 @BuiltValue()
 abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
+  /// Source file container.
+  @BuiltValueField(wireName: r'container')
+  String? get container;
+
   /// Disc number within a multi-disc release (music).
   @BuiltValueField(wireName: r'discNumber')
   int? get discNumber;
+
+  /// Source audio codec.
+  @BuiltValueField(wireName: r'codec')
+  String? get codec;
 
   /// When the item entered the library.
   @BuiltValueField(wireName: r'addedAt')
@@ -47,6 +59,14 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   /// Display genres.
   @BuiltValueField(wireName: r'genres')
   BuiltList<String>? get genres;
+
+  /// Source bitrate in bits per second, when known.
+  @BuiltValueField(wireName: r'bitrate')
+  int? get bitrate;
+
+  /// Source sample rate in Hz.
+  @BuiltValueField(wireName: r'sampleRate')
+  int? get sampleRate;
 
   Item._();
 
@@ -71,11 +91,11 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
     Item object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
-    if (object.discNumber != null) {
-      yield r'discNumber';
+    if (object.container != null) {
+      yield r'container';
       yield serializers.serialize(
-        object.discNumber,
-        specifiedType: const FullType(int),
+        object.container,
+        specifiedType: const FullType(String),
       );
     }
     if (object.addedAt != null) {
@@ -106,18 +126,18 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
         specifiedType: const FullType(String),
       );
     }
-    if (object.genres != null) {
-      yield r'genres';
-      yield serializers.serialize(
-        object.genres,
-        specifiedType: const FullType(BuiltList, [FullType(String)]),
-      );
-    }
     if (object.album != null) {
       yield r'album';
       yield serializers.serialize(
         object.album,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.bitrate != null) {
+      yield r'bitrate';
+      yield serializers.serialize(
+        object.bitrate,
+        specifiedType: const FullType(int),
       );
     }
     yield r'pid';
@@ -135,11 +155,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
       object.title,
       specifiedType: const FullType(String),
     );
-    yield r'durationMs';
-    yield serializers.serialize(
-      object.durationMs,
-      specifiedType: const FullType(int),
-    );
+    if (object.sampleRate != null) {
+      yield r'sampleRate';
+      yield serializers.serialize(
+        object.sampleRate,
+        specifiedType: const FullType(int),
+      );
+    }
     if (object.artUrl != null) {
       yield r'artUrl';
       yield serializers.serialize(
@@ -147,6 +169,32 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
         specifiedType: const FullType(String),
       );
     }
+    if (object.discNumber != null) {
+      yield r'discNumber';
+      yield serializers.serialize(
+        object.discNumber,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.codec != null) {
+      yield r'codec';
+      yield serializers.serialize(
+        object.codec,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.genres != null) {
+      yield r'genres';
+      yield serializers.serialize(
+        object.genres,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
+    yield r'durationMs';
+    yield serializers.serialize(
+      object.durationMs,
+      specifiedType: const FullType(int),
+    );
   }
 
   @override
@@ -170,12 +218,12 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
       final key = serializedList[i] as String;
       final value = serializedList[i + 1];
       switch (key) {
-        case r'discNumber':
+        case r'container':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
-          result.discNumber = valueDes;
+            specifiedType: const FullType(String),
+          ) as String;
+          result.container = valueDes;
           break;
         case r'addedAt':
           final valueDes = serializers.deserialize(
@@ -205,19 +253,19 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           ) as String;
           result.artist = valueDes;
           break;
-        case r'genres':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
-          result.genres.replace(valueDes);
-          break;
         case r'album':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(String),
           ) as String;
           result.album = valueDes;
+          break;
+        case r'bitrate':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.bitrate = valueDes;
           break;
         case r'pid':
           final valueDes = serializers.deserialize(
@@ -240,12 +288,12 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           ) as String;
           result.title = valueDes;
           break;
-        case r'durationMs':
+        case r'sampleRate':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(int),
           ) as int;
-          result.durationMs = valueDes;
+          result.sampleRate = valueDes;
           break;
         case r'artUrl':
           final valueDes = serializers.deserialize(
@@ -253,6 +301,34 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
             specifiedType: const FullType(String),
           ) as String;
           result.artUrl = valueDes;
+          break;
+        case r'discNumber':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.discNumber = valueDes;
+          break;
+        case r'codec':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.codec = valueDes;
+          break;
+        case r'genres':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>;
+          result.genres.replace(valueDes);
+          break;
+        case r'durationMs':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.durationMs = valueDes;
           break;
         default:
           unhandled.add(key);

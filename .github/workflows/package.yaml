@@ -18,7 +18,7 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -47,17 +47,17 @@ jobs:
         run: Compress-Archive -Path app/app/build/windows/x64/runner/Release/* -DestinationPath waxdeck-windows-x64.zip
       - name: Create MSIX (unsigned; config in app/app/pubspec.yaml)
         run: cd app/app; dart run msix:create
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: waxdeck-windows-msix
           path: app/app/build/windows/x64/runner/Release/*.msix
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: waxdeck-windows-velopack
           path: dist-velopack
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: waxdeck-windows-zip
           path: waxdeck-windows-x64.zip
@@ -66,7 +66,7 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -83,7 +83,7 @@ jobs:
           if [ -z "$APP_PATH" ]; then echo "no .app bundle found" >&2; exit 1; fi
           echo "Packaging $APP_PATH"
           hdiutil create -volname WaxDeck -srcfolder "$APP_PATH" -ov -format UDZO waxdeck-macos.dmg
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: waxdeck-macos-dmg
           path: waxdeck-macos.dmg
@@ -92,7 +92,7 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install linux desktop build deps
         run: |
           sudo apt-get update
@@ -120,12 +120,12 @@ jobs:
           assert m["app-id"] == "com.colespringer.WaxDeck"
           print("flatpak manifest parses and has the required keys")
           EOF
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: waxdeck-linux-tar
           path: waxdeck-linux-x64.tar.gz
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: waxdeck-flatpak-manifest
           path: deploy/flatpak/com.colespringer.WaxDeck.yml

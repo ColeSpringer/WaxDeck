@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1
+# The WaxFlow streaming sidecar, WaxDeck's flavored build: the stock
+# waxflow CLI plus a catalog resolver answering pid: sources against
+# waxbin.db. No stock WaxFlow build resolves pid: references; this
+# image is what makes src=pid:<ULID> (and direct mode) work.
+#
+# Build context is the REPO ROOT:
+#   docker build -f deploy/Dockerfile.waxflow .
+#
+# The layout mirrors upstream WaxFlow's own Dockerfile (distroless
+# static, UID 10001, /data + /cache state dirs, ping healthcheck).
+
+## --- stage 1: build -------------------------------------------------------------
+FROM golang:1.26-bookworm AS build
+
+WORKDIR /src
+COPY server/ server/
+COPY fixtures/ fixtures/
+ARG VERSION=dev
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd server && go mod download && \
+    CGO_ENABLED=0 go build -trimpath \
+      -ldflags "-s -w -X main.version=${VERSION}" \
+      -o /out/waxflow ./cmd/waxflow-catalog
+RUN mkdir -p /out/state/data /out/state/cache && chown -R 10001:10001 /out/state
+
+## --- stage 2: runtime -----------------------------------------------------------
+FROM gcr.io/distroless/static-debian12
+
+COPY --from=build /out/waxflow /usr/local/bin/waxflow
+COPY --from=build /out/state/ /
+
+USER 10001:10001
+ENV WAXFLOW_DATA_DIR=/data \
+    WAXFLOW_CACHE_DIR=/cache
+EXPOSE 4418
+
+HEALTHCHECK CMD ["/usr/local/bin/waxflow", "ping"]
+ENTRYPOINT ["/usr/local/bin/waxflow"]
+CMD ["server"]

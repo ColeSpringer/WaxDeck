@@ -9,3 +9,5 @@ workspace:
   - app
   - packages/waxdeck_api
   - packages/waxdeck_api_gen
+  - packages/waxdeck_player
+  - packages/waxdeck_player_testing

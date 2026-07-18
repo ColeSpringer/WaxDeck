@@ -20,8 +20,9 @@ gen-dart:
 
 lint: spec-lint
 	cd server && go vet ./... && test -z "$$(gofmt -l .)"
+	cd server && go run ./cmd/spawnlint ./...
 	cd fixtures && go vet ./... && test -z "$$(gofmt -l .)"
-	cd app && dart format --set-exit-if-changed app/lib app/test packages/waxdeck_api/lib >/dev/null
+	cd app && dart format --set-exit-if-changed app/lib app/test packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib packages/waxdeck_player/test >/dev/null
 	cd app && flutter analyze --no-pub
 
 spec-lint:
@@ -36,6 +37,8 @@ test-fixtures:
 	cd fixtures && go test ./...
 
 test-app:
+	cd app/packages/waxdeck_api && dart test
+	cd app/packages/waxdeck_player_testing && flutter test
 	cd app/app && flutter test
 
 # Regenerate everything and fail if the tree changes (CI codegen-drift gate).

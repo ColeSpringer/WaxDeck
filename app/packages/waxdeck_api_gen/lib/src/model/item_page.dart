@@ -15,6 +15,7 @@ part 'item_page.g.dart';
 /// Properties:
 /// * [items] - Items in stable order.
 /// * [nextCursor] - Opaque cursor for the next page. Absent on the last page. 
+/// * [seed] - The effective shuffle seed. Present only on `random` browse pages; pass it back together with `nextCursor` so later pages keep the same order. 
 @BuiltValue()
 abstract class ItemPage implements Built<ItemPage, ItemPageBuilder> {
   /// Items in stable order.
@@ -24,6 +25,10 @@ abstract class ItemPage implements Built<ItemPage, ItemPageBuilder> {
   /// Opaque cursor for the next page. Absent on the last page. 
   @BuiltValueField(wireName: r'nextCursor')
   String? get nextCursor;
+
+  /// The effective shuffle seed. Present only on `random` browse pages; pass it back together with `nextCursor` so later pages keep the same order. 
+  @BuiltValueField(wireName: r'seed')
+  int? get seed;
 
   ItemPage._();
 
@@ -58,6 +63,13 @@ class _$ItemPageSerializer implements PrimitiveSerializer<ItemPage> {
       yield serializers.serialize(
         object.nextCursor,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.seed != null) {
+      yield r'seed';
+      yield serializers.serialize(
+        object.seed,
+        specifiedType: const FullType(int),
       );
     }
   }
@@ -96,6 +108,13 @@ class _$ItemPageSerializer implements PrimitiveSerializer<ItemPage> {
             specifiedType: const FullType(String),
           ) as String;
           result.nextCursor = valueDes;
+          break;
+        case r'seed':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.seed = valueDes;
           break;
         default:
           unhandled.add(key);

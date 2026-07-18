@@ -1,0 +1,23 @@
+name: waxdeck_player_testing
+description: >
+  Test companions for waxdeck_player: the deterministic FakeEngine and the
+  engine conformance suite. A separate package so waxdeck_player's release
+  surface carries no test doubles and no flutter_test dependency; app code
+  depends on this only from dev_dependencies.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_test:
+    sdk: flutter
+  waxdeck_player:
+    path: ../waxdeck_player
+
+dev_dependencies:
+  flutter_lints: ^6.0.0

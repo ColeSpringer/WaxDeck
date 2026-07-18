@@ -137,19 +137,15 @@ func TestDefaultLibrary(t *testing.T) {
 	}
 }
 
-func TestFFmpegLibrary(t *testing.T) {
-	specs := fixtures.FFmpegLibrary()
-	if !fixtures.FFmpegAvailable() {
-		_, err := fixtures.Generate(t.TempDir(), specs...)
-		if !errors.Is(err, fixtures.ErrNeedsFFmpeg) {
-			t.Fatalf("without ffmpeg, Generate error = %v, want ErrNeedsFFmpeg", err)
-		}
-		t.Skip("ffmpeg not on PATH")
-	}
+func TestConformanceMedia(t *testing.T) {
+	specs := fixtures.ConformanceMedia()
 	dir := t.TempDir()
 	paths, err := fixtures.Generate(dir, specs...)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(paths) != len(specs) {
+		t.Fatalf("got %d paths for %d specs", len(paths), len(specs))
 	}
 	for i, spec := range specs {
 		t.Run(filepath.Base(paths[i]), func(t *testing.T) {
@@ -160,9 +156,6 @@ func TestFFmpegLibrary(t *testing.T) {
 
 func TestDeterministic(t *testing.T) {
 	specs := fixtures.DefaultLibrary()
-	if fixtures.FFmpegAvailable() {
-		specs = append(specs, fixtures.FFmpegLibrary()...)
-	}
 	dirA, dirB := t.TempDir(), t.TempDir()
 	pathsA, err := fixtures.Generate(dirA, specs...)
 	if err != nil {

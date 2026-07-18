@@ -1,27 +1,30 @@
 openapi: 3.0.3
 info:
   title: WaxDeck API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     First-party REST API for WaxDeck: the self-hosted player, library manager,
     and metadata completer for music, podcasts, and audiobooks.
 
-    Current scope: health, an authentication stub, library browse, item detail,
-    and play-info. Every surface here is a real contract that later work extends.
-    The shapes (keyset pagination, typed PIDs, the structured error model,
-    relative media URLs) are load-bearing from day one.
+    Current scope: health, an authentication stub, library browse and search,
+    item detail, artwork, lyrics, play-info, playback state (resume), listen
+    session ingest, and library scanning. The shapes (keyset pagination, typed
+    PIDs, the structured error model, relative media URLs) are load-bearing
+    from day one.
 
     Conventions:
     - All endpoints live under `/api/v1` (this document's `servers` entry).
     - Item identifiers (`pid`) are type-prefixed ULIDs (`tr-` track, `al-` album,
-      `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook).
+      `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook, `jb-` job).
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
       string; currently defined codes: `invalid-request`, `unauthenticated`,
-      `forbidden`, `not-found`, `conflict`, `internal`, and (reserved for the
-      streaming bridge) `stream-stale`. New codes may appear; clients must treat
-      unknown codes as opaque.
+      `forbidden`, `not-found`, `conflict`, `internal`, `stream-stale` (a
+      stream URL no longer matches the file on disk; re-request play-info),
+      and `catalog-maintenance` (the catalog is temporarily handed to a
+      maintenance operation; retry shortly). New codes may appear; clients
+      must treat unknown codes as opaque.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
   contact:
@@ -41,9 +44,11 @@ tags:
   - name: auth
     description: Session authentication (development stub; real accounts come later).
   - name: library
-    description: Browse and inspect library items.
+    description: Browse, search, and inspect library items.
   - name: playback
-    description: Resolve playable streams for items.
+    description: Resolve playable streams, playback state, and listen accounting.
+  - name: admin
+    description: Library maintenance operations.
 
 security:
   - cookieAuth: []
@@ -110,6 +115,7 @@ paths:
         Revokes the presented session (cookie or bearer token) and clears the
         session cookie. Succeeds even if no session is active.
       tags: [auth]
+      security: []
       responses:
         "204":
           description: Session ended.
@@ -144,8 +150,7 @@ paths:
       description: >
         Keyset-paginated list of library items, optionally filtered by media
         type. Ordering is stable (title, then pid) so cursors never skip or
-        duplicate. Development stub: serves a small built-in catalog. The
-        WaxBin-backed catalog replaces it once the library integration lands.
+        duplicate.
       tags: [library]
       parameters:
         - name: mediaType
@@ -179,6 +184,154 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/browse:
+    get:
+      operationId: browseList
+      summary: Browse a discovery list
+      description: >
+        Keyset-paginated discovery lists over the whole library: newest,
+        recently added, most played, recently played, random, starred, and
+        alphabetical. Play-derived lists reflect the calling user's own
+        listening state.
+      tags: [library]
+      parameters:
+        - name: list
+          in: query
+          required: true
+          description: Which discovery list to page through.
+          schema:
+            $ref: "#/components/schemas/DiscoveryList"
+        - name: seed
+          in: query
+          description: >
+            Shuffle seed for the `random` list. The same seed pages through
+            the same shuffled order, so paging stays stable. When omitted the
+            server picks a fresh seed and returns it as the page's `seed`;
+            pass that value back with the cursor for later pages. A cursor is
+            only valid together with the same `list` and `seed` it was issued
+            for.
+          schema:
+            type: integer
+            format: int64
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum items per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of the list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/search:
+    get:
+      operationId: search
+      summary: Search the library
+      description: >
+        Full-text search across artists, albums, tracks, books, and episodes.
+        Results are grouped by kind and ranked within each group; each group
+        is capped at `limit` hits.
+      tags: [library]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query. Must contain at least one non-whitespace character.
+          schema:
+            type: string
+            minLength: 1
+        - name: limit
+          in: query
+          description: Maximum hits per result group.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Grouped search results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/rescan:
+    post:
+      operationId: rescanLibrary
+      summary: Start a library rescan
+      description: >
+        Starts an asynchronous scan of every library root and returns the job
+        tracking it. Poll the job to observe progress and completion. Scans
+        serialize with other catalog jobs; starting one while another runs
+        returns the conflict error. This operation becomes admin-only once
+        roles land; clients should be prepared for `forbidden`.
+      tags: [admin]
+      responses:
+        "202":
+          description: Scan started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /jobs/{pid}:
+    get:
+      operationId: getJob
+      summary: Get one job's state
+      description: State and progress of a server-run catalog job.
+      tags: [admin]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The job.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
 
   /items/{pid}:
     get:
@@ -199,6 +352,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
 
   /items/{pid}/play-info:
     get:
@@ -210,9 +365,7 @@ paths:
         by bare `<audio>` elements, cast devices, and DLNA renderers that cannot
         send headers), the served format, and expiry. Clients re-request
         play-info when a stream URL expires or the server signals
-        `stream-stale`. Development stub: returns a well-formed response whose
-        URL points at the not-yet-implemented `/media/stream`. The WaxFlow
-        bridge fills it in once streaming lands.
+        `stream-stale`.
       tags: [playback]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -227,6 +380,184 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/art:
+    get:
+      operationId: getItemArt
+      summary: Get artwork
+      description: >
+        Artwork as image bytes: the original at full size, or a square-fit
+        thumbnail when `size` is given. Besides item PIDs this endpoint also
+        accepts album (`al-`) and artist (`ar-`) PIDs, so search hits can
+        render artwork directly. Items without any artwork in their fallback
+        chain return 404. Responses carry a content-addressed `ETag`;
+        revalidate with `If-None-Match` instead of refetching.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: size
+          in: query
+          description: >
+            Longest-edge bound in pixels for a thumbnail. Omit for the
+            original image.
+          schema:
+            type: integer
+            minimum: 16
+            maximum: 2048
+        - name: If-None-Match
+          in: header
+          description: Previously returned `ETag`; a match answers 304 with no body.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The artwork image.
+          headers:
+            ETag:
+              description: Content-addressed validator for the returned bytes.
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: The cached copy is still current.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/lyrics:
+    get:
+      operationId: getItemLyrics
+      summary: Get an item's lyrics
+      description: >
+        Lyrics for the item: synced lines when available, an unsynced text
+        block otherwise. 404 when the item has no lyrics at all.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The item's lyrics.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lyrics"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/play-state:
+    get:
+      operationId: getPlayState
+      summary: Get the caller's playback state for an item
+      description: >
+        The calling user's saved playback state for the item: resume
+        position, play count, and flags. Items never played return a zero
+        state, not a 404.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The caller's state for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayState"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: putPlayState
+      summary: Checkpoint the caller's playback position
+      description: >
+        Persists the calling user's resume position for the item. Every call
+        writes through, so clients keep the cadence coarse: checkpoint on
+        pause, stop, and track change, and every few seconds during
+        playback, never per tick.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayStateUpdate"
+      responses:
+        "204":
+          description: Position saved.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /listens:
+    post:
+      operationId: reportListens
+      summary: Report listen sessions
+      description: >
+        Ingests one or more listen sessions. Every session carries a
+        client-generated idempotency ID; the server deduplicates on ingest,
+        so replaying a batch (an offline queue flushing alongside a live
+        report of the same session) can never double-count. Sessions from
+        other services ride the same path with `source` set, carrying their
+        original timestamps (backdated imports). Per-session rejections in
+        the response are permanent (the session can never be recorded);
+        transient conditions fail the whole request instead, and clients
+        retry the batch, which deduplication makes safe.
+      tags: [playback]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListenReport"
+      responses:
+        "200":
+          description: Ingest outcome for the batch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenIngestResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
 
 components:
   securitySchemes:
@@ -245,7 +576,7 @@ components:
       name: pid
       in: path
       required: true
-      description: Type-prefixed item PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE`).
+      description: Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
       schema:
         type: string
         pattern: "^[a-z]{2}-[0-9A-HJKMNP-TV-Z]{26}$"
@@ -263,8 +594,29 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: The caller is authenticated but not allowed to do this.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     NotFound:
-      description: No item with that PID is visible to the caller.
+      description: No resource with that PID is visible to the caller.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The request conflicts with current state (for example, a running job).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    CatalogMaintenance:
+      description: >
+        The catalog is temporarily handed to a maintenance operation (code
+        `catalog-maintenance`). Retry shortly; already-playing streams are
+        unaffected.
       content:
         application/json:
           schema:
@@ -304,7 +656,7 @@ components:
         message:
           type: string
           description: Human-readable explanation (not stable, do not parse).
-          example: no item with pid tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE
+          example: no item with pid tr-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     LoginRequest:
       type: object
@@ -355,7 +707,7 @@ components:
         id:
           type: string
           description: Stable user identifier.
-          example: us-01JZX5N8QW3F4V9T2B7KDEXAMPLE
+          example: us-01JZX5N8QW3F4V9T2B7KD3M9R6
         username:
           type: string
           description: Login name.
@@ -375,6 +727,276 @@ components:
       description: The three first-class media types.
       enum: [music, podcast, audiobook]
 
+    DiscoveryList:
+      type: string
+      description: >
+        Discovery lists for browsing. `most-played`, `recently-played`, and
+        `starred` reflect the calling user's own listening state.
+      enum:
+        - newest
+        - recently-added
+        - most-played
+        - recently-played
+        - random
+        - starred
+        - alphabetical
+
+    SearchHit:
+      type: object
+      description: One ranked search hit.
+      required: [pid, kind, title]
+      properties:
+        pid:
+          type: string
+          description: Type-prefixed ULID of the hit.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          type: string
+          description: What the hit is (`artist`, `album`, `track`, `book`, `episode`).
+          example: track
+        title:
+          type: string
+          description: Display title.
+        subtitle:
+          type: string
+          description: Context line (artist for a track, author for a book).
+
+    SearchResults:
+      type: object
+      description: Search results grouped by kind, ranked within each group.
+      required: [query, artists, albums, tracks, books, episodes]
+      properties:
+        query:
+          type: string
+          description: The query these results answer.
+        artists:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        albums:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        books:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        episodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        truncated:
+          type: boolean
+          description: True when any group was capped at the limit.
+
+    Job:
+      type: object
+      description: A server-run catalog job.
+      required: [pid, kind, state]
+      properties:
+        pid:
+          type: string
+          description: Job PID.
+          example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          type: string
+          description: What the job does (`scan`, `analyze`, `enrich`, `organize`).
+          example: scan
+        state:
+          type: string
+          description: >
+            Job lifecycle state. Currently `running`, `done`, `failed`,
+            `crashed`, or `canceled`; new states may appear, and clients
+            must treat unknown values as "not finished successfully yet"
+            rather than failing.
+          example: running
+        progress:
+          type: number
+          format: double
+          description: >
+            Completion fraction in [0, 1]. Absent when the job has not yet
+            reported progress or cannot estimate it.
+        message:
+          type: string
+          description: Human-readable progress note.
+        error:
+          type: string
+          description: Failure detail for `failed`/`crashed` jobs.
+
+    Lyrics:
+      type: object
+      description: >
+        Lyrics for one item. At least one of `synced` and `unsynced` is
+        non-empty.
+      required: [pid, source]
+      properties:
+        pid:
+          type: string
+          description: The item these lyrics belong to.
+        source:
+          type: string
+          description: Where the lyrics came from (`lrc` sidecar, `embedded` tag).
+          example: lrc
+        synced:
+          type: array
+          description: Time-synced lines, ordered by `timeMs`.
+          items:
+            $ref: "#/components/schemas/SyncedLine"
+        unsynced:
+          type: string
+          description: Plain text block when no synced lines exist.
+
+    SyncedLine:
+      type: object
+      description: One time-synced lyric line.
+      required: [timeMs, text]
+      properties:
+        timeMs:
+          type: integer
+          format: int64
+          description: Line start in milliseconds.
+        text:
+          type: string
+          description: Line text.
+
+    PlayState:
+      type: object
+      description: The calling user's playback state for one item.
+      required: [pid, positionMs, played, finished, playCount, starred]
+      properties:
+        pid:
+          type: string
+          description: The item this state belongs to.
+        positionMs:
+          type: integer
+          format: int64
+          description: Resume position in milliseconds.
+        played:
+          type: boolean
+          description: Whether the item has crossed its played threshold.
+        finished:
+          type: boolean
+          description: Whether the item was completed.
+        playCount:
+          type: integer
+          description: How many times the item has been played.
+        starred:
+          type: boolean
+          description: Whether the caller starred the item.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this state last changed.
+
+    PlayStateUpdate:
+      type: object
+      description: A resume-position checkpoint.
+      required: [positionMs]
+      properties:
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Playback position in milliseconds.
+
+    ListenSession:
+      type: object
+      description: >
+        One listen session as reported by a client. `sessionId` is a
+        client-generated idempotency ID; replaying a session with the same
+        ID never double-counts. Deduplication is per user across all of the
+        user's clients, so IDs must be globally random (ULID or UUID), never
+        a per-device counter.
+      required: [sessionId, pid, startedAt, msPlayed]
+      properties:
+        sessionId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Client-generated idempotency ID for this session, unique across
+            all of the user's clients (use a ULID or UUID).
+          example: 01JZX5N8QW3F4V9T2B7KD3M9R6
+        pid:
+          type: string
+          description: The item that was played.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        startedAt:
+          type: string
+          format: date-time
+          description: >
+            When playback started. Historical for backdated imports; the
+            server preserves it as reported.
+        msPlayed:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Milliseconds actually heard (excludes pauses and seeks).
+        finished:
+          type: boolean
+          description: Whether playback reached the end of the item.
+        client:
+          type: string
+          maxLength: 128
+          description: Client identifier (app name and platform).
+          example: waxdeck-web
+        source:
+          type: string
+          description: >
+            Where the session originates. `live` is a WaxDeck client
+            reporting its own playback; `import` is a backdated session from
+            another service's history.
+          enum: [live, import]
+          default: live
+
+    ListenReport:
+      type: object
+      description: A batch of listen sessions (a flush of an offline queue, or one live session).
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/ListenSession"
+
+    ListenIngestResult:
+      type: object
+      description: Outcome of a listen ingest batch.
+      required: [accepted, duplicates]
+      properties:
+        accepted:
+          type: integer
+          description: Sessions recorded for the first time.
+        duplicates:
+          type: integer
+          description: Sessions already recorded (replay of a known `sessionId`); ignored without error.
+        rejected:
+          type: array
+          description: Sessions that could not be recorded at all (unknown item, malformed fields).
+          items:
+            $ref: "#/components/schemas/RejectedListen"
+
+    RejectedListen:
+      type: object
+      description: One session the server refused, and why.
+      required: [sessionId, code, message]
+      properties:
+        sessionId:
+          type: string
+          description: The refused session's idempotency ID.
+        code:
+          type: string
+          description: Stable machine-readable reason (`not-found`, `invalid-request`).
+        message:
+          type: string
+          description: Human-readable explanation.
+
     ItemSummary:
       type: object
       description: >
@@ -385,7 +1007,7 @@ components:
         pid:
           type: string
           description: Type-prefixed ULID.
-          example: tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         mediaType:
           $ref: "#/components/schemas/MediaType"
         title:
@@ -405,8 +1027,11 @@ components:
           example: 214000
         artUrl:
           type: string
-          description: Origin-relative URL of the item's artwork, when present.
-          example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE/art
+          description: >
+            Origin-relative URL of the item's artwork endpoint. Always
+            populated; the endpoint itself returns 404 for items with no
+            artwork, so clients keep a placeholder ready.
+          example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/art
 
     Item:
       allOf:
@@ -430,6 +1055,21 @@ components:
             discNumber:
               type: integer
               description: Disc number within a multi-disc release (music).
+            codec:
+              type: string
+              description: Source audio codec.
+              example: flac
+            container:
+              type: string
+              description: Source file container.
+              example: flac
+            sampleRate:
+              type: integer
+              description: Source sample rate in Hz.
+              example: 44100
+            bitrate:
+              type: integer
+              description: Source bitrate in bits per second, when known.
             addedAt:
               type: string
               format: date-time
@@ -450,6 +1090,13 @@ components:
           type: string
           description: >
             Opaque cursor for the next page. Absent on the last page.
+        seed:
+          type: integer
+          format: int64
+          description: >
+            The effective shuffle seed. Present only on `random` browse
+            pages; pass it back together with `nextCursor` so later pages
+            keep the same order.
 
     PlayInfo:
       type: object
@@ -459,13 +1106,13 @@ components:
         pid:
           type: string
           description: The resolved item's PID.
-          example: tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         url:
           type: string
           description: >
             Origin-relative, media-token-authenticated stream URL. Short TTL;
             re-request play-info on expiry or a `stream-stale` error.
-          example: /media/stream?pid=tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE&mt=abc123
+          example: /media/stream?pid=tr-01JZX5N8QW3F4V9T2B7KD3M9R6&mt=abc123
         mimeType:
           type: string
           description: MIME type the stream will be served as.

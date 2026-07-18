@@ -1,8 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 // Point at an already-running stack with WAXDECK_BASE_URL (the compose-based
-// harness comes later); by default we launch the locally built binary.
+// harness comes later); by default we launch the locally built binaries.
 const baseURL = process.env.WAXDECK_BASE_URL ?? 'http://localhost:4420';
+const external = !!process.env.WAXDECK_BASE_URL;
 
 export default defineConfig({
   testDir: './tests',
@@ -17,15 +18,17 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
-  // Launches the server binary built with the embedded web UI:
-  //   make web build   (or CI's equivalent)
-  // In CI, always start a fresh binary and fail if the port is already taken,
-  // so tests never silently run against a foreign process. Locally, reuse a
-  // dev-run `make run` (or a WAXDECK_BASE_URL target) if one is present.
-  webServer: {
-    command: '../server/waxdeck',
+  // run-stack.sh synthesizes the fixture library, starts the WaxFlow
+  // streaming sidecar, and execs the server binary built with the embedded
+  // web UI (`make web build`, or CI's equivalent); the server scans the
+  // fixture library at startup. In CI, always start a fresh stack and fail
+  // if the port is already taken, so tests never silently run against a
+  // foreign process. Locally, reuse a dev-run stack (or a WAXDECK_BASE_URL
+  // target) if one is present.
+  webServer: external ? undefined : {
+    command: './run-stack.sh',
     url: `${baseURL}/api/v1/health`,
     reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
+    timeout: 120_000,
   },
 });

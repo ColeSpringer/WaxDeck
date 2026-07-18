@@ -1,10 +1,7 @@
 // Command fixturegen writes a synthesized fixture library to a
 // directory and prints the file list, one path per line.
 //
-//	fixturegen -out <dir> [-preset default|ffmpeg|all]
-//
-// The default preset needs no ffmpeg; ffmpeg-only specs in the other
-// presets are skipped with a warning when no ffmpeg is on PATH.
+//	fixturegen -out <dir> [-preset default|demo|conformance|all]
 package main
 
 import (
@@ -18,7 +15,7 @@ import (
 func main() {
 	out := flag.String("out", "", "output directory (required)")
 	preset := flag.String("preset", "default",
-		"spec preset: default (WaxFlow-native only), ffmpeg (formats needing ffmpeg), all")
+		"spec preset: default (the codec/container matrix), demo (a titled album), conformance (the engine-suite tone), all")
 	flag.Parse()
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "fixturegen: -out is required")
@@ -30,27 +27,15 @@ func main() {
 	switch *preset {
 	case "default":
 		specs = fixtures.DefaultLibrary()
-	case "ffmpeg":
-		specs = fixtures.FFmpegLibrary()
+	case "demo":
+		specs = fixtures.DemoLibrary()
+	case "conformance":
+		specs = fixtures.ConformanceMedia()
 	case "all":
-		specs = append(fixtures.DefaultLibrary(), fixtures.FFmpegLibrary()...)
+		specs = append(fixtures.DefaultLibrary(), fixtures.DemoLibrary()...)
 	default:
 		fmt.Fprintf(os.Stderr, "fixturegen: unknown preset %q\n", *preset)
 		os.Exit(2)
-	}
-
-	// ffmpeg is never hard-required: without one, ffmpeg-only specs are
-	// skipped loudly rather than failing the run.
-	if !fixtures.FFmpegAvailable() {
-		kept := specs[:0]
-		for _, s := range specs {
-			if s.NeedsFFmpeg() {
-				fmt.Fprintf(os.Stderr, "fixturegen: skipping %s: ffmpeg not on PATH\n", s.Filename())
-				continue
-			}
-			kept = append(kept, s)
-		}
-		specs = kept
 	}
 
 	paths, err := fixtures.Generate(*out, specs...)

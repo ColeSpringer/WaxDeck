@@ -10,20 +10,33 @@ export 'package:waxdeck_api_gen/src/auth/oauth.dart';
 export 'package:waxdeck_api_gen/src/serializers.dart';
 export 'package:waxdeck_api_gen/src/model/date.dart';
 
+export 'package:waxdeck_api_gen/src/api/admin_api.dart';
 export 'package:waxdeck_api_gen/src/api/auth_api.dart';
 export 'package:waxdeck_api_gen/src/api/library_api.dart';
 export 'package:waxdeck_api_gen/src/api/playback_api.dart';
 export 'package:waxdeck_api_gen/src/api/system_api.dart';
 
+export 'package:waxdeck_api_gen/src/model/discovery_list.dart';
 export 'package:waxdeck_api_gen/src/model/error.dart';
 export 'package:waxdeck_api_gen/src/model/health.dart';
 export 'package:waxdeck_api_gen/src/model/item.dart';
 export 'package:waxdeck_api_gen/src/model/item_page.dart';
 export 'package:waxdeck_api_gen/src/model/item_summary.dart';
+export 'package:waxdeck_api_gen/src/model/job.dart';
+export 'package:waxdeck_api_gen/src/model/listen_ingest_result.dart';
+export 'package:waxdeck_api_gen/src/model/listen_report.dart';
+export 'package:waxdeck_api_gen/src/model/listen_session.dart';
 export 'package:waxdeck_api_gen/src/model/login_request.dart';
 export 'package:waxdeck_api_gen/src/model/login_response.dart';
+export 'package:waxdeck_api_gen/src/model/lyrics.dart';
 export 'package:waxdeck_api_gen/src/model/media_type.dart';
 export 'package:waxdeck_api_gen/src/model/play_info.dart';
+export 'package:waxdeck_api_gen/src/model/play_state.dart';
+export 'package:waxdeck_api_gen/src/model/play_state_update.dart';
+export 'package:waxdeck_api_gen/src/model/rejected_listen.dart';
+export 'package:waxdeck_api_gen/src/model/search_hit.dart';
+export 'package:waxdeck_api_gen/src/model/search_results.dart';
 export 'package:waxdeck_api_gen/src/model/session_info.dart';
+export 'package:waxdeck_api_gen/src/model/synced_line.dart';
 export 'package:waxdeck_api_gen/src/model/user.dart';
 

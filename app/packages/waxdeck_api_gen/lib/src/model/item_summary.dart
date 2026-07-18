@@ -18,7 +18,7 @@ part 'item_summary.g.dart';
 /// * [artist] - Primary display artist / author / show name.
 /// * [album] - Album / series / podcast title, when applicable.
 /// * [durationMs] - Duration in milliseconds.
-/// * [artUrl] - Origin-relative URL of the item's artwork, when present.
+/// * [artUrl] - Origin-relative URL of the item's artwork endpoint. Always populated; the endpoint itself returns 404 for items with no artwork, so clients keep a placeholder ready. 
 @BuiltValue(instantiable: false)
 abstract class ItemSummary  {
   /// Type-prefixed ULID.
@@ -45,7 +45,7 @@ abstract class ItemSummary  {
   @BuiltValueField(wireName: r'durationMs')
   int get durationMs;
 
-  /// Origin-relative URL of the item's artwork, when present.
+  /// Origin-relative URL of the item's artwork endpoint. Always populated; the endpoint itself returns 404 for items with no artwork, so clients keep a placeholder ready. 
   @BuiltValueField(wireName: r'artUrl')
   String? get artUrl;
 

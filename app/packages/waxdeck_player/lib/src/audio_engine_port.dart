@@ -1,0 +1,70 @@
+/// The WaxDeck-owned audio engine contract.
+library;
+
+/// Coarse lifecycle of the loaded media.
+enum EngineProcessingState {
+  /// Nothing loaded, or playback was stopped.
+  idle,
+
+  /// Media is being fetched or buffered.
+  loading,
+
+  /// Media is ready; play and seek work.
+  ready,
+
+  /// Playback ran off the end of the media.
+  completed,
+}
+
+/// Small, honest facade over whatever audio plugin actually plays sound.
+///
+/// App code depends on this interface only. Community plugins (just_audio
+/// and the media_kit bridge today) live behind it, so replacing or upgrading
+/// them never touches feature code.
+abstract interface class AudioEnginePort {
+  /// Loads [url] and prepares it for playback, optionally starting at
+  /// [initialPosition]. [mimeType] is a hint; engines may ignore it.
+  Future<void> load(String url, {String? mimeType, Duration? initialPosition});
+
+  /// Starts or resumes playback.
+  Future<void> play();
+
+  /// Pauses playback, keeping the position.
+  Future<void> pause();
+
+  /// Moves the playback position.
+  Future<void> seek(Duration position);
+
+  /// Stops playback and releases the media, keeping the engine usable.
+  Future<void> stop();
+
+  /// Releases the engine permanently. No calls are valid afterwards.
+  Future<void> dispose();
+
+  /// Current playback position.
+  Duration get position;
+
+  /// Position updates during playback and after seeks.
+  Stream<Duration> get positionStream;
+
+  /// Duration of the loaded media, when known.
+  Duration? get duration;
+
+  /// Duration updates as media loads.
+  Stream<Duration?> get durationStream;
+
+  /// Whether playback is currently running (play intent, not buffering).
+  bool get playing;
+
+  /// Play and pause transitions.
+  Stream<bool> get playingStream;
+
+  /// Current media lifecycle state.
+  EngineProcessingState get processingState;
+
+  /// Media lifecycle transitions.
+  Stream<EngineProcessingState> get processingStateStream;
+
+  /// Fires once each time playback reaches the end of the media.
+  Stream<void> get completed;
+}
