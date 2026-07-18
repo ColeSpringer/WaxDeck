@@ -116,7 +116,11 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 
-	srv := NewServer("test", svc, bridge)
+	srv := NewServer("test", Options{
+		Service:  svc,
+		Bridge:   bridge,
+		Sessions: auth.NewSessions(store),
+	})
 	apiHandler := HandlerWithOptions(
 		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  RequestErrorHandler,
@@ -414,6 +418,144 @@ func (h *harness) putJSON(t *testing.T, path string, body any) *http.Response {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
+	}
+	return resp
+}
+
+// putJSON sends an authenticated PUT with a JSON body.
+func putJSON(t *testing.T, ts *httptest.Server, path, token string, body any) *http.Response {
+	t.Helper()
+	raw, _ := json.Marshal(body)
+	req, _ := http.NewRequest("PUT", ts.URL+path, bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+// TestTwoUsersIsolatedState is the multi-user acceptance at the API
+// level: two accounts share the catalog but never each other's
+// playback state, stars, or ratings.
+func TestTwoUsersIsolatedState(t *testing.T) {
+	h := newHarness(t)
+
+	// A second, non-admin account.
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "sam", "password": testPassword,
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create user status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+	sam := loginAs(t, h.ts, "sam", testPassword)
+
+	page := h.items(t, "")
+	if len(page.Items) < 2 {
+		t.Fatalf("want at least 2 items, got %d", len(page.Items))
+	}
+	first, second := page.Items[0].Pid, page.Items[1].Pid
+
+	// Sam sees the whole shared catalog.
+	resp = get(t, h.ts, "/api/v1/library/items", sam.Token)
+	if p := decode[ItemPage](t, resp); len(p.Items) != len(page.Items) {
+		t.Fatalf("sam sees %d items, admin sees %d", len(p.Items), len(page.Items))
+	}
+
+	// Admin stars, rates, and checkpoints the first item.
+	if resp := putJSON(t, h.ts, "/api/v1/items/"+first+"/star", h.token, map[string]any{"starred": true}); resp.StatusCode != 200 {
+		t.Fatalf("admin star status = %d", resp.StatusCode)
+	} else {
+		st := decode[PlayState](t, resp)
+		if !st.Starred {
+			t.Fatal("admin star did not stick")
+		}
+	}
+	if resp := putJSON(t, h.ts, "/api/v1/items/"+first+"/rating", h.token, map[string]any{"rating": 80}); resp.StatusCode != 200 {
+		t.Fatalf("admin rating status = %d", resp.StatusCode)
+	} else {
+		st := decode[PlayState](t, resp)
+		if st.Rating == nil || *st.Rating != 80 {
+			t.Fatalf("admin rating = %v, want 80", st.Rating)
+		}
+	}
+	if resp := putJSON(t, h.ts, "/api/v1/items/"+first+"/play-state", h.token, map[string]any{"positionMs": 4200}); resp.StatusCode != 204 {
+		t.Fatalf("admin checkpoint status = %d", resp.StatusCode)
+	} else {
+		resp.Body.Close()
+	}
+
+	// Sam's view of the same item is untouched.
+	resp = get(t, h.ts, "/api/v1/items/"+first+"/play-state", sam.Token)
+	samState := decode[PlayState](t, resp)
+	if samState.Starred || samState.Rating != nil || samState.PositionMs != 0 {
+		t.Fatalf("sam's state leaked admin's: %+v", samState)
+	}
+
+	// Sam stars the second item; the starred lists diverge.
+	if resp := putJSON(t, h.ts, "/api/v1/items/"+second+"/star", sam.Token, map[string]any{"starred": true}); resp.StatusCode != 200 {
+		t.Fatalf("sam star status = %d", resp.StatusCode)
+	} else {
+		resp.Body.Close()
+	}
+	adminStarred := decode[ItemPage](t, get(t, h.ts, "/api/v1/library/browse?list=starred", h.token))
+	samStarred := decode[ItemPage](t, get(t, h.ts, "/api/v1/library/browse?list=starred", sam.Token))
+	if len(adminStarred.Items) != 1 || adminStarred.Items[0].Pid != first {
+		t.Fatalf("admin starred list = %+v, want just %s", adminStarred.Items, first)
+	}
+	if len(samStarred.Items) != 1 || samStarred.Items[0].Pid != second {
+		t.Fatalf("sam starred list = %+v, want just %s", samStarred.Items, second)
+	}
+
+	// Clearing a rating with null works and stays per-user.
+	if resp := putJSON(t, h.ts, "/api/v1/items/"+first+"/rating", h.token, map[string]any{"rating": nil}); resp.StatusCode != 200 {
+		t.Fatalf("clear rating status = %d", resp.StatusCode)
+	} else {
+		st := decode[PlayState](t, resp)
+		if st.Rating != nil {
+			t.Fatalf("cleared rating = %v, want nil", st.Rating)
+		}
+	}
+
+	// Listens account per user: the same session id from both users is
+	// two distinct sessions, not a dedupe collision.
+	sid := "01JZTESTISOLATIONSESSION01"
+	for _, tok := range []string{h.token, sam.Token} {
+		resp := postListens(t, h.ts, tok, sid, first)
+		res := decode[ListenIngestResult](t, resp)
+		if res.Accepted != 1 || res.Duplicates != 0 {
+			t.Fatalf("listen ingest = %+v, want accepted 1", res)
+		}
+	}
+	// A replay by the same user does dedupe.
+	resp = postListens(t, h.ts, sam.Token, sid, first)
+	if res := decode[ListenIngestResult](t, resp); res.Duplicates != 1 || res.Accepted != 0 {
+		t.Fatalf("replay ingest = %+v, want duplicate 1", res)
+	}
+}
+
+// postListens reports one finished listen session.
+func postListens(t *testing.T, ts *httptest.Server, token, sessionID, pid string) *http.Response {
+	t.Helper()
+	body := map[string]any{"sessions": []map[string]any{{
+		"sessionId": sessionID,
+		"pid":       pid,
+		"startedAt": time.Now().UTC().Format(time.RFC3339),
+		"msPlayed":  300000,
+		"finished":  true,
+	}}}
+	raw, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", ts.URL+"/api/v1/listens", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("listens status = %d", resp.StatusCode)
 	}
 	return resp
 }

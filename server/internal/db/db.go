@@ -38,6 +38,79 @@ var migrations = []string{
 		UNIQUE (user_id, session_id)
 	);
 	CREATE INDEX listen_sessions_by_item ON listen_sessions (user_id, item_pid, started_at_ns);`,
+
+	// Accounts, sessions, and per-user server state. The catalog user
+	// (waxbin_user_pid) is created at provisioning; WaxDeck is the sole
+	// identity authority and WaxBin stores no credentials. username_ci
+	// carries the case-insensitive uniqueness the login path matches on.
+	`CREATE TABLE users (
+		id             TEXT    PRIMARY KEY,
+		username       TEXT    NOT NULL,
+		username_ci    TEXT    NOT NULL UNIQUE,
+		display_name   TEXT    NOT NULL DEFAULT '',
+		password_hash  TEXT    NOT NULL DEFAULT '',
+		roles          TEXT    NOT NULL DEFAULT 'user',
+		disabled       INTEGER NOT NULL DEFAULT 0,
+		library_access TEXT    NOT NULL DEFAULT 'all',
+		waxbin_user_pid TEXT   NOT NULL,
+		created_at_ns  INTEGER NOT NULL,
+		updated_at_ns  INTEGER NOT NULL
+	);
+	CREATE TABLE identities (
+		id            INTEGER PRIMARY KEY,
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		provider      TEXT    NOT NULL,
+		subject       TEXT    NOT NULL,
+		email         TEXT    NOT NULL DEFAULT '',
+		created_at_ns INTEGER NOT NULL,
+		UNIQUE (provider, subject)
+	);
+	CREATE INDEX identities_by_user ON identities (user_id);
+	CREATE TABLE sessions (
+		id              TEXT    PRIMARY KEY,
+		user_id         TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		kind            TEXT    NOT NULL,
+		token_hash      BLOB    NOT NULL UNIQUE,
+		prev_token_hash BLOB,
+		rotated_at_ns   INTEGER NOT NULL DEFAULT 0,
+		csrf_token      TEXT    NOT NULL,
+		device_name     TEXT    NOT NULL DEFAULT '',
+		client          TEXT    NOT NULL DEFAULT '',
+		created_at_ns   INTEGER NOT NULL,
+		last_seen_ns    INTEGER NOT NULL,
+		expires_at_ns   INTEGER NOT NULL
+	);
+	CREATE INDEX sessions_by_user ON sessions (user_id, created_at_ns);
+	CREATE INDEX sessions_by_prev ON sessions (prev_token_hash) WHERE prev_token_hash IS NOT NULL;
+	CREATE TABLE library_grants (
+		user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		library_pid TEXT NOT NULL,
+		PRIMARY KEY (user_id, library_pid)
+	);
+	CREATE TABLE prefs (
+		user_id       TEXT    PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+		json          TEXT    NOT NULL,
+		updated_at_ns INTEGER NOT NULL
+	);
+	CREATE TABLE oauth_state (
+		state         TEXT    PRIMARY KEY,
+		provider      TEXT    NOT NULL,
+		mode          TEXT    NOT NULL,
+		code_verifier TEXT    NOT NULL,
+		redirect_uri  TEXT    NOT NULL,
+		redirect_to   TEXT    NOT NULL DEFAULT '',
+		challenge     TEXT    NOT NULL DEFAULT '',
+		loopback_port INTEGER NOT NULL DEFAULT 0,
+		created_at_ns INTEGER NOT NULL,
+		expires_at_ns INTEGER NOT NULL
+	);
+	CREATE TABLE oidc_codes (
+		code_hash     BLOB    PRIMARY KEY,
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		challenge     TEXT    NOT NULL DEFAULT '',
+		created_at_ns INTEGER NOT NULL,
+		expires_at_ns INTEGER NOT NULL
+	);`,
 }
 
 // Open opens (creating if needed) the database at path and applies

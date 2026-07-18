@@ -18,6 +18,7 @@ const (
 	PrefixEpisode = "ep"
 	PrefixBook    = "bk"
 	PrefixJob     = "jb"
+	PrefixLibrary = "lb"
 )
 
 // prefixForKind maps an item kind to its API prefix.

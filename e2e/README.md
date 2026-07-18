@@ -20,6 +20,15 @@ end to end (currently: serve the UI and answer health; later: browse a
 scanned library, and so on). Keep specs small and additive: this suite is the
 contract that "the whole thing still boots and plays".
 
-The compose-based harness comes later, alongside real library scanning and
-real auth. It runs the full `waxdeck` + `waxflow` + `dex` (OIDC) stack from
-`deploy/compose.yaml` under test instead of a bare binary.
+The stack includes a small test identity provider (`fixtures/cmd/testidp`)
+so the single sign-on journey runs against a real HTTP IdP: discovery,
+JWKS, an interactive login form, PKCE, and single-use codes. The
+compose-based harness comes later; it swaps the bare binaries for the
+full `waxdeck` + `waxflow` stack from `deploy/compose.yaml` with `dex`
+as the identity provider.
+
+The first spec to run is the first-run setup wizard (the `setup`
+Playwright project); every other spec depends on it and reaches the
+shared administrator through `tests/helpers.ts`, which bootstraps or
+logs in as needed. Against a reused dev stack the wizard spec skips
+itself (the one-shot door is already closed).

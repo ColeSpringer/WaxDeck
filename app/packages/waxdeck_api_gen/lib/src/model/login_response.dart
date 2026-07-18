@@ -14,6 +14,7 @@ part 'login_response.g.dart';
 /// Properties:
 /// * [user] 
 /// * [token] - Opaque bearer token equivalent to the session cookie. Native clients store it in the OS keychain; web clients ignore it and rely on the cookie. 
+/// * [csrfToken] - CSRF token for cookie-authenticated mutations (sent back as the `X-CSRF-Token` header). Irrelevant to bearer-token callers. 
 @BuiltValue()
 abstract class LoginResponse implements Built<LoginResponse, LoginResponseBuilder> {
   @BuiltValueField(wireName: r'user')
@@ -22,6 +23,10 @@ abstract class LoginResponse implements Built<LoginResponse, LoginResponseBuilde
   /// Opaque bearer token equivalent to the session cookie. Native clients store it in the OS keychain; web clients ignore it and rely on the cookie. 
   @BuiltValueField(wireName: r'token')
   String get token;
+
+  /// CSRF token for cookie-authenticated mutations (sent back as the `X-CSRF-Token` header). Irrelevant to bearer-token callers. 
+  @BuiltValueField(wireName: r'csrfToken')
+  String get csrfToken;
 
   LoginResponse._();
 
@@ -56,6 +61,11 @@ class _$LoginResponseSerializer implements PrimitiveSerializer<LoginResponse> {
       object.token,
       specifiedType: const FullType(String),
     );
+    yield r'csrfToken';
+    yield serializers.serialize(
+      object.csrfToken,
+      specifiedType: const FullType(String),
+    );
   }
 
   @override
@@ -84,7 +94,7 @@ class _$LoginResponseSerializer implements PrimitiveSerializer<LoginResponse> {
             value,
             specifiedType: const FullType(User),
           ) as User;
-          result.user.replace(valueDes);
+          result.user = valueDes;
           break;
         case r'token':
           final valueDes = serializers.deserialize(
@@ -92,6 +102,13 @@ class _$LoginResponseSerializer implements PrimitiveSerializer<LoginResponse> {
             specifiedType: const FullType(String),
           ) as String;
           result.token = valueDes;
+          break;
+        case r'csrfToken':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.csrfToken = valueDes;
           break;
         default:
           unhandled.add(key);

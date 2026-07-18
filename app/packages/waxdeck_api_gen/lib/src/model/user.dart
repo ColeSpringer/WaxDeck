@@ -16,8 +16,8 @@ part 'user.g.dart';
 /// * [username] - Login name.
 /// * [displayName] - Optional display name; falls back to `username`.
 /// * [roles] - Assigned roles (`admin`, `user`).
-@BuiltValue()
-abstract class User implements Built<User, UserBuilder> {
+@BuiltValue(instantiable: false)
+abstract class User  {
   /// Stable user identifier.
   @BuiltValueField(wireName: r'id')
   String get id;
@@ -34,20 +34,13 @@ abstract class User implements Built<User, UserBuilder> {
   @BuiltValueField(wireName: r'roles')
   BuiltList<String> get roles;
 
-  User._();
-
-  factory User([void updates(UserBuilder b)]) = _$User;
-
-  @BuiltValueHook(initializeBuilder: true)
-  static void _defaults(UserBuilder b) => b;
-
   @BuiltValueSerializer(custom: true)
   static Serializer<User> get serializer => _$UserSerializer();
 }
 
 class _$UserSerializer implements PrimitiveSerializer<User> {
   @override
-  final Iterable<Type> types = const [User, _$User];
+  final Iterable<Type> types = const [User];
 
   @override
   final String wireName = r'User';
@@ -88,6 +81,46 @@ class _$UserSerializer implements PrimitiveSerializer<User> {
     FullType specifiedType = FullType.unspecified,
   }) {
     return _serializeProperties(serializers, object, specifiedType: specifiedType).toList();
+  }
+
+  @override
+  User deserialize(
+    Serializers serializers,
+    Object serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
+    return serializers.deserialize(serialized, specifiedType: FullType($User)) as $User;
+  }
+}
+
+/// a concrete implementation of [User], since [User] is not instantiable
+@BuiltValue(instantiable: true)
+abstract class $User implements User, Built<$User, $UserBuilder> {
+  $User._();
+
+  factory $User([void Function($UserBuilder)? updates]) = _$$User;
+
+  @BuiltValueHook(initializeBuilder: true)
+  static void _defaults($UserBuilder b) => b;
+
+  @BuiltValueSerializer(custom: true)
+  static Serializer<$User> get serializer => _$$UserSerializer();
+}
+
+class _$$UserSerializer implements PrimitiveSerializer<$User> {
+  @override
+  final Iterable<Type> types = const [$User, _$$User];
+
+  @override
+  final String wireName = r'$User';
+
+  @override
+  Object serialize(
+    Serializers serializers,
+    $User object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
+    return serializers.serialize(object, specifiedType: FullType(User))!;
   }
 
   void _deserializeProperties(
@@ -139,12 +172,12 @@ class _$UserSerializer implements PrimitiveSerializer<User> {
   }
 
   @override
-  User deserialize(
+  $User deserialize(
     Serializers serializers,
     Object serialized, {
     FullType specifiedType = FullType.unspecified,
   }) {
-    final result = UserBuilder();
+    final result = $UserBuilder();
     final serializedList = (serialized as Iterable<Object?>).toList();
     final unhandled = <Object?>[];
     _deserializeProperties(

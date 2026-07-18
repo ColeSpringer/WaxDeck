@@ -3,41 +3,88 @@ package api
 import (
 	"bytes"
 	"context"
-	cryptorand "crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
+	"unicode/utf8"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
-// Server implements StrictServerInterface over the library service and
-// the WaxFlow bridge. Authentication is still the development stub (any
-// credentials map to the built-in admin); real accounts arrive with the
-// identity work.
+// Server implements StrictServerInterface over the library service,
+// the WaxFlow bridge, and the session manager.
 type Server struct {
 	Version string
 
 	svc      *service.Library
 	bridge   *flow.Bridge
-	sessions sessionStore
+	sessions *auth.Sessions
+	oidc     *auth.OIDC
+	limiter  *auth.RateLimiter
+	log      logger
+	// cookieSecure marks session cookies Secure; set whenever the
+	// deployed origin is HTTPS, never on the plain-HTTP LAN default.
+	cookieSecure bool
+	// publicBase is the externally reachable base URL; the OIDC
+	// callback redirect URI derives from it.
+	publicBase string
 }
 
-// NewServer builds the API server. bridge may be nil when streaming is
-// not configured; play-info then reports streaming unavailable while
-// every catalog surface keeps working.
-func NewServer(version string, svc *service.Library, bridge *flow.Bridge) *Server {
-	s := &Server{Version: version, svc: svc, bridge: bridge}
-	s.sessions.m = make(map[string]User)
-	return s
+// logger is the slice of slog the API layer uses (a seam tests can
+// leave nil-safe via discard).
+type logger interface {
+	Info(msg string, args ...any)
+	Warn(msg string, args ...any)
 }
+
+// Options carries the server's collaborators.
+type Options struct {
+	Service      *service.Library
+	Bridge       *flow.Bridge
+	Sessions     *auth.Sessions
+	OIDC         *auth.OIDC
+	Limiter      *auth.RateLimiter
+	Logger       logger
+	CookieSecure bool
+	PublicBase   string
+}
+
+// NewServer builds the API server. Bridge may be nil when streaming is
+// not configured; play-info then reports streaming unavailable while
+// every catalog surface keeps working. OIDC may be nil when no provider
+// is configured.
+func NewServer(version string, opts Options) *Server {
+	if opts.Limiter == nil {
+		opts.Limiter = auth.NewRateLimiter()
+	}
+	if opts.Logger == nil {
+		opts.Logger = discardLogger{}
+	}
+	return &Server{
+		Version:      version,
+		svc:          opts.Service,
+		bridge:       opts.Bridge,
+		sessions:     opts.Sessions,
+		oidc:         opts.OIDC,
+		limiter:      opts.Limiter,
+		log:          opts.Logger,
+		cookieSecure: opts.CookieSecure,
+		publicBase:   opts.PublicBase,
+	}
+}
+
+type discardLogger struct{}
+
+func (discardLogger) Info(string, ...any) {}
+func (discardLogger) Warn(string, ...any) {}
 
 // --- system ------------------------------------------------------------------
 
@@ -49,55 +96,105 @@ func (s *Server) GetHealth(ctx context.Context, _ GetHealthRequestObject) (GetHe
 	}, nil
 }
 
-// --- auth (development stub) ---------------------------------------------------
+// --- auth ------------------------------------------------------------------------
 
-const sessionCookie = "waxdeck_session"
+const (
+	sessionCookie = "waxdeck_session"
+	csrfHeader    = "X-Csrf-Token"
+)
+
+// authFailureLog is the stable single-line auth-failure format the
+// fail2ban recipe matches on; changing it breaks deployed jails.
+const authFailureLog = "auth failure"
 
 func (s *Server) Login(ctx context.Context, req LoginRequestObject) (LoginResponseObject, error) {
 	if req.Body == nil || req.Body.Username == "" || req.Body.Password == "" {
 		return Login400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "username and password are required"))}, nil
 	}
-	// Development stub: any non-empty credentials map to the built-in dev user.
-	user := devUser(req.Body.Username)
-	token := s.sessions.create(user)
-	cookie := &http.Cookie{
-		Name:     sessionCookie,
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		// Secure is intentionally unset here so the plain-HTTP localhost demo
-		// works. Real sessions will set Secure from deployment config whenever
-		// the origin is HTTPS: the cookie must never ride cleartext in prod.
+	ip := remoteIPFromContext(ctx)
+	ipKey := "login-ip:" + ip
+	acctKey := "login-acct:" + strings.ToLower(req.Body.Username)
+	if !s.limiter.Allowed(ipKey) || !s.limiter.Allowed(acctKey) {
+		return Login429JSONResponse{RateLimitedJSONResponse(errObj("rate-limited", "too many login attempts; retry later"))}, nil
 	}
-	setCookie := cookie.String()
+	user, err := s.svc.VerifyLocalLogin(ctx, req.Body.Username, req.Body.Password)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		s.limiter.Failure(ipKey)
+		s.limiter.Failure(acctKey)
+		s.log.Warn(authFailureLog, "user", req.Body.Username, "ip", ip)
+		return Login401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "invalid credentials"))}, nil
+	}
+	s.limiter.Success(ipKey)
+	s.limiter.Success(acctKey)
+
+	kind := "web"
+	deviceName := deref(req.Body.DeviceName)
+	if deviceName != "" {
+		kind = "device"
+	}
+	created, err := s.sessions.Create(ctx, user.ID, kind, deviceName, clientFromContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	setCookie := s.newSessionCookie(created.Token)
 	return Login200JSONResponse{
-		Body:    LoginResponse{User: user, Token: token},
+		Body:    LoginResponse{User: userJSON(user), Token: created.Token, CsrfToken: created.CSRFToken},
 		Headers: Login200ResponseHeaders{SetCookie: &setCookie},
 	}, nil
 }
 
 func (s *Server) Logout(ctx context.Context, _ LogoutRequestObject) (LogoutResponseObject, error) {
-	if token, ok := tokenFromContext(ctx); ok {
-		s.sessions.revoke(token)
+	if p, ok := principalFromContext(ctx); ok {
+		if err := s.sessions.Revoke(ctx, p.Session.ID); err != nil {
+			s.log.Warn("revoking session at logout", "session", p.Session.ID, "err", err)
+		}
 	}
-	expired := &http.Cookie{
-		Name:     sessionCookie,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	}
-	setCookie := expired.String()
+	setCookie := s.expiredSessionCookie()
 	return Logout204Response{Headers: Logout204ResponseHeaders{SetCookie: &setCookie}}, nil
 }
 
 func (s *Server) GetSession(ctx context.Context, _ GetSessionRequestObject) (GetSessionResponseObject, error) {
-	if user, ok := userFromContext(ctx); ok {
-		return GetSession200JSONResponse{Authenticated: true, User: &user}, nil
+	if p, ok := principalFromContext(ctx); ok {
+		u := userJSON(p.User)
+		return GetSession200JSONResponse{Authenticated: true, User: &u, CsrfToken: &p.Session.CSRFToken}, nil
 	}
 	return GetSession200JSONResponse{Authenticated: false}, nil
+}
+
+// sessionCookie renders the Set-Cookie value for a fresh session. The
+// CSRF token is deliberately NOT a cookie: it lives in the session row
+// server-side and reaches the SPA only through login and session
+// bodies, which cross-origin pages cannot read. Mutating requests
+// echo it in the X-CSRF-Token header (a synchronizer token, strictly
+// stronger than cookie double-submit).
+func (s *Server) newSessionCookie(token string) string {
+	return (&http.Cookie{
+		Name:     sessionCookie,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   s.cookieSecure,
+	}).String()
+}
+
+func (s *Server) expiredSessionCookie() string {
+	return (&http.Cookie{
+		Name: sessionCookie, Value: "", Path: "/", HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure, MaxAge: -1,
+	}).String()
+}
+
+// userJSON renders the self view of an account.
+func userJSON(u *wdb.User) User {
+	out := User{Id: u.ID, Username: u.Username, Roles: u.Roles}
+	if u.DisplayName != "" {
+		out.DisplayName = ptr(u.DisplayName)
+	}
+	return out
 }
 
 // --- library ---------------------------------------------------------------------
@@ -116,7 +213,11 @@ func (s *Server) ListItems(ctx context.Context, req ListItemsRequestObject) (Lis
 	if req.Params.MediaType != nil {
 		mediaType = string(*req.Params.MediaType)
 	}
-	page, err := s.svc.Items(ctx, mediaType, deref(req.Params.Cursor), limit)
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.svc.Items(ctx, uc, mediaType, deref(req.Params.Cursor), limit)
 	if err != nil {
 		if kind := service.KindOf(err); kind == service.KindInvalid {
 			return ListItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
@@ -141,7 +242,11 @@ func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (B
 	if req.Params.List == Random && req.Params.Seed == nil {
 		seed = rand.Int64()
 	}
-	page, err := s.svc.Browse(ctx, string(req.Params.List), seed, deref(req.Params.Cursor), limit)
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.svc.Browse(ctx, uc, string(req.Params.List), seed, deref(req.Params.Cursor), limit)
 	if err != nil {
 		if kind := service.KindOf(err); kind == service.KindInvalid {
 			return BrowseList400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
@@ -163,7 +268,11 @@ func (s *Server) Search(ctx context.Context, req SearchRequestObject) (SearchRes
 	if !ok {
 		return Search400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 100"))}, nil
 	}
-	res, err := s.svc.Search(ctx, req.Params.Q, limit)
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.svc.Search(ctx, uc, req.Params.Q, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +299,11 @@ func (s *Server) Search(ctx context.Context, req SearchRequestObject) (SearchRes
 }
 
 func (s *Server) GetItem(ctx context.Context, req GetItemRequestObject) (GetItemResponseObject, error) {
-	d, err := s.svc.Item(ctx, req.Pid)
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	d, err := s.svc.Item(ctx, uc, req.Pid)
 	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return GetItem404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
@@ -208,7 +321,11 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 			return GetItemArt400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "size must be between 16 and 2048"))}, nil
 		}
 	}
-	blob, err := s.svc.Art(ctx, req.Pid, size)
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	blob, err := s.svc.Art(ctx, uc, req.Pid, size)
 	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return GetItemArt404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artwork for pid "+req.Pid))}, nil
@@ -237,7 +354,11 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 }
 
 func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObject) (GetItemLyricsResponseObject, error) {
-	ly, err := s.svc.ItemLyrics(ctx, req.Pid)
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ly, err := s.svc.ItemLyrics(ctx, uc, req.Pid)
 	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return GetItemLyrics404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no lyrics for pid "+req.Pid))}, nil
@@ -261,6 +382,9 @@ func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObje
 // --- admin -----------------------------------------------------------------------
 
 func (s *Server) RescanLibrary(ctx context.Context, _ RescanLibraryRequestObject) (RescanLibraryResponseObject, error) {
+	if p, ok := principalFromContext(ctx); !ok || !p.IsAdmin() {
+		return RescanLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
 	job, err := s.svc.Rescan(ctx)
 	if err != nil {
 		if service.KindOf(err) == service.KindConflict {
@@ -288,13 +412,19 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	if s.bridge == nil {
 		return nil, errStreamingUnavailable
 	}
-	// AuthMiddleware guarantees a user on this path; the guard covers a
-	// future miswiring, not a reachable state.
-	user, ok := userFromContext(ctx)
-	if !ok {
-		return GetPlayInfo401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no user in request context"))}, nil
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
 	}
-	info, err := s.bridge.PlayInfoFor(ctx, user.Id, req.Pid)
+	// Visibility gates the mint: an item outside the caller's libraries
+	// must not yield a stream URL.
+	if err := s.svc.VisibleItem(ctx, uc, req.Pid); err != nil {
+		if service.KindOf(err) == service.KindNotFound {
+			return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		}
+		return nil, err
+	}
+	info, err := s.bridge.PlayInfoFor(ctx, uc.ID, req.Pid)
 	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
@@ -312,13 +442,21 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 }
 
 func (s *Server) GetPlayState(ctx context.Context, req GetPlayStateRequestObject) (GetPlayStateResponseObject, error) {
-	st, err := s.svc.PlayState(ctx, req.Pid)
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.svc.PlayState(ctx, uc, req.Pid)
 	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return GetPlayState404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
 		}
 		return nil, err
 	}
+	return GetPlayState200JSONResponse(playStateJSON(st)), nil
+}
+
+func playStateJSON(st service.PlayState) PlayState {
 	out := PlayState{
 		Pid:        st.PID,
 		PositionMs: st.PositionMS,
@@ -326,18 +464,23 @@ func (s *Server) GetPlayState(ctx context.Context, req GetPlayStateRequestObject
 		Finished:   st.Finished,
 		PlayCount:  st.PlayCount,
 		Starred:    st.Starred,
+		Rating:     st.Rating,
 	}
 	if !st.UpdatedAt.IsZero() {
 		out.UpdatedAt = &st.UpdatedAt
 	}
-	return GetPlayState200JSONResponse(out), nil
+	return out
 }
 
 func (s *Server) PutPlayState(ctx context.Context, req PutPlayStateRequestObject) (PutPlayStateResponseObject, error) {
 	if req.Body == nil {
 		return PutPlayState400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
-	err := s.svc.Checkpoint(ctx, req.Pid, req.Body.PositionMs)
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = s.svc.Checkpoint(ctx, uc, req.Pid, req.Body.PositionMs)
 	switch service.KindOf(err) {
 	case "":
 		return PutPlayState204Response{}, nil
@@ -357,11 +500,9 @@ func (s *Server) ReportListens(ctx context.Context, req ReportListensRequestObje
 	if len(req.Body.Sessions) > 500 {
 		return ReportListens400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "at most 500 sessions per report"))}, nil
 	}
-	// AuthMiddleware guarantees a user on this path; the guard covers a
-	// future miswiring, not a reachable state.
-	user, ok := userFromContext(ctx)
-	if !ok {
-		return ReportListens401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no user in request context"))}, nil
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
 	}
 	sessions := make([]service.ListenSession, 0, len(req.Body.Sessions))
 	for _, in := range req.Body.Sessions {
@@ -378,7 +519,7 @@ func (s *Server) ReportListens(ctx context.Context, req ReportListensRequestObje
 		}
 		sessions = append(sessions, s)
 	}
-	res, err := s.svc.IngestListens(ctx, user.Id, sessions)
+	res, err := s.svc.IngestListens(ctx, uc, sessions)
 	if err != nil {
 		return nil, err
 	}
@@ -525,65 +666,154 @@ var errStreamingUnavailable = &service.Error{
 type ctxKey int
 
 const (
-	ctxUser ctxKey = iota
-	ctxToken
+	ctxPrincipal ctxKey = iota
+	ctxRemoteIP
+	ctxClient
 )
 
 // publicPaths are reachable without a session (per the spec's per-operation
-// `security` overrides).
+// `security` overrides). They are also exempt from CSRF proof.
 var publicPaths = map[string]bool{
-	"/api/v1/health":       true,
-	"/api/v1/auth/login":   true,
-	"/api/v1/auth/session": true,
-	"/api/v1/auth/logout":  true,
+	"/api/v1/health":              true,
+	"/api/v1/auth/login":          true,
+	"/api/v1/auth/session":        true,
+	"/api/v1/auth/logout":         true,
+	"/api/v1/auth/bootstrap":      true,
+	"/api/v1/auth/oidc/providers": true,
+	"/api/v1/auth/oidc/start":     true,
+	"/api/v1/auth/oidc/callback":  true,
+	"/api/v1/auth/oidc/exchange":  true,
 }
 
-// AuthMiddleware resolves the session (cookie or bearer) into the request
-// context and rejects unauthenticated calls to protected endpoints.
+// AuthMiddleware resolves the session (cookie or bearer) into the
+// request context, rejects unauthenticated calls to protected
+// endpoints, and demands CSRF proof for cookie-authenticated
+// mutations. Request metadata (source IP, user agent) rides the
+// context for the login and device paths.
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), ctxRemoteIP, remoteIP(r))
+		ctx = context.WithValue(ctx, ctxClient, clientHint(r))
+
 		// Try each presented credential in precedence order; a stale or
 		// invalid bearer must not shadow a valid session cookie.
-		for _, token := range authCandidates(r) {
-			if user, ok := s.sessions.lookup(token); ok {
-				ctx := context.WithValue(r.Context(), ctxUser, user)
-				ctx = context.WithValue(ctx, ctxToken, token)
-				r = r.WithContext(ctx)
+		var principal *auth.Principal
+		for _, cand := range authCandidates(r) {
+			p, err := s.sessions.Lookup(ctx, cand.token)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "internal", "session lookup failed")
+				return
+			}
+			if p != nil {
+				p.FromCookie = cand.fromCookie
+				principal = p
 				break
 			}
 		}
-		if _, ok := userFromContext(r.Context()); !ok && !publicPaths[r.URL.Path] {
+		if principal != nil {
+			ctx = context.WithValue(ctx, ctxPrincipal, principal)
+		} else if !publicPaths[r.URL.Path] {
 			writeError(w, http.StatusUnauthorized, "unauthenticated", "no valid session or token was presented")
 			return
 		}
-		next.ServeHTTP(w, r)
+
+		// Cookie-borne credentials ride on every browser request, so a
+		// mutation needs proof the SPA itself sent it: the session's CSRF
+		// token echoed in a header, which a cross-site page cannot set.
+		if principal != nil && principal.FromCookie && mutatingMethod(r.Method) && !publicPaths[r.URL.Path] {
+			if r.Header.Get(csrfHeader) != principal.Session.CSRFToken {
+				writeError(w, http.StatusForbidden, "forbidden", "missing or wrong CSRF token")
+				return
+			}
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// authCandidates returns the credential tokens to try, in precedence order:
-// the bearer token (native clients) first, then the session cookie (web).
-// Returning both lets the caller fall through a stale bearer to a good cookie.
-func authCandidates(r *http.Request) []string {
-	var tokens []string
+func mutatingMethod(m string) bool {
+	switch m {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	}
+	return true
+}
+
+type credential struct {
+	token      string
+	fromCookie bool
+}
+
+// authCandidates returns the credentials to try, in precedence order:
+// the bearer token (native clients) first, then the session cookie
+// (web). Returning both lets the caller fall through a stale bearer to
+// a good cookie.
+func authCandidates(r *http.Request) []credential {
+	var out []credential
 	// The Authorization scheme name is case-insensitive (RFC 7235 section 2.1),
 	// so accept "Bearer", "bearer", "BEARER", and other casings.
 	if h := r.Header.Get("Authorization"); len(h) > 7 && strings.EqualFold(h[:7], "bearer ") {
-		tokens = append(tokens, h[7:])
+		out = append(out, credential{token: h[7:]})
 	}
 	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
-		tokens = append(tokens, c.Value)
+		out = append(out, credential{token: c.Value, fromCookie: true})
 	}
-	return tokens
+	return out
 }
 
-func userFromContext(ctx context.Context) (User, bool) {
-	u, ok := ctx.Value(ctxUser).(User)
-	return u, ok
+// remoteIP is the connection's source address. Deliberately not
+// X-Forwarded-For: an unauthenticated header would let anyone dodge the
+// login limiter; trusted-proxy support is a config surface for later.
+func remoteIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
-func tokenFromContext(ctx context.Context) (string, bool) {
-	t, ok := ctx.Value(ctxToken).(string)
-	return t, ok
+// clientHint is a compact client label for the device list, truncated
+// on a rune boundary so an exotic user agent never persists as invalid
+// UTF-8.
+func clientHint(r *http.Request) string {
+	ua := r.Header.Get("User-Agent")
+	if len(ua) <= 128 {
+		return ua
+	}
+	ua = ua[:128]
+	for len(ua) > 0 && !utf8.ValidString(ua) {
+		ua = ua[:len(ua)-1]
+	}
+	return ua
+}
+
+func principalFromContext(ctx context.Context) (*auth.Principal, bool) {
+	p, ok := ctx.Value(ctxPrincipal).(*auth.Principal)
+	return p, ok
+}
+
+func remoteIPFromContext(ctx context.Context) string {
+	ip, _ := ctx.Value(ctxRemoteIP).(string)
+	return ip
+}
+
+func clientFromContext(ctx context.Context) string {
+	c, _ := ctx.Value(ctxClient).(string)
+	return c
+}
+
+// requireUserCtx resolves the principal into the service-layer user
+// context. AuthMiddleware guarantees a principal on protected paths;
+// the error covers a future miswiring, not a reachable state.
+func (s *Server) requireUserCtx(ctx context.Context) (*service.UserCtx, *auth.Principal, error) {
+	p, ok := principalFromContext(ctx)
+	if !ok {
+		return nil, nil, &service.Error{Kind: service.KindInternal, Msg: "no principal in request context"}
+	}
+	uc, err := s.svc.UserCtx(ctx, p.User)
+	if err != nil {
+		return nil, nil, err
+	}
+	return uc, p, nil
 }
 
 // writeError writes the spec's Error schema; used by the API middleware and by
@@ -637,67 +867,8 @@ func kindMessage(err error, fallback string) string {
 	return fallback
 }
 
-// --- session store (in-memory stub) ----------------------------------------------
-
-// maxStubSessions bounds the in-memory session map. The development stub has
-// no session expiry, so this cap is the only thing preventing unbounded
-// growth. Real session lifecycle (TTL, persistence, revocation) arrives with
-// identity work.
-const maxStubSessions = 4096
-
-type sessionStore struct {
-	mu sync.RWMutex
-	m  map[string]User
-}
-
-func (st *sessionStore) create(u User) string {
-	buf := make([]byte, 32)
-	if _, err := cryptorand.Read(buf); err != nil {
-		panic(err) // crypto/rand failure is not recoverable
-	}
-	token := base64.RawURLEncoding.EncodeToString(buf)
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	st.m[token] = u
-	// Evict an existing entry when over the cap so the map cannot grow without
-	// bound. Map iteration order makes the victim effectively arbitrary, which
-	// is acceptable for a stub backstop that normal use never reaches.
-	if len(st.m) > maxStubSessions {
-		for k := range st.m {
-			if k != token {
-				delete(st.m, k)
-				break
-			}
-		}
-	}
-	return token
-}
-
-func (st *sessionStore) lookup(token string) (User, bool) {
-	st.mu.RLock()
-	defer st.mu.RUnlock()
-	u, ok := st.m[token]
-	return u, ok
-}
-
-func (st *sessionStore) revoke(token string) {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	delete(st.m, token)
-}
-
-// --- helpers & dev data ------------------------------------------------------------
+// --- helpers ----------------------------------------------------------------------
 
 func errObj(code, message string) Error {
 	return Error{Code: code, Message: message}
-}
-
-func devUser(username string) User {
-	name := "Development User"
-	return User{
-		Id:          "us-01JZWAXDECKDEVUSER00000000",
-		Username:    username,
-		DisplayName: &name,
-		Roles:       []string{"admin"},
-	}
 }

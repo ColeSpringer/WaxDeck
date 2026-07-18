@@ -45,6 +45,8 @@ type Library struct {
 	db    *wdb.DB
 	roots []Root
 	log   *slog.Logger
+	// libDirs caches path→library attribution for visibility checks.
+	libDirs libraryDirs
 	// procCtx outlives any one request: async catalog jobs launch on it
 	// so a scan survives the 202 that reported it started.
 	procCtx context.Context

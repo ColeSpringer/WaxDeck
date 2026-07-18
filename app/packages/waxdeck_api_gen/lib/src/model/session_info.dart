@@ -14,6 +14,7 @@ part 'session_info.g.dart';
 /// Properties:
 /// * [authenticated] - True when a valid session or token was presented.
 /// * [user] 
+/// * [csrfToken] - CSRF token for cookie-authenticated mutations. Present only when authenticated. 
 @BuiltValue()
 abstract class SessionInfo implements Built<SessionInfo, SessionInfoBuilder> {
   /// True when a valid session or token was presented.
@@ -22,6 +23,10 @@ abstract class SessionInfo implements Built<SessionInfo, SessionInfoBuilder> {
 
   @BuiltValueField(wireName: r'user')
   User? get user;
+
+  /// CSRF token for cookie-authenticated mutations. Present only when authenticated. 
+  @BuiltValueField(wireName: r'csrfToken')
+  String? get csrfToken;
 
   SessionInfo._();
 
@@ -56,6 +61,13 @@ class _$SessionInfoSerializer implements PrimitiveSerializer<SessionInfo> {
       yield serializers.serialize(
         object.user,
         specifiedType: const FullType(User),
+      );
+    }
+    if (object.csrfToken != null) {
+      yield r'csrfToken';
+      yield serializers.serialize(
+        object.csrfToken,
+        specifiedType: const FullType(String),
       );
     }
   }
@@ -93,7 +105,14 @@ class _$SessionInfoSerializer implements PrimitiveSerializer<SessionInfo> {
             value,
             specifiedType: const FullType(User),
           ) as User;
-          result.user.replace(valueDes);
+          result.user = valueDes;
+          break;
+        case r'csrfToken':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.csrfToken = valueDes;
           break;
         default:
           unhandled.add(key);

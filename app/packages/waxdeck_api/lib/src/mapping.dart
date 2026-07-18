@@ -64,6 +64,65 @@ SessionState sessionStateFromGen(gen.SessionInfo info) {
   );
 }
 
+SessionKind sessionKindFromGen(gen.DeviceSessionKindEnum kind) {
+  return SessionKind.values.firstWhere(
+    (k) => k.wireName == kind.name,
+    orElse: () => SessionKind.device,
+  );
+}
+
+DeviceSession deviceSessionFromGen(gen.DeviceSession session) {
+  return DeviceSession(
+    id: session.id,
+    kind: sessionKindFromGen(session.kind),
+    deviceName: session.deviceName,
+    client: session.client,
+    createdAt: session.createdAt,
+    lastSeenAt: session.lastSeenAt,
+    current: session.current,
+  );
+}
+
+OidcProvider oidcProviderFromGen(
+  gen.OidcProvider provider, {
+  String baseUrl = '',
+}) {
+  return OidcProvider(
+    id: provider.id,
+    displayName: provider.displayName,
+    startUrl: resolveMediaUrl(baseUrl, provider.startUrl),
+  );
+}
+
+ThemePref themePrefFromGen(gen.PrefsThemeEnum theme) {
+  return ThemePref.values.firstWhere(
+    (t) => t.wireName == theme.name,
+    orElse: () => ThemePref.system,
+  );
+}
+
+gen.PrefsThemeEnum themePrefToGen(ThemePref theme) =>
+    gen.PrefsThemeEnum.valueOf(theme.wireName);
+
+Prefs prefsFromGen(gen.Prefs prefs) {
+  final theme = prefs.theme;
+  return Prefs(
+    timezone: prefs.timezone,
+    locale: prefs.locale,
+    theme: theme == null ? null : themePrefFromGen(theme),
+  );
+}
+
+gen.Prefs prefsToGen(Prefs prefs) {
+  final theme = prefs.theme;
+  return gen.Prefs(
+    (b) => b
+      ..timezone = prefs.timezone
+      ..locale = prefs.locale
+      ..theme = theme == null ? null : themePrefToGen(theme),
+  );
+}
+
 ItemSummary itemSummaryFromGen(gen.ItemSummary item, {String baseUrl = ''}) {
   final artUrl = item.artUrl;
   return ItemSummary(
@@ -128,6 +187,7 @@ PlayState playStateFromGen(gen.PlayState state) {
     finished: state.finished,
     playCount: state.playCount,
     starred: state.starred,
+    rating: state.rating,
     updatedAt: state.updatedAt,
   );
 }

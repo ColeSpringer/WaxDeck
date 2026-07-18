@@ -13,6 +13,13 @@ dependencies:
   # Riverpod is pinned exact: state-management idioms shift between minors and
   # this codebase tracks v3 idioms only.
   flutter_riverpod: 3.3.2
+  # Community plugins are pinned exact and only ever used behind WaxDeck-owned
+  # ports (CredentialStorePort, UrlOpenerPort, DeepLinkPort).
+  app_links: 7.2.1
+  crypto: 3.0.7
+  flutter_secure_storage: 10.3.1
+  url_launcher: 6.3.2
+  web: 1.1.1
   waxdeck_api:
     path: ../packages/waxdeck_api
   waxdeck_player:

@@ -20,6 +20,8 @@ class _$PlayState extends PlayState {
   @override
   final bool starred;
   @override
+  final int? rating;
+  @override
   final DateTime? updatedAt;
 
   factory _$PlayState([void Function(PlayStateBuilder)? updates]) =>
@@ -32,6 +34,7 @@ class _$PlayState extends PlayState {
     required this.finished,
     required this.playCount,
     required this.starred,
+    this.rating,
     this.updatedAt,
   }) : super._();
   @override
@@ -51,6 +54,7 @@ class _$PlayState extends PlayState {
         finished == other.finished &&
         playCount == other.playCount &&
         starred == other.starred &&
+        rating == other.rating &&
         updatedAt == other.updatedAt;
   }
 
@@ -63,6 +67,7 @@ class _$PlayState extends PlayState {
     _$hash = $jc(_$hash, finished.hashCode);
     _$hash = $jc(_$hash, playCount.hashCode);
     _$hash = $jc(_$hash, starred.hashCode);
+    _$hash = $jc(_$hash, rating.hashCode);
     _$hash = $jc(_$hash, updatedAt.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -77,6 +82,7 @@ class _$PlayState extends PlayState {
           ..add('finished', finished)
           ..add('playCount', playCount)
           ..add('starred', starred)
+          ..add('rating', rating)
           ..add('updatedAt', updatedAt))
         .toString();
   }
@@ -109,6 +115,10 @@ class PlayStateBuilder implements Builder<PlayState, PlayStateBuilder> {
   bool? get starred => _$this._starred;
   set starred(bool? starred) => _$this._starred = starred;
 
+  int? _rating;
+  int? get rating => _$this._rating;
+  set rating(int? rating) => _$this._rating = rating;
+
   DateTime? _updatedAt;
   DateTime? get updatedAt => _$this._updatedAt;
   set updatedAt(DateTime? updatedAt) => _$this._updatedAt = updatedAt;
@@ -126,6 +136,7 @@ class PlayStateBuilder implements Builder<PlayState, PlayStateBuilder> {
       _finished = $v.finished;
       _playCount = $v.playCount;
       _starred = $v.starred;
+      _rating = $v.rating;
       _updatedAt = $v.updatedAt;
       _$v = null;
     }
@@ -175,6 +186,7 @@ class PlayStateBuilder implements Builder<PlayState, PlayStateBuilder> {
             r'PlayState',
             'starred',
           ),
+          rating: rating,
           updatedAt: updatedAt,
         );
     replace(_$result);

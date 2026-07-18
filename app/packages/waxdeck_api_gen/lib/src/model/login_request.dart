@@ -13,6 +13,7 @@ part 'login_request.g.dart';
 /// Properties:
 /// * [username] - Account username.
 /// * [password] - Account password.
+/// * [deviceName] - Human-readable label for this session in the device list (for example `Pixel 9` or `Study desktop`). Native clients pass one; web logins usually omit it. 
 @BuiltValue()
 abstract class LoginRequest implements Built<LoginRequest, LoginRequestBuilder> {
   /// Account username.
@@ -22,6 +23,10 @@ abstract class LoginRequest implements Built<LoginRequest, LoginRequestBuilder> 
   /// Account password.
   @BuiltValueField(wireName: r'password')
   String get password;
+
+  /// Human-readable label for this session in the device list (for example `Pixel 9` or `Study desktop`). Native clients pass one; web logins usually omit it. 
+  @BuiltValueField(wireName: r'deviceName')
+  String? get deviceName;
 
   LoginRequest._();
 
@@ -56,6 +61,13 @@ class _$LoginRequestSerializer implements PrimitiveSerializer<LoginRequest> {
       object.password,
       specifiedType: const FullType(String),
     );
+    if (object.deviceName != null) {
+      yield r'deviceName';
+      yield serializers.serialize(
+        object.deviceName,
+        specifiedType: const FullType(String),
+      );
+    }
   }
 
   @override
@@ -92,6 +104,13 @@ class _$LoginRequestSerializer implements PrimitiveSerializer<LoginRequest> {
             specifiedType: const FullType(String),
           ) as String;
           result.password = valueDes;
+          break;
+        case r'deviceName':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.deviceName = valueDes;
           break;
         default:
           unhandled.add(key);

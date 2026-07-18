@@ -1,4 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
+import { ADMIN_PASS, ADMIN_USER, ensureAdmin, typeInto } from './helpers';
 
 // The first-party web UI journey: log in through the real login form,
 // find a scanned fixture track in the library grid, open the player,
@@ -11,10 +12,7 @@ const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 // Wait for the startup scan through a separate cookie jar, so the page
 // context still sees the login screen.
 async function waitForAlpha(request: APIRequestContext): Promise<string> {
-  const login = await request.post('/api/v1/auth/login', {
-    data: { username: 'admin', password: 'e2e' },
-  });
-  const token = (await login.json()).token as string;
+  const token = await ensureAdmin(request);
   let pid = '';
   await expect
     .poll(
@@ -41,13 +39,12 @@ test('login, browse the grid, and play a track', async ({ page, request }) => {
 
   // The login form is the first thing an unauthenticated visitor sees.
   // Click-and-type drives flutter's real text-editing path; a direct
-  // value fill can leave the framework-side controller empty.
+  // value fill can leave the framework-side controller empty, and
+  // typeInto retypes until every keystroke verifiably landed.
   const username = page.getByRole('textbox', { name: 'Username' });
   await username.waitFor({ timeout: 30_000 });
-  await username.click();
-  await page.keyboard.type('admin');
-  await page.getByRole('textbox', { name: 'Password' }).click();
-  await page.keyboard.type('hunter2');
+  await typeInto(page, username, ADMIN_USER);
+  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
   await page.getByRole('button', { name: 'Log in' }).click();
 
   // The library grid renders the scanned fixture album.

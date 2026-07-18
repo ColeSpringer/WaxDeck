@@ -16,7 +16,19 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // First-run setup runs alone before everything else: it drives the
+    // one-shot bootstrap wizard every other spec assumes has happened.
+    {
+      name: 'setup',
+      testMatch: /first-run\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'chromium',
+      testIgnore: /first-run\.spec\.ts/,
+      dependencies: ['setup'],
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
   // run-stack.sh synthesizes the fixture library, starts the WaxFlow
   // streaming sidecar, and execs the server binary built with the embedded

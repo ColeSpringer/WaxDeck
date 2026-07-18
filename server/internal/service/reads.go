@@ -11,9 +11,9 @@ import (
 )
 
 // Items pages the whole library (optionally one media type) in stable
-// (title, pid) order. The cursor is WaxBin's opaque keyset token,
-// passed through untouched.
-func (l *Library) Items(ctx context.Context, mediaType string, cursor string, limit int) (Page, error) {
+// (title, pid) order for the acting user. The cursor is WaxBin's opaque
+// keyset token, passed through untouched.
+func (l *Library) Items(ctx context.Context, uc *UserCtx, mediaType string, cursor string, limit int) (Page, error) {
 	b := query.New(query.EntityItems).OrderBy("title", false)
 	if mediaType != "" {
 		kind, ok := kindForMediaType(mediaType)
@@ -22,11 +22,11 @@ func (l *Library) Items(ctx context.Context, mediaType string, cursor string, li
 		}
 		b = b.Where("kind", query.OpIs, string(kind))
 	}
-	page, err := l.lib.QueryPage(ctx, b.Build(), read.Cursor(cursor), limit, false, "")
+	page, err := l.lib.QueryPage(ctx, b.Build(), read.Cursor(cursor), limit, false, model.PID(uc.CatalogPID))
 	if err != nil {
 		return Page{}, classify(err)
 	}
-	return pageDTO(page), nil
+	return l.pageDTO(ctx, uc, page), nil
 }
 
 // browseLists maps API discovery-list names onto WaxBin's. The names
@@ -41,27 +41,34 @@ var browseLists = map[string]read.DiscoveryList{
 	"alphabetical":    read.ListAlphabetical,
 }
 
-// Browse pages one discovery list. Play-derived lists use the default
-// user until real accounts land.
-func (l *Library) Browse(ctx context.Context, list string, seed int64, cursor string, limit int) (Page, error) {
+// Browse pages one discovery list; play-derived lists reflect the
+// acting user's own state.
+func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, seed int64, cursor string, limit int) (Page, error) {
 	dl, ok := browseLists[list]
 	if !ok {
 		return Page{}, errInvalid("unknown list " + list)
 	}
 	page, err := l.lib.Browse(ctx, dl, read.BrowseOptions{
-		Seed:   seed,
-		Cursor: read.Cursor(cursor),
-		Limit:  limit,
+		UserPID: model.PID(uc.CatalogPID),
+		Seed:    seed,
+		Cursor:  read.Cursor(cursor),
+		Limit:   limit,
 	})
 	if err != nil {
 		return Page{}, classify(err)
 	}
-	return pageDTO(page), nil
+	return l.pageDTO(ctx, uc, page), nil
 }
 
-func pageDTO(p *read.Page) Page {
+// pageDTO converts a catalog page, dropping items outside the caller's
+// visible libraries. Restricted callers may get short pages that still
+// carry a cursor; the contract documents that.
+func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page) Page {
 	out := Page{Items: make([]ItemSummary, 0, len(p.Items))}
 	for _, it := range p.Items {
+		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
+			continue
+		}
 		out.Items = append(out.Items, summary(it))
 	}
 	if p.HasMore {
@@ -70,13 +77,19 @@ func pageDTO(p *read.Page) Page {
 	return out
 }
 
-// Search runs grouped full-text search.
-func (l *Library) Search(ctx context.Context, q string, limit int) (SearchResults, error) {
+// Search runs grouped full-text search. Restricted callers get item
+// hits filtered by library visibility; artist and album groups are
+// omitted for them, since entities have no cheap library attribution
+// yet, and hiding beats leaking another library's catalog.
+func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) (SearchResults, error) {
 	res, err := l.lib.Search(ctx, q, read.SearchOptions{Limit: limit})
 	if err != nil {
 		return SearchResults{}, classify(err)
 	}
-	conv := func(hits []read.SearchHit, prefix string) []SearchHit {
+	convEntity := func(hits []read.SearchHit, prefix string) []SearchHit {
+		if !uc.AllLibraries {
+			return nil
+		}
 		out := make([]SearchHit, 0, len(hits))
 		for _, h := range hits {
 			out = append(out, SearchHit{
@@ -88,20 +101,35 @@ func (l *Library) Search(ctx context.Context, q string, limit int) (SearchResult
 		}
 		return out
 	}
+	convItem := func(hits []read.SearchHit, prefix string) []SearchHit {
+		out := make([]SearchHit, 0, len(hits))
+		for _, h := range hits {
+			if !uc.AllLibraries && !l.itemVisible(ctx, uc, h.PID) {
+				continue
+			}
+			out = append(out, SearchHit{
+				PID:      apiPID(prefix, h.PID),
+				Kind:     h.Kind,
+				Title:    h.Title,
+				Subtitle: h.Subtitle,
+			})
+		}
+		return out
+	}
 	return SearchResults{
 		Query:     res.Query,
-		Artists:   conv(res.Artists, PrefixArtist),
-		Albums:    conv(res.Albums, PrefixAlbum),
-		Tracks:    conv(res.Tracks, PrefixTrack),
-		Books:     conv(res.Books, PrefixBook),
-		Episodes:  conv(res.Episodes, PrefixEpisode),
+		Artists:   convEntity(res.Artists, PrefixArtist),
+		Albums:    convEntity(res.Albums, PrefixAlbum),
+		Tracks:    convItem(res.Tracks, PrefixTrack),
+		Books:     convItem(res.Books, PrefixBook),
+		Episodes:  convItem(res.Episodes, PrefixEpisode),
 		Truncated: res.Truncated,
 	}, nil
 }
 
 // Item returns full detail for one item.
-func (l *Library) Item(ctx context.Context, apiItemPID string) (ItemDetail, error) {
-	it, err := l.getItem(ctx, apiItemPID)
+func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (ItemDetail, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return ItemDetail{}, err
 	}
@@ -138,7 +166,11 @@ var artMimes = map[string]string{
 // Art resolves artwork: original when size is 0, square-fit thumbnail
 // otherwise. Besides item PIDs it accepts album and artist PIDs, so
 // search hits render artwork without a second identifier scheme.
-func (l *Library) Art(ctx context.Context, apiPID string, size int) (ArtBlob, error) {
+// Item artwork honors library visibility; album and artist artwork is
+// served without an attribution check (entities span libraries and
+// PIDs are unguessable ULIDs; restricted users never discover them
+// through listings, which are filtered).
+func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID string, size int) (ArtBlob, error) {
 	prefix, pid, ok := parseAPIPID(apiPID)
 	if !ok {
 		return ArtBlob{}, errNotFound("no artwork for pid " + apiPID)
@@ -150,7 +182,7 @@ func (l *Library) Art(ctx context.Context, apiPID string, size int) (ArtBlob, er
 	case prefix == PrefixArtist:
 		ref = model.EntityRef{Type: model.ArtArtist, PID: pid}
 	case itemPrefix(prefix):
-		it, err := l.getItem(ctx, apiPID)
+		it, err := l.getVisibleItem(ctx, uc, apiPID)
 		if err != nil {
 			return ArtBlob{}, err
 		}
@@ -174,8 +206,8 @@ func (l *Library) Art(ctx context.Context, apiPID string, size int) (ArtBlob, er
 }
 
 // ItemLyrics returns the item's lyrics; not-found when it has none.
-func (l *Library) ItemLyrics(ctx context.Context, apiItemPID string) (Lyrics, error) {
-	it, err := l.getItem(ctx, apiItemPID)
+func (l *Library) ItemLyrics(ctx context.Context, uc *UserCtx, apiItemPID string) (Lyrics, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return Lyrics{}, err
 	}

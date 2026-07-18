@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../media_icons.dart';
 import '../providers.dart';
+import 'play_state_controller.dart';
 import 'playback_session.dart';
 
 /// Full-screen player for one item: artwork, transport controls, and a seek
@@ -148,6 +149,7 @@ class _PlayerBody extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+          _StarRatingRow(pid: item.pid),
           const SizedBox(height: 8),
           StreamBuilder<Duration>(
             stream: engine.positionStream,
@@ -206,6 +208,73 @@ class _PlayerBody extends StatelessWidget {
           const SizedBox(height: 16),
         ],
       ),
+    );
+  }
+}
+
+/// Star toggle plus the five-star rating row, backed by the item's play
+/// state. Ratings map star N to N times 20 on the 0 to 100 wire scale;
+/// tapping the current rating again clears it.
+class _StarRatingRow extends ConsumerWidget {
+  const _StarRatingRow({required this.pid});
+
+  final String pid;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
+    // A failed mutation rolls the value back and lands here as an error
+    // still carrying that previous value; tell the user the tap did not
+    // stick while the row keeps rendering the real state.
+    ref.listen(playStateControllerProvider(pid), (previous, next) {
+      if (next.hasError && !next.isLoading) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('Could not save that change')),
+          );
+      }
+    });
+    final playState = ref.watch(playStateControllerProvider(pid)).value;
+    final notifier = ref.read(playStateControllerProvider(pid).notifier);
+    final starred = playState?.starred ?? false;
+    final rating = playState?.rating;
+    final stars = rating == null ? 0 : (rating / 20).round().clamp(0, 5);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Semantics(
+          identifier: 'star-button',
+          label: starred ? 'Unstar' : 'Star',
+          button: true,
+          child: IconButton(
+            key: const Key('star-button'),
+            tooltip: starred ? 'Unstar' : 'Star',
+            color: starred ? colorScheme.primary : null,
+            onPressed: playState == null
+                ? null
+                : () => notifier.setStarred(!starred),
+            icon: Icon(starred ? Icons.favorite : Icons.favorite_border),
+          ),
+        ),
+        const SizedBox(width: 8),
+        for (var n = 1; n <= 5; n++)
+          Semantics(
+            identifier: 'rating-$n',
+            label: '$n star rating',
+            button: true,
+            child: IconButton(
+              key: Key('rating-$n'),
+              visualDensity: VisualDensity.compact,
+              color: n <= stars ? colorScheme.primary : null,
+              onPressed: playState == null
+                  ? null
+                  : () => notifier.rate(n == stars ? null : n * 20),
+              icon: Icon(n <= stars ? Icons.star : Icons.star_border),
+            ),
+          ),
+      ],
     );
   }
 }

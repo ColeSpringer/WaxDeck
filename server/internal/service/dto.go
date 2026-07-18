@@ -89,7 +89,8 @@ type Lyrics struct {
 	Unsynced string
 }
 
-// PlayState is a user's playback state for one item.
+// PlayState is a user's playback state for one item. Rating is nil when
+// unrated (an explicit 0 is a valid rating).
 type PlayState struct {
 	PID        string
 	PositionMS int64
@@ -97,6 +98,7 @@ type PlayState struct {
 	Finished   bool
 	PlayCount  int
 	Starred    bool
+	Rating     *int
 	UpdatedAt  time.Time
 }
 

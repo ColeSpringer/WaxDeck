@@ -1,4 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
+import { authed, ensureAdmin, waitForLibrary } from './helpers';
 
 // Playback end to end over the real stack: the server scans a synthesized
 // fixture library at startup and streams through the WaxFlow sidecar.
@@ -6,29 +7,7 @@ import { test, expect, APIRequestContext } from '@playwright/test';
 // lives in ui.spec.ts.
 
 async function loginToken(request: APIRequestContext): Promise<string> {
-  const resp = await request.post('/api/v1/auth/login', {
-    data: { username: 'admin', password: 'e2e' },
-  });
-  expect(resp.ok()).toBeTruthy();
-  return (await resp.json()).token as string;
-}
-
-function authed(token: string) {
-  return { headers: { Authorization: `Bearer ${token}` } };
-}
-
-// The startup scan is asynchronous; poll until the fixture library shows up.
-async function waitForLibrary(request: APIRequestContext, token: string) {
-  await expect
-    .poll(
-      async () => {
-        const resp = await request.get('/api/v1/library/items', authed(token));
-        if (!resp.ok()) return 0;
-        return ((await resp.json()).items ?? []).length;
-      },
-      { timeout: 60_000, message: 'startup scan should populate the library' },
-    )
-    .toBeGreaterThanOrEqual(4);
+  return ensureAdmin(request);
 }
 
 test('scanned library browses, searches, and pages', async ({ request }) => {

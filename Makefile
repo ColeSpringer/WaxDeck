@@ -22,7 +22,7 @@ lint: spec-lint
 	cd server && go vet ./... && test -z "$$(gofmt -l .)"
 	cd server && go run ./cmd/spawnlint ./...
 	cd fixtures && go vet ./... && test -z "$$(gofmt -l .)"
-	cd app && dart format --set-exit-if-changed app/lib app/test packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib packages/waxdeck_player/test >/dev/null
+	cd app && dart format --set-exit-if-changed app/lib app/test app/integration_test app/tool packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib >/dev/null
 	cd app && flutter analyze --no-pub
 
 spec-lint:

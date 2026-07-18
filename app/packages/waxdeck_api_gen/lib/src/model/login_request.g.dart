@@ -11,12 +11,17 @@ class _$LoginRequest extends LoginRequest {
   final String username;
   @override
   final String password;
+  @override
+  final String? deviceName;
 
   factory _$LoginRequest([void Function(LoginRequestBuilder)? updates]) =>
       (LoginRequestBuilder()..update(updates))._build();
 
-  _$LoginRequest._({required this.username, required this.password})
-    : super._();
+  _$LoginRequest._({
+    required this.username,
+    required this.password,
+    this.deviceName,
+  }) : super._();
   @override
   LoginRequest rebuild(void Function(LoginRequestBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -29,7 +34,8 @@ class _$LoginRequest extends LoginRequest {
     if (identical(other, this)) return true;
     return other is LoginRequest &&
         username == other.username &&
-        password == other.password;
+        password == other.password &&
+        deviceName == other.deviceName;
   }
 
   @override
@@ -37,6 +43,7 @@ class _$LoginRequest extends LoginRequest {
     var _$hash = 0;
     _$hash = $jc(_$hash, username.hashCode);
     _$hash = $jc(_$hash, password.hashCode);
+    _$hash = $jc(_$hash, deviceName.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -45,7 +52,8 @@ class _$LoginRequest extends LoginRequest {
   String toString() {
     return (newBuiltValueToStringHelper(r'LoginRequest')
           ..add('username', username)
-          ..add('password', password))
+          ..add('password', password)
+          ..add('deviceName', deviceName))
         .toString();
   }
 }
@@ -62,6 +70,10 @@ class LoginRequestBuilder
   String? get password => _$this._password;
   set password(String? password) => _$this._password = password;
 
+  String? _deviceName;
+  String? get deviceName => _$this._deviceName;
+  set deviceName(String? deviceName) => _$this._deviceName = deviceName;
+
   LoginRequestBuilder() {
     LoginRequest._defaults(this);
   }
@@ -71,6 +83,7 @@ class LoginRequestBuilder
     if ($v != null) {
       _username = $v.username;
       _password = $v.password;
+      _deviceName = $v.deviceName;
       _$v = null;
     }
     return this;
@@ -103,6 +116,7 @@ class LoginRequestBuilder
             r'LoginRequest',
             'password',
           ),
+          deviceName: deviceName,
         );
     replace(_$result);
     return _$result;

@@ -29,6 +29,21 @@ services:
       WAXDECK_FLOW_URL: http://waxflow:4418
       # Must be one of the keys in WAXFLOW_API_KEYS below (see .env.example).
       WAXDECK_FLOW_API_KEY: ${WAXDECK_FLOW_API_KEY:?set WAXDECK_FLOW_API_KEY (must match a key in WAXFLOW_API_KEYS)}
+      # Set to "true" whenever the deployed origin is HTTPS so session
+      # cookies never ride cleartext.
+      WAXDECK_COOKIE_SECURE: ${WAXDECK_COOKIE_SECURE:-false}
+      # The externally reachable base URL, e.g. https://wax.example.com.
+      # Required for single sign-on (the OIDC callback derives from it).
+      WAXDECK_PUBLIC_BASE: ${WAXDECK_PUBLIC_BASE:-}
+      # Optional OIDC single sign-on; leave the issuer empty to disable.
+      # Local accounts always keep working.
+      WAXDECK_OIDC_ISSUER: ${WAXDECK_OIDC_ISSUER:-}
+      WAXDECK_OIDC_ID: ${WAXDECK_OIDC_ID:-sso}
+      WAXDECK_OIDC_NAME: ${WAXDECK_OIDC_NAME:-}
+      WAXDECK_OIDC_CLIENT_ID: ${WAXDECK_OIDC_CLIENT_ID:-}
+      WAXDECK_OIDC_CLIENT_SECRET: ${WAXDECK_OIDC_CLIENT_SECRET:-}
+      WAXDECK_OIDC_GROUPS_CLAIM: ${WAXDECK_OIDC_GROUPS_CLAIM:-}
+      WAXDECK_OIDC_ADMIN_GROUP: ${WAXDECK_OIDC_ADMIN_GROUP:-}
     volumes:
       # Holds waxbin.db + waxdeck.db (and their -wal/-shm sidecars).
       - waxdeck-data:/data

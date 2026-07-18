@@ -18,6 +18,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	// Timezone validation for user preferences must work in scratch
+	// containers with no zoneinfo on disk.
+	_ "time/tzdata"
 
 	"github.com/colespringer/waxdeck/server/internal/api"
 	"github.com/colespringer/waxdeck/server/internal/auth"
@@ -47,7 +50,18 @@ func run() error {
 		flowURL    = flag.String("flow-url", envOr("WAXDECK_FLOW_URL", ""), "WaxFlow sidecar base URL (empty disables streaming)")
 		flowAPIKey = flag.String("flow-api-key", envOr("WAXDECK_FLOW_API_KEY", ""), "API key WaxDeck presents to the WaxFlow sidecar")
 		scanStart  = flag.Bool("scan-on-start", envOr("WAXDECK_SCAN_ON_START", "true") == "true", "launch a library scan at startup")
-		showVer    = flag.Bool("version", false, "print version and exit")
+		cookieSec  = flag.Bool("cookie-secure", envOr("WAXDECK_COOKIE_SECURE", "false") == "true", "mark session cookies Secure (set whenever the origin is HTTPS)")
+		publicBase = flag.String("public-base", envOr("WAXDECK_PUBLIC_BASE", ""), "externally reachable base URL (needed for OIDC callbacks), e.g. https://wax.example.com")
+
+		oidcIssuer  = flag.String("oidc-issuer", envOr("WAXDECK_OIDC_ISSUER", ""), "OIDC issuer URL (empty disables single sign-on)")
+		oidcID      = flag.String("oidc-id", envOr("WAXDECK_OIDC_ID", "sso"), "OIDC provider id shown in start URLs")
+		oidcName    = flag.String("oidc-name", envOr("WAXDECK_OIDC_NAME", ""), "OIDC provider display name for login buttons")
+		oidcClient  = flag.String("oidc-client-id", envOr("WAXDECK_OIDC_CLIENT_ID", ""), "OIDC client id")
+		oidcSecret  = flag.String("oidc-client-secret", envOr("WAXDECK_OIDC_CLIENT_SECRET", ""), "OIDC client secret")
+		oidcGroups  = flag.String("oidc-groups-claim", envOr("WAXDECK_OIDC_GROUPS_CLAIM", ""), "ID-token claim holding groups (empty disables role mapping)")
+		oidcAdminGr = flag.String("oidc-admin-group", envOr("WAXDECK_OIDC_ADMIN_GROUP", ""), "group granting the admin role via the groups claim")
+
+		showVer = flag.Bool("version", false, "print version and exit")
 	)
 	flag.Parse()
 
@@ -123,7 +137,55 @@ func run() error {
 		log.Warn("WAXDECK_FLOW_URL is not set; streaming is disabled")
 	}
 
-	srv := api.NewServer(version, svc, bridge)
+	sessions := auth.NewSessions(store)
+
+	// Expired sessions, spent OIDC state, and stale one-time codes are
+	// swept on a coarse timer; correctness never depends on the sweep
+	// (lookups check expiry themselves), it just keeps the tables lean.
+	group.Go(ctx, "session-janitor", func(ctx context.Context) error {
+		tick := time.NewTicker(time.Hour)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+				if err := store.SweepExpired(ctx); err != nil {
+					log.Warn("sweeping expired auth state", "err", err)
+				}
+			}
+		}
+	})
+
+	var oidc *auth.OIDC
+	if *oidcIssuer != "" {
+		if *publicBase == "" {
+			return errors.New("WAXDECK_OIDC_ISSUER requires WAXDECK_PUBLIC_BASE for the callback URL")
+		}
+		oidc, err = auth.NewOIDC(ctx, auth.OIDCConfig{
+			ID:           *oidcID,
+			DisplayName:  *oidcName,
+			Issuer:       *oidcIssuer,
+			ClientID:     *oidcClient,
+			ClientSecret: *oidcSecret,
+			GroupsClaim:  *oidcGroups,
+			AdminGroup:   *oidcAdminGr,
+		}, store)
+		if err != nil {
+			return err
+		}
+		log.Info("single sign-on enabled", "issuer", *oidcIssuer, "provider", *oidcID)
+	}
+
+	srv := api.NewServer(version, api.Options{
+		Service:      svc,
+		Bridge:       bridge,
+		Sessions:     sessions,
+		OIDC:         oidc,
+		Logger:       log,
+		CookieSecure: *cookieSec,
+		PublicBase:   *publicBase,
+	})
 	apiHandler := api.HandlerWithOptions(
 		api.NewStrictHandlerWithOptions(srv, nil, api.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  api.RequestErrorHandler,

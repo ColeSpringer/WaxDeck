@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/colespringer/waxbin/model"
+
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
@@ -23,19 +25,19 @@ const (
 	audiobookFraction = 0.99
 )
 
-// The empty user PID below selects WaxBin's default user everywhere.
-// That is correct while the auth stub maps every login to one built-in
-// admin; when real accounts land, these calls must bind the calling
-// user's catalog PID instead (part of the identity work).
-
 // PlayState returns the calling user's state for one item. Items never
 // played return a zero state.
-func (l *Library) PlayState(ctx context.Context, apiItemPID string) (PlayState, error) {
-	it, err := l.getItem(ctx, apiItemPID)
+func (l *Library) PlayState(ctx context.Context, uc *UserCtx, apiItemPID string) (PlayState, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return PlayState{}, err
 	}
-	st, err := l.lib.Playback().State(ctx, "", it.PID)
+	return l.playStateFor(ctx, uc, apiItemPID, it.PID)
+}
+
+// playStateFor reads the user's state for an already-authorized item.
+func (l *Library) playStateFor(ctx context.Context, uc *UserCtx, apiItemPID string, pid model.PID) (PlayState, error) {
+	st, err := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), pid)
 	if err != nil {
 		return PlayState{}, classify(err)
 	}
@@ -46,6 +48,10 @@ func (l *Library) PlayState(ctx context.Context, apiItemPID string) (PlayState, 
 		out.Finished = st.Finished
 		out.PlayCount = st.PlayCount
 		out.Starred = st.Starred
+		if st.HasRating {
+			r := st.Rating
+			out.Rating = &r
+		}
 		if st.UpdatedAt > 0 {
 			out.UpdatedAt = time.Unix(0, st.UpdatedAt).UTC()
 		}
@@ -56,18 +62,47 @@ func (l *Library) PlayState(ctx context.Context, apiItemPID string) (PlayState, 
 // Checkpoint persists the user's resume position for the item. WaxBin
 // buffers high-frequency progress internally; Checkpoint writes
 // through, which is what clients call at their coarse interval.
-func (l *Library) Checkpoint(ctx context.Context, apiItemPID string, positionMS int64) error {
-	it, err := l.getItem(ctx, apiItemPID)
+func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64) error {
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return err
 	}
 	if positionMS < 0 {
 		return errInvalid("positionMs must not be negative")
 	}
-	if err := l.lib.Playback().Checkpoint(ctx, "", it.PID, positionMS); err != nil {
+	if err := l.lib.Playback().Checkpoint(ctx, model.PID(uc.CatalogPID), it.PID, positionMS); err != nil {
 		return classify(err)
 	}
 	return nil
+}
+
+// SetStar stars or unstars the item for the acting user and returns the
+// resulting state.
+func (l *Library) SetStar(ctx context.Context, uc *UserCtx, apiItemPID string, starred bool) (PlayState, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	if err != nil {
+		return PlayState{}, err
+	}
+	if err := l.lib.Playback().SetStar(ctx, model.PID(uc.CatalogPID), it.PID, starred); err != nil {
+		return PlayState{}, classify(err)
+	}
+	return l.playStateFor(ctx, uc, apiItemPID, it.PID)
+}
+
+// SetRating sets (0..100) or clears (nil) the acting user's rating and
+// returns the resulting state.
+func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string, rating *int) (PlayState, error) {
+	if rating != nil && (*rating < 0 || *rating > 100) {
+		return PlayState{}, errInvalid("rating must be between 0 and 100")
+	}
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	if err != nil {
+		return PlayState{}, err
+	}
+	if err := l.lib.Playback().SetRating(ctx, model.PID(uc.CatalogPID), it.PID, rating); err != nil {
+		return PlayState{}, classify(err)
+	}
+	return l.playStateFor(ctx, uc, apiItemPID, it.PID)
 }
 
 // IngestListens records a batch of listen sessions for user userID,
@@ -82,7 +117,7 @@ func (l *Library) Checkpoint(ctx context.Context, apiItemPID string, positionMS 
 // the whole request so the client retries the batch, which the
 // idempotency IDs make safe. Conflating the two here silently loses
 // listens.
-func (l *Library) IngestListens(ctx context.Context, userID string, sessions []ListenSession) (ListenIngestResult, error) {
+func (l *Library) IngestListens(ctx context.Context, uc *UserCtx, sessions []ListenSession) (ListenIngestResult, error) {
 	var res ListenIngestResult
 	for _, s := range sessions {
 		if reason := invalidSession(s); reason != "" {
@@ -91,7 +126,7 @@ func (l *Library) IngestListens(ctx context.Context, userID string, sessions []L
 			})
 			continue
 		}
-		it, err := l.getItem(ctx, s.PID)
+		it, err := l.getVisibleItem(ctx, uc, s.PID)
 		if err != nil {
 			switch KindOf(err) {
 			case KindNotFound, KindInvalid:
@@ -108,7 +143,7 @@ func (l *Library) IngestListens(ctx context.Context, userID string, sessions []L
 			source = "live"
 		}
 		inserted, err := l.db.InsertListen(ctx, wdb.ListenSession{
-			UserID:    userID,
+			UserID:    uc.ID,
 			SessionID: s.SessionID,
 			ItemPID:   string(it.PID),
 			MediaType: mediaTypeForKind(it.Kind),
@@ -127,7 +162,7 @@ func (l *Library) IngestListens(ctx context.Context, userID string, sessions []L
 		}
 		res.Accepted++
 		if crossedPlayedThreshold(mediaTypeForKind(it.Kind), s.MsPlayed, it.DurationMS) || s.Finished {
-			if err := l.lib.Playback().MarkPlayed(ctx, "", it.PID, s.Finished); err != nil {
+			if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, s.Finished); err != nil {
 				err = classify(err)
 				switch KindOf(err) {
 				case KindNotFound, KindInvalid:
@@ -139,7 +174,7 @@ func (l *Library) IngestListens(ctx context.Context, userID string, sessions []L
 					// duplicate that skips the mark forever, so take the row
 					// back out and fail the batch; the retry redoes both.
 					res.Accepted--
-					if delErr := l.db.DeleteListen(ctx, userID, s.SessionID); delErr != nil {
+					if delErr := l.db.DeleteListen(ctx, uc.ID, s.SessionID); delErr != nil {
 						l.log.Error("compensating listen delete", "session", s.SessionID, "err", delErr)
 					}
 					return res, err

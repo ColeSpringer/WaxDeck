@@ -14,6 +14,9 @@ import 'package:built_value/iso_8601_date_time_serializer.dart';
 import 'package:waxdeck_api_gen/src/date_serializer.dart';
 import 'package:waxdeck_api_gen/src/model/date.dart';
 
+import 'package:waxdeck_api_gen/src/model/bootstrap_request.dart';
+import 'package:waxdeck_api_gen/src/model/bootstrap_status.dart';
+import 'package:waxdeck_api_gen/src/model/device_session.dart';
 import 'package:waxdeck_api_gen/src/model/discovery_list.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/health.dart';
@@ -21,6 +24,9 @@ import 'package:waxdeck_api_gen/src/model/item.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
 import 'package:waxdeck_api_gen/src/model/item_summary.dart';
 import 'package:waxdeck_api_gen/src/model/job.dart';
+import 'package:waxdeck_api_gen/src/model/libraries.dart';
+import 'package:waxdeck_api_gen/src/model/library_access.dart';
+import 'package:waxdeck_api_gen/src/model/linked_identity.dart';
 import 'package:waxdeck_api_gen/src/model/listen_ingest_result.dart';
 import 'package:waxdeck_api_gen/src/model/listen_report.dart';
 import 'package:waxdeck_api_gen/src/model/listen_session.dart';
@@ -28,19 +34,36 @@ import 'package:waxdeck_api_gen/src/model/login_request.dart';
 import 'package:waxdeck_api_gen/src/model/login_response.dart';
 import 'package:waxdeck_api_gen/src/model/lyrics.dart';
 import 'package:waxdeck_api_gen/src/model/media_type.dart';
+import 'package:waxdeck_api_gen/src/model/model_library.dart';
+import 'package:waxdeck_api_gen/src/model/oidc_exchange_request.dart';
+import 'package:waxdeck_api_gen/src/model/oidc_provider.dart';
+import 'package:waxdeck_api_gen/src/model/oidc_providers.dart';
+import 'package:waxdeck_api_gen/src/model/password_change.dart';
 import 'package:waxdeck_api_gen/src/model/play_info.dart';
 import 'package:waxdeck_api_gen/src/model/play_state.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_update.dart';
+import 'package:waxdeck_api_gen/src/model/prefs.dart';
+import 'package:waxdeck_api_gen/src/model/rating_update.dart';
 import 'package:waxdeck_api_gen/src/model/rejected_listen.dart';
+import 'package:waxdeck_api_gen/src/model/role.dart';
 import 'package:waxdeck_api_gen/src/model/search_hit.dart';
 import 'package:waxdeck_api_gen/src/model/search_results.dart';
 import 'package:waxdeck_api_gen/src/model/session_info.dart';
+import 'package:waxdeck_api_gen/src/model/session_list.dart';
+import 'package:waxdeck_api_gen/src/model/star_update.dart';
 import 'package:waxdeck_api_gen/src/model/synced_line.dart';
 import 'package:waxdeck_api_gen/src/model/user.dart';
+import 'package:waxdeck_api_gen/src/model/user_account.dart';
+import 'package:waxdeck_api_gen/src/model/user_create.dart';
+import 'package:waxdeck_api_gen/src/model/user_page.dart';
+import 'package:waxdeck_api_gen/src/model/user_update.dart';
 
 part 'serializers.g.dart';
 
 @SerializersFor([
+  BootstrapRequest,
+  BootstrapStatus,
+  DeviceSession,
   DiscoveryList,
   Error,
   Health,
@@ -48,6 +71,9 @@ part 'serializers.g.dart';
   ItemPage,
   ItemSummary,$ItemSummary,
   Job,
+  Libraries,
+  LibraryAccess,
+  LinkedIdentity,
   ListenIngestResult,
   ListenReport,
   ListenSession,
@@ -55,18 +81,33 @@ part 'serializers.g.dart';
   LoginResponse,
   Lyrics,
   MediaType,
+  ModelLibrary,
+  OidcExchangeRequest,
+  OidcProvider,
+  OidcProviders,
+  PasswordChange,
   PlayInfo,
   PlayState,
   PlayStateUpdate,
+  Prefs,
+  RatingUpdate,
   RejectedListen,
+  Role,
   SearchHit,
   SearchResults,
   SessionInfo,
+  SessionList,
+  StarUpdate,
   SyncedLine,
-  User,
+  User,$User,
+  UserAccount,
+  UserCreate,
+  UserPage,
+  UserUpdate,
 ])
 Serializers serializers = (_$serializers.toBuilder()
       ..add(ItemSummary.serializer)
+      ..add(User.serializer)
       ..add(const OneOfSerializer())
       ..add(const AnyOfSerializer())
       ..add(const DateSerializer())

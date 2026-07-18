@@ -11,11 +11,17 @@ class _$LoginResponse extends LoginResponse {
   final User user;
   @override
   final String token;
+  @override
+  final String csrfToken;
 
   factory _$LoginResponse([void Function(LoginResponseBuilder)? updates]) =>
       (LoginResponseBuilder()..update(updates))._build();
 
-  _$LoginResponse._({required this.user, required this.token}) : super._();
+  _$LoginResponse._({
+    required this.user,
+    required this.token,
+    required this.csrfToken,
+  }) : super._();
   @override
   LoginResponse rebuild(void Function(LoginResponseBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -26,7 +32,10 @@ class _$LoginResponse extends LoginResponse {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is LoginResponse && user == other.user && token == other.token;
+    return other is LoginResponse &&
+        user == other.user &&
+        token == other.token &&
+        csrfToken == other.csrfToken;
   }
 
   @override
@@ -34,6 +43,7 @@ class _$LoginResponse extends LoginResponse {
     var _$hash = 0;
     _$hash = $jc(_$hash, user.hashCode);
     _$hash = $jc(_$hash, token.hashCode);
+    _$hash = $jc(_$hash, csrfToken.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -42,7 +52,8 @@ class _$LoginResponse extends LoginResponse {
   String toString() {
     return (newBuiltValueToStringHelper(r'LoginResponse')
           ..add('user', user)
-          ..add('token', token))
+          ..add('token', token)
+          ..add('csrfToken', csrfToken))
         .toString();
   }
 }
@@ -51,13 +62,17 @@ class LoginResponseBuilder
     implements Builder<LoginResponse, LoginResponseBuilder> {
   _$LoginResponse? _$v;
 
-  UserBuilder? _user;
-  UserBuilder get user => _$this._user ??= UserBuilder();
-  set user(UserBuilder? user) => _$this._user = user;
+  User? _user;
+  User? get user => _$this._user;
+  set user(User? user) => _$this._user = user;
 
   String? _token;
   String? get token => _$this._token;
   set token(String? token) => _$this._token = token;
+
+  String? _csrfToken;
+  String? get csrfToken => _$this._csrfToken;
+  set csrfToken(String? csrfToken) => _$this._csrfToken = csrfToken;
 
   LoginResponseBuilder() {
     LoginResponse._defaults(this);
@@ -66,8 +81,9 @@ class LoginResponseBuilder
   LoginResponseBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
-      _user = $v.user.toBuilder();
+      _user = $v.user;
       _token = $v.token;
+      _csrfToken = $v.csrfToken;
       _$v = null;
     }
     return this;
@@ -87,32 +103,25 @@ class LoginResponseBuilder
   LoginResponse build() => _build();
 
   _$LoginResponse _build() {
-    _$LoginResponse _$result;
-    try {
-      _$result =
-          _$v ??
-          _$LoginResponse._(
-            user: user.build(),
-            token: BuiltValueNullFieldError.checkNotNull(
-              token,
-              r'LoginResponse',
-              'token',
-            ),
-          );
-    } catch (_) {
-      late String _$failedField;
-      try {
-        _$failedField = 'user';
-        user.build();
-      } catch (e) {
-        throw BuiltValueNestedFieldError(
-          r'LoginResponse',
-          _$failedField,
-          e.toString(),
+    final _$result =
+        _$v ??
+        _$LoginResponse._(
+          user: BuiltValueNullFieldError.checkNotNull(
+            user,
+            r'LoginResponse',
+            'user',
+          ),
+          token: BuiltValueNullFieldError.checkNotNull(
+            token,
+            r'LoginResponse',
+            'token',
+          ),
+          csrfToken: BuiltValueNullFieldError.checkNotNull(
+            csrfToken,
+            r'LoginResponse',
+            'csrfToken',
+          ),
         );
-      }
-      rethrow;
-    }
     replace(_$result);
     return _$result;
   }

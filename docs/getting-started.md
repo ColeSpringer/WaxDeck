@@ -60,10 +60,26 @@ not configured.
   client picks up where it left off on any device.
 - Listen accounting: clients report listen sessions with idempotency
   IDs, so offline replays never double-count.
+- Real accounts: argon2id passwords, per-device sessions with remote
+  sign-out, admin and user roles, per-library visibility, per-user
+  stars, ratings, resume positions, and preferences.
+- OIDC single sign-on (optional): configure an issuer and every form
+  factor logs in through one server-registered redirect URI.
 
-Accounts are a development stub for now: any username and password log
-in as the built-in admin. Real accounts, roles, and OIDC arrive with
-the identity work.
+## First run
+
+A fresh server has no accounts. Open the web UI (or call
+`POST /api/v1/auth/bootstrap`) and create the first administrator;
+the setup door closes permanently once any account exists. Further
+accounts are created from the admin API. If the server is reached
+over HTTPS, set `WAXDECK_COOKIE_SECURE=true`.
+
+To enable single sign-on, set `WAXDECK_PUBLIC_BASE` and the
+`WAXDECK_OIDC_*` variables (see `deploy/.env.example`) and register
+`<public base>/api/v1/auth/oidc/callback` with the identity provider.
+Local accounts keep working alongside; group-based role mapping is
+available via `WAXDECK_OIDC_GROUPS_CLAIM` and
+`WAXDECK_OIDC_ADMIN_GROUP`.
 
 ## Useful endpoints
 
@@ -72,14 +88,20 @@ contract):
 
 | Endpoint | What it does |
 | --- | --- |
+| `POST /auth/bootstrap` | Create the first administrator (one shot) |
 | `POST /auth/login` | Establish a session (cookie plus bearer token) |
+| `GET /auth/sessions` | List sessions and devices; DELETE one to sign it out |
+| `GET /users` | Account administration (admin) |
+| `GET/PUT /users/me/prefs` | Per-user preferences (timezone, locale, theme) |
 | `GET /library/items` | Page the library (`mediaType`, `cursor`, `limit`) |
 | `GET /library/browse?list=recently-added` | Discovery lists |
 | `GET /library/search?q=` | Grouped full-text search |
 | `GET /items/{pid}/play-info` | Resolve a playable stream URL |
 | `GET/PUT /items/{pid}/play-state` | Resume position |
+| `PUT /items/{pid}/star` | Star or unstar an item |
+| `PUT /items/{pid}/rating` | Rate an item (0 to 100, null clears) |
 | `POST /listens` | Report listen sessions |
-| `POST /library/rescan` | Start a scan; poll `GET /jobs/{pid}` |
+| `POST /library/rescan` | Start a scan; poll `GET /jobs/{pid}` (admin) |
 
 ## Maintenance and the waxbin CLI
 

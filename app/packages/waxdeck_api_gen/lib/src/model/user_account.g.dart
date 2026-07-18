@@ -1,0 +1,229 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'user_account.dart';
+
+// **************************************************************************
+// BuiltValueGenerator
+// **************************************************************************
+
+class _$UserAccount extends UserAccount {
+  @override
+  final DateTime createdAt;
+  @override
+  final BuiltList<LinkedIdentity>? identities;
+  @override
+  final LibraryAccess libraryAccess;
+  @override
+  final bool disabled;
+  @override
+  final bool? hasPassword;
+  @override
+  final String id;
+  @override
+  final String username;
+  @override
+  final String? displayName;
+  @override
+  final BuiltList<String> roles;
+
+  factory _$UserAccount([void Function(UserAccountBuilder)? updates]) =>
+      (UserAccountBuilder()..update(updates))._build();
+
+  _$UserAccount._({
+    required this.createdAt,
+    this.identities,
+    required this.libraryAccess,
+    required this.disabled,
+    this.hasPassword,
+    required this.id,
+    required this.username,
+    this.displayName,
+    required this.roles,
+  }) : super._();
+  @override
+  UserAccount rebuild(void Function(UserAccountBuilder) updates) =>
+      (toBuilder()..update(updates)).build();
+
+  @override
+  UserAccountBuilder toBuilder() => UserAccountBuilder()..replace(this);
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(other, this)) return true;
+    return other is UserAccount &&
+        createdAt == other.createdAt &&
+        identities == other.identities &&
+        libraryAccess == other.libraryAccess &&
+        disabled == other.disabled &&
+        hasPassword == other.hasPassword &&
+        id == other.id &&
+        username == other.username &&
+        displayName == other.displayName &&
+        roles == other.roles;
+  }
+
+  @override
+  int get hashCode {
+    var _$hash = 0;
+    _$hash = $jc(_$hash, createdAt.hashCode);
+    _$hash = $jc(_$hash, identities.hashCode);
+    _$hash = $jc(_$hash, libraryAccess.hashCode);
+    _$hash = $jc(_$hash, disabled.hashCode);
+    _$hash = $jc(_$hash, hasPassword.hashCode);
+    _$hash = $jc(_$hash, id.hashCode);
+    _$hash = $jc(_$hash, username.hashCode);
+    _$hash = $jc(_$hash, displayName.hashCode);
+    _$hash = $jc(_$hash, roles.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
+  }
+
+  @override
+  String toString() {
+    return (newBuiltValueToStringHelper(r'UserAccount')
+          ..add('createdAt', createdAt)
+          ..add('identities', identities)
+          ..add('libraryAccess', libraryAccess)
+          ..add('disabled', disabled)
+          ..add('hasPassword', hasPassword)
+          ..add('id', id)
+          ..add('username', username)
+          ..add('displayName', displayName)
+          ..add('roles', roles))
+        .toString();
+  }
+}
+
+class UserAccountBuilder
+    implements Builder<UserAccount, UserAccountBuilder>, UserBuilder {
+  _$UserAccount? _$v;
+
+  DateTime? _createdAt;
+  DateTime? get createdAt => _$this._createdAt;
+  set createdAt(covariant DateTime? createdAt) => _$this._createdAt = createdAt;
+
+  ListBuilder<LinkedIdentity>? _identities;
+  ListBuilder<LinkedIdentity> get identities =>
+      _$this._identities ??= ListBuilder<LinkedIdentity>();
+  set identities(covariant ListBuilder<LinkedIdentity>? identities) =>
+      _$this._identities = identities;
+
+  LibraryAccessBuilder? _libraryAccess;
+  LibraryAccessBuilder get libraryAccess =>
+      _$this._libraryAccess ??= LibraryAccessBuilder();
+  set libraryAccess(covariant LibraryAccessBuilder? libraryAccess) =>
+      _$this._libraryAccess = libraryAccess;
+
+  bool? _disabled;
+  bool? get disabled => _$this._disabled;
+  set disabled(covariant bool? disabled) => _$this._disabled = disabled;
+
+  bool? _hasPassword;
+  bool? get hasPassword => _$this._hasPassword;
+  set hasPassword(covariant bool? hasPassword) =>
+      _$this._hasPassword = hasPassword;
+
+  String? _id;
+  String? get id => _$this._id;
+  set id(covariant String? id) => _$this._id = id;
+
+  String? _username;
+  String? get username => _$this._username;
+  set username(covariant String? username) => _$this._username = username;
+
+  String? _displayName;
+  String? get displayName => _$this._displayName;
+  set displayName(covariant String? displayName) =>
+      _$this._displayName = displayName;
+
+  ListBuilder<String>? _roles;
+  ListBuilder<String> get roles => _$this._roles ??= ListBuilder<String>();
+  set roles(covariant ListBuilder<String>? roles) => _$this._roles = roles;
+
+  UserAccountBuilder() {
+    UserAccount._defaults(this);
+  }
+
+  UserAccountBuilder get _$this {
+    final $v = _$v;
+    if ($v != null) {
+      _createdAt = $v.createdAt;
+      _identities = $v.identities?.toBuilder();
+      _libraryAccess = $v.libraryAccess.toBuilder();
+      _disabled = $v.disabled;
+      _hasPassword = $v.hasPassword;
+      _id = $v.id;
+      _username = $v.username;
+      _displayName = $v.displayName;
+      _roles = $v.roles.toBuilder();
+      _$v = null;
+    }
+    return this;
+  }
+
+  @override
+  void replace(covariant UserAccount other) {
+    _$v = other as _$UserAccount;
+  }
+
+  @override
+  void update(void Function(UserAccountBuilder)? updates) {
+    if (updates != null) updates(this);
+  }
+
+  @override
+  UserAccount build() => _build();
+
+  _$UserAccount _build() {
+    _$UserAccount _$result;
+    try {
+      _$result =
+          _$v ??
+          _$UserAccount._(
+            createdAt: BuiltValueNullFieldError.checkNotNull(
+              createdAt,
+              r'UserAccount',
+              'createdAt',
+            ),
+            identities: _identities?.build(),
+            libraryAccess: libraryAccess.build(),
+            disabled: BuiltValueNullFieldError.checkNotNull(
+              disabled,
+              r'UserAccount',
+              'disabled',
+            ),
+            hasPassword: hasPassword,
+            id: BuiltValueNullFieldError.checkNotNull(id, r'UserAccount', 'id'),
+            username: BuiltValueNullFieldError.checkNotNull(
+              username,
+              r'UserAccount',
+              'username',
+            ),
+            displayName: displayName,
+            roles: roles.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'identities';
+        _identities?.build();
+        _$failedField = 'libraryAccess';
+        libraryAccess.build();
+
+        _$failedField = 'roles';
+        roles.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'UserAccount',
+          _$failedField,
+          e.toString(),
+        );
+      }
+      rethrow;
+    }
+    replace(_$result);
+    return _$result;
+  }
+}
+
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

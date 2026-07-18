@@ -20,10 +20,12 @@ Future<Map<String, dynamic>> _readJson(HttpClientResponse resp) async =>
 
 /// Logs in over the API, separate from the session the app form will
 /// establish, so server-side assertions have their own bearer token.
+/// run-desktop.sh bootstraps the admin account before launching the app,
+/// so a plain login suffices here.
 Future<String> _apiToken(HttpClient http) async {
   final req = await http.postUrl(Uri.parse('$_base/api/v1/auth/login'));
   req.headers.contentType = ContentType.json;
-  req.write(jsonEncode({'username': 'admin', 'password': 'e2e'}));
+  req.write(jsonEncode({'username': 'admin', 'password': 'wax-e2e-pass'}));
   final resp = await req.close();
   final body = await _readJson(resp);
   return body['token'] as String;
@@ -94,7 +96,10 @@ Future<void> _run(WidgetTester tester) async {
   await _pumpUntilFound(tester, find.byKey(const Key('login-username')));
 
   await tester.enterText(find.byKey(const Key('login-username')), 'admin');
-  await tester.enterText(find.byKey(const Key('login-password')), 'hunter2');
+  await tester.enterText(
+    find.byKey(const Key('login-password')),
+    'wax-e2e-pass',
+  );
   await tester.tap(find.byKey(const Key('login-submit')));
 
   // The grid renders the scanned album; opening a card starts playback.

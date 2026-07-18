@@ -24,12 +24,18 @@ cleanup() {
 trap cleanup EXIT INT TERM HUP
 
 # Wait for the startup scan: the grid loads once at login, so the demo
-# album must be searchable before the app launches.
+# album must be searchable before the app launches. The server accepts no
+# credentials until its first administrator exists, so each attempt first
+# bootstraps that account (a no-op 409 once it exists) and then logs in
+# with it; the login fallback covers a stack reusing an existing DB.
 READY=
 for _ in $(seq 1 120); do
+  curl -sf -X POST "$BASE/api/v1/auth/bootstrap" \
+    -H 'Content-Type: application/json' \
+    -d '{"username":"admin","password":"wax-e2e-pass"}' >/dev/null 2>&1 || true
   TOKEN=$(curl -sf -X POST "$BASE/api/v1/auth/login" \
     -H 'Content-Type: application/json' \
-    -d '{"username":"admin","password":"e2e"}' |
+    -d '{"username":"admin","password":"wax-e2e-pass"}' |
     sed -n 's/.*"token":"\([^"]*\)".*/\1/p') || true
   if [ -n "${TOKEN:-}" ] && curl -sf "$BASE/api/v1/library/search?q=Alpha" \
     -H "Authorization: Bearer $TOKEN" | grep -q '"tr-'; then

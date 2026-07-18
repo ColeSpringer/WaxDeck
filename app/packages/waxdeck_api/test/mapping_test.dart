@@ -163,7 +163,8 @@ void main() {
             ..played = true
             ..finished = false
             ..playCount = 3
-            ..starred = true,
+            ..starred = true
+            ..rating = 80,
         ),
       );
       expect(state.positionMs, 61500);
@@ -171,7 +172,133 @@ void main() {
       expect(state.finished, isFalse);
       expect(state.playCount, 3);
       expect(state.starred, isTrue);
+      expect(state.rating, 80);
       expect(state.updatedAt, isNull);
+    });
+
+    test('an unrated play-state keeps a null rating', () {
+      final state = playStateFromGen(
+        gen.PlayState(
+          (b) => b
+            ..pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE'
+            ..positionMs = 0
+            ..played = false
+            ..finished = false
+            ..playCount = 0
+            ..starred = false,
+        ),
+      );
+      expect(state.rating, isNull);
+    });
+  });
+
+  group('session mapping', () {
+    test('device sessions carry over including the kind', () {
+      final created = DateTime.utc(2026, 7, 1, 8);
+      final seen = DateTime.utc(2026, 7, 18, 9);
+      final session = deviceSessionFromGen(
+        gen.DeviceSession(
+          (b) => b
+            ..id = 'se-01JZX5N8QW3F4V9T2B7KDEXAMPLE'
+            ..kind = gen.DeviceSessionKindEnum.device
+            ..deviceName = 'Pixel 9'
+            ..client = 'waxdeck-flutter-android'
+            ..createdAt = created
+            ..lastSeenAt = seen
+            ..current = true,
+        ),
+      );
+      expect(session.id, 'se-01JZX5N8QW3F4V9T2B7KDEXAMPLE');
+      expect(session.kind, SessionKind.device);
+      expect(session.deviceName, 'Pixel 9');
+      expect(session.client, 'waxdeck-flutter-android');
+      expect(session.createdAt, created);
+      expect(session.lastSeenAt, seen);
+      expect(session.current, isTrue);
+      expect(session.label, 'Pixel 9');
+    });
+
+    test('web sessions without labels fall back for display', () {
+      final session = deviceSessionFromGen(
+        gen.DeviceSession(
+          (b) => b
+            ..id = 'se-01JZX5N8QW3F4V9T2B7KDEXAMPL2'
+            ..kind = gen.DeviceSessionKindEnum.web
+            ..createdAt = DateTime.utc(2026, 7, 1)
+            ..current = false,
+        ),
+      );
+      expect(session.kind, SessionKind.web);
+      expect(session.deviceName, isNull);
+      expect(session.label, 'web');
+    });
+  });
+
+  group('oidc mapping', () {
+    test('start URLs resolve against the base for native clients', () {
+      final provider = oidcProviderFromGen(
+        gen.OidcProvider(
+          (b) => b
+            ..id = 'corp'
+            ..displayName = 'Corp SSO'
+            ..startUrl = '/api/v1/auth/oidc/start?provider=corp',
+        ),
+        baseUrl: 'http://host:4420',
+      );
+      expect(provider.id, 'corp');
+      expect(provider.displayName, 'Corp SSO');
+      expect(
+        provider.startUrl,
+        'http://host:4420/api/v1/auth/oidc/start?provider=corp',
+      );
+    });
+
+    test('start URLs stay origin-relative with an empty base', () {
+      final provider = oidcProviderFromGen(
+        gen.OidcProvider(
+          (b) => b
+            ..id = 'corp'
+            ..displayName = 'Corp SSO'
+            ..startUrl = '/api/v1/auth/oidc/start?provider=corp',
+        ),
+      );
+      expect(provider.startUrl, '/api/v1/auth/oidc/start?provider=corp');
+    });
+  });
+
+  group('prefs mapping', () {
+    test('themes round trip through the wire names', () {
+      for (final theme in ThemePref.values) {
+        expect(themePrefFromGen(themePrefToGen(theme)), theme);
+      }
+      expect(themePrefToGen(ThemePref.oled).name, 'oled');
+    });
+
+    test('fields carry over in both directions', () {
+      final mapped = prefsFromGen(
+        gen.Prefs(
+          (b) => b
+            ..timezone = 'Europe/Amsterdam'
+            ..locale = 'en-US'
+            ..theme = gen.PrefsThemeEnum.dark,
+        ),
+      );
+      expect(mapped.timezone, 'Europe/Amsterdam');
+      expect(mapped.locale, 'en-US');
+      expect(mapped.theme, ThemePref.dark);
+
+      final wire = prefsToGen(mapped.copyWith(theme: ThemePref.oled));
+      expect(wire.timezone, 'Europe/Amsterdam');
+      expect(wire.theme, gen.PrefsThemeEnum.oled);
+    });
+
+    test('empty prefs stay empty', () {
+      final mapped = prefsFromGen(gen.Prefs((b) => b));
+      expect(mapped.timezone, isNull);
+      expect(mapped.locale, isNull);
+      expect(mapped.theme, isNull);
+      final wire = prefsToGen(mapped);
+      expect(wire.theme, isNull);
     });
   });
 

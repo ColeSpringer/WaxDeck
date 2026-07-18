@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../media_icons.dart';
 import '../player/player_screen.dart';
+import '../settings/settings_screen.dart';
 import 'library_controller.dart';
 
 /// Artwork grid over the whole library with a media-type filter, cursor
@@ -24,7 +25,22 @@ class LibraryScreen extends ConsumerWidget {
     final resume = ref.watch(continueListeningProvider).value;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('WaxDeck')),
+      appBar: AppBar(
+        title: const Text('WaxDeck'),
+        actions: [
+          Semantics(
+            identifier: 'settings-open',
+            child: IconButton(
+              key: const Key('settings-open'),
+              tooltip: 'Settings',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(

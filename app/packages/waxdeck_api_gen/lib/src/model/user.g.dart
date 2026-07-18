@@ -6,7 +6,23 @@ part of 'user.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-class _$User extends User {
+abstract mixin class UserBuilder {
+  void replace(User other);
+  void update(void Function(UserBuilder) updates);
+  String? get id;
+  set id(String? id);
+
+  String? get username;
+  set username(String? username);
+
+  String? get displayName;
+  set displayName(String? displayName);
+
+  ListBuilder<String> get roles;
+  set roles(ListBuilder<String>? roles);
+}
+
+class _$$User extends $User {
   @override
   final String id;
   @override
@@ -16,26 +32,26 @@ class _$User extends User {
   @override
   final BuiltList<String> roles;
 
-  factory _$User([void Function(UserBuilder)? updates]) =>
-      (UserBuilder()..update(updates))._build();
+  factory _$$User([void Function($UserBuilder)? updates]) =>
+      ($UserBuilder()..update(updates))._build();
 
-  _$User._({
+  _$$User._({
     required this.id,
     required this.username,
     this.displayName,
     required this.roles,
   }) : super._();
   @override
-  User rebuild(void Function(UserBuilder) updates) =>
+  $User rebuild(void Function($UserBuilder) updates) =>
       (toBuilder()..update(updates)).build();
 
   @override
-  UserBuilder toBuilder() => UserBuilder()..replace(this);
+  $UserBuilder toBuilder() => $UserBuilder()..replace(this);
 
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is User &&
+    return other is $User &&
         id == other.id &&
         username == other.username &&
         displayName == other.displayName &&
@@ -55,7 +71,7 @@ class _$User extends User {
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(r'User')
+    return (newBuiltValueToStringHelper(r'$User')
           ..add('id', id)
           ..add('username', username)
           ..add('displayName', displayName)
@@ -64,30 +80,31 @@ class _$User extends User {
   }
 }
 
-class UserBuilder implements Builder<User, UserBuilder> {
-  _$User? _$v;
+class $UserBuilder implements Builder<$User, $UserBuilder>, UserBuilder {
+  _$$User? _$v;
 
   String? _id;
   String? get id => _$this._id;
-  set id(String? id) => _$this._id = id;
+  set id(covariant String? id) => _$this._id = id;
 
   String? _username;
   String? get username => _$this._username;
-  set username(String? username) => _$this._username = username;
+  set username(covariant String? username) => _$this._username = username;
 
   String? _displayName;
   String? get displayName => _$this._displayName;
-  set displayName(String? displayName) => _$this._displayName = displayName;
+  set displayName(covariant String? displayName) =>
+      _$this._displayName = displayName;
 
   ListBuilder<String>? _roles;
   ListBuilder<String> get roles => _$this._roles ??= ListBuilder<String>();
-  set roles(ListBuilder<String>? roles) => _$this._roles = roles;
+  set roles(covariant ListBuilder<String>? roles) => _$this._roles = roles;
 
-  UserBuilder() {
-    User._defaults(this);
+  $UserBuilder() {
+    $User._defaults(this);
   }
 
-  UserBuilder get _$this {
+  $UserBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
       _id = $v.id;
@@ -100,28 +117,28 @@ class UserBuilder implements Builder<User, UserBuilder> {
   }
 
   @override
-  void replace(User other) {
-    _$v = other as _$User;
+  void replace(covariant $User other) {
+    _$v = other as _$$User;
   }
 
   @override
-  void update(void Function(UserBuilder)? updates) {
+  void update(void Function($UserBuilder)? updates) {
     if (updates != null) updates(this);
   }
 
   @override
-  User build() => _build();
+  $User build() => _build();
 
-  _$User _build() {
-    _$User _$result;
+  _$$User _build() {
+    _$$User _$result;
     try {
       _$result =
           _$v ??
-          _$User._(
-            id: BuiltValueNullFieldError.checkNotNull(id, r'User', 'id'),
+          _$$User._(
+            id: BuiltValueNullFieldError.checkNotNull(id, r'$User', 'id'),
             username: BuiltValueNullFieldError.checkNotNull(
               username,
-              r'User',
+              r'$User',
               'username',
             ),
             displayName: displayName,
@@ -133,7 +150,7 @@ class UserBuilder implements Builder<User, UserBuilder> {
         _$failedField = 'roles';
         roles.build();
       } catch (e) {
-        throw BuiltValueNestedFieldError(r'User', _$failedField, e.toString());
+        throw BuiltValueNestedFieldError(r'$User', _$failedField, e.toString());
       }
       rethrow;
     }

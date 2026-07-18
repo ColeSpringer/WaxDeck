@@ -17,6 +17,7 @@ part 'play_state.g.dart';
 /// * [finished] - Whether the item was completed.
 /// * [playCount] - How many times the item has been played.
 /// * [starred] - Whether the caller starred the item.
+/// * [rating] - The caller's rating (0 to 100); absent or null when unrated.
 /// * [updatedAt] - When this state last changed.
 @BuiltValue()
 abstract class PlayState implements Built<PlayState, PlayStateBuilder> {
@@ -43,6 +44,10 @@ abstract class PlayState implements Built<PlayState, PlayStateBuilder> {
   /// Whether the caller starred the item.
   @BuiltValueField(wireName: r'starred')
   bool get starred;
+
+  /// The caller's rating (0 to 100); absent or null when unrated.
+  @BuiltValueField(wireName: r'rating')
+  int? get rating;
 
   /// When this state last changed.
   @BuiltValueField(wireName: r'updatedAt')
@@ -101,6 +106,13 @@ class _$PlayStateSerializer implements PrimitiveSerializer<PlayState> {
       object.starred,
       specifiedType: const FullType(bool),
     );
+    if (object.rating != null) {
+      yield r'rating';
+      yield serializers.serialize(
+        object.rating,
+        specifiedType: const FullType.nullable(int),
+      );
+    }
     if (object.updatedAt != null) {
       yield r'updatedAt';
       yield serializers.serialize(
@@ -172,6 +184,14 @@ class _$PlayStateSerializer implements PrimitiveSerializer<PlayState> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.starred = valueDes;
+          break;
+        case r'rating':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.rating = valueDes;
           break;
         case r'updatedAt':
           final valueDes = serializers.deserialize(

@@ -1,32 +1,55 @@
 openapi: 3.0.3
 info:
   title: WaxDeck API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     First-party REST API for WaxDeck: the self-hosted player, library manager,
     and metadata completer for music, podcasts, and audiobooks.
 
-    Current scope: health, an authentication stub, library browse and search,
-    item detail, artwork, lyrics, play-info, playback state (resume), listen
-    session ingest, and library scanning. The shapes (keyset pagination, typed
+    Current scope: health, accounts and sessions (local passwords and OIDC),
+    user administration with roles and per-library visibility, per-user
+    preferences, library browse and search, item detail, artwork, lyrics,
+    play-info, playback state (resume, stars, ratings), listen session
+    ingest, and library scanning. The shapes (keyset pagination, typed
     PIDs, the structured error model, relative media URLs) are load-bearing
     from day one.
 
     Conventions:
     - All endpoints live under `/api/v1` (this document's `servers` entry).
-    - Item identifiers (`pid`) are type-prefixed ULIDs (`tr-` track, `al-` album,
-      `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook, `jb-` job).
+    - Identifiers (`pid`) are type-prefixed ULIDs (`tr-` track, `al-` album,
+      `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook, `jb-` job,
+      `lb-` library, `us-` user, `se-` session).
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
       string; currently defined codes: `invalid-request`, `unauthenticated`,
-      `forbidden`, `not-found`, `conflict`, `internal`, `stream-stale` (a
-      stream URL no longer matches the file on disk; re-request play-info),
-      and `catalog-maintenance` (the catalog is temporarily handed to a
+      `forbidden`, `not-found`, `conflict`, `internal`, `rate-limited` (too
+      many attempts; retry later), `stream-stale` (a stream URL no longer
+      matches the file on disk; re-request play-info), and
+      `catalog-maintenance` (the catalog is temporarily handed to a
       maintenance operation; retry shortly). New codes may appear; clients
       must treat unknown codes as opaque.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
+    - Cross-site request forgery: state-changing requests (POST, PUT, PATCH,
+      DELETE) authenticated by the session cookie must carry an
+      `X-CSRF-Token` header matching the session's CSRF token, which login
+      and session inspection return in their bodies (a synchronizer token;
+      it is never a cookie). Requests authenticated by a bearer token are
+      exempt. A cookie-authenticated mutation without a matching token is
+      rejected with `forbidden`. Login, logout, and the other endpoints
+      declaring `security: []` are exempt (the residual forced-login and
+      forced-logout CSRF nuisances are accepted; `SameSite=Lax` cookies
+      and the single-origin UI bound them).
+    - The server never enables cross-origin credentialed access: no CORS
+      headers are emitted, and session cookies stay `SameSite=Lax`. The
+      CSRF-token readback model depends on this; deployments must not
+      layer permissive CORS onto the API origin.
+    - Every item read and mutation is scoped to the libraries visible to the
+      calling user: an item outside the caller's visibility behaves exactly
+      as if it did not exist (`not-found`), and list endpoints omit such
+      items (a page may carry fewer than `limit` items and still have a
+      `nextCursor`).
   contact:
     name: WaxDeck
     url: https://github.com/ColeSpringer/WaxDeck
@@ -42,7 +65,9 @@ tags:
   - name: system
     description: Health and server metadata.
   - name: auth
-    description: Session authentication (development stub; real accounts come later).
+    description: Sessions, devices, first-run bootstrap, and OIDC single sign-on.
+  - name: users
+    description: Account administration, roles, library visibility, and preferences.
   - name: library
     description: Browse, search, and inspect library items.
   - name: playback
@@ -77,11 +102,13 @@ paths:
       operationId: login
       summary: Log in and establish a session
       description: >
-        Establishes a session and sets the `waxdeck_session` HttpOnly cookie.
-        Native clients use the same endpoint and read the bearer token from the
-        response body instead of the cookie. Development stub: any non-empty
-        credentials are accepted and map to the built-in development user. Real
-        account storage, roles, and OIDC come later.
+        Verifies local-account credentials, establishes a session, and sets
+        the `waxdeck_session` HttpOnly cookie. Native clients use the same
+        endpoint and read the bearer token from the response body instead of
+        the cookie; passing `deviceName` labels the session in the device
+        list. Invalid credentials and disabled accounts answer 401 without
+        distinguishing the two. Repeated failures are rate limited per
+        source and account.
       tags: [auth]
       security: []
       requestBody:
@@ -106,6 +133,8 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /auth/logout:
     post:
@@ -131,8 +160,9 @@ paths:
       summary: Inspect the current session
       description: >
         Returns whether the caller is authenticated and, if so, the session's
-        user. Unauthenticated callers get `authenticated: false`, not a 401.
-        Clients use this at startup to decide whether to show the login screen.
+        user and CSRF token. Unauthenticated callers get
+        `authenticated: false`, not a 401. Clients use this at startup to
+        decide whether to show the login screen.
       tags: [auth]
       security: []
       responses:
@@ -142,6 +172,598 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionInfo"
+
+  /auth/bootstrap:
+    get:
+      operationId: getBootstrapStatus
+      summary: Check whether first-run setup is needed
+      description: >
+        Reports whether the server is still waiting for its first
+        administrator. Clients probe this when a session check comes back
+        unauthenticated and route to the setup screen instead of the
+        login screen while `required` is true. Setup stays required as
+        long as no enabled administrator exists, so an OIDC login that
+        provisioned a plain account first never strands the server
+        adminless.
+      tags: [auth]
+      security: []
+      responses:
+        "200":
+          description: Bootstrap state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootstrapStatus"
+    post:
+      operationId: bootstrap
+      summary: Create the first administrator
+      description: >
+        Creates an administrator account and logs it in (cookie plus
+        bearer token, exactly like login). Available only while the
+        server has no enabled administrator; once one exists this
+        endpoint answers `conflict` forever. Not rate limited
+        separately: it is a door that closes the moment an
+        administrator exists.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BootstrapRequest"
+      responses:
+        "200":
+          description: Administrator created and logged in.
+          headers:
+            Set-Cookie:
+              description: "`waxdeck_session` HttpOnly SameSite=Lax session cookie."
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: Rotate the caller's bearer token
+      description: >
+        Issues a replacement bearer token for the calling device session and
+        invalidates the presented one after a short overlap window (so
+        requests already in flight with the old token do not fail). Native
+        clients call this periodically; the session itself (its id, device
+        name, and history) is unchanged. Cookie-authenticated callers have
+        nothing to rotate and get `invalid-request`.
+      tags: [auth]
+      responses:
+        "200":
+          description: Replacement token for the same session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /auth/sessions:
+    get:
+      operationId: listSessions
+      summary: List the caller's sessions and devices
+      description: >
+        Every live session belonging to the calling user, newest first: web
+        logins and native devices, with the one serving this request marked
+        `current`. This doubles as the device list; revoke an entry to sign
+        that device out. Unpaginated: a user's live sessions are a small,
+        bounded set.
+      tags: [auth]
+      responses:
+        "200":
+          description: The caller's sessions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /auth/sessions/{sessionId}:
+    delete:
+      operationId: revokeSession
+      summary: Revoke one of the caller's sessions
+      description: >
+        Revokes one of the calling user's sessions immediately: the device
+        holding it is signed out and its next request fails with 401.
+        Revoking the session serving this request is allowed and acts as
+        a logout (the response then also expires the session cookie).
+        Only the caller's own sessions are visible here; an administrator
+        signs another user out via that user's account endpoints.
+      tags: [auth]
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "204":
+          description: Session revoked.
+          headers:
+            Set-Cookie:
+              description: >
+                Expired `waxdeck_session` cookie, present only when the
+                revoked session is the one serving this request.
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /auth/oidc/providers:
+    get:
+      operationId: listOidcProviders
+      summary: List configured OIDC providers
+      description: >
+        The single sign-on providers this server is configured with, for
+        rendering login buttons. Empty when OIDC is not configured. Each
+        provider carries the origin-relative URL that starts its flow.
+      tags: [auth]
+      security: []
+      responses:
+        "200":
+          description: Configured providers (possibly none).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OidcProviders"
+
+  /auth/oidc/start:
+    get:
+      operationId: startOidc
+      summary: Start an OIDC login
+      description: >
+        Redirects the browser to the identity provider's authorization
+        endpoint (authorization code with PKCE, server-mediated: the
+        provider only ever redirects back to this server). `mode` selects
+        how the flow completes after the callback: `web` sets the session
+        cookie and redirects into the SPA; `app` redirects to the
+        `waxdeck://auth` deep link with a one-time code; `loopback`
+        redirects to `http://127.0.0.1:{port}/callback` with a one-time
+        code; `code` shows the one-time code on a plain page for manual
+        copy. One-time codes are exchanged at `/auth/oidc/exchange`.
+      tags: [auth]
+      security: []
+      parameters:
+        - name: provider
+          in: query
+          required: true
+          description: Provider id from `/auth/oidc/providers`.
+          schema:
+            type: string
+        - name: mode
+          in: query
+          description: How the flow completes after the provider callback.
+          schema:
+            type: string
+            enum: [web, app, loopback, code]
+            default: web
+        - name: redirect
+          in: query
+          description: >
+            Where the browser lands after a `web`-mode login: a
+            single-slash-rooted path (for example `/library`). Values
+            starting `//` or containing a scheme or authority are
+            rejected, never coerced, since this redirect fires after the
+            session cookie is set. Defaults to `/`.
+          schema:
+            type: string
+        - name: challenge
+          in: query
+          description: >
+            Proof-of-possession binding for `app`, `loopback`, and `code`
+            modes: the base64url SHA-256 of a client-held secret, exactly
+            like a PKCE code challenge. When given, the resulting
+            one-time code can only be redeemed together with the matching
+            `verifier`, so a code intercepted in transit (a rogue app
+            claiming the deep-link scheme) is useless alone. First-party
+            clients always send one.
+          schema:
+            type: string
+        - name: port
+          in: query
+          description: >
+            Loopback port for `loopback` mode. Required for that mode,
+            ignored otherwise.
+          schema:
+            type: integer
+            minimum: 1024
+            maximum: 65535
+      responses:
+        "302":
+          description: Redirect to the identity provider.
+          headers:
+            Location:
+              description: The provider's authorization URL.
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /auth/oidc/callback:
+    get:
+      operationId: oidcCallback
+      summary: OIDC provider callback
+      description: >
+        The redirect URI registered with the identity provider; browsers
+        arrive here from the provider, clients never call it directly.
+        Exchanges the authorization code, verifies the ID token, resolves
+        the account, then completes per the flow's `mode`: `web` sets the
+        session cookie and redirects into the SPA; `app` redirects to the
+        `waxdeck://auth` deep link carrying a one-time code; `loopback`
+        redirects to the flow's loopback URL with the code; `code` renders
+        the code as plain HTML for manual copy. Account resolution is by
+        provider identity (issuer and subject) only: a first login
+        provisions a fresh account, disambiguating a taken username with
+        a suffix, and never links onto an existing local account by
+        username or email (silent merges are an account-takeover class;
+        linking is an explicit future admin action). Provider errors and
+        unknown or expired `state` render a plain error page, since there
+        is no client context to return a structured error to. Every value
+        interpolated into these HTML pages (codes, provider error text)
+        is HTML-escaped, and the code page carries nothing derived from
+        the user agent.
+      tags: [auth]
+      security: []
+      parameters:
+        - name: code
+          in: query
+          description: Authorization code from the provider.
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: Opaque state issued by `/auth/oidc/start`.
+          schema:
+            type: string
+        - name: error
+          in: query
+          description: Provider-reported error code, when the provider denied the flow.
+          schema:
+            type: string
+        - name: error_description
+          in: query
+          description: Provider-reported human-readable error detail.
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Flow completion redirect (`web`, `app`, and `loopback` modes).
+          headers:
+            Location:
+              description: SPA path, deep link, or loopback URL per the flow's mode.
+              schema:
+                type: string
+            Set-Cookie:
+              description: "`waxdeck_session` cookie (`web` mode only)."
+              schema:
+                type: string
+        "200":
+          description: One-time code page (`code` mode) or a plain error page.
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /auth/oidc/exchange:
+    post:
+      operationId: exchangeOidcCode
+      summary: Exchange a one-time OIDC code for a session
+      description: >
+        Redeems the one-time code delivered by an `app`, `loopback`, or
+        `code` mode OIDC flow for a session (bearer token plus user, exactly
+        like login). Codes are single-use and expire within minutes;
+        redeeming one again fails. Guessing is rate limited.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OidcExchangeRequest"
+      responses:
+        "200":
+          description: Session established.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /users:
+    get:
+      operationId: listUsers
+      summary: List accounts
+      description: >
+        Keyset-paginated list of all accounts, ordered by username.
+        Administrators only.
+      tags: [users]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum accounts per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of accounts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createUser
+      summary: Create an account
+      description: >
+        Creates a local account. Administrators only. Usernames are unique
+        case-insensitively; a taken name answers `conflict`. The account is
+        immediately able to log in with the given password.
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccount"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /users/{userId}:
+    get:
+      operationId: getUser
+      summary: Get one account
+      description: >
+        Full account detail. Administrators can read any account; everyone
+        else only their own.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccount"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateUser
+      summary: Update an account
+      description: >
+        Partial update: absent fields are unchanged. Administrators can
+        update any field on any account; everyone else can change only
+        their own `displayName`, and a non-administrator supplying any
+        other field is rejected with `forbidden`, never silently
+        ignored. Changes that would leave the server without an enabled
+        administrator (demoting or disabling the last one) answer
+        `conflict`. Setting `displayName` to the empty string clears it.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: The updated account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccount"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      operationId: deleteUser
+      summary: Delete an account
+      description: >
+        Deletes the account and revokes all its sessions. Administrators
+        only, and never the calling account or the last enabled
+        administrator (`conflict`). The user's listening history in the
+        catalog is orphaned, not destroyed.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Account deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /users/{userId}/password:
+    put:
+      operationId: setPassword
+      summary: Set an account's password
+      description: >
+        Changes the account's password and revokes the account's
+        sessions. Changing your own password always requires
+        `currentPassword` (administrators included); a wrong value
+        answers `forbidden`, and the session making the request is the
+        only one that survives. An administrator resetting another
+        account's password omits `currentPassword`, and every one of
+        that account's sessions is revoked. Setting a password on an
+        OIDC-provisioned account enables local login for it.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordChange"
+      responses:
+        "204":
+          description: Password changed.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{userId}/sessions:
+    delete:
+      operationId: revokeUserSessions
+      summary: Revoke all of an account's sessions
+      description: >
+        Signs the account out everywhere by revoking every live session it
+        has. When callers target their own account, the session making this
+        request survives. Administrators can target any account; everyone
+        else only their own.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Sessions revoked.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/me/prefs:
+    get:
+      operationId: getPrefs
+      summary: Get the caller's preferences
+      description: >
+        The calling user's preferences. Unset fields are absent; clients
+        apply their own defaults.
+      tags: [users]
+      responses:
+        "200":
+          description: The caller's preferences.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prefs"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    put:
+      operationId: putPrefs
+      summary: Replace the caller's preferences
+      description: >
+        Replaces the calling user's preferences with the given object:
+        absent fields are cleared back to unset. Returns the stored
+        result; comparing it against what was sent reveals anything the
+        server did not store. Field values are validated (unknown
+        timezone, malformed locale, or unknown theme is rejected).
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Prefs"
+      responses:
+        "200":
+          description: The stored preferences.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prefs"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /libraries:
+    get:
+      operationId: listLibraries
+      summary: List libraries
+      description: >
+        The catalog's libraries, for granting per-library visibility.
+        Administrators only. Unpaginated: libraries are a handful of roots,
+        not a collection that grows with content.
+      tags: [admin]
+      responses:
+        "200":
+          description: All libraries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Libraries"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
 
   /library/items:
     get:
@@ -292,8 +914,7 @@ paths:
         Starts an asynchronous scan of every library root and returns the job
         tracking it. Poll the job to observe progress and completion. Scans
         serialize with other catalog jobs; starting one while another runs
-        returns the conflict error. This operation becomes admin-only once
-        roles land; clients should be prepared for `forbidden`.
+        returns the conflict error. Administrators only.
       tags: [admin]
       responses:
         "202":
@@ -524,6 +1145,73 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /items/{pid}/star:
+    put:
+      operationId: setStar
+      summary: Star or unstar an item
+      description: >
+        Sets the calling user's star on the item and returns the resulting
+        playback state. Starring is idempotent: setting the current value
+        again succeeds without changing the star's set time.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StarUpdate"
+      responses:
+        "200":
+          description: The caller's updated state for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayState"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/rating:
+    put:
+      operationId: setRating
+      summary: Rate an item
+      description: >
+        Sets or clears the calling user's rating for the item and returns
+        the resulting playback state. Ratings are 0 to 100; clients render
+        them on whatever scale they like (a five-star widget maps to
+        0/20/40/60/80/100). Null clears the rating.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RatingUpdate"
+      responses:
+        "200":
+          description: The caller's updated state for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayState"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /listens:
     post:
       operationId: reportListens
@@ -580,6 +1268,22 @@ components:
       schema:
         type: string
         pattern: "^[a-z]{2}-[0-9A-HJKMNP-TV-Z]{26}$"
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: User PID (e.g. `us-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^us-[0-9A-HJKMNP-TV-Z]{26}$"
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      description: Session PID (e.g. `se-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^se-[0-9A-HJKMNP-TV-Z]{26}$"
 
   responses:
     InvalidRequest:
@@ -589,7 +1293,9 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     Unauthenticated:
-      description: No valid session or token was presented.
+      description: >
+        No valid credentials were presented: a missing or invalid
+        session, bearer token, login password, or one-time code.
       content:
         application/json:
           schema:
@@ -617,6 +1323,12 @@ components:
         The catalog is temporarily handed to a maintenance operation (code
         `catalog-maintenance`). Retry shortly; already-playing streams are
         unaffected.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Too many attempts (code `rate-limited`). Back off and retry later.
       content:
         application/json:
           schema:
@@ -673,11 +1385,18 @@ components:
           minLength: 1
           format: password
           description: Account password.
+        deviceName:
+          type: string
+          maxLength: 128
+          description: >
+            Human-readable label for this session in the device list (for
+            example `Pixel 9` or `Study desktop`). Native clients pass one;
+            web logins usually omit it.
 
     LoginResponse:
       type: object
       description: Established session plus a bearer token for native clients.
-      required: [user, token]
+      required: [user, token, csrfToken]
       properties:
         user:
           $ref: "#/components/schemas/User"
@@ -687,6 +1406,11 @@ components:
             Opaque bearer token equivalent to the session cookie. Native
             clients store it in the OS keychain; web clients ignore it and rely
             on the cookie.
+        csrfToken:
+          type: string
+          description: >
+            CSRF token for cookie-authenticated mutations (sent back as the
+            `X-CSRF-Token` header). Irrelevant to bearer-token callers.
 
     SessionInfo:
       type: object
@@ -698,6 +1422,11 @@ components:
           description: True when a valid session or token was presented.
         user:
           $ref: "#/components/schemas/User"
+        csrfToken:
+          type: string
+          description: >
+            CSRF token for cookie-authenticated mutations. Present only when
+            authenticated.
 
     User:
       type: object
@@ -721,6 +1450,359 @@ components:
           items:
             type: string
             example: admin
+
+    UserAccount:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          description: Administrative account fields beyond the self view.
+          required: [disabled, libraryAccess, createdAt]
+          properties:
+            disabled:
+              type: boolean
+              description: >
+                Disabled accounts cannot log in and their live sessions are
+                revoked on disable.
+            libraryAccess:
+              $ref: "#/components/schemas/LibraryAccess"
+            createdAt:
+              type: string
+              format: date-time
+              description: When the account was created.
+            hasPassword:
+              type: boolean
+              description: >
+                Whether local password login is enabled for the account
+                (false for accounts provisioned by OIDC that never set one).
+            identities:
+              type: array
+              description: Linked single sign-on identities.
+              items:
+                $ref: "#/components/schemas/LinkedIdentity"
+      description: An account as visible to administrators (and to its owner).
+
+    LinkedIdentity:
+      type: object
+      description: One linked OIDC identity.
+      required: [provider]
+      properties:
+        provider:
+          type: string
+          description: Provider id the identity belongs to.
+          example: dex
+        email:
+          type: string
+          description: Email reported by the provider at last login, if any.
+
+    LibraryAccess:
+      type: object
+      description: >
+        Which libraries an account can see. `all` grants every library
+        including ones added later; `granted` limits visibility to
+        `libraryPids`. Administrators always see everything regardless of
+        this setting.
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [all, granted]
+          description: Access mode.
+        libraryPids:
+          type: array
+          description: >
+            Visible libraries when mode is `granted`; ignored for `all`.
+          items:
+            type: string
+            example: lb-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    Role:
+      type: string
+      enum: [admin, user]
+      description: >
+        An assignable account role. A shared named schema on purpose:
+        identical inline enums make the Dart generator emit one enum class
+        into two files, which does not compile.
+
+    UserCreate:
+      type: object
+      description: A new local account.
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Login name, unique case-insensitively. Leading and trailing
+            whitespace is rejected.
+          example: frodo
+        password:
+          type: string
+          minLength: 8
+          format: password
+          description: Initial password (at least 8 characters).
+        displayName:
+          type: string
+          maxLength: 128
+          description: Optional display name.
+        roles:
+          type: array
+          description: Assigned roles; defaults to `[user]`.
+          items:
+            $ref: "#/components/schemas/Role"
+        libraryAccess:
+          $ref: "#/components/schemas/LibraryAccess"
+
+    UserUpdate:
+      type: object
+      description: >
+        Partial account update: absent fields are unchanged. Setting
+        `displayName` to the empty string clears it.
+      properties:
+        displayName:
+          type: string
+          maxLength: 128
+          description: New display name; empty clears it.
+        roles:
+          type: array
+          description: Replacement role set.
+          items:
+            $ref: "#/components/schemas/Role"
+        disabled:
+          type: boolean
+          description: >
+            Disable or re-enable the account. Disabling revokes its live
+            sessions.
+        libraryAccess:
+          $ref: "#/components/schemas/LibraryAccess"
+
+    UserPage:
+      type: object
+      description: One keyset-paginated page of accounts.
+      required: [users]
+      properties:
+        users:
+          type: array
+          description: Accounts ordered by username.
+          items:
+            $ref: "#/components/schemas/UserAccount"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
+
+    PasswordChange:
+      type: object
+      description: A password change.
+      required: [newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          description: >
+            The account's current password. Required when changing your own
+            password; administrators resetting another account omit it.
+        newPassword:
+          type: string
+          minLength: 8
+          format: password
+          description: The new password (at least 8 characters).
+
+    BootstrapStatus:
+      type: object
+      description: Whether first-run setup is still waiting for an administrator.
+      required: [required]
+      properties:
+        required:
+          type: boolean
+          description: True while the server has no enabled administrator.
+
+    BootstrapRequest:
+      type: object
+      description: The first administrator account.
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Administrator login name.
+          example: admin
+        password:
+          type: string
+          minLength: 8
+          format: password
+          description: Administrator password (at least 8 characters).
+        displayName:
+          type: string
+          maxLength: 128
+          description: Optional display name.
+
+    DeviceSession:
+      type: object
+      description: One live session, as shown in the device list.
+      required: [id, kind, createdAt, current]
+      properties:
+        id:
+          type: string
+          description: Session identifier.
+          example: se-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          type: string
+          enum: [web, device]
+          description: >
+            `web` sessions authenticate with the cookie; `device` sessions
+            with a bearer token.
+        deviceName:
+          type: string
+          description: Client-supplied label, when the login provided one.
+        client:
+          type: string
+          description: Client software hint (from the login's user agent).
+        createdAt:
+          type: string
+          format: date-time
+          description: When the session was established.
+        lastSeenAt:
+          type: string
+          format: date-time
+          description: When the session last made a request (coarse, minutes).
+        current:
+          type: boolean
+          description: True for the session serving this request.
+
+    SessionList:
+      type: object
+      description: The caller's live sessions, newest first.
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeviceSession"
+
+    OidcProvider:
+      type: object
+      description: One configured OIDC provider.
+      required: [id, displayName, startUrl]
+      properties:
+        id:
+          type: string
+          description: Stable provider id, referenced by `/auth/oidc/start`.
+          example: dex
+        displayName:
+          type: string
+          description: Human-readable name for the login button.
+          example: Company SSO
+        startUrl:
+          type: string
+          description: >
+            Origin-relative URL that starts this provider's login flow
+            (web mode; other modes add their query parameters).
+          example: /api/v1/auth/oidc/start?provider=dex
+
+    OidcProviders:
+      type: object
+      description: The configured OIDC providers.
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/OidcProvider"
+
+    OidcExchangeRequest:
+      type: object
+      description: A one-time OIDC completion code to redeem for a session.
+      required: [code]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: The one-time code delivered by the flow's redirect or code page.
+        verifier:
+          type: string
+          description: >
+            The secret whose SHA-256 was sent as `challenge` when the
+            flow started. Required when the flow carried a challenge;
+            a missing or wrong value fails the exchange.
+        deviceName:
+          type: string
+          maxLength: 128
+          description: Device-list label for the resulting session.
+
+    Prefs:
+      type: object
+      additionalProperties: false
+      description: >
+        Per-user preferences that sync across clients. All fields are
+        optional; unset fields are absent and clients apply their own
+        defaults. Unknown fields are rejected.
+      properties:
+        timezone:
+          type: string
+          description: >
+            IANA timezone name (for example `Europe/Amsterdam`). Drives
+            streaks, heatmaps, and other calendar-bucketed statistics.
+          example: America/Denver
+        locale:
+          type: string
+          description: Preferred BCP 47 locale tag (for example `en-US`).
+          example: en-US
+        theme:
+          type: string
+          enum: [system, dark, light, oled]
+          description: Preferred app theme.
+
+    Library:
+      type: object
+      description: One catalog library (a scanned root).
+      required: [pid, name]
+      properties:
+        pid:
+          type: string
+          description: Library PID.
+          example: lb-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: Display name (the configured root name).
+          example: music
+        media:
+          type: string
+          description: >
+            Content class the library holds. Currently `music`,
+            `audiobook`, `podcast`, or `mixed`; new values may appear.
+          example: music
+
+    Libraries:
+      type: object
+      description: All catalog libraries.
+      required: [libraries]
+      properties:
+        libraries:
+          type: array
+          items:
+            $ref: "#/components/schemas/Library"
+
+    StarUpdate:
+      type: object
+      description: A star or unstar.
+      required: [starred]
+      properties:
+        starred:
+          type: boolean
+          description: The new star state.
+
+    RatingUpdate:
+      type: object
+      description: A rating change.
+      required: [rating]
+      properties:
+        rating:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: The new rating (0 to 100), or null to clear it.
 
     MediaType:
       type: string
@@ -887,6 +1969,12 @@ components:
         starred:
           type: boolean
           description: Whether the caller starred the item.
+        rating:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: The caller's rating (0 to 100); absent or null when unrated.
         updatedAt:
           type: string
           format: date-time

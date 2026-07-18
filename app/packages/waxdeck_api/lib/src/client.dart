@@ -9,23 +9,69 @@ import 'models.dart';
 /// What feature code programs against. [WaxDeckClient] is the real
 /// implementation; tests substitute fakes without touching the network.
 abstract interface class WaxDeckRepository {
+  /// Bearer token applied to every request. [login], [bootstrap],
+  /// [oidcExchange], and [refreshToken] set it; native clients persist it
+  /// and restore it here before the startup session probe. Web builds
+  /// leave it null and rely on the HttpOnly session cookie.
+  abstract String? authToken;
+
   /// `GET /health`: liveness and version probe.
   Future<ServerHealth> health();
+
+  /// `GET /auth/bootstrap`: whether first-run setup is needed.
+  Future<BootstrapStatus> bootstrapStatus();
+
+  /// `POST /auth/bootstrap`: creates the server's first administrator and
+  /// logs it in, exactly like [login]. Fails with `conflict` once any
+  /// account exists.
+  Future<LoginResult> bootstrap({
+    required String username,
+    required String password,
+    String? displayName,
+  });
 
   /// `POST /auth/login`: establishes a session. On success the client keeps
   /// the returned bearer token and applies it to subsequent calls; web
   /// builds additionally get the HttpOnly session cookie from the browser.
+  /// [deviceName] labels the session in the device list.
   Future<LoginResult> login({
     required String username,
     required String password,
+    String? deviceName,
   });
 
   /// `GET /auth/session`: whether the caller is authenticated, and as whom.
   /// Unauthenticated callers get a false state, never an error.
   Future<SessionState> getSession();
 
+  /// `POST /auth/refresh`: rotates the caller's bearer token. The presented
+  /// token stays valid for a short overlap window. Bearer-authenticated
+  /// callers only.
+  Future<LoginResult> refreshToken();
+
   /// `POST /auth/logout`: revokes the current session.
   Future<void> logout();
+
+  /// `GET /auth/sessions`: every live session belonging to the calling
+  /// user, newest first. Doubles as the device list.
+  Future<List<DeviceSession>> listSessions();
+
+  /// `DELETE /auth/sessions/{id}`: revokes one of the caller's sessions.
+  /// Revoking the session serving the request acts as a logout.
+  Future<void> revokeSession(String sessionId);
+
+  /// `GET /auth/oidc/providers`: configured single-sign-on providers, for
+  /// rendering login buttons. Empty when SSO is not configured.
+  Future<List<OidcProvider>> oidcProviders();
+
+  /// `POST /auth/oidc/exchange`: redeems a one-time OIDC code for a
+  /// session, exactly like [login]. [verifier] is required when the flow
+  /// sent a challenge; first-party clients always send one.
+  Future<LoginResult> oidcExchange({
+    required String code,
+    String? verifier,
+    String? deviceName,
+  });
 
   /// `GET /library/items`: keyset-paginated library listing, optionally
   /// filtered by media type.
@@ -60,24 +106,41 @@ abstract interface class WaxDeckRepository {
   /// `PUT /items/{pid}/play-state`: checkpoints the resume position.
   Future<void> putPlayState(String pid, int positionMs);
 
+  /// `PUT /items/{pid}/star`: stars or unstars one item, returning the
+  /// updated play state.
+  Future<PlayState> setStar(String pid, bool starred);
+
+  /// `PUT /items/{pid}/rating`: rates one item, 0 to 100, or clears the
+  /// rating with null. Returns the updated play state.
+  Future<PlayState> setRating(String pid, int? rating);
+
   /// `POST /listens`: reports listen sessions. Idempotent per session ID, so
   /// retrying a failed batch is always safe.
   Future<ListenOutcome> reportListens(List<ListenSession> sessions);
+
+  /// `GET /users/me/prefs`: the caller's synced preferences.
+  Future<Prefs> getPrefs();
+
+  /// `PUT /users/me/prefs`: replaces the caller's synced preferences and
+  /// returns the stored document. Replace semantics: start from [getPrefs].
+  Future<Prefs> putPrefs(Prefs prefs);
 }
 
 /// Thin repository layer over the generated dart-dio client.
 class WaxDeckClient implements WaxDeckRepository {
   /// [baseUrl] is the server origin. On web builds pass an empty string:
   /// relative URLs resolve against the single origin serving the SPA.
-  factory WaxDeckClient({String baseUrl = ''}) {
+  ///
+  /// [dio] is a test hook: the package's own tests inject a Dio carrying a
+  /// recording adapter to pin request headers without a network.
+  factory WaxDeckClient({String baseUrl = '', Dio? dio}) {
     // Strip trailing slashes so a baseUrl like "http://host:4420/" doesn't
     // produce "//api/v1", a non-canonical path the server 301-redirects,
     // which can drop the body on POST /auth/login.
     final trimmed = baseUrl.replaceAll(RegExp(r'/+$'), '');
-    return WaxDeckClient._(
-      trimmed,
-      gen.WaxdeckApiGen(dio: Dio(BaseOptions(baseUrl: '$trimmed/api/v1'))),
-    );
+    final transport = dio ?? Dio();
+    transport.options.baseUrl = '$trimmed/api/v1';
+    return WaxDeckClient._(trimmed, gen.WaxdeckApiGen(dio: transport));
   }
 
   WaxDeckClient._(this._baseUrl, this._gen) {
@@ -88,23 +151,66 @@ class WaxDeckClient implements WaxDeckRepository {
           if (token != null && !options.headers.containsKey('Authorization')) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+          // Cookie-authenticated mutations (web after a reload: no bearer
+          // in memory, the HttpOnly cookie authenticates) must echo the
+          // CSRF token from login/getSession. Bearer requests are exempt.
+          final csrf = _csrfToken;
+          if (token == null &&
+              csrf != null &&
+              _isMutation(options.method) &&
+              !options.headers.containsKey('X-CSRF-Token')) {
+            options.headers['X-CSRF-Token'] = csrf;
+          }
           handler.next(options);
         },
       ),
     );
   }
 
+  static bool _isMutation(String method) {
+    return switch (method.toUpperCase()) {
+      'GET' || 'HEAD' || 'OPTIONS' => false,
+      _ => true,
+    };
+  }
+
   final String _baseUrl;
   final gen.WaxdeckApiGen _gen;
   String? _authToken;
+  String? _csrfToken;
 
   /// Bearer token applied to every request as an Authorization header.
   ///
-  /// [login] sets it automatically; native clients that persist the token
-  /// across restarts can restore it here before calling anything else. Web
-  /// builds work without it via the session cookie.
+  /// [login] sets it automatically on native platforms; clients that
+  /// persist the token across restarts can restore it here before
+  /// calling anything else. Web builds never hold it and rely on the
+  /// HttpOnly session cookie plus the CSRF header.
+  @override
   String? get authToken => _authToken;
+  @override
   set authToken(String? token) => _authToken = token;
+
+  /// Adopts a login-shaped response: keeps the CSRF token, and on native
+  /// platforms the bearer token, then maps to the plain result.
+  ///
+  /// Web builds deliberately do NOT retain the bearer: the HttpOnly
+  /// session cookie is the credential there, and holding a JS-readable
+  /// copy of an equivalent long-lived token would hand an XSS exactly
+  /// the portable credential the HttpOnly flag exists to deny. Without
+  /// a bearer, the interceptor rides the cookie and sends the CSRF
+  /// header on mutations.
+  LoginResult _adoptLogin(gen.LoginResponse body) {
+    _csrfToken = body.csrfToken;
+    final result = loginResultFromGen(body);
+    if (!_isWebBuild) {
+      _authToken = result.token;
+    }
+    return result;
+  }
+
+  /// True in browser builds. Detected via library availability so this
+  /// pure-Dart package needs no Flutter dependency.
+  static const _isWebBuild = bool.fromEnvironment('dart.library.js_interop');
 
   @override
   Future<ServerHealth> health() => _guard(() async {
@@ -117,33 +223,101 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<BootstrapStatus> bootstrapStatus() => _guard(() async {
+    final body = _require((await _gen.getAuthApi().getBootstrapStatus()).data);
+    return BootstrapStatus(required: body.required_);
+  });
+
+  @override
+  Future<LoginResult> bootstrap({
+    required String username,
+    required String password,
+    String? displayName,
+  }) => _guard(() async {
+    final response = await _gen.getAuthApi().bootstrap(
+      bootstrapRequest: gen.BootstrapRequest(
+        (b) => b
+          ..username = username
+          ..password = password
+          ..displayName = displayName,
+      ),
+    );
+    return _adoptLogin(_require(response.data));
+  });
+
+  @override
   Future<LoginResult> login({
     required String username,
     required String password,
+    String? deviceName,
   }) => _guard(() async {
     final response = await _gen.getAuthApi().login(
       loginRequest: gen.LoginRequest(
         (b) => b
           ..username = username
-          ..password = password,
+          ..password = password
+          ..deviceName = deviceName,
       ),
     );
-    final result = loginResultFromGen(_require(response.data));
-    _authToken = result.token;
-    return result;
+    return _adoptLogin(_require(response.data));
   });
 
   @override
   Future<SessionState> getSession() => _guard(() async {
-    return sessionStateFromGen(
-      _require((await _gen.getAuthApi().getSession()).data),
-    );
+    final body = _require((await _gen.getAuthApi().getSession()).data);
+    // Unauthenticated probes carry no CSRF token; dropping a stale one is
+    // correct because the session it belonged to is gone.
+    _csrfToken = body.csrfToken;
+    return sessionStateFromGen(body);
+  });
+
+  @override
+  Future<LoginResult> refreshToken() => _guard(() async {
+    final response = await _gen.getAuthApi().refreshToken();
+    return _adoptLogin(_require(response.data));
   });
 
   @override
   Future<void> logout() => _guard(() async {
     await _gen.getAuthApi().logout();
     _authToken = null;
+    _csrfToken = null;
+  });
+
+  @override
+  Future<List<DeviceSession>> listSessions() => _guard(() async {
+    final body = _require((await _gen.getAuthApi().listSessions()).data);
+    return body.sessions.map(deviceSessionFromGen).toList();
+  });
+
+  @override
+  Future<void> revokeSession(String sessionId) => _guard(() async {
+    await _gen.getAuthApi().revokeSession(sessionId: sessionId);
+  });
+
+  @override
+  Future<List<OidcProvider>> oidcProviders() => _guard(() async {
+    final body = _require((await _gen.getAuthApi().listOidcProviders()).data);
+    return body.providers
+        .map((p) => oidcProviderFromGen(p, baseUrl: _baseUrl))
+        .toList();
+  });
+
+  @override
+  Future<LoginResult> oidcExchange({
+    required String code,
+    String? verifier,
+    String? deviceName,
+  }) => _guard(() async {
+    final response = await _gen.getAuthApi().exchangeOidcCode(
+      oidcExchangeRequest: gen.OidcExchangeRequest(
+        (b) => b
+          ..code = code
+          ..verifier = verifier
+          ..deviceName = deviceName,
+      ),
+    );
+    return _adoptLogin(_require(response.data));
   });
 
   @override
@@ -209,6 +383,24 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<PlayState> setStar(String pid, bool starred) => _guard(() async {
+    final response = await _gen.getPlaybackApi().setStar(
+      pid: pid,
+      starUpdate: gen.StarUpdate((b) => b..starred = starred),
+    );
+    return playStateFromGen(_require(response.data));
+  });
+
+  @override
+  Future<PlayState> setRating(String pid, int? rating) => _guard(() async {
+    final response = await _gen.getPlaybackApi().setRating(
+      pid: pid,
+      ratingUpdate: gen.RatingUpdate((b) => b..rating = rating),
+    );
+    return playStateFromGen(_require(response.data));
+  });
+
+  @override
   Future<ListenOutcome> reportListens(List<ListenSession> sessions) =>
       _guard(() async {
         final response = await _gen.getPlaybackApi().reportListens(
@@ -218,6 +410,19 @@ class WaxDeckClient implements WaxDeckRepository {
         );
         return listenOutcomeFromGen(_require(response.data));
       });
+
+  @override
+  Future<Prefs> getPrefs() => _guard(() async {
+    return prefsFromGen(_require((await _gen.getUsersApi().getPrefs()).data));
+  });
+
+  @override
+  Future<Prefs> putPrefs(Prefs prefs) => _guard(() async {
+    final response = await _gen.getUsersApi().putPrefs(
+      prefs: prefsToGen(prefs),
+    );
+    return prefsFromGen(_require(response.data));
+  });
 
   /// Runs [body], mapping transport failures to the structured error model.
   Future<T> _guard<T>(Future<T> Function() body) async {
