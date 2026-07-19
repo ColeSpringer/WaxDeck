@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../media_icons.dart';
+import '../playlists/add_to_playlist_dialog.dart';
 import '../providers.dart';
+import '../radio/radio_controller.dart';
 import '../sync/sync_providers.dart';
 import 'play_state_controller.dart';
 import 'playback_session.dart';
@@ -58,6 +60,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    // Live radio bypasses sessions; loading an item takes the engine
+    // back, so the radio surface must stop claiming it.
+    ref.read(radioPlaybackProvider.notifier).markInterrupted();
     _session = PlaybackSession(
       repository: ref.read(repositoryProvider),
       engine: ref.read(audioEngineProvider),
@@ -91,7 +96,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(item.title),
-        actions: [_DownloadButton(pid: item.pid)],
+        actions: [
+          Semantics(
+            identifier: 'add-to-playlist',
+            label: 'Add to playlist',
+            button: true,
+            child: IconButton(
+              key: const Key('add-to-playlist'),
+              tooltip: 'Add to playlist',
+              icon: const Icon(Icons.playlist_add),
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => AddToPlaylistDialog(item: item),
+              ),
+            ),
+          ),
+          _DownloadButton(pid: item.pid),
+        ],
       ),
       body: FutureBuilder<void>(
         future: _starting,

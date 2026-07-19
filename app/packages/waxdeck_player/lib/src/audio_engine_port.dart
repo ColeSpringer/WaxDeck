@@ -24,7 +24,19 @@ enum EngineProcessingState {
 abstract interface class AudioEnginePort {
   /// Loads [url] and prepares it for playback, optionally starting at
   /// [initialPosition]. [mimeType] is a hint; engines may ignore it.
-  Future<void> load(String url, {String? mimeType, Duration? initialPosition});
+  ///
+  /// [clipStart] and [clipEnd] restrict playback to a window of the
+  /// source: an item carved out of a larger file plays as if the
+  /// window were the whole media, with positions, duration, and
+  /// completion all window-relative ([initialPosition] included). A
+  /// null [clipEnd] with a set [clipStart] runs to the source's end.
+  Future<void> load(
+    String url, {
+    String? mimeType,
+    Duration? initialPosition,
+    Duration? clipStart,
+    Duration? clipEnd,
+  });
 
   /// Starts or resumes playback.
   Future<void> play();

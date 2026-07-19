@@ -13,8 +13,12 @@ import 'package:waxdeck_api_gen/src/api/admin_api.dart';
 import 'package:waxdeck_api_gen/src/api/auth_api.dart';
 import 'package:waxdeck_api_gen/src/api/books_api.dart';
 import 'package:waxdeck_api_gen/src/api/library_api.dart';
+import 'package:waxdeck_api_gen/src/api/notifications_api.dart';
 import 'package:waxdeck_api_gen/src/api/playback_api.dart';
+import 'package:waxdeck_api_gen/src/api/playlists_api.dart';
 import 'package:waxdeck_api_gen/src/api/podcasts_api.dart';
+import 'package:waxdeck_api_gen/src/api/radio_api.dart';
+import 'package:waxdeck_api_gen/src/api/scrobbling_api.dart';
 import 'package:waxdeck_api_gen/src/api/sync_api.dart';
 import 'package:waxdeck_api_gen/src/api/system_api.dart';
 import 'package:waxdeck_api_gen/src/api/users_api.dart';
@@ -97,16 +101,40 @@ class WaxdeckApiGen {
     return LibraryApi(dio, serializers);
   }
 
+  /// Get NotificationsApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  NotificationsApi getNotificationsApi() {
+    return NotificationsApi(dio, serializers);
+  }
+
   /// Get PlaybackApi instance, base route and serializer can be overridden by a given but be careful,
   /// by doing that all interceptors will not be executed
   PlaybackApi getPlaybackApi() {
     return PlaybackApi(dio, serializers);
   }
 
+  /// Get PlaylistsApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  PlaylistsApi getPlaylistsApi() {
+    return PlaylistsApi(dio, serializers);
+  }
+
   /// Get PodcastsApi instance, base route and serializer can be overridden by a given but be careful,
   /// by doing that all interceptors will not be executed
   PodcastsApi getPodcastsApi() {
     return PodcastsApi(dio, serializers);
+  }
+
+  /// Get RadioApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  RadioApi getRadioApi() {
+    return RadioApi(dio, serializers);
+  }
+
+  /// Get ScrobblingApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  ScrobblingApi getScrobblingApi() {
+    return ScrobblingApi(dio, serializers);
   }
 
   /// Get SyncApi instance, base route and serializer can be overridden by a given but be careful,

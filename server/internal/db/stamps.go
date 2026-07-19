@@ -61,3 +61,27 @@ func (d *DB) StampPlayState(ctx context.Context, userID, itemPID, field string, 
 	}
 	return nil
 }
+
+// RecentPositionStamps lists item pids the user holds position stamps
+// for, most recently stamped first. This is the in-progress surface:
+// the catalog's recently-played list requires a completed play, while
+// a resume position exists from the first checkpoint.
+func (d *DB) RecentPositionStamps(ctx context.Context, userID string, limit int) ([]string, error) {
+	rows, err := d.r.QueryContext(ctx, `
+		SELECT item_pid FROM play_state_stamps
+		WHERE user_id = ? AND position_ns > 0
+		ORDER BY position_ns DESC LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing position stamps: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var pid string
+		if err := rows.Scan(&pid); err != nil {
+			return nil, fmt.Errorf("db: scanning position stamp: %w", err)
+		}
+		out = append(out, pid)
+	}
+	return out, rows.Err()
+}

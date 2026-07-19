@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<subsonic-response xmlns="http://subsonic.org/restapi" status="ok" version="1.16.1" type="waxdeck" serverVersion="VERSION" openSubsonic="true"><song id="tr-ULID_1" parent="L!Rml4dHVyZSBBcnRpc3QfRml4dHVyZSBBbGJ1bQ" isDir="false" title="Alpha Song" album="Fixture Album" artist="Fixture Artist" coverArt="tr-ULID_1" duration="2" suffix="flac" contentType="audio/flac" albumId="L!Rml4dHVyZSBBcnRpc3QfRml4dHVyZSBBbGJ1bQ" artistId="A!Rml4dHVyZSBBcnRpc3Q" type="music"></song></subsonic-response>

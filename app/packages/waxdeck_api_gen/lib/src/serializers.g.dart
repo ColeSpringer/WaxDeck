@@ -36,10 +36,12 @@ Serializers _$serializers =
           ..add(Item.serializer)
           ..add(ItemPage.serializer)
           ..add(Job.serializer)
+          ..add(LastfmConnectStart.serializer)
           ..add(Libraries.serializer)
           ..add(LibraryAccess.serializer)
           ..add(LibraryAccessModeEnum.serializer)
           ..add(LinkedIdentity.serializer)
+          ..add(ListenBrainzConnect.serializer)
           ..add(ListenIngestResult.serializer)
           ..add(ListenReport.serializer)
           ..add(ListenSession.serializer)
@@ -47,8 +49,12 @@ Serializers _$serializers =
           ..add(LoginRequest.serializer)
           ..add(LoginResponse.serializer)
           ..add(Lyrics.serializer)
+          ..add(M3uImport.serializer)
+          ..add(M3uImportResult.serializer)
           ..add(MediaType.serializer)
           ..add(ModelLibrary.serializer)
+          ..add(NotificationConfig.serializer)
+          ..add(NotificationConfigUpdate.serializer)
           ..add(OidcExchangeRequest.serializer)
           ..add(OidcProvider.serializer)
           ..add(OidcProviders.serializer)
@@ -61,14 +67,38 @@ Serializers _$serializers =
           ..add(PlayStateList.serializer)
           ..add(PlayStateQuery.serializer)
           ..add(PlayStateUpdate.serializer)
+          ..add(Playlist.serializer)
+          ..add(PlaylistCreate.serializer)
+          ..add(PlaylistEntry.serializer)
+          ..add(PlaylistItemsPage.serializer)
+          ..add(PlaylistItemsUpdate.serializer)
+          ..add(PlaylistPage.serializer)
+          ..add(PlaylistPreview.serializer)
+          ..add(PlaylistUpdate.serializer)
           ..add(PodcastDetail.serializer)
           ..add(PodcastShow.serializer)
           ..add(Prefs.serializer)
           ..add(PrefsThemeEnum.serializer)
+          ..add(PushRegistration.serializer)
+          ..add(PushRegistrationCreate.serializer)
+          ..add(PushRegistrationList.serializer)
+          ..add(RadioDirectoryEntry.serializer)
+          ..add(RadioDirectoryResults.serializer)
+          ..add(RadioPlayInfo.serializer)
+          ..add(RadioStation.serializer)
+          ..add(RadioStationEdit.serializer)
+          ..add(RadioStationList.serializer)
           ..add(RatingUpdate.serializer)
           ..add(RefreshResult.serializer)
           ..add(RejectedListen.serializer)
           ..add(Role.serializer)
+          ..add(RuleField.serializer)
+          ..add(RuleFields.serializer)
+          ..add(RuleNode.serializer)
+          ..add(RuleSort.serializer)
+          ..add(RuleTagKey.serializer)
+          ..add(Scrobbler.serializer)
+          ..add(ScrobblerList.serializer)
           ..add(SearchHit.serializer)
           ..add(SearchResults.serializer)
           ..add(ServerSyncEvent.serializer)
@@ -77,6 +107,7 @@ Serializers _$serializers =
           ..add(SessionList.serializer)
           ..add(SkipMap.serializer)
           ..add(SkipSpan.serializer)
+          ..add(SmartRule.serializer)
           ..add(StarUpdate.serializer)
           ..add(SubscribeRequest.serializer)
           ..add(Subscription.serializer)
@@ -120,6 +151,10 @@ Serializers _$serializers =
             () => ListBuilder<ItemSummary>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ItemSummary)]),
+            () => ListBuilder<ItemSummary>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(LinkedIdentity)]),
             () => ListBuilder<LinkedIdentity>(),
           )
@@ -148,6 +183,28 @@ Serializers _$serializers =
             () => ListBuilder<PlayState>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Playlist)]),
+            () => ListBuilder<Playlist>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(PlaylistEntry)]),
+            () => ListBuilder<PlaylistEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(PushRegistration)]),
+            () => ListBuilder<PushRegistration>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(RadioDirectoryEntry),
+            ]),
+            () => ListBuilder<RadioDirectoryEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(RadioStation)]),
+            () => ListBuilder<RadioStation>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(RejectedListen)]),
             () => ListBuilder<RejectedListen>(),
           )
@@ -158,6 +215,30 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(Role)]),
             () => ListBuilder<Role>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(RuleField)]),
+            () => ListBuilder<RuleField>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(RuleTagKey)]),
+            () => ListBuilder<RuleTagKey>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(RuleNode)]),
+            () => ListBuilder<RuleNode>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(RuleSort)]),
+            () => ListBuilder<RuleSort>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Scrobbler)]),
+            () => ListBuilder<Scrobbler>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(SearchHit)]),
@@ -186,6 +267,34 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(SkipSpan)]),
             () => ListBuilder<SkipSpan>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

@@ -311,6 +311,7 @@ class FakeRepository implements WaxDeckRepository {
         partStartMs: part.startMs,
       );
     }
+    final span = playInfoSpans[pid];
     return PlayInfo(
       pid: pid,
       url: '/media/stream?pid=$pid&mt=test-token',
@@ -318,8 +319,14 @@ class FakeRepository implements WaxDeckRepository {
       durationMs: episode?.durationMs ?? 214000,
       seekable: true,
       expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+      spanStartMs: span?.startMs,
+      spanEndMs: span?.endMs,
     );
   }
+
+  /// Span windows served by [getPlayInfo], keyed by pid: the direct
+  /// playback shape for tracks carved out of a larger file.
+  final Map<String, ({int startMs, int endMs})> playInfoSpans = {};
 
   EpisodeSummary? _findEpisode(String pid) {
     for (final episodes in episodesByShow.values) {
@@ -428,20 +435,27 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<List<AppPassword>> listAppPasswords() async => const [];
+  Future<List<AppPassword>> listAppPasswords() async => List.of(appPasswords);
+
+  /// App passwords created through the fake, served by the listing.
+  final List<AppPassword> appPasswords = [];
 
   @override
   Future<AppPasswordCreated> createAppPassword(String label) async {
-    return AppPasswordCreated(
-      id: 'ap-01JZX5N8QW3F4V9T2B7KD3M9R6',
+    final created = AppPasswordCreated(
+      id: 'ap-FAKE${appPasswords.length}',
       label: label,
       createdAt: DateTime.now().toUtc(),
       secret: 'FAKESECRETFAKESECRETFAKESE',
     );
+    appPasswords.add(created);
+    return created;
   }
 
   @override
-  Future<void> revokeAppPassword(String id) async {}
+  Future<void> revokeAppPassword(String id) async {
+    appPasswords.removeWhere((ap) => ap.id == id);
+  }
 
   // A beat of latency before the failure, so tests can observe the
   // optimistic frame a real network round trip would leave on screen.
@@ -765,6 +779,470 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<void> importOpml(String opml) async {
     importedOpml.add(opml);
+  }
+
+  /// Playlists by pid, with static members alongside.
+  final Map<String, Playlist> playlistsByPid = {};
+  final Map<String, List<String>> playlistMembers = {};
+
+  /// Preview served by [previewSmartRule]; tests seed it.
+  PlaylistPreview previewResult = const PlaylistPreview(items: [], total: 0);
+
+  /// Rule vocabulary served by [getRuleFields].
+  RuleFields ruleFields = const RuleFields(
+    fields: [
+      RuleField(
+        name: 'title',
+        kind: 'text',
+        ops: [
+          'is',
+          'isNot',
+          'contains',
+          'startsWith',
+          'endsWith',
+          'isPresent',
+          'isMissing',
+        ],
+        userState: false,
+        sortable: true,
+      ),
+      RuleField(
+        name: 'rating',
+        kind: 'number',
+        ops: [
+          'is',
+          'isNot',
+          'gt',
+          'lt',
+          'gte',
+          'lte',
+          'inTheRange',
+          'isPresent',
+          'isMissing',
+        ],
+        userState: true,
+        sortable: true,
+      ),
+      RuleField(
+        name: 'starred',
+        kind: 'boolean',
+        ops: ['is'],
+        userState: true,
+        sortable: true,
+      ),
+      RuleField(
+        name: 'mediaType',
+        kind: 'mediaType',
+        ops: ['is', 'isNot'],
+        userState: false,
+        sortable: false,
+      ),
+    ],
+    tagKeys: [RuleTagKey(key: 'MOOD', itemCount: 3)],
+  );
+
+  int _playlistSeq = 0;
+
+  ItemSummary _itemByPid(String pid) {
+    return libraryItems.firstWhere(
+      (i) => i.pid == pid,
+      orElse: () => throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such item',
+      ),
+    );
+  }
+
+  @override
+  Future<PlaylistPage> listPlaylists({
+    String? cursor,
+    int? limit,
+    String? containsItem,
+  }) async {
+    var rows = playlistsByPid.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    if (containsItem != null) {
+      rows = rows
+          .where(
+            (p) =>
+                !p.isSmart &&
+                (playlistMembers[p.pid] ?? const []).contains(containsItem),
+          )
+          .toList();
+    }
+    return PlaylistPage(playlists: rows);
+  }
+
+  @override
+  Future<Playlist> createPlaylist({
+    required String name,
+    required String kind,
+    String? visibility,
+    SmartRule? rule,
+    List<String> itemPids = const [],
+  }) async {
+    final pid = 'pl-FAKE${_playlistSeq++}';
+    final pl = Playlist(
+      pid: pid,
+      name: name,
+      kind: kind,
+      visibility: visibility ?? 'private',
+      ownerName: 'me',
+      isOwner: true,
+      itemCount: kind == 'static' ? itemPids.length : null,
+      rule: rule,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    playlistsByPid[pid] = pl;
+    playlistMembers[pid] = List.of(itemPids);
+    return pl;
+  }
+
+  @override
+  Future<Playlist> getPlaylist(String pid) async {
+    final pl = playlistsByPid[pid];
+    if (pl == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such playlist',
+      );
+    }
+    return pl;
+  }
+
+  @override
+  Future<Playlist> updatePlaylist(
+    String pid, {
+    String? name,
+    String? visibility,
+    SmartRule? rule,
+  }) async {
+    final pl = await getPlaylist(pid);
+    var next = Playlist(
+      pid: pl.pid,
+      name: name ?? pl.name,
+      kind: pl.kind,
+      visibility: visibility ?? pl.visibility,
+      ownerName: pl.ownerName,
+      isOwner: pl.isOwner,
+      itemCount: pl.itemCount,
+      rule: rule ?? pl.rule,
+      createdAt: pl.createdAt,
+      updatedAt: DateTime.utc(2026, 2),
+    );
+    if (rule != null) {
+      // A rule replace reissues the pid, like the real server.
+      playlistsByPid.remove(pid);
+      next = Playlist(
+        pid: 'pl-FAKE${_playlistSeq++}',
+        previousPid: pid,
+        name: next.name,
+        kind: next.kind,
+        visibility: next.visibility,
+        ownerName: next.ownerName,
+        isOwner: next.isOwner,
+        rule: rule,
+        createdAt: DateTime.utc(2026, 2),
+        updatedAt: DateTime.utc(2026, 2),
+      );
+    }
+    playlistsByPid[next.pid] = next;
+    return next;
+  }
+
+  @override
+  Future<void> deletePlaylist(String pid) async {
+    playlistsByPid.remove(pid);
+    playlistMembers.remove(pid);
+  }
+
+  @override
+  Future<PlaylistItemsPage> listPlaylistItems(
+    String pid, {
+    String? cursor,
+    int? limit,
+  }) async {
+    final pl = await getPlaylist(pid);
+    if (pl.isSmart) {
+      return PlaylistItemsPage(
+        entries: [
+          for (final it in previewResult.items) PlaylistEntry(item: it),
+        ],
+      );
+    }
+    final members = playlistMembers[pid] ?? const [];
+    return PlaylistItemsPage(
+      entries: [
+        for (var i = 0; i < members.length; i++)
+          PlaylistEntry(position: i, item: _itemByPid(members[i])),
+      ],
+    );
+  }
+
+  @override
+  Future<void> replacePlaylistItems(
+    String pid,
+    List<String> itemPids, {
+    DateTime? baseUpdatedAt,
+  }) async {
+    await getPlaylist(pid);
+    playlistMembers[pid] = List.of(itemPids);
+  }
+
+  @override
+  Future<void> addPlaylistItems(String pid, List<String> itemPids) async {
+    await getPlaylist(pid);
+    (playlistMembers[pid] ??= []).addAll(itemPids);
+  }
+
+  @override
+  Future<void> removePlaylistItemAt(String pid, int position) async {
+    await getPlaylist(pid);
+    final members = playlistMembers[pid];
+    if (members != null && position >= 0 && position < members.length) {
+      members.removeAt(position);
+    }
+  }
+
+  /// Rules passed to [previewSmartRule], newest last.
+  final List<SmartRule> previewedRules = [];
+
+  @override
+  Future<PlaylistPreview> previewSmartRule(SmartRule rule, {int? limit}) async {
+    previewedRules.add(rule);
+    return previewResult;
+  }
+
+  @override
+  Future<RuleFields> getRuleFields() async => ruleFields;
+
+  /// What [exportPlaylistM3u] serves, and the pids it was asked for.
+  String exportM3uResult = '#EXTM3U\n';
+  final List<String> exportedM3uPids = [];
+
+  /// The documents [importPlaylistM3u] received, and the counts its
+  /// result reports.
+  final List<String> importedM3uContents = [];
+  int importMatched = 0;
+  int importUnmatched = 0;
+
+  @override
+  Future<String> exportPlaylistM3u(String pid) async {
+    exportedM3uPids.add(pid);
+    return exportM3uResult;
+  }
+
+  @override
+  Future<M3uImportResult> importPlaylistM3u({
+    required String name,
+    required String content,
+    String? visibility,
+  }) async {
+    importedM3uContents.add(content);
+    final pl = await createPlaylist(
+      name: name,
+      kind: 'static',
+      visibility: visibility,
+    );
+    return M3uImportResult(
+      playlist: pl,
+      matched: importMatched,
+      unmatched: importUnmatched,
+    );
+  }
+
+  /// Radio stations by pid.
+  final Map<String, RadioStation> radioStationsByPid = {};
+
+  /// Directory entries served by [searchRadioDirectory].
+  List<RadioDirectoryEntry> directoryEntries = const [];
+
+  int _stationSeq = 0;
+
+  @override
+  Future<List<RadioStation>> listRadioStations() async {
+    final rows = radioStationsByPid.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return rows;
+  }
+
+  @override
+  Future<RadioStation> createRadioStation({
+    required String name,
+    required String streamUrl,
+    String? homepageUrl,
+    String? logoUrl,
+  }) async {
+    final st = RadioStation(
+      pid: 'rs-FAKE${_stationSeq++}',
+      name: name,
+      streamUrl: streamUrl,
+      homepageUrl: homepageUrl,
+      logoUrl: logoUrl,
+      createdAt: DateTime.utc(2026),
+    );
+    radioStationsByPid[st.pid] = st;
+    return st;
+  }
+
+  @override
+  Future<RadioStation> updateRadioStation(
+    String pid, {
+    required String name,
+    required String streamUrl,
+    String? homepageUrl,
+    String? logoUrl,
+  }) async {
+    final st = RadioStation(
+      pid: pid,
+      name: name,
+      streamUrl: streamUrl,
+      homepageUrl: homepageUrl,
+      logoUrl: logoUrl,
+      createdAt: DateTime.utc(2026),
+    );
+    radioStationsByPid[pid] = st;
+    return st;
+  }
+
+  @override
+  Future<void> deleteRadioStation(String pid) async {
+    radioStationsByPid.remove(pid);
+  }
+
+  @override
+  Future<RadioPlayInfo> getRadioPlayInfo(String pid) async {
+    return RadioPlayInfo(url: '/media/radio/$pid?mt=fake');
+  }
+
+  @override
+  Future<List<RadioDirectoryEntry>> searchRadioDirectory(
+    String query, {
+    int? limit,
+  }) async => directoryEntries;
+
+  /// Scrobbler slots served by [listScrobblers]; connect and disconnect
+  /// mutate them.
+  List<Scrobbler> scrobblers = const [
+    Scrobbler(service: 'lastfm', available: false, connected: false),
+    Scrobbler(service: 'listenbrainz', available: true, connected: false),
+  ];
+
+  /// Thrown by [connectListenBrainz] when set.
+  WaxDeckApiException? connectError;
+
+  @override
+  Future<List<Scrobbler>> listScrobblers() async => scrobblers;
+
+  @override
+  Future<Scrobbler> connectListenBrainz(String token, {String? apiUrl}) async {
+    final error = connectError;
+    if (error != null) throw error;
+    final connected = Scrobbler(
+      service: 'listenbrainz',
+      available: true,
+      connected: true,
+      username: 'listener',
+      apiUrl: apiUrl,
+    );
+    scrobblers = [
+      for (final s in scrobblers)
+        if (s.service == 'listenbrainz') connected else s,
+    ];
+    return connected;
+  }
+
+  @override
+  Future<void> disconnectListenBrainz() async {
+    scrobblers = [
+      for (final s in scrobblers)
+        if (s.service == 'listenbrainz')
+          const Scrobbler(
+            service: 'listenbrainz',
+            available: true,
+            connected: false,
+          )
+        else
+          s,
+    ];
+  }
+
+  @override
+  Future<String> startLastfmConnect() async =>
+      'https://last.fm/api/auth/?api_key=fake';
+
+  @override
+  Future<void> disconnectLastfm() async {
+    scrobblers = [
+      for (final s in scrobblers)
+        if (s.service == 'lastfm')
+          const Scrobbler(service: 'lastfm', available: true, connected: false)
+        else
+          s,
+    ];
+  }
+
+  /// Push registrations served and mutated by the push endpoints.
+  final List<PushRegistration> pushRegistrations = [];
+
+  @override
+  Future<List<PushRegistration>> listPushRegistrations() async =>
+      List.of(pushRegistrations);
+
+  @override
+  Future<PushRegistration> createPushRegistration({
+    required String endpoint,
+    String? label,
+  }) async {
+    final reg = PushRegistration(
+      pid: 'pr-FAKE${pushRegistrations.length}',
+      endpoint: endpoint,
+      label: label,
+      createdAt: DateTime.utc(2026),
+    );
+    pushRegistrations.add(reg);
+    return reg;
+  }
+
+  @override
+  Future<void> deletePushRegistration(String pid) async {
+    pushRegistrations.removeWhere((r) => r.pid == pid);
+  }
+
+  /// Notification configuration served and replaced by the admin
+  /// endpoints.
+  NotificationConfig notificationConfig = const NotificationConfig(
+    appriseUrl: '',
+    enabledEvents: [],
+    knownEvents: ['test', 'episode-downloaded', 'feed-disabled'],
+  );
+
+  /// Count of admin test notifications requested.
+  int notificationTests = 0;
+
+  @override
+  Future<NotificationConfig> getNotificationConfig() async =>
+      notificationConfig;
+
+  @override
+  Future<NotificationConfig> putNotificationConfig({
+    required String appriseUrl,
+    String? targets,
+    required List<String> enabledEvents,
+  }) async {
+    notificationConfig = NotificationConfig(
+      appriseUrl: appriseUrl,
+      targets: targets,
+      enabledEvents: enabledEvents,
+      knownEvents: notificationConfig.knownEvents,
+    );
+    return notificationConfig;
+  }
+
+  @override
+  Future<void> testNotifications() async {
+    notificationTests++;
   }
 }
 

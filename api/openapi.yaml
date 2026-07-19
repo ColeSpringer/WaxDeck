@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: WaxDeck API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     First-party REST API for WaxDeck: the self-hosted player, library manager,
     and metadata completer for music, podcasts, and audiobooks.
@@ -18,31 +18,45 @@ info:
     browsing with sanitized show notes, transcripts, OPML round trips,
     server-side episode fetching, and YouTube channels as shows),
     audiobooks (book detail with chapters and parts, chapter-aware
-    resume, per-book playback settings), and silence skip maps for
-    client-side trimming. The shapes (keyset pagination, typed PIDs,
-    the structured error model, relative media URLs) are load-bearing
-    from day one.
+    resume, per-book playback settings), silence skip maps for
+    client-side trimming, playlists (manual ordered lists and smart
+    playlists whose rules are evaluated per user on read, with a rule
+    preview and a field discovery endpoint for rule editors, plus M3U8
+    round trips), internet radio stations (a shared station library
+    with directory search), outbound scrobbling connections (Last.fm
+    and ListenBrainz per user, delivered from a durable server-side
+    queue), server notifications (an Apprise relay configured by
+    administrators), and UnifiedPush registrations for
+    push-transported events. The shapes (keyset pagination, typed
+    PIDs, the structured error model, relative media URLs) are
+    load-bearing from day one.
 
     Conventions:
     - All endpoints live under `/api/v1` (this document's `servers` entry).
     - Identifiers (`pid`) are type-prefixed ULIDs (`tr-` track, `al-` album,
       `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook, `jb-` job,
-      `lb-` library, `us-` user, `se-` session, `ap-` app password).
+      `lb-` library, `us-` user, `se-` session, `ap-` app password,
+      `pl-` playlist, `rs-` radio station, `pr-` push registration).
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
       string; currently defined codes: `invalid-request`, `unauthenticated`,
       `forbidden`, `not-found`, `conflict`, `internal`, `rate-limited` (too
-      many attempts; retry later), `stream-stale` (a stream URL no longer
-      matches the file on disk; re-request play-info), `catalog-maintenance`
+      many attempts; retry later), `stream-stale` (a minted media URL no longer
+      matches the file on disk, a metadata-only retag included since the
+      pin is byte identity; re-request the info endpoint that minted it), `catalog-maintenance`
       (the catalog is temporarily handed to a maintenance operation; retry
       shortly), `sync-reset` (a sync cursor predates the retained change
       history; drop the local mirror and re-mirror from a fresh snapshot),
       `feed-unreachable` (an upstream feed could not be fetched or parsed;
       the feed's own server answered an error, timed out, or returned
-      something that is not a feed), and `source-unavailable` (the request
+      something that is not a feed), `source-unavailable` (the request
       needs an acquisition source integration, such as the YouTube bridge,
-      that this server is not running).
+      that this server is not running), `directory-unavailable` (an
+      external directory service, such as the radio station directory,
+      could not be reached; try again later), and `service-unreachable`
+      (an external service this request depends on, such as a
+      scrobbling provider, could not be reached; try again later).
       New codes may appear; clients must treat unknown codes as opaque.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
@@ -76,6 +90,25 @@ info:
       new membership. Show detail, a show's episode list, and episode
       reads stay available to any caller who can see the podcast
       library, so shows can be browsed before subscribing.
+    - Playlists are per-user with a visibility flag: `private` playlists
+      exist only for their owner (other callers get `not-found`),
+      `shared` playlists are readable by every user but writable only
+      by their owner. A shared smart playlist evaluates user-state
+      rules (stars, ratings, play counts) against the owner's data:
+      viewers see the owner's list, not their own recomputation. Item
+      reads through a playlist still apply the caller's own library
+      visibility, so a viewer may see fewer items than the owner.
+      Replacing a smart playlist's rule reissues its pid: the update
+      response carries the new pid with `previousPid` set to the old
+      one, the old pid stops resolving, and `createdAt` restarts. The
+      caller's server sync stream carries exactly two `playlist`
+      events for a reissue, the old pid absent and the new pid
+      present (the new pid's hydrated playlist carries
+      `previousPid`), so mirrors relink instead of seeing an
+      unrelated delete and create. A client whose rule-replace
+      response was lost recovers by re-listing and matching
+      `previousPid`. Clients treat the pid as stable only between
+      rule changes.
   contact:
     name: WaxDeck
     url: https://github.com/ColeSpringer/WaxDeck
@@ -103,6 +136,23 @@ tags:
       server-side episode fetching.
   - name: books
     description: Audiobook detail, chapter-aware resume, and per-book settings.
+  - name: playlists
+    description: >
+      Manual ordered playlists and smart playlists: rule-based lists
+      evaluated per user on read, with a stateless rule preview, field
+      discovery for rule editors, and M3U8 import and export.
+  - name: radio
+    description: >
+      Internet radio: a shared station library, directory search, and
+      proxied station streaming.
+  - name: scrobbling
+    description: >
+      Outbound scrobbling connections per user: Last.fm and
+      ListenBrainz, with server-side queueing and delivery.
+  - name: notifications
+    description: >
+      Server notifications: the Apprise relay configuration and
+      per-user UnifiedPush registrations.
   - name: playback
     description: Resolve playable streams, playback state, and listen accounting.
   - name: sync
@@ -857,6 +907,262 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /users/me/scrobblers:
+    get:
+      operationId: listScrobblers
+      summary: List the caller's scrobbling connections
+      description: >
+        The calling user's outbound scrobbling connections, one entry
+        per known service. A service is `available` when the server can
+        offer it (Last.fm needs server-configured API credentials;
+        ListenBrainz is always available) and `connected` once the
+        caller has linked an account. Accepted listens for music are
+        queued and delivered to every connected service, surviving
+        restarts and outages.
+      tags: [scrobbling]
+      responses:
+        "200":
+          description: The caller's scrobbling connections.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrobblerList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /users/me/scrobblers/listenbrainz:
+    put:
+      operationId: connectListenBrainz
+      summary: Connect ListenBrainz
+      description: >
+        Stores the caller's ListenBrainz user token after validating it
+        against the service. The token is sealed at rest and never
+        returned. Supplying a new token replaces the old one. An
+        optional `apiUrl` points the connection at a
+        ListenBrainz-compatible server (Maloja and friends); omitted
+        means listenbrainz.org.
+      tags: [scrobbling]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListenBrainzConnect"
+      responses:
+        "200":
+          description: Connected; the validated connection state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scrobbler"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "502":
+          description: >
+            The scrobbling service could not be reached to validate
+            the token (code `service-unreachable`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: disconnectListenBrainz
+      summary: Disconnect ListenBrainz
+      description: >
+        Removes the caller's ListenBrainz connection and drops its
+        queued deliveries.
+      tags: [scrobbling]
+      responses:
+        "204":
+          description: Disconnected.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/me/scrobblers/lastfm:
+    delete:
+      operationId: disconnectLastfm
+      summary: Disconnect Last.fm
+      description: >
+        Removes the caller's Last.fm connection and drops its queued
+        deliveries.
+      tags: [scrobbling]
+      responses:
+        "204":
+          description: Disconnected.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/me/scrobblers/lastfm/connect:
+    post:
+      operationId: startLastfmConnect
+      summary: Start linking a Last.fm account
+      description: >
+        Mints a short-lived one-time state and returns the Last.fm
+        authorization URL for the caller to open in a browser. After
+        the user approves, Last.fm redirects to this server's callback,
+        which completes the session-key exchange and stores the sealed
+        session key. Requires server-configured Last.fm API
+        credentials; without them this endpoint answers
+        `source-unavailable`.
+      tags: [scrobbling]
+      responses:
+        "200":
+          description: The authorization URL to open.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LastfmConnectStart"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "501":
+          $ref: "#/components/responses/SourceUnavailable"
+
+  /scrobble/lastfm/callback:
+    get:
+      operationId: lastfmCallback
+      summary: Last.fm authorization callback
+      description: >
+        The redirect target Last.fm sends the user back to after
+        approving access. Authenticated by the one-time `state` minted
+        by the connect endpoint (bound to the requesting user, single
+        use, short-lived), not by a session: the browser tab may not
+        carry one. Completes the session-key exchange and renders a
+        small confirmation page for the user to close.
+      tags: [scrobbling]
+      security: []
+      parameters:
+        - name: state
+          in: query
+          required: true
+          description: The one-time state from the connect endpoint.
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          description: The authorization token appended by Last.fm.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Connection completed; a human-readable confirmation page.
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          description: Unknown, expired, or reused state; a human-readable error page.
+          content:
+            text/html:
+              schema:
+                type: string
+        "502":
+          description: Last.fm could not be reached to complete the exchange; a human-readable error page.
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /users/me/push-registrations:
+    get:
+      operationId: listPushRegistrations
+      summary: List the caller's push registrations
+      description: >
+        The calling user's UnifiedPush registrations. Unpaginated; the
+        per-user cap is small.
+      tags: [notifications]
+      responses:
+        "200":
+          description: The caller's push registrations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushRegistrationList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    post:
+      operationId: createPushRegistration
+      summary: Register a UnifiedPush endpoint
+      description: >
+        Registers a UnifiedPush endpoint URL (obtained by the client
+        from its distributor) for push-transported event
+        notifications. Re-registering the same endpoint URL updates
+        its label and returns the existing registration. Each user may
+        hold at most 20 registrations; conflict (code `conflict`)
+        means the cap is reached, so remove a stale registration
+        first. The endpoint URL must be https and is used exactly as
+        supplied: posting to caller-chosen URLs is inherent to
+        UnifiedPush (self-hosted LAN distributors are legitimate), so
+        the mitigations are shape, not reachability: delivery bodies
+        carry only notification text, and delivery responses are
+        never surfaced to any user.
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushRegistrationCreate"
+      responses:
+        "201":
+          description: Newly registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushRegistration"
+        "200":
+          description: The endpoint was already registered; label updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushRegistration"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      operationId: deleteAllPushRegistrations
+      summary: Remove all of the caller's push registrations
+      description: >
+        Drops every UnifiedPush registration the caller holds, for a
+        clean sign-out across distributors.
+      tags: [notifications]
+      responses:
+        "204":
+          description: All registrations removed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /users/me/push-registrations/{registrationId}:
+    delete:
+      operationId: deletePushRegistration
+      summary: Remove a push registration
+      description: Drops one UnifiedPush registration.
+      tags: [notifications]
+      parameters:
+        - name: registrationId
+          in: path
+          required: true
+          description: The push registration's pid.
+          schema:
+            type: string
+          example: pr-01JZX5N8QW3F4V9T2B7KD3M9R6
+      responses:
+        "204":
+          description: Registration removed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /libraries:
     get:
       operationId: listLibraries
@@ -1047,6 +1353,85 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /admin/notifications:
+    get:
+      operationId: getNotificationConfig
+      summary: Read the notification configuration
+      description: >
+        The server's notification relay configuration and the catalog
+        of known event names. Administrators only. Delivery goes
+        through an Apprise API server (self-hosted, one integration
+        for many services); WaxDeck posts each enabled event's title
+        and body to it. `knownEvents` is the server's current event
+        catalog: enable a subset via `enabledEvents`. Unknown names in
+        `enabledEvents` are kept verbatim (a later server version may
+        define them) but deliver nothing. `appriseUrl` and `targets`
+        commonly embed service tokens; this endpoint returns them
+        verbatim, a deliberate choice so administrators can round-trip
+        the configuration (the surface is admin-only, and the tokens
+        are for the administrator's own notification services).
+      tags: [notifications]
+      responses:
+        "200":
+          description: The current configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationConfig"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: putNotificationConfig
+      summary: Replace the notification configuration
+      description: >
+        Replaces the notification relay configuration; this is a full
+        replace, so an omitted `targets` clears it. Administrators
+        only. An empty `appriseUrl` disables Apprise delivery without
+        touching UnifiedPush registrations.
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationConfigUpdate"
+      responses:
+        "200":
+          description: The stored configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationConfig"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: testNotifications
+      summary: Send a test notification
+      description: >
+        Queues a test notification through the configured relay and
+        every push registration, so administrators can verify delivery
+        without waiting for a real event. Answers accepted as soon as
+        the test is queued; delivery outcome is observable in the
+        server log. With no Apprise URL configured and no push
+        registrations there is nothing to deliver to, and the request
+        answers `invalid-request` saying so.
+      tags: [notifications]
+      responses:
+        "202":
+          description: Test queued.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /jobs/{pid}:
     get:
       operationId: getJob
@@ -1101,13 +1486,28 @@ paths:
         by bare `<audio>` elements, cast devices, and DLNA renderers that cannot
         send headers), the served format, and expiry. Clients re-request
         play-info when a stream URL expires or the server signals
-        `stream-stale`. A multi-file audiobook resolves one part per call:
+        `stream-stale`. On a server running without the streaming
+        engine, the url serves the item's original file bytes directly
+        (ranged, no transcoding, in whatever format the file is in)
+        through the same endpoint downloads use, attachment
+        disposition and byte-identity pin included; expiry is
+        enforced per request, so an in-flight fetch completes but a
+        later range request after `expiresAt` answers
+        `unauthenticated` and the client re-requests play-info. An
+        item carved out of a larger file additionally carries
+        `spanStartMs`/`spanEndMs` and the client plays only that
+        window; a client that does not implement the window MUST
+        treat a span-bearing response as unplayable rather than play
+        the served audio whole. A multi-file audiobook resolves one
+        part per call:
         pass `positionMs` (book-timeline milliseconds) to get the part
         containing that position, and read `partIndex`, `partCount`, and
         `partStartMs` from the response; when playback crosses the end of
         a part, re-request play-info with the new book-timeline position.
-        The response's `durationMs` is always the duration of the served
-        stream (the resolved part, for multi-file books); the book total
+        The response's `durationMs` is always the duration of what the
+        client plays: the resolved part for multi-file books, and the
+        item's own window, never the backing file, for span-carved
+        direct playback; the book total
         lives on the item summary and the book detail. Positions reported
         to play-state for multi-file books are always book-timeline
         milliseconds (`partStartMs` plus the in-part position). A podcast
@@ -1136,7 +1536,7 @@ paths:
             mint time: when this parameter is present it wins; when
             absent, the caller's stored setting for the show or book
             applies. Honored only for podcast episodes and audiobooks,
-            only when the streaming sidecar supports it, and only when
+            only when the streaming engine supports it, and only when
             the item's measured loudness is known; the response's
             `voiceBoost` always reports the actual outcome. Applying it
             forces a transcode.
@@ -2010,6 +2410,647 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /playlists:
+    get:
+      operationId: listPlaylists
+      summary: List playlists visible to the caller
+      description: >
+        Keyset-paginated list of the caller's own playlists plus every
+        shared playlist, ordered by name then pid. Smart playlist
+        entries omit `itemCount` (membership is computed on read);
+        fetch the playlist detail for a computed count.
+      tags: [playlists]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum playlists per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: containsItem
+          in: query
+          description: >
+            An item pid. Restricts the page to static playlists whose
+            stored members include the item, for add-to-playlist
+            surfaces that mark existing membership. Smart playlists
+            are always omitted from a filtered listing.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: One page of playlists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    post:
+      operationId: createPlaylist
+      summary: Create a playlist
+      description: >
+        Creates a manual (`static`) or rule-based (`smart`) playlist
+        owned by the caller. A smart playlist requires `rule` and
+        rejects `itemPids`; a static playlist rejects `rule` and may
+        seed initial members via `itemPids` (invisible or unknown
+        items fail the request). The rule is validated on write:
+        unknown fields, unknown operators, unknown node types, or
+        operator and field combinations the engine rejects answer
+        `invalid-request` with a message naming the offending
+        condition.
+      tags: [playlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistCreate"
+      responses:
+        "201":
+          description: The created playlist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/rule-fields:
+    get:
+      operationId: getRuleFields
+      summary: Discover smart rule fields
+      description: >
+        The field vocabulary for smart playlist rules: every rule
+        field with its value kind, the operators it accepts, whether
+        it reads per-user state, and whether it can sort; plus the
+        catalog's custom tag keys (usable as `tag.KEY` fields) with
+        item counts, most used first. Rule editors build their
+        dropdowns from this instead of hardcoding the vocabulary.
+      tags: [playlists]
+      responses:
+        "200":
+          description: The rule field vocabulary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuleFields"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/preview:
+    post:
+      operationId: previewSmartRule
+      summary: Preview a smart rule
+      description: >
+        Evaluates a rule without storing anything and returns the
+        first matching items plus the total match count, computed
+        against the caller's own user state and library visibility.
+        Rule editors call this while the user builds the rule.
+      tags: [playlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SmartRule"
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum preview items to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Preview items and total match count.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistPreview"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/m3u:
+    post:
+      operationId: importPlaylistM3u
+      summary: Import an M3U8 playlist
+      description: >
+        Creates a static playlist from an M3U8 document, matching each
+        entry to a cataloged item by exact path or unique
+        relative-path suffix. Unmatched paths are skipped and
+        reported, never invented; an empty document yields an empty
+        playlist.
+      tags: [playlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/M3uImport"
+      responses:
+        "201":
+          description: The created playlist and per-entry match results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/M3uImportResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}:
+    get:
+      operationId: getPlaylist
+      summary: Get one playlist
+      description: >
+        Playlist detail. For a smart playlist this includes the rule
+        and a freshly computed `itemCount` (evaluated as the owner for
+        shared lists, as the caller for the caller's own).
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The playlist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    patch:
+      operationId: updatePlaylist
+      summary: Update a playlist
+      description: >
+        Partial update: renames a playlist, changes its visibility, or
+        replaces a smart playlist's rule. Owner only. Omitted
+        properties stay unchanged (this is a PATCH; a bare rename
+        never touches the rule). Replacing the rule reissues the
+        playlist's pid (see the conventions): the response carries the
+        new pid with `previousPid` set and the old pid stops
+        resolving. Supplying `rule` for a static playlist answers
+        `invalid-request`. Changing a shared playlist to `private`
+        removes it from other users' view; their sync streams see it
+        become absent.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistUpdate"
+      responses:
+        "200":
+          description: The updated playlist, possibly under a new pid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: deletePlaylist
+      summary: Delete a playlist
+      description: Deletes a playlist. Owner only.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "204":
+          description: Playlist deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}/items:
+    get:
+      operationId: listPlaylistItems
+      summary: List a playlist's items
+      description: >
+        The playlist's members in order: stored order for a static
+        playlist, rule order for a smart playlist (evaluated against
+        the owner's user state for shared lists, the caller's for
+        their own). Items outside the caller's library visibility are
+        omitted, so a static playlist's `position` values are not
+        guaranteed contiguous for restricted viewers; use `position`,
+        never the row index, when removing members.
+        Keyset-paginated within one evaluation; a membership change
+        between pages may shift entries.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: cursor
+          in: query
+          description: >
+            Opaque cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum items per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of playlist items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistItemsPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: replacePlaylistItems
+      summary: Replace a static playlist's members
+      description: >
+        Replaces the full ordered member list; this is also the
+        reorder primitive (send the same members in the new order).
+        Owner only; static playlists only (a smart playlist's
+        membership is its rule). Unknown or invisible items fail the
+        request. When the playlist holds members outside the owner's
+        current library visibility the replace is refused with
+        `conflict` (a list built from what the owner can see would
+        silently drop them); appends still work. Playlist edits are
+        live-only: clients must not queue them for offline replay
+        (a stale full-list replay would revert another device's
+        edits). The optional `baseUpdatedAt` precondition makes the
+        lost-update window explicit: when supplied and older than the
+        playlist's current `updatedAt`, the replace answers
+        `conflict` and the client refetches before retrying.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistItemsUpdate"
+      responses:
+        "204":
+          description: Members replaced.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    post:
+      operationId: addPlaylistItems
+      summary: Append items to a static playlist
+      description: >
+        Appends items in the given order. Owner only; static playlists
+        only. Duplicates are allowed (a playlist may repeat a track);
+        clients wanting dedupe check membership first.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistItemsUpdate"
+      responses:
+        "204":
+          description: Items appended.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}/items/{position}:
+    delete:
+      operationId: removePlaylistItemAt
+      summary: Remove one member by position
+      description: >
+        Removes the member at the given zero-based position in the
+        stored order. Owner only; static playlists only. Positions are
+        the unfiltered stored order (visibility filtering never shifts
+        them); take them from the item listing's `position` field, not
+        from a rendered row index.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: position
+          in: path
+          required: true
+          description: Zero-based position in the stored member order.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "204":
+          description: Member removed.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}/m3u:
+    get:
+      operationId: exportPlaylistM3u
+      summary: Export a playlist as M3U8
+      description: >
+        The playlist as an M3U8 document, for interop with path-based
+        players. Entries are the cataloged display paths (absolute
+        server-side paths); exposing them is deliberate, since
+        playlists reach only this server's own users and path-based
+        interop is the point of the format. A smart playlist exports
+        its current evaluation. The import side matches by exact path
+        or unique relative-path suffix, so documents exported from a
+        differently-rooted server still resolve.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The M3U8 document.
+          content:
+            audio/x-mpegurl:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /radio/stations:
+    get:
+      operationId: listRadioStations
+      summary: List radio stations
+      description: >
+        The server's internet radio station library, shared by all
+        users, ordered by name. Unpaginated; the library is capped at
+        500 stations.
+      tags: [radio]
+      responses:
+        "200":
+          description: All stations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioStationList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    post:
+      operationId: createRadioStation
+      summary: Add a radio station
+      description: >
+        Adds a station to the shared library. Any user may add
+        stations; edits and deletion are open to any user too (the
+        library is a shared household surface, like the catalog).
+        Stream URLs must be http or https, and because the server
+        proxies station streams, URLs that resolve to loopback,
+        link-local, or private address ranges are rejected with
+        `invalid-request` (and re-checked at fetch time, after
+        redirects, with a bounded redirect depth), so a station entry
+        can never read internal services. A server option permits
+        private-range stream URLs for households running their own
+        LAN icecast. Conflict (code `conflict`) means a station with
+        this stream URL already exists, or the 500-station cap is
+        reached.
+      tags: [radio]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RadioStationEdit"
+      responses:
+        "201":
+          description: The created station.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioStation"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /radio/stations/{pid}:
+    get:
+      operationId: getRadioStation
+      summary: Get one radio station
+      description: One station by pid.
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The station.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioStation"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateRadioStation
+      summary: Update a radio station
+      description: >
+        Replaces a station's fields, under the same stream URL rules
+        as creation (scheme, private-range rejection, and duplicate
+        conflict).
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RadioStationEdit"
+      responses:
+        "200":
+          description: The updated station.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioStation"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      operationId: deleteRadioStation
+      summary: Delete a radio station
+      description: Removes a station from the shared library.
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "204":
+          description: Station deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /radio/stations/{pid}/play-info:
+    get:
+      operationId: getRadioPlayInfo
+      summary: Resolve a playable station stream
+      description: >
+        Mints a short-lived tokenized URL for the station's stream,
+        proxied through this server's origin (so web clients are never
+        blocked by the station's missing CORS headers and mixed
+        content never arises). The proxy passes ICY station metadata
+        headers through (never icy-metaint: the in-stream metadata it
+        announces is consumed by the proxy, so clients receive clean
+        audio and read the current title from nowPlaying here
+        instead) and serves the stream as a live, unseekable body.
+        Re-request when playback is restarted; the token has a
+        bounded lifetime but an already-open stream is never cut by
+        token expiry.
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The stream URL.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioPlayInfo"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /radio/directory:
+    get:
+      operationId: searchRadioDirectory
+      summary: Search the station directory
+      description: >
+        Searches a public radio station directory (radio-browser.info)
+        by name so stations can be added without pasting stream URLs.
+        Requires internet; when the directory cannot be reached the
+        endpoint answers `directory-unavailable` and manual entry
+        still works.
+      tags: [radio]
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: Station name search terms.
+          schema:
+            type: string
+            minLength: 2
+        - name: limit
+          in: query
+          description: Maximum directory entries to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        "200":
+          description: Directory matches, best first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioDirectoryResults"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "502":
+          description: >
+            The station directory could not be reached (code
+            `directory-unavailable`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /play-states:
     post:
       operationId: listPlayStates
@@ -2162,18 +3203,22 @@ paths:
       description: >
         The server half of delta sync: the calling user's own state
         changes (playback state, preferences, podcast subscriptions,
-        per-book settings), on the server change cursor. Without
-        `since` it mints a fresh cursor (`nextSince` with no events):
-        new mirrors start there and hydrate the play states they care
-        about through `/play-states` (play states are only meaningful
-        for items a client holds), subscriptions through `/podcasts`,
-        and book settings through the book detail. With `since` it returns
+        per-book settings, playlists), on the server change cursor.
+        Without `since` it mints a fresh cursor (`nextSince` with no
+        events): new mirrors start there and hydrate the play states
+        they care about through `/play-states` (play states are only
+        meaningful for items a client holds), subscriptions through
+        `/podcasts`, book settings through the book detail, and
+        playlists through `/playlists`. With `since` it returns
         the caller's events after that cursor with freshly hydrated
         state, coalesced within a page (an item may recur on later pages;
         application is idempotent), plus `more` for immediate
-        continuation. Only the caller's own state ever appears here. A
-        `since` the server can no longer serve contiguously answers 410
-        `sync-reset`: re-mint and re-hydrate.
+        continuation. Only state visible to the caller ever appears
+        here; that is the caller's own state, plus `playlist` events
+        for other users' shared playlists (shared playlists are
+        visible to everyone, so their changes reach every user's
+        stream). A `since` the server can no longer serve contiguously
+        answers 410 `sync-reset`: re-mint and re-hydrate.
       tags: [sync]
       parameters:
         - name: since
@@ -3394,10 +4439,13 @@ components:
     ServerSyncEvent:
       type: object
       description: >
-        One change to the calling user's server-side state, with the
-        current value hydrated fresh. `kind` is a string, not a closed
-        enum, so new kinds can appear; clients must skip events whose
-        `kind` they do not recognize.
+        One change to server-side state visible to the calling user
+        (their own state, plus other users' shared playlists), with
+        the current value hydrated fresh. `kind` is a string, not a
+        closed enum, so new kinds can appear; clients must skip events
+        whose `kind` they do not recognize. Hydrated `playlist`
+        payloads omit a smart playlist's computed `itemCount`, like
+        list pages.
       required: [kind]
       properties:
         kind:
@@ -3406,14 +4454,16 @@ components:
             What changed: `play-state` (carries `pid` and `playState`),
             `prefs` (carries `prefs`), `subscription` (carries `pid`, the
             show; `subscription` is the current state, absent when the
-            caller unsubscribed), or `book-settings` (carries `pid`, the
-            book, and `bookSettings`).
+            caller unsubscribed), `book-settings` (carries `pid`, the
+            book, and `bookSettings`), or `playlist` (carries `pid`;
+            `playlist` is the current state, absent when the playlist
+            was deleted or replaced under a new pid).
           example: play-state
         pid:
           type: string
           description: >
-            The item, show, or book the event is about (absent for
-            `prefs`).
+            The item, show, book, or playlist the event is about
+            (absent for `prefs`).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         playState:
           $ref: "#/components/schemas/PlayState"
@@ -3423,6 +4473,8 @@ components:
           $ref: "#/components/schemas/Subscription"
         bookSettings:
           $ref: "#/components/schemas/BookSettings"
+        playlist:
+          $ref: "#/components/schemas/Playlist"
 
     ServerSyncPage:
       type: object
@@ -3634,6 +4686,25 @@ components:
             normalization. Absent or false otherwise, including when it
             was requested but cannot be applied yet (unsupported by the
             sidecar, or loudness not measured yet).
+        spanStartMs:
+          type: integer
+          format: int64
+          description: >
+            Present exactly with `spanEndMs`, and only when the url
+            serves the item's whole backing file while the item is a
+            window into it (direct playback of a track carved from a
+            larger rip, on a server running without the streaming
+            engine): the client must play only the
+            [`spanStartMs`, `spanEndMs`) window of the served audio.
+            Absent whenever the server cuts the stream itself.
+            `durationMs` remains the item's own duration, never the
+            backing file's.
+        spanEndMs:
+          type: integer
+          format: int64
+          description: >
+            End of the playback window in served-audio milliseconds.
+            Present exactly when `spanStartMs` is.
 
     PodcastShow:
       type: object
@@ -4196,7 +5267,7 @@ components:
             `ready` (spans present), `pending` (analysis queued or
             running; poll again later), or `unavailable` (this item is
             not mapped: not spoken-word content, audio not fetched to
-            the server yet, or the streaming sidecar cannot analyze).
+            the server yet, or the streaming engine cannot analyze).
             Open set; treat unknown values as `unavailable`.
           example: ready
         essenceHash:
@@ -4231,3 +5302,726 @@ components:
           type: string
           format: date-time
           description: When the map was computed.
+
+    Playlist:
+      type: object
+      description: >
+        A playlist: a manual ordered list (`static`) or a rule
+        evaluated per user on read (`smart`). `rule` is present only
+        for smart playlists. `itemCount` is the stored member count
+        for a static playlist; for a smart playlist it is computed on
+        detail reads and omitted from list pages.
+      required: [pid, name, kind, visibility, ownerName, isOwner, createdAt, updatedAt]
+      properties:
+        pid:
+          type: string
+          description: >
+            Type-prefixed ULID. Stable for the playlist's lifetime,
+            except that replacing a smart playlist's rule reissues it
+            (see the conventions).
+          example: pl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        previousPid:
+          type: string
+          description: >
+            The pid this playlist replaced. Present on a rule-replace
+            response, on the reissued playlist's sync events, and on
+            its detail reads, so clients relink instead of treating
+            the reissue as a delete and create. Absent for playlists
+            never reissued.
+        name:
+          type: string
+          description: Display name.
+          example: Rainy day blues
+        kind:
+          type: string
+          description: >
+            `static` (manual ordered members) or `smart` (rule
+            evaluated on read). A string, not a closed enum; clients
+            must treat unknown kinds as read-only.
+          example: smart
+        visibility:
+          type: string
+          description: >
+            `private` (owner only) or `shared` (readable by every
+            user). A string, not a closed enum.
+          example: private
+        ownerName:
+          type: string
+          description: The owning user's display name.
+          example: cole
+        isOwner:
+          type: boolean
+          description: True when the caller owns this playlist and may edit it.
+        itemCount:
+          type: integer
+          description: >
+            Member count. Stored count for static playlists; computed
+            for smart playlists on detail reads and absent on list
+            pages.
+        rule:
+          $ref: "#/components/schemas/SmartRule"
+        createdAt:
+          type: string
+          format: date-time
+          description: >
+            When the playlist was created. Restarts on a rule-replace
+            reissue; clients that care about original creation order
+            follow `previousPid`.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the playlist row last changed.
+
+    PlaylistPage:
+      type: object
+      description: One keyset-paginated page of playlists.
+      required: [playlists]
+      properties:
+        playlists:
+          type: array
+          description: Playlists ordered by name then pid.
+          items:
+            $ref: "#/components/schemas/Playlist"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
+
+    PlaylistCreate:
+      type: object
+      description: Create a playlist.
+      required: [name, kind]
+      properties:
+        name:
+          type: string
+          description: Display name.
+          minLength: 1
+          maxLength: 200
+        kind:
+          type: string
+          description: "`static` or `smart`."
+          example: static
+        visibility:
+          type: string
+          description: "`private` (default) or `shared`."
+        rule:
+          $ref: "#/components/schemas/SmartRule"
+        itemPids:
+          type: array
+          description: >
+            Initial members for a static playlist, in order. Invalid
+            with `smart`.
+          items:
+            type: string
+
+    PlaylistUpdate:
+      type: object
+      description: >
+        Update a playlist. Omitted properties stay unchanged; `rule`
+        applies only to smart playlists and reissues the pid.
+      properties:
+        name:
+          type: string
+          description: New display name.
+          minLength: 1
+          maxLength: 200
+        visibility:
+          type: string
+          description: "`private` or `shared`."
+        rule:
+          $ref: "#/components/schemas/SmartRule"
+
+    PlaylistItemsUpdate:
+      type: object
+      description: The full ordered member list, or members to append.
+      required: [itemPids]
+      properties:
+        itemPids:
+          type: array
+          description: Item pids in playback order.
+          maxItems: 10000
+          items:
+            type: string
+        baseUpdatedAt:
+          type: string
+          format: date-time
+          description: >
+            Optional lost-update precondition for the replace
+            endpoint: the playlist `updatedAt` this member list was
+            built from, echoed back as read. The comparison is at
+            millisecond granularity, so a client date-time type that
+            cannot hold the server's full precision still matches. A
+            replace against a playlist that changed since then
+            answers `conflict`. Ignored by the append endpoint.
+
+    PlaylistEntry:
+      type: object
+      description: One playlist member.
+      required: [item]
+      properties:
+        position:
+          type: integer
+          description: >
+            Zero-based position in the stored member order. Present
+            only for static playlists; this is the value the removal
+            endpoint takes.
+        item:
+          $ref: "#/components/schemas/ItemSummary"
+
+    PlaylistItemsPage:
+      type: object
+      description: One page of playlist members.
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          description: Members in playlist order.
+          items:
+            $ref: "#/components/schemas/PlaylistEntry"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
+
+    SmartRule:
+      type: object
+      description: >
+        A smart playlist rule: a condition tree, optional sort order,
+        and an optional row limit. Rules are evaluated per user on
+        read; fields that read user state (stars, ratings, play
+        counts) bind to the evaluating user at that moment. Without
+        `sorts` the engine orders by title ascending so results are
+        deterministic. Rules are bounded on write: at most 200 nodes
+        total and at most 10 levels of nesting; larger rules answer
+        `invalid-request`.
+      required: [root]
+      properties:
+        root:
+          $ref: "#/components/schemas/RuleNode"
+        sorts:
+          type: array
+          description: Sort order, applied in sequence.
+          maxItems: 4
+          items:
+            $ref: "#/components/schemas/RuleSort"
+        limit:
+          type: integer
+          description: >
+            Maximum members, applied after sorting. Zero or absent
+            means unlimited.
+          minimum: 0
+
+    RuleNode:
+      type: object
+      description: >
+        One node of a rule's condition tree. `type` selects the shape:
+        `all` (every child must match) and `any` (at least one child
+        must match) carry `nodes`; `not` inverts its single `node`;
+        `condition` compares one `field` with `op` against `value` (or
+        `values` for `inTheRange`, exactly two, low then high). An
+        `all` with no children matches everything; an `any` with no
+        children matches nothing. Unknown `type` strings are rejected
+        on write. Condition values are strings on the wire regardless
+        of the field's kind: numbers in decimal, booleans as `true`
+        or `false`, dates as absolute RFC 3339 timestamps (there are
+        no relative date operators; a rule meaning "recently" must be
+        re-saved to move its cutoff), media types as `music`,
+        `podcast`, or `audiobook`. `inTheRange` is inclusive on both
+        ends. The field vocabulary and each field's accepted
+        operators come from the rule-fields endpoint; custom tags are
+        addressed as `tag.KEY`.
+      required: [type]
+      properties:
+        type:
+          type: string
+          description: "`all`, `any`, `not`, or `condition`."
+          example: condition
+        nodes:
+          type: array
+          description: Children of an `all` or `any` group.
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/RuleNode"
+        node:
+          $ref: "#/components/schemas/RuleNode"
+        field:
+          type: string
+          description: Field name from the rule-fields vocabulary.
+          example: rating
+        op:
+          type: string
+          description: >
+            Operator: one of `is`, `isNot`, `contains`, `startsWith`,
+            `endsWith`, `gt`, `lt`, `gte`, `lte`, `inTheRange`,
+            `before`, `after`, `isPresent`, `isMissing`. Each field
+            accepts a subset; see the rule-fields endpoint.
+          example: gte
+        value:
+          type: string
+          description: Comparison value, string-encoded per the field's kind.
+          example: "80"
+        values:
+          type: array
+          description: Exactly two values for `inTheRange`, low then high.
+          minItems: 2
+          maxItems: 2
+          items:
+            type: string
+
+    RuleSort:
+      type: object
+      description: One sort key.
+      required: [field]
+      properties:
+        field:
+          type: string
+          description: A sortable field from the rule-fields vocabulary.
+          example: lastPlayedAt
+        desc:
+          type: boolean
+          description: Descending when true.
+
+    RuleField:
+      type: object
+      description: One rule field and what it accepts.
+      required: [name, kind, ops, userState, sortable]
+      properties:
+        name:
+          type: string
+          description: Field name as used in conditions and sorts.
+          example: rating
+        kind:
+          type: string
+          description: >
+            Value kind: `text`, `number`, `date`, `boolean`, or
+            `mediaType`. A string, not a closed enum. Editors render
+            the value input from this.
+          example: number
+        ops:
+          type: array
+          description: Operators this field accepts.
+          items:
+            type: string
+        userState:
+          type: boolean
+          description: >
+            True when the field reads the evaluating user's playback
+            state rather than shared catalog data.
+        sortable:
+          type: boolean
+          description: True when the field may appear in `sorts`.
+        description:
+          type: string
+          description: Short human-readable meaning, for editor tooltips.
+
+    RuleTagKey:
+      type: object
+      description: One custom tag key usable as a `tag.KEY` field.
+      required: [key, itemCount]
+      properties:
+        key:
+          type: string
+          description: Canonical tag key; address it as `tag.KEY`.
+          example: MOOD
+        itemCount:
+          type: integer
+          description: Distinct items carrying this key.
+
+    RuleFields:
+      type: object
+      description: >
+        The rule field vocabulary for smart rule editors. `tag.KEY`
+        fields are uniform and therefore not repeated per key: they
+        are text-kind, accept `is`, `isNot`, `contains`,
+        `startsWith`, `endsWith`, `isPresent`, and `isMissing` (never
+        the ordered operators), and can never sort. On a tag field
+        `isNot` matches items that do not carry that value, including
+        items without the tag at all: the deny-list reading.
+      required: [fields, tagKeys]
+      properties:
+        fields:
+          type: array
+          description: Every rule field.
+          items:
+            $ref: "#/components/schemas/RuleField"
+        tagKeys:
+          type: array
+          description: Custom tag keys, most used first.
+          items:
+            $ref: "#/components/schemas/RuleTagKey"
+
+    PlaylistPreview:
+      type: object
+      description: A stateless rule evaluation.
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          description: >
+            The first matching items in rule order, honoring the
+            rule's own `limit`.
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+        total:
+          type: integer
+          description: >
+            Total items the condition tree matches for the caller,
+            ignoring the rule's `limit`, so editors can render
+            "matches N items, keeping the first L".
+
+    M3uImport:
+      type: object
+      description: An M3U8 document to import as a static playlist.
+      required: [name, content]
+      properties:
+        name:
+          type: string
+          description: Name for the created playlist.
+          minLength: 1
+          maxLength: 200
+        visibility:
+          type: string
+          description: "`private` (default) or `shared`."
+        content:
+          type: string
+          description: The M3U8 document text.
+          maxLength: 1048576
+
+    M3uImportResult:
+      type: object
+      description: The import outcome.
+      required: [playlist, matched, unmatched]
+      properties:
+        playlist:
+          $ref: "#/components/schemas/Playlist"
+        matched:
+          type: integer
+          description: Entries matched to cataloged items.
+        unmatched:
+          type: integer
+          description: Entries no cataloged item matched.
+        unmatchedPaths:
+          type: array
+          description: The unmatched entry paths, in document order.
+          items:
+            type: string
+
+    RadioStation:
+      type: object
+      description: One internet radio station in the shared library.
+      required: [pid, name, streamUrl, createdAt]
+      properties:
+        pid:
+          type: string
+          description: Type-prefixed ULID.
+          example: rs-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: Display name.
+          example: FIP
+        streamUrl:
+          type: string
+          description: The station's stream URL.
+          example: https://icecast.radiofrance.fr/fip-midfi.mp3
+        homepageUrl:
+          type: string
+          description: The station's website, when known.
+        logoUrl:
+          type: string
+          description: >
+            Station logo URL, when known. Clients fetch logos
+            directly (they are not proxied), so an http logo may be
+            blocked as mixed content on an https UI; render the
+            placeholder in that case.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the station was added.
+
+    RadioStationList:
+      type: object
+      description: The whole station library.
+      required: [stations]
+      properties:
+        stations:
+          type: array
+          description: Stations ordered by name.
+          items:
+            $ref: "#/components/schemas/RadioStation"
+
+    RadioStationEdit:
+      type: object
+      description: Station fields for create and update.
+      required: [name, streamUrl]
+      properties:
+        name:
+          type: string
+          description: Display name.
+          minLength: 1
+          maxLength: 200
+        streamUrl:
+          type: string
+          description: The station's stream URL; http or https.
+        homepageUrl:
+          type: string
+          description: The station's website.
+        logoUrl:
+          type: string
+          description: Station logo URL.
+
+    RadioPlayInfo:
+      type: object
+      description: A resolved, tokenized station stream.
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: >
+            Origin-relative proxied stream URL carrying a short-lived
+            media token.
+          example: /media/radio/rs-01JZX5N8QW3F4V9T2B7KD3M9R6?mt=abc
+        nowPlaying:
+          type: string
+          description: >
+            The most recent in-stream ICY title the proxy observed for
+            this station. Present only while a proxied listener has
+            the stream open and the station publishes StreamTitle
+            metadata; it reflects what the station last announced, not
+            a guarantee of what is audible right now. The listener may
+            be any user (stations are a shared library, so the field's
+            presence reveals that someone on this server is streaming
+            the station). The value is best-effort UTF-8 from an
+            untrusted station and should be treated as plain display
+            text; an empty announced title is reported as absent.
+            Clients that show it should re-poll this endpoint on the
+            order of every 15 seconds during playback. Every response
+            carries a freshly tokenized url; while already playing,
+            ignore the new url and keep the open stream (polling opens
+            no new connection to the station). On a first request,
+            before anyone has the stream open, the field is
+            necessarily absent.
+          example: Charlie Parker - Ornithology
+
+    RadioDirectoryEntry:
+      type: object
+      description: One station directory match.
+      required: [name, streamUrl]
+      properties:
+        name:
+          type: string
+          description: Station name as listed in the directory.
+        streamUrl:
+          type: string
+          description: Resolved stream URL.
+        homepageUrl:
+          type: string
+          description: Station website.
+        logoUrl:
+          type: string
+          description: Station logo URL.
+        tags:
+          type: string
+          description: Comma-separated directory tags.
+          example: jazz,eclectic
+        country:
+          type: string
+          description: Directory country name.
+        codec:
+          type: string
+          description: Directory-reported stream codec.
+          example: MP3
+        bitrateKbps:
+          type: integer
+          description: Directory-reported bitrate in kbit/s, 0 when unknown.
+
+    RadioDirectoryResults:
+      type: object
+      description: Station directory matches.
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          description: Matches, best first.
+          items:
+            $ref: "#/components/schemas/RadioDirectoryEntry"
+
+    Scrobbler:
+      type: object
+      description: One outbound scrobbling connection slot.
+      required: [service, available, connected]
+      properties:
+        service:
+          type: string
+          description: >
+            `lastfm` or `listenbrainz`. A string, not a closed enum;
+            clients must skip services they do not recognize.
+          example: listenbrainz
+        available:
+          type: boolean
+          description: >
+            True when the server can offer this service (Last.fm
+            requires server-configured API credentials).
+        connected:
+          type: boolean
+          description: True when the caller has linked an account.
+        username:
+          type: string
+          description: >
+            The linked account's username, when the service reports
+            one.
+        apiUrl:
+          type: string
+          description: >
+            The API base a ListenBrainz-compatible connection points
+            at. Absent for listenbrainz.org and for Last.fm.
+        lastSuccessAt:
+          type: string
+          format: date-time
+          description: >
+            When this connection last delivered a scrobble. Absent
+            until the first delivery succeeds. Reconnecting resets
+            it: the stamp belongs to the current credential.
+        lastError:
+          type: string
+          maxLength: 300
+          description: >
+            The most recent delivery failure, present only while the
+            connection is unhealthy: set when a delivery attempt
+            fails, cleared by the next successful delivery and by
+            reconnecting. A connection can carry both lastSuccessAt
+            and lastError (it worked before it broke). A short
+            human-readable summary suitable for display; never
+            contains the credential. All three delivery stamps are
+            absent whenever connected is false.
+        lastErrorAt:
+          type: string
+          format: date-time
+          description: >
+            When lastError was recorded. Present exactly when
+            lastError is.
+
+    ScrobblerList:
+      type: object
+      description: The caller's scrobbling connection slots.
+      required: [scrobblers]
+      properties:
+        scrobblers:
+          type: array
+          description: One entry per known service.
+          items:
+            $ref: "#/components/schemas/Scrobbler"
+
+    ListenBrainzConnect:
+      type: object
+      description: A ListenBrainz user token to link.
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: The user token from the ListenBrainz profile page.
+          minLength: 1
+        apiUrl:
+          type: string
+          description: >
+            Base URL of a ListenBrainz-compatible API server. Omit for
+            listenbrainz.org.
+
+    LastfmConnectStart:
+      type: object
+      description: The Last.fm authorization hand-off.
+      required: [authUrl]
+      properties:
+        authUrl:
+          type: string
+          description: >
+            The Last.fm authorization URL to open in a browser; it
+            redirects back to this server's callback on approval.
+
+    NotificationConfig:
+      type: object
+      description: The server's notification relay configuration.
+      required: [appriseUrl, enabledEvents, knownEvents]
+      properties:
+        appriseUrl:
+          type: string
+          description: >
+            Base URL of the Apprise API server to relay through
+            (its notify endpoint is derived). Empty disables Apprise
+            delivery.
+        targets:
+          type: string
+          description: >
+            Apprise target URLs (comma or space separated) passed with
+            each notification. Empty relies on the Apprise server's
+            own configured targets.
+        enabledEvents:
+          type: array
+          description: Event names to deliver.
+          items:
+            type: string
+        knownEvents:
+          type: array
+          description: >
+            The server's current event catalog, for building the
+            settings surface.
+          items:
+            type: string
+
+    NotificationConfigUpdate:
+      type: object
+      description: Replaces the notification relay configuration.
+      required: [appriseUrl, enabledEvents]
+      properties:
+        appriseUrl:
+          type: string
+          description: Apprise API server base URL; empty disables.
+        targets:
+          type: string
+          description: Apprise target URLs; empty uses the server's own.
+        enabledEvents:
+          type: array
+          description: Event names to deliver.
+          items:
+            type: string
+
+    PushRegistration:
+      type: object
+      description: One UnifiedPush endpoint registration.
+      required: [pid, endpoint, createdAt]
+      properties:
+        pid:
+          type: string
+          description: Type-prefixed ULID.
+          example: pr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        endpoint:
+          type: string
+          description: The distributor-issued push endpoint URL.
+        label:
+          type: string
+          description: Client-chosen label, usually the device name.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the endpoint was registered.
+
+    PushRegistrationCreate:
+      type: object
+      description: A UnifiedPush endpoint to register.
+      required: [endpoint]
+      properties:
+        endpoint:
+          type: string
+          description: The distributor-issued https endpoint URL.
+        label:
+          type: string
+          description: Display label, usually the device name.
+          maxLength: 100
+
+    PushRegistrationList:
+      type: object
+      description: The caller's push registrations.
+      required: [registrations]
+      properties:
+        registrations:
+          type: array
+          description: Registrations, newest first.
+          items:
+            $ref: "#/components/schemas/PushRegistration"

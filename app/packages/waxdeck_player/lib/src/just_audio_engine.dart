@@ -17,13 +17,22 @@ class JustAudioEngine implements AudioEnginePort {
     String url, {
     String? mimeType,
     Duration? initialPosition,
+    Duration? clipStart,
+    Duration? clipEnd,
   }) async {
     // The MIME hint is unused: just_audio sniffs the container itself on
     // every backend this engine targets.
-    await _player.setAudioSource(
-      AudioSource.uri(Uri.parse(url)),
-      initialPosition: initialPosition,
-    );
+    AudioSource source = AudioSource.uri(Uri.parse(url));
+    if (clipStart != null || clipEnd != null) {
+      // The clip window makes positions, duration, and completion
+      // window-relative, which is exactly the port's contract.
+      source = ClippingAudioSource(
+        child: source as UriAudioSource,
+        start: clipStart,
+        end: clipEnd,
+      );
+    }
+    await _player.setAudioSource(source, initialPosition: initialPosition);
   }
 
   @override

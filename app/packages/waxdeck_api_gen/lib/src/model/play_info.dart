@@ -21,6 +21,8 @@ part 'play_info.g.dart';
 /// * [partCount] - Number of parts in a multi-file audiobook. Present only for multi-file books; single-file items omit the part fields entirely. 
 /// * [partStartMs] - Book-timeline millisecond offset where the resolved part begins. In-part positions plus this offset give the book-timeline positions that play-state expects. Present exactly when `partCount` is. 
 /// * [voiceBoost] - True when the stream applies server-side spoken-word loudness normalization. Absent or false otherwise, including when it was requested but cannot be applied yet (unsupported by the sidecar, or loudness not measured yet). 
+/// * [spanStartMs] - Present exactly with `spanEndMs`, and only when the url serves the item's whole backing file while the item is a window into it (direct playback of a track carved from a larger rip, on a server running without the streaming engine): the client must play only the [`spanStartMs`, `spanEndMs`) window of the served audio. Absent whenever the server cuts the stream itself. `durationMs` remains the item's own duration, never the backing file's. 
+/// * [spanEndMs] - End of the playback window in served-audio milliseconds. Present exactly when `spanStartMs` is. 
 @BuiltValue()
 abstract class PlayInfo implements Built<PlayInfo, PlayInfoBuilder> {
   /// The resolved item's PID.
@@ -62,6 +64,14 @@ abstract class PlayInfo implements Built<PlayInfo, PlayInfoBuilder> {
   /// True when the stream applies server-side spoken-word loudness normalization. Absent or false otherwise, including when it was requested but cannot be applied yet (unsupported by the sidecar, or loudness not measured yet). 
   @BuiltValueField(wireName: r'voiceBoost')
   bool? get voiceBoost;
+
+  /// Present exactly with `spanEndMs`, and only when the url serves the item's whole backing file while the item is a window into it (direct playback of a track carved from a larger rip, on a server running without the streaming engine): the client must play only the [`spanStartMs`, `spanEndMs`) window of the served audio. Absent whenever the server cuts the stream itself. `durationMs` remains the item's own duration, never the backing file's. 
+  @BuiltValueField(wireName: r'spanStartMs')
+  int? get spanStartMs;
+
+  /// End of the playback window in served-audio milliseconds. Present exactly when `spanStartMs` is. 
+  @BuiltValueField(wireName: r'spanEndMs')
+  int? get spanEndMs;
 
   PlayInfo._();
 
@@ -142,6 +152,20 @@ class _$PlayInfoSerializer implements PrimitiveSerializer<PlayInfo> {
       yield serializers.serialize(
         object.voiceBoost,
         specifiedType: const FullType(bool),
+      );
+    }
+    if (object.spanStartMs != null) {
+      yield r'spanStartMs';
+      yield serializers.serialize(
+        object.spanStartMs,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.spanEndMs != null) {
+      yield r'spanEndMs';
+      yield serializers.serialize(
+        object.spanEndMs,
+        specifiedType: const FullType(int),
       );
     }
   }
@@ -236,6 +260,20 @@ class _$PlayInfoSerializer implements PrimitiveSerializer<PlayInfo> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.voiceBoost = valueDes;
+          break;
+        case r'spanStartMs':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.spanStartMs = valueDes;
+          break;
+        case r'spanEndMs':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.spanEndMs = valueDes;
           break;
         default:
           unhandled.add(key);

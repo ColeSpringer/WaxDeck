@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -65,6 +66,12 @@ func run() error {
 		feedRefreshMin  = flag.Int("feed-refresh-minutes", envIntOr("WAXDECK_FEED_REFRESH_MINUTES", 30), "minutes between scheduled feed refreshes")
 		retentionKeep   = flag.Int64("podcast-retention-default", envInt64Or("WAXDECK_PODCAST_RETENTION_DEFAULT", 0), "default keep-newest-N downloaded episodes for subscribers who leave retention unset (0 keeps all)")
 		allowPrivateNet = flag.Bool("allow-private-feed-hosts", envOr("WAXDECK_ALLOW_PRIVATE_FEED_HOSTS", "false") == "true", "allow feeds and enclosures on private addresses (LAN-hosted feeds)")
+
+		allowPrivateRadio    = flag.Bool("allow-private-radio-hosts", envOr("WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS", "false") == "true", "allow radio stream URLs on private addresses (LAN icecast)")
+		allowPrivateScrobble = flag.Bool("allow-private-scrobble-hosts", envOr("WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS", "false") == "true", "allow ListenBrainz-compatible API bases on private addresses (LAN Maloja)")
+		radioDirBase         = flag.String("radio-directory-base", envOr("WAXDECK_RADIO_DIRECTORY_BASE", ""), "radio-browser directory API base URL (empty selects the public instance)")
+		lastfmKey            = flag.String("lastfm-api-key", envOr("WAXDECK_LASTFM_API_KEY", ""), "Last.fm API key for outbound scrobbling (empty leaves Last.fm unavailable)")
+		lastfmSecret         = flag.String("lastfm-secret", envOr("WAXDECK_LASTFM_SECRET", ""), "Last.fm API shared secret")
 
 		youtubeOn    = flag.Bool("youtube", envOr("WAXDECK_YOUTUBE", "false") == "true", "enable the YouTube acquisition bridge (channels and playlists as shows)")
 		sealURL      = flag.String("seal-url", envOr("WAXDECK_SEAL_URL", ""), "WaxSeal attestation sidecar base URL (optional; full-quality YouTube path)")
@@ -175,17 +182,22 @@ func run() error {
 	}
 
 	svc, err := service.Open(ctx, service.Config{
-		DataDir:               *dataDir,
-		Roots:                 svcRoots,
-		ScanOnStart:           *scanStart && len(roots) > 0,
-		Sealer:                sealer,
-		SecretCipher:          catalogCipher,
-		PodcastDir:            *podcastDir,
-		PodcastRootName:       *podcastRoot,
-		AllowPrivateFeedHosts: *allowPrivateNet,
-		DefaultRetentionKeep:  *retentionKeep,
-		SourceProviders:       providers,
-		Logger:                log,
+		DataDir:                   *dataDir,
+		Roots:                     svcRoots,
+		ScanOnStart:               *scanStart && len(roots) > 0,
+		Sealer:                    sealer,
+		SecretCipher:              catalogCipher,
+		PodcastDir:                *podcastDir,
+		PodcastRootName:           *podcastRoot,
+		AllowPrivateFeedHosts:     *allowPrivateNet,
+		DefaultRetentionKeep:      *retentionKeep,
+		SourceProviders:           providers,
+		AllowPrivateRadioHosts:    *allowPrivateRadio,
+		AllowPrivateScrobbleHosts: *allowPrivateScrobble,
+		RadioDirectoryBase:        *radioDirBase,
+		LastfmAPIKey:              *lastfmKey,
+		LastfmSecret:              *lastfmSecret,
+		Logger:                    log,
 	}, store, group)
 	if err != nil {
 		return err
@@ -229,7 +241,7 @@ func run() error {
 		}
 		svc.SetFlowJobs(bridge)
 	} else {
-		log.Warn("WAXDECK_FLOW_URL is not set; streaming is disabled")
+		log.Warn("WAXDECK_FLOW_URL is not set; playing original files directly (no transcoding, gapless timelines, or voice boost)")
 	}
 
 	// Podcast background work: the feed refresh scheduler, the retention
@@ -302,11 +314,47 @@ func run() error {
 		})
 	}
 
+	// The scrobble and notification outboxes drain continuously; both
+	// are cheap when idle and their deliveries back off on failure.
+	group.Go(ctx, "scrobble-outbox", func(ctx context.Context) error {
+		tick := time.NewTicker(5 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+				for svc.DrainScrobbleOutbox(ctx) {
+					if ctx.Err() != nil {
+						return nil
+					}
+				}
+			}
+		}
+	})
+	group.Go(ctx, "notify-outbox", func(ctx context.Context) error {
+		tick := time.NewTicker(5 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+				for svc.DrainNotifyOutbox(ctx) {
+					if ctx.Err() != nil {
+						return nil
+					}
+				}
+			}
+		}
+	})
+
 	sessions := auth.NewSessions(store)
 
 	// Expired sessions, spent OIDC state, and stale one-time codes are
 	// swept on a coarse timer; correctness never depends on the sweep
 	// (lookups check expiry themselves), it just keeps the tables lean.
+	// The outbox prunes ride the same coarse timer.
 	group.Go(ctx, "session-janitor", func(ctx context.Context) error {
 		tick := time.NewTicker(time.Hour)
 		defer tick.Stop()
@@ -318,6 +366,8 @@ func run() error {
 				if err := store.SweepExpired(ctx); err != nil {
 					log.Warn("sweeping expired auth state", "err", err)
 				}
+				svc.PruneScrobbleOutbox(ctx)
+				svc.PruneNotifyOutbox(ctx)
 			}
 		}
 	})
@@ -375,10 +425,13 @@ func run() error {
 	// authenticate by media token like /media/stream.
 	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
 	mux.HandleFunc("GET /media/download", srv.ServeDownload)
+	// Radio streams proxy through this origin under a media token,
+	// like /media/stream; the guarded client owns the URL policy.
+	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)
 	// The read-only OpenSubsonic compatibility surface. App-password
 	// authenticated; third-party clients browse and stream while the
 	// first-party clients mature.
-	mux.Handle("/rest/", subsonic.New(svc, bridge, version))
+	mux.Handle("/rest/", subsonic.New(svc, bridge, media, version))
 	// The gpodder.net-compatible sync surface (AntennaPod and friends):
 	// app passwords over Basic plus its own stateless session cookie.
 	gp := gpodder.New(svc, secret, log)
@@ -395,10 +448,19 @@ func run() error {
 	}
 	mux.Handle("/", web.Handler(*webDir))
 
+	// Streaming handlers (the radio proxy, any long response body) hold
+	// their connections active for as long as both sides stay open, and
+	// Shutdown waits for active connections, so without a cancel signal
+	// one live stream rides out the entire shutdown deadline. Every
+	// request context derives from this base; canceling it at shutdown
+	// ends the streams so the drain can finish.
+	reqCtx, reqCancel := context.WithCancel(context.Background())
+	defer reqCancel()
 	httpSrv := &http.Server{
 		Addr:              *addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return reqCtx },
 	}
 
 	group.GoOnce(ctx, "http", func(context.Context) error {
@@ -414,6 +476,7 @@ func run() error {
 
 	<-ctx.Done()
 
+	reqCancel()
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := httpSrv.Shutdown(shutCtx); err != nil {

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<subsonic-response xmlns="http://subsonic.org/restapi" status="failed" version="1.16.1" type="waxdeck" serverVersion="VERSION" openSubsonic="true"><error code="70" message="no such song"></error></subsonic-response>

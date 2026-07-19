@@ -103,12 +103,24 @@ silently serving diverged history.
 
 ## User-state scoping
 
-WaxBin's change log has no user dimension for `play_state`, `bookmark`, and
-`play_queue` rows. The hub filters those entity types out of catalog fan-out
-entirely. Play state is re-emitted user-scoped on the server cursor (WaxDeck
-is the sole writer, so it knows the acting user at write time); bookmarks
-and queues will ride the same path when their API surfaces land. No client
-ever sees another user's listening activity.
+WaxBin's change log has no user dimension for `play_state`, `bookmark`,
+`play_queue`, and `playlist` rows. The hub filters those entity types out of
+catalog fan-out entirely. Play state is re-emitted user-scoped on the server
+cursor (WaxDeck is the sole writer, so it knows the acting user at write
+time); bookmarks and queues will ride the same path when their API surfaces
+land. No client ever sees another user's listening activity.
+
+Playlists ride the `user` stream too (the `playlist` event kind on
+`/sync/server`): a mutation reaches the owner always, and a shared
+playlist's mutation additionally reaches every other user, since shared
+playlists are visible to all. A playlist leaving a viewer's visibility
+(deletion, a shared list flipped private, or a rule-replace retiring the
+old pid) reaches those viewers as a playlist-absent event, so mirrors never
+strand a row they can no longer read. Private playlists never appear on
+anyone else's stream, which is why playlist rows cannot ride the catalog
+stream. A smart playlist's *membership* drift (an underlying star, rating,
+or catalog change) emits no playlist event; clients re-evaluate on the
+play-state and catalog invalidations they already receive.
 
 Podcast subscriptions are WaxDeck-side per-user state and ride the `user`
 stream (the `subscription` event kind on `/sync/server`), so one user's

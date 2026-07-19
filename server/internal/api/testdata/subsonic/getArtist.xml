@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<subsonic-response xmlns="http://subsonic.org/restapi" status="ok" version="1.16.1" type="waxdeck" serverVersion="VERSION" openSubsonic="true"><artist id="A!Rml4dHVyZSBBcnRpc3Q" name="Fixture Artist" coverArt="A!Rml4dHVyZSBBcnRpc3Q" albumCount="1"><album id="L!Rml4dHVyZSBBcnRpc3QfRml4dHVyZSBBbGJ1bQ" name="Fixture Album" artist="Fixture Artist" artistId="A!Rml4dHVyZSBBcnRpc3Q" coverArt="L!Rml4dHVyZSBBcnRpc3QfRml4dHVyZSBBbGJ1bQ" songCount="4" duration="11"></album></artist></subsonic-response>

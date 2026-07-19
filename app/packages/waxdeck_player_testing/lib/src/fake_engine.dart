@@ -15,6 +15,10 @@ class FakeEngine implements AudioEnginePort {
   /// Last URL passed to [load], for assertions.
   String? loadedUrl;
 
+  /// The clip window the last [load] carried, when any.
+  Duration? loadedClipStart;
+  Duration? loadedClipEnd;
+
   /// Last MIME hint passed to [load], for assertions.
   String? loadedMimeType;
 
@@ -78,11 +82,23 @@ class FakeEngine implements AudioEnginePort {
     String url, {
     String? mimeType,
     Duration? initialPosition,
+    Duration? clipStart,
+    Duration? clipEnd,
   }) async {
     loadedUrl = url;
     loadedMimeType = mimeType;
+    loadedClipStart = clipStart;
+    loadedClipEnd = clipEnd;
     _setState(EngineProcessingState.loading);
-    _duration = mediaDuration;
+    if (clipStart != null || clipEnd != null) {
+      final start = clipStart ?? Duration.zero;
+      final end = clipEnd ?? mediaDuration;
+      // Floor at zero: a window past the media's end plays nothing,
+      // never a negative duration.
+      _duration = end > start ? end - start : Duration.zero;
+    } else {
+      _duration = mediaDuration;
+    }
     if (!_durations.isClosed) _durations.add(_duration);
     _setPosition(initialPosition ?? Duration.zero);
     _setState(EngineProcessingState.ready);

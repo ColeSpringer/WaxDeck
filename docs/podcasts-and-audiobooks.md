@@ -97,6 +97,10 @@ subscriptions and episode positions directly:
 
 Subscription changes and play positions sync both ways; positions run
 through the same per-medium reconciliation as first-party clients.
+The test suite replays AntennaPod's actual sync sequence (login,
+device registration, subscription diff, episode actions with its
+timestamp format) against a live server on every run, so a regression
+there fails CI rather than a user's sync.
 
 ## YouTube channels as shows
 

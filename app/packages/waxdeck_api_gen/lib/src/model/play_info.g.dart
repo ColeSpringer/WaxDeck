@@ -27,6 +27,10 @@ class _$PlayInfo extends PlayInfo {
   final int? partStartMs;
   @override
   final bool? voiceBoost;
+  @override
+  final int? spanStartMs;
+  @override
+  final int? spanEndMs;
 
   factory _$PlayInfo([void Function(PlayInfoBuilder)? updates]) =>
       (PlayInfoBuilder()..update(updates))._build();
@@ -42,6 +46,8 @@ class _$PlayInfo extends PlayInfo {
     this.partCount,
     this.partStartMs,
     this.voiceBoost,
+    this.spanStartMs,
+    this.spanEndMs,
   }) : super._();
   @override
   PlayInfo rebuild(void Function(PlayInfoBuilder) updates) =>
@@ -63,7 +69,9 @@ class _$PlayInfo extends PlayInfo {
         partIndex == other.partIndex &&
         partCount == other.partCount &&
         partStartMs == other.partStartMs &&
-        voiceBoost == other.voiceBoost;
+        voiceBoost == other.voiceBoost &&
+        spanStartMs == other.spanStartMs &&
+        spanEndMs == other.spanEndMs;
   }
 
   @override
@@ -79,6 +87,8 @@ class _$PlayInfo extends PlayInfo {
     _$hash = $jc(_$hash, partCount.hashCode);
     _$hash = $jc(_$hash, partStartMs.hashCode);
     _$hash = $jc(_$hash, voiceBoost.hashCode);
+    _$hash = $jc(_$hash, spanStartMs.hashCode);
+    _$hash = $jc(_$hash, spanEndMs.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -95,7 +105,9 @@ class _$PlayInfo extends PlayInfo {
           ..add('partIndex', partIndex)
           ..add('partCount', partCount)
           ..add('partStartMs', partStartMs)
-          ..add('voiceBoost', voiceBoost))
+          ..add('voiceBoost', voiceBoost)
+          ..add('spanStartMs', spanStartMs)
+          ..add('spanEndMs', spanEndMs))
         .toString();
   }
 }
@@ -143,6 +155,14 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
   bool? get voiceBoost => _$this._voiceBoost;
   set voiceBoost(bool? voiceBoost) => _$this._voiceBoost = voiceBoost;
 
+  int? _spanStartMs;
+  int? get spanStartMs => _$this._spanStartMs;
+  set spanStartMs(int? spanStartMs) => _$this._spanStartMs = spanStartMs;
+
+  int? _spanEndMs;
+  int? get spanEndMs => _$this._spanEndMs;
+  set spanEndMs(int? spanEndMs) => _$this._spanEndMs = spanEndMs;
+
   PlayInfoBuilder() {
     PlayInfo._defaults(this);
   }
@@ -160,6 +180,8 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
       _partCount = $v.partCount;
       _partStartMs = $v.partStartMs;
       _voiceBoost = $v.voiceBoost;
+      _spanStartMs = $v.spanStartMs;
+      _spanEndMs = $v.spanEndMs;
       _$v = null;
     }
     return this;
@@ -208,6 +230,8 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
           partCount: partCount,
           partStartMs: partStartMs,
           voiceBoost: voiceBoost,
+          spanStartMs: spanStartMs,
+          spanEndMs: spanEndMs,
         );
     replace(_$result);
     return _$result;

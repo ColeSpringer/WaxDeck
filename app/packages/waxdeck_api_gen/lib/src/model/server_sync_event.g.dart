@@ -19,6 +19,8 @@ class _$ServerSyncEvent extends ServerSyncEvent {
   final Subscription? subscription;
   @override
   final BookSettings? bookSettings;
+  @override
+  final Playlist? playlist;
 
   factory _$ServerSyncEvent([void Function(ServerSyncEventBuilder)? updates]) =>
       (ServerSyncEventBuilder()..update(updates))._build();
@@ -30,6 +32,7 @@ class _$ServerSyncEvent extends ServerSyncEvent {
     this.prefs,
     this.subscription,
     this.bookSettings,
+    this.playlist,
   }) : super._();
   @override
   ServerSyncEvent rebuild(void Function(ServerSyncEventBuilder) updates) =>
@@ -47,7 +50,8 @@ class _$ServerSyncEvent extends ServerSyncEvent {
         playState == other.playState &&
         prefs == other.prefs &&
         subscription == other.subscription &&
-        bookSettings == other.bookSettings;
+        bookSettings == other.bookSettings &&
+        playlist == other.playlist;
   }
 
   @override
@@ -59,6 +63,7 @@ class _$ServerSyncEvent extends ServerSyncEvent {
     _$hash = $jc(_$hash, prefs.hashCode);
     _$hash = $jc(_$hash, subscription.hashCode);
     _$hash = $jc(_$hash, bookSettings.hashCode);
+    _$hash = $jc(_$hash, playlist.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -71,7 +76,8 @@ class _$ServerSyncEvent extends ServerSyncEvent {
           ..add('playState', playState)
           ..add('prefs', prefs)
           ..add('subscription', subscription)
-          ..add('bookSettings', bookSettings))
+          ..add('bookSettings', bookSettings)
+          ..add('playlist', playlist))
         .toString();
   }
 }
@@ -108,6 +114,10 @@ class ServerSyncEventBuilder
   set bookSettings(BookSettingsBuilder? bookSettings) =>
       _$this._bookSettings = bookSettings;
 
+  PlaylistBuilder? _playlist;
+  PlaylistBuilder get playlist => _$this._playlist ??= PlaylistBuilder();
+  set playlist(PlaylistBuilder? playlist) => _$this._playlist = playlist;
+
   ServerSyncEventBuilder() {
     ServerSyncEvent._defaults(this);
   }
@@ -121,6 +131,7 @@ class ServerSyncEventBuilder
       _prefs = $v.prefs?.toBuilder();
       _subscription = $v.subscription?.toBuilder();
       _bookSettings = $v.bookSettings?.toBuilder();
+      _playlist = $v.playlist?.toBuilder();
       _$v = null;
     }
     return this;
@@ -155,6 +166,7 @@ class ServerSyncEventBuilder
             prefs: _prefs?.build(),
             subscription: _subscription?.build(),
             bookSettings: _bookSettings?.build(),
+            playlist: _playlist?.build(),
           );
     } catch (_) {
       late String _$failedField;
@@ -167,6 +179,8 @@ class ServerSyncEventBuilder
         _subscription?.build();
         _$failedField = 'bookSettings';
         _bookSettings?.build();
+        _$failedField = 'playlist';
+        _playlist?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'ServerSyncEvent',

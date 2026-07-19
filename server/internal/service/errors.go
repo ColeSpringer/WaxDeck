@@ -32,6 +32,14 @@ const (
 	// server is not running, such as the YouTube bridge (501
 	// source-unavailable at the API).
 	KindUnsupported ErrorKind = "source-unavailable"
+	// KindDirectory marks an unreachable external directory service,
+	// such as the radio station directory (502 directory-unavailable
+	// at the API).
+	KindDirectory ErrorKind = "directory-unavailable"
+	// KindService marks an unreachable external service a request
+	// depends on, such as a scrobbling provider (502
+	// service-unreachable at the API).
+	KindService ErrorKind = "service-unreachable"
 )
 
 // Error is a classified service failure.

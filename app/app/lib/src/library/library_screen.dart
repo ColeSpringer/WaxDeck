@@ -5,7 +5,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../books/book_screen.dart';
 import '../media_icons.dart';
 import '../player/player_screen.dart';
+import '../playlists/playlists_screen.dart';
 import '../podcasts/podcasts_screen.dart';
+import '../radio/radio_screen.dart';
 import '../settings/settings_screen.dart';
 import '../sync/sync_providers.dart';
 import 'library_controller.dart';
@@ -39,6 +41,30 @@ class LibraryScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('WaxDeck'),
         actions: [
+          Semantics(
+            identifier: 'playlists-open',
+            child: IconButton(
+              key: const Key('playlists-open'),
+              tooltip: 'Playlists',
+              icon: const Icon(Icons.queue_music),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const PlaylistsScreen(),
+                ),
+              ),
+            ),
+          ),
+          Semantics(
+            identifier: 'radio-open',
+            child: IconButton(
+              key: const Key('radio-open'),
+              tooltip: 'Radio',
+              icon: const Icon(Icons.radio),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const RadioScreen()),
+              ),
+            ),
+          ),
           Semantics(
             identifier: 'podcasts-open',
             child: IconButton(

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
@@ -89,6 +90,18 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID) (int, error) 
 			l.log.Warn("recording feed failure", "show", string(showPID), "err", dbErr)
 		} else if st.Disabled && st.ConsecutiveFailures == feedDisableAfter {
 			l.log.Warn("feed disabled after repeated failures", "show", string(showPID), "failures", st.ConsecutiveFailures)
+			if subs, subErr := l.db.SubscribersByShow(ctx, string(showPID)); subErr == nil {
+				userIDs := make([]string, 0, len(subs))
+				for _, s := range subs {
+					userIDs = append(userIDs, s.UserID)
+				}
+				// Titles only: feed URLs are scrubbed from every
+				// notification surface, private shows especially.
+				l.EmitNotification(ctx, "feed-disabled",
+					"Podcast feed disabled: "+pod.Title,
+					fmt.Sprintf("The feed failed %d refreshes in a row and was disabled. A manual refresh re-enables it.", st.ConsecutiveFailures),
+					userIDs)
+			}
 		}
 		return 0, l.classifyFeedErr(ctx, err, pod.FeedURL, l.showIsPrivate(ctx, pod))
 	}
@@ -164,7 +177,31 @@ func (l *Library) DrainFetchQueue(ctx context.Context) bool {
 	// A fresh spoken-word file wants a silence map; queue analysis by
 	// essence so a replayed fetch never duplicates the work.
 	l.enqueueAnalysisForItem(ctx, model.PID(row.Key))
+	l.notifyEpisodeDownloaded(ctx, model.PID(row.Key))
 	return true
+}
+
+// notifyEpisodeDownloaded fans a finished download out to the show's
+// subscribers and the admin relay. Best effort by design.
+func (l *Library) notifyEpisodeDownloaded(ctx context.Context, episodePID model.PID) {
+	det, err := l.lib.Podcasts().Episode(ctx, episodePID)
+	if err != nil {
+		return
+	}
+	subs, err := l.db.SubscribersByShow(ctx, string(det.Episode.PodcastPID))
+	if err != nil {
+		l.log.Warn("reading subscribers for notification", "err", err)
+		return
+	}
+	userIDs := make([]string, 0, len(subs))
+	for _, s := range subs {
+		userIDs = append(userIDs, s.UserID)
+	}
+	show := det.Episode.PodcastTitle
+	if show == "" {
+		show = "podcast"
+	}
+	l.EmitNotification(ctx, "episode-downloaded", "New episode: "+show, det.Episode.Title, userIDs)
 }
 
 // SweepRetention re-evaluates every queued show: pushes the union

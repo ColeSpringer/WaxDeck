@@ -7,27 +7,29 @@ import 'package:waxdeck_api_gen/src/model/subscription.dart';
 import 'package:waxdeck_api_gen/src/model/book_settings.dart';
 import 'package:waxdeck_api_gen/src/model/prefs.dart';
 import 'package:waxdeck_api_gen/src/model/play_state.dart';
+import 'package:waxdeck_api_gen/src/model/playlist.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
 part 'server_sync_event.g.dart';
 
-/// One change to the calling user's server-side state, with the current value hydrated fresh. `kind` is a string, not a closed enum, so new kinds can appear; clients must skip events whose `kind` they do not recognize. 
+/// One change to server-side state visible to the calling user (their own state, plus other users' shared playlists), with the current value hydrated fresh. `kind` is a string, not a closed enum, so new kinds can appear; clients must skip events whose `kind` they do not recognize. Hydrated `playlist` payloads omit a smart playlist's computed `itemCount`, like list pages. 
 ///
 /// Properties:
-/// * [kind] - What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), or `book-settings` (carries `pid`, the book, and `bookSettings`). 
-/// * [pid] - The item, show, or book the event is about (absent for `prefs`). 
+/// * [kind] - What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). 
+/// * [pid] - The item, show, book, or playlist the event is about (absent for `prefs`). 
 /// * [playState] 
 /// * [prefs] 
 /// * [subscription] 
 /// * [bookSettings] 
+/// * [playlist] 
 @BuiltValue()
 abstract class ServerSyncEvent implements Built<ServerSyncEvent, ServerSyncEventBuilder> {
-  /// What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), or `book-settings` (carries `pid`, the book, and `bookSettings`). 
+  /// What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). 
   @BuiltValueField(wireName: r'kind')
   String get kind;
 
-  /// The item, show, or book the event is about (absent for `prefs`). 
+  /// The item, show, book, or playlist the event is about (absent for `prefs`). 
   @BuiltValueField(wireName: r'pid')
   String? get pid;
 
@@ -42,6 +44,9 @@ abstract class ServerSyncEvent implements Built<ServerSyncEvent, ServerSyncEvent
 
   @BuiltValueField(wireName: r'bookSettings')
   BookSettings? get bookSettings;
+
+  @BuiltValueField(wireName: r'playlist')
+  Playlist? get playlist;
 
   ServerSyncEvent._();
 
@@ -104,6 +109,13 @@ class _$ServerSyncEventSerializer implements PrimitiveSerializer<ServerSyncEvent
       yield serializers.serialize(
         object.bookSettings,
         specifiedType: const FullType(BookSettings),
+      );
+    }
+    if (object.playlist != null) {
+      yield r'playlist';
+      yield serializers.serialize(
+        object.playlist,
+        specifiedType: const FullType(Playlist),
       );
     }
   }
@@ -170,6 +182,13 @@ class _$ServerSyncEventSerializer implements PrimitiveSerializer<ServerSyncEvent
             specifiedType: const FullType(BookSettings),
           ) as BookSettings;
           result.bookSettings.replace(valueDes);
+          break;
+        case r'playlist':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(Playlist),
+          ) as Playlist;
+          result.playlist.replace(valueDes);
           break;
         default:
           unhandled.add(key);

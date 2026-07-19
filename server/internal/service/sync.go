@@ -58,6 +58,7 @@ type ServerSyncEvent struct {
 	Prefs        *Prefs
 	Subscription *Subscription
 	BookSettings *BookSettings
+	Playlist     *Playlist
 }
 
 // ServerDelta is one page of the caller's server-state changes.
@@ -73,6 +74,7 @@ const (
 	eventPrefs        = "prefs"
 	eventSubscription = "subscription"
 	eventBookSettings = "book-settings"
+	eventPlaylist     = "playlist"
 )
 
 // ErrSyncReset marks a cursor the stream can no longer serve
@@ -750,6 +752,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 	seenState := make(map[string]bool)
 	seenSub := make(map[string]bool)
 	seenBook := make(map[string]bool)
+	seenPlaylist := make(map[string]bool)
 	seenPrefs := false
 	for _, e := range events {
 		switch e.Kind {
@@ -807,6 +810,22 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 			out.Events = append(out.Events, ServerSyncEvent{
 				Kind: eventBookSettings, PID: apiPID(PrefixBook, model.PID(e.ItemPID)), BookSettings: &bs,
 			})
+		case eventPlaylist:
+			if seenPlaylist[e.ItemPID] {
+				continue
+			}
+			seenPlaylist[e.ItemPID] = true
+			ev := ServerSyncEvent{Kind: eventPlaylist, PID: apiPID(PrefixPlaylist, model.PID(e.ItemPID))}
+			// Hydrate fresh: a playlist the caller can still read
+			// carries its current state; one that is gone, private, or
+			// reissued under a new pid carries none (the absence is
+			// the payload).
+			if pl, err := l.PlaylistByPID(ctx, uc, ev.PID); err == nil {
+				ev.Playlist = &pl
+			} else if KindOf(err) != KindNotFound {
+				l.log.Warn("hydrating playlist event", "playlist", e.ItemPID, "err", err)
+			}
+			out.Events = append(out.Events, ev)
 		}
 	}
 	return out, nil

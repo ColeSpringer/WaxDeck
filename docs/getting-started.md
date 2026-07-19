@@ -19,7 +19,8 @@ the rescan endpoint or restart after adding files.
 
 The stack is two services. `waxdeck` owns the catalog, the API, and the
 web UI, and is the only published port. `waxflow` is the streaming
-sidecar (WaxDeck's own build of the WaxFlow engine); it lives on the
+engine (WaxDeck's own build of the WaxFlow engine, and an optional
+upgrade rather than a requirement; see below); it lives on the
 internal network and every stream is proxied through the WaxDeck
 origin, so clients, cast devices, and reverse proxies only ever need to
 reach one address.
@@ -29,12 +30,17 @@ reach one address.
 ```sh
 make web build     # Flutter web UI + server binary with it embedded
 WAXDECK_LIBRARY_ROOTS=lib=/path/to/music \
-WAXDECK_FLOW_URL=http://127.0.0.1:4418 \
-WAXDECK_FLOW_API_KEY=devkey \
 ./server/waxdeck
 ```
 
-Streaming needs the sidecar running with the same root name:
+That alone plays: without a streaming engine configured, WaxDeck
+serves your original files directly (ranged and seekable, no
+transcoding), and tracks carved out of single-file rips by cue sheets
+still play as themselves in the first-party apps. What you give up is
+transcoding for constrained networks and picky clients, gapless
+timelines, and voice boost; on the web, playable formats are whatever
+the browser decodes. To add all of that, run the bundled engine and
+point the server at it, with the same root names on both sides:
 
 ```sh
 cd server && go build -o waxflow-catalog ./cmd/waxflow-catalog
@@ -44,9 +50,12 @@ WAXFLOW_API_KEYS=devkey \
 ./waxflow-catalog server
 ```
 
-Without `WAXDECK_FLOW_URL` the server still runs: browsing, search,
-and playback state all work, and play-info reports that streaming is
-not configured.
+```sh
+WAXDECK_LIBRARY_ROOTS=lib=/path/to/music \
+WAXDECK_FLOW_URL=http://127.0.0.1:4418 \
+WAXDECK_FLOW_API_KEY=devkey \
+./server/waxdeck
+```
 
 ## What works today
 

@@ -137,6 +137,10 @@ func (s *Server) SyncServer(ctx context.Context, req SyncServerRequestObject) (S
 			bs := bookSettingsJSON(*e.BookSettings)
 			je.BookSettings = &bs
 		}
+		if e.Playlist != nil {
+			pl := playlistJSON(*e.Playlist)
+			je.Playlist = &pl
+		}
 		out.Events = append(out.Events, je)
 	}
 	return SyncServer200JSONResponse(out), nil

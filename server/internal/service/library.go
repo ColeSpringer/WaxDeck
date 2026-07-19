@@ -20,6 +20,7 @@ import (
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/scrobble"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
 
@@ -65,7 +66,21 @@ type Config struct {
 	// SourceProviders are injected acquisition providers (the YouTube
 	// bridge); the catalog dispatches shows to them by source type.
 	SourceProviders []source.Provider
-	Logger          *slog.Logger
+	// AllowPrivateRadioHosts disables the private-address guard on
+	// radio stream URLs, for households running their own LAN icecast.
+	AllowPrivateRadioHosts bool
+	// AllowPrivateScrobbleHosts disables the private-address guard on
+	// caller-supplied ListenBrainz API bases, for self-hosted LAN
+	// instances (Maloja and friends).
+	AllowPrivateScrobbleHosts bool
+	// RadioDirectoryBase is the radio-browser directory API base;
+	// empty selects the public instance.
+	RadioDirectoryBase string
+	// LastfmAPIKey and LastfmSecret are the server's Last.fm API
+	// credentials; empty leaves the Last.fm connection unavailable.
+	LastfmAPIKey string
+	LastfmSecret string
+	Logger       *slog.Logger
 }
 
 // Library is the catalog service over an embedded WaxBin library. It
@@ -77,7 +92,7 @@ type Library struct {
 	db    *wdb.DB
 	roots []Root
 	log   *slog.Logger
-	// libDirs caches path→library attribution for visibility checks.
+	// libDirs caches path-to-library attribution for visibility checks.
 	libDirs libraryDirs
 	// procCtx outlives any one request: async catalog jobs launch on it
 	// so a scan survives the 202 that reported it started.
@@ -110,6 +125,24 @@ type Library struct {
 	transcriptHTTP        *http.Client
 	transcriptHTTPOnce    sync.Once
 	allowPrivateFeedHosts bool
+	// radioHTTP is the guarded client for radio streams and the
+	// station directory, built on first use; allowPrivateRadioHosts
+	// relaxes its SSRF guard. It carries no overall timeout (radio
+	// streams are unbounded); bounded calls pass a request context.
+	radioHTTP              *http.Client
+	radioHTTPOnce          sync.Once
+	allowPrivateRadioHosts bool
+	radioDirectoryBase     string
+	// radioTitles holds each station's last proxy-observed in-stream
+	// title; process-local on purpose (a title only exists while this
+	// process is proxying the stream).
+	radioTitles   map[string]radioTitle
+	radioTitlesMu sync.Mutex
+	// lastfm and listenbrainz are the outbound scrobbling clients;
+	// lastfm is nil without server API credentials.
+	lastfm                    *scrobble.Lastfm
+	listenbrainz              *scrobble.ListenBrainz
+	allowPrivateScrobbleHosts bool
 }
 
 // SocketFileName is the IPC socket beside the catalog DB. It is a local
@@ -159,14 +192,27 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 
 	l := &Library{
 		lib: lib, paths: paths, db: store, roots: cfg.Roots, log: log, procCtx: ctx,
-		catalogWake:           make(chan struct{}, 1),
-		userWake:              make(chan string, 64),
-		sealer:                cfg.Sealer,
-		podcastDir:            cfg.PodcastDir,
-		podcastRootName:       cfg.PodcastRootName,
-		defaultRetentionKeep:  cfg.DefaultRetentionKeep,
-		retentionInUseWindow:  cfg.RetentionInUseWindow,
-		allowPrivateFeedHosts: cfg.AllowPrivateFeedHosts,
+		catalogWake:            make(chan struct{}, 1),
+		userWake:               make(chan string, 64),
+		sealer:                 cfg.Sealer,
+		podcastDir:             cfg.PodcastDir,
+		podcastRootName:        cfg.PodcastRootName,
+		defaultRetentionKeep:   cfg.DefaultRetentionKeep,
+		retentionInUseWindow:   cfg.RetentionInUseWindow,
+		allowPrivateFeedHosts:  cfg.AllowPrivateFeedHosts,
+		allowPrivateRadioHosts: cfg.AllowPrivateRadioHosts,
+		radioDirectoryBase:     cfg.RadioDirectoryBase,
+		radioTitles:            map[string]radioTitle{},
+		listenbrainz:           scrobble.NewListenBrainz(),
+	}
+	// The ListenBrainz API base is caller-supplied, so its deliveries
+	// ride a dial-guarded client like every other user-pointed fetch;
+	// the flag opts LAN instances back in. The connection's write-time
+	// check gives the friendly error, this guard is the boundary.
+	l.allowPrivateScrobbleHosts = cfg.AllowPrivateScrobbleHosts
+	l.listenbrainz.HTTP = scrobbleHTTPClient(cfg.AllowPrivateScrobbleHosts)
+	if cfg.LastfmAPIKey != "" && cfg.LastfmSecret != "" {
+		l.lastfm = scrobble.NewLastfm(cfg.LastfmAPIKey, cfg.LastfmSecret)
 	}
 	if l.retentionInUseWindow == 0 {
 		l.retentionInUseWindow = 2 * time.Minute

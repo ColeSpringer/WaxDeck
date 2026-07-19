@@ -11,15 +11,18 @@ import (
 // self-describing and lets the server reject a PID used against the
 // wrong entity.
 const (
-	PrefixTrack       = "tr"
-	PrefixAlbum       = "al"
-	PrefixArtist      = "ar"
-	PrefixPodcast     = "pc"
-	PrefixEpisode     = "ep"
-	PrefixBook        = "bk"
-	PrefixJob         = "jb"
-	PrefixLibrary     = "lb"
-	PrefixAppPassword = "ap"
+	PrefixTrack        = "tr"
+	PrefixAlbum        = "al"
+	PrefixArtist       = "ar"
+	PrefixPodcast      = "pc"
+	PrefixEpisode      = "ep"
+	PrefixBook         = "bk"
+	PrefixJob          = "jb"
+	PrefixLibrary      = "lb"
+	PrefixAppPassword  = "ap"
+	PrefixPlaylist     = "pl"
+	PrefixRadioStation = "rs"
+	PrefixPushReg      = "pr"
 )
 
 // prefixForKind maps an item kind to its API prefix.

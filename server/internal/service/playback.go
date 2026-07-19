@@ -32,6 +32,39 @@ const (
 	spokenFinishedFraction = 0.99
 )
 
+// RecentlyPositionedItems lists the caller's spoken-word items with a
+// saved resume position, most recently checkpointed first. Backed by
+// the per-user position stamps, so an item counts from its first
+// checkpoint; the catalog's recently-played list would miss anything
+// never played to completion, which is exactly the state a resume
+// surface exists for.
+func (l *Library) RecentlyPositionedItems(ctx context.Context, uc *UserCtx, limit int) ([]ItemSummary, error) {
+	pids, err := l.db.RecentPositionStamps(ctx, uc.ID, limit)
+	if err != nil {
+		return nil, &Error{Kind: KindInternal, Err: err}
+	}
+	subs := l.newSubscriptionFilter(uc)
+	out := make([]ItemSummary, 0, len(pids))
+	for _, pid := range pids {
+		it, err := l.lib.Get(ctx, model.PID(pid))
+		if err != nil {
+			// Stamps are dangling-tolerant: the item may be gone.
+			continue
+		}
+		if it.Kind != model.KindEpisode && it.Kind != model.KindBook {
+			continue
+		}
+		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
+			continue
+		}
+		if !subs.allowsItem(ctx, l, it) {
+			continue
+		}
+		out = append(out, summary(it))
+	}
+	return out, nil
+}
+
 // PlayState returns the calling user's state for one item. Items never
 // played return a zero state.
 func (l *Library) PlayState(ctx context.Context, uc *UserCtx, apiItemPID string) (PlayState, error) {
@@ -380,6 +413,11 @@ func (l *Library) IngestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 		if crossed {
 			if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, finished); err == nil {
 				l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
+				// A crossed music listen is exactly the scrobble
+				// threshold; deliveries drain from the durable outbox.
+				if mt == "music" {
+					l.enqueueScrobbles(ctx, uc, it, s.StartedAt)
+				}
 			} else {
 				err = classify(err)
 				switch KindOf(err) {

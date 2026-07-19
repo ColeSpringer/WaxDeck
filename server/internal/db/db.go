@@ -270,6 +270,74 @@ var migrations = []string{
 		uploaded_sec INTEGER NOT NULL
 	);
 	CREATE INDEX gpodder_actions_by_user ON gpodder_actions (user_id, id);`,
+
+	// 5: internet radio stations, scrobbling connections and their durable
+	// delivery queue, the notification outbox, UnifiedPush registrations,
+	// and a small settings store for runtime-editable server configuration.
+	`CREATE TABLE radio_stations (
+		id            TEXT    PRIMARY KEY,
+		name          TEXT    NOT NULL,
+		stream_url    TEXT    NOT NULL UNIQUE,
+		homepage_url  TEXT    NOT NULL DEFAULT '',
+		logo_url      TEXT    NOT NULL DEFAULT '',
+		created_by    TEXT    NOT NULL DEFAULT '',
+		created_at_ns INTEGER NOT NULL
+	);
+	CREATE TABLE scrobble_connections (
+		user_id            TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		service            TEXT    NOT NULL,
+		sealed_secret      BLOB    NOT NULL,
+		username           TEXT    NOT NULL DEFAULT '',
+		api_url            TEXT    NOT NULL DEFAULT '',
+		created_at_ns      INTEGER NOT NULL,
+		updated_at_ns      INTEGER NOT NULL,
+		last_success_at_ns INTEGER NOT NULL DEFAULT 0,
+		last_error         TEXT    NOT NULL DEFAULT '',
+		last_error_at_ns   INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (user_id, service)
+	);
+	CREATE TABLE scrobble_outbox (
+		id             INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id        TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		service        TEXT    NOT NULL,
+		item_pid       TEXT    NOT NULL,
+		artist         TEXT    NOT NULL DEFAULT '',
+		title          TEXT    NOT NULL DEFAULT '',
+		album          TEXT    NOT NULL DEFAULT '',
+		duration_ms    INTEGER NOT NULL DEFAULT 0,
+		listened_at_ns INTEGER NOT NULL,
+		enqueued_at_ns INTEGER NOT NULL,
+		attempts       INTEGER NOT NULL DEFAULT 0,
+		lease_until_ns INTEGER NOT NULL DEFAULT 0,
+		last_error     TEXT    NOT NULL DEFAULT ''
+	);
+	CREATE INDEX scrobble_outbox_ready ON scrobble_outbox (lease_until_ns, enqueued_at_ns);
+	CREATE TABLE notify_outbox (
+		id             INTEGER PRIMARY KEY AUTOINCREMENT,
+		kind           TEXT    NOT NULL,
+		event          TEXT    NOT NULL,
+		target         TEXT    NOT NULL DEFAULT '',
+		title          TEXT    NOT NULL DEFAULT '',
+		body           TEXT    NOT NULL DEFAULT '',
+		enqueued_at_ns INTEGER NOT NULL,
+		attempts       INTEGER NOT NULL DEFAULT 0,
+		lease_until_ns INTEGER NOT NULL DEFAULT 0,
+		last_error     TEXT    NOT NULL DEFAULT ''
+	);
+	CREATE INDEX notify_outbox_ready ON notify_outbox (lease_until_ns, enqueued_at_ns);
+	CREATE TABLE push_registrations (
+		id            TEXT    PRIMARY KEY,
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		endpoint      TEXT    NOT NULL,
+		label         TEXT    NOT NULL DEFAULT '',
+		created_at_ns INTEGER NOT NULL,
+		UNIQUE (user_id, endpoint)
+	);
+	CREATE TABLE settings (
+		key        TEXT PRIMARY KEY,
+		value      TEXT NOT NULL,
+		updated_at_ns INTEGER NOT NULL
+	);`,
 }
 
 // Open opens (creating if needed) the database at path and applies

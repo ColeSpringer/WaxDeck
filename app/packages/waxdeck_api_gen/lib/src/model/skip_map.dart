@@ -13,7 +13,7 @@ part 'skip_map.g.dart';
 /// Precomputed silence spans for one audio file, keyed to its audio essence and the upstream detector version. Spans are in the mapped file's own timeline (for a multi-file audiobook, the requested part's timeline, not the book's). 
 ///
 /// Properties:
-/// * [state] - `ready` (spans present), `pending` (analysis queued or running; poll again later), or `unavailable` (this item is not mapped: not spoken-word content, audio not fetched to the server yet, or the streaming sidecar cannot analyze). Open set; treat unknown values as `unavailable`. 
+/// * [state] - `ready` (spans present), `pending` (analysis queued or running; poll again later), or `unavailable` (this item is not mapped: not spoken-word content, audio not fetched to the server yet, or the streaming engine cannot analyze). Open set; treat unknown values as `unavailable`. 
 /// * [essenceHash] - Content hash of the mapped file's audio essence, matching the download surface's `essenceHash`; a stored map whose hash no longer matches the stored audio is stale. 
 /// * [partIndex] - The mapped part of a multi-file audiobook. Present only for multi-file books. 
 /// * [version] - Upstream silence-detector revision the map was built by.
@@ -23,7 +23,7 @@ part 'skip_map.g.dart';
 /// * [updatedAt] - When the map was computed.
 @BuiltValue()
 abstract class SkipMap implements Built<SkipMap, SkipMapBuilder> {
-  /// `ready` (spans present), `pending` (analysis queued or running; poll again later), or `unavailable` (this item is not mapped: not spoken-word content, audio not fetched to the server yet, or the streaming sidecar cannot analyze). Open set; treat unknown values as `unavailable`. 
+  /// `ready` (spans present), `pending` (analysis queued or running; poll again later), or `unavailable` (this item is not mapped: not spoken-word content, audio not fetched to the server yet, or the streaming engine cannot analyze). Open set; treat unknown values as `unavailable`. 
   @BuiltValueField(wireName: r'state')
   String get state;
 

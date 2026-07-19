@@ -312,6 +312,8 @@ class PlayInfo {
     this.partCount,
     this.partStartMs,
     this.voiceBoost = false,
+    this.spanStartMs,
+    this.spanEndMs,
   });
 
   final String pid;
@@ -346,6 +348,13 @@ class PlayInfo {
 
   /// Whether server-side voice boost is actually applied to the stream.
   final bool voiceBoost;
+
+  /// Playback window within the served audio, present only when the
+  /// url carries the item's whole backing file and the item is a
+  /// window into it (direct playback of a carved track): the player
+  /// clips to [spanStartMs, spanEndMs). Null when the server cuts.
+  final int? spanStartMs;
+  final int? spanEndMs;
 }
 
 /// The calling user's playback state for one item.
@@ -979,4 +988,322 @@ class SkipMap {
   final List<SkipSpan> spans;
 
   bool get ready => state == 'ready';
+}
+
+/// One node of a smart rule's condition tree. [type] selects the shape:
+/// `all` and `any` carry [nodes], `not` carries [node], `condition`
+/// compares [field] with [op] against [value] (or [values] for
+/// `inTheRange`). Values are strings on the wire regardless of the
+/// field's kind.
+class RuleNode {
+  const RuleNode({
+    required this.type,
+    this.nodes = const [],
+    this.node,
+    this.field,
+    this.op,
+    this.value,
+    this.values = const [],
+  });
+
+  const RuleNode.all([this.nodes = const []])
+    : type = 'all',
+      node = null,
+      field = null,
+      op = null,
+      value = null,
+      values = const [];
+
+  const RuleNode.any([this.nodes = const []])
+    : type = 'any',
+      node = null,
+      field = null,
+      op = null,
+      value = null,
+      values = const [];
+
+  const RuleNode.condition({
+    required String this.field,
+    required String this.op,
+    this.value,
+    this.values = const [],
+  }) : type = 'condition',
+       nodes = const [],
+       node = null;
+
+  final String type;
+  final List<RuleNode> nodes;
+  final RuleNode? node;
+  final String? field;
+  final String? op;
+  final String? value;
+  final List<String> values;
+}
+
+/// One sort key of a smart rule.
+class RuleSort {
+  const RuleSort({required this.field, this.desc = false});
+
+  final String field;
+  final bool desc;
+}
+
+/// A smart playlist rule: condition tree, sort order, and row limit
+/// (0 means unlimited).
+class SmartRule {
+  const SmartRule({required this.root, this.sorts = const [], this.limit = 0});
+
+  final RuleNode root;
+  final List<RuleSort> sorts;
+  final int limit;
+}
+
+/// A playlist: `static` (manual ordered members) or `smart` (rule
+/// evaluated on read). [itemCount] is null when omitted (smart playlists
+/// on list pages). [rule] is null for static playlists.
+class Playlist {
+  const Playlist({
+    required this.pid,
+    required this.name,
+    required this.kind,
+    required this.visibility,
+    required this.ownerName,
+    required this.isOwner,
+    required this.createdAt,
+    required this.updatedAt,
+    this.previousPid,
+    this.itemCount,
+    this.rule,
+  });
+
+  final String pid;
+
+  /// Set after a rule replace reissued the pid; clients relink instead of
+  /// treating the reissue as a delete and create.
+  final String? previousPid;
+  final String name;
+
+  /// `static` or `smart`; unknown kinds render read-only.
+  final String kind;
+
+  /// `private` or `shared`.
+  final String visibility;
+  final String ownerName;
+
+  /// True when the caller owns the playlist and may edit it.
+  final bool isOwner;
+  final int? itemCount;
+  final SmartRule? rule;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  bool get isSmart => kind == 'smart';
+  bool get isShared => visibility == 'shared';
+}
+
+/// One page of playlists.
+class PlaylistPage {
+  const PlaylistPage({required this.playlists, this.nextCursor});
+
+  final List<Playlist> playlists;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// One playlist member. [position] is the stored order for static
+/// playlists (the removal endpoint takes it); null for smart playlists.
+class PlaylistEntry {
+  const PlaylistEntry({required this.item, this.position});
+
+  final int? position;
+  final ItemSummary item;
+}
+
+/// One page of playlist members.
+class PlaylistItemsPage {
+  const PlaylistItemsPage({required this.entries, this.nextCursor});
+
+  final List<PlaylistEntry> entries;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// A stateless rule evaluation: the first matching items plus the total
+/// match count ignoring the rule's own limit.
+class PlaylistPreview {
+  const PlaylistPreview({required this.items, required this.total});
+
+  final List<ItemSummary> items;
+  final int total;
+}
+
+/// One rule field the editor may offer.
+class RuleField {
+  const RuleField({
+    required this.name,
+    required this.kind,
+    required this.ops,
+    required this.userState,
+    required this.sortable,
+    this.description,
+  });
+
+  final String name;
+
+  /// `text`, `number`, `date`, `boolean`, or `mediaType`.
+  final String kind;
+  final List<String> ops;
+
+  /// True when the field reads the evaluating user's playback state.
+  final bool userState;
+  final bool sortable;
+  final String? description;
+}
+
+/// One custom tag key usable as a `tag.KEY` rule field.
+class RuleTagKey {
+  const RuleTagKey({required this.key, required this.itemCount});
+
+  final String key;
+  final int itemCount;
+}
+
+/// The rule vocabulary for smart rule editors. Tag fields are text-kind,
+/// accept the unordered text operators, and never sort.
+class RuleFields {
+  const RuleFields({required this.fields, required this.tagKeys});
+
+  final List<RuleField> fields;
+  final List<RuleTagKey> tagKeys;
+}
+
+/// Outcome of an M3U8 import.
+class M3uImportResult {
+  const M3uImportResult({
+    required this.playlist,
+    required this.matched,
+    required this.unmatched,
+    this.unmatchedPaths = const [],
+  });
+
+  final Playlist playlist;
+  final int matched;
+  final int unmatched;
+  final List<String> unmatchedPaths;
+}
+
+/// One internet radio station in the shared library.
+class RadioStation {
+  const RadioStation({
+    required this.pid,
+    required this.name,
+    required this.streamUrl,
+    required this.createdAt,
+    this.homepageUrl,
+    this.logoUrl,
+  });
+
+  final String pid;
+  final String name;
+  final String streamUrl;
+  final String? homepageUrl;
+  final String? logoUrl;
+  final DateTime createdAt;
+}
+
+/// One station directory match.
+class RadioDirectoryEntry {
+  const RadioDirectoryEntry({
+    required this.name,
+    required this.streamUrl,
+    this.homepageUrl,
+    this.logoUrl,
+    this.tags,
+    this.country,
+    this.codec,
+    this.bitrateKbps,
+  });
+
+  final String name;
+  final String streamUrl;
+  final String? homepageUrl;
+  final String? logoUrl;
+  final String? tags;
+  final String? country;
+  final String? codec;
+  final int? bitrateKbps;
+}
+
+/// A resolved, tokenized station stream, absolute against the client
+/// base URL.
+class RadioPlayInfo {
+  const RadioPlayInfo({required this.url, this.nowPlaying});
+
+  final String url;
+
+  /// The station's current in-stream title, present only while a
+  /// proxied listener has the stream open. Poll play-info while
+  /// playing to keep it fresh; keep the open stream and ignore the
+  /// fresh url.
+  final String? nowPlaying;
+}
+
+/// One outbound scrobbling connection slot.
+class Scrobbler {
+  const Scrobbler({
+    required this.service,
+    required this.available,
+    required this.connected,
+    this.username,
+    this.apiUrl,
+    this.lastSuccessAt,
+    this.lastError,
+    this.lastErrorAt,
+  });
+
+  /// `lastfm` or `listenbrainz`; clients skip unknown services.
+  final String service;
+  final bool available;
+  final bool connected;
+  final String? username;
+  final String? apiUrl;
+
+  /// Delivery health: the last successful delivery, and the standing
+  /// error while the connection is unhealthy (cleared by the next
+  /// success and by reconnecting).
+  final DateTime? lastSuccessAt;
+  final String? lastError;
+  final DateTime? lastErrorAt;
+}
+
+/// The server's notification relay configuration (administrators).
+class NotificationConfig {
+  const NotificationConfig({
+    required this.appriseUrl,
+    required this.enabledEvents,
+    required this.knownEvents,
+    this.targets,
+  });
+
+  final String appriseUrl;
+  final String? targets;
+  final List<String> enabledEvents;
+  final List<String> knownEvents;
+}
+
+/// One UnifiedPush endpoint registration.
+class PushRegistration {
+  const PushRegistration({
+    required this.pid,
+    required this.endpoint,
+    required this.createdAt,
+    this.label,
+  });
+
+  final String pid;
+  final String endpoint;
+  final String? label;
+  final DateTime createdAt;
 }

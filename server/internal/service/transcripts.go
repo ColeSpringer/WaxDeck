@@ -175,10 +175,16 @@ func refusePrivateAddr(address string) error {
 	if ip == nil {
 		return fmt.Errorf("unresolved address %q", host)
 	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-		return fmt.Errorf("transcript host resolves to a private address")
+	if privateIP(ip) {
+		return fmt.Errorf("host resolves to a private address")
 	}
 	return nil
+}
+
+// privateIP reports whether ip is off limits for guarded outbound
+// fetches: loopback, private, link-local, or unspecified.
+func privateIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }
 
 // parseTranscript classifies and parses the document. Classification

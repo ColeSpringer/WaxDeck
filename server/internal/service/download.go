@@ -121,10 +121,20 @@ func (l *Library) downloadResolution(ctx context.Context, it *model.ItemView) (D
 	out.Files = []DownloadFile{df}
 	if it.Virtual {
 		out.HasSpan = true
-		out.SpanStartMS = it.StartMS
-		out.SpanEndMS = it.EndMS
+		out.SpanStartMS, out.SpanEndMS = spanWindow(it)
 	}
 	return out, nil
+}
+
+// spanWindow reports a carved item's playback window with the sheet's
+// open-ended last track closed by the item's own duration; the wire
+// contracts promise a closed window, never the upstream 0 sentinel.
+func spanWindow(it *model.ItemView) (startMS, endMS int64) {
+	endMS = it.EndMS
+	if endMS == 0 {
+		endMS = it.StartMS + it.DurationMS
+	}
+	return it.StartMS, endMS
 }
 
 func (l *Library) downloadFile(ctx context.Context, filePID model.PID) (DownloadFile, error) {

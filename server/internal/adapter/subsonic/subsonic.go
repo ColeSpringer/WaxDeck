@@ -1,8 +1,12 @@
-// Package subsonic is the read-only OpenSubsonic compatibility surface:
-// ID3 browsing, search, cover art, and streaming, so mature third-party
-// clients work against WaxDeck while the first-party clients mature.
+// Package subsonic is the OpenSubsonic compatibility surface: ID3 and
+// folder-emulated browsing, search, cover art, streaming, playlists,
+// stars and ratings, scrobbling, bookmark parity over spoken-word
+// resume, read-only podcasts, and the internet radio library, so
+// mature third-party clients work against WaxDeck while the
+// first-party clients mature.
 // It sits on the service layer like any first-party handler; user
-// mapping, visibility, and media-token minting apply identically.
+// mapping, visibility, media-token minting, and the scrobble outbox
+// apply identically.
 //
 // Identifier scheme: songs are real item PIDs. The item query grammar
 // addresses artists and albums by display string, so artist and album
@@ -16,11 +20,13 @@ import (
 	"encoding/base64"
 	"math/rand/v2"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -39,6 +45,7 @@ type streamer interface {
 type Handler struct {
 	svc     *service.Library
 	bridge  streamer
+	media   *auth.MediaTokens
 	version string
 
 	// The full-visibility grouped index, cached against the catalog
@@ -50,9 +57,12 @@ type Handler struct {
 	idxShared *index
 }
 
-// New builds the adapter. bridge may be nil (stream answers an error).
-func New(svc *service.Library, bridge *flow.Bridge, version string) *Handler {
-	h := &Handler{svc: svc, version: version}
+// New builds the adapter. bridge may be nil: stream then serves
+// original bytes directly through the tokenized download endpoint
+// (media mints the tokens), refusing only span-carved tracks it
+// cannot cut.
+func New(svc *service.Library, bridge *flow.Bridge, media *auth.MediaTokens, version string) *Handler {
+	h := &Handler{svc: svc, media: media, version: version}
 	if bridge != nil {
 		h.bridge = bridge
 	}
@@ -84,30 +94,97 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.ok(w, r, envelope{})
 	case "getLicense":
 		h.ok(w, r, envelope{License: &license{Valid: true}})
+	case "getOpenSubsonicExtensions":
+		h.getOpenSubsonicExtensions(w, r)
 	case "getMusicFolders":
 		h.getMusicFolders(w, r)
+	case "getIndexes":
+		h.getIndexes(w, r, uc)
+	case "getMusicDirectory":
+		h.getMusicDirectory(w, r, uc)
 	case "getArtists":
 		h.getArtists(w, r, uc)
 	case "getArtist":
 		h.getArtist(w, r, uc)
 	case "getAlbum":
 		h.getAlbum(w, r, uc)
+	case "getAlbumList":
+		h.getAlbumList(w, r, uc)
 	case "getAlbumList2":
 		h.getAlbumList2(w, r, uc)
+	case "getRandomSongs":
+		h.getRandomSongs(w, r, uc)
+	case "getSongsByGenre":
+		h.getSongsByGenre(w, r, uc)
 	case "getSong":
 		h.getSong(w, r, uc)
 	case "getGenres":
 		h.getGenres(w, r, uc)
+	case "getArtistInfo":
+		h.getArtistInfo(w, r)
+	case "getArtistInfo2":
+		h.getArtistInfo2(w, r)
+	case "getTopSongs":
+		h.getTopSongs(w, r)
+	case "getScanStatus":
+		h.getScanStatus(w, r, uc)
 	case "search3":
 		h.search3(w, r, uc)
 	case "getCoverArt":
 		h.getCoverArt(w, r, uc)
 	case "stream", "download":
 		h.stream(w, r, uc)
+	case "getPlaylists":
+		h.getPlaylists(w, r, uc)
+	case "getPlaylist":
+		h.getPlaylist(w, r, uc)
+	case "createPlaylist":
+		h.createPlaylist(w, r, uc)
+	case "updatePlaylist":
+		h.updatePlaylist(w, r, uc)
+	case "deletePlaylist":
+		h.deletePlaylist(w, r, uc)
+	case "star":
+		h.setStar(w, r, uc, true)
+	case "unstar":
+		h.setStar(w, r, uc, false)
+	case "setRating":
+		h.setRating(w, r, uc)
+	case "getStarred":
+		h.getStarred(w, r, uc)
+	case "getStarred2":
+		h.getStarred2(w, r, uc)
+	case "getPodcasts":
+		h.getPodcasts(w, r, uc)
+	case "getNewestPodcasts":
+		h.getNewestPodcasts(w, r, uc)
+	case "scrobble":
+		h.scrobble(w, r, uc)
+	case "getBookmarks":
+		h.getBookmarks(w, r, uc)
+	case "createBookmark":
+		h.createBookmark(w, r, uc)
+	case "deleteBookmark":
+		h.deleteBookmark(w, r, uc)
+	case "getInternetRadioStations":
+		h.getInternetRadioStations(w, r)
+	case "createInternetRadioStation":
+		h.createInternetRadioStation(w, r, uc)
+	case "updateInternetRadioStation":
+		h.updateInternetRadioStation(w, r)
+	case "deleteInternetRadioStation":
+		h.deleteInternetRadioStation(w, r)
+	case "getNowPlaying":
+		// Live session tracking arrives with the connect subsystem;
+		// an empty list beats an error for the clients that poll it.
+		h.ok(w, r, envelope{NowPlaying: &nowPlaying{}})
+	case "jukeboxControl":
+		h.fail(w, r, 0, "jukebox mode is not available on this server yet")
+	case "savePlayQueue", "getPlayQueue":
+		h.fail(w, r, 0, "play queue sync is not available on this server yet")
 	default:
-		// The read-only surface: everything else is an explicit stub,
-		// never a 500.
-		h.fail(w, r, 0, "not implemented by this server (read-only browse and stream)")
+		// Everything else is an explicit stub, never a 500.
+		h.fail(w, r, 0, "not implemented by this server")
 	}
 }
 
@@ -227,6 +304,17 @@ func (h *Handler) getAlbumList2(w http.ResponseWriter, r *http.Request, uc *serv
 		h.fail(w, r, 0, "reading the library failed")
 		return
 	}
+	out := &albumList2{}
+	for _, al := range h.pagedAlbums(r, idx) {
+		out.Albums = append(out.Albums, al.id3())
+	}
+	h.ok(w, r, envelope{AlbumList2: out})
+}
+
+// pagedAlbums applies the album-list type, size, and offset shared by
+// both list flavors (getAlbumList2 renders ID3 shapes, getAlbumList
+// directory children).
+func (h *Handler) pagedAlbums(r *http.Request, idx *index) []*album {
 	size := formInt(r, "size", 10)
 	if size < 1 {
 		size = 10
@@ -246,17 +334,26 @@ func (h *Handler) getAlbumList2(w http.ResponseWriter, r *http.Request, uc *serv
 		rand.Shuffle(len(albums), func(i, j int) { albums[i], albums[j] = albums[j], albums[i] })
 	case "byYear":
 		sort.SliceStable(albums, func(i, j int) bool { return albums[i].year < albums[j].year })
+	case "byGenre":
+		g := r.Form.Get("genre")
+		kept := albums[:0]
+		for _, al := range albums {
+			if al.genre == g {
+				kept = append(kept, al)
+			}
+		}
+		albums = kept
 	default:
 		// alphabeticalByName is the shape everything else falls back to:
 		// played-derived lists need per-user history this surface does
 		// not serve yet, and an ordered list beats an error for a
 		// read-only browse.
 	}
-	out := &albumList2{}
-	for i := offset; i < len(albums) && len(out.Albums) < size; i++ {
-		out.Albums = append(out.Albums, albums[i].id3())
+	var out []*album
+	for i := offset; i < len(albums) && len(out) < size; i++ {
+		out = append(out, albums[i])
 	}
-	h.ok(w, r, envelope{AlbumList2: out})
+	return out
 }
 
 func (h *Handler) getSong(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
@@ -390,10 +487,6 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 }
 
 func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	if h.bridge == nil {
-		h.fail(w, r, 0, "streaming is not configured on this server")
-		return
-	}
 	id := r.Form.Get("id")
 	if id == "" {
 		h.fail(w, r, 10, "missing id")
@@ -401,6 +494,28 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	}
 	if err := h.svc.VisibleItem(r.Context(), uc, id); err != nil {
 		h.fail(w, r, 70, "no such song")
+		return
+	}
+	// Without the streaming engine the original bytes serve directly.
+	// Subsonic clients cannot clip, so a track carved out of a larger
+	// file is the one thing this mode must refuse.
+	if h.bridge == nil {
+		if h.media == nil {
+			h.fail(w, r, 0, "streaming is not configured on this server")
+			return
+		}
+		res, err := h.svc.DirectPlayInfo(r.Context(), uc, id, "")
+		if err != nil {
+			h.failFromService(w, r, err, "no such song")
+			return
+		}
+		if res.HasSpan {
+			h.fail(w, r, 0, "this track is a window into a larger file; playing it needs the streaming engine")
+			return
+		}
+		token, _ := h.media.Mint(uc.ID, id)
+		http.Redirect(w, r, "/media/download?pid="+url.QueryEscape(id)+
+			"&mt="+url.QueryEscape(token)+"&id="+url.QueryEscape(res.File.ETag), http.StatusFound)
 		return
 	}
 	info, err := h.bridge.PlayInfoFor(r.Context(), uc.ID, id, flow.PlayOptions{})

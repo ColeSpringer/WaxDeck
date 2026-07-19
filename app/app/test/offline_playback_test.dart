@@ -50,6 +50,70 @@ void main() {
     );
     await session.start();
     expect(engine.loadedUrl, Uri.file('/downloads/AAA.flac').toString());
+    expect(engine.loadedClipStart, isNull);
+    expect(engine.playing, isTrue);
+    await session.dispose();
+  });
+
+  test('an offline carved track clips to its stored window', () async {
+    final repo = FakeRepository(items: [testItem('tr-AAA')]);
+    repo.playInfoError = unreachable;
+    final engine = FakeEngine();
+    final session = PlaybackSession(
+      repository: repo,
+      engine: engine,
+      item: testItem('tr-AAA'),
+      clientId: 'test',
+      downloads: _FakeDownloads({
+        'tr-AAA': const LocalPlayback(
+          paths: ['/downloads/rip.flac'],
+          spanStartMs: 60000,
+          spanEndMs: 240000,
+        ),
+      }),
+    );
+    await session.start();
+    expect(engine.loadedClipStart, const Duration(minutes: 1));
+    expect(engine.loadedClipEnd, const Duration(minutes: 4));
+    await session.dispose();
+  });
+
+  test('a stored open-ended window clips the start only', () async {
+    final repo = FakeRepository(items: [testItem('tr-AAA')]);
+    repo.playInfoError = unreachable;
+    final engine = FakeEngine();
+    final session = PlaybackSession(
+      repository: repo,
+      engine: engine,
+      item: testItem('tr-AAA'),
+      clientId: 'test',
+      downloads: _FakeDownloads({
+        'tr-AAA': const LocalPlayback(
+          paths: ['/downloads/rip.flac'],
+          spanStartMs: 60000,
+          spanEndMs: 0,
+        ),
+      }),
+    );
+    await session.start();
+    expect(engine.loadedClipStart, const Duration(minutes: 1));
+    expect(engine.loadedClipEnd, isNull);
+    await session.dispose();
+  });
+
+  test('an online direct span clips the served file to the track', () async {
+    final repo = FakeRepository(items: [testItem('tr-AAA')]);
+    repo.playInfoSpans['tr-AAA'] = (startMs: 1000, endMs: 2000);
+    final engine = FakeEngine();
+    final session = PlaybackSession(
+      repository: repo,
+      engine: engine,
+      item: testItem('tr-AAA'),
+      clientId: 'test',
+    );
+    await session.start();
+    expect(engine.loadedClipStart, const Duration(seconds: 1));
+    expect(engine.loadedClipEnd, const Duration(seconds: 2));
     expect(engine.playing, isTrue);
     await session.dispose();
   });

@@ -415,10 +415,7 @@ func (s *Server) GetJob(ctx context.Context, req GetJobRequestObject) (GetJobRes
 // --- playback --------------------------------------------------------------------
 
 func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) (GetPlayInfoResponseObject, error) {
-	if s.bridge == nil {
-		return nil, errStreamingUnavailable
-	}
-	uc, _, err := s.requireUserCtx(ctx)
+	uc, p, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -440,6 +437,50 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	part, err := s.svc.ResolvePlayPart(ctx, uc, req.Pid, positionMS)
 	if err != nil {
 		return nil, err
+	}
+
+	// Without the streaming engine the original bytes serve directly:
+	// ranged, untranscoded, through the same token-authenticated
+	// endpoint downloads use. Span items ride whole with the window in
+	// the response; DSP (voice boost) is simply unavailable.
+	if s.bridge == nil {
+		if s.media == nil {
+			return nil, errStreamingUnavailable
+		}
+		res, err := s.svc.DirectPlayInfo(ctx, uc, req.Pid, part.FilePID)
+		if err != nil {
+			switch service.KindOf(err) {
+			case service.KindNotFound:
+				return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+			case service.KindConflict:
+				return GetPlayInfo409JSONResponse(errObj("conflict", err.Error())), nil
+			}
+			return nil, err
+		}
+		token, exp := s.media.Mint(p.User.ID, req.Pid)
+		u := "/media/download?pid=" + url.QueryEscape(req.Pid) +
+			"&mt=" + url.QueryEscape(token) + "&id=" + url.QueryEscape(res.File.ETag)
+		if part.FilePID != "" {
+			u += "&f=" + url.QueryEscape(part.FilePID)
+		}
+		out := GetPlayInfo200JSONResponse{
+			Pid:        req.Pid,
+			Url:        u,
+			MimeType:   res.File.MimeType,
+			DurationMs: res.DurationMS,
+			Seekable:   true,
+			ExpiresAt:  exp,
+		}
+		if res.HasSpan {
+			out.SpanStartMs = &res.SpanStartMS
+			out.SpanEndMs = &res.SpanEndMS
+		}
+		if part.MultiPart {
+			out.PartIndex = &part.Index
+			out.PartCount = &part.Count
+			out.PartStartMs = &part.StartMS
+		}
+		return out, nil
 	}
 
 	// Voice boost precedence is resolved here, at mint time: an explicit
@@ -727,6 +768,9 @@ var publicPaths = map[string]bool{
 	"/api/v1/auth/oidc/start":     true,
 	"/api/v1/auth/oidc/callback":  true,
 	"/api/v1/auth/oidc/exchange":  true,
+	// The Last.fm redirect target authenticates by its one-time state,
+	// never by a session: the approving browser tab may not carry one.
+	"/api/v1/scrobble/lastfm/callback": true,
 }
 
 // AuthMiddleware resolves the session (cookie or bearer) into the
@@ -892,6 +936,16 @@ func ResponseErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 		writeError(w, http.StatusConflict, "conflict", kindMessage(err, "a conflicting operation is running"))
 	case service.KindGone:
 		writeError(w, http.StatusGone, "sync-reset", kindMessage(err, "re-mirror from a fresh snapshot"))
+	case service.KindForbidden:
+		writeError(w, http.StatusForbidden, "forbidden", kindMessage(err, "not allowed"))
+	case service.KindUnsupported:
+		writeError(w, http.StatusNotImplemented, "source-unavailable", kindMessage(err, "this server is not running the needed integration"))
+	case service.KindUpstream:
+		writeError(w, http.StatusBadGateway, "feed-unreachable", kindMessage(err, "the upstream feed could not be fetched"))
+	case service.KindDirectory:
+		writeError(w, http.StatusBadGateway, "directory-unavailable", kindMessage(err, "the external directory could not be reached"))
+	case service.KindService:
+		writeError(w, http.StatusBadGateway, "service-unreachable", kindMessage(err, "an external service could not be reached"))
 	default:
 		var se *service.Error
 		if errors.As(err, &se) && se.Msg != "" && se.Kind == service.KindInternal {

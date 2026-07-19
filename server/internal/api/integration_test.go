@@ -48,6 +48,19 @@ func newHarness(t *testing.T, extraRoots ...service.Root) *harness {
 // private-address guard relaxed for loopback feeds).
 func newHarnessWith(t *testing.T, mutate func(*service.Config), extraRoots ...service.Root) *harness {
 	t.Helper()
+	return newHarnessCore(t, mutate, false, extraRoots...)
+}
+
+// newHarnessDirect builds the stack without the streaming bridge: the
+// shape of a server running with no WAXDECK_FLOW_URL, where play-info
+// serves original bytes directly.
+func newHarnessDirect(t *testing.T) *harness {
+	t.Helper()
+	return newHarnessCore(t, nil, true)
+}
+
+func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, extraRoots ...service.Root) *harness {
+	t.Helper()
 	h := &harness{}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -103,8 +116,54 @@ func newHarnessWith(t *testing.T, mutate func(*service.Config), extraRoots ...se
 		svc.Close()
 	})
 
-	// The fake WaxFlow sidecar: /caps as the flavored build reports it,
-	// /stream serving the named source file (ranges included).
+	media := auth.NewMediaTokens(secret, 0)
+	var bridge *flow.Bridge
+	if !noBridge {
+		bridge = newFakeFlowBridge(t, ctx, h, cfg, media, svc, log)
+		svc.SetFlowJobs(bridge)
+	}
+
+	hub := events.New(svc)
+	group.Go(ctx, "event-hub", hub.Run)
+
+	srv := NewServer("test", Options{
+		Service:  svc,
+		Bridge:   bridge,
+		Sessions: auth.NewSessions(store),
+		Media:    media,
+	})
+	apiHandler := HandlerWithOptions(
+		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
+			RequestErrorHandlerFunc:  RequestErrorHandler,
+			ResponseErrorHandlerFunc: ResponseErrorHandler,
+		}),
+		StdHTTPServerOptions{
+			BaseURL:     "/api/v1",
+			Middlewares: []MiddlewareFunc{srv.AuthMiddleware},
+		},
+	)
+	mux := http.NewServeMux()
+	mux.Handle("/api/v1/", apiHandler)
+	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
+	mux.HandleFunc("GET /media/download", srv.ServeDownload)
+	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)
+	mux.Handle("/rest/", subsonic.New(svc, bridge, media, "test"))
+	if bridge != nil {
+		mux.HandleFunc("/media/stream", bridge.ServeStream)
+	}
+	h.ts = httptest.NewServer(mux)
+	t.Cleanup(h.ts.Close)
+
+	h.token = login(t, h.ts)
+	h.rescanAndWait(t)
+	return h
+}
+
+// newFakeFlowBridge builds the fake WaxFlow sidecar (/caps as the
+// flavored build reports it, /stream serving the named source file,
+// ranges included) and the bridge over it.
+func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg service.Config, media *auth.MediaTokens, svc *service.Library, log *slog.Logger) *flow.Bridge {
+	t.Helper()
 	fakeFlow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/caps":
@@ -161,7 +220,6 @@ func newHarnessWith(t *testing.T, mutate func(*service.Config), extraRoots ...se
 	if cfg.PodcastDir != "" {
 		flowRoots = append(flowRoots, flow.Root{Name: "podcasts", Path: cfg.PodcastDir})
 	}
-	media := auth.NewMediaTokens(secret, 0)
 	bridge, err := flow.New(ctx, flow.Config{
 		BaseURL:  fakeFlow.URL,
 		APIKey:   "test-flow-key",
@@ -173,39 +231,7 @@ func newHarnessWith(t *testing.T, mutate func(*service.Config), extraRoots ...se
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.SetFlowJobs(bridge)
-
-	hub := events.New(svc)
-	group.Go(ctx, "event-hub", hub.Run)
-
-	srv := NewServer("test", Options{
-		Service:  svc,
-		Bridge:   bridge,
-		Sessions: auth.NewSessions(store),
-		Media:    media,
-	})
-	apiHandler := HandlerWithOptions(
-		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
-			RequestErrorHandlerFunc:  RequestErrorHandler,
-			ResponseErrorHandlerFunc: ResponseErrorHandler,
-		}),
-		StdHTTPServerOptions{
-			BaseURL:     "/api/v1",
-			Middlewares: []MiddlewareFunc{srv.AuthMiddleware},
-		},
-	)
-	mux := http.NewServeMux()
-	mux.Handle("/api/v1/", apiHandler)
-	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
-	mux.HandleFunc("GET /media/download", srv.ServeDownload)
-	mux.Handle("/rest/", subsonic.New(svc, bridge, "test"))
-	mux.HandleFunc("/media/stream", bridge.ServeStream)
-	h.ts = httptest.NewServer(mux)
-	t.Cleanup(h.ts.Close)
-
-	h.token = login(t, h.ts)
-	h.rescanAndWait(t)
-	return h
+	return bridge
 }
 
 // rescanAndWait runs a scan through the API and polls the job to done.

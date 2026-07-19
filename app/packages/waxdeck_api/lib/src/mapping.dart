@@ -5,6 +5,7 @@
 /// directly to pin the mapping behavior.
 library;
 
+import 'package:built_collection/built_collection.dart';
 import 'package:waxdeck_api_gen/waxdeck_api_gen.dart' as gen;
 
 import 'models.dart';
@@ -180,6 +181,8 @@ PlayInfo playInfoFromGen(gen.PlayInfo info, {String baseUrl = ''}) {
     partCount: info.partCount,
     partStartMs: info.partStartMs,
     voiceBoost: info.voiceBoost ?? false,
+    spanStartMs: info.spanStartMs,
+    spanEndMs: info.spanEndMs,
   );
 }
 
@@ -572,5 +575,217 @@ SkipMap skipMapFromGen(gen.SkipMap map) {
             ?.map((s) => SkipSpan(startMs: s.startMs, endMs: s.endMs))
             .toList() ??
         const [],
+  );
+}
+
+RuleNode ruleNodeFromGen(gen.RuleNode node) {
+  final inner = node.node;
+  return RuleNode(
+    type: node.type,
+    nodes: node.nodes?.map(ruleNodeFromGen).toList() ?? const [],
+    node: inner == null ? null : ruleNodeFromGen(inner),
+    field: node.field,
+    op: node.op,
+    value: node.value,
+    values: node.values?.toList() ?? const [],
+  );
+}
+
+gen.RuleNode ruleNodeToGen(RuleNode node) {
+  final inner = node.node;
+  return gen.RuleNode(
+    (b) => b
+      ..type = node.type
+      ..nodes = node.nodes.isEmpty
+          ? null
+          : ListBuilder<gen.RuleNode>(node.nodes.map(ruleNodeToGen))
+      ..node = inner == null ? null : ruleNodeToGen(inner).toBuilder()
+      ..field = node.field
+      ..op = node.op
+      ..value = node.value
+      ..values = node.values.isEmpty ? null : ListBuilder<String>(node.values),
+  );
+}
+
+SmartRule smartRuleFromGen(gen.SmartRule rule) {
+  return SmartRule(
+    root: ruleNodeFromGen(rule.root),
+    sorts:
+        rule.sorts
+            ?.map((s) => RuleSort(field: s.field, desc: s.desc ?? false))
+            .toList() ??
+        const [],
+    limit: rule.limit ?? 0,
+  );
+}
+
+gen.SmartRule smartRuleToGen(SmartRule rule) {
+  return gen.SmartRule(
+    (b) => b
+      ..root = ruleNodeToGen(rule.root).toBuilder()
+      ..sorts = rule.sorts.isEmpty
+          ? null
+          : ListBuilder<gen.RuleSort>(
+              rule.sorts.map(
+                (s) => gen.RuleSort(
+                  (sb) => sb
+                    ..field = s.field
+                    ..desc = s.desc ? true : null,
+                ),
+              ),
+            )
+      ..limit = rule.limit > 0 ? rule.limit : null,
+  );
+}
+
+Playlist playlistFromGen(gen.Playlist pl) {
+  final rule = pl.rule;
+  return Playlist(
+    pid: pl.pid,
+    previousPid: pl.previousPid,
+    name: pl.name,
+    kind: pl.kind,
+    visibility: pl.visibility,
+    ownerName: pl.ownerName,
+    isOwner: pl.isOwner,
+    itemCount: pl.itemCount,
+    rule: rule == null ? null : smartRuleFromGen(rule),
+    createdAt: pl.createdAt.toUtc(),
+    updatedAt: pl.updatedAt.toUtc(),
+  );
+}
+
+PlaylistPage playlistPageFromGen(gen.PlaylistPage page) {
+  return PlaylistPage(
+    playlists: page.playlists.map(playlistFromGen).toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
+PlaylistItemsPage playlistItemsPageFromGen(
+  gen.PlaylistItemsPage page, {
+  String baseUrl = '',
+}) {
+  return PlaylistItemsPage(
+    entries: page.entries
+        .map(
+          (e) => PlaylistEntry(
+            position: e.position,
+            item: itemSummaryFromGen(e.item, baseUrl: baseUrl),
+          ),
+        )
+        .toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
+PlaylistPreview playlistPreviewFromGen(
+  gen.PlaylistPreview preview, {
+  String baseUrl = '',
+}) {
+  return PlaylistPreview(
+    items: preview.items
+        .map((i) => itemSummaryFromGen(i, baseUrl: baseUrl))
+        .toList(),
+    total: preview.total,
+  );
+}
+
+RuleFields ruleFieldsFromGen(gen.RuleFields fields) {
+  return RuleFields(
+    fields: fields.fields
+        .map(
+          (f) => RuleField(
+            name: f.name,
+            kind: f.kind,
+            ops: f.ops.toList(),
+            userState: f.userState,
+            sortable: f.sortable,
+            description: f.description,
+          ),
+        )
+        .toList(),
+    tagKeys: fields.tagKeys
+        .map((k) => RuleTagKey(key: k.key, itemCount: k.itemCount))
+        .toList(),
+  );
+}
+
+M3uImportResult m3uImportResultFromGen(gen.M3uImportResult res) {
+  return M3uImportResult(
+    playlist: playlistFromGen(res.playlist),
+    matched: res.matched,
+    unmatched: res.unmatched,
+    unmatchedPaths: res.unmatchedPaths?.toList() ?? const [],
+  );
+}
+
+RadioStation radioStationFromGen(gen.RadioStation st) {
+  return RadioStation(
+    pid: st.pid,
+    name: st.name,
+    streamUrl: st.streamUrl,
+    homepageUrl: st.homepageUrl,
+    logoUrl: st.logoUrl,
+    createdAt: st.createdAt.toUtc(),
+  );
+}
+
+gen.RadioStationEdit radioStationEditToGen({
+  required String name,
+  required String streamUrl,
+  String? homepageUrl,
+  String? logoUrl,
+}) {
+  return gen.RadioStationEdit(
+    (b) => b
+      ..name = name
+      ..streamUrl = streamUrl
+      ..homepageUrl = homepageUrl
+      ..logoUrl = logoUrl,
+  );
+}
+
+RadioDirectoryEntry radioDirectoryEntryFromGen(gen.RadioDirectoryEntry e) {
+  return RadioDirectoryEntry(
+    name: e.name,
+    streamUrl: e.streamUrl,
+    homepageUrl: e.homepageUrl,
+    logoUrl: e.logoUrl,
+    tags: e.tags,
+    country: e.country,
+    codec: e.codec,
+    bitrateKbps: e.bitrateKbps,
+  );
+}
+
+Scrobbler scrobblerFromGen(gen.Scrobbler s) {
+  return Scrobbler(
+    service: s.service,
+    available: s.available,
+    connected: s.connected,
+    username: s.username,
+    apiUrl: s.apiUrl,
+    lastSuccessAt: s.lastSuccessAt,
+    lastError: s.lastError,
+    lastErrorAt: s.lastErrorAt,
+  );
+}
+
+NotificationConfig notificationConfigFromGen(gen.NotificationConfig c) {
+  return NotificationConfig(
+    appriseUrl: c.appriseUrl,
+    targets: c.targets,
+    enabledEvents: c.enabledEvents.toList(),
+    knownEvents: c.knownEvents.toList(),
+  );
+}
+
+PushRegistration pushRegistrationFromGen(gen.PushRegistration r) {
+  return PushRegistration(
+    pid: r.pid,
+    endpoint: r.endpoint,
+    label: r.label,
+    createdAt: r.createdAt.toUtc(),
   );
 }

@@ -241,11 +241,59 @@ func TestSubsonicAuthAndStubs(t *testing.T) {
 		t.Fatalf("p= auth = %s, want code 41", body)
 	}
 
-	// Mutating endpoints are explicit stubs, never 500s.
+	// Scrobble is implemented: an unknown item answers the protocol's
+	// not-found code, never a 500.
 	env = subsonicGet(t, h, "scrobble", secret, "&id=tr-01JZX5N8QW3F4V9T2B7KD3M9R6")
+	if env.Status != "failed" || env.Error == nil || env.Error.Code != 70 {
+		t.Fatalf("scrobble with unknown id = %+v", env)
+	}
+
+	// Unimplemented endpoints stay explicit stubs, never 500s.
+	env = subsonicGet(t, h, "jukeboxControl", secret, "")
 	if env.Status != "failed" || env.Error == nil || env.Error.Code != 0 ||
-		!strings.Contains(env.Error.Message, "read-only") {
-		t.Fatalf("scrobble stub = %+v", env)
+		!strings.Contains(env.Error.Message, "jukebox") {
+		t.Fatalf("jukebox stub = %+v", env)
+	}
+}
+
+func TestSubsonicRemoveDuplicateIndexes(t *testing.T) {
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+
+	// A playlist over the whole album, then a removal request naming
+	// the same index twice: one row goes, never a second shifted one.
+	items := h.items(t, "?mediaType=music")
+	q := ""
+	for _, it := range items.Items {
+		q += "&songId=" + it.Pid
+	}
+	env := subsonicGet(t, h, "createPlaylist", secret, "&name=DupRemove"+q)
+	if env.Status != "ok" {
+		t.Fatalf("createPlaylist = %+v", env)
+	}
+	lists := decode[PlaylistPage](t, get(t, h.ts, "/api/v1/playlists", h.token))
+	var pid string
+	for _, pl := range lists.Playlists {
+		if pl.Name == "DupRemove" {
+			pid = pl.Pid
+		}
+	}
+	if pid == "" {
+		t.Fatal("created playlist not listed")
+	}
+	env = subsonicGet(t, h, "updatePlaylist", secret,
+		"&playlistId="+pid+"&songIndexToRemove=1&songIndexToRemove=1")
+	if env.Status != "ok" {
+		t.Fatalf("updatePlaylist = %+v", env)
+	}
+	entries := decode[PlaylistItemsPage](t, get(t, h.ts, "/api/v1/playlists/"+pid+"/items", h.token))
+	if len(entries.Entries) != len(items.Items)-1 {
+		t.Fatalf("entries after duplicate removal = %d, want %d", len(entries.Entries), len(items.Items)-1)
+	}
+	for _, e := range entries.Entries {
+		if e.Item.Title == items.Items[1].Title {
+			t.Fatalf("index 1 (%q) still present", e.Item.Title)
+		}
 	}
 }
 

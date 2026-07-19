@@ -57,6 +57,13 @@ void main() {
     expect(find.text('This device'), findsOneWidget);
     expect(find.text('Firefox'), findsOneWidget);
     expect(find.text('Pixel 9'), findsOneWidget);
+    // The integration sections sit above the sign-out button, which
+    // starts off screen in the test viewport.
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('logout-button')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.byKey(const Key('logout-button')), findsOneWidget);
   });
 
@@ -122,6 +129,11 @@ void main() {
     await tester.pumpAndSettle();
     final container = _container(tester);
 
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('logout-button')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byKey(const Key('logout-button')));
     await tester.pumpAndSettle();
 

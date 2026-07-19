@@ -158,6 +158,67 @@ func (l *Library) ResolvePlayPart(ctx context.Context, uc *UserCtx, apiItemPID s
 	}, nil
 }
 
+// DirectPlayResolution is direct playback of original bytes, the
+// no-transcoder path: the selected backing file, the duration of what
+// plays, and the playback window for items carved out of a larger
+// file (the client clips; nothing here rewrites audio).
+type DirectPlayResolution struct {
+	File        DownloadFile
+	DurationMS  int64
+	HasSpan     bool
+	SpanStartMS int64
+	SpanEndMS   int64
+}
+
+// DirectPlayInfo resolves what to serve for one item on a server
+// running without the streaming engine: the original file, or the
+// selected part of a multi-file book, served whole. filePID comes
+// from ResolvePlayPart; empty means the item's own backing file.
+func (l *Library) DirectPlayInfo(ctx context.Context, uc *UserCtx, apiItemPID, filePID string) (DirectPlayResolution, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	if err != nil {
+		return DirectPlayResolution{}, err
+	}
+	// Same contract as the engine path: an unfetched episode answers
+	// the typed conflict, telling clients to queue a fetch and retry.
+	if it.Kind == model.KindEpisode && it.State != model.StatePresent {
+		return DirectPlayResolution{}, &Error{Kind: KindConflict,
+			Msg: "episode audio is not fetched to the server yet; queue it with the fetch endpoint"}
+	}
+	out := DirectPlayResolution{DurationMS: it.DurationMS}
+	if filePID != "" {
+		bd, err := l.lib.Book(ctx, it.PID)
+		if err != nil {
+			return DirectPlayResolution{}, classify(err)
+		}
+		part, ok := bookPartByFile(bd, filePID)
+		if !ok {
+			return DirectPlayResolution{}, errNotFound("no such part for item " + apiItemPID)
+		}
+		df, err := l.downloadFile(ctx, part.FilePID)
+		if err != nil {
+			return DirectPlayResolution{}, err
+		}
+		out.File = df
+		out.DurationMS = part.DurationMS
+		return out, nil
+	}
+	loc, err := l.paths.Locate(ctx, it.PID)
+	if err != nil {
+		return DirectPlayResolution{}, classify(err)
+	}
+	df, err := l.downloadFile(ctx, loc.FilePID)
+	if err != nil {
+		return DirectPlayResolution{}, err
+	}
+	out.File = df
+	if it.Virtual {
+		out.HasSpan = true
+		out.SpanStartMS, out.SpanEndMS = spanWindow(it)
+	}
+	return out, nil
+}
+
 // EffectiveVoiceBoost resolves the caller's stored voice-boost setting
 // for an item: the subscription setting for a podcast episode, the
 // book settings for an audiobook, false elsewhere.

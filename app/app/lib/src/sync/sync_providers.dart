@@ -4,6 +4,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../library/library_controller.dart';
 import '../player/play_state_controller.dart';
+import '../playlists/playlists_controller.dart';
 import '../podcasts/podcasts_controller.dart';
 import '../providers.dart';
 import '../settings/prefs_controller.dart';
@@ -78,6 +79,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     ref.invalidate(podcastDetailProvider);
     ref.invalidate(episodesProvider);
     ref.invalidate(episodeDetailProvider);
+    // A catalog change can shift any smart playlist's evaluation.
+    ref.invalidate(playlistDetailProvider);
   }
 
   void invalidateUserState() {
@@ -90,6 +93,10 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     ref.invalidate(subscriptionsProvider);
     ref.invalidate(podcastDetailProvider);
     ref.invalidate(libraryControllerProvider);
+    // Playlist rows ride the user stream, and play-state changes (a
+    // star, a rating) can shift a user-state smart rule's evaluation.
+    ref.invalidate(playlistsProvider);
+    ref.invalidate(playlistDetailProvider);
   }
 
   final engine = ref.watch(syncEngineProvider);

@@ -159,10 +159,19 @@ class PlaybackSession {
         _applyOutroCutoff(info.durationMs);
         resumeMs = _applyIntroSkip(resumeMs);
         final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
+        // A span means the URL carries the whole backing file (direct
+        // playback of a carved track); the engine clips to the window
+        // and every position stays track-relative.
         await engine.load(
           info.url,
           mimeType: info.mimeType,
           initialPosition: resumeAt,
+          clipStart: info.spanStartMs == null
+              ? null
+              : Duration(milliseconds: info.spanStartMs!),
+          clipEnd: info.spanEndMs == null
+              ? null
+              : Duration(milliseconds: info.spanEndMs!),
         );
         if (trimEnabled.value) unawaited(_loadSkipMap());
       }
@@ -173,9 +182,21 @@ class PlaybackSession {
       var resumeMs = initialPositionMs ?? saved?.positionMs ?? 0;
       if (!_isBook) resumeMs = _applyIntroSkip(resumeMs);
       final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
+      // Downloaded originals carry the same window; clipping here is
+      // what makes an offline carved track play as itself instead of
+      // the whole rip.
       await engine.load(
         Uri.file(local.paths.first).toString(),
         initialPosition: resumeAt,
+        clipStart: local.spanStartMs == null
+            ? null
+            : Duration(milliseconds: local.spanStartMs!),
+        // The server closes open-ended windows now; the zero guard
+        // covers download records stored before it did (an open clip
+        // end plays to the file's end, which is what those meant).
+        clipEnd: local.spanEndMs == null || local.spanEndMs! <= 0
+            ? null
+            : Duration(milliseconds: local.spanEndMs!),
       );
     }
     _lastPosition = engine.position;
