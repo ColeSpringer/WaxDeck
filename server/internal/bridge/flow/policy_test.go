@@ -21,7 +21,7 @@ func testCaps() *client.Caps {
 }
 
 func TestShapeForWholeFile(t *testing.T) {
-	shape := ShapeFor(Source{Codec: "flac", Container: "flac"}, testCaps())
+	shape := ShapeFor(Source{Codec: "flac", Container: "flac"}, testCaps(), false)
 	if shape.Format != "auto" || shape.MimeType != "audio/flac" || !shape.Seekable {
 		t.Fatalf("whole-file shape = %+v", shape)
 	}
@@ -45,7 +45,7 @@ func TestShapeForVirtualTracks(t *testing.T) {
 		{"vorbis", "opus"},
 	}
 	for _, c := range cases {
-		shape := ShapeFor(Source{Virtual: true, Codec: c.codec}, caps)
+		shape := ShapeFor(Source{Virtual: true, Codec: c.codec}, caps, false)
 		if shape.Format != c.wantFormat {
 			t.Errorf("virtual %s: format = %q, want %q", c.codec, shape.Format, c.wantFormat)
 		}
@@ -58,7 +58,7 @@ func TestShapeForVirtualTracks(t *testing.T) {
 	noOpus := testCaps()
 	noOpus.Outputs = []client.CapsOutput{{Name: "flac", Live: true}, {Name: "mp3", Live: true}}
 	noOpus.Delivery.CutFormats = nil
-	if shape := ShapeFor(Source{Virtual: true, Codec: "mp3"}, noOpus); shape.Format != "mp3" {
+	if shape := ShapeFor(Source{Virtual: true, Codec: "mp3"}, noOpus, false); shape.Format != "mp3" {
 		t.Errorf("no-opus lossy fallback = %q, want mp3", shape.Format)
 	}
 }

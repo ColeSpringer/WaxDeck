@@ -6,7 +6,9 @@ import { expect, APIRequestContext, Locator, Page } from '@playwright/test';
 // the only reliable protocol is: select-all, type, check the value,
 // and redo the whole round if anything went missing.
 export async function typeInto(page: Page, field: Locator, text: string) {
-  await field.waitFor();
+  // Bounded: an absent field must fail here with a page snapshot, not
+  // silently consume the whole test budget.
+  await field.waitFor({ timeout: 30_000 });
   // The locator may be the input itself (role-based) or a semantics
   // container wrapping it (identifier-based).
   const inner = field.locator('input, textarea');
@@ -44,6 +46,28 @@ export async function ensureAdmin(request: APIRequestContext): Promise<string> {
 
 export function authed(token: string) {
   return { headers: { Authorization: `Bearer ${token}` } };
+}
+
+// Click a canvas-rendered control and wait for what it opens, as one
+// retried unit: flutter web can swallow a click while its handlers are
+// still attaching (the click cousin of the keystroke gap typeInto
+// retries around), and a swallowed navigation click means the next
+// screen never appears at all.
+export async function clickThrough(trigger: Locator, appears: Locator) {
+  await expect(async () => {
+    // A prior attempt's click may have landed with the destination
+    // just slow, and navigating away removes the trigger; so the click
+    // is skipped once the destination shows and is best-effort
+    // otherwise (a swallowed click retries, a vanished trigger means
+    // the navigation is already underway).
+    if (!(await appears.isVisible())) {
+      // Forced, like the a11y suite's canvas clicks: semantics nodes
+      // over an animating canvas (a live seek bar) never satisfy the
+      // stability heuristics, so an actionability wait just times out.
+      await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
+    }
+    await appears.waitFor({ timeout: 5_000 });
+  }).toPass({ timeout: 30_000 });
 }
 
 // The startup scan is asynchronous; poll until the fixture library shows up.

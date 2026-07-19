@@ -15,6 +15,10 @@ class _$ServerSyncEvent extends ServerSyncEvent {
   final PlayState? playState;
   @override
   final Prefs? prefs;
+  @override
+  final Subscription? subscription;
+  @override
+  final BookSettings? bookSettings;
 
   factory _$ServerSyncEvent([void Function(ServerSyncEventBuilder)? updates]) =>
       (ServerSyncEventBuilder()..update(updates))._build();
@@ -24,6 +28,8 @@ class _$ServerSyncEvent extends ServerSyncEvent {
     this.pid,
     this.playState,
     this.prefs,
+    this.subscription,
+    this.bookSettings,
   }) : super._();
   @override
   ServerSyncEvent rebuild(void Function(ServerSyncEventBuilder) updates) =>
@@ -39,7 +45,9 @@ class _$ServerSyncEvent extends ServerSyncEvent {
         kind == other.kind &&
         pid == other.pid &&
         playState == other.playState &&
-        prefs == other.prefs;
+        prefs == other.prefs &&
+        subscription == other.subscription &&
+        bookSettings == other.bookSettings;
   }
 
   @override
@@ -49,6 +57,8 @@ class _$ServerSyncEvent extends ServerSyncEvent {
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, playState.hashCode);
     _$hash = $jc(_$hash, prefs.hashCode);
+    _$hash = $jc(_$hash, subscription.hashCode);
+    _$hash = $jc(_$hash, bookSettings.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -59,7 +69,9 @@ class _$ServerSyncEvent extends ServerSyncEvent {
           ..add('kind', kind)
           ..add('pid', pid)
           ..add('playState', playState)
-          ..add('prefs', prefs))
+          ..add('prefs', prefs)
+          ..add('subscription', subscription)
+          ..add('bookSettings', bookSettings))
         .toString();
   }
 }
@@ -84,6 +96,18 @@ class ServerSyncEventBuilder
   PrefsBuilder get prefs => _$this._prefs ??= PrefsBuilder();
   set prefs(PrefsBuilder? prefs) => _$this._prefs = prefs;
 
+  SubscriptionBuilder? _subscription;
+  SubscriptionBuilder get subscription =>
+      _$this._subscription ??= SubscriptionBuilder();
+  set subscription(SubscriptionBuilder? subscription) =>
+      _$this._subscription = subscription;
+
+  BookSettingsBuilder? _bookSettings;
+  BookSettingsBuilder get bookSettings =>
+      _$this._bookSettings ??= BookSettingsBuilder();
+  set bookSettings(BookSettingsBuilder? bookSettings) =>
+      _$this._bookSettings = bookSettings;
+
   ServerSyncEventBuilder() {
     ServerSyncEvent._defaults(this);
   }
@@ -95,6 +119,8 @@ class ServerSyncEventBuilder
       _pid = $v.pid;
       _playState = $v.playState?.toBuilder();
       _prefs = $v.prefs?.toBuilder();
+      _subscription = $v.subscription?.toBuilder();
+      _bookSettings = $v.bookSettings?.toBuilder();
       _$v = null;
     }
     return this;
@@ -127,6 +153,8 @@ class ServerSyncEventBuilder
             pid: pid,
             playState: _playState?.build(),
             prefs: _prefs?.build(),
+            subscription: _subscription?.build(),
+            bookSettings: _bookSettings?.build(),
           );
     } catch (_) {
       late String _$failedField;
@@ -135,6 +163,10 @@ class ServerSyncEventBuilder
         _playState?.build();
         _$failedField = 'prefs';
         _prefs?.build();
+        _$failedField = 'subscription';
+        _subscription?.build();
+        _$failedField = 'bookSettings';
+        _bookSettings?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'ServerSyncEvent',

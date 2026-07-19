@@ -9,20 +9,28 @@ part of 'serializers.dart';
 Serializers _$serializers =
     (Serializers().toBuilder()
           ..add($AppPassword.serializer)
+          ..add($EpisodeSummary.serializer)
           ..add($ItemSummary.serializer)
           ..add($User.serializer)
           ..add(AppPasswordCreate.serializer)
           ..add(AppPasswordCreated.serializer)
           ..add(AppPasswordList.serializer)
+          ..add(BookDetail.serializer)
+          ..add(BookPart.serializer)
+          ..add(BookResume.serializer)
+          ..add(BookSettings.serializer)
           ..add(BootstrapRequest.serializer)
           ..add(BootstrapStatus.serializer)
           ..add(CatalogSyncEntry.serializer)
           ..add(CatalogSyncPage.serializer)
+          ..add(ChapterMark.serializer)
           ..add(DeviceSession.serializer)
           ..add(DeviceSessionKindEnum.serializer)
           ..add(DiscoveryList.serializer)
           ..add(DownloadFile.serializer)
           ..add(DownloadInfo.serializer)
+          ..add(Episode.serializer)
+          ..add(EpisodePage.serializer)
           ..add(Error.serializer)
           ..add(Health.serializer)
           ..add(Item.serializer)
@@ -44,15 +52,21 @@ Serializers _$serializers =
           ..add(OidcExchangeRequest.serializer)
           ..add(OidcProvider.serializer)
           ..add(OidcProviders.serializer)
+          ..add(OpmlImport.serializer)
+          ..add(OpmlImportEntry.serializer)
+          ..add(OpmlImportResult.serializer)
           ..add(PasswordChange.serializer)
           ..add(PlayInfo.serializer)
           ..add(PlayState.serializer)
           ..add(PlayStateList.serializer)
           ..add(PlayStateQuery.serializer)
           ..add(PlayStateUpdate.serializer)
+          ..add(PodcastDetail.serializer)
+          ..add(PodcastShow.serializer)
           ..add(Prefs.serializer)
           ..add(PrefsThemeEnum.serializer)
           ..add(RatingUpdate.serializer)
+          ..add(RefreshResult.serializer)
           ..add(RejectedListen.serializer)
           ..add(Role.serializer)
           ..add(SearchHit.serializer)
@@ -61,8 +75,16 @@ Serializers _$serializers =
           ..add(ServerSyncPage.serializer)
           ..add(SessionInfo.serializer)
           ..add(SessionList.serializer)
+          ..add(SkipMap.serializer)
+          ..add(SkipSpan.serializer)
           ..add(StarUpdate.serializer)
+          ..add(SubscribeRequest.serializer)
+          ..add(Subscription.serializer)
+          ..add(SubscriptionPage.serializer)
+          ..add(SubscriptionSettings.serializer)
           ..add(SyncedLine.serializer)
+          ..add(Transcript.serializer)
+          ..add(TranscriptCue.serializer)
           ..add(UserAccount.serializer)
           ..add(UserCreate.serializer)
           ..add(UserPage.serializer)
@@ -78,12 +100,20 @@ Serializers _$serializers =
             () => ListBuilder<CatalogSyncEntry>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ChapterMark)]),
+            () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(DeviceSession)]),
             () => ListBuilder<DeviceSession>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(DownloadFile)]),
             () => ListBuilder<DownloadFile>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(EpisodeSummary)]),
+            () => ListBuilder<EpisodeSummary>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ItemSummary)]),
@@ -108,6 +138,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(OidcProvider)]),
             () => ListBuilder<OidcProvider>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(OpmlImportEntry)]),
+            () => ListBuilder<OpmlImportEntry>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(PlayState)]),
@@ -150,8 +184,8 @@ Serializers _$serializers =
             () => ListBuilder<ServerSyncEvent>(),
           )
           ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(String)]),
-            () => ListBuilder<String>(),
+            const FullType(BuiltList, const [const FullType(SkipSpan)]),
+            () => ListBuilder<SkipSpan>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),
@@ -168,10 +202,38 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),
             () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ChapterMark)]),
+            () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(BookPart)]),
+            () => ListBuilder<BookPart>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Subscription)]),
+            () => ListBuilder<Subscription>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(SyncedLine)]),
             () => ListBuilder<SyncedLine>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TranscriptCue)]),
+            () => ListBuilder<TranscriptCue>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(UserAccount)]),

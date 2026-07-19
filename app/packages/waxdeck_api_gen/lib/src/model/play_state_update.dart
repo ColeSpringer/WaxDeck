@@ -11,11 +11,11 @@ part 'play_state_update.g.dart';
 /// A resume-position checkpoint.
 ///
 /// Properties:
-/// * [positionMs] - Playback position in milliseconds.
+/// * [positionMs] - Playback position in milliseconds. For multi-file audiobooks always a book-timeline position (play-info's `partStartMs` plus the in-part position). 
 /// * [recordedAt] - When the checkpoint was recorded on the client, sent only when replaying an offline queue. The server reconciles replays per medium: audiobooks and long tracks are recency-primary (the most recently recorded position wins, so a stale replay never drags a 14-hour book backward or forward), while music and podcast episodes are furthest-position-wins with a recency guard (the further position wins unless the nearer one is substantially more recent, honoring a deliberate rewind). Future-dated values are clamped to the server clock. Live checkpoints omit it and always apply. The response does not reveal whether a replay was applied or skipped: after flushing an offline queue, clients learn the winning state through `/sync/server` (a skipped replay means the winner is already in the event stream). 
 @BuiltValue()
 abstract class PlayStateUpdate implements Built<PlayStateUpdate, PlayStateUpdateBuilder> {
-  /// Playback position in milliseconds.
+  /// Playback position in milliseconds. For multi-file audiobooks always a book-timeline position (play-info's `partStartMs` plus the in-part position). 
   @BuiltValueField(wireName: r'positionMs')
   int get positionMs;
 

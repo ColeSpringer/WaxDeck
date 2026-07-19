@@ -35,9 +35,10 @@ type Root struct {
 }
 
 // SourceResolver is what the service layer provides: API item PID to
-// stream source, re-resolved on every call.
+// stream source, re-resolved on every call. filePID selects one part
+// of a multi-file item; empty means the item's own (or first) file.
 type SourceResolver interface {
-	StreamSource(ctx context.Context, apiItemPID string) (Source, error)
+	StreamSource(ctx context.Context, apiItemPID, filePID string) (Source, error)
 }
 
 // Config configures the bridge.
@@ -147,23 +148,47 @@ type PlayInfo struct {
 	DurationMS int64
 	Seekable   bool
 	ExpiresAt  time.Time
+	// VoiceBoost reports whether the minted stream applies server-side
+	// spoken-word loudness normalization.
+	VoiceBoost bool
+}
+
+// PlayOptions select a part of a multi-file item and request DSP.
+type PlayOptions struct {
+	// FilePID selects the backing file (multi-file books); empty means
+	// the item's own file.
+	FilePID string
+	// VoiceBoost asks for server-side spoken-word normalization; the
+	// mint reports whether it actually engages.
+	VoiceBoost bool
 }
 
 // PlayInfoFor resolves an item into a tokenized stream URL. The token
-// binds user and item; every stream parameter is re-derived at fetch.
-func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string) (PlayInfo, error) {
-	src, err := b.resolver.StreamSource(ctx, apiItemPID)
+// binds user and item; the part and boost selections ride the URL as
+// plain parameters and are validated again at fetch, like every other
+// stream parameter.
+func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts PlayOptions) (PlayInfo, error) {
+	src, err := b.resolver.StreamSource(ctx, apiItemPID, opts.FilePID)
 	if err != nil {
 		return PlayInfo{}, err
 	}
-	shape := ShapeFor(src, b.caps)
+	_, boost := VoiceBoostParams(src, b.caps, opts.VoiceBoost)
+	shape := ShapeFor(src, b.caps, boost)
 	token, exp := b.tokens.Mint(user, apiItemPID)
+	streamURL := "/media/stream?pid=" + url.QueryEscape(apiItemPID) + "&mt=" + url.QueryEscape(token)
+	if opts.FilePID != "" {
+		streamURL += "&f=" + url.QueryEscape(opts.FilePID)
+	}
+	if boost {
+		streamURL += "&vb=1"
+	}
 	return PlayInfo{
-		URL:        "/media/stream?pid=" + url.QueryEscape(apiItemPID) + "&mt=" + url.QueryEscape(token),
+		URL:        streamURL,
 		MimeType:   shape.MimeType,
 		DurationMS: src.DurationMS,
 		Seekable:   shape.Seekable,
 		ExpiresAt:  exp,
+		VoiceBoost: boost,
 	}, nil
 }
 
@@ -194,7 +219,7 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusUnauthorized, "unauthenticated", "invalid or expired media token")
 		return
 	}
-	src, err := b.resolver.StreamSource(r.Context(), pid)
+	src, err := b.resolver.StreamSource(r.Context(), pid, q.Get("f"))
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "not-found", "no streamable item with pid "+pid)
 		return
@@ -205,7 +230,11 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "internal", "item is not under a streamable root")
 		return
 	}
-	shape := ShapeFor(src, b.caps)
+	// The boost flag rides the URL, but the gain is derived here from
+	// stored loudness and the live capabilities, never from anything
+	// client-controlled.
+	gainDB, boost := VoiceBoostParams(src, b.caps, q.Get("vb") == "1")
+	shape := ShapeFor(src, b.caps, boost)
 
 	params := url.Values{}
 	params.Set("src", ref)
@@ -214,6 +243,10 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	if src.Virtual {
 		params.Set("from", strconv.FormatInt(src.FromSample, 10))
 		params.Set("to", strconv.FormatInt(src.ToSample, 10))
+	}
+	if boost {
+		params.Set("dynamics", "voice")
+		params.Set("gain", strconv.FormatFloat(gainDB, 'f', 1, 64))
 	}
 	// Time-based seek for non-direct paths: clients pass t= through the
 	// tokenized URL and the bridge forwards it.

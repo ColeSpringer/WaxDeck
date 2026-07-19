@@ -36,15 +36,25 @@ type harness struct {
 	library string
 	svc     *service.Library
 	store   *db.DB
-	flowReq struct{ apiKey, format string } // captured by the fake sidecar
+	flowReq struct{ apiKey, format, dynamics, gain string } // captured by the fake sidecar
 }
 
 func newHarness(t *testing.T, extraRoots ...service.Root) *harness {
+	return newHarnessWith(t, nil, extraRoots...)
+}
+
+// newHarnessWith lets a test adjust the service configuration before
+// the catalog opens (the podcast surface needs a download dir and the
+// private-address guard relaxed for loopback feeds).
+func newHarnessWith(t *testing.T, mutate func(*service.Config), extraRoots ...service.Root) *harness {
 	t.Helper()
 	h := &harness{}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if os.Getenv("HARNESS_LOG") != "" {
+		log = slog.New(slog.NewTextHandler(os.Stderr, nil))
+	}
 
 	// The demo library: Alpha (flac), Bravo (mp3), Charlie (opus), and
 	// Delta (vorbis), all titled and tagged.
@@ -66,14 +76,23 @@ func newHarness(t *testing.T, extraRoots ...service.Root) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cipher, err := auth.NewAADSealer(secret, "waxdeck-catalog-secret-v1")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	group := supervise.NewGroup(log)
-	svc, err := service.Open(ctx, service.Config{
-		DataDir: dataDir,
-		Roots:   append([]service.Root{{Name: "lib", Path: h.library}}, extraRoots...),
-		Sealer:  sealer,
-		Logger:  log,
-	}, store, group)
+	cfg := service.Config{
+		DataDir:      dataDir,
+		Roots:        append([]service.Root{{Name: "lib", Path: h.library}}, extraRoots...),
+		Sealer:       sealer,
+		SecretCipher: cipher,
+		Logger:       log,
+	}
+	if mutate != nil {
+		mutate(&cfg)
+	}
+	svc, err := service.Open(ctx, cfg, store, group)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,30 +116,56 @@ func newHarness(t *testing.T, extraRoots ...service.Root) *harness {
 					{"name":"aac","live":true},{"name":"alac","live":true}
 				],
 				"delivery": {"progressive":true,"hls":true,"hlsFormats":["opus","flac","aac","alac"],
-					"cutFormats":["opus","aac"],"pid":true,"timelines":true},
-				"dsp": {"gainModes":["off","track","album"],"gainMaxDb":12,"gainMaxVoiceDb":24}
+					"cutFormats":["opus","aac"],"pid":true,"timelines":true,"jobs":true},
+				"dsp": {"gainModes":["off","track","album"],"gainMaxDb":12,"gainMaxVoiceDb":24,
+					"dynamics":["off","voice"]}
 			}`)
+		case "/jobs":
+			// One-shot analyze jobs finish instantly in the fake.
+			fmt.Fprint(w, `{"schemaVersion":2,"id":"job1","state":"done",
+				"analysis":{"integratedLufs":-20.5,"truePeakDb":-1.2,"rate":44100}}`)
+		case "/jobs/job1":
+			fmt.Fprint(w, `{"schemaVersion":2,"id":"job1","state":"done",
+				"analysis":{"integratedLufs":-20.5,"truePeakDb":-1.2,"rate":44100}}`)
+		case "/jobs/job1/result":
+			fmt.Fprint(w, `{"schemaVersion":1,"version":"silence-1","thresholdDb":-50,
+				"minSeconds":0.5,"rate":44100,"durationSeconds":5,
+				"spans":[{"fromSample":0,"toSample":66150,"fromSeconds":0,"toSeconds":1.5},
+					{"fromSample":176400,"toSample":220500,"fromSeconds":4,"toSeconds":5}]}`)
 		case "/stream":
 			h.flowReq.apiKey = r.Header.Get("X-API-Key")
 			h.flowReq.format = r.URL.Query().Get("format")
+			h.flowReq.dynamics = r.URL.Query().Get("dynamics")
+			h.flowReq.gain = r.URL.Query().Get("gain")
 			src := r.URL.Query().Get("src")
-			rel, ok := strings.CutPrefix(src, "lib/")
-			if !ok || r.URL.Query().Get("id") == "" {
-				http.Error(w, "bad src or missing id", http.StatusBadRequest)
+			if r.URL.Query().Get("id") == "" {
+				http.Error(w, "missing id", http.StatusBadRequest)
 				return
 			}
-			http.ServeFile(w, r, filepath.Join(h.library, filepath.FromSlash(rel)))
+			if rel, ok := strings.CutPrefix(src, "lib/"); ok {
+				http.ServeFile(w, r, filepath.Join(h.library, filepath.FromSlash(rel)))
+				return
+			}
+			if rel, ok := strings.CutPrefix(src, "podcasts/"); ok && cfg.PodcastDir != "" {
+				http.ServeFile(w, r, filepath.Join(cfg.PodcastDir, filepath.FromSlash(rel)))
+				return
+			}
+			http.Error(w, "bad src", http.StatusBadRequest)
 		default:
 			http.NotFound(w, r)
 		}
 	}))
 	t.Cleanup(fakeFlow.Close)
 
+	flowRoots := []flow.Root{{Name: "lib", Path: h.library}}
+	if cfg.PodcastDir != "" {
+		flowRoots = append(flowRoots, flow.Root{Name: "podcasts", Path: cfg.PodcastDir})
+	}
 	media := auth.NewMediaTokens(secret, 0)
 	bridge, err := flow.New(ctx, flow.Config{
 		BaseURL:  fakeFlow.URL,
 		APIKey:   "test-flow-key",
-		Roots:    []flow.Root{{Name: "lib", Path: h.library}},
+		Roots:    flowRoots,
 		Tokens:   media,
 		Resolver: svc,
 		Logger:   log,
@@ -128,6 +173,7 @@ func newHarness(t *testing.T, extraRoots ...service.Root) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	svc.SetFlowJobs(bridge)
 
 	hub := events.New(svc)
 	group.Go(ctx, "event-hub", hub.Run)

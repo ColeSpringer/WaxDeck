@@ -152,6 +152,124 @@ var migrations = []string{
 		last_used_ns  INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX app_passwords_by_user ON app_passwords (user_id, created_at_ns);`,
+
+	// Podcasts and audiobooks. Shows, episodes, and files are cataloged
+	// globally in waxbin.db; everything per user lives here. NULL in a
+	// settings column always means "server default", which is distinct
+	// from an explicit 0 or false. Retention resolves across a show's
+	// subscribers as the most generous union, so sweeps read
+	// podcast_subscriptions by show. feed_state carries the refresh
+	// scheduler's per-feed failure accounting (the catalog keeps none).
+	// silence_maps cache the streaming sidecar's silence analysis keyed
+	// by audio essence, so retags and moves never invalidate a map but a
+	// re-encode or a detector revision does. The three queue tables are
+	// durable work queues drained by supervised workers with row leases;
+	// the gpodder tables serve the compatibility adapter, whose protocol
+	// speaks feed URLs and epoch seconds.
+	`CREATE TABLE podcast_subscriptions (
+		user_id          TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		show_pid         TEXT    NOT NULL,
+		folder           TEXT    NOT NULL DEFAULT '',
+		private          INTEGER NOT NULL DEFAULT 0,
+		retention_keep   INTEGER,
+		auto_download    INTEGER NOT NULL DEFAULT 0,
+		speed            REAL,
+		trim_silence     INTEGER,
+		voice_boost      INTEGER,
+		skip_intro_secs  INTEGER,
+		skip_outro_secs  INTEGER,
+		created_at_ns    INTEGER NOT NULL,
+		updated_at_ns    INTEGER NOT NULL,
+		PRIMARY KEY (user_id, show_pid)
+	);
+	CREATE INDEX podcast_subscriptions_by_show ON podcast_subscriptions (show_pid);
+	CREATE TABLE book_settings (
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		book_pid      TEXT    NOT NULL,
+		speed         REAL,
+		voice_boost   INTEGER,
+		trim_silence  INTEGER,
+		updated_at_ns INTEGER NOT NULL,
+		PRIMARY KEY (user_id, book_pid)
+	);
+	CREATE TABLE feed_state (
+		show_pid             TEXT    PRIMARY KEY,
+		consecutive_failures INTEGER NOT NULL DEFAULT 0,
+		disabled             INTEGER NOT NULL DEFAULT 0,
+		last_error           TEXT    NOT NULL DEFAULT '',
+		last_attempt_ns      INTEGER NOT NULL DEFAULT 0,
+		last_synced_ns       INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE TABLE silence_maps (
+		essence_hash     TEXT    PRIMARY KEY,
+		detector_version TEXT    NOT NULL,
+		threshold_db     REAL    NOT NULL,
+		min_seconds      REAL    NOT NULL,
+		spans            TEXT    NOT NULL,
+		duration_ms      INTEGER NOT NULL DEFAULT 0,
+		integrated_lufs  REAL,
+		true_peak_db     REAL,
+		created_at_ns    INTEGER NOT NULL
+	);
+	CREATE TABLE analysis_queue (
+		essence_hash   TEXT    PRIMARY KEY,
+		item_pid       TEXT    NOT NULL,
+		enqueued_at_ns INTEGER NOT NULL,
+		attempts       INTEGER NOT NULL DEFAULT 0,
+		lease_until_ns INTEGER NOT NULL DEFAULT 0,
+		last_error     TEXT    NOT NULL DEFAULT ''
+	);
+	CREATE TABLE fetch_queue (
+		episode_pid    TEXT    PRIMARY KEY,
+		requested_by   TEXT    NOT NULL DEFAULT '',
+		enqueued_at_ns INTEGER NOT NULL,
+		attempts       INTEGER NOT NULL DEFAULT 0,
+		lease_until_ns INTEGER NOT NULL DEFAULT 0,
+		last_error     TEXT    NOT NULL DEFAULT ''
+	);
+	CREATE TABLE retention_queue (
+		show_pid       TEXT    PRIMARY KEY,
+		enqueued_at_ns INTEGER NOT NULL
+	);
+	CREATE TABLE transcript_cache (
+		episode_pid   TEXT    PRIMARY KEY,
+		format        TEXT    NOT NULL DEFAULT '',
+		cues          TEXT    NOT NULL DEFAULT '',
+		negative      INTEGER NOT NULL DEFAULT 0,
+		fetched_at_ns INTEGER NOT NULL
+	);
+	CREATE TABLE gpodder_devices (
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		device_id     TEXT    NOT NULL,
+		caption       TEXT    NOT NULL DEFAULT '',
+		type          TEXT    NOT NULL DEFAULT 'other',
+		created_at_ns INTEGER NOT NULL,
+		updated_at_ns INTEGER NOT NULL,
+		PRIMARY KEY (user_id, device_id)
+	);
+	CREATE TABLE gpodder_sub_events (
+		id        INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id   TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		feed_url  TEXT    NOT NULL,
+		action    TEXT    NOT NULL,
+		device_id TEXT    NOT NULL DEFAULT '',
+		ts_sec    INTEGER NOT NULL
+	);
+	CREATE INDEX gpodder_sub_events_by_user ON gpodder_sub_events (user_id, id);
+	CREATE TABLE gpodder_actions (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id      TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		podcast_url  TEXT    NOT NULL,
+		episode_url  TEXT    NOT NULL,
+		device_id    TEXT    NOT NULL DEFAULT '',
+		action       TEXT    NOT NULL,
+		action_ts    TEXT    NOT NULL DEFAULT '',
+		started_sec  INTEGER,
+		position_sec INTEGER,
+		total_sec    INTEGER,
+		uploaded_sec INTEGER NOT NULL
+	);
+	CREATE INDEX gpodder_actions_by_user ON gpodder_actions (user_id, id);`,
 }
 
 // Open opens (creating if needed) the database at path and applies

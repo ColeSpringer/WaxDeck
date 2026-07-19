@@ -23,9 +23,18 @@ test('two users share the catalog but never each other\'s state', async ({ reque
   expect(merryLogin.ok()).toBeTruthy();
   const merryToken = (await merryLogin.json()).token as string;
 
-  // Both see the same catalog.
-  const adminItems = (await (await request.get('/api/v1/library/items', authed(adminToken))).json()).items;
-  const merryItems = (await (await request.get('/api/v1/library/items', authed(merryToken))).json()).items;
+  // Both see the same shared catalog. Podcast episodes are the one
+  // deliberate exception (they scope to each user's own subscriptions,
+  // and a parallel spec may have subscribed the admin), so the shared
+  // half is everything else.
+  const shared = (items: { pid: string; mediaType: string }[]) =>
+    items.filter((it) => it.mediaType !== 'podcast');
+  const adminItems = shared(
+    (await (await request.get('/api/v1/library/items', authed(adminToken))).json()).items,
+  );
+  const merryItems = shared(
+    (await (await request.get('/api/v1/library/items', authed(merryToken))).json()).items,
+  );
   expect(merryItems.length).toBe(adminItems.length);
   const [first, second] = [adminItems[0].pid, adminItems[1].pid];
 

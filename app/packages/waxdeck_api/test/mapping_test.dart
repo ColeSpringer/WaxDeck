@@ -372,6 +372,203 @@ void main() {
     });
   });
 
+  group('podcast and book mapping', () {
+    test('play-info carries part fields and defaults voiceBoost off', () {
+      final expires = DateTime.utc(2026, 7, 18, 12);
+      gen.PlayInfo base(void Function(gen.PlayInfoBuilder) extra) =>
+          gen.PlayInfo((b) {
+            b
+              ..pid = 'bk-01JZX5N8QW3F4V9T2B7KDEXAMPLE'
+              ..url = '/media/stream?pid=bk-x&mt=abc'
+              ..mimeType = 'audio/mp4'
+              ..durationMs = 60000
+              ..seekable = true
+              ..expiresAt = expires;
+            extra(b);
+          });
+
+      final single = playInfoFromGen(base((_) {}));
+      expect(single.partIndex, isNull);
+      expect(single.partCount, isNull);
+      expect(single.partStartMs, isNull);
+      expect(single.voiceBoost, isFalse);
+
+      final part = playInfoFromGen(
+        base(
+          (b) => b
+            ..partIndex = 1
+            ..partCount = 3
+            ..partStartMs = 60000
+            ..voiceBoost = true,
+        ),
+      );
+      expect(part.partIndex, 1);
+      expect(part.partCount, 3);
+      expect(part.partStartMs, 60000);
+      expect(part.voiceBoost, isTrue);
+    });
+
+    test('episode summaries carry over with resolved art and defaults', () {
+      final episode = episodeSummaryFromGen(
+        gen.$EpisodeSummary(
+          (b) => b
+            ..pid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001'
+            ..mediaType = gen.MediaType.podcast
+            ..title = 'Pipeweed Economics'
+            ..durationMs = 214000
+            ..artUrl = '/media/art?pid=tr-x'
+            ..showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01'
+            ..publishedAt = DateTime.utc(2026, 7, 10)
+            ..downloaded = false
+            ..fetchState = 'queued',
+        ),
+        baseUrl: 'http://host:4420',
+      );
+      expect(episode.mediaType, MediaType.podcast);
+      expect(episode.artUrl, 'http://host:4420/media/art?pid=tr-x');
+      expect(episode.showPid, 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01');
+      expect(episode.downloaded, isFalse);
+      expect(episode.fetchState, 'queued');
+      expect(episode.explicit, isFalse);
+      expect(episode.hasTranscript, isFalse);
+    });
+
+    test('subscription settings round trip through the wire shape', () {
+      const settings = SubscriptionSettings(
+        retentionKeep: 5,
+        autoDownload: true,
+        folder: 'News',
+        speed: 1.5,
+        trimSilence: true,
+        skipIntroSeconds: 30,
+      );
+      final round = subscriptionSettingsFromGen(
+        subscriptionSettingsToGen(settings),
+      );
+      expect(round.retentionKeep, 5);
+      expect(round.autoDownload, isTrue);
+      expect(round.folder, 'News');
+      expect(round.private, isFalse);
+      expect(round.speed, 1.5);
+      expect(round.trimSilence, isTrue);
+      expect(round.voiceBoost, isNull);
+      expect(round.skipIntroSeconds, 30);
+      expect(round.skipOutroSeconds, isNull);
+    });
+
+    test('skip maps expose spans only when ready', () {
+      final ready = skipMapFromGen(
+        gen.SkipMap(
+          (b) => b
+            ..state = 'ready'
+            ..spans.addAll([
+              gen.SkipSpan(
+                (s) => s
+                  ..startMs = 5000
+                  ..endMs = 15000,
+              ),
+            ]),
+        ),
+      );
+      expect(ready.ready, isTrue);
+      expect(ready.spans.single.endMs, 15000);
+
+      final pending = skipMapFromGen(gen.SkipMap((b) => b..state = 'pending'));
+      expect(pending.ready, isFalse);
+      expect(pending.spans, isEmpty);
+    });
+
+    test('book detail maps chapters, parts, and settings', () {
+      final book = bookDetailFromGen(
+        gen.BookDetail(
+          (b) => b
+            ..pid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01'
+            ..title = 'There And Back Again'
+            ..authors.add('B. Baggins')
+            ..narrators.add('Frodo')
+            ..durationMs = 120000
+            ..artUrl = '/media/art?pid=bk-x'
+            ..chapters.add(
+              gen.ChapterMark(
+                (c) => c
+                  ..index = 0
+                  ..title = 'One'
+                  ..startMs = 0,
+              ),
+            )
+            ..parts.addAll([
+              gen.BookPart(
+                (p) => p
+                  ..index = 0
+                  ..startMs = 0
+                  ..durationMs = 60000,
+              ),
+              gen.BookPart(
+                (p) => p
+                  ..index = 1
+                  ..startMs = 60000
+                  ..durationMs = 60000,
+              ),
+            ])
+            ..settings.replace(gen.BookSettings((s) => s..speed = 1.25)),
+        ),
+        baseUrl: 'http://host:4420',
+      );
+      expect(book.artUrl, 'http://host:4420/media/art?pid=bk-x');
+      expect(book.chapters.single.title, 'One');
+      expect(book.parts, hasLength(2));
+      expect(book.parts[1].startMs, 60000);
+      expect(book.settings?.speed, 1.25);
+    });
+
+    test('sync payloads carry shows and the new event kinds', () {
+      final page = catalogSyncPageFromGen(
+        gen.CatalogSyncPage(
+          (b) => b
+            ..entries.add(
+              gen.CatalogSyncEntry(
+                (e) => e
+                  ..op = 'upsert-show'
+                  ..pid = 'pc-SHOW'
+                  ..show_.replace(
+                    gen.PodcastShow(
+                      (s) => s
+                        ..pid = 'pc-SHOW'
+                        ..title = 'The Prancing Pony Hour'
+                        ..sourceType = 'rss',
+                    ),
+                  ),
+              ),
+            )
+            ..nextSince = 'cur-1',
+        ),
+      );
+      final entry = page.entries.single;
+      expect(entry.op, 'upsert-show');
+      expect(entry.item, isNull);
+      expect(entry.show?.title, 'The Prancing Pony Hour');
+
+      final events = serverSyncPageFromGen(
+        gen.ServerSyncPage(
+          (b) => b
+            ..events.add(
+              gen.ServerSyncEvent(
+                (e) => e
+                  ..kind = 'book-settings'
+                  ..pid = 'bk-BOOK'
+                  ..bookSettings.replace(
+                    gen.BookSettings((s) => s..speed = 2.0),
+                  ),
+              ),
+            )
+            ..nextSince = 'scur-1',
+        ),
+      );
+      expect(events.events.single.kind, 'book-settings');
+      expect(events.events.single.bookSettings?.speed, 2.0);
+    });
+  });
+
   group('session ids', () {
     test('are 26 Crockford base32 characters and collision free', () {
       final seen = <String>{};

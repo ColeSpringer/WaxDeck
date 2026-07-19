@@ -19,7 +19,7 @@ part 'item.g.dart';
 /// * [title] - Display title.
 /// * [artist] - Primary display artist / author / show name.
 /// * [album] - Album / series / podcast title, when applicable.
-/// * [durationMs] - Duration in milliseconds.
+/// * [durationMs] - Duration in milliseconds. For a multi-file audiobook this is the total across all parts; for a not-yet-fetched podcast episode it is the feed-declared duration, or 0 when the feed declares none. 
 /// * [artUrl] - Origin-relative URL of the item's artwork endpoint. Always populated; the endpoint itself returns 404 for items with no artwork, so clients keep a placeholder ready. 
 /// * [genres] - Display genres.
 /// * [year] - Release / publication year.

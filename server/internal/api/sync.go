@@ -69,6 +69,14 @@ func catalogEntriesJSON(entries []service.CatalogSyncEntry) []CatalogSyncEntry {
 			item := summaryJSON(*e.Item)
 			je.Item = &item
 		}
+		if e.Episode != nil {
+			ep := episodeSummaryJSON(*e.Episode)
+			je.Episode = &ep
+		}
+		if e.Show != nil {
+			show := showJSON(*e.Show)
+			je.Show = &show
+		}
 		out = append(out, je)
 	}
 	return out
@@ -120,6 +128,14 @@ func (s *Server) SyncServer(ctx context.Context, req SyncServerRequestObject) (S
 		if e.Prefs != nil {
 			p := prefsJSON(*e.Prefs)
 			je.Prefs = &p
+		}
+		if e.Subscription != nil {
+			sub := subscriptionJSON(*e.Subscription)
+			je.Subscription = &sub
+		}
+		if e.BookSettings != nil {
+			bs := bookSettingsJSON(*e.BookSettings)
+			je.BookSettings = &bs
 		}
 		out.Events = append(out.Events, je)
 	}

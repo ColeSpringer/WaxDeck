@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../books/book_screen.dart';
 import '../media_icons.dart';
 import '../player/player_screen.dart';
+import '../podcasts/podcasts_screen.dart';
 import '../settings/settings_screen.dart';
 import '../sync/sync_providers.dart';
 import 'library_controller.dart';
@@ -14,6 +16,14 @@ class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
 
   void _openPlayer(BuildContext context, ItemSummary item) {
+    // Audiobooks route through their detail screen (resume, chapters,
+    // settings); music and downloaded podcast episodes play directly.
+    if (item.mediaType == MediaType.audiobook) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => BookScreen(pid: item.pid)),
+      );
+      return;
+    }
     Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => PlayerScreen(item: item)));
@@ -29,6 +39,17 @@ class LibraryScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('WaxDeck'),
         actions: [
+          Semantics(
+            identifier: 'podcasts-open',
+            child: IconButton(
+              key: const Key('podcasts-open'),
+              tooltip: 'Podcasts',
+              icon: const Icon(Icons.podcasts),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const PodcastsScreen()),
+              ),
+            ),
+          ),
           Semantics(
             identifier: 'settings-open',
             child: IconButton(

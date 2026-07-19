@@ -62,17 +62,30 @@ test('a right click does not destroy the selection', async ({ page }) => {
 
   // Recorded gate finding: the native menu costs the selection (a
   // copy here lands nothing), so the measurable guarantee is recovery,
-  // not survival: re-selecting and copying works immediately after.
-  await page.mouse.move(box.x + 2, y);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width - 2, y, { steps: 8 });
-  await page.mouse.up();
-  await page.keyboard.press('ControlOrMeta+c');
-  await expect
-    .poll(async () => page.evaluate(() => navigator.clipboard.readText()), {
-      timeout: 5_000,
-    })
-    .toContain('track 07');
+  // not survival: re-selecting and copying delivers afterwards. The
+  // whole select-copy-read round retries, because a canvas drag can
+  // miss on any attempt (the same async-semantics gap typeInto retries
+  // around); if the menu had permanently wrecked selection, no number
+  // of retries would ever land the text.
+  await expect(async () => {
+    // The native menu can open late, after the first Escape already
+    // fired; a still-open menu swallows every later mouse event, so
+    // each attempt dismisses again before selecting. Fresh geometry
+    // every attempt too: the dismissed menu or an earlier attempt can
+    // scroll the view, and a drag along a stale box selects nothing
+    // on every retry.
+    await page.keyboard.press('Escape');
+    await cell.scrollIntoViewIfNeeded();
+    const fresh = (await cell.boundingBox())!;
+    const fy = fresh.y + fresh.height / 2;
+    await page.mouse.move(fresh.x + 2, fy);
+    await page.mouse.down();
+    await page.mouse.move(fresh.x + fresh.width - 2, fy, { steps: 8 });
+    await page.mouse.up();
+    await page.keyboard.press('ControlOrMeta+c');
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toContain('track 07');
+  }).toPass({ timeout: 15_000 });
 });
 
 test('static cell text selects with the pointer and copies', async ({

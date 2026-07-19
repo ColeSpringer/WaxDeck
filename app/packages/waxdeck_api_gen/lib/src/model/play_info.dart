@@ -17,6 +17,10 @@ part 'play_info.g.dart';
 /// * [durationMs] - Duration in milliseconds.
 /// * [seekable] - Whether the stream supports sample-exact seeking.
 /// * [expiresAt] - When the embedded media token stops being accepted.
+/// * [partIndex] - Zero-based index of the resolved part within a multi-file audiobook. Present exactly when `partCount` is. 
+/// * [partCount] - Number of parts in a multi-file audiobook. Present only for multi-file books; single-file items omit the part fields entirely. 
+/// * [partStartMs] - Book-timeline millisecond offset where the resolved part begins. In-part positions plus this offset give the book-timeline positions that play-state expects. Present exactly when `partCount` is. 
+/// * [voiceBoost] - True when the stream applies server-side spoken-word loudness normalization. Absent or false otherwise, including when it was requested but cannot be applied yet (unsupported by the sidecar, or loudness not measured yet). 
 @BuiltValue()
 abstract class PlayInfo implements Built<PlayInfo, PlayInfoBuilder> {
   /// The resolved item's PID.
@@ -42,6 +46,22 @@ abstract class PlayInfo implements Built<PlayInfo, PlayInfoBuilder> {
   /// When the embedded media token stops being accepted.
   @BuiltValueField(wireName: r'expiresAt')
   DateTime get expiresAt;
+
+  /// Zero-based index of the resolved part within a multi-file audiobook. Present exactly when `partCount` is. 
+  @BuiltValueField(wireName: r'partIndex')
+  int? get partIndex;
+
+  /// Number of parts in a multi-file audiobook. Present only for multi-file books; single-file items omit the part fields entirely. 
+  @BuiltValueField(wireName: r'partCount')
+  int? get partCount;
+
+  /// Book-timeline millisecond offset where the resolved part begins. In-part positions plus this offset give the book-timeline positions that play-state expects. Present exactly when `partCount` is. 
+  @BuiltValueField(wireName: r'partStartMs')
+  int? get partStartMs;
+
+  /// True when the stream applies server-side spoken-word loudness normalization. Absent or false otherwise, including when it was requested but cannot be applied yet (unsupported by the sidecar, or loudness not measured yet). 
+  @BuiltValueField(wireName: r'voiceBoost')
+  bool? get voiceBoost;
 
   PlayInfo._();
 
@@ -96,6 +116,34 @@ class _$PlayInfoSerializer implements PrimitiveSerializer<PlayInfo> {
       object.expiresAt,
       specifiedType: const FullType(DateTime),
     );
+    if (object.partIndex != null) {
+      yield r'partIndex';
+      yield serializers.serialize(
+        object.partIndex,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.partCount != null) {
+      yield r'partCount';
+      yield serializers.serialize(
+        object.partCount,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.partStartMs != null) {
+      yield r'partStartMs';
+      yield serializers.serialize(
+        object.partStartMs,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.voiceBoost != null) {
+      yield r'voiceBoost';
+      yield serializers.serialize(
+        object.voiceBoost,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -160,6 +208,34 @@ class _$PlayInfoSerializer implements PrimitiveSerializer<PlayInfo> {
             specifiedType: const FullType(DateTime),
           ) as DateTime;
           result.expiresAt = valueDes;
+          break;
+        case r'partIndex':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.partIndex = valueDes;
+          break;
+        case r'partCount':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.partCount = valueDes;
+          break;
+        case r'partStartMs':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.partStartMs = valueDes;
+          break;
+        case r'voiceBoost':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.voiceBoost = valueDes;
           break;
         default:
           unhandled.add(key);

@@ -97,8 +97,11 @@ abstract interface class WaxDeckRepository {
   Future<ItemDetail> getItem(String pid);
 
   /// `GET /items/{pid}/play-info`: short-TTL stream resolution. The returned
-  /// URL is already resolved against the client base URL.
-  Future<PlayInfo> getPlayInfo(String pid);
+  /// URL is already resolved against the client base URL. For multi-file
+  /// audiobooks [positionMs] (book-timeline milliseconds) selects the part
+  /// containing that position; [voiceBoost] requests server-side loudness
+  /// normalization, overriding the caller's stored setting when present.
+  Future<PlayInfo> getPlayInfo(String pid, {int? positionMs, bool? voiceBoost});
 
   /// `GET /items/{pid}/play-state`: the caller's resume state for one item.
   Future<PlayState> getPlayState(String pid);
@@ -159,6 +162,85 @@ abstract interface class WaxDeckRepository {
   /// `PUT /users/me/prefs`: replaces the caller's synced preferences and
   /// returns the stored document. Replace semantics: start from [getPrefs].
   Future<Prefs> putPrefs(Prefs prefs);
+
+  /// `GET /podcasts`: keyset-paginated list of the caller's podcast
+  /// subscriptions, ordered by show title then pid.
+  Future<SubscriptionPage> listSubscriptions({String? cursor, int? limit});
+
+  /// `POST /podcasts`: subscribes the caller to a show, cataloging it on
+  /// first subscription. [sourceType] is `rss` (default) or `youtube`;
+  /// supplying credentials marks the show private.
+  Future<Subscription> subscribePodcast({
+    required String url,
+    String? sourceType,
+    String? username,
+    String? password,
+    String? folder,
+  });
+
+  /// `GET /podcasts/{pid}`: show detail with the caller's subscription
+  /// state, for any cataloged show.
+  Future<PodcastDetail> getPodcast(String pid);
+
+  /// `DELETE /podcasts/{pid}`: removes the caller's subscription. Never
+  /// destructive to the catalog; a no-op when not subscribed. With
+  /// [removeDownloads], and only when the caller was the show's last
+  /// subscriber, the downloaded audio moves to the server trash.
+  Future<void> unsubscribePodcast(String pid, {bool removeDownloads});
+
+  /// `PUT /podcasts/{pid}/settings`: full replace of the caller's
+  /// per-subscription settings; absent fields reset to defaults, so
+  /// senders start from the stored value.
+  Future<Subscription> putSubscriptionSettings(
+    String pid,
+    SubscriptionSettings settings,
+  );
+
+  /// `GET /podcasts/{pid}/episodes`: keyset-paginated episodes, newest
+  /// first.
+  Future<EpisodePage> listEpisodes(String pid, {String? cursor, int? limit});
+
+  /// `GET /episodes/{pid}`: full episode detail with sanitized show
+  /// notes and chapter marks.
+  Future<EpisodeDetail> getEpisode(String pid);
+
+  /// `GET /episodes/{pid}/transcript`: the episode's transcript as
+  /// time-coded cues; the first call may take a moment while the server
+  /// fetches and caches it.
+  Future<Transcript> getEpisodeTranscript(String pid);
+
+  /// `POST /episodes/{pid}/fetch`: queues a server-side download of the
+  /// episode's audio. A no-op success when already downloaded or queued.
+  Future<void> fetchEpisode(String pid);
+
+  /// Removes an episode's fetched audio from the server (archive, not
+  /// delete: playback state survives and the episode stays fetchable).
+  Future<void> removeEpisodeDownload(String pid);
+
+  /// `GET /books/{pid}`: full audiobook detail with chapters, parts, and
+  /// the caller's per-book settings.
+  Future<BookDetail> getBook(String pid);
+
+  /// `GET /books/{pid}/resume`: the caller's cross-device resume point
+  /// on the book timeline.
+  Future<BookResume> getBookResume(String pid);
+
+  /// `PUT /books/{pid}/settings`: full replace of the caller's per-book
+  /// playback settings.
+  Future<BookSettings> putBookSettings(String pid, BookSettings settings);
+
+  /// `GET /items/{pid}/skip-map`: precomputed silence spans for
+  /// client-side trimming; [partIndex] selects one part of a multi-file
+  /// audiobook, with spans in that part's own timeline.
+  Future<SkipMap> getSkipMap(String pid, {int? partIndex});
+
+  /// `GET /podcasts/opml`: the caller's subscriptions as an OPML 2.0
+  /// document.
+  Future<String> exportOpml();
+
+  /// `POST /podcasts/opml`: subscribes the caller to every feed in the
+  /// document; per-feed failures do not fail the import.
+  Future<void> importOpml(String opml);
 }
 
 /// Thin repository layer over the generated dart-dio client.
@@ -398,8 +480,16 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<PlayInfo> getPlayInfo(String pid) => _guard(() async {
-    final response = await _gen.getPlaybackApi().getPlayInfo(pid: pid);
+  Future<PlayInfo> getPlayInfo(
+    String pid, {
+    int? positionMs,
+    bool? voiceBoost,
+  }) => _guard(() async {
+    final response = await _gen.getPlaybackApi().getPlayInfo(
+      pid: pid,
+      positionMs: positionMs,
+      voiceBoost: voiceBoost,
+    );
     return playInfoFromGen(_require(response.data), baseUrl: _baseUrl);
   });
 
@@ -543,6 +633,143 @@ class WaxDeckClient implements WaxDeckRepository {
       prefs: prefsToGen(prefs),
     );
     return prefsFromGen(_require(response.data));
+  });
+
+  @override
+  Future<SubscriptionPage> listSubscriptions({String? cursor, int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getPodcastsApi().listSubscriptions(
+          cursor: cursor,
+          limit: limit,
+        );
+        return subscriptionPageFromGen(
+          _require(response.data),
+          baseUrl: _baseUrl,
+        );
+      });
+
+  @override
+  Future<Subscription> subscribePodcast({
+    required String url,
+    String? sourceType,
+    String? username,
+    String? password,
+    String? folder,
+  }) => _guard(() async {
+    final response = await _gen.getPodcastsApi().subscribePodcast(
+      subscribeRequest: gen.SubscribeRequest(
+        (b) => b
+          ..url = url
+          ..sourceType = sourceType
+          ..username = username
+          ..password = password
+          ..folder = folder,
+      ),
+    );
+    return subscriptionFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<PodcastDetail> getPodcast(String pid) => _guard(() async {
+    final response = await _gen.getPodcastsApi().getPodcast(pid: pid);
+    return podcastDetailFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<void> unsubscribePodcast(String pid, {bool removeDownloads = false}) =>
+      _guard(() async {
+        await _gen.getPodcastsApi().unsubscribePodcast(
+          pid: pid,
+          removeDownloads: removeDownloads ? true : null,
+        );
+      });
+
+  @override
+  Future<Subscription> putSubscriptionSettings(
+    String pid,
+    SubscriptionSettings settings,
+  ) => _guard(() async {
+    final response = await _gen.getPodcastsApi().putSubscriptionSettings(
+      pid: pid,
+      subscriptionSettings: subscriptionSettingsToGen(settings),
+    );
+    return subscriptionFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<EpisodePage> listEpisodes(String pid, {String? cursor, int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getPodcastsApi().listEpisodes(
+          pid: pid,
+          cursor: cursor,
+          limit: limit,
+        );
+        return episodePageFromGen(_require(response.data), baseUrl: _baseUrl);
+      });
+
+  @override
+  Future<EpisodeDetail> getEpisode(String pid) => _guard(() async {
+    final response = await _gen.getPodcastsApi().getEpisode(pid: pid);
+    return episodeDetailFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<Transcript> getEpisodeTranscript(String pid) => _guard(() async {
+    final response = await _gen.getPodcastsApi().getEpisodeTranscript(pid: pid);
+    return transcriptFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> removeEpisodeDownload(String pid) => _guard(() async {
+    await _gen.getPodcastsApi().removeEpisodeDownload(pid: pid);
+  });
+
+  @override
+  Future<void> fetchEpisode(String pid) => _guard(() async {
+    await _gen.getPodcastsApi().fetchEpisode(pid: pid);
+  });
+
+  @override
+  Future<BookDetail> getBook(String pid) => _guard(() async {
+    final response = await _gen.getBooksApi().getBook(pid: pid);
+    return bookDetailFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<BookResume> getBookResume(String pid) => _guard(() async {
+    final response = await _gen.getBooksApi().getBookResume(pid: pid);
+    return bookResumeFromGen(_require(response.data));
+  });
+
+  @override
+  Future<BookSettings> putBookSettings(String pid, BookSettings settings) =>
+      _guard(() async {
+        final response = await _gen.getBooksApi().putBookSettings(
+          pid: pid,
+          bookSettings: bookSettingsToGen(settings),
+        );
+        return bookSettingsFromGen(_require(response.data));
+      });
+
+  @override
+  Future<SkipMap> getSkipMap(String pid, {int? partIndex}) => _guard(() async {
+    final response = await _gen.getPlaybackApi().getSkipMap(
+      pid: pid,
+      partIndex: partIndex,
+    );
+    return skipMapFromGen(_require(response.data));
+  });
+
+  @override
+  Future<String> exportOpml() => _guard(() async {
+    return _require((await _gen.getPodcastsApi().exportOpml()).data);
+  });
+
+  @override
+  Future<void> importOpml(String opml) => _guard(() async {
+    await _gen.getPodcastsApi().importOpml(
+      opmlImport: gen.OpmlImport((b) => b..opml = opml),
+    );
   });
 
   /// Runs [body], mapping transport failures to the structured error model.

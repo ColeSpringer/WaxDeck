@@ -4,6 +4,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../library/library_controller.dart';
 import '../player/play_state_controller.dart';
+import '../podcasts/podcasts_controller.dart';
 import '../providers.dart';
 import '../settings/prefs_controller.dart';
 import 'live_invalidations.dart';
@@ -72,12 +73,23 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   void invalidateCatalog() {
     ref.invalidate(libraryControllerProvider);
     ref.invalidate(continueListeningProvider);
+    // Shows and episodes are catalog entities too: a server-side fetch
+    // flipping an episode to downloaded must reach an open show screen.
+    ref.invalidate(podcastDetailProvider);
+    ref.invalidate(episodesProvider);
+    ref.invalidate(episodeDetailProvider);
   }
 
   void invalidateUserState() {
     ref.invalidate(playStateControllerProvider);
     ref.invalidate(continueListeningProvider);
     ref.invalidate(prefsControllerProvider);
+    // Subscriptions and their settings ride the user stream, and a
+    // membership change also reshapes the caller's own catalog view
+    // (episodes scope to subscriptions), so the grid refetches too.
+    ref.invalidate(subscriptionsProvider);
+    ref.invalidate(podcastDetailProvider);
+    ref.invalidate(libraryControllerProvider);
   }
 
   final engine = ref.watch(syncEngineProvider);

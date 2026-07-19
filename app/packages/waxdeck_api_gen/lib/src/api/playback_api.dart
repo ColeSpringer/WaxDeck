@@ -19,6 +19,7 @@ import 'package:waxdeck_api_gen/src/model/play_state_list.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_query.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_update.dart';
 import 'package:waxdeck_api_gen/src/model/rating_update.dart';
+import 'package:waxdeck_api_gen/src/model/skip_map.dart';
 import 'package:waxdeck_api_gen/src/model/star_update.dart';
 
 class PlaybackApi {
@@ -116,10 +117,12 @@ class PlaybackApi {
   }
 
   /// Resolve a playable stream for an item
-  /// Returns everything a client needs to start playback: a short-TTL, origin-relative stream URL (media-token authenticated, so it is playable by bare &#x60;&lt;audio&gt;&#x60; elements, cast devices, and DLNA renderers that cannot send headers), the served format, and expiry. Clients re-request play-info when a stream URL expires or the server signals &#x60;stream-stale&#x60;. 
+  /// Returns everything a client needs to start playback: a short-TTL, origin-relative stream URL (media-token authenticated, so it is playable by bare &#x60;&lt;audio&gt;&#x60; elements, cast devices, and DLNA renderers that cannot send headers), the served format, and expiry. Clients re-request play-info when a stream URL expires or the server signals &#x60;stream-stale&#x60;. A multi-file audiobook resolves one part per call: pass &#x60;positionMs&#x60; (book-timeline milliseconds) to get the part containing that position, and read &#x60;partIndex&#x60;, &#x60;partCount&#x60;, and &#x60;partStartMs&#x60; from the response; when playback crosses the end of a part, re-request play-info with the new book-timeline position. The response&#39;s &#x60;durationMs&#x60; is always the duration of the served stream (the resolved part, for multi-file books); the book total lives on the item summary and the book detail. Positions reported to play-state for multi-file books are always book-timeline milliseconds (&#x60;partStartMs&#x60; plus the in-part position). A podcast episode whose audio has not been fetched to the server yet answers &#x60;conflict&#x60;; queue it with the episode fetch endpoint and retry when the catalog reports it present. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [positionMs] - Book-timeline position in milliseconds; selects which part of a multi-file audiobook to resolve. Omitting it resolves the first part. Ignored for single-file items. 
+  /// * [voiceBoost] - Request server-side spoken-word loudness normalization (compression plus leveling gain) applied to the stream, for clients without local DSP. Precedence is resolved here, at mint time: when this parameter is present it wins; when absent, the caller's stored setting for the show or book applies. Honored only for podcast episodes and audiobooks, only when the streaming sidecar supports it, and only when the item's measured loudness is known; the response's `voiceBoost` always reports the actual outcome. Applying it forces a transcode. 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -131,6 +134,8 @@ class PlaybackApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<PlayInfo>> getPlayInfo({ 
     required String pid,
+    int? positionMs,
+    bool? voiceBoost,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -162,9 +167,15 @@ class PlaybackApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (positionMs != null) r'positionMs': encodeQueryParameter(_serializers, positionMs, const FullType(int)),
+      if (voiceBoost != null) r'voiceBoost': encodeQueryParameter(_serializers, voiceBoost, const FullType(bool)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
@@ -276,6 +287,99 @@ class PlaybackApi {
     }
 
     return Response<PlayState>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Get an item&#39;s silence skip map
+  /// Precomputed silence spans for client-side trimming of spoken-word content: clients skip a mapped span by seeking to its end, so positions stay honest on every platform and the hours-saved arithmetic is exact (trimming therefore needs a seekable stream). Maps are keyed to the item&#39;s audio essence and to the upstream detector version, so a re-encode or a detector revision invalidates them; offline clients compare the response&#39;s &#x60;essenceHash&#x60; against their download store to spot a stale stored map. Maps are per audio file: for a multi-file audiobook, pass &#x60;partIndex&#x60; to get the map of one part, with spans in that part&#39;s own timeline. Only podcast episodes and audiobooks are mapped; other items, and episodes whose audio is not fetched to the server yet, answer &#x60;unavailable&#x60; (an episode may become mappable after its fetch). When no map exists yet the server queues analysis and answers &#x60;pending&#x60;; poll again later (analysis runs in the background at low priority, and repeated polls coalesce onto the single queued analysis). Downloads for offline playback should fetch and store this map alongside the audio, or trimming silently stops working in airplane mode. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [partIndex] - Zero-based part of a multi-file audiobook to map. Ignored for single-file items. 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [SkipMap] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<SkipMap>> getSkipMap({ 
+    required String pid,
+    int? partIndex,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/skip-map'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (partIndex != null) r'partIndex': encodeQueryParameter(_serializers, partIndex, const FullType(int)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    SkipMap? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(SkipMap),
+      ) as SkipMap;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<SkipMap>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

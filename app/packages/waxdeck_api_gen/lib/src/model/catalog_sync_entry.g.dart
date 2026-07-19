@@ -13,13 +13,22 @@ class _$CatalogSyncEntry extends CatalogSyncEntry {
   final String pid;
   @override
   final ItemSummary? item;
+  @override
+  final EpisodeSummary? episode;
+  @override
+  final PodcastShow? show_;
 
   factory _$CatalogSyncEntry([
     void Function(CatalogSyncEntryBuilder)? updates,
   ]) => (CatalogSyncEntryBuilder()..update(updates))._build();
 
-  _$CatalogSyncEntry._({required this.op, required this.pid, this.item})
-    : super._();
+  _$CatalogSyncEntry._({
+    required this.op,
+    required this.pid,
+    this.item,
+    this.episode,
+    this.show_,
+  }) : super._();
   @override
   CatalogSyncEntry rebuild(void Function(CatalogSyncEntryBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -34,7 +43,9 @@ class _$CatalogSyncEntry extends CatalogSyncEntry {
     return other is CatalogSyncEntry &&
         op == other.op &&
         pid == other.pid &&
-        item == other.item;
+        item == other.item &&
+        episode == other.episode &&
+        show_ == other.show_;
   }
 
   @override
@@ -43,6 +54,8 @@ class _$CatalogSyncEntry extends CatalogSyncEntry {
     _$hash = $jc(_$hash, op.hashCode);
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, item.hashCode);
+    _$hash = $jc(_$hash, episode.hashCode);
+    _$hash = $jc(_$hash, show_.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -52,7 +65,9 @@ class _$CatalogSyncEntry extends CatalogSyncEntry {
     return (newBuiltValueToStringHelper(r'CatalogSyncEntry')
           ..add('op', op)
           ..add('pid', pid)
-          ..add('item', item))
+          ..add('item', item)
+          ..add('episode', episode)
+          ..add('show_', show_))
         .toString();
   }
 }
@@ -73,6 +88,14 @@ class CatalogSyncEntryBuilder
   ItemSummary? get item => _$this._item;
   set item(ItemSummary? item) => _$this._item = item;
 
+  EpisodeSummary? _episode;
+  EpisodeSummary? get episode => _$this._episode;
+  set episode(EpisodeSummary? episode) => _$this._episode = episode;
+
+  PodcastShowBuilder? _show_;
+  PodcastShowBuilder get show_ => _$this._show_ ??= PodcastShowBuilder();
+  set show_(PodcastShowBuilder? show_) => _$this._show_ = show_;
+
   CatalogSyncEntryBuilder() {
     CatalogSyncEntry._defaults(this);
   }
@@ -83,6 +106,8 @@ class CatalogSyncEntryBuilder
       _op = $v.op;
       _pid = $v.pid;
       _item = $v.item;
+      _episode = $v.episode;
+      _show_ = $v.show_?.toBuilder();
       _$v = null;
     }
     return this;
@@ -102,21 +127,39 @@ class CatalogSyncEntryBuilder
   CatalogSyncEntry build() => _build();
 
   _$CatalogSyncEntry _build() {
-    final _$result =
-        _$v ??
-        _$CatalogSyncEntry._(
-          op: BuiltValueNullFieldError.checkNotNull(
-            op,
-            r'CatalogSyncEntry',
-            'op',
-          ),
-          pid: BuiltValueNullFieldError.checkNotNull(
-            pid,
-            r'CatalogSyncEntry',
-            'pid',
-          ),
-          item: item,
+    _$CatalogSyncEntry _$result;
+    try {
+      _$result =
+          _$v ??
+          _$CatalogSyncEntry._(
+            op: BuiltValueNullFieldError.checkNotNull(
+              op,
+              r'CatalogSyncEntry',
+              'op',
+            ),
+            pid: BuiltValueNullFieldError.checkNotNull(
+              pid,
+              r'CatalogSyncEntry',
+              'pid',
+            ),
+            item: item,
+            episode: episode,
+            show_: _show_?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'show_';
+        _show_?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'CatalogSyncEntry',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

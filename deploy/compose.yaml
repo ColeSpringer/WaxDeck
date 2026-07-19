@@ -44,11 +44,30 @@ services:
       WAXDECK_OIDC_CLIENT_SECRET: ${WAXDECK_OIDC_CLIENT_SECRET:-}
       WAXDECK_OIDC_GROUPS_CLAIM: ${WAXDECK_OIDC_GROUPS_CLAIM:-}
       WAXDECK_OIDC_ADMIN_GROUP: ${WAXDECK_OIDC_ADMIN_GROUP:-}
+      # Episode downloads live in their own directory (the catalog
+      # refuses a podcast dir inside a library root); the sidecar
+      # mounts the same volume read-only under the matching root name.
+      WAXDECK_PODCAST_DIR: /podcasts
+      WAXDECK_PODCAST_ROOT_NAME: podcasts
+      WAXDECK_FEED_REFRESH_MINUTES: ${WAXDECK_FEED_REFRESH_MINUTES:-30}
+      WAXDECK_PODCAST_RETENTION_DEFAULT: ${WAXDECK_PODCAST_RETENTION_DEFAULT:-0}
+      # Set to "true" when your feeds live on the LAN (relaxes the
+      # private-address guard on feed and enclosure fetches).
+      WAXDECK_ALLOW_PRIVATE_FEED_HOSTS: ${WAXDECK_ALLOW_PRIVATE_FEED_HOSTS:-false}
+      # YouTube acquisition bridge: channels and playlists as shows.
+      # Pair with the youtube profile's waxseal sidecar for the
+      # full-quality path.
+      WAXDECK_YOUTUBE: ${WAXDECK_YOUTUBE:-false}
+      WAXDECK_SEAL_URL: ${WAXDECK_SEAL_URL:-}
+      WAXDECK_SEAL_API_KEY: ${WAXDECK_SEAL_API_KEY:-}
+      WAXDECK_YOUTUBE_SPONSORBLOCK: ${WAXDECK_YOUTUBE_SPONSORBLOCK:-}
     volumes:
       # Holds waxbin.db + waxdeck.db (and their -wal/-shm sidecars).
       - waxdeck-data:/data
       # WaxDeck manages the library (imports, sidecars, organization): read-write.
       - ${WAXDECK_LIBRARY:-./library}:/library
+      # Episode downloads: WaxDeck writes, WaxFlow streams.
+      - waxdeck-podcasts:/podcasts
     networks: [internal]
     cap_drop: [ALL]
     security_opt:
@@ -75,12 +94,14 @@ services:
       WAXFLOW_ADDR: 0.0.0.0:4418
       # WaxFlow fails closed: a non-loopback listen address requires API keys.
       WAXFLOW_API_KEYS: ${WAXFLOW_API_KEYS:?set WAXFLOW_API_KEYS (comma-separated; generate with openssl rand -hex 24)}
-      WAXFLOW_ROOTS: lib=/library
+      WAXFLOW_ROOTS: lib=/library,podcasts=/podcasts
       # The catalog resolver behind pid: sources reads waxbin.db.
       WAXFLOW_CATALOG_DB: /catalog/waxbin.db
     volumes:
       # Same library as waxdeck, but WaxFlow only reads it.
       - ${WAXDECK_LIBRARY:-./library}:/library:ro
+      # Episode downloads, read-only for streaming.
+      - waxdeck-podcasts:/podcasts:ro
       # WaxDeck's data volume for pid resolution. The resolver opens the
       # catalog read-only, but the mount stays writable: SQLite WAL
       # readers need write access to the -shm/-wal sidecar files while
@@ -105,10 +126,25 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  waxseal:
+    # YouTube PO-token attestation for the full-quality acquisition
+    # path. Optional: the bridge works without it at reduced quality.
+    # Enable with --profile youtube and set WAXDECK_YOUTUBE=true plus
+    # WAXDECK_SEAL_URL=http://waxseal:4416 in .env.
+    image: ghcr.io/colespringer/waxseal:latest
+    profiles: [youtube]
+    environment:
+      WAXSEAL_ADDR: 0.0.0.0:4416
+      WAXSEAL_API_KEYS: ${WAXSEAL_API_KEYS:-}
+    networks: [internal]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # --- future profiles (documented topology; services come later) ---
-  #
-  # youtube (profile: youtube) - WaxFlow's yt-dlp sidecar / source package.
-  #   Internal network only; WAXFLOW_* wiring extends the waxflow service.
   #
   # similarity (profile: similarity) - sonic-similarity analysis worker.
   #   Reads /library:ro, writes embeddings to its own named volume.
@@ -126,5 +162,6 @@ networks:
 
 volumes:
   waxdeck-data:
+  waxdeck-podcasts:
   waxflow-data:
   waxflow-cache:

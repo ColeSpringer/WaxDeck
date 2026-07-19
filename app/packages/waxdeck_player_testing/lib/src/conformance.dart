@@ -129,5 +129,33 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
       expect(engine.playing, isFalse);
       expect(engine.processingState, EngineProcessingState.idle);
     });
+
+    test('speed defaults to 1.0 and setSpeed reads back', () async {
+      await engine.load(harness.mediaUrl);
+      expect(engine.speed, closeTo(1.0, 0.001));
+      await engine.setSpeed(1.5);
+      expect(engine.speed, closeTo(1.5, 0.001));
+    });
+
+    test('speedStream emits the new speed', () async {
+      await engine.load(harness.mediaUrl);
+      final emitted = <double>[];
+      final sub = engine.speedStream.listen(emitted.add);
+      await engine.setSpeed(1.5);
+      await harness.advance(engine, Duration.zero);
+      expect(emitted.any((s) => (s - 1.5).abs() < 0.001), isTrue);
+      await sub.cancel();
+    });
+
+    test('speed persists across pause and play', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.setSpeed(2.0);
+      await engine.play();
+      await harness.advance(engine, const Duration(seconds: 1));
+      await engine.pause();
+      expect(engine.speed, closeTo(2.0, 0.001));
+      await engine.play();
+      expect(engine.speed, closeTo(2.0, 0.001));
+    });
   });
 }

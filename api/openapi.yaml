@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: WaxDeck API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     First-party REST API for WaxDeck: the self-hosted player, library manager,
     and metadata completer for music, podcasts, and audiobooks.
@@ -13,9 +13,15 @@ info:
     ingest, library scanning, delta sync for offline-first clients (with
     the WebSocket event channel specified in `api/events.md`; its frame
     payloads are components in this document), offline downloads of
-    original files, and app passwords for the compatibility APIs. The
-    shapes (keyset pagination, typed PIDs, the structured error model,
-    relative media URLs) are load-bearing from day one.
+    original files, app passwords for the compatibility APIs, podcasts
+    (per-user subscriptions over globally cataloged shows, episode
+    browsing with sanitized show notes, transcripts, OPML round trips,
+    server-side episode fetching, and YouTube channels as shows),
+    audiobooks (book detail with chapters and parts, chapter-aware
+    resume, per-book playback settings), and silence skip maps for
+    client-side trimming. The shapes (keyset pagination, typed PIDs,
+    the structured error model, relative media URLs) are load-bearing
+    from day one.
 
     Conventions:
     - All endpoints live under `/api/v1` (this document's `servers` entry).
@@ -30,8 +36,13 @@ info:
       many attempts; retry later), `stream-stale` (a stream URL no longer
       matches the file on disk; re-request play-info), `catalog-maintenance`
       (the catalog is temporarily handed to a maintenance operation; retry
-      shortly), and `sync-reset` (a sync cursor predates the retained change
-      history; drop the local mirror and re-mirror from a fresh snapshot).
+      shortly), `sync-reset` (a sync cursor predates the retained change
+      history; drop the local mirror and re-mirror from a fresh snapshot),
+      `feed-unreachable` (an upstream feed could not be fetched or parsed;
+      the feed's own server answered an error, timed out, or returned
+      something that is not a feed), and `source-unavailable` (the request
+      needs an acquisition source integration, such as the YouTube bridge,
+      that this server is not running).
       New codes may appear; clients must treat unknown codes as opaque.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
@@ -54,6 +65,17 @@ info:
       as if it did not exist (`not-found`), and list endpoints omit such
       items (a page may carry fewer than `limit` items and still have a
       `nextCursor`).
+    - Podcast subscriptions additionally scope the caller's own catalog
+      view: shows and their episodes appear in item listings, discovery
+      browse, search, and catalog sync only while the caller subscribes
+      to the show, so unsubscribing removes a show from your library
+      surfaces while the catalog keeps everything (files, other users'
+      subscriptions, playback history). Subscribing or unsubscribing
+      therefore retires the caller's outstanding catalog sync cursors:
+      the next delta answers `sync-reset` and the re-mirror reflects the
+      new membership. Show detail, a show's episode list, and episode
+      reads stay available to any caller who can see the podcast
+      library, so shows can be browsed before subscribing.
   contact:
     name: WaxDeck
     url: https://github.com/ColeSpringer/WaxDeck
@@ -74,6 +96,13 @@ tags:
     description: Account administration, roles, library visibility, and preferences.
   - name: library
     description: Browse, search, and inspect library items.
+  - name: podcasts
+    description: >
+      Per-user podcast subscriptions over globally cataloged shows:
+      subscribe, browse episodes, transcripts, OPML, refresh, and
+      server-side episode fetching.
+  - name: books
+    description: Audiobook detail, chapter-aware resume, and per-book settings.
   - name: playback
     description: Resolve playable streams, playback state, and listen accounting.
   - name: sync
@@ -1072,10 +1101,47 @@ paths:
         by bare `<audio>` elements, cast devices, and DLNA renderers that cannot
         send headers), the served format, and expiry. Clients re-request
         play-info when a stream URL expires or the server signals
-        `stream-stale`.
+        `stream-stale`. A multi-file audiobook resolves one part per call:
+        pass `positionMs` (book-timeline milliseconds) to get the part
+        containing that position, and read `partIndex`, `partCount`, and
+        `partStartMs` from the response; when playback crosses the end of
+        a part, re-request play-info with the new book-timeline position.
+        The response's `durationMs` is always the duration of the served
+        stream (the resolved part, for multi-file books); the book total
+        lives on the item summary and the book detail. Positions reported
+        to play-state for multi-file books are always book-timeline
+        milliseconds (`partStartMs` plus the in-part position). A podcast
+        episode whose audio has not been fetched to the server yet
+        answers `conflict`; queue it with the episode fetch endpoint and
+        retry when the catalog reports it present.
       tags: [playback]
       parameters:
         - $ref: "#/components/parameters/Pid"
+        - name: positionMs
+          in: query
+          description: >
+            Book-timeline position in milliseconds; selects which part of
+            a multi-file audiobook to resolve. Omitting it resolves the
+            first part. Ignored for single-file items.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: voiceBoost
+          in: query
+          description: >
+            Request server-side spoken-word loudness normalization
+            (compression plus leveling gain) applied to the stream, for
+            clients without local DSP. Precedence is resolved here, at
+            mint time: when this parameter is present it wins; when
+            absent, the caller's stored setting for the show or book
+            applies. Honored only for podcast episodes and audiobooks,
+            only when the streaming sidecar supports it, and only when
+            the item's measured loudness is known; the response's
+            `voiceBoost` always reports the actual outcome. Applying it
+            forces a transcode.
+          schema:
+            type: boolean
       responses:
         "200":
           description: Stream resolution for the item.
@@ -1087,6 +1153,14 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The item cannot stream yet (code `conflict`): a podcast
+            episode whose audio has not been fetched to the server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1140,10 +1214,11 @@ paths:
       description: >
         Artwork as image bytes: the original at full size, or a square-fit
         thumbnail when `size` is given. Besides item PIDs this endpoint also
-        accepts album (`al-`) and artist (`ar-`) PIDs, so search hits can
-        render artwork directly. Items without any artwork in their fallback
-        chain return 404. Responses carry a content-addressed `ETag`;
-        revalidate with `If-None-Match` instead of refetching.
+        accepts album (`al-`), artist (`ar-`), and podcast show (`pc-`)
+        PIDs, so search hits and subscription lists can render artwork
+        directly. Items without any artwork in their fallback chain return
+        404. Responses carry a content-addressed `ETag`; revalidate with
+        `If-None-Match` instead of refetching.
       tags: [library]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -1341,6 +1416,600 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /items/{pid}/skip-map:
+    get:
+      operationId: getSkipMap
+      summary: Get an item's silence skip map
+      description: >
+        Precomputed silence spans for client-side trimming of spoken-word
+        content: clients skip a mapped span by seeking to its end, so
+        positions stay honest on every platform and the hours-saved
+        arithmetic is exact (trimming therefore needs a seekable
+        stream). Maps are keyed to the item's audio essence and to the
+        upstream detector version, so a re-encode or a detector
+        revision invalidates them; offline clients compare the
+        response's `essenceHash` against their download store to spot
+        a stale stored map. Maps are per audio file: for a multi-file
+        audiobook, pass `partIndex` to get the map of one part, with
+        spans in that part's own timeline. Only podcast episodes and
+        audiobooks are mapped; other items, and episodes whose audio
+        is not fetched to the server yet, answer `unavailable` (an
+        episode may become mappable after its fetch). When no map
+        exists yet the server queues analysis and answers `pending`;
+        poll again later (analysis runs in the background at low
+        priority, and repeated polls coalesce onto the single queued
+        analysis). Downloads for offline playback should fetch and
+        store this map alongside the audio, or trimming silently stops
+        working in airplane mode.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: partIndex
+          in: query
+          description: >
+            Zero-based part of a multi-file audiobook to map. Ignored
+            for single-file items.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: The skip map, or its pending or unavailable state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkipMap"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /podcasts:
+    get:
+      operationId: listSubscriptions
+      summary: List the caller's podcast subscriptions
+      description: >
+        Keyset-paginated list of the calling user's podcast subscriptions,
+        each carrying the show summary and the caller's per-subscription
+        settings. Ordering is stable (show title, then pid).
+      tags: [podcasts]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum subscriptions per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of subscriptions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    post:
+      operationId: subscribePodcast
+      summary: Subscribe to a podcast
+      description: >
+        Subscribes the calling user to a show. The show is cataloged
+        globally on first subscription (fetching and parsing the feed, or
+        resolving a YouTube channel or playlist through the acquisition
+        bridge when `sourceType` is `youtube`); later subscribers attach
+        to the existing show without refetching. Subscribing to a show
+        the caller already follows returns the existing subscription
+        with its settings unchanged (200 instead of 201), except that
+        supplied credentials always replace the show's stored
+        credentials: re-subscribing with new credentials is the
+        rotation path. Credentials are stored once per show (the last
+        supplied set wins, whoever supplied it), apply to feed and
+        enclosure fetches, and are sealed at rest and never returned by
+        any endpoint. Supplying credentials marks the show private (a
+        global, sticky property; see the show schema).
+      tags: [podcasts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscribeRequest"
+      responses:
+        "201":
+          description: Newly subscribed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        "200":
+          description: The caller was already subscribed to this show.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "501":
+          $ref: "#/components/responses/SourceUnavailable"
+        "502":
+          $ref: "#/components/responses/FeedUnreachable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /podcasts/opml:
+    get:
+      operationId: exportOpml
+      summary: Export the caller's subscriptions as OPML
+      description: >
+        OPML 2.0 document of the calling user's subscriptions, with folder
+        assignments rendered as nested outlines. Private shows (see the
+        show schema's sticky privacy rule) are omitted entirely, for
+        every exporting user: private feed URLs are secrets and never
+        leave the server in an export.
+      tags: [podcasts]
+      responses:
+        "200":
+          description: The OPML document.
+          content:
+            application/xml:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    post:
+      operationId: importOpml
+      summary: Import subscriptions from OPML
+      description: >
+        Subscribes the calling user to every feed in the document,
+        honoring folder outlines (nested outline titles become the
+        subscription's folder path). Feeds that fail to fetch are
+        reported per entry and do not fail the import. Already-followed
+        feeds are left unchanged.
+      tags: [podcasts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpmlImport"
+      responses:
+        "200":
+          description: Per-feed import results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpmlImportResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /podcasts/{pid}:
+    get:
+      operationId: getPodcast
+      summary: Get one show with the caller's subscription state
+      description: >
+        Show detail for any cataloged show, subscribed or not: the show
+        summary with sanitized description, whether the calling user is
+        subscribed, and their per-subscription settings when they are.
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The show and the caller's subscription state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PodcastDetail"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: unsubscribePodcast
+      summary: Unsubscribe from a show
+      description: >
+        Removes the calling user's subscription. The show, its episodes,
+        and every user's playback state stay in the catalog. By default
+        downloaded files stay too, governed by the remaining
+        subscribers' retention; with `removeDownloads` set, and only
+        when the caller was the show's last subscriber, the downloaded
+        audio moves into the library trash (archive, never delete:
+        recoverable until purged, playback state untouched, episodes
+        fetchable again after a re-subscribe). Files someone is
+        listening to right now are skipped by that cleanup. While other
+        subscribers remain the flag is ignored: the files are theirs as
+        much as the caller's. Unsubscribing from a show the caller does
+        not follow is a no-op success.
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: removeDownloads
+          in: query
+          description: >
+            Also move the show's downloaded audio to the trash when the
+            caller is the last subscriber.
+          schema:
+            type: boolean
+      responses:
+        "204":
+          description: The caller is not subscribed to this show anymore.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /podcasts/{pid}/settings:
+    put:
+      operationId: putSubscriptionSettings
+      summary: Replace the caller's settings for a subscription
+      description: >
+        Full replace of the calling user's per-subscription settings.
+        Absent fields reset to their defaults, so clients send the
+        complete object (read it back from the subscription first).
+        Retention resolves across subscribers as the most generous
+        union, and sweeps are asynchronous: lowering `retentionKeep`
+        enqueues a re-evaluation instead of deleting files inline.
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscriptionSettings"
+      responses:
+        "200":
+          description: The updated subscription.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: >
+            The caller is not subscribed to this show (code `not-found`);
+            settings exist only on subscriptions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /podcasts/{pid}/episodes:
+    get:
+      operationId: listEpisodes
+      summary: List a show's episodes
+      description: >
+        Keyset-paginated episodes of one show, newest first (publication
+        date, then pid). Available to any caller who can see the show,
+        subscribed or not.
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum episodes per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of episodes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpisodePage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /podcasts/{pid}/refresh:
+    post:
+      operationId: refreshPodcast
+      summary: Refresh a show's feed now
+      description: >
+        Fetches the show's feed immediately (conditional GET; a feed that
+        reports no change is cheap) and reports how many new episodes
+        appeared. Subscribers only: refresh failures carry upstream
+        detail, and a private feed's detail belongs to its subscribers.
+        Refreshes are coalesced server-side: a show synced within the
+        last minute answers from that sync instead of refetching. A
+        repeatedly failing feed is auto-disabled from scheduled
+        refresh; a successful manual refresh re-enables it.
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: Refresh outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResult"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          description: >
+            The caller is not subscribed to this show (code
+            `forbidden`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/FeedUnreachable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /episodes/{pid}:
+    get:
+      operationId: getEpisode
+      summary: Get one episode's detail
+      description: >
+        Full episode detail: summary fields plus sanitized show notes
+        (`descriptionHtml` is feed-controlled HTML reduced server-side
+        to a safe allowlist; clients may render it directly) and chapter
+        marks when the episode has them.
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The episode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Episode"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /episodes/{pid}/transcript:
+    get:
+      operationId: getEpisodeTranscript
+      summary: Get an episode's transcript
+      description: >
+        The episode's transcript as time-coded cues for display and
+        tap-line-to-seek. Fetched from the feed's transcript pointer on
+        first request and cached; the first call may take a moment. 404
+        only when the episode announces no transcript; a pointer that
+        exists but cannot be fetched or parsed answers
+        `feed-unreachable`, so clients retry later instead of caching
+        a false absence.
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The transcript.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcript"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/FeedUnreachable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /episodes/{pid}/fetch:
+    post:
+      operationId: fetchEpisode
+      summary: Fetch an episode's audio to the server
+      description: >
+        Queues a server-side download of the episode's enclosure into the
+        library. The caller must be subscribed to the episode's show.
+        The episode's item flips from remote to present when the fetch
+        completes, which reaches clients as a catalog invalidation; a
+        failed fetch surfaces as `fetchState: failed` with `fetchError`
+        on the episode summary. Queuing an episode that is already
+        downloaded or already queued is a no-op success; queuing a
+        previously failed one retries it.
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "202":
+          description: The fetch is queued (or the episode is already present).
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          description: >
+            The caller is not subscribed to this episode's show (code
+            `forbidden`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: removeEpisodeDownload
+      summary: Remove an episode's fetched audio from the server
+      description: >
+        The inverse of the fetch: moves the episode's audio into the
+        library trash and returns the episode to its not-fetched state,
+        which reaches clients as a catalog invalidation. Archive, never
+        delete: every user's playback state survives, the audio is
+        recoverable from the trash until it is purged, and the episode
+        can be fetched again at any time. The caller must be subscribed
+        to the show (the file is shared; any subscriber may reclaim the
+        space). Removing an episode that is not fetched is a no-op
+        success that also cancels a queued fetch; an episode someone is
+        listening to right now answers `conflict` (retry when playback
+        stops).
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "204":
+          description: The episode's audio is not on the server anymore.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          description: >
+            The caller is not subscribed to this episode's show (code
+            `forbidden`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The episode is being listened to right now (code
+            `conflict`); removing the file would kill the stream.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}:
+    get:
+      operationId: getBook
+      summary: Get one audiobook's detail
+      description: >
+        Full audiobook detail: contributors, series membership, chapters
+        on the book timeline, backing parts in reading order, and the
+        calling user's per-book playback settings. Positions everywhere
+        on this surface are book-timeline milliseconds spanning all
+        parts.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The book.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookDetail"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}/resume:
+    get:
+      operationId: getBookResume
+      summary: Where the caller left off in a book
+      description: >
+        The calling user's resume point on the book timeline, with the
+        chapter that position falls in (when the book has chapters).
+        This is the cross-device resume answer: the position reflects
+        the newest checkpoint from any device after the server's
+        per-medium reconciliation.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The caller's resume point.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookResume"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}/settings:
+    put:
+      operationId: putBookSettings
+      summary: Replace the caller's playback settings for a book
+      description: >
+        Full replace of the calling user's per-book playback settings
+        (speed memory, voice boost, silence trimming). Absent fields
+        reset to their defaults, so clients send the complete object.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookSettings"
+      responses:
+        "200":
+          description: The stored settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookSettings"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /play-states:
     post:
       operationId: listPlayStates
@@ -1416,8 +2085,14 @@ paths:
       summary: Mirror the catalog (snapshot or changed-since delta)
       description: >
         The catalog half of delta sync, feeding client-side library mirrors
-        with hydrated item summaries. Two modes. Without `since`: a
-        snapshot, keyset-paged via `cursor`; every page carries
+        with hydrated item summaries (episodes carry their full episode
+        summaries, and podcast shows ride the same stream as
+        `upsert-show` entries; see the entry schema). Shows and episodes
+        are scoped to the caller's own subscriptions, and a subscription
+        change retires the caller's cursors the same way a visibility
+        grant change does (410 `sync-reset`, then re-mirror). Two modes.
+        Without `since`: a snapshot, keyset-paged via `cursor`; every
+        page carries
         `nextSince`, an opaque change cursor captured at or before the
         first page's read, which the client stores and syncs from after
         mirroring every page (changes landing mid-snapshot are covered by
@@ -1486,11 +2161,13 @@ paths:
       summary: Mirror the caller's server-side state (changed-since delta)
       description: >
         The server half of delta sync: the calling user's own state
-        changes (playback state, preferences), on the server change
-        cursor. Without `since` it mints a fresh cursor (`nextSince` with
-        no events): new mirrors start there and hydrate the play states
-        they care about through `/play-states`, since play states are
-        only meaningful for items a client holds. With `since` it returns
+        changes (playback state, preferences, podcast subscriptions,
+        per-book settings), on the server change cursor. Without
+        `since` it mints a fresh cursor (`nextSince` with no events):
+        new mirrors start there and hydrate the play states they care
+        about through `/play-states` (play states are only meaningful
+        for items a client holds), subscriptions through `/podcasts`,
+        and book settings through the book detail. With `since` it returns
         the caller's events after that cursor with freshly hydrated
         state, coalesced within a page (an item may recur on later pages;
         application is idempotent), plus `more` for immediate
@@ -1629,6 +2306,28 @@ components:
         The sync cursor predates the retained change history or belongs to
         a previous catalog generation (code `sync-reset`). Drop the local
         mirror and re-mirror from a fresh snapshot.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    FeedUnreachable:
+      description: >
+        An upstream feed could not be fetched or parsed (code
+        `feed-unreachable`): its server answered an error, timed out, or
+        returned something that is not a feed. The message carries the
+        upstream detail, except that for private shows it never includes
+        the feed URL or credentials (upstream error text routinely
+        embeds the request URL, and for a tokenized feed that URL is
+        the secret).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    SourceUnavailable:
+      description: >
+        The request needs an acquisition source integration that this
+        server is not running (code `source-unavailable`), for example a
+        YouTube subscription on a server without the YouTube bridge.
       content:
         application/json:
           schema:
@@ -2335,13 +3034,24 @@ components:
         positionMs:
           type: integer
           format: int64
-          description: Resume position in milliseconds.
+          description: >
+            Resume position in milliseconds. For multi-file audiobooks
+            this is always a book-timeline position spanning all parts.
         played:
           type: boolean
-          description: Whether the item has crossed its played threshold.
+          description: >
+            Whether the item has crossed its played threshold. The
+            server derives this from the position reached against the
+            item's full duration (per-medium thresholds), never from a
+            listened-milliseconds ratio, so silence trimming and speed
+            changes cannot distort it.
         finished:
           type: boolean
-          description: Whether the item was completed.
+          description: >
+            Whether the item was completed. For multi-file audiobooks
+            the server derives completion from the book-timeline
+            position; a client-reported finished flag alone does not
+            finish a book.
         playCount:
           type: integer
           description: How many times the item has been played.
@@ -2395,7 +3105,10 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Playback position in milliseconds.
+          description: >
+            Playback position in milliseconds. For multi-file
+            audiobooks always a book-timeline position (play-info's
+            `partStartMs` plus the in-part position).
         recordedAt:
           type: string
           format: date-time
@@ -2535,7 +3248,11 @@ components:
         durationMs:
           type: integer
           format: int64
-          description: Duration in milliseconds.
+          description: >
+            Duration in milliseconds. For a multi-file audiobook this
+            is the total across all parts; for a not-yet-fetched
+            podcast episode it is the feed-declared duration, or 0
+            when the feed declares none.
           example: 214000
         artUrl:
           type: string
@@ -2614,24 +3331,37 @@ components:
       type: object
       description: >
         One mirrored catalog change: an `upsert` carrying the item's
-        current summary, or a `delete` tombstone carrying only the PID.
-        Snapshot pages contain only upserts. `op` is a string, not a
-        closed enum, so new operations can appear; clients must drop
-        entries whose `op` they do not recognize.
+        current summary, an `upsert-show` carrying a podcast show's
+        current summary (shows are catalog entities but not items, so
+        they ride their own operation and clients from before this
+        operation existed drop them harmlessly), or a `delete`
+        tombstone carrying only the PID (which removes the PID from
+        whichever mirror table holds it). An `upsert` for a podcast
+        episode carries `item` and additionally `episode`, the full
+        episode summary; clients that only know items keep reading
+        `item`. Snapshot pages contain only upserts, of both kinds.
+        `op` is a string, not a closed enum, so new operations can
+        appear; clients must drop entries whose `op` they do not
+        recognize.
       required: [op, pid]
       properties:
         op:
           type: string
           description: >
             What the mirror should do with this entry: `upsert` (store
-            `item`) or `delete` (remove the PID).
+            `item`, and `episode` when present), `upsert-show` (store
+            `show`), or `delete` (remove the PID).
           example: upsert
         pid:
           type: string
-          description: The item the entry is about.
+          description: The item or show the entry is about.
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         item:
           $ref: "#/components/schemas/ItemSummary"
+        episode:
+          $ref: "#/components/schemas/EpisodeSummary"
+        show:
+          $ref: "#/components/schemas/PodcastShow"
 
     CatalogSyncPage:
       type: object
@@ -2673,17 +3403,26 @@ components:
         kind:
           type: string
           description: >
-            What changed: `play-state` (carries `pid` and `playState`) or
-            `prefs` (carries `prefs`).
+            What changed: `play-state` (carries `pid` and `playState`),
+            `prefs` (carries `prefs`), `subscription` (carries `pid`, the
+            show; `subscription` is the current state, absent when the
+            caller unsubscribed), or `book-settings` (carries `pid`, the
+            book, and `bookSettings`).
           example: play-state
         pid:
           type: string
-          description: The item whose state changed (`play-state` only).
+          description: >
+            The item, show, or book the event is about (absent for
+            `prefs`).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         playState:
           $ref: "#/components/schemas/PlayState"
         prefs:
           $ref: "#/components/schemas/Prefs"
+        subscription:
+          $ref: "#/components/schemas/Subscription"
+        bookSettings:
+          $ref: "#/components/schemas/BookSettings"
 
     ServerSyncPage:
       type: object
@@ -2869,3 +3608,626 @@ components:
           type: string
           format: date-time
           description: When the embedded media token stops being accepted.
+        partIndex:
+          type: integer
+          description: >
+            Zero-based index of the resolved part within a multi-file
+            audiobook. Present exactly when `partCount` is.
+        partCount:
+          type: integer
+          description: >
+            Number of parts in a multi-file audiobook. Present only for
+            multi-file books; single-file items omit the part fields
+            entirely.
+        partStartMs:
+          type: integer
+          format: int64
+          description: >
+            Book-timeline millisecond offset where the resolved part
+            begins. In-part positions plus this offset give the
+            book-timeline positions that play-state expects. Present
+            exactly when `partCount` is.
+        voiceBoost:
+          type: boolean
+          description: >
+            True when the stream applies server-side spoken-word loudness
+            normalization. Absent or false otherwise, including when it
+            was requested but cannot be applied yet (unsupported by the
+            sidecar, or loudness not measured yet).
+
+    PodcastShow:
+      type: object
+      description: >
+        One globally cataloged show. Show privacy is a global, sticky
+        property: a show becomes private when it is first subscribed
+        with credentials or when any subscriber ever marks their
+        subscription private, and it never becomes public again. For a
+        private show, `feedUrl` is omitted from every response for
+        every user, and the show is excluded from every user's OPML
+        export: tokenized feed URLs and credentials are secrets.
+        Privacy protects the URL and credentials only, never the
+        show's existence or content, which any user with visibility
+        into the podcast library can browse and play.
+      required: [pid, title, sourceType]
+      properties:
+        pid:
+          type: string
+          description: Show PID.
+          example: pc-01JZX5N8QW3F4V9T2B7KD3M9R6
+        title:
+          type: string
+          description: Show title.
+        author:
+          type: string
+          description: Show author or channel name.
+        descriptionHtml:
+          type: string
+          description: >
+            Show description as sanitized HTML (server-side allowlist;
+            safe to render directly).
+        feedUrl:
+          type: string
+          description: The feed URL. Omitted for private feeds.
+        link:
+          type: string
+          description: The show's website, when the feed declares one.
+        sourceType:
+          type: string
+          description: >
+            Where the show comes from: `rss`, `youtube` (a channel or
+            playlist through the acquisition bridge), or `manual` (a
+            local-folder show). Open set; treat unknown values like
+            `rss`.
+          example: rss
+        artUrl:
+          type: string
+          description: Origin-relative URL of the show's artwork endpoint.
+          example: /api/v1/items/pc-01JZX5N8QW3F4V9T2B7KD3M9R6/art
+        episodeCount:
+          type: integer
+          description: Number of cataloged episodes.
+        lastPublishedAt:
+          type: string
+          format: date-time
+          description: Publication time of the newest cataloged episode.
+        refreshDisabled:
+          type: boolean
+          description: >
+            True when scheduled refresh is suspended after repeated feed
+            failures. A successful manual refresh clears it.
+
+    SubscriptionSettings:
+      type: object
+      description: >
+        The calling user's per-subscription settings. All fields are
+        optional; an absent field means the server default. `PUT` replaces
+        the whole object.
+      properties:
+        retentionKeep:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: >
+            Keep the newest N downloaded episode files for this user; 0
+            means keep all. Null (or absent) means the server default,
+            which is keep-all unless the administrator configured
+            otherwise. The effective policy for a show is the most
+            generous union across its subscribers, and removing a file
+            never removes playback history (archive, not delete).
+        autoDownload:
+          type: boolean
+          description: >
+            Fetch new episodes to the server automatically as the feed
+            publishes them.
+        folder:
+          type: string
+          maxLength: 512
+          description: >
+            Folder path for organizing subscriptions, as segments joined
+            by `/` (round-trips through OPML outline nesting).
+        private:
+          type: boolean
+          description: >
+            Mark the show private (see the show schema: privacy is
+            global and sticky, hiding the feed URL everywhere and
+            keeping the show out of every OPML export). Set
+            automatically when subscribing with credentials. Setting
+            this back to false does not un-private a show.
+        speed:
+          type: number
+          format: double
+          minimum: 0.5
+          maximum: 3.5
+          description: Playback speed override for this show.
+        trimSilence:
+          type: boolean
+          description: Trim mapped silence spans when playing this show.
+        voiceBoost:
+          type: boolean
+          description: Apply spoken-word loudness normalization for this show.
+        skipIntroSeconds:
+          type: integer
+          minimum: 0
+          maximum: 600
+          description: Seconds to skip at the start of every episode.
+        skipOutroSeconds:
+          type: integer
+          minimum: 0
+          maximum: 600
+          description: Seconds to skip at the end of every episode.
+
+    Subscription:
+      type: object
+      description: One subscription of the calling user.
+      required: [show, settings, subscribedAt]
+      properties:
+        show:
+          $ref: "#/components/schemas/PodcastShow"
+        settings:
+          $ref: "#/components/schemas/SubscriptionSettings"
+        subscribedAt:
+          type: string
+          format: date-time
+          description: When the caller subscribed.
+
+    SubscriptionPage:
+      type: object
+      description: One keyset-paginated page of the caller's subscriptions.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: Subscriptions in stable order.
+          items:
+            $ref: "#/components/schemas/Subscription"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
+
+    PodcastDetail:
+      type: object
+      description: A show together with the caller's subscription state.
+      required: [show, subscribed]
+      properties:
+        show:
+          $ref: "#/components/schemas/PodcastShow"
+        subscribed:
+          type: boolean
+          description: Whether the calling user follows this show.
+        settings:
+          $ref: "#/components/schemas/SubscriptionSettings"
+
+    SubscribeRequest:
+      type: object
+      description: A subscription request.
+      required: [url]
+      properties:
+        url:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: >
+            Feed URL, or a YouTube channel or playlist URL when
+            `sourceType` is `youtube`.
+        sourceType:
+          type: string
+          description: >
+            Source kind: `rss` (default) or `youtube`. Open set for
+            forward compatibility; servers reject values they do not
+            support with `source-unavailable`.
+          example: rss
+        username:
+          type: string
+          maxLength: 256
+          description: Basic-auth username for a private feed.
+        password:
+          type: string
+          format: password
+          maxLength: 256
+          description: >
+            Basic-auth password for a private feed. Stored sealed at
+            rest; never returned by any endpoint.
+        folder:
+          type: string
+          maxLength: 512
+          description: Initial folder path for the subscription.
+
+    RefreshResult:
+      type: object
+      description: Outcome of a feed refresh.
+      required: [newEpisodes]
+      properties:
+        newEpisodes:
+          type: integer
+          description: Episodes that appeared in this refresh.
+
+    OpmlImport:
+      type: object
+      description: An OPML document to import.
+      required: [opml]
+      properties:
+        opml:
+          type: string
+          minLength: 1
+          description: The OPML XML document, verbatim.
+
+    OpmlImportEntry:
+      type: object
+      description: The import outcome for one OPML feed entry.
+      required: [feedUrl]
+      properties:
+        feedUrl:
+          type: string
+          description: The feed URL from the document.
+        title:
+          type: string
+          description: The show title, when the feed resolved.
+        pid:
+          type: string
+          description: The subscribed show's PID, when the feed resolved.
+        error:
+          type: string
+          description: Why this feed failed to subscribe, when it did.
+
+    OpmlImportResult:
+      type: object
+      description: Per-feed outcomes of an OPML import.
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpmlImportEntry"
+
+    EpisodeSummary:
+      allOf:
+        - $ref: "#/components/schemas/ItemSummary"
+        - type: object
+          description: Episode fields beyond the generic summary row.
+          required: [showPid, downloaded, publishedAt]
+          properties:
+            showPid:
+              type: string
+              description: The show this episode belongs to.
+              example: pc-01JZX5N8QW3F4V9T2B7KD3M9R6
+            season:
+              type: integer
+              description: Season number, when the feed declares one.
+            episodeNumber:
+              type: integer
+              description: Episode number, when the feed declares one.
+            episodeType:
+              type: string
+              description: >
+                Feed-declared episode type (`full`, `trailer`, `bonus`).
+                Open set; treat unknown values like `full`.
+            publishedAt:
+              type: string
+              format: date-time
+              description: >
+                Publication time. When the feed declares none, the
+                server substitutes the time it first saw the episode,
+                so ordering and paging stay total.
+            downloaded:
+              type: boolean
+              description: >
+                Whether the audio is on the server. Playback needs the
+                fetch first: play-info for a not-yet-fetched episode
+                answers `conflict`, and the episode fetch endpoint
+                queues the download.
+            fetchState:
+              type: string
+              description: >
+                Present while a server-side fetch is queued or after
+                one failed: `queued` or `failed`. Absent otherwise.
+                Open set; treat unknown values as `queued`.
+            fetchError:
+              type: string
+              description: >
+                Why the last fetch attempt failed (`fetchState` is
+                `failed`). Retrying the fetch endpoint re-queues it.
+            explicit:
+              type: boolean
+              description: Feed-declared explicit flag.
+            hasTranscript:
+              type: boolean
+              description: Whether a transcript is available.
+      description: Compact episode representation for lists.
+
+    EpisodePage:
+      type: object
+      description: One keyset-paginated page of a show's episodes.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: Episodes, newest first.
+          items:
+            $ref: "#/components/schemas/EpisodeSummary"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
+
+    Episode:
+      allOf:
+        - $ref: "#/components/schemas/EpisodeSummary"
+        - type: object
+          description: Detail fields beyond the episode summary.
+          properties:
+            descriptionHtml:
+              type: string
+              description: >
+                Show notes as sanitized HTML (server-side allowlist; safe
+                to render directly).
+            link:
+              type: string
+              description: The episode's web page, when the feed declares one.
+            chapters:
+              type: array
+              description: Chapter marks, ordered by `startMs`.
+              items:
+                $ref: "#/components/schemas/ChapterMark"
+      description: Full detail for one episode.
+
+    ChapterMark:
+      type: object
+      description: One chapter mark on an item's timeline.
+      required: [index, startMs]
+      properties:
+        index:
+          type: integer
+          description: Zero-based chapter position.
+        title:
+          type: string
+          description: Chapter title.
+        startMs:
+          type: integer
+          format: int64
+          description: >
+            Chapter start in milliseconds (book-timeline milliseconds
+            for multi-part audiobooks).
+        endMs:
+          type: integer
+          format: int64
+          description: >
+            Chapter end in milliseconds, exclusive. Absent for
+            open-ended final chapters.
+
+    TranscriptCue:
+      type: object
+      description: One transcript cue.
+      required: [startMs, text]
+      properties:
+        startMs:
+          type: integer
+          format: int64
+          description: Cue start in milliseconds.
+        endMs:
+          type: integer
+          format: int64
+          description: Cue end in milliseconds, when the format carries one.
+        text:
+          type: string
+          description: Cue text.
+        speaker:
+          type: string
+          description: Speaker name, when the format carries one.
+
+    Transcript:
+      type: object
+      description: An episode's transcript as ordered, time-coded cues.
+      required: [format, cues]
+      properties:
+        format:
+          type: string
+          description: >
+            Source format the cues were parsed from (`json`, `srt`,
+            `vtt`, `text`). Cues from `text` transcripts carry a zero
+            `startMs` and no `endMs`.
+          example: vtt
+        cues:
+          type: array
+          description: Cues ordered by `startMs`.
+          items:
+            $ref: "#/components/schemas/TranscriptCue"
+
+    BookPart:
+      type: object
+      description: >
+        One backing file of an audiobook, in reading order. `index` is
+        the join key across the whole surface: it matches play-info's
+        `partIndex`, the skip-map `partIndex`, and the same position in
+        download-info's `files` array.
+      required: [index, startMs, durationMs]
+      properties:
+        index:
+          type: integer
+          description: Zero-based reading-order position.
+        startMs:
+          type: integer
+          format: int64
+          description: Book-timeline millisecond offset where this part begins.
+        durationMs:
+          type: integer
+          format: int64
+          description: Part duration in milliseconds.
+        displayName:
+          type: string
+          description: Human-readable part name (the file's base name).
+
+    BookSettings:
+      type: object
+      description: >
+        The calling user's per-book playback settings. All fields are
+        optional; an absent field means the server default. `PUT`
+        replaces the whole object.
+      properties:
+        speed:
+          type: number
+          format: double
+          minimum: 0.5
+          maximum: 3.5
+          description: Playback speed memory for this book.
+        voiceBoost:
+          type: boolean
+          description: Apply spoken-word loudness normalization for this book.
+        trimSilence:
+          type: boolean
+          description: Trim mapped silence spans when playing this book.
+
+    BookDetail:
+      type: object
+      description: >
+        Full audiobook detail. All positions are book-timeline
+        milliseconds spanning every part.
+      required: [pid, title, durationMs, authors, narrators, chapters, parts]
+      properties:
+        pid:
+          type: string
+          description: Book PID.
+          example: bk-01JZX5N8QW3F4V9T2B7KD3M9R6
+        title:
+          type: string
+          description: Book title.
+        subtitle:
+          type: string
+          description: Subtitle, when known.
+        authors:
+          type: array
+          description: Author display names, in credit order.
+          items:
+            type: string
+        narrators:
+          type: array
+          description: Narrator display names, in credit order.
+          items:
+            type: string
+        series:
+          type: string
+          description: Series name, when the book belongs to one.
+        seriesSequence:
+          type: string
+          description: >
+            Position within the series, as the source states it
+            (decimals like `1.5` are preserved).
+        publisher:
+          type: string
+          description: Publisher, when known.
+        asin:
+          type: string
+          description: Audible ASIN, when known.
+        isbn:
+          type: string
+          description: ISBN, when known.
+        edition:
+          type: string
+          description: Edition label, when known.
+        abridged:
+          type: boolean
+          description: Whether this edition is abridged, when known.
+        descriptionHtml:
+          type: string
+          description: >
+            Book description as sanitized HTML (server-side allowlist;
+            safe to render directly).
+        durationMs:
+          type: integer
+          format: int64
+          description: Total duration across all parts, in milliseconds.
+        artUrl:
+          type: string
+          description: Origin-relative URL of the book's artwork endpoint.
+        chapters:
+          type: array
+          description: Chapters on the book timeline, ordered by `startMs`.
+          items:
+            $ref: "#/components/schemas/ChapterMark"
+        parts:
+          type: array
+          minItems: 1
+          description: Backing files in reading order.
+          items:
+            $ref: "#/components/schemas/BookPart"
+        settings:
+          $ref: "#/components/schemas/BookSettings"
+
+    BookResume:
+      type: object
+      description: The calling user's resume point in one book.
+      required: [positionMs]
+      properties:
+        positionMs:
+          type: integer
+          format: int64
+          description: Book-timeline resume position in milliseconds.
+        chapter:
+          $ref: "#/components/schemas/ChapterMark"
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this position was last written.
+
+    SkipSpan:
+      type: object
+      description: One silence span to skip.
+      required: [startMs, endMs]
+      properties:
+        startMs:
+          type: integer
+          format: int64
+          description: Span start in milliseconds.
+        endMs:
+          type: integer
+          format: int64
+          description: Span end in milliseconds, exclusive.
+
+    SkipMap:
+      type: object
+      description: >
+        Precomputed silence spans for one audio file, keyed to its
+        audio essence and the upstream detector version. Spans are in
+        the mapped file's own timeline (for a multi-file audiobook,
+        the requested part's timeline, not the book's).
+      required: [state]
+      properties:
+        state:
+          type: string
+          description: >
+            `ready` (spans present), `pending` (analysis queued or
+            running; poll again later), or `unavailable` (this item is
+            not mapped: not spoken-word content, audio not fetched to
+            the server yet, or the streaming sidecar cannot analyze).
+            Open set; treat unknown values as `unavailable`.
+          example: ready
+        essenceHash:
+          type: string
+          description: >
+            Content hash of the mapped file's audio essence, matching
+            the download surface's `essenceHash`; a stored map whose
+            hash no longer matches the stored audio is stale.
+        partIndex:
+          type: integer
+          description: >
+            The mapped part of a multi-file audiobook. Present only
+            for multi-file books.
+        version:
+          type: string
+          description: Upstream silence-detector revision the map was built by.
+          example: silence-1
+        thresholdDb:
+          type: number
+          format: double
+          description: Detection threshold in dBFS.
+        minSeconds:
+          type: number
+          format: double
+          description: Minimum span length in seconds.
+        spans:
+          type: array
+          description: Silence spans ordered by `startMs` (`ready` only).
+          items:
+            $ref: "#/components/schemas/SkipSpan"
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the map was computed.

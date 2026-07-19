@@ -57,6 +57,19 @@ void main() {
       await engine.dispose();
     });
 
+    test('advance scales media time by the playback speed', () async {
+      final engine = FakeEngine(mediaDuration: const Duration(minutes: 10));
+      await engine.load('/stream');
+      await engine.setSpeed(2.0);
+      await engine.play();
+      engine.advance(const Duration(seconds: 30));
+      expect(engine.position, const Duration(minutes: 1));
+      await engine.setSpeed(0.5);
+      engine.advance(const Duration(seconds: 60));
+      expect(engine.position, const Duration(seconds: 90));
+      await engine.dispose();
+    });
+
     test('seek clamps to the media bounds', () async {
       final engine = FakeEngine(mediaDuration: const Duration(seconds: 10));
       await engine.load('/stream');

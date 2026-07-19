@@ -255,6 +255,50 @@ void main() {
     },
   );
 
+  test(
+    'upsert-show entries are dropped without corrupting the mirror',
+    () async {
+      repo.catalogPages.add(
+        CatalogSyncPage(
+          entries: [
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: 'tr-AAA',
+              item: repo.item('tr-AAA', 'Alpha'),
+            ),
+          ],
+          nextSince: 'cur-1',
+        ),
+      );
+      await engine.pullCatalog();
+
+      // Podcast milestone servers emit upsert-show entries carrying a show
+      // payload and no item; mirrors that do not track shows drop them.
+      repo.catalogPages.add(
+        const CatalogSyncPage(
+          entries: [
+            CatalogSyncEntry(
+              op: 'upsert-show',
+              pid: 'pc-SHOW',
+              show: PodcastShow(
+                pid: 'pc-SHOW',
+                title: 'The Prancing Pony Hour',
+                sourceType: 'rss',
+              ),
+            ),
+          ],
+          nextSince: 'cur-2',
+        ),
+      );
+      await engine.pullCatalog();
+
+      final rows = await mirror();
+      expect(rows.map((r) => r.pid), ['tr-AAA']);
+      final cursors = await db.select(db.syncCursors).getSingle();
+      expect(cursors.catalogSince, 'cur-2');
+    },
+  );
+
   test('a sync-reset drops the mirror and re-snapshots', () async {
     repo.catalogPages.add(
       CatalogSyncPage(
@@ -378,6 +422,41 @@ void main() {
     final st = await db.select(db.mirrorPlayStates).getSingle();
     expect(st.positionMs, 7000);
     expect(st.starred, isTrue);
+    final cursors = await db.select(db.syncCursors).getSingle();
+    expect(cursors.serverSince, 'scur-2');
+  });
+
+  test('subscription and book-settings events are skipped cleanly', () async {
+    repo.serverPages.addAll([const ServerSyncPage(nextSince: 'scur-1')]);
+    await engine.pullServer(); // mints
+    repo.serverPages.add(
+      ServerSyncPage(
+        events: [
+          ServerSyncEvent(
+            kind: 'subscription',
+            pid: 'pc-SHOW',
+            subscription: Subscription(
+              show: const PodcastShow(
+                pid: 'pc-SHOW',
+                title: 'The Prancing Pony Hour',
+                sourceType: 'rss',
+              ),
+              settings: const SubscriptionSettings(),
+              subscribedAt: DateTime.utc(2026, 7, 1),
+            ),
+          ),
+          const ServerSyncEvent(
+            kind: 'book-settings',
+            pid: 'bk-BOOK',
+            bookSettings: BookSettings(speed: 1.5),
+          ),
+        ],
+        nextSince: 'scur-2',
+      ),
+    );
+    await engine.pullServer();
+    // Neither event touches the play-state mirror; the cursor advances.
+    expect(await db.select(db.mirrorPlayStates).get(), isEmpty);
     final cursors = await db.select(db.syncCursors).getSingle();
     expect(cursors.serverSince, 'scur-2');
   });

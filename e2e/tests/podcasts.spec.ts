@@ -1,0 +1,189 @@
+import { test, expect, APIRequestContext } from '@playwright/test';
+import {
+  ADMIN_PASS,
+  ADMIN_USER,
+  authed,
+  clickThrough,
+  ensureAdmin,
+  typeInto,
+} from './helpers';
+
+// The podcast journey: subscribe to the fixture feed host through the
+// web UI, fetch an episode to the server, and play it with silence
+// trimming saving real time. The feed host (feedserv) serves a
+// generated three-episode feed whose audio carries lead silence.
+
+const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
+const FEED_URL = 'http://127.0.0.1:4421/feed.xml';
+
+async function subscribedShowPid(request: APIRequestContext, token: string): Promise<string> {
+  let pid = '';
+  await expect
+    .poll(
+      async () => {
+        const resp = await request.get('/api/v1/podcasts', authed(token));
+        if (!resp.ok()) return false;
+        const items = (await resp.json()).items ?? [];
+        const hit = items.find((s: any) => s.show.feedUrl === FEED_URL);
+        if (!hit) return false;
+        pid = hit.show.pid;
+        return true;
+      },
+      { timeout: 30_000, message: 'the subscription should appear' },
+    )
+    .toBeTruthy();
+  return pid;
+}
+
+test('subscribe, fetch, and play an episode with silence trimming', async ({ page, request }) => {
+  test.setTimeout(240_000);
+  const token = await ensureAdmin(request);
+
+  await page.goto('/');
+  const username = page.getByRole('textbox', { name: 'Username' });
+  await username.waitFor({ timeout: 30_000 });
+  await typeInto(page, username, ADMIN_USER);
+  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
+  await page.getByRole('button', { name: 'Log in' }).click();
+
+  // Subscribe through the UI: podcasts screen, add dialog, feed URL.
+  // The dialog open retries as a unit: a click over canvas can be
+  // swallowed while flutter's handlers are still attaching (the click
+  // cousin of the keystroke gap typeInto retries around), and a
+  // swallowed click here means the dialog never appears at all.
+  await page.locator(sem('podcasts-open')).click();
+  await expect(async () => {
+    await page.locator(sem('podcast-add')).click();
+    await page
+      .locator(sem('podcast-subscribe-confirm'))
+      .waitFor({ timeout: 5_000 });
+  }).toPass({ timeout: 30_000 });
+  await typeInto(page, page.getByRole('textbox', { name: 'Feed or channel URL' }), FEED_URL);
+  await page.locator(sem('podcast-subscribe-confirm')).click();
+
+  const showPid = await subscribedShowPid(request, token);
+  const showRow = page.locator(sem(`podcast-${showPid}`));
+  await showRow.waitFor({ timeout: 30_000 });
+  const episodeList = () => page.locator(sem('podcast-unsubscribe'));
+
+  // Silence trimming is a per-subscription setting; flip it before
+  // playback so the session starts trimming from the first load.
+  const put = await request.put(`/api/v1/podcasts/${showPid}/settings`, {
+    ...authed(token),
+    data: { trimSilence: true },
+  });
+  expect(put.ok()).toBeTruthy();
+
+  await clickThrough(showRow, episodeList());
+
+  // Three episodes from the generated feed, none fetched yet.
+  const eps = await request.get(`/api/v1/podcasts/${showPid}/episodes`, authed(token));
+  expect(eps.ok()).toBeTruthy();
+  const items = (await eps.json()).items as any[];
+  expect(items.length).toBe(3);
+  const episode = items[0];
+  expect(episode.downloaded).toBeFalsy();
+
+  // Queue the server-side fetch from the UI; the background worker
+  // lands it and the row flips to downloaded.
+  await page.locator(sem(`episode-fetch-${episode.pid}`)).click();
+  await expect
+    .poll(
+      async () => {
+        const resp = await request.get(`/api/v1/podcasts/${showPid}/episodes`, authed(token));
+        const fresh = ((await resp.json()).items as any[]).find((e) => e.pid === episode.pid);
+        return fresh?.downloaded ?? false;
+      },
+      { timeout: 60_000, message: 'the fetch worker should land the episode' },
+    )
+    .toBeTruthy();
+
+  // The skip map builds in the background off the streaming sidecar's
+  // analysis; asking for it queues the work.
+  await expect
+    .poll(
+      async () => {
+        const resp = await request.get(`/api/v1/items/${episode.pid}/skip-map`, authed(token));
+        if (!resp.ok()) return 'error';
+        return (await resp.json()).state as string;
+      },
+      { timeout: 90_000, message: 'silence analysis should produce the skip map' },
+    )
+    .toBe('ready');
+  const map = await (await request.get(`/api/v1/items/${episode.pid}/skip-map`, authed(token))).json();
+  expect((map.spans ?? []).length).toBeGreaterThan(0);
+
+  // The show screen rendered while the fetch was still queued;
+  // re-entering it reloads the list with the episode present. Back
+  // travels through the app's own button: browser history against
+  // flutter's navigator is handled asynchronously, and a deferred
+  // popstate can pop the very screen the test just re-entered.
+  await clickThrough(page.getByRole('button', { name: 'Back' }).first(), showRow);
+  await clickThrough(showRow, page.locator(sem(`episode-${episode.pid}`)));
+
+  // Play it. The trim chip reports time actually saved once the
+  // session seeks over the lead silence, which is the observable proof
+  // the jump happened (positions stay honest, so only the counter can
+  // tell trimmed playback from ordinary playback this quickly).
+  await clickThrough(
+    page.locator(sem(`episode-${episode.pid}`)),
+    page.locator(sem('player-toggle')),
+  );
+  await expect(page.locator(sem('player-trim'))).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(sem('player-trim'))).toHaveAccessibleName(/saved/, {
+    timeout: 30_000,
+  });
+
+  // Show notes were sanitized server-side and render as text.
+  await clickThrough(
+    page.getByRole('button', { name: 'Back' }).first(),
+    page.locator(sem(`episode-info-${episode.pid}`)),
+  );
+  await clickThrough(
+    page.locator(sem(`episode-info-${episode.pid}`)),
+    page.getByText(/pilot episode/).first(),
+  );
+
+  // The fetch's inverse: a second episode fetches, removes (archive,
+  // not delete), and cannot stream until fetched again.
+  const second = items[1];
+  const fetch2 = await request.post(`/api/v1/episodes/${second.pid}/fetch`, authed(token));
+  expect(fetch2.status()).toBe(202);
+  await expect
+    .poll(
+      async () => {
+        const resp = await request.get(`/api/v1/podcasts/${showPid}/episodes`, authed(token));
+        const fresh = ((await resp.json()).items as any[]).find((e) => e.pid === second.pid);
+        return fresh?.downloaded ?? false;
+      },
+      { timeout: 60_000 },
+    )
+    .toBeTruthy();
+  const removed = await request.delete(`/api/v1/episodes/${second.pid}/fetch`, authed(token));
+  expect(removed.status()).toBe(204);
+  const after = await request.get(`/api/v1/podcasts/${showPid}/episodes`, authed(token));
+  const secondAfter = ((await after.json()).items as any[]).find((e) => e.pid === second.pid);
+  expect(secondAfter.downloaded).toBeFalsy();
+  const info = await request.get(`/api/v1/items/${second.pid}/play-info`, authed(token));
+  expect(info.status(), 'a removed episode cannot stream until fetched again').toBe(409);
+
+  // Unsubscribing while an episode sits fetched asks about the server
+  // files; keeping them ends the subscription and leaves the download
+  // governed by whoever subscribes next.
+  await clickThrough(
+    page.getByRole('button', { name: 'Back' }).first(),
+    page.locator(sem('podcast-unsubscribe')),
+  );
+  await expect(async () => {
+    await page.locator(sem('podcast-unsubscribe')).click();
+    await page.locator(sem('unsubscribe-keep-files')).waitFor({ timeout: 5_000 });
+  }).toPass({ timeout: 30_000 });
+  await page.locator(sem('unsubscribe-keep-files')).click();
+  await page.locator(sem('podcast-subscribe')).waitFor({ timeout: 30_000 });
+  const subs = await request.get('/api/v1/podcasts', authed(token));
+  const gone = ((await subs.json()).items ?? []).find((s: any) => s.show.pid === showPid);
+  expect(gone, 'the subscription should be gone').toBeFalsy();
+  const kept = await request.get(`/api/v1/podcasts/${showPid}/episodes`, authed(token));
+  const firstKept = ((await kept.json()).items as any[]).find((e) => e.pid === episode.pid);
+  expect(firstKept.downloaded, 'keeping files leaves the fetched episode').toBeTruthy();
+});

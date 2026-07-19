@@ -176,6 +176,10 @@ PlayInfo playInfoFromGen(gen.PlayInfo info, {String baseUrl = ''}) {
     durationMs: info.durationMs,
     seekable: info.seekable,
     expiresAt: info.expiresAt,
+    partIndex: info.partIndex,
+    partCount: info.partCount,
+    partStartMs: info.partStartMs,
+    voiceBoost: info.voiceBoost ?? false,
   );
 }
 
@@ -259,6 +263,12 @@ CatalogSyncPage catalogSyncPageFromGen(
             item: e.item == null
                 ? null
                 : itemSummaryFromGen(e.item!, baseUrl: baseUrl),
+            episode: e.episode == null
+                ? null
+                : episodeSummaryFromGen(e.episode!, baseUrl: baseUrl),
+            show: e.show_ == null
+                ? null
+                : podcastShowFromGen(e.show_!, baseUrl: baseUrl),
           ),
         )
         .toList(),
@@ -279,6 +289,12 @@ ServerSyncPage serverSyncPageFromGen(gen.ServerSyncPage page) {
                 ? null
                 : playStateFromGen(e.playState!),
             prefs: e.prefs == null ? null : prefsFromGen(e.prefs!),
+            subscription: e.subscription == null
+                ? null
+                : subscriptionFromGen(e.subscription!),
+            bookSettings: e.bookSettings == null
+                ? null
+                : bookSettingsFromGen(e.bookSettings!),
           ),
         )
         .toList(),
@@ -314,5 +330,247 @@ AppPassword appPasswordFromGen(gen.AppPassword ap) {
     label: ap.label,
     createdAt: ap.createdAt,
     lastUsedAt: ap.lastUsedAt,
+  );
+}
+
+PodcastShow podcastShowFromGen(gen.PodcastShow show, {String baseUrl = ''}) {
+  final artUrl = show.artUrl;
+  return PodcastShow(
+    pid: show.pid,
+    title: show.title,
+    author: show.author,
+    descriptionHtml: show.descriptionHtml,
+    feedUrl: show.feedUrl,
+    link: show.link,
+    sourceType: show.sourceType,
+    artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
+    episodeCount: show.episodeCount,
+    lastPublishedAt: show.lastPublishedAt,
+    refreshDisabled: show.refreshDisabled ?? false,
+  );
+}
+
+SubscriptionSettings subscriptionSettingsFromGen(
+  gen.SubscriptionSettings settings,
+) {
+  return SubscriptionSettings(
+    retentionKeep: settings.retentionKeep,
+    autoDownload: settings.autoDownload ?? false,
+    folder: settings.folder,
+    private: settings.private ?? false,
+    speed: settings.speed,
+    trimSilence: settings.trimSilence,
+    voiceBoost: settings.voiceBoost,
+    skipIntroSeconds: settings.skipIntroSeconds,
+    skipOutroSeconds: settings.skipOutroSeconds,
+  );
+}
+
+gen.SubscriptionSettings subscriptionSettingsToGen(
+  SubscriptionSettings settings,
+) {
+  return gen.SubscriptionSettings(
+    (b) => b
+      ..retentionKeep = settings.retentionKeep
+      ..autoDownload = settings.autoDownload
+      ..folder = settings.folder
+      ..private = settings.private
+      ..speed = settings.speed
+      ..trimSilence = settings.trimSilence
+      ..voiceBoost = settings.voiceBoost
+      ..skipIntroSeconds = settings.skipIntroSeconds
+      ..skipOutroSeconds = settings.skipOutroSeconds,
+  );
+}
+
+Subscription subscriptionFromGen(gen.Subscription sub, {String baseUrl = ''}) {
+  return Subscription(
+    show: podcastShowFromGen(sub.show_, baseUrl: baseUrl),
+    settings: subscriptionSettingsFromGen(sub.settings),
+    subscribedAt: sub.subscribedAt,
+  );
+}
+
+PodcastDetail podcastDetailFromGen(
+  gen.PodcastDetail detail, {
+  String baseUrl = '',
+}) {
+  final settings = detail.settings;
+  return PodcastDetail(
+    show: podcastShowFromGen(detail.show_, baseUrl: baseUrl),
+    subscribed: detail.subscribed,
+    settings: settings == null ? null : subscriptionSettingsFromGen(settings),
+  );
+}
+
+SubscriptionPage subscriptionPageFromGen(
+  gen.SubscriptionPage page, {
+  String baseUrl = '',
+}) {
+  return SubscriptionPage(
+    items: page.items
+        .map((s) => subscriptionFromGen(s, baseUrl: baseUrl))
+        .toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
+EpisodeSummary episodeSummaryFromGen(
+  gen.EpisodeSummary episode, {
+  String baseUrl = '',
+}) {
+  final artUrl = episode.artUrl;
+  return EpisodeSummary(
+    pid: episode.pid,
+    mediaType: mediaTypeFromGen(episode.mediaType),
+    title: episode.title,
+    artist: episode.artist,
+    album: episode.album,
+    durationMs: episode.durationMs,
+    artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
+    showPid: episode.showPid,
+    season: episode.season,
+    episodeNumber: episode.episodeNumber,
+    episodeType: episode.episodeType,
+    publishedAt: episode.publishedAt,
+    downloaded: episode.downloaded,
+    fetchState: episode.fetchState,
+    fetchError: episode.fetchError,
+    explicit: episode.explicit ?? false,
+    hasTranscript: episode.hasTranscript ?? false,
+  );
+}
+
+EpisodePage episodePageFromGen(gen.EpisodePage page, {String baseUrl = ''}) {
+  return EpisodePage(
+    items: page.items
+        .map((e) => episodeSummaryFromGen(e, baseUrl: baseUrl))
+        .toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
+ChapterMark chapterMarkFromGen(gen.ChapterMark mark) {
+  return ChapterMark(
+    index: mark.index,
+    title: mark.title,
+    startMs: mark.startMs,
+    endMs: mark.endMs,
+  );
+}
+
+EpisodeDetail episodeDetailFromGen(gen.Episode episode, {String baseUrl = ''}) {
+  final artUrl = episode.artUrl;
+  return EpisodeDetail(
+    pid: episode.pid,
+    mediaType: mediaTypeFromGen(episode.mediaType),
+    title: episode.title,
+    artist: episode.artist,
+    album: episode.album,
+    durationMs: episode.durationMs,
+    artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
+    showPid: episode.showPid,
+    season: episode.season,
+    episodeNumber: episode.episodeNumber,
+    episodeType: episode.episodeType,
+    publishedAt: episode.publishedAt,
+    downloaded: episode.downloaded,
+    fetchState: episode.fetchState,
+    fetchError: episode.fetchError,
+    explicit: episode.explicit ?? false,
+    hasTranscript: episode.hasTranscript ?? false,
+    descriptionHtml: episode.descriptionHtml,
+    link: episode.link,
+    chapters: episode.chapters?.map(chapterMarkFromGen).toList() ?? const [],
+  );
+}
+
+Transcript transcriptFromGen(gen.Transcript transcript) {
+  return Transcript(
+    format: transcript.format,
+    cues: transcript.cues
+        .map(
+          (c) => TranscriptCue(
+            startMs: c.startMs,
+            endMs: c.endMs,
+            text: c.text,
+            speaker: c.speaker,
+          ),
+        )
+        .toList(),
+  );
+}
+
+BookSettings bookSettingsFromGen(gen.BookSettings settings) {
+  return BookSettings(
+    speed: settings.speed,
+    voiceBoost: settings.voiceBoost,
+    trimSilence: settings.trimSilence,
+  );
+}
+
+gen.BookSettings bookSettingsToGen(BookSettings settings) {
+  return gen.BookSettings(
+    (b) => b
+      ..speed = settings.speed
+      ..voiceBoost = settings.voiceBoost
+      ..trimSilence = settings.trimSilence,
+  );
+}
+
+BookDetail bookDetailFromGen(gen.BookDetail book, {String baseUrl = ''}) {
+  final artUrl = book.artUrl;
+  final settings = book.settings;
+  return BookDetail(
+    pid: book.pid,
+    title: book.title,
+    subtitle: book.subtitle,
+    authors: book.authors.toList(),
+    narrators: book.narrators.toList(),
+    series: book.series,
+    seriesSequence: book.seriesSequence,
+    publisher: book.publisher,
+    asin: book.asin,
+    isbn: book.isbn,
+    edition: book.edition,
+    abridged: book.abridged,
+    descriptionHtml: book.descriptionHtml,
+    durationMs: book.durationMs,
+    artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
+    chapters: book.chapters.map(chapterMarkFromGen).toList(),
+    parts: book.parts
+        .map(
+          (p) => BookPart(
+            index: p.index,
+            startMs: p.startMs,
+            durationMs: p.durationMs,
+            displayName: p.displayName,
+          ),
+        )
+        .toList(),
+    settings: settings == null ? null : bookSettingsFromGen(settings),
+  );
+}
+
+BookResume bookResumeFromGen(gen.BookResume resume) {
+  final chapter = resume.chapter;
+  return BookResume(
+    positionMs: resume.positionMs,
+    chapter: chapter == null ? null : chapterMarkFromGen(chapter),
+    updatedAt: resume.updatedAt,
+  );
+}
+
+SkipMap skipMapFromGen(gen.SkipMap map) {
+  return SkipMap(
+    state: map.state,
+    essenceHash: map.essenceHash,
+    partIndex: map.partIndex,
+    version: map.version,
+    spans:
+        map.spans
+            ?.map((s) => SkipSpan(startMs: s.startMs, endMs: s.endMs))
+            .toList() ??
+        const [],
   );
 }

@@ -12,9 +12,9 @@ part 'play_state.g.dart';
 ///
 /// Properties:
 /// * [pid] - The item this state belongs to.
-/// * [positionMs] - Resume position in milliseconds.
-/// * [played] - Whether the item has crossed its played threshold.
-/// * [finished] - Whether the item was completed.
+/// * [positionMs] - Resume position in milliseconds. For multi-file audiobooks this is always a book-timeline position spanning all parts. 
+/// * [played] - Whether the item has crossed its played threshold. The server derives this from the position reached against the item's full duration (per-medium thresholds), never from a listened-milliseconds ratio, so silence trimming and speed changes cannot distort it. 
+/// * [finished] - Whether the item was completed. For multi-file audiobooks the server derives completion from the book-timeline position; a client-reported finished flag alone does not finish a book. 
 /// * [playCount] - How many times the item has been played.
 /// * [starred] - Whether the caller starred the item.
 /// * [rating] - The caller's rating (0 to 100); absent or null when unrated.
@@ -25,15 +25,15 @@ abstract class PlayState implements Built<PlayState, PlayStateBuilder> {
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
-  /// Resume position in milliseconds.
+  /// Resume position in milliseconds. For multi-file audiobooks this is always a book-timeline position spanning all parts. 
   @BuiltValueField(wireName: r'positionMs')
   int get positionMs;
 
-  /// Whether the item has crossed its played threshold.
+  /// Whether the item has crossed its played threshold. The server derives this from the position reached against the item's full duration (per-medium thresholds), never from a listened-milliseconds ratio, so silence trimming and speed changes cannot distort it. 
   @BuiltValueField(wireName: r'played')
   bool get played;
 
-  /// Whether the item was completed.
+  /// Whether the item was completed. For multi-file audiobooks the server derives completion from the book-timeline position; a client-reported finished flag alone does not finish a book. 
   @BuiltValueField(wireName: r'finished')
   bool get finished;
 

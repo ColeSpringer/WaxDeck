@@ -23,8 +23,43 @@ type Source struct {
 	// Codec and Container describe the source stream.
 	Codec     string
 	Container string
-	// DurationMS is the item's duration (the span's for virtual tracks).
+	// DurationMS is the item's duration (the span's for virtual tracks,
+	// the resolved part's for multi-file books).
 	DurationMS int64
+	// SpokenWord marks podcast episodes and audiobooks: the content
+	// voice boost is for.
+	SpokenWord bool
+	// IntegratedLUFS is the source's measured loudness when known (the
+	// analysis cache); voice boost needs it to derive leveling gain.
+	IntegratedLUFS *float64
+}
+
+// voiceTargetLUFS is the spoken-word leveling target. Streaming
+// speech norms cluster around -16 LUFS; the true-peak limiter behind
+// dynamics=voice makes overshooting safe.
+const voiceTargetLUFS = -16.0
+
+// VoiceBoostParams derives the DSP parameters for a requested voice
+// boost: engaged only for spoken-word sources with measured loudness
+// on a sidecar that ships the dynamics stage. The gain is the leveling
+// delta to the target, clamped to the engaged ceiling.
+func VoiceBoostParams(src Source, caps *client.Caps, want bool) (gainDB float64, applied bool) {
+	if !want || !src.SpokenWord || src.IntegratedLUFS == nil || caps == nil {
+		return 0, false
+	}
+	if !slices.Contains(caps.DSP.Dynamics, "voice") {
+		return 0, false
+	}
+	gain := voiceTargetLUFS - *src.IntegratedLUFS
+	ceiling := caps.DSP.GainMaxVoiceDB
+	if ceiling <= 0 {
+		ceiling = 24
+	}
+	if gain > ceiling {
+		gain = ceiling
+	}
+	// Attenuation has no engaged floor worth clamping at speech levels.
+	return gain, true
 }
 
 // Shape is the format policy's answer: the stream parameters to
@@ -77,18 +112,24 @@ func lossless(codec string) bool {
 // through the ladder (format auto). Virtual tracks must name a format:
 // the source codec when the sidecar's cut supports it (zero-generation
 // packet move), FLAC for lossless sources (no loss), and Opus (or the
-// MP3 floor) for the lossy rest.
-func ShapeFor(src Source, caps *client.Caps) Shape {
+// MP3 floor) for the lossy rest. An engaged voice boost is a DSP
+// stage, so it forces a real encode: no direct play, no cut.
+func ShapeFor(src Source, caps *client.Caps, voiceBoost bool) Shape {
+	pick := func(format string) Shape {
+		return Shape{Format: format, MimeType: formatMime[format], Seekable: false}
+	}
+	if voiceBoost {
+		if hasOutput(caps, "opus") {
+			return pick("opus")
+		}
+		return pick("mp3")
+	}
 	if !src.Virtual {
 		mime := containerMime[src.Container]
 		if mime == "" {
 			mime = "application/octet-stream"
 		}
 		return Shape{Format: "auto", MimeType: mime, Seekable: true}
-	}
-
-	pick := func(format string) Shape {
-		return Shape{Format: format, MimeType: formatMime[format], Seekable: false}
 	}
 	if slices.Contains(caps.Delivery.CutFormats, src.Codec) {
 		return pick(src.Codec)

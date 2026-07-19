@@ -68,6 +68,36 @@ class FakeRepository implements WaxDeckRepository {
   /// When set, position checkpoints fail with it.
   WaxDeckApiException? putPlayStateError;
 
+  /// When set, [subscribePodcast] fails with it (bad feeds in tests).
+  WaxDeckApiException? subscribeError;
+
+  /// Cataloged shows by pid, subscribed or not.
+  final Map<String, PodcastShow> shows = {};
+
+  /// The caller's subscriptions by show pid.
+  final Map<String, Subscription> subscriptions = {};
+
+  /// Episodes per show pid, newest first.
+  final Map<String, List<EpisodeSummary>> episodesByShow = {};
+
+  /// Full episode details by pid; absent pids derive from the summary.
+  final Map<String, EpisodeDetail> episodeDetails = {};
+
+  /// Transcripts by episode pid.
+  final Map<String, Transcript> transcripts = {};
+
+  /// Audiobooks by pid.
+  final Map<String, BookDetail> books = {};
+
+  /// Stored per-book settings by pid; falls back to the book's own.
+  final Map<String, BookSettings> storedBookSettings = {};
+
+  /// Resume points by book pid; falls back to [playPositions].
+  final Map<String, BookResume> bookResumes = {};
+
+  /// Skip maps by pid (single file) or 'pid#partIndex' (book parts).
+  final Map<String, SkipMap> skipMaps = {};
+
   final List<({String username, String password, String? deviceName})>
   loginCalls = [];
   final List<({String username, String password, String? displayName})>
@@ -77,7 +107,18 @@ class FakeRepository implements WaxDeckRepository {
   final List<String> revokedSessionIds = [];
   final List<({String pid, int positionMs})> putPlayStateCalls = [];
   final List<ListenSession> reportedSessions = [];
+  final List<({String url, String? sourceType})> subscribeCalls = [];
+  final List<String> unsubscribeCalls = [];
+  final List<String> unsubscribeRemoveDownloadsCalls = [];
+  final List<({String pid, SubscriptionSettings settings})>
+  putSubscriptionSettingsCalls = [];
+  final List<String> fetchEpisodeCalls = [];
+  final List<String> removeDownloadCalls = [];
+  final List<({String pid, BookSettings settings})> putBookSettingsCalls = [];
+  final List<({String pid, int? positionMs})> playInfoCalls = [];
+  final List<String> importedOpml = [];
   int refreshCalls = 0;
+  int _subscribeCounter = 0;
 
   static const _user = WaxDeckUser(
     id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -235,17 +276,58 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<PlayInfo> getPlayInfo(String pid) async {
+  Future<PlayInfo> getPlayInfo(
+    String pid, {
+    int? positionMs,
+    bool? voiceBoost,
+  }) async {
     final error = playInfoError;
     if (error != null) throw error;
+    playInfoCalls.add((pid: pid, positionMs: positionMs));
+    final episode = _findEpisode(pid);
+    if (episode != null && !episode.downloaded) {
+      throw const WaxDeckApiException(
+        code: 'conflict',
+        message: 'episode audio not fetched yet',
+        statusCode: 409,
+      );
+    }
+    final book = books[pid];
+    if (book != null && book.parts.isNotEmpty) {
+      final parts = book.parts;
+      var part = parts.first;
+      for (final p in parts) {
+        if ((positionMs ?? 0) >= p.startMs) part = p;
+      }
+      return PlayInfo(
+        pid: pid,
+        url: '/media/stream?pid=$pid&part=${part.index}&mt=test-token',
+        mimeType: 'audio/mp4',
+        durationMs: part.durationMs,
+        seekable: true,
+        expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+        partIndex: part.index,
+        partCount: parts.length,
+        partStartMs: part.startMs,
+      );
+    }
     return PlayInfo(
       pid: pid,
       url: '/media/stream?pid=$pid&mt=test-token',
       mimeType: 'audio/flac',
-      durationMs: 214000,
+      durationMs: episode?.durationMs ?? 214000,
       seekable: true,
       expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
     );
+  }
+
+  EpisodeSummary? _findEpisode(String pid) {
+    for (final episodes in episodesByShow.values) {
+      for (final episode in episodes) {
+        if (episode.pid == pid) return episode;
+      }
+    }
+    return null;
   }
 
   @override
@@ -271,8 +353,18 @@ class FakeRepository implements WaxDeckRepository {
     playPositions[pid] = positionMs;
   }
 
+  /// When set, [setStar] and [setRating] wait on it before applying,
+  /// so tests can hold a mutation in flight while they race something
+  /// against it (a provider invalidation, another mutation).
+  Future<void>? mutationGate;
+
   @override
-  Future<PlayState> setStar(String pid, bool starred, {DateTime? recordedAt}) {
+  Future<PlayState> setStar(
+    String pid,
+    bool starred, {
+    DateTime? recordedAt,
+  }) async {
+    await (mutationGate ?? Future<void>.value());
     final error = playStateError;
     if (error != null) return _failLikeANetwork(error);
     starredByPid[pid] = starred;
@@ -280,7 +372,12 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<PlayState> setRating(String pid, int? rating, {DateTime? recordedAt}) {
+  Future<PlayState> setRating(
+    String pid,
+    int? rating, {
+    DateTime? recordedAt,
+  }) async {
+    await (mutationGate ?? Future<void>.value());
     final error = playStateError;
     if (error != null) return _failLikeANetwork(error);
     ratingByPid[pid] = rating;
@@ -367,6 +464,308 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<Prefs> putPrefs(Prefs next) async => prefs = next;
+
+  /// Registers a show and subscribes the test user to it.
+  void addSubscription(
+    PodcastShow show, {
+    SubscriptionSettings settings = const SubscriptionSettings(),
+  }) {
+    shows[show.pid] = show;
+    subscriptions[show.pid] = Subscription(
+      show: show,
+      settings: settings,
+      subscribedAt: DateTime.utc(2026, 7, 1),
+    );
+  }
+
+  /// Flips an episode to downloaded, like a completed server-side fetch.
+  void completeEpisodeFetch(String pid) {
+    for (final entry in episodesByShow.entries) {
+      episodesByShow[entry.key] = [
+        for (final e in entry.value)
+          if (e.pid == pid)
+            EpisodeSummary(
+              pid: e.pid,
+              mediaType: e.mediaType,
+              title: e.title,
+              artist: e.artist,
+              album: e.album,
+              durationMs: e.durationMs,
+              artUrl: e.artUrl,
+              showPid: e.showPid,
+              season: e.season,
+              episodeNumber: e.episodeNumber,
+              episodeType: e.episodeType,
+              publishedAt: e.publishedAt,
+              downloaded: true,
+              explicit: e.explicit,
+              hasTranscript: e.hasTranscript,
+            )
+          else
+            e,
+      ];
+    }
+  }
+
+  @override
+  Future<SubscriptionPage> listSubscriptions({
+    String? cursor,
+    int? limit,
+  }) async {
+    final error = listError;
+    if (error != null) throw error;
+    final items = subscriptions.values.toList()
+      ..sort((a, b) => a.show.title.compareTo(b.show.title));
+    return SubscriptionPage(items: items);
+  }
+
+  @override
+  Future<Subscription> subscribePodcast({
+    required String url,
+    String? sourceType,
+    String? username,
+    String? password,
+    String? folder,
+  }) async {
+    subscribeCalls.add((url: url, sourceType: sourceType));
+    final error = subscribeError;
+    if (error != null) throw error;
+    // Re-subscribing to a known feed returns the existing subscription.
+    for (final sub in subscriptions.values) {
+      if (sub.show.feedUrl == url) return sub;
+    }
+    final existing = shows.values.where((s) => s.feedUrl == url).toList();
+    final show = existing.isNotEmpty
+        ? existing.first
+        : PodcastShow(
+            pid: 'pc-SUB${++_subscribeCounter}',
+            title: 'Subscribed Show $_subscribeCounter',
+            author: 'Some Host',
+            sourceType: sourceType ?? 'rss',
+            feedUrl: url,
+          );
+    addSubscription(show);
+    return subscriptions[show.pid]!;
+  }
+
+  @override
+  Future<PodcastDetail> getPodcast(String pid) async {
+    final show = subscriptions[pid]?.show ?? shows[pid];
+    if (show == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such show',
+        statusCode: 404,
+      );
+    }
+    return PodcastDetail(
+      show: show,
+      subscribed: subscriptions.containsKey(pid),
+      settings: subscriptions[pid]?.settings,
+    );
+  }
+
+  @override
+  Future<void> unsubscribePodcast(
+    String pid, {
+    bool removeDownloads = false,
+  }) async {
+    unsubscribeCalls.add(pid);
+    subscriptions.remove(pid);
+    if (!removeDownloads) return;
+    unsubscribeRemoveDownloadsCalls.add(pid);
+    for (final e in List.of(episodesByShow[pid] ?? const <EpisodeSummary>[])) {
+      if (e.downloaded) _markUndownloaded(e.pid);
+    }
+  }
+
+  @override
+  Future<Subscription> putSubscriptionSettings(
+    String pid,
+    SubscriptionSettings settings,
+  ) async {
+    putSubscriptionSettingsCalls.add((pid: pid, settings: settings));
+    final current = subscriptions[pid];
+    if (current == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'not subscribed',
+        statusCode: 404,
+      );
+    }
+    final updated = Subscription(
+      show: current.show,
+      settings: settings,
+      subscribedAt: current.subscribedAt,
+    );
+    subscriptions[pid] = updated;
+    return updated;
+  }
+
+  @override
+  Future<EpisodePage> listEpisodes(
+    String pid, {
+    String? cursor,
+    int? limit,
+  }) async {
+    final error = listError;
+    if (error != null) throw error;
+    final episodes = episodesByShow[pid] ?? const [];
+    final start = cursor == null ? 0 : int.parse(cursor);
+    final pageSize = limit ?? 100;
+    final end = (start + pageSize).clamp(0, episodes.length);
+    return EpisodePage(
+      items: episodes.sublist(start.clamp(0, episodes.length), end),
+      nextCursor: end < episodes.length ? '$end' : null,
+    );
+  }
+
+  @override
+  Future<EpisodeDetail> getEpisode(String pid) async {
+    final canned = episodeDetails[pid];
+    if (canned != null) return canned;
+    final summary = _findEpisode(pid);
+    if (summary == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such episode',
+        statusCode: 404,
+      );
+    }
+    return EpisodeDetail(
+      pid: summary.pid,
+      mediaType: summary.mediaType,
+      title: summary.title,
+      artist: summary.artist,
+      album: summary.album,
+      durationMs: summary.durationMs,
+      artUrl: summary.artUrl,
+      showPid: summary.showPid,
+      season: summary.season,
+      episodeNumber: summary.episodeNumber,
+      episodeType: summary.episodeType,
+      publishedAt: summary.publishedAt,
+      downloaded: summary.downloaded,
+      fetchState: summary.fetchState,
+      fetchError: summary.fetchError,
+      explicit: summary.explicit,
+      hasTranscript: summary.hasTranscript,
+    );
+  }
+
+  @override
+  Future<Transcript> getEpisodeTranscript(String pid) async {
+    final transcript = transcripts[pid];
+    if (transcript == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no transcript',
+        statusCode: 404,
+      );
+    }
+    return transcript;
+  }
+
+  @override
+  Future<void> removeEpisodeDownload(String pid) async {
+    removeDownloadCalls.add(pid);
+    _markUndownloaded(pid);
+  }
+
+  void _markUndownloaded(String pid) {
+    for (final entry in episodesByShow.entries) {
+      episodesByShow[entry.key] = [
+        for (final e in entry.value)
+          if (e.pid == pid)
+            EpisodeSummary(
+              pid: e.pid,
+              mediaType: e.mediaType,
+              title: e.title,
+              artist: e.artist,
+              album: e.album,
+              durationMs: e.durationMs,
+              artUrl: e.artUrl,
+              showPid: e.showPid,
+              season: e.season,
+              episodeNumber: e.episodeNumber,
+              episodeType: e.episodeType,
+              publishedAt: e.publishedAt,
+              downloaded: false,
+              explicit: e.explicit,
+              hasTranscript: e.hasTranscript,
+            )
+          else
+            e,
+      ];
+    }
+  }
+
+  @override
+  Future<void> fetchEpisode(String pid) async {
+    fetchEpisodeCalls.add(pid);
+  }
+
+  @override
+  Future<BookDetail> getBook(String pid) async {
+    final book = books[pid];
+    if (book == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such book',
+        statusCode: 404,
+      );
+    }
+    final settings = storedBookSettings[pid] ?? book.settings;
+    return BookDetail(
+      pid: book.pid,
+      title: book.title,
+      subtitle: book.subtitle,
+      authors: book.authors,
+      narrators: book.narrators,
+      series: book.series,
+      seriesSequence: book.seriesSequence,
+      publisher: book.publisher,
+      asin: book.asin,
+      isbn: book.isbn,
+      edition: book.edition,
+      abridged: book.abridged,
+      descriptionHtml: book.descriptionHtml,
+      durationMs: book.durationMs,
+      artUrl: book.artUrl,
+      chapters: book.chapters,
+      parts: book.parts,
+      settings: settings,
+    );
+  }
+
+  @override
+  Future<BookResume> getBookResume(String pid) async {
+    return bookResumes[pid] ?? BookResume(positionMs: playPositions[pid] ?? 0);
+  }
+
+  @override
+  Future<BookSettings> putBookSettings(
+    String pid,
+    BookSettings settings,
+  ) async {
+    putBookSettingsCalls.add((pid: pid, settings: settings));
+    storedBookSettings[pid] = settings;
+    return settings;
+  }
+
+  @override
+  Future<SkipMap> getSkipMap(String pid, {int? partIndex}) async {
+    final keyed = partIndex == null ? null : skipMaps['$pid#$partIndex'];
+    return keyed ?? skipMaps[pid] ?? const SkipMap(state: 'unavailable');
+  }
+
+  @override
+  Future<String> exportOpml() async => '<opml version="2.0"><body/></opml>';
+
+  @override
+  Future<void> importOpml(String opml) async {
+    importedOpml.add(opml);
+  }
 }
 
 /// Handy device-session factory for tests.
@@ -399,3 +798,73 @@ ItemSummary testItem(
   artist: artist,
   durationMs: durationMs,
 );
+
+/// Handy show factory for tests.
+PodcastShow testShow(
+  String pid, {
+  String title = 'The Prancing Pony Hour',
+  String? author = 'Barliman Butterbur',
+  String? feedUrl = 'https://pony.example/feed.xml',
+  String? descriptionHtml,
+}) => PodcastShow(
+  pid: pid,
+  title: title,
+  author: author,
+  feedUrl: feedUrl,
+  descriptionHtml: descriptionHtml,
+  sourceType: 'rss',
+);
+
+/// Handy episode factory for tests.
+EpisodeSummary testEpisode(
+  String pid, {
+  String showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01',
+  String title = 'Pipeweed Economics',
+  String? artist = 'Barliman Butterbur',
+  int durationMs = 214000,
+  DateTime? publishedAt,
+  bool downloaded = true,
+  String? fetchState,
+  bool hasTranscript = false,
+}) => EpisodeSummary(
+  pid: pid,
+  mediaType: MediaType.podcast,
+  title: title,
+  artist: artist,
+  durationMs: durationMs,
+  showPid: showPid,
+  publishedAt: publishedAt ?? DateTime.utc(2026, 7, 10, 6),
+  downloaded: downloaded,
+  fetchState: fetchState,
+  hasTranscript: hasTranscript,
+);
+
+/// Handy audiobook factory for tests. With [partCount] above one the
+/// book splits into equal parts of [durationMs] / [partCount] each.
+BookDetail testBook(
+  String pid, {
+  String title = 'There And Back Again',
+  List<String> authors = const ['B. Baggins'],
+  List<String> narrators = const ['Frodo'],
+  int durationMs = 3600000,
+  int partCount = 1,
+  List<ChapterMark>? chapters,
+  BookSettings? settings,
+  String? descriptionHtml,
+}) {
+  final partMs = durationMs ~/ partCount;
+  return BookDetail(
+    pid: pid,
+    title: title,
+    authors: authors,
+    narrators: narrators,
+    durationMs: durationMs,
+    descriptionHtml: descriptionHtml,
+    chapters: chapters ?? const [],
+    parts: [
+      for (var i = 0; i < partCount; i++)
+        BookPart(index: i, startMs: i * partMs, durationMs: partMs),
+    ],
+    settings: settings,
+  );
+}

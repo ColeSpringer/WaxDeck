@@ -7,21 +7,33 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/colespringer/waxdeck/fixtures v0.0.0-00010101000000-000000000000
+	github.com/colespringer/waxtap/v3 v3.0.0-20260718124103-7d8d2c394199
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/getkin/kin-openapi v0.135.0
+	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/oapi-codegen/runtime v1.4.2
 	golang.org/x/crypto v0.54.0
 	golang.org/x/oauth2 v0.36.0
 )
 
-require github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+require (
+	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/dlclark/regexp2 v1.11.5 // indirect
+	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
+	github.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e // indirect
+	github.com/gorilla/css v1.0.1 // indirect
+	golang.org/x/net v0.56.0 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
+)
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/colespringer/waxbin v0.0.0-20260718124056-6bed909ad5a8
 	github.com/colespringer/waxflow v0.0.0-20260718120944-c4a5e80a3fef
 	github.com/colespringer/waxflow/cli v0.0.0-20260718120944-c4a5e80a3fef
-	github.com/colespringer/waxlabel v1.2.0 // indirect
+	github.com/colespringer/waxlabel v1.2.0
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect

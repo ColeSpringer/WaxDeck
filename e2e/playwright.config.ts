@@ -8,6 +8,10 @@ const external = !!process.env.WAXDECK_BASE_URL;
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
+  // Playback-heavy specs stream real audio while clipboard specs need
+  // OS focus; too many concurrent pages makes both flaky. Four workers
+  // keeps the suite fast without the contention.
+  workers: 4,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
@@ -25,8 +29,24 @@ export default defineConfig({
     },
     {
       name: 'chromium',
-      testIgnore: /first-run\.spec\.ts/,
+      testIgnore: [/first-run\.spec\.ts/, /editing-prototype\.spec\.ts/, /a11y-audit\.spec\.ts/],
       dependencies: ['setup'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    // Focus-sensitive specs run after the parallel wave, one at a
+    // time (projects chain through dependencies): text selection,
+    // clipboard, native context menus, and the semantics walk all
+    // lose OS focus to sibling workers' pages and flake.
+    {
+      name: 'focus-a11y',
+      testMatch: /a11y-audit\.spec\.ts/,
+      dependencies: ['chromium'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'focus-editing',
+      testMatch: /editing-prototype\.spec\.ts/,
+      dependencies: ['focus-a11y'],
       use: { ...devices['Desktop Chrome'] },
     },
   ],

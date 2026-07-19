@@ -20,6 +20,18 @@ const (
 	// KindGone marks a sync cursor the stream can no longer serve
 	// contiguously (410 sync-reset at the API).
 	KindGone ErrorKind = "sync-reset"
+	// KindForbidden marks an authenticated caller who is not allowed
+	// to do this (403 forbidden at the API).
+	KindForbidden ErrorKind = "forbidden"
+	// KindUpstream marks a failure of a server the request depends on
+	// but WaxDeck does not operate: a podcast feed's host answered an
+	// error, timed out, or returned something unparseable (502
+	// feed-unreachable at the API).
+	KindUpstream ErrorKind = "feed-unreachable"
+	// KindUnsupported marks a request needing an integration this
+	// server is not running, such as the YouTube bridge (501
+	// source-unavailable at the API).
+	KindUnsupported ErrorKind = "source-unavailable"
 )
 
 // Error is a classified service failure.
@@ -71,6 +83,8 @@ func kindFromWaxErr(err error) ErrorKind {
 		return KindInvalid
 	case waxerr.CodeConflict, waxerr.CodeLocked:
 		return KindConflict
+	case waxerr.CodeUnsupported:
+		return KindUnsupported
 	default:
 		return KindInternal
 	}

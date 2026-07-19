@@ -3,30 +3,40 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/podcast_show.dart';
 import 'package:waxdeck_api_gen/src/model/item_summary.dart';
+import 'package:waxdeck_api_gen/src/model/episode_summary.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
 part 'catalog_sync_entry.g.dart';
 
-/// One mirrored catalog change: an `upsert` carrying the item's current summary, or a `delete` tombstone carrying only the PID. Snapshot pages contain only upserts. `op` is a string, not a closed enum, so new operations can appear; clients must drop entries whose `op` they do not recognize. 
+/// One mirrored catalog change: an `upsert` carrying the item's current summary, an `upsert-show` carrying a podcast show's current summary (shows are catalog entities but not items, so they ride their own operation and clients from before this operation existed drop them harmlessly), or a `delete` tombstone carrying only the PID (which removes the PID from whichever mirror table holds it). An `upsert` for a podcast episode carries `item` and additionally `episode`, the full episode summary; clients that only know items keep reading `item`. Snapshot pages contain only upserts, of both kinds. `op` is a string, not a closed enum, so new operations can appear; clients must drop entries whose `op` they do not recognize. 
 ///
 /// Properties:
-/// * [op] - What the mirror should do with this entry: `upsert` (store `item`) or `delete` (remove the PID). 
-/// * [pid] - The item the entry is about.
+/// * [op] - What the mirror should do with this entry: `upsert` (store `item`, and `episode` when present), `upsert-show` (store `show`), or `delete` (remove the PID). 
+/// * [pid] - The item or show the entry is about.
 /// * [item] 
+/// * [episode] 
+/// * [show_] 
 @BuiltValue()
 abstract class CatalogSyncEntry implements Built<CatalogSyncEntry, CatalogSyncEntryBuilder> {
-  /// What the mirror should do with this entry: `upsert` (store `item`) or `delete` (remove the PID). 
+  /// What the mirror should do with this entry: `upsert` (store `item`, and `episode` when present), `upsert-show` (store `show`), or `delete` (remove the PID). 
   @BuiltValueField(wireName: r'op')
   String get op;
 
-  /// The item the entry is about.
+  /// The item or show the entry is about.
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
   @BuiltValueField(wireName: r'item')
   ItemSummary? get item;
+
+  @BuiltValueField(wireName: r'episode')
+  EpisodeSummary? get episode;
+
+  @BuiltValueField(wireName: r'show')
+  PodcastShow? get show_;
 
   CatalogSyncEntry._();
 
@@ -66,6 +76,20 @@ class _$CatalogSyncEntrySerializer implements PrimitiveSerializer<CatalogSyncEnt
       yield serializers.serialize(
         object.item,
         specifiedType: const FullType(ItemSummary),
+      );
+    }
+    if (object.episode != null) {
+      yield r'episode';
+      yield serializers.serialize(
+        object.episode,
+        specifiedType: const FullType(EpisodeSummary),
+      );
+    }
+    if (object.show_ != null) {
+      yield r'show';
+      yield serializers.serialize(
+        object.show_,
+        specifiedType: const FullType(PodcastShow),
       );
     }
   }
@@ -111,6 +135,20 @@ class _$CatalogSyncEntrySerializer implements PrimitiveSerializer<CatalogSyncEnt
             specifiedType: const FullType(ItemSummary),
           ) as ItemSummary;
           result.item = valueDes;
+          break;
+        case r'episode':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(EpisodeSummary),
+          ) as EpisodeSummary;
+          result.episode = valueDes;
+          break;
+        case r'show':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(PodcastShow),
+          ) as PodcastShow;
+          result.show_.replace(valueDes);
           break;
         default:
           unhandled.add(key);

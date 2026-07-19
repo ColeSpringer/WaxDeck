@@ -3,6 +3,8 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/subscription.dart';
+import 'package:waxdeck_api_gen/src/model/book_settings.dart';
 import 'package:waxdeck_api_gen/src/model/prefs.dart';
 import 'package:waxdeck_api_gen/src/model/play_state.dart';
 import 'package:built_value/built_value.dart';
@@ -13,17 +15,19 @@ part 'server_sync_event.g.dart';
 /// One change to the calling user's server-side state, with the current value hydrated fresh. `kind` is a string, not a closed enum, so new kinds can appear; clients must skip events whose `kind` they do not recognize. 
 ///
 /// Properties:
-/// * [kind] - What changed: `play-state` (carries `pid` and `playState`) or `prefs` (carries `prefs`). 
-/// * [pid] - The item whose state changed (`play-state` only).
+/// * [kind] - What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), or `book-settings` (carries `pid`, the book, and `bookSettings`). 
+/// * [pid] - The item, show, or book the event is about (absent for `prefs`). 
 /// * [playState] 
 /// * [prefs] 
+/// * [subscription] 
+/// * [bookSettings] 
 @BuiltValue()
 abstract class ServerSyncEvent implements Built<ServerSyncEvent, ServerSyncEventBuilder> {
-  /// What changed: `play-state` (carries `pid` and `playState`) or `prefs` (carries `prefs`). 
+  /// What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), or `book-settings` (carries `pid`, the book, and `bookSettings`). 
   @BuiltValueField(wireName: r'kind')
   String get kind;
 
-  /// The item whose state changed (`play-state` only).
+  /// The item, show, or book the event is about (absent for `prefs`). 
   @BuiltValueField(wireName: r'pid')
   String? get pid;
 
@@ -32,6 +36,12 @@ abstract class ServerSyncEvent implements Built<ServerSyncEvent, ServerSyncEvent
 
   @BuiltValueField(wireName: r'prefs')
   Prefs? get prefs;
+
+  @BuiltValueField(wireName: r'subscription')
+  Subscription? get subscription;
+
+  @BuiltValueField(wireName: r'bookSettings')
+  BookSettings? get bookSettings;
 
   ServerSyncEvent._();
 
@@ -80,6 +90,20 @@ class _$ServerSyncEventSerializer implements PrimitiveSerializer<ServerSyncEvent
       yield serializers.serialize(
         object.prefs,
         specifiedType: const FullType(Prefs),
+      );
+    }
+    if (object.subscription != null) {
+      yield r'subscription';
+      yield serializers.serialize(
+        object.subscription,
+        specifiedType: const FullType(Subscription),
+      );
+    }
+    if (object.bookSettings != null) {
+      yield r'bookSettings';
+      yield serializers.serialize(
+        object.bookSettings,
+        specifiedType: const FullType(BookSettings),
       );
     }
   }
@@ -132,6 +156,20 @@ class _$ServerSyncEventSerializer implements PrimitiveSerializer<ServerSyncEvent
             specifiedType: const FullType(Prefs),
           ) as Prefs;
           result.prefs.replace(valueDes);
+          break;
+        case r'subscription':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(Subscription),
+          ) as Subscription;
+          result.subscription.replace(valueDes);
+          break;
+        case r'bookSettings':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BookSettings),
+          ) as BookSettings;
+          result.bookSettings.replace(valueDes);
           break;
         default:
           unhandled.add(key);

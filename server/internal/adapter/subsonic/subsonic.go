@@ -32,7 +32,7 @@ const apiVersion = "1.16.1"
 // streamer is the slice of the WaxFlow bridge the adapter needs; nil
 // when streaming is not configured.
 type streamer interface {
-	PlayInfoFor(ctx context.Context, user, apiItemPID string) (flow.PlayInfo, error)
+	PlayInfoFor(ctx context.Context, user, apiItemPID string, opts flow.PlayOptions) (flow.PlayInfo, error)
 }
 
 // Handler serves /rest/*.
@@ -403,7 +403,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 		h.fail(w, r, 70, "no such song")
 		return
 	}
-	info, err := h.bridge.PlayInfoFor(r.Context(), uc.ID, id)
+	info, err := h.bridge.PlayInfoFor(r.Context(), uc.ID, id, flow.PlayOptions{})
 	if err != nil {
 		h.fail(w, r, 0, "resolving stream failed")
 		return

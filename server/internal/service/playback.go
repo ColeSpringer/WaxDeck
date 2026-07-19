@@ -23,6 +23,13 @@ const (
 	musicLongTrack    = 30 * time.Minute
 	podcastFraction   = 0.9
 	audiobookFraction = 0.99
+	// spokenFinishedFraction is the completion bar for spoken word.
+	// Deliberately stricter than the podcast played threshold: played
+	// at 90 percent drives archive and retention, but finished means
+	// the listener actually reached the end, and a podcast at 92
+	// percent is played yet unfinished. Its own constant so tuning
+	// the audiobook played threshold can never move completion.
+	spokenFinishedFraction = 0.99
 )
 
 // PlayState returns the calling user's state for one item. Items never
@@ -150,8 +157,61 @@ func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string
 	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), wdb.StampPosition, stampNS); err != nil {
 		l.log.Warn("stamping position", "pid", apiItemPID, "err", err)
 	}
+	l.markSpokenWordProgress(ctx, uc, it, positionMS)
 	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
 	return nil
+}
+
+// markSpokenWordProgress derives played and finished for podcasts and
+// audiobooks from the position reached against the item's full
+// duration, marking only on a transition. Position, never a
+// listened-milliseconds ratio, so silence trimming and speed changes
+// cannot distort the thresholds; for multi-file books the position is
+// already book-timeline by contract. Best effort on the checkpoint
+// path: a missed mark self-heals at the next checkpoint.
+func (l *Library) markSpokenWordProgress(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64) {
+	crossed, finished, err := l.spokenWordCrossing(ctx, uc, it, positionMS)
+	if err != nil || !crossed {
+		return
+	}
+	if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, finished); err != nil {
+		l.log.Warn("marking spoken word played", "pid", string(it.PID), "err", err)
+	}
+}
+
+// spokenWordCrossing evaluates the position-derived played rules for
+// podcasts and audiobooks: whether a mark is due now (a transition the
+// stored state has not recorded) and whether it also finishes the
+// item. Non-spoken-word items never cross here.
+func (l *Library) spokenWordCrossing(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64) (crossed, finished bool, err error) {
+	mt := mediaTypeForKind(it.Kind)
+	if (mt != "podcast" && mt != "audiobook") || it.DurationMS <= 0 {
+		return false, false, nil
+	}
+	frac := podcastFraction
+	if mt == "audiobook" {
+		frac = audiobookFraction
+	}
+	if float64(positionMS) < frac*float64(it.DurationMS) {
+		return false, false, nil
+	}
+	finished = float64(positionMS) >= spokenFinishedFraction*float64(it.DurationMS)
+	st, err := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), it.PID)
+	if err != nil {
+		return false, false, classify(err)
+	}
+	if st != nil && st.Played {
+		// One mark per listen-through: the catalog's mark increments
+		// the play count unconditionally and offers no count-free way
+		// to set finished afterwards, so a played item never marks
+		// again (letting the later completion crossing through counted
+		// every finished podcast as two plays). The recorded trade: a
+		// podcast that crosses its 90 percent played bar first keeps
+		// finished false when it later reaches the end; stats count
+		// one play, which is the truth that matters.
+		return false, false, nil
+	}
+	return true, finished, nil
 }
 
 // SetStar stars or unstars the item for the acting user and returns the
@@ -274,8 +334,51 @@ func (l *Library) IngestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 			continue
 		}
 		res.Accepted++
-		if crossedPlayedThreshold(mediaTypeForKind(it.Kind), s.MsPlayed, it.DurationMS) || s.Finished {
-			if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, s.Finished); err == nil {
+		mt := mediaTypeForKind(it.Kind)
+		crossed := false
+		finished := s.Finished
+		switch mt {
+		case "podcast", "audiobook":
+			// Spoken word derives played from the position reached, never
+			// the listened-milliseconds ratio (trimming and speed changes
+			// must not distort it); the client finished flag counts for
+			// single-file episodes but never finishes a multi-part book.
+			// The stored position is the right input here even though a
+			// session carries no position of its own: clients flush
+			// checkpoints before listen reports (live and in the offline
+			// outbox), and the checkpoint path evaluates the same crossing
+			// independently, so an out-of-order listen can never lose a
+			// mark for good.
+			st, stErr := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), it.PID)
+			if stErr != nil {
+				res.Accepted--
+				if delErr := l.db.DeleteListen(ctx, uc.ID, s.SessionID); delErr != nil {
+					l.log.Error("compensating listen delete", "session", s.SessionID, "err", delErr)
+				}
+				return res, classify(stErr)
+			}
+			var pos int64
+			if st != nil {
+				pos = st.PositionMS
+			}
+			var evalErr error
+			crossed, finished, evalErr = l.spokenWordCrossing(ctx, uc, it, pos)
+			if evalErr != nil {
+				res.Accepted--
+				if delErr := l.db.DeleteListen(ctx, uc.ID, s.SessionID); delErr != nil {
+					l.log.Error("compensating listen delete", "session", s.SessionID, "err", delErr)
+				}
+				return res, evalErr
+			}
+			if mt == "podcast" && s.Finished && (st == nil || !st.Played) {
+				crossed = true
+				finished = true
+			}
+		default:
+			crossed = crossedPlayedThreshold(mt, s.MsPlayed, it.DurationMS) || s.Finished
+		}
+		if crossed {
+			if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, finished); err == nil {
 				l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
 			} else {
 				err = classify(err)

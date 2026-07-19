@@ -67,4 +67,14 @@ abstract interface class AudioEnginePort {
 
   /// Fires once each time playback reaches the end of the media.
   Stream<void> get completed;
+
+  /// Sets the playback speed multiplier (1.0 is normal speed). The
+  /// setting survives pause/play and loading new media.
+  Future<void> setSpeed(double speed);
+
+  /// Current playback speed multiplier.
+  double get speed;
+
+  /// Speed changes from [setSpeed].
+  Stream<double> get speedStream;
 }

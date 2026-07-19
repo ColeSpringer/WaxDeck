@@ -18,7 +18,7 @@ import (
 // staticResolver serves one fixed source for any pid.
 type staticResolver struct{ src Source }
 
-func (r staticResolver) StreamSource(context.Context, string) (Source, error) {
+func (r staticResolver) StreamSource(context.Context, string, string) (Source, error) {
 	return r.src, nil
 }
 
@@ -55,7 +55,7 @@ func newTestBridge(t *testing.T, upstream http.HandlerFunc, src Source) *Bridge 
 
 func tokenURL(t *testing.T, b *Bridge, pid string) string {
 	t.Helper()
-	info, err := b.PlayInfoFor(context.Background(), "us-1", pid)
+	info, err := b.PlayInfoFor(context.Background(), "us-1", pid, PlayOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

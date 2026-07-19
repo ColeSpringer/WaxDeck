@@ -35,7 +35,7 @@ The client sends exactly one frame, immediately after the upgrade
 (`WsSubscribeFrame`):
 
 ```json
-{ "catalogSince": "…", "serverSince": "…", "topics": ["catalog", "user"] }
+{ "catalogSince": "abc", "serverSince": "def", "topics": ["catalog", "user"] }
 ```
 
 Cursors are the opaque values the client's mirror is at (from the sync
@@ -86,11 +86,16 @@ continuously in tests.
 
 Two ordered streams, replayable independently through the sync endpoints:
 
-- `catalog` (`catalogSeq`): WaxBin catalog changes, item-granular. WaxBin's
-  own change feed also carries file, album, artist, and other entity rows;
-  the hub relays only what a summary mirror can act on.
+- `catalog` (`catalogSeq`): WaxBin catalog changes, item-granular, plus
+  podcast show rows (a show is list-level metadata every subscriber's UI
+  renders, and it is not per-user state; shows travel through
+  `/sync/catalog` as their own `upsert-show` entries, which clients from
+  before that operation existed drop harmlessly). WaxBin's own change
+  feed also carries file, album, artist, and other entity rows; the hub
+  relays only what a summary mirror can act on.
 - `user` (`serverSeq`): the calling user's own WaxDeck-side state (playback
-  state, preferences), from the `event_log` table.
+  state, preferences, podcast subscriptions and their settings, per-book
+  playback settings), from the `event_log` table.
 
 Cursors are opaque strings. Internally they bind a stream generation, so a
 rebuilt catalog or restored database invalidates stale cursors instead of
@@ -104,3 +109,11 @@ entirely. Play state is re-emitted user-scoped on the server cursor (WaxDeck
 is the sole writer, so it knows the acting user at write time); bookmarks
 and queues will ride the same path when their API surfaces land. No client
 ever sees another user's listening activity.
+
+Podcast subscriptions are WaxDeck-side per-user state and ride the `user`
+stream (the `subscription` event kind on `/sync/server`), so one user's
+subscribe never invalidates another user's *user* mirror; the show and
+episode rows a first subscription creates are catalog entities like any
+other and reach every client through the `catalog` stream. Per-book
+playback settings are per-user state the same way (the `book-settings`
+event kind).

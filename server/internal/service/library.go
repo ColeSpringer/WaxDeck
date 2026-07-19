@@ -7,12 +7,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/config"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/pidpath"
+	"github.com/colespringer/waxbin/source"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -36,7 +40,32 @@ type Config struct {
 	ScanOnStart bool
 	// Sealer encrypts recoverable secrets (app passwords) at rest.
 	Sealer *auth.Sealer
-	Logger *slog.Logger
+	// SecretCipher seals catalog-held secrets (private-feed passwords)
+	// at rest; the catalog binds each secret's key as AAD. Removing an
+	// adopted cipher bricks sealed rows, so this is wired once and kept.
+	SecretCipher *auth.AADSealer
+	// PodcastDir is the episode download directory: its own catalog
+	// library, never inside a user root (the catalog refuses overlap),
+	// and mounted for the streaming sidecar under PodcastRootName.
+	PodcastDir string
+	// PodcastRootName is the streaming root name PodcastDir is served
+	// under; the bridge maps episode paths through it.
+	PodcastRootName string
+	// AllowPrivateFeedHosts disables the private-address guard on feed
+	// and enclosure fetches, for feeds hosted on the caller's own LAN.
+	AllowPrivateFeedHosts bool
+	// DefaultRetentionKeep applies to subscribers who leave retention
+	// unset: keep the newest N downloaded episode files, 0 keeps all.
+	DefaultRetentionKeep int64
+	// RetentionInUseWindow is how recently a subscriber's position must
+	// have moved for an episode to count as in use (deferring its
+	// show's sweep). Zero means the default of two minutes; a negative
+	// value disables the guard (tests).
+	RetentionInUseWindow time.Duration
+	// SourceProviders are injected acquisition providers (the YouTube
+	// bridge); the catalog dispatches shows to them by source type.
+	SourceProviders []source.Provider
+	Logger          *slog.Logger
 }
 
 // Library is the catalog service over an embedded WaxBin library. It
@@ -66,6 +95,21 @@ type Library struct {
 	appSecrets appSecretCache
 	// trackFacts caches the compatibility surface's track sweep.
 	trackFacts trackFactsCache
+	// podcastDir and podcastRootName locate the episode download
+	// library; defaultRetentionKeep is the unset-subscriber policy;
+	// retentionInUseWindow gates the sweep's in-use deferral.
+	podcastDir           string
+	podcastRootName      string
+	defaultRetentionKeep int64
+	retentionInUseWindow time.Duration
+	// flowJobs is the streaming sidecar's analysis surface, wired after
+	// construction (the bridge needs this service as its resolver).
+	flowJobs FlowJobs
+	// transcriptHTTP is the guarded client for transcript pointers,
+	// built on first use; allowPrivateFeedHosts relaxes its SSRF guard.
+	transcriptHTTP        *http.Client
+	transcriptHTTPOnce    sync.Once
+	allowPrivateFeedHosts bool
 }
 
 // SocketFileName is the IPC socket beside the catalog DB. It is a local
@@ -85,12 +129,24 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		roots = append(roots, config.Root{Path: r.Path, Mode: model.ModeInPlace})
 	}
 	socket := filepath.Join(cfg.DataDir, SocketFileName)
-	lib, err := waxbin.Open(ctx, waxbin.Options{
-		DBPath:    filepath.Join(cfg.DataDir, "waxbin.db"),
-		Roots:     roots,
-		Logger:    log,
-		IPCSocket: socket,
-	})
+	opts := waxbin.Options{
+		DBPath:          filepath.Join(cfg.DataDir, "waxbin.db"),
+		Roots:           roots,
+		Logger:          log,
+		IPCSocket:       socket,
+		SourceProviders: cfg.SourceProviders,
+	}
+	if cfg.SecretCipher != nil {
+		opts.SecretCipher = cfg.SecretCipher
+		opts.SecretKeyID = "1"
+	}
+	if cfg.PodcastDir != "" {
+		opts.Podcasts = config.PodcastConfig{
+			Dir:             cfg.PodcastDir,
+			BlockPrivateIPs: !cfg.AllowPrivateFeedHosts,
+		}
+	}
+	lib, err := waxbin.Open(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("service: opening catalog: %w", err)
 	}
@@ -103,14 +159,33 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 
 	l := &Library{
 		lib: lib, paths: paths, db: store, roots: cfg.Roots, log: log, procCtx: ctx,
-		catalogWake: make(chan struct{}, 1),
-		userWake:    make(chan string, 64),
-		sealer:      cfg.Sealer,
+		catalogWake:           make(chan struct{}, 1),
+		userWake:              make(chan string, 64),
+		sealer:                cfg.Sealer,
+		podcastDir:            cfg.PodcastDir,
+		podcastRootName:       cfg.PodcastRootName,
+		defaultRetentionKeep:  cfg.DefaultRetentionKeep,
+		retentionInUseWindow:  cfg.RetentionInUseWindow,
+		allowPrivateFeedHosts: cfg.AllowPrivateFeedHosts,
+	}
+	if l.retentionInUseWindow == 0 {
+		l.retentionInUseWindow = 2 * time.Minute
 	}
 	if err := l.initSync(ctx); err != nil {
 		paths.Close()
 		lib.Close()
 		return nil, fmt.Errorf("service: sync state: %w", err)
+	}
+
+	// Cipher adoption: re-seal any plaintext catalog secrets once. Old
+	// rows seal lazily on write anyway; the one-shot closes the gap for
+	// rows never rewritten. Never fatal (the catalog stays usable).
+	if cfg.SecretCipher != nil {
+		if n, err := lib.ReSealSecrets(ctx); err != nil {
+			log.Warn("re-sealing catalog secrets", "err", err)
+		} else if n > 0 {
+			log.Info("sealed catalog secrets", "count", n)
+		}
 	}
 
 	// The CLI-through-server proxy: host side is one call, alive for the

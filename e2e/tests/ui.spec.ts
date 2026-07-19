@@ -1,5 +1,11 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { ADMIN_PASS, ADMIN_USER, ensureAdmin, typeInto } from './helpers';
+import {
+  ADMIN_PASS,
+  ADMIN_USER,
+  clickThrough,
+  ensureAdmin,
+  typeInto,
+} from './helpers';
 
 // The first-party web UI journey: log in through the real login form,
 // find a scanned fixture track in the library grid, open the player,
@@ -35,6 +41,23 @@ async function waitForAlpha(request: APIRequestContext): Promise<string> {
 test('login, browse the grid, and play a track', async ({ page, request }) => {
   const pid = await waitForAlpha(request);
 
+  // Browser-side diagnostics: playback-start failures render a terse
+  // error pane, so the console and failed requests are the evidence.
+  page.on('console', (msg) => {
+    if (msg.type() === 'error' || msg.type() === 'warning') {
+      console.log(`[browser ${msg.type()}] ${msg.text()}`);
+    }
+  });
+  page.on('pageerror', (err) => console.log(`[pageerror] ${err.message}`));
+  page.on('requestfailed', (req) =>
+    console.log(`[requestfailed] ${req.method()} ${req.url()} ${req.failure()?.errorText}`),
+  );
+  page.on('response', (resp) => {
+    if (resp.status() >= 400) {
+      console.log(`[http ${resp.status()}] ${resp.request().method()} ${resp.url()}`);
+    }
+  });
+
   await page.goto('/');
 
   // The login form is the first thing an unauthenticated visitor sees.
@@ -53,8 +76,7 @@ test('login, browse the grid, and play a track', async ({ page, request }) => {
 
   // Opening the item starts playback through the single-origin media
   // proxy. The rendered duration proves the stream's metadata decoded.
-  await card.click();
-  await page.locator(sem('player-toggle')).waitFor({ timeout: 30_000 });
+  await clickThrough(card, page.locator(sem('player-toggle')));
   await expect(page.getByText(/0:0[2-9]/).first()).toBeVisible({ timeout: 30_000 });
 
   // The fixture is two seconds long; when it completes, the client

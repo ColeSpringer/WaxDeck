@@ -5,6 +5,16 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import '../providers.dart';
 import '../sync/sync_providers.dart';
 
+/// In-flight optimistic intents by pid, container-scoped so they
+/// survive controller rebuilds: server events (a playing session's own
+/// checkpoints included) invalidate the play-state family, and a
+/// rebuild racing an unsettled mutation would otherwise refetch the
+/// pre-mutation server state and visually revert the tap. Fresh builds
+/// overlay these intents onto what they fetch, so the optimistic value
+/// holds across the rebuild until the write settles.
+final _pendingIntentsProvider =
+    Provider<Map<String, List<PlayState Function(PlayState)>>>((_) => {});
+
 /// One item's play state (star, rating, progress) for UI that edits it.
 ///
 /// Mutations apply optimistically so the tap feels instant, then settle
@@ -18,7 +28,16 @@ class PlayStateController extends AsyncNotifier<PlayState> {
   final String pid;
 
   @override
-  Future<PlayState> build() => ref.watch(repositoryProvider).getPlayState(pid);
+  Future<PlayState> build() async {
+    final fetched = await ref.watch(repositoryProvider).getPlayState(pid);
+    final pending = ref.read(_pendingIntentsProvider)[pid];
+    if (pending == null) return fetched;
+    var overlaid = fetched;
+    for (final apply in pending) {
+      overlaid = apply(overlaid);
+    }
+    return overlaid;
+  }
 
   Future<void> setStarred(bool starred) => _mutate(
     optimistic: (s) => _copy(s, starred: starred),
@@ -43,15 +62,47 @@ class PlayStateController extends AsyncNotifier<PlayState> {
     if (current != null) {
       state = AsyncData(optimistic(current));
     }
+    // Register the intent before awaiting anything, and read what the
+    // rest of the method needs through locals: a family invalidation
+    // can dispose this notifier mid-flight, after which ref and state
+    // are off limits (the mounted guards below).
+    final intents = ref.read(_pendingIntentsProvider);
+    final engine = ref.read(syncEngineProvider);
+    intents.putIfAbsent(pid, () => []).add(optimistic);
+    void settle() {
+      final list = intents[pid];
+      list?.remove(optimistic);
+      if (list != null && list.isEmpty) intents.remove(pid);
+    }
+
+    // Settlement is a finally, never a per-path call: an exception
+    // outside the typed catch (a repository bug throwing something
+    // other than the API exception) must still remove the intent, or
+    // the leaked transform would overlay every future rebuild of this
+    // pid until app restart.
     try {
-      state = AsyncData(await call());
+      final settled = await call();
+      if (ref.mounted) state = AsyncData(settled);
+      // Not mounted: the replacement controller built with the intent
+      // overlaid, which is exactly the value the server just stored.
     } on WaxDeckApiException catch (e, st) {
       // An unreachable server is not a rejection: the change queues in
       // the outbox and the optimistic state stands (the winner comes
-      // back through sync on reconnect).
-      final engine = ref.read(syncEngineProvider);
+      // back through sync on reconnect). An offline rebuild cannot
+      // fetch anything to overlay anyway, and the flushed outbox
+      // announces the winner through sync.
       if (engine != null && _unreachable(e)) {
         await queue(engine);
+        return;
+      }
+      if (!ref.mounted) {
+        // Rejected after a rebuild: the rollback cannot reach the
+        // replacement controller. The intent is settled, so any later
+        // rebuild fetches the truth; a replacement that built during
+        // the flight keeps its optimistic frame until the next
+        // play-state event or screen entry (a rejection racing a
+        // rebuild is the edge of an edge, and the server state is
+        // correct throughout).
         return;
       }
       // Emit the failure so listeners can tell the user, then restore
@@ -59,6 +110,8 @@ class PlayStateController extends AsyncNotifier<PlayState> {
       // the rolled-back data.
       state = AsyncError<PlayState>(e, st);
       state = previous;
+    } finally {
+      settle();
     }
   }
 

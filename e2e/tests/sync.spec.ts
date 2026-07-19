@@ -25,7 +25,10 @@ test('a mirror snapshots, deltas to quiescence, and follows a change', async ({
     expect(page.nextSince).toBeTruthy();
     since = page.nextSince;
     for (const e of page.entries) {
-      expect(e.op).toBe('upsert');
+      // The contract: mirrors drop entries whose op they do not
+      // recognize (podcast shows ride the same stream as their own
+      // operation). This mirror only tracks items.
+      if (e.op !== 'upsert') continue;
       mirror.set(e.pid, e.item.title);
     }
     if (!page.nextCursor) break;

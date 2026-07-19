@@ -160,6 +160,23 @@ func (l *Library) viewVisible(ctx context.Context, uc *UserCtx, it *model.ItemVi
 	return uc.Libraries[libPID]
 }
 
+// podcastsVisible reports whether the caller can see the podcast
+// library (shows are not items, so show surfaces gate on the library
+// itself). Servers without a podcast dir have nothing to show.
+func (l *Library) podcastsVisible(ctx context.Context, uc *UserCtx) bool {
+	if uc.AllLibraries {
+		return true
+	}
+	if l.podcastDir == "" {
+		return false
+	}
+	libPID, err := l.libraryForPath(ctx, l.podcastDir)
+	if err != nil || libPID == "" {
+		return false
+	}
+	return uc.Libraries[libPID]
+}
+
 // getVisibleItem is getItem plus the visibility check: an item outside
 // the caller's scope behaves exactly as if it did not exist.
 func (l *Library) getVisibleItem(ctx context.Context, uc *UserCtx, apiItemPID string) (*model.ItemView, error) {

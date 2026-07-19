@@ -19,6 +19,14 @@ class _$PlayInfo extends PlayInfo {
   final bool seekable;
   @override
   final DateTime expiresAt;
+  @override
+  final int? partIndex;
+  @override
+  final int? partCount;
+  @override
+  final int? partStartMs;
+  @override
+  final bool? voiceBoost;
 
   factory _$PlayInfo([void Function(PlayInfoBuilder)? updates]) =>
       (PlayInfoBuilder()..update(updates))._build();
@@ -30,6 +38,10 @@ class _$PlayInfo extends PlayInfo {
     required this.durationMs,
     required this.seekable,
     required this.expiresAt,
+    this.partIndex,
+    this.partCount,
+    this.partStartMs,
+    this.voiceBoost,
   }) : super._();
   @override
   PlayInfo rebuild(void Function(PlayInfoBuilder) updates) =>
@@ -47,7 +59,11 @@ class _$PlayInfo extends PlayInfo {
         mimeType == other.mimeType &&
         durationMs == other.durationMs &&
         seekable == other.seekable &&
-        expiresAt == other.expiresAt;
+        expiresAt == other.expiresAt &&
+        partIndex == other.partIndex &&
+        partCount == other.partCount &&
+        partStartMs == other.partStartMs &&
+        voiceBoost == other.voiceBoost;
   }
 
   @override
@@ -59,6 +75,10 @@ class _$PlayInfo extends PlayInfo {
     _$hash = $jc(_$hash, durationMs.hashCode);
     _$hash = $jc(_$hash, seekable.hashCode);
     _$hash = $jc(_$hash, expiresAt.hashCode);
+    _$hash = $jc(_$hash, partIndex.hashCode);
+    _$hash = $jc(_$hash, partCount.hashCode);
+    _$hash = $jc(_$hash, partStartMs.hashCode);
+    _$hash = $jc(_$hash, voiceBoost.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -71,7 +91,11 @@ class _$PlayInfo extends PlayInfo {
           ..add('mimeType', mimeType)
           ..add('durationMs', durationMs)
           ..add('seekable', seekable)
-          ..add('expiresAt', expiresAt))
+          ..add('expiresAt', expiresAt)
+          ..add('partIndex', partIndex)
+          ..add('partCount', partCount)
+          ..add('partStartMs', partStartMs)
+          ..add('voiceBoost', voiceBoost))
         .toString();
   }
 }
@@ -103,6 +127,22 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
   DateTime? get expiresAt => _$this._expiresAt;
   set expiresAt(DateTime? expiresAt) => _$this._expiresAt = expiresAt;
 
+  int? _partIndex;
+  int? get partIndex => _$this._partIndex;
+  set partIndex(int? partIndex) => _$this._partIndex = partIndex;
+
+  int? _partCount;
+  int? get partCount => _$this._partCount;
+  set partCount(int? partCount) => _$this._partCount = partCount;
+
+  int? _partStartMs;
+  int? get partStartMs => _$this._partStartMs;
+  set partStartMs(int? partStartMs) => _$this._partStartMs = partStartMs;
+
+  bool? _voiceBoost;
+  bool? get voiceBoost => _$this._voiceBoost;
+  set voiceBoost(bool? voiceBoost) => _$this._voiceBoost = voiceBoost;
+
   PlayInfoBuilder() {
     PlayInfo._defaults(this);
   }
@@ -116,6 +156,10 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
       _durationMs = $v.durationMs;
       _seekable = $v.seekable;
       _expiresAt = $v.expiresAt;
+      _partIndex = $v.partIndex;
+      _partCount = $v.partCount;
+      _partStartMs = $v.partStartMs;
+      _voiceBoost = $v.voiceBoost;
       _$v = null;
     }
     return this;
@@ -160,6 +204,10 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
             r'PlayInfo',
             'expiresAt',
           ),
+          partIndex: partIndex,
+          partCount: partCount,
+          partStartMs: partStartMs,
+          voiceBoost: voiceBoost,
         );
     replace(_$result);
     return _$result;

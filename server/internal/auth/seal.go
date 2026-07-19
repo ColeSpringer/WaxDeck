@@ -57,6 +57,52 @@ func (s *Sealer) Open(sealed []byte) ([]byte, error) {
 	return pt, nil
 }
 
+// AADSealer is the Sealer shape for consumers whose envelope binds
+// ciphertext to a context string via additional authenticated data:
+// the catalog's secret store passes each secret's key as AAD, so a
+// sealed value copied onto another key refuses to open. Same
+// construction as Sealer (AES-256-GCM under a purpose-bound subkey).
+type AADSealer struct {
+	aead cipher.AEAD
+}
+
+// NewAADSealer derives the sealing subkey from the server secret.
+func NewAADSealer(secret []byte, purpose string) (*AADSealer, error) {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(purpose))
+	block, err := aes.NewCipher(mac.Sum(nil))
+	if err != nil {
+		return nil, fmt.Errorf("auth: sealing cipher: %w", err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("auth: sealing cipher: %w", err)
+	}
+	return &AADSealer{aead: aead}, nil
+}
+
+// Seal encrypts plaintext bound to aad.
+func (s *AADSealer) Seal(aad, plaintext []byte) ([]byte, error) {
+	nonce := make([]byte, s.aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("auth: sealing: %w", err)
+	}
+	return s.aead.Seal(nonce, nonce, plaintext, aad), nil
+}
+
+// Open decrypts a sealed value bound to aad.
+func (s *AADSealer) Open(aad, sealed []byte) ([]byte, error) {
+	if len(sealed) < s.aead.NonceSize() {
+		return nil, errors.New("auth: sealed value too short")
+	}
+	nonce, ct := sealed[:s.aead.NonceSize()], sealed[s.aead.NonceSize():]
+	pt, err := s.aead.Open(nil, nonce, ct, aad)
+	if err != nil {
+		return nil, fmt.Errorf("auth: unsealing: %w", err)
+	}
+	return pt, nil
+}
+
 // crockford is the ULID alphabet: unambiguous, case-insensitive,
 // double-click selectable.
 const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"

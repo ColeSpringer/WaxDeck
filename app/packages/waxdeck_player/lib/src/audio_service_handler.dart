@@ -15,6 +15,7 @@ class WaxDeckAudioHandler extends BaseAudioHandler {
   }) {
     engine.playingStream.listen(_publishState);
     engine.processingStateStream.listen((_) => _publishState(engine.playing));
+    engine.speedStream.listen((_) => _publishState(engine.playing));
   }
 
   final AudioEnginePort engine;
@@ -40,6 +41,7 @@ class WaxDeckAudioHandler extends BaseAudioHandler {
         },
         playing: playing,
         updatePosition: engine.position,
+        speed: engine.speed,
       ),
     );
   }
@@ -55,6 +57,9 @@ class WaxDeckAudioHandler extends BaseAudioHandler {
 
   @override
   Future<void> seek(Duration position) => engine.seek(position);
+
+  @override
+  Future<void> setSpeed(double speed) => engine.setSpeed(speed);
 
   @override
   Future<void> playFromMediaId(String mediaId, [Map<String, dynamic>? extras]) {

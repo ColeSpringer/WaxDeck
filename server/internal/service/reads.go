@@ -61,12 +61,19 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, seed int
 }
 
 // pageDTO converts a catalog page, dropping items outside the caller's
-// visible libraries. Restricted callers may get short pages that still
-// carry a cursor; the contract documents that.
+// visible libraries and podcast episodes of shows the caller does not
+// subscribe to (subscriptions are per-user views; unsubscribing removes
+// a show's episodes from your listings while the catalog keeps
+// everything). Restricted callers may get short pages that still carry
+// a cursor; the contract documents that.
 func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page) Page {
+	subs := l.newSubscriptionFilter(uc)
 	out := Page{Items: make([]ItemSummary, 0, len(p.Items))}
 	for _, it := range p.Items {
 		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
+			continue
+		}
+		if !subs.allowsItem(ctx, l, it) {
 			continue
 		}
 		out.Items = append(out.Items, summary(it))
@@ -101,10 +108,16 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 		}
 		return out
 	}
+	subs := l.newSubscriptionFilter(uc)
 	convItem := func(hits []read.SearchHit, prefix string) []SearchHit {
 		out := make([]SearchHit, 0, len(hits))
 		for _, h := range hits {
 			if !uc.AllLibraries && !l.itemVisible(ctx, uc, h.PID) {
+				continue
+			}
+			// Episode hits (title and transcript matches alike) scope to
+			// the caller's subscriptions, like every list surface.
+			if prefix == PrefixEpisode && !subs.allowsEpisode(ctx, l, h.PID) {
 				continue
 			}
 			out = append(out, SearchHit{

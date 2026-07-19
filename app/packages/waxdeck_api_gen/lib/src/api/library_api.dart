@@ -213,7 +213,7 @@ class LibraryApi {
   }
 
   /// Get artwork
-  /// Artwork as image bytes: the original at full size, or a square-fit thumbnail when &#x60;size&#x60; is given. Besides item PIDs this endpoint also accepts album (&#x60;al-&#x60;) and artist (&#x60;ar-&#x60;) PIDs, so search hits can render artwork directly. Items without any artwork in their fallback chain return 404. Responses carry a content-addressed &#x60;ETag&#x60;; revalidate with &#x60;If-None-Match&#x60; instead of refetching. 
+  /// Artwork as image bytes: the original at full size, or a square-fit thumbnail when &#x60;size&#x60; is given. Besides item PIDs this endpoint also accepts album (&#x60;al-&#x60;), artist (&#x60;ar-&#x60;), and podcast show (&#x60;pc-&#x60;) PIDs, so search hits and subscription lists can render artwork directly. Items without any artwork in their fallback chain return 404. Responses carry a content-addressed &#x60;ETag&#x60;; revalidate with &#x60;If-None-Match&#x60; instead of refetching. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

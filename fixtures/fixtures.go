@@ -96,9 +96,17 @@ type Spec struct {
 	// Container selects the file container; ContainerDefault picks the
 	// codec's native one.
 	Container Container
-	// Duration is the length of synthesized audio, capped at
+	// Duration is the length of the synthesized tone, capped at
 	// MaxDuration to keep fixtures tiny; 0 means 1 second.
 	Duration time.Duration
+	// LeadSilence prepends literal zero samples before the tone. Zero
+	// means none; the output is then byte-identical to a spec without
+	// the field. LeadSilence + Duration + TrailSilence must stay within
+	// MaxDuration.
+	LeadSilence time.Duration
+	// TrailSilence appends literal zero samples after the tone. Zero
+	// means none.
+	TrailSilence time.Duration
 	// SampleRate is in Hz; 0 means 44100 (48000 for Opus, which always
 	// runs at 48 kHz anyway).
 	SampleRate int
@@ -115,8 +123,9 @@ type Spec struct {
 	Chapters []Chapter
 }
 
-// MaxDuration bounds a Spec's synthesized audio. Fixtures exist to be
-// tiny; anything longer is a misuse this package refuses.
+// MaxDuration bounds a Spec's synthesized audio, silence included.
+// Fixtures exist to be tiny; anything longer is a misuse this package
+// refuses.
 const MaxDuration = 10 * time.Second
 
 // route describes how one codec+container pair is produced through
@@ -212,6 +221,12 @@ func (s Spec) validate() error {
 	if s.Duration <= 0 || s.Duration > MaxDuration {
 		return fmt.Errorf("fixtures: duration %v outside (0, %v]", s.Duration, MaxDuration)
 	}
+	if s.LeadSilence < 0 || s.TrailSilence < 0 {
+		return fmt.Errorf("fixtures: negative silence (lead %v, trail %v)", s.LeadSilence, s.TrailSilence)
+	}
+	if total := s.LeadSilence + s.Duration + s.TrailSilence; total > MaxDuration {
+		return fmt.Errorf("fixtures: total duration %v (silence included) exceeds %v", total, MaxDuration)
+	}
 	if s.SampleRate < 1 {
 		return fmt.Errorf("fixtures: sample rate %d must be positive", s.SampleRate)
 	}
@@ -239,8 +254,14 @@ func (s Spec) Filename() string {
 		if s.Corrupt != CorruptNone {
 			parts = append(parts, string(s.Corrupt))
 		}
+		parts = append(parts, fmt.Sprintf("%dms", s.Duration.Milliseconds()))
+		if s.LeadSilence > 0 {
+			parts = append(parts, fmt.Sprintf("lead%dms", s.LeadSilence.Milliseconds()))
+		}
+		if s.TrailSilence > 0 {
+			parts = append(parts, fmt.Sprintf("trail%dms", s.TrailSilence.Milliseconds()))
+		}
 		parts = append(parts,
-			fmt.Sprintf("%dms", s.Duration.Milliseconds()),
 			fmt.Sprintf("%dhz", s.SampleRate),
 			fmt.Sprintf("%dch", s.Channels))
 		base = strings.Join(parts, "-")

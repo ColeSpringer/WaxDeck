@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -22,6 +23,9 @@ import (
 	// containers with no zoneinfo on disk.
 	_ "time/tzdata"
 
+	"github.com/colespringer/waxbin/source"
+
+	"github.com/colespringer/waxdeck/server/internal/adapter/gpodder"
 	"github.com/colespringer/waxdeck/server/internal/adapter/subsonic"
 	"github.com/colespringer/waxdeck/server/internal/api"
 	"github.com/colespringer/waxdeck/server/internal/auth"
@@ -30,6 +34,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/events"
 	"github.com/colespringer/waxdeck/server/internal/service"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
+	"github.com/colespringer/waxdeck/server/internal/waxtapsource"
 	"github.com/colespringer/waxdeck/server/internal/web"
 )
 
@@ -54,6 +59,17 @@ func run() error {
 		scanStart  = flag.Bool("scan-on-start", envOr("WAXDECK_SCAN_ON_START", "true") == "true", "launch a library scan at startup")
 		cookieSec  = flag.Bool("cookie-secure", envOr("WAXDECK_COOKIE_SECURE", "false") == "true", "mark session cookies Secure (set whenever the origin is HTTPS)")
 		publicBase = flag.String("public-base", envOr("WAXDECK_PUBLIC_BASE", ""), "externally reachable base URL (needed for OIDC callbacks), e.g. https://wax.example.com")
+
+		podcastDir      = flag.String("podcast-dir", envOr("WAXDECK_PODCAST_DIR", ""), "episode download directory (its own library, never inside a library root; defaults to <data-dir>/podcasts, explicit empty via -podcast-dir=\"\" disables podcasts)")
+		podcastRoot     = flag.String("podcast-root-name", envOr("WAXDECK_PODCAST_ROOT_NAME", "podcasts"), "WaxFlow root name the podcast dir is mounted under")
+		feedRefreshMin  = flag.Int("feed-refresh-minutes", envIntOr("WAXDECK_FEED_REFRESH_MINUTES", 30), "minutes between scheduled feed refreshes")
+		retentionKeep   = flag.Int64("podcast-retention-default", envInt64Or("WAXDECK_PODCAST_RETENTION_DEFAULT", 0), "default keep-newest-N downloaded episodes for subscribers who leave retention unset (0 keeps all)")
+		allowPrivateNet = flag.Bool("allow-private-feed-hosts", envOr("WAXDECK_ALLOW_PRIVATE_FEED_HOSTS", "false") == "true", "allow feeds and enclosures on private addresses (LAN-hosted feeds)")
+
+		youtubeOn    = flag.Bool("youtube", envOr("WAXDECK_YOUTUBE", "false") == "true", "enable the YouTube acquisition bridge (channels and playlists as shows)")
+		sealURL      = flag.String("seal-url", envOr("WAXDECK_SEAL_URL", ""), "WaxSeal attestation sidecar base URL (optional; full-quality YouTube path)")
+		sealKey      = flag.String("seal-api-key", envOr("WAXDECK_SEAL_API_KEY", ""), "API key for the WaxSeal sidecar")
+		sponsorBlock = flag.String("youtube-sponsorblock", envOr("WAXDECK_YOUTUBE_SPONSORBLOCK", ""), "SponsorBlock categories to cut from acquired audio, comma separated (empty disables)")
 
 		oidcIssuer  = flag.String("oidc-issuer", envOr("WAXDECK_OIDC_ISSUER", ""), "OIDC issuer URL (empty disables single sign-on)")
 		oidcID      = flag.String("oidc-id", envOr("WAXDECK_OIDC_ID", "sso"), "OIDC provider id shown in start URLs")
@@ -103,17 +119,73 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// Catalog-held secrets (private-feed passwords) seal under their own
+	// subkey; the catalog binds each secret's key as AAD.
+	catalogCipher, err := auth.NewAADSealer(secret, "waxdeck-catalog-secret-v1")
+	if err != nil {
+		return err
+	}
 
 	svcRoots := make([]service.Root, len(roots))
 	for i, r := range roots {
 		svcRoots[i] = service.Root{Name: r.Name, Path: r.Path}
 	}
+	// Podcasts work out of the box: an unset dir lands beside the
+	// databases. Only an explicit -podcast-dir="" disables the surface
+	// (the flag default is empty so the env fallback stays expressible,
+	// hence the isSet probe rather than a non-empty flag default).
+	if *podcastDir == "" && !flagWasSet("podcast-dir") && os.Getenv("WAXDECK_PODCAST_DIR") == "" {
+		*podcastDir = filepath.Join(*dataDir, "podcasts")
+	}
+	if *podcastDir != "" {
+		abs, err := filepath.Abs(*podcastDir)
+		if err != nil {
+			return fmt.Errorf("bad podcast dir: %w", err)
+		}
+		*podcastDir = abs
+		if err := os.MkdirAll(abs, 0o755); err != nil {
+			return fmt.Errorf("creating podcast dir: %w", err)
+		}
+	}
+	var providers []source.Provider
+	if *youtubeOn {
+		if *podcastDir == "" {
+			return errors.New("WAXDECK_YOUTUBE requires WAXDECK_PODCAST_DIR (acquired audio lands in the podcast library)")
+		}
+		var categories []string
+		if strings.TrimSpace(*sponsorBlock) != "" {
+			for c := range strings.SplitSeq(*sponsorBlock, ",") {
+				categories = append(categories, strings.TrimSpace(c))
+			}
+		}
+		yt, err := waxtapsource.New(waxtapsource.Config{
+			WorkDir:        filepath.Join(*dataDir, "waxtap-work"),
+			SealBaseURL:    *sealURL,
+			SealAPIKey:     *sealKey,
+			SponsorBlock:   categories,
+			EmbedThumbnail: true,
+			EmbedMetadata:  true,
+			Logger:         log,
+		})
+		if err != nil {
+			return fmt.Errorf("youtube bridge: %w", err)
+		}
+		providers = append(providers, yt)
+		log.Info("youtube acquisition bridge enabled", "seal", *sealURL != "")
+	}
+
 	svc, err := service.Open(ctx, service.Config{
-		DataDir:     *dataDir,
-		Roots:       svcRoots,
-		ScanOnStart: *scanStart && len(roots) > 0,
-		Sealer:      sealer,
-		Logger:      log,
+		DataDir:               *dataDir,
+		Roots:                 svcRoots,
+		ScanOnStart:           *scanStart && len(roots) > 0,
+		Sealer:                sealer,
+		SecretCipher:          catalogCipher,
+		PodcastDir:            *podcastDir,
+		PodcastRootName:       *podcastRoot,
+		AllowPrivateFeedHosts: *allowPrivateNet,
+		DefaultRetentionKeep:  *retentionKeep,
+		SourceProviders:       providers,
+		Logger:                log,
 	}, store, group)
 	if err != nil {
 		return err
@@ -138,6 +210,12 @@ func run() error {
 		for i, r := range roots {
 			flowRoots[i] = flow.Root{Name: r.Name, Path: r.Path}
 		}
+		if *podcastDir != "" {
+			// The podcast dir is its own root pair: the catalog refuses a
+			// download dir inside a user root, and the sidecar streams
+			// episodes only from a root it mounts.
+			flowRoots = append(flowRoots, flow.Root{Name: *podcastRoot, Path: *podcastDir})
+		}
 		bridge, err = flow.New(ctx, flow.Config{
 			BaseURL:  *flowURL,
 			APIKey:   *flowAPIKey,
@@ -149,8 +227,79 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		svc.SetFlowJobs(bridge)
 	} else {
 		log.Warn("WAXDECK_FLOW_URL is not set; streaming is disabled")
+	}
+
+	// Podcast background work: the feed refresh scheduler, the retention
+	// sweeper, and the queue drainers. All are supervised ticker loops on
+	// the process context; each cycle is cheap when idle.
+	if *podcastDir != "" {
+		refreshEvery := time.Duration(*feedRefreshMin) * time.Minute
+		group.Go(ctx, "feed-refresh", func(ctx context.Context) error {
+			tick := time.NewTicker(time.Minute)
+			defer tick.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-tick.C:
+					svc.RefreshDueFeeds(ctx, refreshEvery)
+				}
+			}
+		})
+		group.Go(ctx, "retention-sweeper", func(ctx context.Context) error {
+			tick := time.NewTicker(time.Minute)
+			defer tick.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-tick.C:
+					svc.SweepRetention(ctx)
+				}
+			}
+		})
+		group.Go(ctx, "fetch-worker", func(ctx context.Context) error {
+			tick := time.NewTicker(5 * time.Second)
+			defer tick.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-tick.C:
+					for svc.DrainFetchQueue(ctx) {
+						if ctx.Err() != nil {
+							return nil
+						}
+					}
+				}
+			}
+		})
+	}
+
+	// The silence and loudness analysis worker serves audiobooks as
+	// much as podcasts (skip maps and voice-boost leveling), so it runs
+	// whenever the streaming sidecar does, independent of the podcast
+	// surface.
+	if bridge != nil {
+		group.Go(ctx, "analysis-worker", func(ctx context.Context) error {
+			tick := time.NewTicker(10 * time.Second)
+			defer tick.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-tick.C:
+					for svc.DrainAnalysisQueue(ctx) {
+						if ctx.Err() != nil {
+							return nil
+						}
+					}
+				}
+			}
+		})
 	}
 
 	sessions := auth.NewSessions(store)
@@ -230,6 +379,11 @@ func run() error {
 	// authenticated; third-party clients browse and stream while the
 	// first-party clients mature.
 	mux.Handle("/rest/", subsonic.New(svc, bridge, version))
+	// The gpodder.net-compatible sync surface (AntennaPod and friends):
+	// app passwords over Basic plus its own stateless session cookie.
+	gp := gpodder.New(svc, secret, log)
+	mux.Handle("/api/2/", gp)
+	mux.Handle("/subscriptions/", gp)
 	if bridge != nil {
 		mux.HandleFunc("/media/stream", bridge.ServeStream)
 	} else {
@@ -301,6 +455,36 @@ func parseRoots(s string) ([]root, error) {
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return def
+}
+
+// flagWasSet reports whether the named flag appeared on the command
+// line (distinguishing an explicit empty value from the default).
+func flagWasSet(name string) bool {
+	set := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			set = true
+		}
+	})
+	return set
+}
+
+func envIntOr(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func envInt64Or(key string, def int64) int64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return n
+		}
 	}
 	return def
 }

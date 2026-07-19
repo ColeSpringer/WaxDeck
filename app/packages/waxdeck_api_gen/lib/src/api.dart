@@ -11,8 +11,10 @@ import 'package:waxdeck_api_gen/src/auth/bearer_auth.dart';
 import 'package:waxdeck_api_gen/src/auth/oauth.dart';
 import 'package:waxdeck_api_gen/src/api/admin_api.dart';
 import 'package:waxdeck_api_gen/src/api/auth_api.dart';
+import 'package:waxdeck_api_gen/src/api/books_api.dart';
 import 'package:waxdeck_api_gen/src/api/library_api.dart';
 import 'package:waxdeck_api_gen/src/api/playback_api.dart';
+import 'package:waxdeck_api_gen/src/api/podcasts_api.dart';
 import 'package:waxdeck_api_gen/src/api/sync_api.dart';
 import 'package:waxdeck_api_gen/src/api/system_api.dart';
 import 'package:waxdeck_api_gen/src/api/users_api.dart';
@@ -83,6 +85,12 @@ class WaxdeckApiGen {
     return AuthApi(dio, serializers);
   }
 
+  /// Get BooksApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  BooksApi getBooksApi() {
+    return BooksApi(dio, serializers);
+  }
+
   /// Get LibraryApi instance, base route and serializer can be overridden by a given but be careful,
   /// by doing that all interceptors will not be executed
   LibraryApi getLibraryApi() {
@@ -93,6 +101,12 @@ class WaxdeckApiGen {
   /// by doing that all interceptors will not be executed
   PlaybackApi getPlaybackApi() {
     return PlaybackApi(dio, serializers);
+  }
+
+  /// Get PodcastsApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  PodcastsApi getPodcastsApi() {
+    return PodcastsApi(dio, serializers);
   }
 
   /// Get SyncApi instance, base route and serializer can be overridden by a given but be careful,

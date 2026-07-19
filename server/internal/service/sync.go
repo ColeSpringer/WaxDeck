@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,11 +24,16 @@ import (
 // history; catalog cursors additionally bind the user's grant epoch, so
 // a visibility change forces a clean re-mirror.
 
-// CatalogSyncEntry is one mirror instruction. Item is set for upserts.
+// CatalogSyncEntry is one mirror instruction. Item is set for item
+// upserts (Episode rides along for podcast episodes); Show is set for
+// show upserts, which travel as their own operation because shows are
+// catalog entities but not items.
 type CatalogSyncEntry struct {
-	Op   string
-	PID  string
-	Item *ItemSummary
+	Op      string
+	PID     string
+	Item    *ItemSummary
+	Episode *EpisodeSummary
+	Show    *PodcastShow
 }
 
 // CatalogDelta is one page of catalog changes.
@@ -46,10 +52,12 @@ type CatalogSnapshotPage struct {
 
 // ServerSyncEvent is one user-scoped state change, hydrated fresh.
 type ServerSyncEvent struct {
-	Kind      string
-	PID       string
-	PlayState *PlayState
-	Prefs     *Prefs
+	Kind         string
+	PID          string
+	PlayState    *PlayState
+	Prefs        *Prefs
+	Subscription *Subscription
+	BookSettings *BookSettings
 }
 
 // ServerDelta is one page of the caller's server-state changes.
@@ -61,8 +69,10 @@ type ServerDelta struct {
 
 // Server event kinds on the event_log stream.
 const (
-	eventPlayState = "play-state"
-	eventPrefs     = "prefs"
+	eventPlayState    = "play-state"
+	eventPrefs        = "prefs"
+	eventSubscription = "subscription"
+	eventBookSettings = "book-settings"
 )
 
 // ErrSyncReset marks a cursor the stream can no longer serve
@@ -89,7 +99,8 @@ const (
 	syncKeyCatalogGen    = "catalog_gen"
 	syncKeyCatalogCursor = "catalog_cursor"
 	syncKeyServerGen     = "server_gen"
-	syncKeyGrantEpoch    = "grant_epoch:" // + user id
+	syncKeyGrantEpoch    = "grant_epoch:"  // + user id
+	syncKeyShowPrivate   = "show_private:" // + bare show pid; sticky
 )
 
 // initSync loads or establishes the stream identities. The catalog
@@ -216,7 +227,9 @@ func (l *Library) advanceFeed(ch model.Change) {
 		l.feed.tailTS = ch.TS
 	}
 	l.feed.mu.Unlock()
-	if ch.EntityType == "item" {
+	// Items feed summary mirrors; podcast rows feed show lists. Both
+	// travel the catalog stream (a show is not per-user state).
+	if ch.EntityType == "item" || ch.EntityType == "podcast" {
 		select {
 		case l.catalogWake <- struct{}{}:
 		default:
@@ -302,36 +315,56 @@ func decodeCatalogCursor(s string) (gen string, epoch, seq int64, ok bool) {
 	return parts[1], epoch, seq, true
 }
 
-// encodeSnapshotCursor wraps a snapshot page cursor: the change cursor
-// frozen before the first page's read rides inside every keyset cursor,
-// so later pages repeat it instead of re-reading a moving tail (a
-// mid-snapshot edit must fall inside the first delta, not vanish
-// between two pages' cursors).
+// encodeSnapshotCursor wraps an item-phase snapshot page cursor: the
+// change cursor frozen before the first page's read rides inside every
+// keyset cursor, so later pages repeat it instead of re-reading a
+// moving tail (a mid-snapshot edit must fall inside the first delta,
+// not vanish between two pages' cursors).
 func encodeSnapshotCursor(since string, next read.Cursor) string {
 	raw := "n1|" + since + "|" + string(next)
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
-func decodeSnapshotCursor(s string) (since string, next read.Cursor, ok bool) {
+// encodeShowSnapshotCursor wraps a show-phase snapshot cursor carrying
+// the same frozen change cursor plus the last served bare show pid.
+func encodeShowSnapshotCursor(since, afterShow string) string {
+	raw := "n1s|" + since + "|" + afterShow
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+// decodeSnapshotCursor reads either snapshot phase's cursor. showsDone
+// reports the item phase; afterShow positions the show phase.
+func decodeSnapshotCursor(s string) (since string, next read.Cursor, afterShow string, showsDone, ok bool) {
 	raw, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
-		return "", "", false
+		return "", "", "", false, false
+	}
+	if rest, found := strings.CutPrefix(string(raw), "n1s|"); found {
+		i := strings.IndexByte(rest, '|')
+		if i < 0 {
+			return "", "", "", false, false
+		}
+		since, afterShow = rest[:i], rest[i+1:]
+		if _, _, _, valid := decodeCatalogCursor(since); !valid {
+			return "", "", "", false, false
+		}
+		return since, "", afterShow, false, true
 	}
 	rest, found := strings.CutPrefix(string(raw), "n1|")
 	if !found {
-		return "", "", false
+		return "", "", "", false, false
 	}
 	// The frozen cursor is base64url and cannot contain the separator;
 	// the keyset remainder may contain anything.
 	i := strings.IndexByte(rest, '|')
 	if i < 0 {
-		return "", "", false
+		return "", "", "", false, false
 	}
 	since, next = rest[:i], read.Cursor(rest[i+1:])
 	if _, _, _, valid := decodeCatalogCursor(since); !valid {
-		return "", "", false
+		return "", "", "", false, false
 	}
-	return since, next, true
+	return since, next, "", true, true
 }
 
 func encodeServerCursor(gen string, id int64) string {
@@ -392,9 +425,13 @@ func (l *Library) bumpGrantEpoch(ctx context.Context, userID string) {
 // change cursor is captured once, before the first page's read, and
 // threaded through the page cursor so every page repeats it per the
 // contract; changes landing mid-snapshot fall inside the first delta.
+// The snapshot runs in two phases behind one opaque cursor: podcast
+// shows first (their own upsert operation), then items.
 func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor string, limit int) (CatalogSnapshotPage, error) {
 	var since string
 	inner := read.Cursor("")
+	showsDone := false
+	afterShow := ""
 	if cursor == "" {
 		epoch, err := l.grantEpoch(ctx, uc.ID)
 		if err != nil {
@@ -406,9 +443,28 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 		since = encodeCatalogCursor(gen, epoch, tail)
 	} else {
 		var ok bool
-		since, inner, ok = decodeSnapshotCursor(cursor)
+		since, inner, afterShow, showsDone, ok = decodeSnapshotCursor(cursor)
 		if !ok {
 			return CatalogSnapshotPage{}, errInvalid("malformed snapshot cursor")
+		}
+	}
+
+	out := CatalogSnapshotPage{NextSince: since}
+	if !showsDone {
+		entries, nextShow, err := l.snapshotShows(ctx, uc, afterShow, limit)
+		if err != nil {
+			return CatalogSnapshotPage{}, err
+		}
+		out.Entries = entries
+		if nextShow != "" {
+			out.NextCursor = encodeShowSnapshotCursor(since, nextShow)
+			return out, nil
+		}
+		// Shows fit in this page's remainder or were empty; fall through
+		// to items only on a fresh page so entry counts stay bounded.
+		if len(out.Entries) > 0 {
+			out.NextCursor = encodeSnapshotCursor(since, "")
+			return out, nil
 		}
 	}
 
@@ -417,21 +473,85 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 	if err != nil {
 		return CatalogSnapshotPage{}, classify(err)
 	}
-	out := CatalogSnapshotPage{
-		Entries:   make([]CatalogSyncEntry, 0, len(page.Items)),
-		NextSince: since,
-	}
+	subs := l.newSubscriptionFilter(uc)
 	for _, it := range page.Items {
 		if !l.viewVisible(ctx, uc, it) {
 			continue
 		}
-		s := summary(it)
-		out.Entries = append(out.Entries, CatalogSyncEntry{Op: "upsert", PID: s.PID, Item: &s})
+		if entry, ok := l.itemSyncEntry(ctx, uc, subs, it); ok {
+			out.Entries = append(out.Entries, entry)
+		}
 	}
 	if page.HasMore {
 		out.NextCursor = encodeSnapshotCursor(since, page.Next)
 	}
 	return out, nil
+}
+
+// snapshotShows serves one page of the snapshot's show phase, ordered
+// by bare pid: the caller's own subscriptions, since subscriptions are
+// per-user views over the shared catalog. Returns the page and the
+// last pid when more remain.
+func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow string, limit int) ([]CatalogSyncEntry, string, error) {
+	if !l.podcastsVisible(ctx, uc) {
+		return nil, "", nil
+	}
+	set, err := l.subscribedShowSet(ctx, uc)
+	if err != nil {
+		return nil, "", &Error{Kind: KindInternal, Err: err}
+	}
+	if len(set) == 0 {
+		return nil, "", nil
+	}
+	pods, err := l.lib.Podcasts().List(ctx)
+	if err != nil {
+		// A catalog without the podcast subsystem configured has no
+		// shows to mirror.
+		return nil, "", nil
+	}
+	sort.Slice(pods, func(i, j int) bool { return pods[i].PID < pods[j].PID })
+	var entries []CatalogSyncEntry
+	last := ""
+	for _, pod := range pods {
+		if !set[string(pod.PID)] {
+			continue
+		}
+		if string(pod.PID) <= afterShow {
+			continue
+		}
+		if len(entries) == limit {
+			return entries, last, nil
+		}
+		show, err := l.showDTO(ctx, pod, false)
+		if err != nil {
+			return nil, "", err
+		}
+		entries = append(entries, CatalogSyncEntry{Op: "upsert-show", PID: show.PID, Show: &show})
+		last = string(pod.PID)
+	}
+	return entries, "", nil
+}
+
+// itemSyncEntry builds the upsert entry for one item view, attaching
+// the episode summary for podcast episodes. Episodes of shows the
+// caller does not subscribe to are excluded (ok false): skipping is
+// sound because the only transition that carries a mirrored episode
+// out of the caller's scope is their own unsubscribe, which bumps
+// their grant epoch and forces a clean re-mirror. One episode lookup
+// serves both the membership check and the payload; the generic
+// allowsItem path would fetch it twice per row on the hot sync path.
+func (l *Library) itemSyncEntry(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, it *model.ItemView) (CatalogSyncEntry, bool) {
+	s := summary(it)
+	entry := CatalogSyncEntry{Op: "upsert", PID: s.PID, Item: &s}
+	if it.Kind == model.KindEpisode {
+		det, err := l.lib.Podcasts().Episode(ctx, it.PID)
+		if err != nil || !subs.allowsShow(ctx, l, string(det.Episode.PodcastPID)) {
+			return CatalogSyncEntry{}, false
+		}
+		ep := l.episodeSummary(ctx, det.Episode)
+		entry.Episode = &ep
+	}
+	return entry, true
 }
 
 // SyncCatalogDelta serves the changes after the given cursor, coalesced
@@ -454,11 +574,17 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 		return CatalogDelta{}, ErrSyncReset
 	}
 
-	// Collect up to limit distinct items' latest ops, tracking the last
-	// consumed seq. The facade caps each pull at 1000 rows; filtered
-	// rows (user state, files, entities) advance the cursor for free.
-	ops := make(map[model.PID]string)
-	order := make([]model.PID, 0, limit)
+	// Collect up to limit distinct entities' latest ops, tracking the
+	// last consumed seq. The facade caps each pull at 1000 rows;
+	// filtered rows (user state, files, entities the mirror cannot act
+	// on) advance the cursor for free. Items and podcast shows both
+	// count against the entry budget.
+	type deltaKey struct {
+		kind string
+		pid  model.PID
+	}
+	ops := make(map[deltaKey]string)
+	order := make([]deltaKey, 0, limit)
 	budgetHit := false
 	for !budgetHit {
 		rows, err := l.lib.Changes(ctx, seq)
@@ -469,18 +595,19 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			break
 		}
 		for _, ch := range rows {
-			if ch.EntityType != "item" {
+			if ch.EntityType != "item" && ch.EntityType != "podcast" {
 				seq = ch.Seq
 				continue
 			}
-			if _, seen := ops[ch.EntityPID]; !seen {
+			key := deltaKey{kind: ch.EntityType, pid: ch.EntityPID}
+			if _, seen := ops[key]; !seen {
 				if len(order) == limit {
 					budgetHit = true
 					break
 				}
-				order = append(order, ch.EntityPID)
+				order = append(order, key)
 			}
-			ops[ch.EntityPID] = string(ch.Op)
+			ops[key] = string(ch.Op)
 			seq = ch.Seq
 		}
 	}
@@ -493,17 +620,49 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 	if len(order) == 0 {
 		return out, nil
 	}
-	views, err := l.lib.GetMany(ctx, order)
-	if err != nil {
-		return CatalogDelta{}, classify(err)
+	itemPIDs := make([]model.PID, 0, len(order))
+	for _, key := range order {
+		if key.kind == "item" {
+			itemPIDs = append(itemPIDs, key.pid)
+		}
 	}
-	byPID := make(map[model.PID]*model.ItemView, len(views))
-	for _, v := range views {
-		byPID[v.PID] = v
+	byPID := make(map[model.PID]*model.ItemView, len(itemPIDs))
+	if len(itemPIDs) > 0 {
+		views, err := l.lib.GetMany(ctx, itemPIDs)
+		if err != nil {
+			return CatalogDelta{}, classify(err)
+		}
+		for _, v := range views {
+			byPID[v.PID] = v
+		}
 	}
-	for _, pid := range order {
+	showsVisible := l.podcastsVisible(ctx, uc)
+	subs := l.newSubscriptionFilter(uc)
+	for _, key := range order {
+		if key.kind == "podcast" {
+			if !showsVisible {
+				continue
+			}
+			pod, err := l.lib.Podcasts().Get(ctx, key.pid)
+			if ops[key] == string(model.OpDelete) || err != nil {
+				out.Entries = append(out.Entries, CatalogSyncEntry{Op: "delete", PID: apiPID(PrefixPodcast, key.pid)})
+				continue
+			}
+			// Show rows fan out only to their subscribers; everyone else
+			// never mirrored the show, so skipping is a no-op for them.
+			if !subs.allowsShow(ctx, l, string(pod.PID)) {
+				continue
+			}
+			show, err := l.showDTO(ctx, pod, false)
+			if err != nil {
+				return CatalogDelta{}, err
+			}
+			out.Entries = append(out.Entries, CatalogSyncEntry{Op: "upsert-show", PID: show.PID, Show: &show})
+			continue
+		}
+		pid := key.pid
 		it := byPID[pid]
-		if ops[pid] == string(model.OpDelete) || it == nil {
+		if ops[key] == string(model.OpDelete) || it == nil {
 			// The kind is unknowable once the item is gone; tombstones
 			// carry the track prefix and mirrors match on the ULID.
 			out.Entries = append(out.Entries, CatalogSyncEntry{Op: "delete", PID: apiPID(PrefixTrack, pid)})
@@ -518,8 +677,9 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			out.Entries = append(out.Entries, CatalogSyncEntry{Op: "delete", PID: apiPID(PrefixTrack, pid)})
 			continue
 		}
-		s := summary(it)
-		out.Entries = append(out.Entries, CatalogSyncEntry{Op: "upsert", PID: s.PID, Item: &s})
+		if entry, ok := l.itemSyncEntry(ctx, uc, subs, it); ok {
+			out.Entries = append(out.Entries, entry)
+		}
 	}
 	return out, nil
 }
@@ -588,6 +748,8 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 	out := ServerDelta{NextSince: encodeServerCursor(l.serverGen, next), More: more}
 
 	seenState := make(map[string]bool)
+	seenSub := make(map[string]bool)
+	seenBook := make(map[string]bool)
 	seenPrefs := false
 	for _, e := range events {
 		switch e.Kind {
@@ -614,6 +776,37 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 				return ServerDelta{}, err
 			}
 			out.Events = append(out.Events, ServerSyncEvent{Kind: eventPrefs, Prefs: &p})
+		case eventSubscription:
+			if seenSub[e.ItemPID] {
+				continue
+			}
+			seenSub[e.ItemPID] = true
+			ev := ServerSyncEvent{Kind: eventSubscription, PID: apiPID(PrefixPodcast, model.PID(e.ItemPID))}
+			// Hydrate fresh: subscribed carries the current subscription,
+			// unsubscribed carries none (the removal is the payload).
+			if pod, err := l.lib.Podcasts().Get(ctx, model.PID(e.ItemPID)); err == nil {
+				if sub, err := l.subscriptionFor(ctx, uc, pod); err == nil {
+					ev.Subscription = &sub
+				} else if KindOf(err) != KindNotFound {
+					l.log.Warn("hydrating subscription event", "show", e.ItemPID, "err", err)
+				}
+			} else if KindOf(classify(err)) != KindNotFound {
+				l.log.Warn("hydrating subscription event show", "show", e.ItemPID, "err", err)
+			}
+			out.Events = append(out.Events, ev)
+		case eventBookSettings:
+			if seenBook[e.ItemPID] {
+				continue
+			}
+			seenBook[e.ItemPID] = true
+			row, err := l.db.BookSettingsFor(ctx, uc.ID, e.ItemPID)
+			if err != nil {
+				return ServerDelta{}, &Error{Kind: KindInternal, Err: err}
+			}
+			bs := bookSettingsDTO(row)
+			out.Events = append(out.Events, ServerSyncEvent{
+				Kind: eventBookSettings, PID: apiPID(PrefixBook, model.PID(e.ItemPID)), BookSettings: &bs,
+			})
 		}
 	}
 	return out, nil

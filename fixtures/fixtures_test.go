@@ -183,6 +183,68 @@ func TestDeterministic(t *testing.T) {
 	}
 }
 
+func TestSilencePadding(t *testing.T) {
+	spec := fixtures.Spec{
+		Codec:        fixtures.CodecFLAC,
+		Container:    fixtures.ContainerFLAC,
+		Duration:     time.Second,
+		LeadSilence:  2 * time.Second,
+		TrailSilence: time.Second,
+		SampleRate:   44100,
+		Channels:     2,
+	}
+	dir := t.TempDir()
+	paths, err := fixtures.Generate(dir, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	med := openFixture(t, paths[0])
+	frames, err := decodeFrames(med)
+	if err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	// FLAC is lossless: the decoded length is exactly the padded total.
+	total := spec.LeadSilence + spec.Duration + spec.TrailSilence
+	want := int64(total * time.Duration(spec.SampleRate) / time.Second)
+	if frames != want {
+		t.Errorf("decoded %d frames, want %d (2s lead + 1s tone + 1s trail)", frames, want)
+	}
+}
+
+func TestSilencePaddingCapped(t *testing.T) {
+	spec := fixtures.Spec{
+		Codec:        fixtures.CodecFLAC,
+		Duration:     8 * time.Second,
+		LeadSilence:  2 * time.Second,
+		TrailSilence: time.Second,
+	}
+	if _, err := fixtures.Generate(t.TempDir(), spec); err == nil {
+		t.Error("Generate accepted 11s of padded audio over the 10s cap")
+	}
+}
+
+func TestSilenceZeroBytesIdentical(t *testing.T) {
+	// A spec with explicit zero silence must produce byte-identical
+	// output to one that never mentions the fields.
+	plain := fixtures.Spec{Name: "same", Codec: fixtures.CodecFLAC, Duration: time.Second}
+	padded := plain
+	padded.LeadSilence, padded.TrailSilence = 0, 0
+	dirA, dirB := t.TempDir(), t.TempDir()
+	pa, err := fixtures.Generate(dirA, plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pb, err := fixtures.Generate(dirB, padded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := os.ReadFile(pa[0])
+	b, _ := os.ReadFile(pb[0])
+	if sha256.Sum256(a) != sha256.Sum256(b) {
+		t.Error("zero-valued silence fields changed the output bytes")
+	}
+}
+
 func TestCorrupt(t *testing.T) {
 	base := fixtures.Spec{Codec: fixtures.CodecFLAC, Duration: time.Second, SampleRate: 44100, Channels: 2}
 	truncated, garbage := base, base
@@ -230,6 +292,8 @@ func TestFilenames(t *testing.T) {
 		{fixtures.Spec{Codec: fixtures.CodecAAC, Container: fixtures.ContainerMP4}, "aac-mp4-1000ms-44100hz-2ch.m4a"},
 		{fixtures.Spec{Codec: fixtures.CodecFLAC, Corrupt: fixtures.CorruptGarbage}, "flac-garbage-1000ms-44100hz-2ch.flac"},
 		{fixtures.Spec{Name: "custom", Codec: fixtures.CodecMP3}, "custom.mp3"},
+		{fixtures.Spec{Codec: fixtures.CodecMP3, Duration: 3 * time.Second, LeadSilence: 1500 * time.Millisecond, TrailSilence: time.Second},
+			"mp3-3000ms-lead1500ms-trail1000ms-44100hz-2ch.mp3"},
 	}
 	for _, c := range cases {
 		if got := c.spec.Filename(); got != c.want {

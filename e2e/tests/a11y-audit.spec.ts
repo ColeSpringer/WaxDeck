@@ -44,17 +44,25 @@ test('login, browse, and play are completable through roles and names', async ({
   // asserted above; its flip cannot be pinned against the two-second
   // fixture, which completes before any assertion lands.) Semantics
   // nodes over canvas fail Playwright's stability heuristics, so the
-  // click is forced; the DOM click still lands.
-  await page
-    .getByRole('button', { name: 'Star', exact: true })
-    .click({ force: true });
-  await expect(
-    page.getByRole('button', { name: 'Unstar', exact: true }),
-  ).toBeVisible({ timeout: 15_000 });
-  await page
-    .getByRole('button', { name: 'Unstar', exact: true })
-    .click({ force: true });
-  await expect(
-    page.getByRole('button', { name: 'Star', exact: true }),
-  ).toBeVisible({ timeout: 15_000 });
+  // click is forced; and because a forced click uses coordinates that
+  // an animating player can shift under it, each activation retries as
+  // a unit until the name flips. A control whose activation were
+  // genuinely broken would fail every retry, so the pinned property
+  // survives.
+  await expect(async () => {
+    await page
+      .getByRole('button', { name: 'Star', exact: true })
+      .click({ force: true });
+    await page
+      .getByRole('button', { name: 'Unstar', exact: true })
+      .waitFor({ timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
+  await expect(async () => {
+    await page
+      .getByRole('button', { name: 'Unstar', exact: true })
+      .click({ force: true });
+    await page
+      .getByRole('button', { name: 'Star', exact: true })
+      .waitFor({ timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
 });

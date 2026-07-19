@@ -26,10 +26,12 @@ class FakeEngine implements AudioEnginePort {
   final _playings = StreamController<bool>.broadcast();
   final _states = StreamController<EngineProcessingState>.broadcast();
   final _completions = StreamController<void>.broadcast();
+  final _speeds = StreamController<double>.broadcast();
 
   Duration _position = Duration.zero;
   Duration? _duration;
   bool _playing = false;
+  double _speed = 1.0;
   EngineProcessingState _state = EngineProcessingState.idle;
 
   @override
@@ -58,6 +60,18 @@ class FakeEngine implements AudioEnginePort {
 
   @override
   Stream<void> get completed => _completions.stream;
+
+  @override
+  double get speed => _speed;
+
+  @override
+  Stream<double> get speedStream => _speeds.stream;
+
+  @override
+  Future<void> setSpeed(double speed) async {
+    _speed = speed;
+    if (!_speeds.isClosed) _speeds.add(speed);
+  }
 
   @override
   Future<void> load(
@@ -115,17 +129,20 @@ class FakeEngine implements AudioEnginePort {
     unawaited(_playings.close());
     unawaited(_states.close());
     unawaited(_completions.close());
+    unawaited(_speeds.close());
   }
 
-  /// Advances the manual clock by [amount] of media time.
+  /// Advances the manual clock by [amount] of wall time.
   ///
-  /// Does nothing while paused, exactly like a real clock. Reaching the end
-  /// of the media fires [completed] and leaves the engine in the completed
-  /// state with playback stopped.
+  /// Media time advances proportionally to the playback speed: at 2.0x,
+  /// one second of wall time covers two seconds of media, exactly like a
+  /// real engine. Does nothing while paused. Reaching the end of the media
+  /// fires [completed] and leaves the engine in the completed state with
+  /// playback stopped.
   void advance(Duration amount) {
     if (!_playing || _state != EngineProcessingState.ready) return;
     final end = _duration;
-    final target = _position + amount;
+    final target = _position + amount * _speed;
     if (end != null && target >= end) {
       _setPosition(end);
       _setPlaying(false);

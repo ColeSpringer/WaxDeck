@@ -308,6 +308,10 @@ class PlayInfo {
     required this.durationMs,
     required this.seekable,
     required this.expiresAt,
+    this.partIndex,
+    this.partCount,
+    this.partStartMs,
+    this.voiceBoost = false,
   });
 
   final String pid;
@@ -318,12 +322,30 @@ class PlayInfo {
   final String url;
 
   final String mimeType;
+
+  /// Duration of the served stream: for a multi-file audiobook this is
+  /// the resolved part's duration, not the book total.
   final int durationMs;
   final bool seekable;
 
   /// When the embedded media token stops being accepted; re-request
   /// play-info after this instant.
   final DateTime expiresAt;
+
+  /// Zero-based index of the resolved part of a multi-file audiobook;
+  /// null for single-file items.
+  final int? partIndex;
+
+  /// Total number of parts of a multi-file audiobook; null for
+  /// single-file items.
+  final int? partCount;
+
+  /// Book-timeline millisecond where the resolved part begins; null for
+  /// single-file items.
+  final int? partStartMs;
+
+  /// Whether server-side voice boost is actually applied to the stream.
+  final bool voiceBoost;
 }
 
 /// The calling user's playback state for one item.
@@ -459,12 +481,25 @@ class SearchResults {
 /// ULID; the prefix is not significant once the item is gone, so
 /// mirrors match deletes on the ULID part.
 class CatalogSyncEntry {
-  const CatalogSyncEntry({required this.op, required this.pid, this.item});
+  const CatalogSyncEntry({
+    required this.op,
+    required this.pid,
+    this.item,
+    this.episode,
+    this.show,
+  });
 
-  /// `upsert` or `delete`. Entries with an unrecognized op are dropped.
+  /// `upsert`, `upsert-show`, or `delete`. Entries with an unrecognized
+  /// op are dropped.
   final String op;
   final String pid;
   final ItemSummary? item;
+
+  /// Episode payload accompanying podcast-episode upserts, when present.
+  final EpisodeSummary? episode;
+
+  /// Show payload of an `upsert-show` entry, when present.
+  final PodcastShow? show;
 }
 
 /// One page of catalog sync entries (snapshot or delta).
@@ -496,14 +531,18 @@ class ServerSyncEvent {
     this.pid,
     this.playState,
     this.prefs,
+    this.subscription,
+    this.bookSettings,
   });
 
-  /// `play-state` or `prefs`; events with an unrecognized kind are
-  /// skipped.
+  /// `play-state`, `prefs`, `subscription`, or `book-settings`; events
+  /// with an unrecognized kind are skipped.
   final String kind;
   final String? pid;
   final PlayState? playState;
   final Prefs? prefs;
+  final Subscription? subscription;
+  final BookSettings? bookSettings;
 }
 
 /// One page of the caller's server-side state changes.
@@ -595,4 +634,349 @@ class AppPasswordCreated extends AppPassword {
   });
 
   final String secret;
+}
+
+/// One podcast show as cataloged on the server.
+class PodcastShow {
+  const PodcastShow({
+    required this.pid,
+    required this.title,
+    this.author,
+    this.descriptionHtml,
+    this.feedUrl,
+    this.link,
+    required this.sourceType,
+    this.artUrl,
+    this.episodeCount,
+    this.lastPublishedAt,
+    this.refreshDisabled = false,
+  });
+
+  final String pid;
+  final String title;
+  final String? author;
+
+  /// Show description as sanitized HTML (server-side allowlist).
+  final String? descriptionHtml;
+  final String? feedUrl;
+  final String? link;
+
+  /// Where the show comes from: `rss` or `youtube`.
+  final String sourceType;
+
+  /// Artwork URL, already resolved against the client base URL.
+  final String? artUrl;
+  final int? episodeCount;
+  final DateTime? lastPublishedAt;
+
+  /// True when scheduled refresh was auto-disabled after repeated
+  /// failures; a successful manual refresh re-enables it.
+  final bool refreshDisabled;
+}
+
+/// The caller's per-subscription settings. The PUT endpoint replaces the
+/// whole document, so senders start from the stored value.
+class SubscriptionSettings {
+  const SubscriptionSettings({
+    this.retentionKeep,
+    this.autoDownload = false,
+    this.folder,
+    this.private = false,
+    this.speed,
+    this.trimSilence,
+    this.voiceBoost,
+    this.skipIntroSeconds,
+    this.skipOutroSeconds,
+  });
+
+  /// Episodes to keep on the server; null means the server default and
+  /// 0 means keep all.
+  final int? retentionKeep;
+  final bool autoDownload;
+  final String? folder;
+  final bool private;
+
+  /// Remembered playback speed for this show; null means the default.
+  final double? speed;
+  final bool? trimSilence;
+  final bool? voiceBoost;
+  final int? skipIntroSeconds;
+  final int? skipOutroSeconds;
+}
+
+/// One of the caller's podcast subscriptions.
+class Subscription {
+  const Subscription({
+    required this.show,
+    required this.settings,
+    required this.subscribedAt,
+  });
+
+  final PodcastShow show;
+  final SubscriptionSettings settings;
+  final DateTime subscribedAt;
+}
+
+/// Show detail with the caller's subscription state.
+class PodcastDetail {
+  const PodcastDetail({
+    required this.show,
+    required this.subscribed,
+    this.settings,
+  });
+
+  final PodcastShow show;
+  final bool subscribed;
+
+  /// The caller's settings, present only when subscribed.
+  final SubscriptionSettings? settings;
+}
+
+/// One keyset-paginated page of subscriptions.
+class SubscriptionPage {
+  const SubscriptionPage({required this.items, this.nextCursor});
+
+  final List<Subscription> items;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// Compact episode representation used by list endpoints.
+class EpisodeSummary extends ItemSummary {
+  const EpisodeSummary({
+    required super.pid,
+    required super.mediaType,
+    required super.title,
+    required super.durationMs,
+    super.artist,
+    super.album,
+    super.artUrl,
+    required this.showPid,
+    this.season,
+    this.episodeNumber,
+    this.episodeType,
+    required this.publishedAt,
+    required this.downloaded,
+    this.fetchState,
+    this.fetchError,
+    this.explicit = false,
+    this.hasTranscript = false,
+  });
+
+  /// The show this episode belongs to.
+  final String showPid;
+  final int? season;
+  final int? episodeNumber;
+
+  /// Feed-declared type (`full`, `trailer`, `bonus`); open set, treat
+  /// unknown values like `full`.
+  final String? episodeType;
+  final DateTime publishedAt;
+
+  /// Whether the audio is on the server; play-info for a not-yet-fetched
+  /// episode answers `conflict`.
+  final bool downloaded;
+
+  /// `queued` or `failed` while a server-side fetch is pending or after
+  /// one failed; null otherwise. Open set, treat unknown as `queued`.
+  final String? fetchState;
+  final String? fetchError;
+  final bool explicit;
+  final bool hasTranscript;
+}
+
+/// One keyset-paginated page of episodes.
+class EpisodePage {
+  const EpisodePage({required this.items, this.nextCursor});
+
+  final List<EpisodeSummary> items;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// Full detail for one episode.
+class EpisodeDetail extends EpisodeSummary {
+  const EpisodeDetail({
+    required super.pid,
+    required super.mediaType,
+    required super.title,
+    required super.durationMs,
+    super.artist,
+    super.album,
+    super.artUrl,
+    required super.showPid,
+    super.season,
+    super.episodeNumber,
+    super.episodeType,
+    required super.publishedAt,
+    required super.downloaded,
+    super.fetchState,
+    super.fetchError,
+    super.explicit,
+    super.hasTranscript,
+    this.descriptionHtml,
+    this.link,
+    this.chapters = const [],
+  });
+
+  /// Show notes as sanitized HTML (server-side allowlist).
+  final String? descriptionHtml;
+  final String? link;
+  final List<ChapterMark> chapters;
+}
+
+/// One chapter mark, ordered by [startMs].
+class ChapterMark {
+  const ChapterMark({
+    required this.index,
+    this.title,
+    required this.startMs,
+    this.endMs,
+  });
+
+  final int index;
+  final String? title;
+  final int startMs;
+  final int? endMs;
+}
+
+/// One time-coded transcript cue.
+class TranscriptCue {
+  const TranscriptCue({
+    required this.startMs,
+    this.endMs,
+    required this.text,
+    this.speaker,
+  });
+
+  final int startMs;
+  final int? endMs;
+  final String text;
+  final String? speaker;
+}
+
+/// An episode's transcript as time-coded cues.
+class Transcript {
+  const Transcript({required this.format, required this.cues});
+
+  final String format;
+  final List<TranscriptCue> cues;
+}
+
+/// One backing file of a multi-file audiobook, in reading order.
+class BookPart {
+  const BookPart({
+    required this.index,
+    required this.startMs,
+    required this.durationMs,
+    this.displayName,
+  });
+
+  final int index;
+
+  /// Book-timeline millisecond where this part begins.
+  final int startMs;
+  final int durationMs;
+  final String? displayName;
+}
+
+/// The caller's per-book playback settings. The PUT endpoint replaces
+/// the whole document.
+class BookSettings {
+  const BookSettings({this.speed, this.voiceBoost, this.trimSilence});
+
+  final double? speed;
+  final bool? voiceBoost;
+  final bool? trimSilence;
+}
+
+/// Full audiobook detail. Positions are book-timeline milliseconds
+/// spanning all parts.
+class BookDetail {
+  const BookDetail({
+    required this.pid,
+    required this.title,
+    this.subtitle,
+    this.authors = const [],
+    this.narrators = const [],
+    this.series,
+    this.seriesSequence,
+    this.publisher,
+    this.asin,
+    this.isbn,
+    this.edition,
+    this.abridged,
+    this.descriptionHtml,
+    required this.durationMs,
+    this.artUrl,
+    this.chapters = const [],
+    this.parts = const [],
+    this.settings,
+  });
+
+  final String pid;
+  final String title;
+  final String? subtitle;
+  final List<String> authors;
+  final List<String> narrators;
+  final String? series;
+  final String? seriesSequence;
+  final String? publisher;
+  final String? asin;
+  final String? isbn;
+  final String? edition;
+  final bool? abridged;
+
+  /// Description as sanitized HTML (server-side allowlist).
+  final String? descriptionHtml;
+
+  /// Book total across all parts.
+  final int durationMs;
+  final String? artUrl;
+  final List<ChapterMark> chapters;
+  final List<BookPart> parts;
+
+  /// The caller's per-book playback settings, when any are stored.
+  final BookSettings? settings;
+}
+
+/// The caller's resume point on the book timeline.
+class BookResume {
+  const BookResume({required this.positionMs, this.chapter, this.updatedAt});
+
+  final int positionMs;
+
+  /// The chapter [positionMs] falls in, when the book has chapters.
+  final ChapterMark? chapter;
+  final DateTime? updatedAt;
+}
+
+/// One silence span, in the mapped file's own timeline.
+class SkipSpan {
+  const SkipSpan({required this.startMs, required this.endMs});
+
+  final int startMs;
+  final int endMs;
+}
+
+/// Precomputed silence spans for client-side trimming.
+class SkipMap {
+  const SkipMap({
+    required this.state,
+    this.essenceHash,
+    this.partIndex,
+    this.version,
+    this.spans = const [],
+  });
+
+  /// `ready`, `pending`, or `unavailable`; spans are empty unless ready.
+  final String state;
+  final String? essenceHash;
+  final int? partIndex;
+  final String? version;
+  final List<SkipSpan> spans;
+
+  bool get ready => state == 'ready';
 }

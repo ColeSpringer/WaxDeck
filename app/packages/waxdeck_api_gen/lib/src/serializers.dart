@@ -18,14 +18,22 @@ import 'package:waxdeck_api_gen/src/model/app_password.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_create.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_created.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_list.dart';
+import 'package:waxdeck_api_gen/src/model/book_detail.dart';
+import 'package:waxdeck_api_gen/src/model/book_part.dart';
+import 'package:waxdeck_api_gen/src/model/book_resume.dart';
+import 'package:waxdeck_api_gen/src/model/book_settings.dart';
 import 'package:waxdeck_api_gen/src/model/bootstrap_request.dart';
 import 'package:waxdeck_api_gen/src/model/bootstrap_status.dart';
 import 'package:waxdeck_api_gen/src/model/catalog_sync_entry.dart';
 import 'package:waxdeck_api_gen/src/model/catalog_sync_page.dart';
+import 'package:waxdeck_api_gen/src/model/chapter_mark.dart';
 import 'package:waxdeck_api_gen/src/model/device_session.dart';
 import 'package:waxdeck_api_gen/src/model/discovery_list.dart';
 import 'package:waxdeck_api_gen/src/model/download_file.dart';
 import 'package:waxdeck_api_gen/src/model/download_info.dart';
+import 'package:waxdeck_api_gen/src/model/episode.dart';
+import 'package:waxdeck_api_gen/src/model/episode_page.dart';
+import 'package:waxdeck_api_gen/src/model/episode_summary.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/health.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
@@ -46,14 +54,20 @@ import 'package:waxdeck_api_gen/src/model/model_library.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_exchange_request.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_provider.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_providers.dart';
+import 'package:waxdeck_api_gen/src/model/opml_import.dart';
+import 'package:waxdeck_api_gen/src/model/opml_import_entry.dart';
+import 'package:waxdeck_api_gen/src/model/opml_import_result.dart';
 import 'package:waxdeck_api_gen/src/model/password_change.dart';
 import 'package:waxdeck_api_gen/src/model/play_info.dart';
 import 'package:waxdeck_api_gen/src/model/play_state.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_list.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_query.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_update.dart';
+import 'package:waxdeck_api_gen/src/model/podcast_detail.dart';
+import 'package:waxdeck_api_gen/src/model/podcast_show.dart';
 import 'package:waxdeck_api_gen/src/model/prefs.dart';
 import 'package:waxdeck_api_gen/src/model/rating_update.dart';
+import 'package:waxdeck_api_gen/src/model/refresh_result.dart';
 import 'package:waxdeck_api_gen/src/model/rejected_listen.dart';
 import 'package:waxdeck_api_gen/src/model/role.dart';
 import 'package:waxdeck_api_gen/src/model/search_hit.dart';
@@ -62,8 +76,16 @@ import 'package:waxdeck_api_gen/src/model/server_sync_event.dart';
 import 'package:waxdeck_api_gen/src/model/server_sync_page.dart';
 import 'package:waxdeck_api_gen/src/model/session_info.dart';
 import 'package:waxdeck_api_gen/src/model/session_list.dart';
+import 'package:waxdeck_api_gen/src/model/skip_map.dart';
+import 'package:waxdeck_api_gen/src/model/skip_span.dart';
 import 'package:waxdeck_api_gen/src/model/star_update.dart';
+import 'package:waxdeck_api_gen/src/model/subscribe_request.dart';
+import 'package:waxdeck_api_gen/src/model/subscription.dart';
+import 'package:waxdeck_api_gen/src/model/subscription_page.dart';
+import 'package:waxdeck_api_gen/src/model/subscription_settings.dart';
 import 'package:waxdeck_api_gen/src/model/synced_line.dart';
+import 'package:waxdeck_api_gen/src/model/transcript.dart';
+import 'package:waxdeck_api_gen/src/model/transcript_cue.dart';
 import 'package:waxdeck_api_gen/src/model/user.dart';
 import 'package:waxdeck_api_gen/src/model/user_account.dart';
 import 'package:waxdeck_api_gen/src/model/user_create.dart';
@@ -79,14 +101,22 @@ part 'serializers.g.dart';
   AppPasswordCreate,
   AppPasswordCreated,
   AppPasswordList,
+  BookDetail,
+  BookPart,
+  BookResume,
+  BookSettings,
   BootstrapRequest,
   BootstrapStatus,
   CatalogSyncEntry,
   CatalogSyncPage,
+  ChapterMark,
   DeviceSession,
   DiscoveryList,
   DownloadFile,
   DownloadInfo,
+  Episode,
+  EpisodePage,
+  EpisodeSummary,$EpisodeSummary,
   Error,
   Health,
   Item,
@@ -107,14 +137,20 @@ part 'serializers.g.dart';
   OidcExchangeRequest,
   OidcProvider,
   OidcProviders,
+  OpmlImport,
+  OpmlImportEntry,
+  OpmlImportResult,
   PasswordChange,
   PlayInfo,
   PlayState,
   PlayStateList,
   PlayStateQuery,
   PlayStateUpdate,
+  PodcastDetail,
+  PodcastShow,
   Prefs,
   RatingUpdate,
+  RefreshResult,
   RejectedListen,
   Role,
   SearchHit,
@@ -123,8 +159,16 @@ part 'serializers.g.dart';
   ServerSyncPage,
   SessionInfo,
   SessionList,
+  SkipMap,
+  SkipSpan,
   StarUpdate,
+  SubscribeRequest,
+  Subscription,
+  SubscriptionPage,
+  SubscriptionSettings,
   SyncedLine,
+  Transcript,
+  TranscriptCue,
   User,$User,
   UserAccount,
   UserCreate,
@@ -135,6 +179,7 @@ part 'serializers.g.dart';
 ])
 Serializers serializers = (_$serializers.toBuilder()
       ..add(AppPassword.serializer)
+      ..add(EpisodeSummary.serializer)
       ..add(ItemSummary.serializer)
       ..add(User.serializer)
       ..add(const OneOfSerializer())

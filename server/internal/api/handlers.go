@@ -430,21 +430,59 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 		}
 		return nil, err
 	}
-	info, err := s.bridge.PlayInfoFor(ctx, uc.ID, req.Pid)
+
+	// Multi-file books resolve one part per call, selected by the
+	// book-timeline position.
+	var positionMS int64
+	if req.Params.PositionMs != nil {
+		positionMS = *req.Params.PositionMs
+	}
+	part, err := s.svc.ResolvePlayPart(ctx, uc, req.Pid, positionMS)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
+		return nil, err
+	}
+
+	// Voice boost precedence is resolved here, at mint time: an explicit
+	// parameter wins, an absent one falls back to the caller's stored
+	// setting for the show or book.
+	boost := false
+	if req.Params.VoiceBoost != nil {
+		boost = *req.Params.VoiceBoost
+	} else {
+		boost = s.svc.EffectiveVoiceBoost(ctx, uc, req.Pid)
+	}
+
+	info, err := s.bridge.PlayInfoFor(ctx, uc.ID, req.Pid, flow.PlayOptions{
+		FilePID:    part.FilePID,
+		VoiceBoost: boost,
+	})
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
 			return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		case service.KindConflict:
+			return GetPlayInfo409JSONResponse(errObj("conflict", err.Error())), nil
 		}
 		return nil, err
 	}
-	return GetPlayInfo200JSONResponse{
+	out := GetPlayInfo200JSONResponse{
 		Pid:        req.Pid,
 		Url:        info.URL,
 		MimeType:   info.MimeType,
 		DurationMs: info.DurationMS,
 		Seekable:   info.Seekable,
 		ExpiresAt:  info.ExpiresAt,
-	}, nil
+	}
+	if info.VoiceBoost {
+		vb := true
+		out.VoiceBoost = &vb
+	}
+	if part.MultiPart {
+		out.PartIndex = &part.Index
+		out.PartCount = &part.Count
+		out.PartStartMs = &part.StartMS
+	}
+	return out, nil
 }
 
 func (s *Server) GetPlayState(ctx context.Context, req GetPlayStateRequestObject) (GetPlayStateResponseObject, error) {
