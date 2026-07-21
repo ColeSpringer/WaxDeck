@@ -338,6 +338,38 @@ var migrations = []string{
 		value      TEXT NOT NULL,
 		updated_at_ns INTEGER NOT NULL
 	);`,
+
+	// Player endpoints and playback sessions. Device endpoints (cast,
+	// DLNA, jukebox) persist across discovery sweeps under a stable
+	// per-device key; client endpoints live only as long as their
+	// WebSocket and are never written here. Session rows are the crash
+	// and restore record of the in-memory session manager: the live
+	// truth is in memory, rows carry the last checkpointed state, and
+	// ended sessions keep their final row as queue-restore history
+	// until pruned.
+	`CREATE TABLE player_endpoints (
+		id            TEXT    PRIMARY KEY,
+		kind          TEXT    NOT NULL,
+		device_key    TEXT    NOT NULL,
+		name          TEXT    NOT NULL,
+		address       TEXT    NOT NULL DEFAULT '',
+		details       TEXT    NOT NULL DEFAULT '',
+		shared        INTEGER NOT NULL DEFAULT 1,
+		last_seen_ns  INTEGER NOT NULL DEFAULT 0,
+		created_at_ns INTEGER NOT NULL,
+		UNIQUE (kind, device_key)
+	);
+	CREATE TABLE playback_sessions (
+		id            TEXT    NOT NULL PRIMARY KEY,
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		endpoint_id   TEXT    NOT NULL,
+		authority     TEXT    NOT NULL,
+		state         TEXT    NOT NULL,
+		active        INTEGER NOT NULL DEFAULT 1,
+		created_at_ns INTEGER NOT NULL,
+		updated_at_ns INTEGER NOT NULL
+	);
+	CREATE INDEX playback_sessions_user ON playback_sessions (user_id, active, updated_at_ns);`,
 }
 
 // Open opens (creating if needed) the database at path and applies

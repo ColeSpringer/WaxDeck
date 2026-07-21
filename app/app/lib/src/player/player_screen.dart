@@ -10,6 +10,9 @@ import '../providers.dart';
 import '../radio/radio_controller.dart';
 import '../sync/sync_providers.dart';
 import 'play_state_controller.dart';
+import '../connect/connect_controller.dart';
+import '../connect/connect_providers.dart';
+import '../connect/device_picker.dart';
 import 'playback_session.dart';
 import 'session_registry.dart';
 import 'sleep_timer.dart';
@@ -52,6 +55,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   late final PlaybackSession _session;
+  late final ConnectEndpointController _connect;
   late final Future<void> _starting;
   // Captured in initState: ref is not usable inside dispose.
   late final CurrentSessionRegistry _registry;
@@ -74,6 +78,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
     _registry = ref.read(currentSessionRegistryProvider);
     _registry.register(_session);
+    _connect = ref.read(connectControllerProvider);
+    _connect.attachLocal(_session, widget.item.pid);
     _starting = _session.start();
     // End-of-chapter sleep mode watches the display timeline.
     final sleepTimer = ref.read(sleepTimerProvider.notifier);
@@ -83,6 +89,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   void dispose() {
     unawaited(_sleepFeed?.cancel());
+    _connect.detachLocal(_session);
     _registry.unregister(_session);
     // Fire and forget: the final checkpoint and listen report run out of
     // band while the route animates away.
@@ -97,6 +104,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       appBar: AppBar(
         title: Text(item.title),
         actions: [
+          Semantics(
+            identifier: 'player-devices',
+            label: 'Play on',
+            button: true,
+            excludeSemantics: true,
+            onTap: () => showDevicePicker(
+              context,
+              ref,
+              currentPid: item.pid,
+              positionMs: _session.displayPosition.inMilliseconds,
+            ),
+            child: IconButton(
+              key: const Key('player-devices'),
+              tooltip: 'Play on',
+              icon: const Icon(Icons.cast),
+              onPressed: () => showDevicePicker(
+                context,
+                ref,
+                currentPid: item.pid,
+                positionMs: _session.displayPosition.inMilliseconds,
+              ),
+            ),
+          ),
           Semantics(
             identifier: 'add-to-playlist',
             label: 'Add to playlist',

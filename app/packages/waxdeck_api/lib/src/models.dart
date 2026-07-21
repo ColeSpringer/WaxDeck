@@ -1307,3 +1307,140 @@ class PushRegistration {
   final String? label;
   final DateTime createdAt;
 }
+
+/// One controllable playback output: a registered client, a cast
+/// device, a DLNA renderer, or the server's own audio output.
+class PlayerEndpoint {
+  const PlayerEndpoint({
+    required this.id,
+    required this.kind,
+    required this.name,
+    required this.online,
+    required this.shared,
+    required this.mine,
+    required this.volumeControl,
+    required this.rateControl,
+    this.activeSessionId,
+  });
+
+  final String id;
+
+  /// `client`, `cast`, `dlna`, or `jukebox`; open vocabulary.
+  final String kind;
+  final String name;
+  final bool online;
+  final bool shared;
+  final bool mine;
+  final bool volumeControl;
+  final bool rateControl;
+  final String? activeSessionId;
+}
+
+/// One queue entry of a playback session, hydrated for display.
+class PlaybackSessionEntry {
+  const PlaybackSessionEntry({
+    required this.pid,
+    required this.title,
+    this.artist,
+    this.durationMs,
+  });
+
+  final String pid;
+  final String title;
+  final String? artist;
+  final int? durationMs;
+
+  factory PlaybackSessionEntry.fromWire(Map<String, dynamic> json) {
+    return PlaybackSessionEntry(
+      pid: json['pid'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      artist: json['artist'] as String?,
+      durationMs: (json['durationMs'] as num?)?.toInt(),
+    );
+  }
+}
+
+/// One playback session: a queue playing (or paused) on an endpoint.
+/// Position is a snapshot: positionMs was true at positionAt; while
+/// playing, render by extrapolating forward with rate against the
+/// server clock offset.
+class PlaybackSessionInfo {
+  const PlaybackSessionInfo({
+    required this.id,
+    required this.endpointId,
+    required this.mine,
+    required this.authority,
+    required this.playing,
+    required this.index,
+    required this.positionMs,
+    required this.positionAt,
+    required this.rate,
+    required this.queueVersion,
+    required this.entries,
+    this.endpointName,
+    this.ownerName,
+    this.volume,
+    this.repeat,
+    this.shuffle = false,
+    this.ended = false,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String endpointId;
+  final String? endpointName;
+  final bool mine;
+  final String? ownerName;
+
+  /// `remote` or `mirror`; open vocabulary.
+  final String authority;
+  final bool playing;
+  final int index;
+  final int positionMs;
+  final DateTime positionAt;
+  final double rate;
+  final double? volume;
+  final String? repeat;
+  final bool shuffle;
+  final int queueVersion;
+
+  /// Empty when a WebSocket frame omitted the unchanged queue.
+  final List<PlaybackSessionEntry> entries;
+  final bool ended;
+  final DateTime? updatedAt;
+
+  /// Decodes a WebSocket `session` frame payload (frames do not pass
+  /// through the generated client).
+  factory PlaybackSessionInfo.fromWire(Map<String, dynamic> json) {
+    final entries = (json['entries'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(PlaybackSessionEntry.fromWire)
+        .toList(growable: false);
+    return PlaybackSessionInfo(
+      id: json['id'] as String? ?? '',
+      endpointId: json['endpointId'] as String? ?? '',
+      endpointName: json['endpointName'] as String?,
+      mine: json['mine'] as bool? ?? false,
+      ownerName: json['ownerName'] as String?,
+      authority: json['authority'] as String? ?? 'remote',
+      playing: json['playing'] as bool? ?? false,
+      index: (json['index'] as num?)?.toInt() ?? 0,
+      positionMs: (json['positionMs'] as num?)?.toInt() ?? 0,
+      positionAt:
+          DateTime.tryParse(json['positionAt'] as String? ?? '')?.toUtc() ??
+          DateTime.now().toUtc(),
+      rate: (json['rate'] as num?)?.toDouble() ?? 1.0,
+      volume: (json['volume'] as num?)?.toDouble(),
+      repeat: json['repeat'] as String?,
+      shuffle: json['shuffle'] as bool? ?? false,
+      queueVersion: (json['queueVersion'] as num?)?.toInt() ?? 0,
+      entries: entries,
+      ended: json['ended'] as bool? ?? false,
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '')?.toUtc(),
+    );
+  }
+
+  /// The current entry, when the queue is known.
+  PlaybackSessionEntry? get currentEntry =>
+      index >= 0 && index < entries.length ? entries[index] : null;
+}

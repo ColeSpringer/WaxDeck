@@ -20,6 +20,22 @@ class LiveInvalidations {
   final void Function() onCatalog;
   final void Function() onUser;
 
+  /// Player-topic invalidations: endpoint and session lists changed.
+  void Function()? onPlayer;
+
+  /// Control-plane frames (the player command bus) hand off here.
+  void Function(Map<String, Object?> frame)? onControlFrame;
+
+  /// Fires after each successful (re)connect.
+  void Function()? onConnected;
+
+  /// Sends one control frame on the live socket. False when offline.
+  bool sendControl(Map<String, Object?> frame) {
+    final channel = _channel;
+    if (channel == null) return false;
+    return channel.send(jsonEncode(frame));
+  }
+
   EventsChannel? _channel;
   Timer? _reconnect;
   bool _running = false;
@@ -51,6 +67,7 @@ class LiveInvalidations {
         .connect()
         .then((_) {
           _backoffSeconds = 1;
+          onConnected?.call();
           // The socket may have been down across changes; refresh once.
           onCatalog();
           onUser();
@@ -76,16 +93,25 @@ class LiveInvalidations {
     } on FormatException {
       return;
     }
-    switch (frame['topic']) {
-      case 'catalog':
-        onCatalog();
-      case 'user':
-        onUser();
+    switch (frame['type']) {
+      case 'invalidate' || 'resync':
+        switch (frame['topic']) {
+          case 'catalog':
+            onCatalog();
+          case 'user':
+            onUser();
+          case 'player':
+            onPlayer?.call();
+          default:
+            // A resync with no topic: refresh everything; refetching
+            // is the only catch-up there is here.
+            onCatalog();
+            onUser();
+        }
       default:
-        // A resync with no topic, or anything unrecognized: refresh
-        // everything; refetching is the only catch-up there is here.
-        onCatalog();
-        onUser();
+        // Command-bus frames route to the Connect layer; anything it
+        // does not recognize either is ignored by contract.
+        onControlFrame?.call(frame);
     }
   }
 }

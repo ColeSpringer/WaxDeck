@@ -12,5 +12,16 @@ overrides:
   - files:
       - "api/openapi.yaml#/components/schemas/WsSubscribeFrame"
       - "api/openapi.yaml#/components/schemas/WsEventFrame"
+      - "api/openapi.yaml#/components/schemas/WsCommandFrame"
+      - "api/openapi.yaml#/components/schemas/WsAckFrame"
+      - "api/openapi.yaml#/components/schemas/WsErrorFrame"
+      - "api/openapi.yaml#/components/schemas/WsRegisterEndpointFrame"
+      - "api/openapi.yaml#/components/schemas/WsEndpointCommandFrame"
+      - "api/openapi.yaml#/components/schemas/WsCommandResultFrame"
+      - "api/openapi.yaml#/components/schemas/WsSessionReportFrame"
+      - "api/openapi.yaml#/components/schemas/WsSessionFrame"
+      - "api/openapi.yaml#/components/schemas/WsWatchFrame"
+      - "api/openapi.yaml#/components/schemas/WsPingFrame"
+      - "api/openapi.yaml#/components/schemas/WsPongFrame"
     rules:
       oas3-unused-component: "off"

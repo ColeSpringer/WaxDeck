@@ -15,6 +15,7 @@ import 'package:waxdeck_api_gen/src/api/books_api.dart';
 import 'package:waxdeck_api_gen/src/api/library_api.dart';
 import 'package:waxdeck_api_gen/src/api/notifications_api.dart';
 import 'package:waxdeck_api_gen/src/api/playback_api.dart';
+import 'package:waxdeck_api_gen/src/api/player_api.dart';
 import 'package:waxdeck_api_gen/src/api/playlists_api.dart';
 import 'package:waxdeck_api_gen/src/api/podcasts_api.dart';
 import 'package:waxdeck_api_gen/src/api/radio_api.dart';
@@ -111,6 +112,12 @@ class WaxdeckApiGen {
   /// by doing that all interceptors will not be executed
   PlaybackApi getPlaybackApi() {
     return PlaybackApi(dio, serializers);
+  }
+
+  /// Get PlayerApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  PlayerApi getPlayerApi() {
+    return PlayerApi(dio, serializers);
   }
 
   /// Get PlaylistsApi instance, base route and serializer can be overridden by a given but be careful,

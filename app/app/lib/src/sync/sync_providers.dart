@@ -8,6 +8,7 @@ import '../playlists/playlists_controller.dart';
 import '../podcasts/podcasts_controller.dart';
 import '../providers.dart';
 import '../settings/prefs_controller.dart';
+import '../connect/connect_providers.dart';
 import 'live_invalidations.dart';
 import 'test_env/test_env.dart';
 
@@ -100,11 +101,18 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   }
 
   final engine = ref.watch(syncEngineProvider);
+  final connect = ref.watch(connectBinderProvider);
   if (engine != null) {
     final catalogSub = engine.catalogChanged.listen((_) => invalidateCatalog());
     final stateSub = engine.playStateChanged.listen(
       (_) => invalidateUserState(),
     );
+    connect.bind(
+      sender: engine.sendControl,
+      routeControl: (handler) => engine.onControlFrame = handler,
+    );
+    engine.onConnected = connect.onConnected;
+    engine.onPlayerInvalidate = connect.onPlayerInvalidate;
     engine.start();
     ref.onDispose(() {
       catalogSub.cancel();
@@ -123,6 +131,12 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       onCatalog: invalidateCatalog,
       onUser: invalidateUserState,
     );
+    connect.bind(
+      sender: live.sendControl,
+      routeControl: (handler) => live.onControlFrame = handler,
+    );
+    live.onConnected = connect.onConnected;
+    live.onPlayer = connect.onPlayerInvalidate;
     live.start();
     ref.onDispose(live.stop);
   }

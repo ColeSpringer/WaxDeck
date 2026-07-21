@@ -12,6 +12,8 @@ class WaxDeckAudioHandler extends BaseAudioHandler {
     required this.engine,
     required this.browse,
     required this.onPlayFromMediaId,
+    this.onSkipNext,
+    this.onSkipPrevious,
   }) {
     engine.playingStream.listen(_publishState);
     engine.processingStateStream.listen((_) => _publishState(engine.playing));
@@ -26,11 +28,21 @@ class WaxDeckAudioHandler extends BaseAudioHandler {
   /// original.
   final Future<void> Function(String pid) onPlayFromMediaId;
 
+  /// Queue steps, when the app runs a queue (a Connect load, a
+  /// browse-tree folder played through). Absent callbacks hide the
+  /// skip controls.
+  final Future<void> Function()? onSkipNext;
+  final Future<void> Function()? onSkipPrevious;
+
   void _publishState(bool playing) {
     playbackState.add(
       PlaybackState(
         controls: [
+          if (onSkipPrevious != null) MediaControl.skipToPrevious,
+          MediaControl.rewind,
           if (playing) MediaControl.pause else MediaControl.play,
+          MediaControl.fastForward,
+          if (onSkipNext != null) MediaControl.skipToNext,
           MediaControl.stop,
         ],
         processingState: switch (engine.processingState) {
@@ -57,6 +69,29 @@ class WaxDeckAudioHandler extends BaseAudioHandler {
 
   @override
   Future<void> seek(Duration position) => engine.seek(position);
+
+  /// Spoken-word friendly jumps for cars and headsets: a short hop
+  /// back to recover a missed sentence, a longer hop forward.
+  @override
+  Future<void> rewind() {
+    final target = engine.position - const Duration(seconds: 10);
+    return engine.seek(target < Duration.zero ? Duration.zero : target);
+  }
+
+  @override
+  Future<void> fastForward() {
+    return engine.seek(engine.position + const Duration(seconds: 30));
+  }
+
+  @override
+  Future<void> skipToNext() async {
+    await onSkipNext?.call();
+  }
+
+  @override
+  Future<void> skipToPrevious() async {
+    await onSkipPrevious?.call();
+  }
 
   @override
   Future<void> setSpeed(double speed) => engine.setSpeed(speed);
@@ -91,12 +126,16 @@ Future<WaxDeckAudioHandler> initWaxDeckAudioService({
   required AudioEnginePort engine,
   required BrowseSourcePort browse,
   required Future<void> Function(String pid) onPlayFromMediaId,
+  Future<void> Function()? onSkipNext,
+  Future<void> Function()? onSkipPrevious,
 }) {
   return AudioService.init(
     builder: () => WaxDeckAudioHandler(
       engine: engine,
       browse: browse,
       onPlayFromMediaId: onPlayFromMediaId,
+      onSkipNext: onSkipNext,
+      onSkipPrevious: onSkipPrevious,
     ),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.colespringer.waxdeck.playback',

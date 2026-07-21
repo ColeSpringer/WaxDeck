@@ -21,6 +21,8 @@ Serializers _$serializers =
           ..add(BookSettings.serializer)
           ..add(BootstrapRequest.serializer)
           ..add(BootstrapStatus.serializer)
+          ..add(CastPreflight.serializer)
+          ..add(CastPreflightBase.serializer)
           ..add(CatalogSyncEntry.serializer)
           ..add(CatalogSyncPage.serializer)
           ..add(ChapterMark.serializer)
@@ -67,6 +69,13 @@ Serializers _$serializers =
           ..add(PlayStateList.serializer)
           ..add(PlayStateQuery.serializer)
           ..add(PlayStateUpdate.serializer)
+          ..add(PlaybackSession.serializer)
+          ..add(PlaybackSessionCreate.serializer)
+          ..add(PlaybackSessionEntry.serializer)
+          ..add(PlaybackSessionList.serializer)
+          ..add(PlaybackSessionTransfer.serializer)
+          ..add(PlayerEndpoint.serializer)
+          ..add(PlayerEndpointList.serializer)
           ..add(Playlist.serializer)
           ..add(PlaylistCreate.serializer)
           ..add(PlaylistEntry.serializer)
@@ -114,17 +123,37 @@ Serializers _$serializers =
           ..add(SubscriptionPage.serializer)
           ..add(SubscriptionSettings.serializer)
           ..add(SyncedLine.serializer)
+          ..add(TimelineBoundary.serializer)
+          ..add(TimelineCreate.serializer)
+          ..add(TimelineInfo.serializer)
           ..add(Transcript.serializer)
           ..add(TranscriptCue.serializer)
           ..add(UserAccount.serializer)
           ..add(UserCreate.serializer)
           ..add(UserPage.serializer)
           ..add(UserUpdate.serializer)
+          ..add(WsAckFrame.serializer)
+          ..add(WsCommandFrame.serializer)
+          ..add(WsCommandResultFrame.serializer)
+          ..add(WsEndpointCommandFrame.serializer)
+          ..add(WsErrorFrame.serializer)
           ..add(WsEventFrame.serializer)
+          ..add(WsPingFrame.serializer)
+          ..add(WsPongFrame.serializer)
+          ..add(WsRegisterEndpointFrame.serializer)
+          ..add(WsSessionFrame.serializer)
+          ..add(WsSessionReportFrame.serializer)
           ..add(WsSubscribeFrame.serializer)
+          ..add(WsWatchFrame.serializer)
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(AppPassword)]),
             () => ListBuilder<AppPassword>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(CastPreflightBase),
+            ]),
+            () => ListBuilder<CastPreflightBase>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(CatalogSyncEntry)]),
@@ -181,6 +210,20 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(PlayState)]),
             () => ListBuilder<PlayState>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(PlaybackSession)]),
+            () => ListBuilder<PlaybackSession>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(PlaybackSessionEntry),
+            ]),
+            () => ListBuilder<PlaybackSessionEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(PlayerEndpoint)]),
+            () => ListBuilder<PlayerEndpoint>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(Playlist)]),
@@ -325,6 +368,30 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
           )
@@ -339,6 +406,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(SyncedLine)]),
             () => ListBuilder<SyncedLine>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TimelineBoundary)]),
+            () => ListBuilder<TimelineBoundary>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(TranscriptCue)]),

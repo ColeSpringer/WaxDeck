@@ -36,6 +36,7 @@ class FakeEngine implements AudioEnginePort {
   Duration? _duration;
   bool _playing = false;
   double _speed = 1.0;
+  double _volume = 1.0;
   EngineProcessingState _state = EngineProcessingState.idle;
 
   @override
@@ -76,6 +77,14 @@ class FakeEngine implements AudioEnginePort {
     _speed = speed;
     if (!_speeds.isClosed) _speeds.add(speed);
   }
+
+  @override
+  Future<void> setVolume(double volume) async {
+    _volume = volume;
+  }
+
+  @override
+  double get volume => _volume;
 
   @override
   Future<void> load(

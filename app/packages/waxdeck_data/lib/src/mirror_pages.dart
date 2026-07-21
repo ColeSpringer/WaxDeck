@@ -52,3 +52,57 @@ Future<ItemPage> mirrorItemsPage(
     nextCursor: hasMore ? '$_mirrorCursorPrefix${offset + limit}' : null,
   );
 }
+
+/// Pids with a completed download, newest first. Feeds the Auto browse
+/// tree's Downloads folder; join back through the mirror for titles.
+Future<List<String>> mirrorDownloadedPids(
+  MirrorDatabase db, {
+  int limit = 200,
+}) async {
+  final rows =
+      await (db.select(db.downloadRecords)
+            ..where((t) => t.state.equals('complete'))
+            ..limit(limit))
+          .get();
+  final seen = <String>{};
+  return [
+    for (final r in rows)
+      if (seen.add(r.pid)) r.pid,
+  ];
+}
+
+/// Pids with listening progress (a position past the start, not yet
+/// finished), most recently updated first. Feeds the Auto browse
+/// tree's Continue folder.
+Future<List<String>> mirrorInProgressPids(
+  MirrorDatabase db, {
+  int limit = 50,
+}) async {
+  final rows =
+      await (db.select(db.mirrorPlayStates)
+            ..where((t) => t.positionMs.isBiggerThanValue(0))
+            ..where((t) => t.finished.equals(false))
+            ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+            ..limit(limit))
+          .get();
+  return [for (final r in rows) r.pid];
+}
+
+/// One mirror row by pid, for hydrating id lists into entries.
+Future<ItemSummary?> mirrorItemByPid(MirrorDatabase db, String pid) async {
+  final row = await (db.select(
+    db.mirrorItems,
+  )..where((t) => t.pid.equals(pid))).getSingleOrNull();
+  if (row == null) return null;
+  return ItemSummary(
+    pid: row.pid,
+    mediaType: MediaType.values.firstWhere(
+      (m) => m.wireName == row.mediaType,
+      orElse: () => MediaType.music,
+    ),
+    title: row.title,
+    artist: row.artist,
+    album: row.album,
+    durationMs: row.durationMs,
+  );
+}

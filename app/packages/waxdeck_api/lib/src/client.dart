@@ -321,6 +321,34 @@ abstract interface class WaxDeckRepository {
   /// `GET /radio/stations`: the shared station library.
   Future<List<RadioStation>> listRadioStations();
 
+  /// `GET /player/endpoints`: outputs the caller can play to.
+  Future<List<PlayerEndpoint>> listPlayerEndpoints();
+
+  /// `GET /player/sessions`: visible active playback sessions.
+  Future<List<PlaybackSessionInfo>> listPlaybackSessions();
+
+  /// `POST /player/sessions`: start playback on an endpoint.
+  Future<PlaybackSessionInfo> createPlaybackSession({
+    required String endpointId,
+    required List<String> itemPids,
+    int index = 0,
+    int positionMs = 0,
+    bool play = true,
+  });
+
+  /// `GET /player/sessions/{sessionId}`: one session snapshot.
+  Future<PlaybackSessionInfo> getPlaybackSession(String sessionId);
+
+  /// `DELETE /player/sessions/{sessionId}`: end a session.
+  Future<void> deletePlaybackSession(String sessionId);
+
+  /// `POST /player/sessions/{sessionId}/transfer`: move live playback
+  /// to another endpoint, keeping queue and position.
+  Future<PlaybackSessionInfo> transferPlaybackSession(
+    String sessionId,
+    String endpointId,
+  );
+
   /// `POST /radio/stations`: adds a station.
   Future<RadioStation> createRadioStation({
     required String name,
@@ -1094,6 +1122,71 @@ class WaxDeckClient implements WaxDeckRepository {
     return _require(
       response.data,
     ).stations.map(radioStationFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<List<PlayerEndpoint>> listPlayerEndpoints() => _guard(() async {
+    final response = await _gen.getPlayerApi().listPlayerEndpoints();
+    return _require(
+      response.data,
+    ).endpoints.map(playerEndpointFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<List<PlaybackSessionInfo>> listPlaybackSessions() => _guard(() async {
+    final response = await _gen.getPlayerApi().listPlaybackSessions();
+    return _require(
+      response.data,
+    ).sessions.map(playbackSessionFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<PlaybackSessionInfo> createPlaybackSession({
+    required String endpointId,
+    required List<String> itemPids,
+    int index = 0,
+    int positionMs = 0,
+    bool play = true,
+  }) => _guard(() async {
+    final response = await _gen.getPlayerApi().createPlaybackSession(
+      playbackSessionCreate: gen.PlaybackSessionCreate(
+        (b) => b
+          ..endpointId = endpointId
+          ..itemPids.replace(itemPids)
+          ..index = index
+          ..positionMs = positionMs
+          ..play = play,
+      ),
+    );
+    return playbackSessionFromGen(_require(response.data));
+  });
+
+  @override
+  Future<PlaybackSessionInfo> getPlaybackSession(String sessionId) =>
+      _guard(() async {
+        final response = await _gen.getPlayerApi().getPlaybackSession(
+          sessionId: sessionId,
+        );
+        return playbackSessionFromGen(_require(response.data));
+      });
+
+  @override
+  Future<void> deletePlaybackSession(String sessionId) => _guard(() async {
+    await _gen.getPlayerApi().deletePlaybackSession(sessionId: sessionId);
+  });
+
+  @override
+  Future<PlaybackSessionInfo> transferPlaybackSession(
+    String sessionId,
+    String endpointId,
+  ) => _guard(() async {
+    final response = await _gen.getPlayerApi().transferPlaybackSession(
+      sessionId: sessionId,
+      playbackSessionTransfer: gen.PlaybackSessionTransfer(
+        (b) => b..endpointId = endpointId,
+      ),
+    );
+    return playbackSessionFromGen(_require(response.data));
   });
 
   @override

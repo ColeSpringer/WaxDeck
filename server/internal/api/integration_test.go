@@ -21,6 +21,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/adapter/subsonic"
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
+	"github.com/colespringer/waxdeck/server/internal/connect"
 	"github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/events"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -36,6 +37,8 @@ type harness struct {
 	library string
 	svc     *service.Library
 	store   *db.DB
+	connect *connect.Service
+	group   *supervise.Group
 	flowReq struct{ apiKey, format, dynamics, gain string } // captured by the fake sidecar
 }
 
@@ -95,6 +98,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	}
 
 	group := supervise.NewGroup(log)
+	h.group = group
 	cfg := service.Config{
 		DataDir:      dataDir,
 		Roots:        append([]service.Root{{Name: "lib", Path: h.library}}, extraRoots...),
@@ -126,11 +130,28 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	hub := events.New(svc)
 	group.Go(ctx, "event-hub", hub.Run)
 
+	connectSvc, err := connect.New(ctx, connect.Config{
+		Store:            store,
+		Group:            group,
+		Resolver:         &ConnectResolver{Svc: svc, Bridge: bridge, Media: media},
+		Sink:             &ConnectSink{Svc: svc},
+		Bases:            connect.Bases{LAN: "http://192.0.2.10:4420", Loopback: "http://127.0.0.1:4420"},
+		InvalidatePlayer: hub.MarkPlayerAll,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.connect = connectSvc
+	group.Go(ctx, "connect", connectSvc.Run)
+
 	srv := NewServer("test", Options{
 		Service:  svc,
 		Bridge:   bridge,
 		Sessions: auth.NewSessions(store),
 		Media:    media,
+		Connect:  connectSvc,
+		Group:    group,
+		Bases:    connect.Bases{LAN: "http://192.0.2.10:4420"},
 	})
 	apiHandler := HandlerWithOptions(
 		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
@@ -150,6 +171,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	mux.Handle("/rest/", subsonic.New(svc, bridge, media, "test"))
 	if bridge != nil {
 		mux.HandleFunc("/media/stream", bridge.ServeStream)
+		mux.HandleFunc("/media/hls/", bridge.ServeHLS)
 	}
 	h.ts = httptest.NewServer(mux)
 	t.Cleanup(h.ts.Close)
@@ -179,6 +201,51 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 				"dsp": {"gainModes":["off","track","album"],"gainMaxDb":12,"gainMaxVoiceDb":24,
 					"dynamics":["off","voice"]}
 			}`)
+		case "/hls/timeline":
+			var req struct {
+				Srcs []struct{ Src string } `json:"srcs"`
+			}
+			json.NewDecoder(r.Body).Decode(&req)
+			w.WriteHeader(http.StatusCreated)
+			boundaries := make([]map[string]int64, 0, len(req.Srcs))
+			var off int64
+			for range req.Srcs {
+				boundaries = append(boundaries, map[string]int64{"offsetSamples": off, "durationSamples": 44100})
+				off += 44100
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"schemaVersion": 1, "tl": "tl-fake-digest", "members": len(req.Srcs),
+				"durationSeconds": float64(len(req.Srcs)), "envelopeRate": 44100,
+				"boundaries": boundaries,
+			})
+		case "/sign":
+			var req struct {
+				Path   string            `json:"path"`
+				Params map[string]string `json:"params"`
+			}
+			json.NewDecoder(r.Body).Decode(&req)
+			if req.Params["tl"] != "" && req.Params["gain"] == "" {
+				// Mirrors the real daemon: tag-driven gain modes are
+				// refused on timelines, explicit values only.
+				http.Error(w, `{"error":"tag gain on timeline","code":"invalid-request"}`, http.StatusBadRequest)
+				return
+			}
+			q := url.Values{}
+			for k, v := range req.Params {
+				q.Set(k, v)
+			}
+			q.Set("sig", "fakesig")
+			json.NewEncoder(w).Encode(map[string]any{
+				"schemaVersion": 1, "url": req.Path + "?" + q.Encode(),
+				"exp": time.Now().Add(time.Hour).Unix(),
+			})
+		case "/hls/master.m3u8":
+			if r.URL.Query().Get("sig") == "" {
+				http.Error(w, "unsigned", http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			fmt.Fprint(w, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=160000\nmedia.m3u8?v=1&sig=child\n")
 		case "/jobs":
 			// One-shot analyze jobs finish instantly in the fake.
 			fmt.Fprint(w, `{"schemaVersion":2,"id":"job1","state":"done",

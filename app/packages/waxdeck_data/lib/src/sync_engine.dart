@@ -107,6 +107,28 @@ class SyncEngine {
     return next;
   }
 
+  /// Control-plane frames (anything that is not invalidate/resync)
+  /// hand off here: the app's Connect layer speaks the player command
+  /// bus over this same socket.
+  void Function(Map<String, Object?> frame)? onControlFrame;
+
+  /// Player-topic invalidations: endpoint and session lists changed.
+  /// No cursor and no mirror half; the lists always answer current
+  /// truth, so the hint is all there is.
+  void Function()? onPlayerInvalidate;
+
+  /// Fires after each successful (re)connect, once the subscribe frame
+  /// is on the wire; the Connect layer re-registers its endpoint and
+  /// re-watches here.
+  void Function()? onConnected;
+
+  /// Sends one control frame on the live socket. False when offline.
+  bool sendControl(Map<String, Object?> frame) {
+    final channel = _channel;
+    if (channel == null) return false;
+    return channel.send(jsonEncode(frame));
+  }
+
   void _connect() {
     if (!_running) return;
     _setStatus(SyncConnection.connecting);
@@ -127,6 +149,7 @@ class SyncEngine {
         .then((_) async {
           _backoffSeconds = 1;
           _setStatus(SyncConnection.connected);
+          onConnected?.call();
           await _serialized(reconcile);
         })
         .catchError((Object e) {
@@ -158,6 +181,8 @@ class SyncEngine {
             _serialized(pullCatalog);
           case 'user':
             _serialized(pullServer);
+          case 'player':
+            onPlayerInvalidate?.call();
         }
       case 'resync':
         final topic = frame['topic'];
@@ -165,7 +190,10 @@ class SyncEngine {
           if (topic == null || topic == 'catalog') await resyncCatalog();
           if (topic == null || topic == 'user') await _remintServer();
         });
-      // Unrecognized frame types are ignored by contract.
+      default:
+        // Command-bus frames route to the Connect layer; anything it
+        // does not recognize either is ignored by contract.
+        onControlFrame?.call(frame);
     }
   }
 

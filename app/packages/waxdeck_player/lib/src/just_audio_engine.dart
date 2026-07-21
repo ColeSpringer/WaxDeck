@@ -93,6 +93,12 @@ class JustAudioEngine implements AudioEnginePort {
   double get speed => _player.speed;
 
   @override
+  Future<void> setVolume(double volume) => _player.setVolume(volume);
+
+  @override
+  double get volume => _player.volume;
+
+  @override
   Stream<double> get speedStream => _player.speedStream;
 
   EngineProcessingState _map(ProcessingState state) {

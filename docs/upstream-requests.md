@@ -84,6 +84,12 @@ sidecar injection seam) all landed and are not repeated here.
   raw-HTTP jobs client. Listed so the decision stays recorded: if the
   omission is permanent policy, this entry can be closed as
   wont-do and the bridge client becomes the documented answer.
+- **Sample windows on timeline members.** Timeline srcs take whole
+  files only, so a CUE-carved virtual track cannot join a gapless
+  timeline (a queue holding one falls back to per-item URLs, and the
+  timeline mint endpoint answers conflict for it). A per-member
+  `from`/`to`, mirroring what `/stream` already accepts, would let
+  carved rips ride gapless queue playback like everything else.
 
 ## Recorded upstream non-goals
 

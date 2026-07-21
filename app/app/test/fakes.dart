@@ -113,6 +113,15 @@ class FakeRepository implements WaxDeckRepository {
   final List<({String pid, SubscriptionSettings settings})>
   putSubscriptionSettingsCalls = [];
   final List<String> fetchEpisodeCalls = [];
+  final List<
+    ({String endpointId, List<String> itemPids, int index, int positionMs})
+  >
+  createPlaybackSessionCalls = [];
+  final List<({String sessionId, String endpointId})>
+  transferPlaybackSessionCalls = [];
+  final List<String> deletePlaybackSessionCalls = [];
+  List<PlayerEndpoint> playerEndpoints = [];
+  List<PlaybackSessionInfo> playbackSessions = [];
   final List<String> removeDownloadCalls = [];
   final List<({String pid, BookSettings settings})> putBookSettingsCalls = [];
   final List<({String pid, int? positionMs})> playInfoCalls = [];
@@ -1059,6 +1068,89 @@ class FakeRepository implements WaxDeckRepository {
   List<RadioDirectoryEntry> directoryEntries = const [];
 
   int _stationSeq = 0;
+
+  @override
+  Future<List<PlayerEndpoint>> listPlayerEndpoints() async {
+    return List.of(playerEndpoints);
+  }
+
+  @override
+  Future<List<PlaybackSessionInfo>> listPlaybackSessions() async {
+    return List.of(playbackSessions);
+  }
+
+  @override
+  Future<PlaybackSessionInfo> createPlaybackSession({
+    required String endpointId,
+    required List<String> itemPids,
+    int index = 0,
+    int positionMs = 0,
+    bool play = true,
+  }) async {
+    createPlaybackSessionCalls.add((
+      endpointId: endpointId,
+      itemPids: itemPids,
+      index: index,
+      positionMs: positionMs,
+    ));
+    return PlaybackSessionInfo(
+      id: 'ps-created',
+      endpointId: endpointId,
+      mine: true,
+      authority: 'remote',
+      playing: play,
+      index: index,
+      positionMs: positionMs,
+      positionAt: DateTime.now().toUtc(),
+      rate: 1,
+      queueVersion: 1,
+      entries: [
+        for (final pid in itemPids) PlaybackSessionEntry(pid: pid, title: pid),
+      ],
+    );
+  }
+
+  @override
+  Future<PlaybackSessionInfo> getPlaybackSession(String sessionId) async {
+    final match = playbackSessions.where((s) => s.id == sessionId);
+    if (match.isEmpty) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such session',
+        statusCode: 404,
+      );
+    }
+    return match.first;
+  }
+
+  @override
+  Future<void> deletePlaybackSession(String sessionId) async {
+    deletePlaybackSessionCalls.add(sessionId);
+  }
+
+  @override
+  Future<PlaybackSessionInfo> transferPlaybackSession(
+    String sessionId,
+    String endpointId,
+  ) async {
+    transferPlaybackSessionCalls.add((
+      sessionId: sessionId,
+      endpointId: endpointId,
+    ));
+    return PlaybackSessionInfo(
+      id: sessionId,
+      endpointId: endpointId,
+      mine: true,
+      authority: 'remote',
+      playing: true,
+      index: 0,
+      positionMs: 0,
+      positionAt: DateTime.now().toUtc(),
+      rate: 1,
+      queueVersion: 1,
+      entries: const [],
+    );
+  }
 
   @override
   Future<List<RadioStation>> listRadioStations() async {

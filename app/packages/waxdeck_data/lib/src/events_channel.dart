@@ -52,6 +52,15 @@ class EventsChannel {
     );
   }
 
+  /// Sends one JSON text frame on the live socket. False when no
+  /// connection is up (the caller retries after the next connect).
+  bool send(String frame) {
+    final channel = _channel;
+    if (channel == null) return false;
+    channel.sink.add(frame);
+    return true;
+  }
+
   Future<void> close() async {
     await _sub?.cancel();
     _sub = null;

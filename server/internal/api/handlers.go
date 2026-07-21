@@ -15,8 +15,10 @@ import (
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
+	"github.com/colespringer/waxdeck/server/internal/connect"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
+	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
 
 // Server implements StrictServerInterface over the library service,
@@ -34,6 +36,13 @@ type Server struct {
 	// reference to the same instance).
 	media *auth.MediaTokens
 	log   logger
+	// connect is the multi-device control core; nil only in tests
+	// that exercise surfaces away from the player.
+	connect *connect.Service
+	// group supervises per-connection WebSocket writers.
+	group *supervise.Group
+	// bases are the advertise bases cast preflight reports.
+	bases connect.Bases
 	// cookieSecure marks session cookies Secure; set whenever the
 	// deployed origin is HTTPS, never on the plain-HTTP LAN default.
 	cookieSecure bool
@@ -57,6 +66,9 @@ type Options struct {
 	OIDC         *auth.OIDC
 	Limiter      *auth.RateLimiter
 	Media        *auth.MediaTokens
+	Connect      *connect.Service
+	Group        *supervise.Group
+	Bases        connect.Bases
 	Logger       logger
 	CookieSecure bool
 	PublicBase   string
@@ -73,6 +85,9 @@ func NewServer(version string, opts Options) *Server {
 	if opts.Logger == nil {
 		opts.Logger = discardLogger{}
 	}
+	if opts.Group == nil {
+		opts.Group = supervise.NewGroup(nil)
+	}
 	return &Server{
 		Version:      version,
 		svc:          opts.Service,
@@ -81,6 +96,9 @@ func NewServer(version string, opts Options) *Server {
 		oidc:         opts.OIDC,
 		limiter:      opts.Limiter,
 		media:        opts.Media,
+		connect:      opts.Connect,
+		group:        opts.Group,
+		bases:        opts.Bases,
 		log:          opts.Logger,
 		cookieSecure: opts.CookieSecure,
 		publicBase:   opts.PublicBase,
@@ -402,6 +420,13 @@ func (s *Server) RescanLibrary(ctx context.Context, _ RescanLibraryRequestObject
 }
 
 func (s *Server) GetJob(ctx context.Context, req GetJobRequestObject) (GetJobResponseObject, error) {
+	// Timeline-measurement jobs live in the bridge, not the catalog;
+	// they answer here so one job surface covers both.
+	if s.bridge != nil {
+		if state, ok := s.bridge.TimelineJob(ctx, req.Pid); ok {
+			return GetJob200JSONResponse(Job{Pid: req.Pid, Kind: "timeline", State: state}), nil
+		}
+	}
 	job, err := s.svc.JobStatus(ctx, req.Pid)
 	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {

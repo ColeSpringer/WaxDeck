@@ -12,10 +12,13 @@ import (
 	"time"
 )
 
-// Topics the hub fans out.
+// Topics the hub fans out. The player topic has no cursor: it
+// invalidates ephemeral endpoint and session lists, which always
+// answer current truth.
 const (
 	TopicCatalog = "catalog"
 	TopicUser    = "user"
+	TopicPlayer  = "player"
 )
 
 // Frame is one server-to-client event frame, JSON-shaped per the
@@ -65,6 +68,7 @@ type Conn struct {
 	pending struct {
 		catalog bool
 		user    bool
+		player  bool
 		resync  bool
 	}
 	wake chan struct{}
@@ -80,7 +84,7 @@ func (h *Hub) Register(userID string, topics []string) *Conn {
 	if len(topics) > 0 {
 		c.topics = make(map[string]bool, len(topics))
 		for _, t := range topics {
-			if t == TopicCatalog || t == TopicUser {
+			if t == TopicCatalog || t == TopicUser || t == TopicPlayer {
 				c.topics[t] = true
 			}
 		}
@@ -120,6 +124,8 @@ func (c *Conn) Mark(frameType, topic string) {
 		c.pending.catalog = true
 	case topic == TopicUser:
 		c.pending.user = true
+	case topic == TopicPlayer:
+		c.pending.player = true
 	}
 	c.mu.Unlock()
 	select {
@@ -145,7 +151,10 @@ func (c *Conn) TakePending() []Frame {
 	if c.pending.user {
 		out = append(out, Frame{Type: TypeInvalidate, Topic: TopicUser})
 	}
-	c.pending.catalog, c.pending.user, c.pending.resync = false, false, false
+	if c.pending.player {
+		out = append(out, Frame{Type: TypeInvalidate, Topic: TopicPlayer})
+	}
+	c.pending.catalog, c.pending.user, c.pending.player, c.pending.resync = false, false, false, false
 	return out
 }
 
@@ -173,6 +182,21 @@ func (h *Hub) Run(ctx context.Context) error {
 			catalogDirty = false
 			clear(dirtyUsers)
 		}
+	}
+}
+
+// MarkPlayerAll queues a player-topic invalidation on every
+// connection. Lifecycle changes are rare and the pull applies
+// visibility, so fanning to everyone is cheap and leaks nothing.
+func (h *Hub) MarkPlayerAll() {
+	h.mu.Lock()
+	conns := make([]*Conn, 0, len(h.conns))
+	for c := range h.conns {
+		conns = append(conns, c)
+	}
+	h.mu.Unlock()
+	for _, c := range conns {
+		c.Mark(TypeInvalidate, TopicPlayer)
 	}
 }
 

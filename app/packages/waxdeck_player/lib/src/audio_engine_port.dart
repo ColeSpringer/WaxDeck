@@ -89,4 +89,12 @@ abstract interface class AudioEnginePort {
 
   /// Speed changes from [setSpeed].
   Stream<double> get speedStream;
+
+  /// Sets the output volume, 0.0 (silent) to 1.0 (full). The setting
+  /// survives pause/play and loading new media. Remote control and
+  /// the sleep timer's fade both ride this.
+  Future<void> setVolume(double volume);
+
+  /// Current output volume.
+  double get volume;
 }

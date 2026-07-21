@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/colespringer/waxflow/client"
@@ -65,8 +66,13 @@ type Bridge struct {
 	tokens   *auth.MediaTokens
 	resolver SourceResolver
 	caps     *client.Caps
+	client   *client.Client
 	proxy    *httputil.ReverseProxy
 	log      *slog.Logger
+
+	// Timeline bookkeeping, built lazily on first use.
+	tlOnce sync.Once
+	tl     *timelineState
 }
 
 // New validates the configuration against the live sidecar (fail fast:
@@ -118,6 +124,7 @@ func New(ctx context.Context, cfg Config) (*Bridge, error) {
 		tokens:   cfg.Tokens,
 		resolver: cfg.Resolver,
 		caps:     caps,
+		client:   c,
 		log:      log,
 	}
 	b.proxy = &httputil.ReverseProxy{
@@ -161,6 +168,23 @@ type PlayOptions struct {
 	// VoiceBoost asks for server-side spoken-word normalization; the
 	// mint reports whether it actually engages.
 	VoiceBoost bool
+	// ForceFormat pins the served format for endpoints with narrow
+	// codec support (mp3 for renderers, wav for the jukebox output).
+	// Only formats in forceFormats are honored; anything else falls
+	// back to the derived shape.
+	ForceFormat string
+	// TTL sizes the media token for long deliveries (whole-queue
+	// casts); zero selects the default.
+	TTL time.Duration
+}
+
+// forceFormats is the closed set of client-visible format hints. The
+// hint rides the URL, so it must never widen what a token authorizes:
+// forcing a transcode of an item the user can already stream is the
+// entire attack surface, which is none.
+var forceFormats = map[string]string{
+	"mp3": "audio/mpeg",
+	"wav": "audio/wav",
 }
 
 // PlayInfoFor resolves an item into a tokenized stream URL. The token
@@ -174,13 +198,21 @@ func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts 
 	}
 	_, boost := VoiceBoostParams(src, b.caps, opts.VoiceBoost)
 	shape := ShapeFor(src, b.caps, boost)
-	token, exp := b.tokens.Mint(user, apiItemPID)
+	if mime, ok := forceFormats[opts.ForceFormat]; ok && hasOutput(b.caps, opts.ForceFormat) {
+		shape.Format = opts.ForceFormat
+		shape.MimeType = mime
+		shape.Seekable = true
+	}
+	token, exp := b.tokens.MintFor(user, apiItemPID, opts.TTL)
 	streamURL := "/media/stream?pid=" + url.QueryEscape(apiItemPID) + "&mt=" + url.QueryEscape(token)
 	if opts.FilePID != "" {
 		streamURL += "&f=" + url.QueryEscape(opts.FilePID)
 	}
 	if boost {
 		streamURL += "&vb=1"
+	}
+	if _, ok := forceFormats[opts.ForceFormat]; ok {
+		streamURL += "&fmt=" + url.QueryEscape(opts.ForceFormat)
 	}
 	return PlayInfo{
 		URL:        streamURL,
@@ -235,6 +267,13 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	// client-controlled.
 	gainDB, boost := VoiceBoostParams(src, b.caps, q.Get("vb") == "1")
 	shape := ShapeFor(src, b.caps, boost)
+	// The format hint is client-visible but closed: it can only pick a
+	// narrow-endpoint format for an item the token already authorizes.
+	if f := q.Get("fmt"); f != "" {
+		if _, ok := forceFormats[f]; ok && hasOutput(b.caps, f) {
+			shape.Format = f
+		}
+	}
 
 	params := url.Values{}
 	params.Set("src", ref)

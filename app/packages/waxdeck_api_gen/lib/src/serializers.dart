@@ -24,6 +24,8 @@ import 'package:waxdeck_api_gen/src/model/book_resume.dart';
 import 'package:waxdeck_api_gen/src/model/book_settings.dart';
 import 'package:waxdeck_api_gen/src/model/bootstrap_request.dart';
 import 'package:waxdeck_api_gen/src/model/bootstrap_status.dart';
+import 'package:waxdeck_api_gen/src/model/cast_preflight.dart';
+import 'package:waxdeck_api_gen/src/model/cast_preflight_base.dart';
 import 'package:waxdeck_api_gen/src/model/catalog_sync_entry.dart';
 import 'package:waxdeck_api_gen/src/model/catalog_sync_page.dart';
 import 'package:waxdeck_api_gen/src/model/chapter_mark.dart';
@@ -69,6 +71,13 @@ import 'package:waxdeck_api_gen/src/model/play_state.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_list.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_query.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_update.dart';
+import 'package:waxdeck_api_gen/src/model/playback_session.dart';
+import 'package:waxdeck_api_gen/src/model/playback_session_create.dart';
+import 'package:waxdeck_api_gen/src/model/playback_session_entry.dart';
+import 'package:waxdeck_api_gen/src/model/playback_session_list.dart';
+import 'package:waxdeck_api_gen/src/model/playback_session_transfer.dart';
+import 'package:waxdeck_api_gen/src/model/player_endpoint.dart';
+import 'package:waxdeck_api_gen/src/model/player_endpoint_list.dart';
 import 'package:waxdeck_api_gen/src/model/playlist.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_create.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_entry.dart';
@@ -115,6 +124,9 @@ import 'package:waxdeck_api_gen/src/model/subscription.dart';
 import 'package:waxdeck_api_gen/src/model/subscription_page.dart';
 import 'package:waxdeck_api_gen/src/model/subscription_settings.dart';
 import 'package:waxdeck_api_gen/src/model/synced_line.dart';
+import 'package:waxdeck_api_gen/src/model/timeline_boundary.dart';
+import 'package:waxdeck_api_gen/src/model/timeline_create.dart';
+import 'package:waxdeck_api_gen/src/model/timeline_info.dart';
 import 'package:waxdeck_api_gen/src/model/transcript.dart';
 import 'package:waxdeck_api_gen/src/model/transcript_cue.dart';
 import 'package:waxdeck_api_gen/src/model/user.dart';
@@ -122,8 +134,19 @@ import 'package:waxdeck_api_gen/src/model/user_account.dart';
 import 'package:waxdeck_api_gen/src/model/user_create.dart';
 import 'package:waxdeck_api_gen/src/model/user_page.dart';
 import 'package:waxdeck_api_gen/src/model/user_update.dart';
+import 'package:waxdeck_api_gen/src/model/ws_ack_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_command_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_command_result_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_endpoint_command_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_error_frame.dart';
 import 'package:waxdeck_api_gen/src/model/ws_event_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_ping_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_pong_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_register_endpoint_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_session_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_session_report_frame.dart';
 import 'package:waxdeck_api_gen/src/model/ws_subscribe_frame.dart';
+import 'package:waxdeck_api_gen/src/model/ws_watch_frame.dart';
 
 part 'serializers.g.dart';
 
@@ -138,6 +161,8 @@ part 'serializers.g.dart';
   BookSettings,
   BootstrapRequest,
   BootstrapStatus,
+  CastPreflight,
+  CastPreflightBase,
   CatalogSyncEntry,
   CatalogSyncPage,
   ChapterMark,
@@ -183,6 +208,13 @@ part 'serializers.g.dart';
   PlayStateList,
   PlayStateQuery,
   PlayStateUpdate,
+  PlaybackSession,
+  PlaybackSessionCreate,
+  PlaybackSessionEntry,
+  PlaybackSessionList,
+  PlaybackSessionTransfer,
+  PlayerEndpoint,
+  PlayerEndpointList,
   Playlist,
   PlaylistCreate,
   PlaylistEntry,
@@ -229,6 +261,9 @@ part 'serializers.g.dart';
   SubscriptionPage,
   SubscriptionSettings,
   SyncedLine,
+  TimelineBoundary,
+  TimelineCreate,
+  TimelineInfo,
   Transcript,
   TranscriptCue,
   User,$User,
@@ -236,8 +271,19 @@ part 'serializers.g.dart';
   UserCreate,
   UserPage,
   UserUpdate,
+  WsAckFrame,
+  WsCommandFrame,
+  WsCommandResultFrame,
+  WsEndpointCommandFrame,
+  WsErrorFrame,
   WsEventFrame,
+  WsPingFrame,
+  WsPongFrame,
+  WsRegisterEndpointFrame,
+  WsSessionFrame,
+  WsSessionReportFrame,
   WsSubscribeFrame,
+  WsWatchFrame,
 ])
 Serializers serializers = (_$serializers.toBuilder()
       ..add(AppPassword.serializer)

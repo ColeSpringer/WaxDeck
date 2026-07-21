@@ -144,17 +144,41 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Casting profile: Chromecast and DLNA discovery speak multicast
+  # (mDNS and SSDP), which never crosses the default bridge network.
+  # `docker compose --profile cast up` runs a second waxdeck on host
+  # networking that CAN discover devices; the bridged instance stays
+  # the default for installs that do not cast, and static devices work
+  # everywhere through WAXDECK_CAST_DEVICES / WAXDECK_DLNA_DEVICES.
+  # Alternatives (macvlan, an avahi reflector) are in the docs.
+  waxdeck-cast:
+    image: ghcr.io/colespringer/waxdeck
+    profiles: ["cast"]
+    network_mode: host
+    environment:
+      WAXDECK_ADDR: "0.0.0.0:4420"
+      WAXDECK_LIBRARY_ROOTS: "lib=/library"
+      WAXDECK_DATA_DIR: /data
+      WAXDECK_FLOW_URL: "http://127.0.0.1:4418"
+      WAXDECK_FLOW_API_KEY: ${WAXDECK_FLOW_API_KEY:-change-me}
+      WAXDECK_PUBLIC_BASE: ${WAXDECK_PUBLIC_BASE:-}
+      WAXDECK_ADVERTISE_BASE: ${WAXDECK_ADVERTISE_BASE:-}
+    volumes:
+      - ${WAXDECK_LIBRARY:-./library}:/library
+      - waxdeck-data:/data
+      - waxdeck-podcasts:/podcasts
+    restart: unless-stopped
+
   # --- future profiles (documented topology; services come later) ---
   #
   # similarity (profile: similarity) - sonic-similarity analysis worker.
   #   Reads /library:ro, writes embeddings to its own named volume.
   #
-  # jukebox (profile: jukebox) - shared-queue party mode companion.
-  #   Talks to waxdeck over `internal`; no published ports.
-  #
-  # cast (profile: cast) - Chromecast/DLNA bridge. The only candidate for a
-  #   second published port (SSDP/mDNS may instead require host networking);
-  #   decide when it lands.
+  # jukebox: not a separate service; set WAXDECK_JUKEBOX=true on the
+  #   waxdeck service and mount the sound device:
+  #     devices: ["/dev/snd:/dev/snd"]
+  #   The jukebox pipes engine WAV into aplay (WAXDECK_JUKEBOX_CMD
+  #   overrides; PipeWire hosts use "pw-cat -p -").
 
 networks:
   internal:

@@ -31,6 +31,10 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/api"
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
+	"github.com/colespringer/waxdeck/server/internal/cast/castv2"
+	"github.com/colespringer/waxdeck/server/internal/cast/dlna"
+	"github.com/colespringer/waxdeck/server/internal/cast/jukebox"
+	"github.com/colespringer/waxdeck/server/internal/connect"
 	"github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/events"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -77,6 +81,14 @@ func run() error {
 		sealURL      = flag.String("seal-url", envOr("WAXDECK_SEAL_URL", ""), "WaxSeal attestation sidecar base URL (optional; full-quality YouTube path)")
 		sealKey      = flag.String("seal-api-key", envOr("WAXDECK_SEAL_API_KEY", ""), "API key for the WaxSeal sidecar")
 		sponsorBlock = flag.String("youtube-sponsorblock", envOr("WAXDECK_YOUTUBE_SPONSORBLOCK", ""), "SponsorBlock categories to cut from acquired audio, comma separated (empty disables)")
+
+		advertiseBase = flag.String("advertise-base", envOr("WAXDECK_ADVERTISE_BASE", ""), "plain-HTTP LAN base URL cast devices fetch media from (empty auto-detects the LAN address)")
+		castDiscovery = flag.Bool("cast-discovery", envOr("WAXDECK_CAST_DISCOVERY", "true") == "true", "discover Chromecast and DLNA devices on the LAN (mDNS and SSDP)")
+		castDevices   = flag.String("cast-devices", envOr("WAXDECK_CAST_DEVICES", ""), "static cast devices as name=host:port pairs, comma separated (networks without multicast)")
+		dlnaDevices   = flag.String("dlna-devices", envOr("WAXDECK_DLNA_DEVICES", ""), "static DLNA renderer description URLs, comma separated")
+		jukeboxOn     = flag.Bool("jukebox", envOr("WAXDECK_JUKEBOX", "false") == "true", "play out the server's own audio device as a selectable endpoint (needs the streaming engine)")
+		jukeboxCmd    = flag.String("jukebox-cmd", envOr("WAXDECK_JUKEBOX_CMD", ""), "player command the jukebox pipes WAV into (default aplay; PipeWire hosts use pw-cat -p -)")
+		jukeboxName   = flag.String("jukebox-name", envOr("WAXDECK_JUKEBOX_NAME", "Server audio"), "display name of the jukebox endpoint")
 
 		oidcIssuer  = flag.String("oidc-issuer", envOr("WAXDECK_OIDC_ISSUER", ""), "OIDC issuer URL (empty disables single sign-on)")
 		oidcID      = flag.String("oidc-id", envOr("WAXDECK_OIDC_ID", "sso"), "OIDC provider id shown in start URLs")
@@ -392,12 +404,88 @@ func run() error {
 		log.Info("single sign-on enabled", "issuer", *oidcIssuer, "provider", *oidcID)
 	}
 
+	// The connect core: endpoint registry, playback sessions, and the
+	// command routing between controllers and endpoints. The advertise
+	// bases are what cast devices and renderers fetch media from; the
+	// LAN base auto-detects so plain-HTTP casting works with zero
+	// setup, and the loopback base serves the jukebox.
+	port := listenPort(*addr)
+	lanBase := *advertiseBase
+	if lanBase == "" {
+		if ip := detectLANIP(); ip != "" {
+			lanBase = "http://" + ip + ":" + port
+		}
+	}
+	bases := connect.Bases{
+		Public:   strings.TrimRight(*publicBase, "/"),
+		LAN:      strings.TrimRight(lanBase, "/"),
+		Loopback: "http://127.0.0.1:" + port,
+	}
+	connectSvc, err := connect.New(ctx, connect.Config{
+		Store:            store,
+		Group:            group,
+		Resolver:         &api.ConnectResolver{Svc: svc, Bridge: bridge, Media: media},
+		Sink:             &api.ConnectSink{Svc: svc},
+		Bases:            bases,
+		InvalidatePlayer: hub.MarkPlayerAll,
+		Logger:           log,
+	})
+	if err != nil {
+		return err
+	}
+	group.Go(ctx, "connect", connectSvc.Run)
+
+	// Device discovery: multicast on the LAN plus statically configured
+	// devices for networks where multicast never arrives (the compose
+	// default network among them; the cast profile documents the
+	// host-networking answer).
+	if *castDiscovery || *castDevices != "" {
+		cfg := castv2.DiscoveryConfig{
+			Announce:   connectSvc,
+			Group:      group,
+			Logger:     log,
+			Static:     parseCastDevices(*castDevices),
+			StaticOnly: !*castDiscovery,
+		}
+		group.Go(ctx, "cast-discovery", func(c context.Context) error {
+			return castv2.RunDiscovery(c, cfg)
+		})
+	}
+	if *castDiscovery || *dlnaDevices != "" {
+		cfg := dlna.DiscoveryConfig{
+			Announce:   connectSvc,
+			Group:      group,
+			Logger:     log,
+			Static:     parseDLNADevices(*dlnaDevices),
+			StaticOnly: !*castDiscovery,
+		}
+		group.Go(ctx, "dlna-discovery", func(c context.Context) error {
+			return dlna.RunDiscovery(c, cfg)
+		})
+	}
+	if *jukeboxOn {
+		if bridge == nil {
+			log.Warn("jukebox needs the streaming engine for WAV output; not registering the endpoint")
+		} else {
+			jbCfg := jukebox.Config{Name: *jukeboxName, Log: log}
+			if *jukeboxCmd != "" {
+				jbCfg.Command = strings.Fields(*jukeboxCmd)
+			}
+			if _, err := connectSvc.EndpointOnline(ctx, "jukebox", "jukebox", *jukeboxName, "", true, false, jukebox.Dial(jbCfg, group)); err != nil {
+				log.Warn("registering jukebox endpoint", "err", err)
+			}
+		}
+	}
+
 	srv := api.NewServer(version, api.Options{
 		Service:      svc,
 		Bridge:       bridge,
 		Sessions:     sessions,
 		OIDC:         oidc,
 		Media:        media,
+		Connect:      connectSvc,
+		Group:        group,
+		Bases:        bases,
 		Logger:       log,
 		CookieSecure: *cookieSec,
 		PublicBase:   *publicBase,
@@ -439,6 +527,7 @@ func run() error {
 	mux.Handle("/subscriptions/", gp)
 	if bridge != nil {
 		mux.HandleFunc("/media/stream", bridge.ServeStream)
+		mux.HandleFunc("/media/hls/", bridge.ServeHLS)
 	} else {
 		mux.HandleFunc("/media/stream", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -550,4 +639,83 @@ func envInt64Or(key string, def int64) int64 {
 		}
 	}
 	return def
+}
+
+// listenPort extracts the port from a listen address, defaulting to
+// the standard port when the address carries none.
+func listenPort(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		return "4420"
+	}
+	return port
+}
+
+// detectLANIP picks the machine's most plausible LAN IPv4: the first
+// global unicast address on an up, non-loopback interface. Cast
+// devices resolve nothing, so an address beats any name.
+func detectLANIP() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			ipNet, ok := a.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip := ipNet.IP.To4()
+			if ip == nil || !ip.IsGlobalUnicast() {
+				continue
+			}
+			return ip.String()
+		}
+	}
+	return ""
+}
+
+// parseCastDevices parses name=host:port pairs into static devices.
+func parseCastDevices(s string) []castv2.Device {
+	var out []castv2.Device
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		name, addr, ok := strings.Cut(part, "=")
+		if !ok {
+			continue
+		}
+		host, portStr, err := net.SplitHostPort(addr)
+		if err != nil {
+			continue
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			continue
+		}
+		out = append(out, castv2.Device{Host: host, Port: port, Name: name})
+	}
+	return out
+}
+
+// parseDLNADevices parses description URLs into static devices.
+func parseDLNADevices(s string) []dlna.Device {
+	var out []dlna.Device
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, dlna.Device{Location: part})
+	}
+	return out
 }

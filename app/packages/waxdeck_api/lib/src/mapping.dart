@@ -789,3 +789,49 @@ PushRegistration pushRegistrationFromGen(gen.PushRegistration r) {
     createdAt: r.createdAt.toUtc(),
   );
 }
+
+PlayerEndpoint playerEndpointFromGen(gen.PlayerEndpoint ep) {
+  return PlayerEndpoint(
+    id: ep.id,
+    kind: ep.kind,
+    name: ep.name,
+    online: ep.online,
+    shared: ep.shared,
+    mine: ep.mine,
+    volumeControl: ep.volumeControl,
+    rateControl: ep.rateControl,
+    activeSessionId: ep.activeSessionId,
+  );
+}
+
+PlaybackSessionInfo playbackSessionFromGen(gen.PlaybackSession s) {
+  return PlaybackSessionInfo(
+    id: s.id,
+    endpointId: s.endpointId,
+    endpointName: s.endpointName,
+    mine: s.mine,
+    ownerName: s.ownerName,
+    authority: s.authority,
+    playing: s.playing,
+    index: s.index,
+    positionMs: s.positionMs,
+    positionAt: s.positionAt.toUtc(),
+    rate: s.rate,
+    volume: s.volume,
+    repeat: s.repeat,
+    shuffle: s.shuffle ?? false,
+    queueVersion: s.queueVersion,
+    entries: (s.entries?.toList() ?? const [])
+        .map(
+          (e) => PlaybackSessionEntry(
+            pid: e.pid,
+            title: e.title,
+            artist: e.artist,
+            durationMs: e.durationMs,
+          ),
+        )
+        .toList(growable: false),
+    ended: s.ended ?? false,
+    updatedAt: s.updatedAt.toUtc(),
+  );
+}

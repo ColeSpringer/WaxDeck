@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: WaxDeck API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     First-party REST API for WaxDeck: the self-hosted player, library manager,
     and metadata completer for music, podcasts, and audiobooks.
@@ -26,17 +26,22 @@ info:
     with directory search), outbound scrobbling connections (Last.fm
     and ListenBrainz per user, delivered from a durable server-side
     queue), server notifications (an Apprise relay configured by
-    administrators), and UnifiedPush registrations for
-    push-transported events. The shapes (keyset pagination, typed
-    PIDs, the structured error model, relative media URLs) are
-    load-bearing from day one.
+    administrators), UnifiedPush registrations for push-transported
+    events, and multi-device playback control (player endpoints,
+    playback sessions with server-side queues, transfer between
+    endpoints, gapless queue timelines through the streaming engine,
+    and cast preflight diagnostics; the live command bus rides the
+    WebSocket channel in `api/events.md`). The shapes (keyset
+    pagination, typed PIDs, the structured error model, relative
+    media URLs) are load-bearing from day one.
 
     Conventions:
     - All endpoints live under `/api/v1` (this document's `servers` entry).
     - Identifiers (`pid`) are type-prefixed ULIDs (`tr-` track, `al-` album,
       `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook, `jb-` job,
       `lb-` library, `us-` user, `se-` session, `ap-` app password,
-      `pl-` playlist, `rs-` radio station, `pr-` push registration).
+      `pl-` playlist, `rs-` radio station, `pr-` push registration,
+      `pe-` player endpoint, `ps-` playback session).
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
@@ -54,9 +59,14 @@ info:
       needs an acquisition source integration, such as the YouTube bridge,
       that this server is not running), `directory-unavailable` (an
       external directory service, such as the radio station directory,
-      could not be reached; try again later), and `service-unreachable`
+      could not be reached; try again later), `service-unreachable`
       (an external service this request depends on, such as a
-      scrobbling provider, could not be reached; try again later).
+      scrobbling provider, could not be reached; try again later),
+      `feature-unavailable` (the request needs an optional capability,
+      such as the streaming engine's queue timelines or a cast
+      integration, that this server is not running), and
+      `endpoint-offline` (the target player endpoint is not currently
+      connected; refresh the endpoint list).
       New codes may appear; clients must treat unknown codes as opaque.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
@@ -109,6 +119,19 @@ info:
       response was lost recovers by re-listing and matching
       `previousPid`. Clients treat the pid as stable only between
       rule changes.
+    - Player endpoints and playback sessions are ephemeral control-plane
+      state, not mirrored data: reads always return current truth, there
+      are no cursors, and lifecycle changes reach connected clients as
+      `player`-topic invalidations on the WebSocket channel. A client
+      endpoint (a signed-in first-party client that registered itself as
+      controllable) is visible only to its owning user; device endpoints
+      the server drives itself (cast targets, DLNA renderers, the
+      jukebox output) are shared and visible to every user. A playback
+      session is visible to its owner always, and to other users exactly
+      when it plays on a shared endpoint (what a shared speaker plays is
+      audible to the room; the queue behind it is not private either).
+      Controlling a session follows visibility: your own sessions
+      always, another user's only on a shared endpoint.
   contact:
     name: WaxDeck
     url: https://github.com/ColeSpringer/WaxDeck
@@ -155,6 +178,12 @@ tags:
       per-user UnifiedPush registrations.
   - name: playback
     description: Resolve playable streams, playback state, and listen accounting.
+  - name: player
+    description: >
+      Multi-device control: player endpoints, playback sessions with
+      server-side queues, transfer between endpoints, gapless queue
+      timelines, and cast preflight diagnostics. Live verbs ride the
+      WebSocket command bus (`api/events.md`).
   - name: sync
     description: >
       Delta sync for offline-first clients: snapshot and changed-since
@@ -3051,6 +3080,274 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /player/endpoints:
+    get:
+      operationId: listPlayerEndpoints
+      summary: List player endpoints
+      description: >
+        Every endpoint the caller can play to or control: the caller's own
+        registered client endpoints (first-party clients connected over
+        the WebSocket that declared themselves controllable) plus shared
+        device endpoints the server drives itself (cast targets, DLNA
+        renderers, the jukebox output). Client endpoints exist while
+        their WebSocket connection lives; device endpoints reflect the
+        most recent discovery sweep and carry `online` accordingly.
+        Unpaginated: a household has tens of endpoints, not thousands.
+      tags: [player]
+      responses:
+        "200":
+          description: The visible endpoints, device endpoints first, then by name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerEndpointList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /player/sessions:
+    get:
+      operationId: listPlaybackSessions
+      summary: List playback sessions
+      description: >
+        Active playback sessions visible to the caller: the caller's own
+        sessions on any endpoint, plus other users' sessions playing on
+        shared endpoints. Ordered by most recent activity. Unpaginated
+        for the same reason as the endpoint list (an endpoint plays at
+        most one session).
+      tags: [player]
+      responses:
+        "200":
+          description: The visible sessions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackSessionList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    post:
+      operationId: createPlaybackSession
+      summary: Start playback on an endpoint
+      description: >
+        Loads a queue onto an endpoint and starts a server-tracked
+        playback session there ("play on the kitchen speaker"). An
+        endpoint plays at most one session: starting a new session on an
+        endpoint that already has one ends the old session first,
+        whoever owned it (physical outputs are last-writer-wins, like
+        the speaker itself). Item pids must all be visible to the
+        caller; the server shapes stream delivery for the target
+        endpoint's capabilities, re-minting URLs as needed, so the same
+        queue plays on a phone, a cast device, or a renderer without
+        the caller caring about formats. Sessions on device endpoints
+        are server-authoritative; a session created on one of the
+        caller's own client endpoints is loaded onto that client and
+        then mirrors the client's local playback. Conflict with code
+        `endpoint-offline` means the target endpoint is not connected
+        right now.
+      tags: [player]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaybackSessionCreate"
+      responses:
+        "201":
+          description: The started session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackSession"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/EndpointOffline"
+
+  /player/sessions/{sessionId}:
+    get:
+      operationId: getPlaybackSession
+      summary: Get one playback session
+      description: >
+        One session's current state. Position is a snapshot: `positionMs`
+        was true at `positionAt`, and controllers extrapolate forward
+        with `rate` while `playing` (live updates ride the WebSocket
+        `watch` flow). A session outside the caller's visibility answers
+        `not-found`.
+      tags: [player]
+      parameters:
+        - $ref: "#/components/parameters/PlaybackSessionId"
+      responses:
+        "200":
+          description: The session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackSession"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deletePlaybackSession
+      summary: End a playback session
+      description: >
+        Stops playback on the session's endpoint and ends the session.
+        Ending another user's session requires it to be on a shared
+        endpoint, the same rule as controlling it.
+      tags: [player]
+      parameters:
+        - $ref: "#/components/parameters/PlaybackSessionId"
+      responses:
+        "204":
+          description: Session ended.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /player/sessions/{sessionId}/transfer:
+    post:
+      operationId: transferPlaybackSession
+      summary: Transfer a session to another endpoint
+      description: >
+        Moves live playback to another endpoint, keeping the queue and
+        the extrapolated position ("pick up where you left off"). The
+        server snapshots the session, loads the target with stream URLs
+        shaped for its capabilities, then stops playback on the source;
+        the session keeps its id and changes `endpointId`, so
+        controllers keep following the same session. Transferring to a
+        client endpoint hands the queue to that client, which resumes
+        local playback and reports back (`authority` becomes `mirror`);
+        transferring to a device endpoint makes the session
+        server-authoritative. A brief overlap or gap at the seam is
+        inherent; position is carried, not resynthesized. Authorization
+        follows control with one tightening: your own sessions may
+        transfer to any endpoint you can see, while a session you do
+        not own may only be transferred to a shared endpoint (moving
+        someone's queue onto your private device would take it out of
+        their sight). Transferring a session to the endpoint it is
+        already on is a no-op answering 200. Conflict with code
+        `endpoint-offline` means the target endpoint is not connected.
+      tags: [player]
+      parameters:
+        - $ref: "#/components/parameters/PlaybackSessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaybackSessionTransfer"
+      responses:
+        "200":
+          description: The session, now on the target endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackSession"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/EndpointOffline"
+
+  /player/timeline:
+    post:
+      operationId: createQueueTimeline
+      summary: Mint a gapless queue timeline
+      description: >
+        Renders an ordered queue of visible items as one continuous
+        stream through the streaming engine: sample-exact seams, no
+        discontinuities, with optional equal-power crossfade. The
+        response's single HLS URL plays the whole queue; `boundaries`
+        map each item onto the combined timeline (offsets in samples at
+        `envelopeRate`; under a crossfade consecutive members overlap),
+        so a client can render per-track position and seek across
+        members without probing. Timelines are immutable: editing the
+        queue means minting a new timeline and switching URLs. The URL
+        is media-token authenticated, and the token lives at least the
+        timeline's duration plus margin (`expiresAt` reflects it), so
+        a queue never expires mid-listen; a member file changing on
+        disk surfaces as `stream-stale`, and a timeline aged out of
+        the engine's store answers `not-found` on fetch. Re-request
+        this endpoint in either case. Minting may first need to
+        measure member lengths (MP3 sources are scanned); the server
+        absorbs short measurements into this request, and when one
+        outlasts the request budget it answers 202 with a job to poll,
+        after which re-requesting answers 201 immediately. Requires
+        the streaming engine with timeline support
+        (`feature-unavailable` otherwise). Items whose delivery cannot
+        join a timeline (unfetched podcast episodes, unsupported
+        sources) answer `conflict` naming the pid, and a
+        `crossfadeSeconds` longer than the shortest queue member can
+        carry answers `invalid-request` naming it.
+      tags: [player]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimelineCreate"
+      responses:
+        "201":
+          description: The minted timeline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimelineInfo"
+        "202":
+          description: >
+            Member measurement is still running. Poll the job, then
+            re-request the timeline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
+
+  /player/cast/preflight:
+    get:
+      operationId: getCastPreflight
+      summary: Check cast reachability
+      description: >
+        Server-side diagnosis of the bases a cast device would fetch
+        media from, before the user hits a silent cast failure. For each
+        candidate advertise base (the configured public base and the
+        auto-detected LAN address), the server verifies it can fetch
+        itself through that base and reports plain-language notes about
+        scheme, certificate, and name-resolution problems (cast devices
+        require publicly trusted certificates for HTTPS and often ignore
+        LAN DNS; the plain-HTTP LAN base exists so casting works with
+        zero TLS setup). A reachable base here does not guarantee the
+        device can reach it, but an unreachable one reliably predicts
+        failure. Exposing the configured and detected bases to every
+        authenticated user is intentional: casting is a household
+        activity, and any LAN peer learns these addresses trivially.
+      tags: [player]
+      responses:
+        "200":
+          description: Candidate bases, in the order sessions will try them.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CastPreflight"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
   /play-states:
     post:
       operationId: listPlayStates
@@ -3289,6 +3586,14 @@ components:
       schema:
         type: string
         pattern: "^se-[0-9A-HJKMNP-TV-Z]{26}$"
+    PlaybackSessionId:
+      name: sessionId
+      in: path
+      required: true
+      description: Playback session PID (e.g. `ps-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^ps-[0-9A-HJKMNP-TV-Z]{26}$"
     AppPasswordId:
       name: appPasswordId
       in: path
@@ -3373,6 +3678,24 @@ components:
         The request needs an acquisition source integration that this
         server is not running (code `source-unavailable`), for example a
         YouTube subscription on a server without the YouTube bridge.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    FeatureUnavailable:
+      description: >
+        The request needs an optional capability this server is not
+        running (code `feature-unavailable`), for example queue
+        timelines on a server without the streaming engine.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    EndpointOffline:
+      description: >
+        The target player endpoint is not currently connected (code
+        `endpoint-offline`). Refresh the endpoint list; the device may
+        have left the network or the client may have disconnected.
       content:
         application/json:
           schema:
@@ -4515,8 +4838,12 @@ components:
         topics:
           type: array
           description: >
-            Topics to receive (`catalog`, `user`). Omit for all topics.
-            Unknown topic names are ignored.
+            Topics to receive (`catalog`, `user`, `player`). Omit for
+            all topics. Unknown topic names are ignored. The `player`
+            topic has no cursor (it invalidates ephemeral lists, not a
+            mirrored stream), so subscribing never prompts an initial
+            `player` invalidate; clients that render endpoint or
+            session lists pull them on connect.
           items:
             type: string
             example: catalog
@@ -4526,18 +4853,20 @@ components:
       description: >
         One server-to-client frame on the WebSocket event channel
         (transport in `api/events.md`). An `invalidate` frame tells the
-        client the named stream moved: pull the matching sync endpoint
-        (`catalog` topic, `/sync/catalog`; `user` topic, `/sync/server`)
-        from the client's own cursor. Invalidations are coalesced
-        server-side, so one frame can cover many changes, and carry no
-        data, so a redundant pull is harmless. A `resync` frame means
-        continuity was lost for the named stream, or for every stream
-        when `topic` is absent (client queue overflow, pruned history):
-        drop the affected mirror halves, re-mirror through the sync
-        endpoints, then close the socket, reconnect, and resubscribe
-        with the fresh cursors. `type` and `topic` are strings, not
-        closed enums; clients must ignore frames whose `type` they do
-        not recognize.
+        client the named topic moved: for `catalog` pull `/sync/catalog`
+        and for `user` pull `/sync/server` from the client's own
+        cursor; for `player` pull `/player/endpoints` and
+        `/player/sessions`, which always return current truth (no
+        cursor). Invalidations are coalesced server-side, so one frame
+        can cover many changes, and carry no data, so a redundant pull
+        is harmless. A `resync` frame means continuity was lost for the
+        named stream, or for every stream when `topic` is absent
+        (client queue overflow, pruned history): drop the affected
+        mirror halves, re-mirror through the sync endpoints, then close
+        the socket, reconnect, and resubscribe with the fresh cursors.
+        `resync` never names `player` (there is nothing to replay).
+        `type` and `topic` are strings, not closed enums; clients must
+        ignore frames whose `type` they do not recognize.
       required: [type]
       properties:
         type:
@@ -4547,10 +4876,753 @@ components:
         topic:
           type: string
           description: >
-            Which stream the frame is about (`catalog` or `user`).
-            Always present on `invalidate`; on `resync` its absence
-            means every stream.
+            Which topic the frame is about (`catalog`, `user`, or
+            `player`). Always present on `invalidate`; on `resync` its
+            absence means every stream.
           example: catalog
+
+    PlayerEndpoint:
+      type: object
+      description: >
+        One controllable playback output: a registered first-party
+        client (`client`), a cast device (`cast`), a DLNA renderer
+        (`dlna`), or the server's own audio output (`jukebox`). `kind`
+        is an open string; clients must render unknown kinds as generic
+        endpoints.
+      required: [id, kind, name, online, shared, mine, volumeControl, rateControl]
+      properties:
+        id:
+          type: string
+          description: Endpoint PID. Stable per device across reconnects.
+          example: pe-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          type: string
+          description: "`client`, `cast`, `dlna`, or `jukebox`."
+          example: cast
+        name:
+          type: string
+          description: >
+            Display name: the device's advertised name, or the client
+            session's device label.
+          example: Kitchen speaker
+        online:
+          type: boolean
+          description: >
+            Whether the endpoint is reachable right now. Client
+            endpoints are listed only while online; device endpoints
+            persist across discovery sweeps and go offline when they
+            stop answering.
+        shared:
+          type: boolean
+          description: >
+            Shared endpoints are visible and controllable by every
+            user. Device endpoints are shared; client endpoints are
+            private to their owner.
+        mine:
+          type: boolean
+          description: True when the endpoint belongs to the caller.
+        volumeControl:
+          type: boolean
+          description: Whether `set-volume` works on this endpoint.
+        rateControl:
+          type: boolean
+          description: Whether `set-rate` works on this endpoint.
+        activeSessionId:
+          type: string
+          description: >
+            The session currently playing on this endpoint, when there
+            is one visible to the caller.
+          example: ps-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    PlayerEndpointList:
+      type: object
+      description: The endpoints visible to the caller.
+      required: [endpoints]
+      properties:
+        endpoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlayerEndpoint"
+
+    PlaybackSessionEntry:
+      type: object
+      description: One queue entry of a playback session, hydrated for display.
+      required: [pid, title]
+      properties:
+        pid:
+          type: string
+          description: The item's PID.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        title:
+          type: string
+          description: Display title.
+        artist:
+          type: string
+          description: Display artist, when the item has one.
+        durationMs:
+          type: integer
+          format: int64
+          description: Item duration in milliseconds, when known.
+
+    PlaybackSession:
+      type: object
+      description: >
+        One playback session: a queue playing (or paused) on an
+        endpoint. `positionMs` is the position that was true at
+        `positionAt` (server clock); while `playing`, controllers
+        extrapolate forward with `rate`. `authority` says who advances
+        playback: `remote` sessions are driven by the server (cast,
+        DLNA, jukebox), `mirror` sessions are driven by the playing
+        client and mirrored here. Both are controlled the same way.
+      required:
+        [id, endpointId, mine, authority, playing, index, positionMs,
+         positionAt, rate, queueVersion, updatedAt]
+      properties:
+        id:
+          type: string
+          description: >
+            Session PID. Stable across transfers between endpoints.
+          example: ps-01JZX5N8QW3F4V9T2B7KD3M9R6
+        endpointId:
+          type: string
+          description: The endpoint the session plays on.
+          example: pe-01JZX5N8QW3F4V9T2B7KD3M9R6
+        endpointName:
+          type: string
+          description: The endpoint's display name, for one-call rendering.
+        mine:
+          type: boolean
+          description: True when the caller owns the session.
+        ownerName:
+          type: string
+          description: >
+            The owning user's display name. Present on sessions the
+            caller does not own (it is how a shared speaker's UI says
+            who is playing).
+        authority:
+          type: string
+          description: "`remote` or `mirror` (open string)."
+          example: remote
+        playing:
+          type: boolean
+          description: Whether playback is running right now.
+        index:
+          type: integer
+          description: Zero-based index of the current entry.
+        positionMs:
+          type: integer
+          format: int64
+          description: Position within the current entry at `positionAt`.
+        positionAt:
+          type: string
+          format: date-time
+          description: >
+            Server-clock instant `positionMs` was true, millisecond
+            precision. Extrapolate against the WebSocket clock offset.
+        rate:
+          type: number
+          format: double
+          minimum: 0.25
+          maximum: 5
+          description: Playback rate. 1.0 is normal speed.
+        volume:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: >
+            Endpoint volume, 0 to 1. Absent on endpoints without
+            volume control.
+        repeat:
+          type: string
+          description: "`off`, `all`, or `one` (open string)."
+          example: "off"
+        shuffle:
+          type: boolean
+          description: >
+            Whether shuffle is on. `entries` always lists the true
+            play order: turning shuffle on reorders the unplayed
+            remainder (and bumps `queueVersion`); turning it off keeps
+            the current order.
+        queueVersion:
+          type: integer
+          format: int64
+          description: >
+            The server-owned queue generation, monotone per session id
+            across transfers and authority changes: it bumps whenever
+            the queue (entries or their order) changes. A playing
+            client's reported version is only an edge signal; the
+            published value here is the server's.
+        entries:
+          type: array
+          description: >
+            The queue, in play order. Always present on the REST
+            endpoints. WebSocket `session` frames carry it on the
+            first frame of a watch and whenever `queueVersion` bumped,
+            and omit it otherwise (absent means unchanged since the
+            version you last saw; refetch the session if you lost
+            track).
+          items:
+            $ref: "#/components/schemas/PlaybackSessionEntry"
+        ended:
+          type: boolean
+          description: >
+            Present true only over the WebSocket, and terminal for
+            that delivery context: the watched or reported session
+            ended, or left the receiver's visibility (a transfer to a
+            private endpoint). Re-list `/player/sessions` to learn
+            which. Never true from the REST endpoints, which answer
+            `not-found` for sessions the caller cannot see.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last state change (position ticks included).
+
+    PlaybackSessionList:
+      type: object
+      description: The sessions visible to the caller, most recent activity first.
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlaybackSession"
+
+    PlaybackSessionCreate:
+      type: object
+      description: Start playback of a queue on an endpoint.
+      required: [endpointId, itemPids]
+      properties:
+        endpointId:
+          type: string
+          description: The target endpoint.
+          example: pe-01JZX5N8QW3F4V9T2B7KD3M9R6
+        itemPids:
+          type: array
+          description: The queue, in play order.
+          minItems: 1
+          maxItems: 500
+          items:
+            type: string
+        index:
+          type: integer
+          description: Zero-based entry to start at. Defaults to 0.
+          minimum: 0
+        positionMs:
+          type: integer
+          format: int64
+          description: Position within the starting entry. Defaults to 0.
+          minimum: 0
+        play:
+          type: boolean
+          description: >
+            Start playing immediately. Defaults to true; false loads
+            paused.
+
+    PlaybackSessionTransfer:
+      type: object
+      description: Move a session's live playback to another endpoint.
+      required: [endpointId]
+      properties:
+        endpointId:
+          type: string
+          description: The endpoint to move playback to.
+          example: pe-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    TimelineCreate:
+      type: object
+      description: Mint a gapless timeline over an ordered queue of items.
+      required: [itemPids]
+      properties:
+        itemPids:
+          type: array
+          description: The queue, in play order.
+          minItems: 1
+          maxItems: 500
+          items:
+            type: string
+        crossfadeSeconds:
+          type: number
+          format: double
+          description: >
+            Equal-power crossfade applied at every seam, in seconds, 0
+            to 12. Omit or 0 for a gapless butt join. The value shapes
+            the returned boundaries; the served stream applies the
+            same value by construction.
+          minimum: 0
+          maximum: 12
+
+    TimelineBoundary:
+      type: object
+      description: >
+        One queue item's place on the combined timeline. Offsets and
+        durations are in samples at the timeline's `envelopeRate`.
+        Without crossfade, members tile exactly; with crossfade,
+        consecutive members overlap, so map positions by offset, never
+        by summing durations.
+      required: [pid, offsetSamples, durationSamples]
+      properties:
+        pid:
+          type: string
+          description: The queue item this boundary describes.
+        offsetSamples:
+          type: integer
+          format: int64
+          description: Where this member starts on the timeline.
+        durationSamples:
+          type: integer
+          format: int64
+          description: The member's own length on the timeline.
+
+    TimelineInfo:
+      type: object
+      description: >
+        A minted gapless timeline: one HLS stream URL that plays the
+        whole queue, plus the per-member boundaries to map positions.
+      required:
+        [url, mimeType, durationMs, expiresAt, envelopeRate, boundaries]
+      properties:
+        url:
+          type: string
+          description: >
+            Origin-relative, media-token-authenticated HLS playlist
+            URL for the whole timeline. The token lives at least the
+            timeline's duration plus margin; re-request this endpoint
+            on `stream-stale`, on a `not-found` fetch (the engine aged
+            the timeline out), or after `expiresAt`.
+          example: /media/hls/master.m3u8?tl=abc&mt=xyz
+        mimeType:
+          type: string
+          description: Always an HLS playlist type.
+          example: application/vnd.apple.mpegurl
+        durationMs:
+          type: integer
+          format: int64
+          description: The combined timeline's duration.
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the embedded media token stops being accepted.
+        envelopeRate:
+          type: integer
+          description: >
+            Sample rate the boundary offsets are measured at (the
+            maximum member rate).
+        crossfadeSeconds:
+          type: number
+          format: double
+          description: The crossfade the timeline was minted with, when nonzero.
+        boundaries:
+          type: array
+          description: Per-member placement, in queue order.
+          items:
+            $ref: "#/components/schemas/TimelineBoundary"
+
+    CastPreflightBase:
+      type: object
+      description: One candidate advertise base and its server-side verdict.
+      required: [base, source, reachable, notes]
+      properties:
+        base:
+          type: string
+          description: The base URL a cast device would fetch media from.
+          example: http://192.168.1.20:4420
+        source:
+          type: string
+          description: >
+            Where the candidate came from: `configured` (the public
+            base) or `detected` (the auto-detected LAN address). Open
+            string.
+        reachable:
+          type: boolean
+          description: >
+            Whether the server could fetch its own health endpoint
+            through this base.
+        notes:
+          type: array
+          description: >
+            Plain-language observations: scheme and certificate
+            caveats, name-resolution warnings, why a base is likely or
+            unlikely to work from a cast device.
+          items:
+            type: string
+
+    CastPreflight:
+      type: object
+      description: >
+        The advertise bases cast sessions will offer, in try order,
+        each with a server-side reachability verdict.
+      required: [bases]
+      properties:
+        bases:
+          type: array
+          items:
+            $ref: "#/components/schemas/CastPreflightBase"
+
+    WsCommandFrame:
+      type: object
+      description: >
+        Client-to-server command on the WebSocket command bus
+        (transport in `api/events.md`). Targets a session by id;
+        `verb` is one of `play`, `pause`, `stop`, `seek`, `next`,
+        `previous`, `set-volume`, `set-rate`, `set-queue`,
+        `set-repeat`, `set-shuffle` (open string; unknown verbs answer
+        an error frame). Arguments are absolute state, never deltas.
+        Answered exactly once, with an ack or an error echoing `id`.
+      required: [type, id, sessionId, verb]
+      properties:
+        type:
+          type: string
+          description: Always `cmd`.
+          example: cmd
+        id:
+          type: string
+          maxLength: 64
+          description: Client-chosen correlation id, echoed on the answer.
+          example: c7
+        sessionId:
+          type: string
+          description: The target session.
+          example: ps-01JZX5N8QW3F4V9T2B7KD3M9R6
+        verb:
+          type: string
+          description: The command verb.
+          example: seek
+        positionMs:
+          type: integer
+          format: int64
+          description: For `seek` and optionally `set-queue`.
+        volume:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: For `set-volume`, 0 to 1.
+        rate:
+          type: number
+          format: double
+          minimum: 0.25
+          maximum: 5
+          description: For `set-rate`.
+        itemPids:
+          type: array
+          description: For `set-queue`, the new queue in play order.
+          maxItems: 500
+          items:
+            type: string
+        index:
+          type: integer
+          description: For `set-queue`, the entry to play.
+        repeat:
+          type: string
+          description: "For `set-repeat`: `off`, `all`, or `one`."
+        shuffle:
+          type: boolean
+          description: For `set-shuffle`.
+
+    WsAckFrame:
+      type: object
+      description: >
+        Server answer to a successful `cmd` or `register-endpoint`
+        frame, echoing its `id`. Command acks carry the updated
+        session snapshot when the server has one; for commands routed
+        to a playing client (mirror sessions) the snapshot may lag or
+        be absent, because the client's own report is what updates the
+        mirror; controllers render those from the following `session`
+        frame. Registration acks carry the endpoint id.
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          description: Always `ack`.
+          example: ack
+        id:
+          type: string
+          description: The answered frame's correlation id.
+        endpointId:
+          type: string
+          description: On registration acks, the endpoint's id.
+          example: pe-01JZX5N8QW3F4V9T2B7KD3M9R6
+        session:
+          $ref: "#/components/schemas/PlaybackSession"
+
+    WsErrorFrame:
+      type: object
+      description: >
+        Server answer to a failed client frame, echoing its `id` when
+        one was readable. `code` draws from the API error vocabulary
+        plus `timeout` (a routed command's target did not answer
+        within the routing deadline).
+      required: [type, code, message]
+      properties:
+        type:
+          type: string
+          description: Always `error`.
+          example: error
+        id:
+          type: string
+          description: The failed frame's correlation id, when known.
+        code:
+          type: string
+          description: Machine-readable error code.
+          example: endpoint-offline
+        message:
+          type: string
+          description: Human-readable detail.
+
+    WsRegisterEndpointFrame:
+      type: object
+      description: >
+        Client-to-server: declare this connection a controllable
+        player endpoint. Answered with an ack carrying `endpointId`.
+        The endpoint lives while the connection does.
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          description: Always `register-endpoint`.
+          example: register-endpoint
+        id:
+          type: string
+          maxLength: 64
+          description: Correlation id for the ack.
+        name:
+          type: string
+          maxLength: 128
+          description: >
+            Display name. Defaults to the device session's label.
+        volumeControl:
+          type: boolean
+          description: Whether this client can apply `set-volume`.
+        rateControl:
+          type: boolean
+          description: Whether this client can apply `set-rate`.
+
+    WsEndpointCommandFrame:
+      type: object
+      description: >
+        Server-to-client command routed to a registered client
+        endpoint. Verbs are the command verbs plus `load` (adopt this
+        queue at this index and position; the client resolves
+        play-info itself). The client executes against its local
+        engine and answers exactly once with a `cmd-result`, then
+        reports state.
+      required: [type, id, sessionId, verb]
+      properties:
+        type:
+          type: string
+          description: Always `endpoint-cmd`.
+          example: endpoint-cmd
+        id:
+          type: string
+          description: Server-chosen correlation id for the result.
+        sessionId:
+          type: string
+          description: The session this command belongs to.
+        verb:
+          type: string
+          description: The command verb.
+          example: load
+        itemPids:
+          type: array
+          description: For `load` and `set-queue`.
+          items:
+            type: string
+        index:
+          type: integer
+          description: For `load` and `set-queue`.
+        positionMs:
+          type: integer
+          format: int64
+          description: For `load`, `seek`, and optionally `set-queue`.
+        play:
+          type: boolean
+          description: For `load`, whether to start playing.
+        volume:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: For `set-volume`.
+        rate:
+          type: number
+          format: double
+          minimum: 0.25
+          maximum: 5
+          description: For `set-rate`.
+        repeat:
+          type: string
+          description: For `set-repeat`.
+        shuffle:
+          type: boolean
+          description: For `set-shuffle`.
+
+    WsCommandResultFrame:
+      type: object
+      description: >
+        Client-to-server answer to an `endpoint-cmd`, echoing its
+        `id`. Sent exactly once per routed command.
+      required: [type, id, ok]
+      properties:
+        type:
+          type: string
+          description: Always `cmd-result`.
+          example: cmd-result
+        id:
+          type: string
+          description: The routed command's correlation id.
+        ok:
+          type: boolean
+          description: Whether the command was applied.
+        code:
+          type: string
+          description: Machine-readable failure code when `ok` is false.
+        message:
+          type: string
+          description: Human-readable failure detail when `ok` is false.
+
+    WsSessionReportFrame:
+      type: object
+      description: >
+        Client-to-server state report from a playing client: sent on
+        every state change (play, pause, seek, track change, queue
+        change) and at least every five seconds while playing. The
+        steady fields (`playing`, `positionMs`, `index`, `rate`,
+        `volume`, `repeat`, `shuffle`) carry current truth on every
+        report; a track advance is just a report with the new `index`.
+        `itemPids` rides only the reports where the queue itself
+        changed, together with a bumped `queueVersion`, plus the
+        first report of a connection that is already playing (the one
+        that creates or re-creates the mirror session; a creating
+        report without `itemPids` is ignored, since a session without
+        a queue is unrenderable). The server answers a creating report
+        with a `session` frame carrying the assigned id; other reports
+        are unacknowledged.
+      required: [type, playing, positionMs, index]
+      properties:
+        type:
+          type: string
+          description: Always `session-report`.
+          example: session-report
+        playing:
+          type: boolean
+          description: Whether local playback is running.
+        positionMs:
+          type: integer
+          format: int64
+          description: Position within the current entry.
+        index:
+          type: integer
+          description: Zero-based index of the current entry.
+        rate:
+          type: number
+          format: double
+          minimum: 0.25
+          maximum: 5
+          description: Playback rate.
+        volume:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: Local volume, 0 to 1, when the client controls one.
+        itemPids:
+          type: array
+          description: >
+            The queue in play order, only on reports where it changed
+            (and on the creating report).
+          maxItems: 500
+          items:
+            type: string
+        queueVersion:
+          type: integer
+          format: int64
+          description: >
+            The client's queue generation, bumped when its queue
+            changes. An edge signal only: the version the server
+            publishes on the session is its own monotone counter.
+        repeat:
+          type: string
+          description: "`off`, `all`, or `one`."
+        shuffle:
+          type: boolean
+          description: Whether shuffle is on.
+
+    WsSessionFrame:
+      type: object
+      description: >
+        Server-to-client session state: pushed to the watcher of a
+        session on every change and about once per second while
+        playing, and to a reporting client when its session identity
+        changes or ends. A frame whose session carries `ended` true is
+        terminal for that id.
+      required: [type, session]
+      properties:
+        type:
+          type: string
+          description: Always `session`.
+          example: session
+        session:
+          $ref: "#/components/schemas/PlaybackSession"
+
+    WsWatchFrame:
+      type: object
+      description: >
+        Client-to-server: follow one session's live state. Watching
+        follows session visibility (your own sessions, others' on
+        shared endpoints). A new watch replaces the previous one;
+        omitting `sessionId` stops watching. A successful watch is not
+        acked (the current state arrives immediately as a `session`
+        frame); a watch of an unknown or invisible session answers an
+        `error` frame with `not-found`, echoing `id` when sent.
+      required: [type]
+      properties:
+        type:
+          type: string
+          description: Always `watch`.
+          example: watch
+        id:
+          type: string
+          maxLength: 64
+          description: Optional correlation id, echoed on a failure.
+        sessionId:
+          type: string
+          description: The session to follow.
+          example: ps-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    WsPingFrame:
+      type: object
+      description: >
+        Client-to-server clock probe for NTP-style offset estimation
+        (unrelated to WebSocket protocol pings).
+      required: [type, t]
+      properties:
+        type:
+          type: string
+          description: Always `ping`.
+          example: ping
+        t:
+          type: integer
+          format: int64
+          description: Opaque client timestamp, echoed back verbatim.
+
+    WsPongFrame:
+      type: object
+      description: Server answer to a `ping` frame.
+      required: [type, t, at]
+      properties:
+        type:
+          type: string
+          description: Always `pong`.
+          example: pong
+        t:
+          type: integer
+          format: int64
+          description: The ping's `t`, echoed verbatim.
+        at:
+          type: integer
+          format: int64
+          description: Server clock in Unix milliseconds at handling time.
 
     DownloadFile:
       type: object
