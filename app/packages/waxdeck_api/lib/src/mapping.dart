@@ -350,6 +350,7 @@ PodcastShow podcastShowFromGen(gen.PodcastShow show, {String baseUrl = ''}) {
     episodeCount: show.episodeCount,
     lastPublishedAt: show.lastPublishedAt,
     refreshDisabled: show.refreshDisabled ?? false,
+    explicit: show.explicit ?? false,
   );
 }
 
@@ -803,6 +804,532 @@ PlayerEndpoint playerEndpointFromGen(gen.PlayerEndpoint ep) {
     activeSessionId: ep.activeSessionId,
   );
 }
+
+CandidateSummary candidateSummaryFromGen(gen.CandidateSummary s) {
+  return CandidateSummary(
+    mbid: s.mbid,
+    title: s.title,
+    artist: s.artist,
+    year: s.year,
+    similarityPct: s.similarityPct,
+  );
+}
+
+ReviewEntry reviewEntryFromGen(gen.ReviewEntry entry) {
+  final best = entry.best;
+  return ReviewEntry(
+    id: entry.id,
+    kind: entry.kind,
+    status: entry.status,
+    mediaType: mediaTypeFromGen(entry.mediaType),
+    origin: entry.origin,
+    title: entry.title,
+    artist: entry.artist,
+    trackCount: entry.trackCount,
+    libraryPid: entry.libraryPid,
+    uploadedBy: entry.uploadedBy,
+    identifying: entry.identifying,
+    best: best == null ? null : candidateSummaryFromGen(best),
+    appliedMbid: entry.appliedMbid,
+    createdAt: entry.createdAt.toUtc(),
+    decidedAt: entry.decidedAt?.toUtc(),
+    decidedBy: entry.decidedBy,
+  );
+}
+
+ReviewTrack reviewTrackFromGen(gen.ReviewTrack track) {
+  return ReviewTrack(
+    pid: track.pid,
+    path: track.path,
+    title: track.title,
+    artist: track.artist,
+    trackNo: track.trackNo,
+    discNo: track.discNo,
+    durationMs: track.durationMs,
+  );
+}
+
+ReviewCandidate reviewCandidateFromGen(gen.ReviewCandidate c) {
+  return ReviewCandidate(
+    mbid: c.mbid,
+    releaseGroupMbid: c.releaseGroupMbid,
+    title: c.title,
+    artist: c.artist,
+    year: c.year,
+    mediaCount: c.mediaCount,
+    trackCount: c.trackCount,
+    country: c.country,
+    label: c.label,
+    catalogNumber: c.catalogNumber,
+    compilation: c.compilation,
+    similarityPct: c.similarityPct,
+    components:
+        c.components
+            ?.map(
+              (comp) => CandidateComponent(
+                name: comp.name,
+                distance: comp.distance,
+                weight: comp.weight,
+              ),
+            )
+            .toList() ??
+        const [],
+    pairings: c.pairings
+        .map(
+          (p) => CandidatePairing(
+            trackIndex: p.trackIndex,
+            position: p.position,
+            disc: p.disc,
+            title: p.title,
+            artist: p.artist,
+            durationMs: p.durationMs,
+            recordingMbid: p.recordingMbid,
+            distance: p.distance,
+          ),
+        )
+        .toList(),
+    missingTitles: c.missingTitles?.toList() ?? const [],
+    extraTrackIndexes: c.extraTrackIndexes?.toList() ?? const [],
+  );
+}
+
+ReviewEntryDetail reviewEntryDetailFromGen(gen.ReviewEntryDetail detail) {
+  final best = detail.best;
+  return ReviewEntryDetail(
+    id: detail.id,
+    kind: detail.kind,
+    status: detail.status,
+    mediaType: mediaTypeFromGen(detail.mediaType),
+    origin: detail.origin,
+    title: detail.title,
+    artist: detail.artist,
+    trackCount: detail.trackCount,
+    libraryPid: detail.libraryPid,
+    uploadedBy: detail.uploadedBy,
+    identifying: detail.identifying,
+    best: best == null ? null : candidateSummaryFromGen(best),
+    appliedMbid: detail.appliedMbid,
+    createdAt: detail.createdAt.toUtc(),
+    decidedAt: detail.decidedAt?.toUtc(),
+    decidedBy: detail.decidedBy,
+    candidates: detail.candidates.map(reviewCandidateFromGen).toList(),
+    tracks: detail.tracks.map(reviewTrackFromGen).toList(),
+  );
+}
+
+ReviewEntryPage reviewEntryPageFromGen(gen.ReviewEntryPage page) {
+  return ReviewEntryPage(
+    entries: page.entries.map(reviewEntryFromGen).toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
+ReviewStats reviewStatsFromGen(gen.ReviewStats stats) {
+  return ReviewStats(
+    pending: stats.pending,
+    identifying: stats.identifying ?? 0,
+    applied: stats.applied,
+    autoApplied: stats.autoApplied,
+    asIs: stats.asIs ?? 0,
+    unofficial: stats.unofficial ?? 0,
+    skipped: stats.skipped ?? 0,
+    reverted: stats.reverted,
+    revertedAutoApplied: stats.revertedAutoApplied,
+  );
+}
+
+ReviewBulkOutcome reviewBulkOutcomeFromGen(gen.ReviewBulkOutcome o) {
+  return ReviewBulkOutcome(entryId: o.entryId, ok: o.ok, error: o.error);
+}
+
+/// Bridges a wire action string (`approve`, `as-is`, `unofficial`,
+/// `skip`, `discard`) to the generated enum, whose Dart name for
+/// `as-is` is `asIs`.
+gen.ReviewDecisionActionEnum reviewActionToGen(String action) =>
+    gen.ReviewDecisionActionEnum.valueOf(action == 'as-is' ? 'asIs' : action);
+
+gen.ReviewBulkDecisionActionEnum reviewBulkActionToGen(String action) =>
+    gen.ReviewBulkDecisionActionEnum.valueOf(
+      action == 'as-is' ? 'asIs' : action,
+    );
+
+/// Bridges the matching mode to its wire name; the generated Dart name
+/// for `false` is `false_`.
+LibraryInfo libraryInfoFromGen(gen.ModelLibrary l) =>
+    LibraryInfo(pid: l.pid, name: l.name, media: l.media);
+
+String libraryMatchingModeFromGen(gen.LibraryMatching m) => m.mode.name;
+
+gen.LibraryMatching libraryMatchingModeToGen(String mode) {
+  return gen.LibraryMatching(
+    (b) => b..mode = gen.LibraryMatchingModeEnum.valueOf(mode),
+  );
+}
+
+DuplicateWarning duplicateWarningFromGen(gen.DuplicateWarning w) {
+  return DuplicateWarning(
+    itemPid: w.itemPid,
+    kind: w.kind,
+    title: w.title,
+    artist: w.artist,
+  );
+}
+
+UploadSession uploadSessionFromGen(gen.Upload upload) {
+  final duplicate = upload.duplicate;
+  return UploadSession(
+    id: upload.id,
+    fileName: upload.fileName,
+    sizeBytes: upload.sizeBytes,
+    receivedBytes: upload.receivedBytes,
+    mediaType: mediaTypeFromGen(upload.mediaType),
+    libraryPid: upload.libraryPid,
+    state: upload.state,
+    reviewEntryId: upload.reviewEntryId,
+    duplicate: duplicate == null ? null : duplicateWarningFromGen(duplicate),
+    uploadedBy: upload.uploadedBy,
+    createdAt: upload.createdAt.toUtc(),
+    expiresAt: upload.expiresAt?.toUtc(),
+  );
+}
+
+UploadPage uploadPageFromGen(gen.UploadPage page) {
+  return UploadPage(
+    uploads: page.uploads.map(uploadSessionFromGen).toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
+EditableField editableFieldFromGen(gen.EditableField f) =>
+    EditableField(name: f.name, writeBack: f.writeBack);
+
+MetadataFields metadataFieldsFromGen(gen.MetadataFields fields) {
+  return MetadataFields(
+    kinds: fields.kinds
+        .map(
+          (k) => KindFields(
+            kind: mediaTypeFromGen(k.kind),
+            fields: k.fields.map(editableFieldFromGen).toList(),
+            creditRoles: k.creditRoles.map(editableFieldFromGen).toList(),
+          ),
+        )
+        .toList(),
+    entityTypes: fields.entityTypes
+        .map(
+          (t) => EntityTypeFields(
+            entityType: t.entityType,
+            fields: t.fields.map(editableFieldFromGen).toList(),
+          ),
+        )
+        .toList(),
+  );
+}
+
+Credit creditFromGen(gen.Credit c) =>
+    Credit(role: c.role, names: c.names.toList());
+
+ItemMetadata itemMetadataFromGen(gen.ItemMetadata meta) {
+  final lyrics = meta.lyrics;
+  return ItemMetadata(
+    pid: meta.pid,
+    mediaType: mediaTypeFromGen(meta.mediaType),
+    fields: meta.fields.toMap(),
+    lockedFields: meta.lockedFields.toList(),
+    provenance: meta.provenance
+        .map(
+          (p) => FieldProvenance(
+            field: p.field,
+            source: p.source_,
+            provider: p.provider,
+            locked: p.locked,
+            updatedAt: p.updatedAt?.toUtc(),
+          ),
+        )
+        .toList(),
+    credits: meta.credits.map(creditFromGen).toList(),
+    lyrics: lyrics == null
+        ? null
+        : LyricsState(
+            synced: lyrics.synced,
+            source: lyrics.source_,
+            lrc: lyrics.lrc,
+          ),
+    chapters: meta.chapters?.map(chapterMarkFromGen).toList() ?? const [],
+    customTags: meta.customTags
+        .map((t) => CustomTag(key: t.key, values: t.values.toList()))
+        .toList(),
+    unofficial: meta.unofficial,
+    virtualTrack: meta.virtualTrack,
+    hasArtwork: meta.hasArtwork,
+    albumPid: meta.albumPid,
+    artistPid: meta.artistPid,
+    releaseGroupPid: meta.releaseGroupPid,
+    writeBackIssues: meta.writeBackIssues
+        .map(
+          (i) => WriteBackIssue(
+            filePid: i.filePid,
+            code: i.code,
+            tagKey: i.tagKey,
+            detail: i.detail,
+          ),
+        )
+        .toList(),
+  );
+}
+
+WriteBackFailure writeBackFailureFromGen(gen.WriteBackFailure f) =>
+    WriteBackFailure(filePid: f.filePid, path: f.path, reason: f.reason);
+
+MetadataEditResult metadataEditResultFromGen(gen.MetadataEditResult result) {
+  return MetadataEditResult(
+    applied: result.applied,
+    writeBackFailures:
+        result.writeBackFailures?.map(writeBackFailureFromGen).toList() ??
+        const [],
+    warnings: result.warnings?.toList() ?? const [],
+  );
+}
+
+BulkEditResult bulkEditResultFromGen(gen.BulkEditResult result) {
+  return BulkEditResult(
+    edited: result.edited.toList(),
+    skipped: result.skipped.toList(),
+    writeBackFailures:
+        result.writeBackFailures?.map(writeBackFailureFromGen).toList() ??
+        const [],
+  );
+}
+
+TagEditResult tagEditResultFromGen(gen.TagEditResult result) =>
+    TagEditResult(key: result.key, stored: result.stored);
+
+EntityCuratedField entityCuratedFieldFromGen(gen.EntityCuratedField f) {
+  return EntityCuratedField(
+    field: f.field,
+    value: f.value,
+    source: f.source_,
+    locked: f.locked,
+    updatedAt: f.updatedAt?.toUtc(),
+  );
+}
+
+gen.ChapterMark chapterEditToGen(ChapterEdit chapter) {
+  return gen.ChapterMark(
+    (b) => b
+      ..index = chapter.index
+      ..title = chapter.title
+      ..startMs = chapter.startMs
+      ..endMs = chapter.endMs,
+  );
+}
+
+EnrichItemResult enrichItemResultFromGen(gen.EnrichItemResult result) {
+  return EnrichItemResult(
+    applied: result.applied.toList(),
+    skipped: result.skipped.toList(),
+  );
+}
+
+HealthSummary healthSummaryFromGen(gen.HealthSummary summary) {
+  return HealthSummary(
+    score: summary.score,
+    totalItems: summary.totalItems,
+    evaluatedItems: summary.evaluatedItems,
+    warmingUp: summary.warmingUp,
+    sweptAt: summary.sweptAt?.toUtc(),
+    rules: summary.rules
+        .map(
+          (r) => HealthRuleCount(
+            rule: r.rule,
+            label: r.label,
+            failing: r.failing,
+            fixable: r.fixable,
+          ),
+        )
+        .toList(),
+  );
+}
+
+HealthIssue healthIssueFromGen(gen.HealthIssue issue) {
+  return HealthIssue(
+    pid: issue.pid,
+    title: issue.title,
+    artist: issue.artist,
+    mediaType: mediaTypeFromGen(issue.mediaType),
+    rules: issue.rules.toList(),
+  );
+}
+
+HealthIssuePage healthIssuePageFromGen(gen.HealthIssuePage page) {
+  return HealthIssuePage(
+    items: page.items.map(healthIssueFromGen).toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
+DuplicateEntity duplicateEntityFromGen(gen.DuplicateEntity e) =>
+    DuplicateEntity(pid: e.pid, name: e.name, itemCount: e.itemCount);
+
+DuplicateGroup duplicateGroupFromGen(gen.DuplicateGroup group) {
+  return DuplicateGroup(
+    entityType: group.entityType,
+    survivor: duplicateEntityFromGen(group.survivor),
+    losers: group.losers.map(duplicateEntityFromGen).toList(),
+    detail: group.detail,
+  );
+}
+
+/// Bridges a wire entity type (`album`, `artist`, `release-group`,
+/// `genre`) to the generated enum, whose Dart name for
+/// `release-group` is `releaseGroup`.
+gen.MergeRequestEntityTypeEnum mergeEntityTypeToGen(String entityType) =>
+    gen.MergeRequestEntityTypeEnum.valueOf(
+      entityType == 'release-group' ? 'releaseGroup' : entityType,
+    );
+
+UpgradeMember upgradeMemberFromGen(gen.UpgradeMember m) {
+  return UpgradeMember(
+    itemPid: m.itemPid,
+    title: m.title,
+    artist: m.artist,
+    codec: m.codec,
+    bitrate: m.bitrate,
+    sampleRate: m.sampleRate,
+    bitDepth: m.bitDepth,
+    lossless: m.lossless,
+    best: m.best,
+  );
+}
+
+UpgradeGroup upgradeGroupFromGen(gen.UpgradeGroup group) =>
+    UpgradeGroup(members: group.members.map(upgradeMemberFromGen).toList());
+
+OrganizeProfile organizeProfileFromGen(gen.OrganizeProfile profile) {
+  return OrganizeProfile(
+    name: profile.name,
+    musicTemplate: profile.musicTemplate,
+    audiobookTemplate: profile.audiobookTemplate,
+    podcastTemplate: profile.podcastTemplate,
+    tagWrite: profile.tagWrite ?? false,
+  );
+}
+
+OrganizePlan organizePlanFromGen(gen.OrganizePlan plan) {
+  return OrganizePlan(
+    profile: plan.profile,
+    totalActions: plan.totalActions,
+    actions: plan.actions
+        .map((a) => OrganizeAction(itemPid: a.itemPid, from: a.from, to: a.to))
+        .toList(),
+    tagWrite: plan.tagWrite ?? false,
+  );
+}
+
+OrganizeReport organizeReportFromGen(gen.OrganizeReport report) {
+  return OrganizeReport(
+    moved: report.moved,
+    skipped: report.skipped,
+    failed: report.failed,
+    failures:
+        report.failures
+            ?.map((f) => OrganizeFailure(path: f.path, reason: f.reason))
+            .toList() ??
+        const [],
+  );
+}
+
+ToolTask toolTaskFromGen(gen.ToolTask task) {
+  return ToolTask(
+    id: task.id,
+    type: task.type,
+    state: task.state,
+    itemPid: task.itemPid,
+    progressPct: task.progressPct,
+    error: task.error,
+    resultPids: task.resultPids?.toList() ?? const [],
+    createdAt: task.createdAt.toUtc(),
+    finishedAt: task.finishedAt?.toUtc(),
+  );
+}
+
+ToolTaskPage toolTaskPageFromGen(gen.ToolTaskPage page) {
+  return ToolTaskPage(
+    tasks: page.tasks.map(toolTaskFromGen).toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
+CoverageCount coverageCountFromGen(gen.CoverageCount c) =>
+    CoverageCount(enriched: c.enriched, total: c.total);
+
+EnrichmentStatus enrichmentStatusFromGen(gen.EnrichmentStatus status) {
+  return EnrichmentStatus(
+    providers: status.providers
+        .map(
+          (p) => EnrichmentProvider(
+            name: p.name,
+            capabilities: p.capabilities.toList(),
+            configured: p.configured,
+            builtin: p.builtin,
+          ),
+        )
+        .toList(),
+    coverage: EnrichmentCoverage(
+      artists: coverageCountFromGen(status.coverage.artists),
+      releaseGroups: coverageCountFromGen(status.coverage.releaseGroups),
+      books: coverageCountFromGen(status.coverage.books),
+      lyrics: coverageCountFromGen(status.coverage.lyrics),
+    ),
+    running: status.running,
+  );
+}
+
+LibraryAccess libraryAccessFromGen(gen.LibraryAccess access) {
+  return LibraryAccess(
+    mode: access.mode.name,
+    libraryPids: access.libraryPids?.toList() ?? const [],
+  );
+}
+
+gen.LibraryAccess libraryAccessToGen(LibraryAccess access) {
+  return gen.LibraryAccess(
+    (b) => b
+      ..mode = gen.LibraryAccessModeEnum.valueOf(access.mode)
+      ..libraryPids = access.libraryPids.isEmpty
+          ? null
+          : ListBuilder<String>(access.libraryPids),
+  );
+}
+
+UserAccount userAccountFromGen(gen.UserAccount account) {
+  return UserAccount(
+    id: account.id,
+    username: account.username,
+    displayName: account.displayName,
+    roles: account.roles.toList(),
+    createdAt: account.createdAt.toUtc(),
+    identities:
+        account.identities
+            ?.map((i) => LinkedIdentity(provider: i.provider, email: i.email))
+            .toList() ??
+        const [],
+    libraryAccess: libraryAccessFromGen(account.libraryAccess),
+    uploadEnabled: account.uploadEnabled,
+    uploadQuotaBytes: account.uploadQuotaBytes,
+    disabled: account.disabled,
+    hasPassword: account.hasPassword ?? true,
+  );
+}
+
+UserPage userPageFromGen(gen.UserPage page) {
+  return UserPage(
+    users: page.users.map(userAccountFromGen).toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
+ListBuilder<gen.Role>? rolesToGen(List<String>? roles) =>
+    roles == null ? null : ListBuilder<gen.Role>(roles.map(gen.Role.valueOf));
 
 PlaybackSessionInfo playbackSessionFromGen(gen.PlaybackSession s) {
   return PlaybackSessionInfo(

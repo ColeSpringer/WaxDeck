@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../player/session_registry.dart';
 import '../providers.dart';
+import 'explicit_badge.dart';
 import 'podcasts_controller.dart';
 import 'show_notes.dart';
 
@@ -56,7 +57,13 @@ class _EpisodeBody extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(episode.title, style: textTheme.titleLarge),
+        Row(
+          children: [
+            if (episode.explicit)
+              ExplicitBadge(key: ValueKey('episode-explicit-${episode.pid}')),
+            Expanded(child: Text(episode.title, style: textTheme.titleLarge)),
+          ],
+        ),
         Text(
           formatEpisodeMeta(episode),
           style: textTheme.bodySmall?.copyWith(

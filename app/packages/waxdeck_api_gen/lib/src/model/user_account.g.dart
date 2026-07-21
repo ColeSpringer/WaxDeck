@@ -14,9 +14,13 @@ class _$UserAccount extends UserAccount {
   @override
   final LibraryAccess libraryAccess;
   @override
+  final bool uploadEnabled;
+  @override
   final bool disabled;
   @override
   final bool? hasPassword;
+  @override
+  final int? uploadQuotaBytes;
   @override
   final String id;
   @override
@@ -33,8 +37,10 @@ class _$UserAccount extends UserAccount {
     required this.createdAt,
     this.identities,
     required this.libraryAccess,
+    required this.uploadEnabled,
     required this.disabled,
     this.hasPassword,
+    this.uploadQuotaBytes,
     required this.id,
     required this.username,
     this.displayName,
@@ -54,8 +60,10 @@ class _$UserAccount extends UserAccount {
         createdAt == other.createdAt &&
         identities == other.identities &&
         libraryAccess == other.libraryAccess &&
+        uploadEnabled == other.uploadEnabled &&
         disabled == other.disabled &&
         hasPassword == other.hasPassword &&
+        uploadQuotaBytes == other.uploadQuotaBytes &&
         id == other.id &&
         username == other.username &&
         displayName == other.displayName &&
@@ -68,8 +76,10 @@ class _$UserAccount extends UserAccount {
     _$hash = $jc(_$hash, createdAt.hashCode);
     _$hash = $jc(_$hash, identities.hashCode);
     _$hash = $jc(_$hash, libraryAccess.hashCode);
+    _$hash = $jc(_$hash, uploadEnabled.hashCode);
     _$hash = $jc(_$hash, disabled.hashCode);
     _$hash = $jc(_$hash, hasPassword.hashCode);
+    _$hash = $jc(_$hash, uploadQuotaBytes.hashCode);
     _$hash = $jc(_$hash, id.hashCode);
     _$hash = $jc(_$hash, username.hashCode);
     _$hash = $jc(_$hash, displayName.hashCode);
@@ -84,8 +94,10 @@ class _$UserAccount extends UserAccount {
           ..add('createdAt', createdAt)
           ..add('identities', identities)
           ..add('libraryAccess', libraryAccess)
+          ..add('uploadEnabled', uploadEnabled)
           ..add('disabled', disabled)
           ..add('hasPassword', hasPassword)
+          ..add('uploadQuotaBytes', uploadQuotaBytes)
           ..add('id', id)
           ..add('username', username)
           ..add('displayName', displayName)
@@ -114,6 +126,11 @@ class UserAccountBuilder
   set libraryAccess(covariant LibraryAccessBuilder? libraryAccess) =>
       _$this._libraryAccess = libraryAccess;
 
+  bool? _uploadEnabled;
+  bool? get uploadEnabled => _$this._uploadEnabled;
+  set uploadEnabled(covariant bool? uploadEnabled) =>
+      _$this._uploadEnabled = uploadEnabled;
+
   bool? _disabled;
   bool? get disabled => _$this._disabled;
   set disabled(covariant bool? disabled) => _$this._disabled = disabled;
@@ -122,6 +139,11 @@ class UserAccountBuilder
   bool? get hasPassword => _$this._hasPassword;
   set hasPassword(covariant bool? hasPassword) =>
       _$this._hasPassword = hasPassword;
+
+  int? _uploadQuotaBytes;
+  int? get uploadQuotaBytes => _$this._uploadQuotaBytes;
+  set uploadQuotaBytes(covariant int? uploadQuotaBytes) =>
+      _$this._uploadQuotaBytes = uploadQuotaBytes;
 
   String? _id;
   String? get id => _$this._id;
@@ -150,8 +172,10 @@ class UserAccountBuilder
       _createdAt = $v.createdAt;
       _identities = $v.identities?.toBuilder();
       _libraryAccess = $v.libraryAccess.toBuilder();
+      _uploadEnabled = $v.uploadEnabled;
       _disabled = $v.disabled;
       _hasPassword = $v.hasPassword;
+      _uploadQuotaBytes = $v.uploadQuotaBytes;
       _id = $v.id;
       _username = $v.username;
       _displayName = $v.displayName;
@@ -187,12 +211,18 @@ class UserAccountBuilder
             ),
             identities: _identities?.build(),
             libraryAccess: libraryAccess.build(),
+            uploadEnabled: BuiltValueNullFieldError.checkNotNull(
+              uploadEnabled,
+              r'UserAccount',
+              'uploadEnabled',
+            ),
             disabled: BuiltValueNullFieldError.checkNotNull(
               disabled,
               r'UserAccount',
               'disabled',
             ),
             hasPassword: hasPassword,
+            uploadQuotaBytes: uploadQuotaBytes,
             id: BuiltValueNullFieldError.checkNotNull(id, r'UserAccount', 'id'),
             username: BuiltValueNullFieldError.checkNotNull(
               username,

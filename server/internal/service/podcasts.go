@@ -31,6 +31,7 @@ type PodcastShow struct {
 	EpisodeCount    int
 	LastPublishedNS int64
 	RefreshDisabled bool
+	Explicit        bool
 }
 
 // SubscriptionSettings is one user's per-subscription settings; nil
@@ -771,6 +772,7 @@ func (l *Library) showDTO(ctx context.Context, pod *model.Podcast, withCounts bo
 		DescriptionHTML: sanitizeShowNotes(pod.Description),
 		Link:            pod.Link,
 		SourceType:      string(pod.SourceType),
+		Explicit:        pod.Explicit,
 	}
 	if out.SourceType == "" {
 		out.SourceType = "rss"

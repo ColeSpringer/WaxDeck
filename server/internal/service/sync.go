@@ -68,13 +68,18 @@ type ServerDelta struct {
 	More      bool
 }
 
-// Server event kinds on the event_log stream.
+// Server event kinds on the event_log stream. The curation kinds are
+// markers: they hydrate nothing (their surfaces are live reads, not
+// mirrored state) and carry only the pid to refetch by.
 const (
 	eventPlayState    = "play-state"
 	eventPrefs        = "prefs"
 	eventSubscription = "subscription"
 	eventBookSettings = "book-settings"
 	eventPlaylist     = "playlist"
+	eventReview       = "review"
+	eventUpload       = "upload"
+	eventTask         = "task"
 )
 
 // ErrSyncReset marks a cursor the stream can no longer serve
@@ -753,9 +758,19 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 	seenSub := make(map[string]bool)
 	seenBook := make(map[string]bool)
 	seenPlaylist := make(map[string]bool)
+	seenMarker := make(map[string]bool)
 	seenPrefs := false
 	for _, e := range events {
 		switch e.Kind {
+		case eventReview, eventUpload, eventTask:
+			// Marker kinds hydrate nothing: the pid names what to
+			// refetch and the surfaces are live reads.
+			key := e.Kind + "\x00" + e.ItemPID
+			if seenMarker[key] {
+				continue
+			}
+			seenMarker[key] = true
+			out.Events = append(out.Events, ServerSyncEvent{Kind: e.Kind, PID: e.ItemPID})
 		case eventPlayState:
 			if seenState[e.ItemPID] {
 				continue

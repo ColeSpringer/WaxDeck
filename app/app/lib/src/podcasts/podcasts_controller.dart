@@ -215,6 +215,7 @@ final episodesProvider =
     );
 
 /// One episode's full detail.
-final episodeDetailProvider = FutureProvider.family<EpisodeDetail, String>(
-  (ref, pid) => ref.watch(repositoryProvider).getEpisode(pid),
-);
+final episodeDetailProvider = FutureProvider.autoDispose
+    .family<EpisodeDetail, String>(
+      (ref, pid) => ref.watch(repositoryProvider).getEpisode(pid),
+    );

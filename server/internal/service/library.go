@@ -8,18 +8,21 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/config"
+	"github.com/colespringer/waxbin/enrich"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/pidpath"
 	"github.com/colespringer/waxbin/source"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/match"
 	"github.com/colespringer/waxdeck/server/internal/scrobble"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
@@ -29,6 +32,11 @@ import (
 type Root struct {
 	Name string
 	Path string
+	// Managed opts the root into catalog-managed file placement: the
+	// import planner will move files into it (uploads, merges) and the
+	// organizer may rename within it. The conservative default is
+	// in-place: the catalog never moves files it did not place.
+	Managed bool
 }
 
 // Config configures the library service.
@@ -80,7 +88,30 @@ type Config struct {
 	// credentials; empty leaves the Last.fm connection unavailable.
 	LastfmAPIKey string
 	LastfmSecret string
-	Logger       *slog.Logger
+	// StagingDir holds upload sessions and their staged files before
+	// they enter the library; empty defaults to DataDir/staging.
+	StagingDir string
+	// UploadFormats are the accepted upload extensions (lowercase, no
+	// dot); empty selects the default audio set.
+	UploadFormats []string
+	// UploadRetention is how long an unfinished or undecided upload
+	// keeps its staged bytes; zero means seven days.
+	UploadRetention time.Duration
+	// MatchSource supplies release candidates to the matching engine;
+	// nil disables matching (entries decide manually with no
+	// candidates).
+	MatchSource match.CandidateSource
+	// MatchConfig tunes the engine; the zero value uses the calibrated
+	// defaults.
+	MatchConfig match.Config
+	// EnrichmentProviders are the server's own providers, registered
+	// ahead of the catalog's built-ins and reused for per-item
+	// enrichment.
+	EnrichmentProviders []enrich.Provider
+	// FpcalcPath locates the fingerprint binary; empty looks it up on
+	// PATH, and a missing binary just disables fingerprint evidence.
+	FpcalcPath string
+	Logger     *slog.Logger
 }
 
 // Library is the catalog service over an embedded WaxBin library. It
@@ -143,6 +174,26 @@ type Library struct {
 	lastfm                    *scrobble.Lastfm
 	listenbrainz              *scrobble.ListenBrainz
 	allowPrivateScrobbleHosts bool
+	// engine is the release matching engine; nil when no candidate
+	// source is configured (review entries then hold no candidates).
+	engine *match.Engine
+	// stagingDir holds upload staging; uploadFormats is the accepted
+	// extension set; uploadRetention bounds staged-byte lifetime.
+	stagingDir      string
+	uploadFormats   map[string]bool
+	uploadRetention time.Duration
+	// fpcalcPath is the fingerprint binary, empty when absent (matching
+	// then runs on tag and search evidence only).
+	fpcalcPath string
+	// enrichProviders are the server-registered providers, kept for the
+	// per-item enrichment path and the status surface.
+	enrichProviders []enrich.Provider
+	// matchWake nudges the identify worker; lossy, ticker-backstopped.
+	matchWake chan struct{}
+	// sourceProviders are the injected acquisition providers, kept for
+	// the acquire-from-URL surface (the catalog holds its own copy for
+	// show dispatch).
+	sourceProviders []source.Provider
 }
 
 // SocketFileName is the IPC socket beside the catalog DB. It is a local
@@ -159,15 +210,20 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	}
 	roots := make([]config.Root, 0, len(cfg.Roots))
 	for _, r := range cfg.Roots {
-		roots = append(roots, config.Root{Path: r.Path, Mode: model.ModeInPlace})
+		mode := model.ModeInPlace
+		if r.Managed {
+			mode = model.ModeManaged
+		}
+		roots = append(roots, config.Root{Path: r.Path, Mode: mode})
 	}
 	socket := filepath.Join(cfg.DataDir, SocketFileName)
 	opts := waxbin.Options{
-		DBPath:          filepath.Join(cfg.DataDir, "waxbin.db"),
-		Roots:           roots,
-		Logger:          log,
-		IPCSocket:       socket,
-		SourceProviders: cfg.SourceProviders,
+		DBPath:              filepath.Join(cfg.DataDir, "waxbin.db"),
+		Roots:               roots,
+		Logger:              log,
+		IPCSocket:           socket,
+		SourceProviders:     cfg.SourceProviders,
+		EnrichmentProviders: cfg.EnrichmentProviders,
 	}
 	if cfg.SecretCipher != nil {
 		opts.SecretCipher = cfg.SecretCipher
@@ -194,6 +250,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		lib: lib, paths: paths, db: store, roots: cfg.Roots, log: log, procCtx: ctx,
 		catalogWake:            make(chan struct{}, 1),
 		userWake:               make(chan string, 64),
+		matchWake:              make(chan struct{}, 1),
 		sealer:                 cfg.Sealer,
 		podcastDir:             cfg.PodcastDir,
 		podcastRootName:        cfg.PodcastRootName,
@@ -217,6 +274,26 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	if l.retentionInUseWindow == 0 {
 		l.retentionInUseWindow = 2 * time.Minute
 	}
+	if cfg.MatchSource != nil {
+		l.engine = match.NewEngine(cfg.MatchSource, cfg.MatchConfig)
+	}
+	l.stagingDir = cfg.StagingDir
+	if l.stagingDir == "" {
+		l.stagingDir = filepath.Join(cfg.DataDir, "staging")
+	}
+	l.uploadFormats = uploadFormatSet(cfg.UploadFormats)
+	l.uploadRetention = cfg.UploadRetention
+	if l.uploadRetention == 0 {
+		l.uploadRetention = 7 * 24 * time.Hour
+	}
+	l.fpcalcPath = cfg.FpcalcPath
+	if l.fpcalcPath == "" {
+		if p, err := exec.LookPath("fpcalc"); err == nil {
+			l.fpcalcPath = p
+		}
+	}
+	l.enrichProviders = cfg.EnrichmentProviders
+	l.sourceProviders = cfg.SourceProviders
 	if err := l.initSync(ctx); err != nil {
 		paths.Close()
 		lib.Close()

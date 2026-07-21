@@ -140,7 +140,5 @@ class PlayStateController extends AsyncNotifier<PlayState> {
   }
 }
 
-final playStateControllerProvider =
-    AsyncNotifierProvider.family<PlayStateController, PlayState, String>(
-      PlayStateController.new,
-    );
+final playStateControllerProvider = AsyncNotifierProvider.autoDispose
+    .family<PlayStateController, PlayState, String>(PlayStateController.new);

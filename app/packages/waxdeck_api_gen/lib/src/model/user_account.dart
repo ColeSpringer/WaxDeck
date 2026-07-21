@@ -21,6 +21,8 @@ part 'user_account.g.dart';
 /// * [roles] - Assigned roles (`admin`, `user`).
 /// * [disabled] - Disabled accounts cannot log in and their live sessions are revoked on disable. 
 /// * [libraryAccess] 
+/// * [uploadEnabled] - Whether the account may upload audio. Administrators can always upload. 
+/// * [uploadQuotaBytes] - Total bytes of uploads the account may hold at once; absent means no per-user cap. 
 /// * [createdAt] - When the account was created.
 /// * [hasPassword] - Whether local password login is enabled for the account (false for accounts provisioned by OIDC that never set one). 
 /// * [identities] - Linked single sign-on identities.
@@ -37,6 +39,10 @@ abstract class UserAccount implements User, Built<UserAccount, UserAccountBuilde
   @BuiltValueField(wireName: r'libraryAccess')
   LibraryAccess get libraryAccess;
 
+  /// Whether the account may upload audio. Administrators can always upload. 
+  @BuiltValueField(wireName: r'uploadEnabled')
+  bool get uploadEnabled;
+
   /// Disabled accounts cannot log in and their live sessions are revoked on disable. 
   @BuiltValueField(wireName: r'disabled')
   bool get disabled;
@@ -44,6 +50,10 @@ abstract class UserAccount implements User, Built<UserAccount, UserAccountBuilde
   /// Whether local password login is enabled for the account (false for accounts provisioned by OIDC that never set one). 
   @BuiltValueField(wireName: r'hasPassword')
   bool? get hasPassword;
+
+  /// Total bytes of uploads the account may hold at once; absent means no per-user cap. 
+  @BuiltValueField(wireName: r'uploadQuotaBytes')
+  int? get uploadQuotaBytes;
 
   UserAccount._();
 
@@ -97,6 +107,11 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
       object.libraryAccess,
       specifiedType: const FullType(LibraryAccess),
     );
+    yield r'uploadEnabled';
+    yield serializers.serialize(
+      object.uploadEnabled,
+      specifiedType: const FullType(bool),
+    );
     yield r'disabled';
     yield serializers.serialize(
       object.disabled,
@@ -114,6 +129,13 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
       object.id,
       specifiedType: const FullType(String),
     );
+    if (object.uploadQuotaBytes != null) {
+      yield r'uploadQuotaBytes';
+      yield serializers.serialize(
+        object.uploadQuotaBytes,
+        specifiedType: const FullType(int),
+      );
+    }
     yield r'username';
     yield serializers.serialize(
       object.username,
@@ -177,6 +199,13 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
           ) as LibraryAccess;
           result.libraryAccess.replace(valueDes);
           break;
+        case r'uploadEnabled':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.uploadEnabled = valueDes;
+          break;
         case r'disabled':
           final valueDes = serializers.deserialize(
             value,
@@ -197,6 +226,13 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
             specifiedType: const FullType(String),
           ) as String;
           result.id = valueDes;
+          break;
+        case r'uploadQuotaBytes':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.uploadQuotaBytes = valueDes;
           break;
         case r'username':
           final valueDes = serializers.deserialize(

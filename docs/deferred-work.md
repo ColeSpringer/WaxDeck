@@ -171,13 +171,107 @@ here waits on upstream.
 - `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists.
-- `[hardware]` **The docker compose acceptance has never run.** Docker Desktop WSL
-  integration is off in the dev environment; the first verification
-  needs to happen wherever Docker exists.
+- `[in-repo]` **Wire the docker compose stack into CI.** Docker is now
+  available in the dev environment and `make up` brings the full stack
+  (waxdeck + the flavored waxflow sidecar) up locally, so the old
+  "never verified" blocker is cleared for manual runs. What remains is
+  running it in CI as an acceptance gate (build both images, up, smoke
+  the origin, down) rather than only by hand.
+
+## Curation and metadata
+
+- `[in-repo]` **Scan discoveries do not enqueue matching on their own.** The
+  identify pipeline runs for uploads and for explicit rematch
+  requests; a library scan that discovers new loose files does not
+  yet open review entries for them. The wiring point is the catalog
+  change feed consumer (debounce a scan's item additions into album
+  units once the scan settles); until it lands, "identify my new
+  files" is a rematch away.
+- `[in-repo]` **Genre normalization.** The canonical genre tree and
+  whitelist mapping (provider tags normalized through an editable
+  tree, with a shipped default) is specified but unbuilt; the health
+  dashboard consequently has no genre-whitelist rule yet.
+- `[in-repo]` **Book and remaining metadata providers.** Hardcover
+  (the ASIN to ISBN bridge), Google Books and Open Library fallbacks,
+  and Discogs are not yet implemented as enrichment providers; Deezer,
+  iTunes, Audnexus, and fanart.tv shipped. Each is one self-contained
+  provider in the providers package.
+- `[in-repo]` **The custom-metadata-provider spec is unpublished.** The
+  documented OpenAPI contract that would let community regional
+  providers plug in (the Audiobookshelf pattern) still needs writing;
+  the in-process provider port it would bridge to is live.
+- `[in-repo]` **Bulk edit applies one value set per call.** Per-item
+  value maps in one atomic batch need an upstream primitive (filed in
+  upstream-requests); until then the apply path edits per item, atomic
+  per item, and a mid-batch failure leaves earlier items edited (the
+  review queue's apply reports exactly which).
+- `[in-repo]` **Small artwork is not yet a health rule.** The art
+  resolution path does not expose dimensions cheaply; the rule needs
+  either a size probe during the sweep or an upstream dimensions
+  report on resolved art.
+- `[in-repo]` **The file picker (and drag-and-drop) is a null stub.** The
+  library's add button and the uploads screen expose "Add from URL"
+  today; the "Upload a file" option only appears once a
+  `FilePickerPort` is wired (`filePickerProvider` defaults to null).
+  That pass adds the native file dialog per platform and web
+  drag-and-drop (a drop target over the library and uploads
+  surfaces), both behind the existing port so the flow above needs no
+  change. URL acquisition and the API upload endpoints work without
+  it.
+- `[in-repo]` **Upload dedupe's up-front hash check only sees prior
+  uploads.** The pre-transfer warning (client sends the SHA-256 before
+  bytes move) answers from upload history, not the whole catalog; the
+  full essence and fingerprint checks still run at completion, so the
+  only cost is bandwidth on a duplicate the up-front check missed.
+- `[in-repo]` **Upload quota does not reclaim on library deletion.** The
+  quota charges every non-discarded session's declared size, imported
+  ones included, so it reads as a total-storage-contribution cap. But a
+  deleted library item never releases its upload row's bytes: there is no
+  library-item delete endpoint (deletion runs through the waxbin CLI or
+  the dedup/merge/health flows), so nothing links "this item is gone"
+  back to the upload session, and `DeleteUpload` refuses imported rows.
+  A user who fills a small quota and then has those items deleted stays
+  locked out. The clean fix depends on a product decision left open here:
+  either the quota means in-flight footprint (then stop counting
+  imported), or it means total contribution (then a delete path, or a
+  WaxBin deletion hook, must discard the linked upload row). Not changed
+  unilaterally because the two readings imply opposite behavior.
+- `[in-repo]` **Acquired-track metadata is cleaned for matching, not for
+  display.** For a loose track the matching engine reads an "Artist -
+  Track" title and a channel-style artist tag into a clean recording
+  query (dash split, trailing alias/producer and production-note
+  stripping) and surfaces the real release for review. The staged file's
+  own tags are left as the source delivered them (channel as artist, full
+  video title), so the review queue shows the raw title until the release
+  is approved or the user hand-edits; the same parse could pre-fill the
+  review entry's title/artist as an editable suggestion. Deferred as a
+  display nicety, not a correctness gap: manual editing and the surfaced
+  candidate both cover it, and rewriting embedded tags from a guess is the
+  riskier half.
+- `[roadmap]` **Explicit-content enforcement.** The display half
+  shipped (feed-declared explicit surfaces on shows and episodes,
+  with badges in the app); the enforcement half (a per-user
+  explicit-content permission toggle, and tag allow and deny lists
+  as the music-side control and the parental-controls mechanism)
+  rides the user-admin slice with the rest of the granular
+  permission set. Listed because the display work landed mid-slice
+  and the split would otherwise read as an oversight.
+- `[in-repo]` **OpenSubsonic explicitStatus is not emitted.** The
+  Subsonic surface's song and album shapes accept an
+  `explicitStatus` field ("explicit" or "clean") that clients
+  render; mapping it from the episode flag and the ITUNESADVISORY
+  custom tag is a small adapter change next time that surface is
+  touched.
 
 ## Decided, not deferred
 
 Recorded so they are not re-read as gaps: gpodder episode delete
 actions stay echo-only (a per-device client delete must not reclaim a
-shared server file). Scope-level non-goals and accepted risks live in
-the roadmap's post-v1 section and the ADRs.
+shared server file). Music has no first-class explicit boolean by
+decision: no canonical source exists (MusicBrainz carries no explicit
+flag), so files' own ITUNESADVISORY tags ride the custom-tag surface
+(queryable, facetable, hand-settable, lockable) and enforcement is
+the deny-list mechanism, not a per-track flag. Audiobooks have no
+explicit convention anywhere; custom tags cover anyone who wants one.
+Scope-level non-goals and accepted risks live in the roadmap's
+post-v1 section and the ADRs.

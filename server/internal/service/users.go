@@ -35,6 +35,10 @@ type AccountCreate struct {
 	Roles       []string
 	AccessMode  string   // "all" or "granted"
 	LibraryPIDs []string // API-prefixed, granted mode
+	// UploadEnabled grants the upload surface; UploadQuotaBytes caps it
+	// (0 means no per-user cap).
+	UploadEnabled    bool
+	UploadQuotaBytes int64
 }
 
 // AccountUpdate is a partial account update; nil fields are unchanged.
@@ -44,6 +48,10 @@ type AccountUpdate struct {
 	Disabled    *bool
 	AccessMode  *string
 	LibraryPIDs []string // meaningful only when AccessMode is set to "granted"
+	// UploadEnabled grants or revokes uploads; UploadQuotaBytes replaces
+	// the cap (0 removes it).
+	UploadEnabled    *bool
+	UploadQuotaBytes *int64
 }
 
 // validRoles is the role vocabulary.
@@ -135,6 +143,10 @@ func (l *Library) createAccount(ctx context.Context, in AccountCreate, onlyIfNoA
 		Roles:         roles,
 		LibraryAccess: mode,
 		WaxbinUserPID: string(catalogUser.PID),
+		UploadEnabled: in.UploadEnabled,
+	}
+	if in.UploadQuotaBytes > 0 {
+		u.UploadQuotaBytes = in.UploadQuotaBytes
 	}
 	if err := l.db.CreateUser(ctx, u, onlyIfNoAdmin); err != nil {
 		if errors.Is(err, wdb.ErrConflict) {
@@ -220,6 +232,15 @@ func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdat
 	}
 	if upd.DisplayName != nil {
 		u.DisplayName = strings.TrimSpace(*upd.DisplayName)
+	}
+	if upd.UploadEnabled != nil {
+		u.UploadEnabled = *upd.UploadEnabled
+	}
+	if upd.UploadQuotaBytes != nil {
+		if *upd.UploadQuotaBytes < 0 {
+			return nil, errInvalid("uploadQuotaBytes must not be negative")
+		}
+		u.UploadQuotaBytes = *upd.UploadQuotaBytes
 	}
 	if upd.AccessMode != nil {
 		mode, grants, err := normalizeAccess(*upd.AccessMode, upd.LibraryPIDs)

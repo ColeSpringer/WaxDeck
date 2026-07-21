@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -14,6 +15,7 @@ Widget _host(FakeRepository repo, FakeEngine engine) => ProviderScope(
   overrides: [
     repositoryProvider.overrideWithValue(repo),
     audioEngineProvider.overrideWithValue(engine),
+    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
   ],
   child: const MaterialApp(home: BookScreen(pid: bookPid)),
 );
@@ -86,5 +88,67 @@ void main() {
     expect(saved.pid, bookPid);
     expect(saved.settings.trimSilence, isTrue);
     expect(saved.settings.speed, closeTo(1.0, 0.001));
+  });
+
+  FakeRepository adminRepo(BookDetail book) => FakeRepository(
+    sessionState: const SessionState(
+      authenticated: true,
+      user: WaxDeckUser(
+        id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
+        username: 'admin',
+        roles: ['admin'],
+      ),
+    ),
+  )..books[bookPid] = book;
+
+  testWidgets('an admin merges a multi-file book from the tools menu', (
+    tester,
+  ) async {
+    final repo = adminRepo(testBook(bookPid, partCount: 3));
+    await tester.pumpWidget(_host(repo, FakeEngine()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('book-tools-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('book-split')), findsNothing);
+    await tester.tap(find.byKey(const Key('book-merge')));
+    await tester.pumpAndSettle();
+
+    expect(repo.mergeBookCalls.map((c) => c.pid), [bookPid]);
+  });
+
+  testWidgets('an admin splits a single-file book with chapters', (
+    tester,
+  ) async {
+    final repo = adminRepo(
+      testBook(
+        bookPid,
+        chapters: const [
+          ChapterMark(index: 0, title: 'One', startMs: 0),
+          ChapterMark(index: 1, title: 'Two', startMs: 600000),
+        ],
+      ),
+    );
+    await tester.pumpWidget(_host(repo, FakeEngine()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('book-tools-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('book-merge')), findsNothing);
+    await tester.tap(find.byKey(const Key('book-split')));
+    await tester.pumpAndSettle();
+
+    expect(repo.splitBookCalls.map((c) => c.pid), [bookPid]);
+  });
+
+  testWidgets('the book tools menu is hidden from non-admins', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        _repo()..books[bookPid] = testBook(bookPid, partCount: 3),
+        FakeEngine(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('book-tools-menu')), findsNothing);
   });
 }

@@ -22,6 +22,7 @@ part 'podcast_show.g.dart';
 /// * [episodeCount] - Number of cataloged episodes.
 /// * [lastPublishedAt] - Publication time of the newest cataloged episode.
 /// * [refreshDisabled] - True when scheduled refresh is suspended after repeated feed failures. A successful manual refresh clears it. 
+/// * [explicit] - Feed-declared explicit flag for the whole show. Episodes carry their own flag, which wins where the feed sets both. 
 @BuiltValue()
 abstract class PodcastShow implements Built<PodcastShow, PodcastShowBuilder> {
   /// Show PID.
@@ -67,6 +68,10 @@ abstract class PodcastShow implements Built<PodcastShow, PodcastShowBuilder> {
   /// True when scheduled refresh is suspended after repeated feed failures. A successful manual refresh clears it. 
   @BuiltValueField(wireName: r'refreshDisabled')
   bool? get refreshDisabled;
+
+  /// Feed-declared explicit flag for the whole show. Episodes carry their own flag, which wins where the feed sets both. 
+  @BuiltValueField(wireName: r'explicit')
+  bool? get explicit;
 
   PodcastShow._();
 
@@ -159,6 +164,13 @@ class _$PodcastShowSerializer implements PrimitiveSerializer<PodcastShow> {
       yield r'refreshDisabled';
       yield serializers.serialize(
         object.refreshDisabled,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.explicit != null) {
+      yield r'explicit';
+      yield serializers.serialize(
+        object.explicit,
         specifiedType: const FullType(bool),
       );
     }
@@ -261,6 +273,13 @@ class _$PodcastShowSerializer implements PrimitiveSerializer<PodcastShow> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.refreshDisabled = valueDes;
+          break;
+        case r'explicit':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.explicit = valueDes;
           break;
         default:
           unhandled.add(key);

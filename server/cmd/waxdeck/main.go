@@ -24,6 +24,7 @@ import (
 	// containers with no zoneinfo on disk.
 	_ "time/tzdata"
 
+	"github.com/colespringer/waxbin/enrich"
 	"github.com/colespringer/waxbin/source"
 
 	"github.com/colespringer/waxdeck/server/internal/adapter/gpodder"
@@ -37,6 +38,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/connect"
 	"github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/events"
+	waxproviders "github.com/colespringer/waxdeck/server/internal/providers"
 	"github.com/colespringer/waxdeck/server/internal/service"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 	"github.com/colespringer/waxdeck/server/internal/waxtapsource"
@@ -77,10 +79,11 @@ func run() error {
 		lastfmKey            = flag.String("lastfm-api-key", envOr("WAXDECK_LASTFM_API_KEY", ""), "Last.fm API key for outbound scrobbling (empty leaves Last.fm unavailable)")
 		lastfmSecret         = flag.String("lastfm-secret", envOr("WAXDECK_LASTFM_SECRET", ""), "Last.fm API shared secret")
 
-		youtubeOn    = flag.Bool("youtube", envOr("WAXDECK_YOUTUBE", "false") == "true", "enable the YouTube acquisition bridge (channels and playlists as shows)")
+		youtubeOn    = flag.Bool("youtube", envOr("WAXDECK_YOUTUBE", "true") == "true", "the YouTube acquisition bridge (download videos, playlists, and channels; subscribe to channels as podcasts). On by default; set WAXDECK_YOUTUBE=false to disable")
 		sealURL      = flag.String("seal-url", envOr("WAXDECK_SEAL_URL", ""), "WaxSeal attestation sidecar base URL (optional; full-quality YouTube path)")
 		sealKey      = flag.String("seal-api-key", envOr("WAXDECK_SEAL_API_KEY", ""), "API key for the WaxSeal sidecar")
 		sponsorBlock = flag.String("youtube-sponsorblock", envOr("WAXDECK_YOUTUBE_SPONSORBLOCK", ""), "SponsorBlock categories to cut from acquired audio, comma separated (empty disables)")
+		ytThumbnail  = flag.Bool("youtube-thumbnail", envOr("WAXDECK_YOUTUBE_THUMBNAIL", "true") == "true", "embed the source thumbnail as cover art on acquired audio, until enrichment finds official artwork. On by default; set WAXDECK_YOUTUBE_THUMBNAIL=false to disable")
 
 		advertiseBase = flag.String("advertise-base", envOr("WAXDECK_ADVERTISE_BASE", ""), "plain-HTTP LAN base URL cast devices fetch media from (empty auto-detects the LAN address)")
 		castDiscovery = flag.Bool("cast-discovery", envOr("WAXDECK_CAST_DISCOVERY", "true") == "true", "discover Chromecast and DLNA devices on the LAN (mDNS and SSDP)")
@@ -89,6 +92,13 @@ func run() error {
 		jukeboxOn     = flag.Bool("jukebox", envOr("WAXDECK_JUKEBOX", "false") == "true", "play out the server's own audio device as a selectable endpoint (needs the streaming engine)")
 		jukeboxCmd    = flag.String("jukebox-cmd", envOr("WAXDECK_JUKEBOX_CMD", ""), "player command the jukebox pipes WAV into (default aplay; PipeWire hosts use pw-cat -p -)")
 		jukeboxName   = flag.String("jukebox-name", envOr("WAXDECK_JUKEBOX_NAME", "Server audio"), "display name of the jukebox endpoint")
+
+		managedRoots = flag.String("managed-roots", envOr("WAXDECK_MANAGED_ROOTS", ""), "library root names (comma separated) the catalog may place files into: uploads import there and the organizer may move files there; unlisted roots stay strictly in place")
+
+		matchingOn  = flag.Bool("matching", envOr("WAXDECK_MATCHING", "true") == "true", "identify new and uploaded music against MusicBrainz (paced background lookups)")
+		mbBase      = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override (a local mirror, or a stub in tests)")
+		acoustidKey = flag.String("acoustid-key", envOr("WAXDECK_ACOUSTID_KEY", ""), "AcoustID API key; empty disables fingerprint evidence in matching")
+		fanartKey   = flag.String("fanarttv-key", envOr("WAXDECK_FANARTTV_KEY", ""), "fanart.tv API key; empty leaves that artwork provider unconfigured")
 
 		oidcIssuer  = flag.String("oidc-issuer", envOr("WAXDECK_OIDC_ISSUER", ""), "OIDC issuer URL (empty disables single sign-on)")
 		oidcID      = flag.String("oidc-id", envOr("WAXDECK_OIDC_ID", "sso"), "OIDC provider id shown in start URLs")
@@ -145,9 +155,21 @@ func run() error {
 		return err
 	}
 
+	managed := map[string]bool{}
+	for name := range strings.SplitSeq(*managedRoots, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			managed[name] = true
+		}
+	}
 	svcRoots := make([]service.Root, len(roots))
 	for i, r := range roots {
-		svcRoots[i] = service.Root{Name: r.Name, Path: r.Path}
+		svcRoots[i] = service.Root{Name: r.Name, Path: r.Path, Managed: managed[r.Name]}
+		delete(managed, r.Name)
+	}
+	if len(managed) > 0 {
+		for name := range managed {
+			return fmt.Errorf("WAXDECK_MANAGED_ROOTS names %q, which is not a configured library root", name)
+		}
 	}
 	// Podcasts work out of the box: an unset dir lands beside the
 	// databases. Only an explicit -podcast-dir="" disables the surface
@@ -168,9 +190,6 @@ func run() error {
 	}
 	var providers []source.Provider
 	if *youtubeOn {
-		if *podcastDir == "" {
-			return errors.New("WAXDECK_YOUTUBE requires WAXDECK_PODCAST_DIR (acquired audio lands in the podcast library)")
-		}
 		var categories []string
 		if strings.TrimSpace(*sponsorBlock) != "" {
 			for c := range strings.SplitSeq(*sponsorBlock, ",") {
@@ -182,18 +201,55 @@ func run() error {
 			SealBaseURL:    *sealURL,
 			SealAPIKey:     *sealKey,
 			SponsorBlock:   categories,
-			EmbedThumbnail: true,
+			EmbedThumbnail: *ytThumbnail,
 			EmbedMetadata:  true,
 			Logger:         log,
 		})
 		if err != nil {
-			return fmt.Errorf("youtube bridge: %w", err)
+			// The bridge is on by default, so a construction hiccup
+			// degrades acquisition rather than downing the server; the
+			// rest of the catalog is unaffected. Set WAXDECK_YOUTUBE=false
+			// to opt out entirely.
+			log.Warn("youtube acquisition bridge unavailable; URL downloads are disabled", "err", err)
+		} else {
+			providers = append(providers, yt)
+			log.Info("youtube acquisition bridge enabled", "seal", *sealURL != "")
 		}
-		providers = append(providers, yt)
-		log.Info("youtube acquisition bridge enabled", "seal", *sealURL != "")
+		// The bridge serves two independent paths: subscribing a
+		// channel or playlist as a podcast (episodes land in the
+		// podcast library) and acquiring a video, playlist, or channel
+		// into a music or audiobook library by URL. Only the former
+		// needs the podcast library, so its absence is a warning, not
+		// a refusal: URL acquisition still works.
+		if *podcastDir == "" {
+			log.Warn("youtube podcast subscriptions are unavailable without a podcast library; URL acquisition to music and audiobook libraries still works")
+		}
 	}
 
-	svc, err := service.Open(ctx, service.Config{
+	// The matching engine's candidate source and the server's own
+	// enrichment providers. Key-free providers are always registered;
+	// keyed ones only when configured. All are paced and cached.
+	var matchSource *waxproviders.Source
+	if *matchingOn {
+		matchSource = &waxproviders.Source{
+			MB: waxproviders.NewMusicBrainz(waxproviders.MusicBrainzConfig{BaseURL: *mbBase}),
+			Acoust: waxproviders.NewAcoustID(waxproviders.AcoustIDConfig{
+				APIKey: *acoustidKey,
+			}),
+		}
+	}
+	enrichProviders := []enrich.Provider{
+		waxproviders.NewDeezer(waxproviders.DeezerConfig{}),
+		waxproviders.NewITunes(waxproviders.ITunesConfig{}),
+		waxproviders.NewAudnexus(waxproviders.AudnexusConfig{}),
+	}
+	if *fanartKey != "" {
+		enrichProviders = append([]enrich.Provider{
+			waxproviders.NewFanartTV(waxproviders.FanartTVConfig{APIKey: *fanartKey}),
+		}, enrichProviders...)
+	}
+
+	svcCfg := service.Config{
 		DataDir:                   *dataDir,
 		Roots:                     svcRoots,
 		ScanOnStart:               *scanStart && len(roots) > 0,
@@ -209,8 +265,13 @@ func run() error {
 		RadioDirectoryBase:        *radioDirBase,
 		LastfmAPIKey:              *lastfmKey,
 		LastfmSecret:              *lastfmSecret,
+		EnrichmentProviders:       enrichProviders,
 		Logger:                    log,
-	}, store, group)
+	}
+	if matchSource != nil {
+		svcCfg.MatchSource = matchSource
+	}
+	svc, err := service.Open(ctx, svcCfg, store, group)
 	if err != nil {
 		return err
 	}
@@ -380,6 +441,92 @@ func run() error {
 				}
 				svc.PruneScrobbleOutbox(ctx)
 				svc.PruneNotifyOutbox(ctx)
+			}
+		}
+	})
+
+	// Curation background work: the identify worker (woken by new review
+	// entries, ticker as backstop), the health fix drainer, the tool
+	// task runner, the upload janitor, and the health sweep scheduler.
+	group.Go(ctx, "match-worker", func(ctx context.Context) error {
+		tick := time.NewTicker(30 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-svc.MatchWakeups():
+			case <-tick.C:
+			}
+			for svc.DrainMatchQueue(ctx) {
+				if ctx.Err() != nil {
+					return nil
+				}
+			}
+		}
+	})
+	group.Go(ctx, "fix-worker", func(ctx context.Context) error {
+		tick := time.NewTicker(15 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+				for svc.DrainFixQueue(ctx) {
+					if ctx.Err() != nil {
+						return nil
+					}
+				}
+			}
+		}
+	})
+	group.Go(ctx, "tool-worker", func(ctx context.Context) error {
+		tick := time.NewTicker(10 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+				for svc.DrainToolTasks(ctx) {
+					if ctx.Err() != nil {
+						return nil
+					}
+				}
+			}
+		}
+	})
+	group.Go(ctx, "upload-janitor", func(ctx context.Context) error {
+		tick := time.NewTicker(time.Hour)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+				for svc.DrainExpiredUploads(ctx) {
+					if ctx.Err() != nil {
+						return nil
+					}
+				}
+			}
+		}
+	})
+	group.Go(ctx, "health-sweep", func(ctx context.Context) error {
+		tick := time.NewTicker(time.Minute)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+				if !svc.HealthSweepDue(ctx) {
+					continue
+				}
+				if err := svc.SweepHealth(ctx); err != nil {
+					log.Warn("health sweep", "err", err)
+				}
 			}
 		}
 	})

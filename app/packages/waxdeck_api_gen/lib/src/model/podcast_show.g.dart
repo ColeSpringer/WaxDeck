@@ -29,6 +29,8 @@ class _$PodcastShow extends PodcastShow {
   final DateTime? lastPublishedAt;
   @override
   final bool? refreshDisabled;
+  @override
+  final bool? explicit;
 
   factory _$PodcastShow([void Function(PodcastShowBuilder)? updates]) =>
       (PodcastShowBuilder()..update(updates))._build();
@@ -45,6 +47,7 @@ class _$PodcastShow extends PodcastShow {
     this.episodeCount,
     this.lastPublishedAt,
     this.refreshDisabled,
+    this.explicit,
   }) : super._();
   @override
   PodcastShow rebuild(void Function(PodcastShowBuilder) updates) =>
@@ -67,7 +70,8 @@ class _$PodcastShow extends PodcastShow {
         artUrl == other.artUrl &&
         episodeCount == other.episodeCount &&
         lastPublishedAt == other.lastPublishedAt &&
-        refreshDisabled == other.refreshDisabled;
+        refreshDisabled == other.refreshDisabled &&
+        explicit == other.explicit;
   }
 
   @override
@@ -84,6 +88,7 @@ class _$PodcastShow extends PodcastShow {
     _$hash = $jc(_$hash, episodeCount.hashCode);
     _$hash = $jc(_$hash, lastPublishedAt.hashCode);
     _$hash = $jc(_$hash, refreshDisabled.hashCode);
+    _$hash = $jc(_$hash, explicit.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -101,7 +106,8 @@ class _$PodcastShow extends PodcastShow {
           ..add('artUrl', artUrl)
           ..add('episodeCount', episodeCount)
           ..add('lastPublishedAt', lastPublishedAt)
-          ..add('refreshDisabled', refreshDisabled))
+          ..add('refreshDisabled', refreshDisabled)
+          ..add('explicit', explicit))
         .toString();
   }
 }
@@ -156,6 +162,10 @@ class PodcastShowBuilder implements Builder<PodcastShow, PodcastShowBuilder> {
   set refreshDisabled(bool? refreshDisabled) =>
       _$this._refreshDisabled = refreshDisabled;
 
+  bool? _explicit;
+  bool? get explicit => _$this._explicit;
+  set explicit(bool? explicit) => _$this._explicit = explicit;
+
   PodcastShowBuilder() {
     PodcastShow._defaults(this);
   }
@@ -174,6 +184,7 @@ class PodcastShowBuilder implements Builder<PodcastShow, PodcastShowBuilder> {
       _episodeCount = $v.episodeCount;
       _lastPublishedAt = $v.lastPublishedAt;
       _refreshDisabled = $v.refreshDisabled;
+      _explicit = $v.explicit;
       _$v = null;
     }
     return this;
@@ -219,6 +230,7 @@ class PodcastShowBuilder implements Builder<PodcastShow, PodcastShowBuilder> {
           episodeCount: episodeCount,
           lastPublishedAt: lastPublishedAt,
           refreshDisabled: refreshDisabled,
+          explicit: explicit,
         );
     replace(_$result);
     return _$result;

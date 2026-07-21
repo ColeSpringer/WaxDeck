@@ -200,6 +200,12 @@ func (s *Server) CreateUser(ctx context.Context, req CreateUserRequestObject) (C
 			in.LibraryPIDs = *req.Body.LibraryAccess.LibraryPids
 		}
 	}
+	if req.Body.UploadEnabled != nil {
+		in.UploadEnabled = *req.Body.UploadEnabled
+	}
+	if req.Body.UploadQuotaBytes != nil {
+		in.UploadQuotaBytes = *req.Body.UploadQuotaBytes
+	}
 	acct, err := s.svc.CreateAccount(ctx, in)
 	if err != nil {
 		switch service.KindOf(err) {
@@ -245,12 +251,15 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 	}
 	// Non-administrators may change only their own display name; any
 	// other supplied field is rejected loudly, never silently ignored.
-	if !admin && (req.Body.Roles != nil || req.Body.Disabled != nil || req.Body.LibraryAccess != nil) {
+	if !admin && (req.Body.Roles != nil || req.Body.Disabled != nil || req.Body.LibraryAccess != nil ||
+		req.Body.UploadEnabled != nil || req.Body.UploadQuotaBytes != nil) {
 		return UpdateUser403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "only displayName may be changed on your own account"))}, nil
 	}
 	upd := service.AccountUpdate{
-		DisplayName: req.Body.DisplayName,
-		Disabled:    req.Body.Disabled,
+		DisplayName:      req.Body.DisplayName,
+		Disabled:         req.Body.Disabled,
+		UploadEnabled:    req.Body.UploadEnabled,
+		UploadQuotaBytes: req.Body.UploadQuotaBytes,
 	}
 	if req.Body.Roles != nil {
 		upd.Roles = roleStrings(req.Body.Roles)
@@ -472,14 +481,18 @@ func (s *Server) SetRating(ctx context.Context, req SetRatingRequestObject) (Set
 func userAccountJSON(acct service.Account) UserAccount {
 	u := acct.User
 	out := UserAccount{
-		Id:        u.ID,
-		Username:  u.Username,
-		Roles:     u.Roles,
-		Disabled:  u.Disabled,
-		CreatedAt: u.CreatedAt,
+		Id:            u.ID,
+		Username:      u.Username,
+		Roles:         u.Roles,
+		Disabled:      u.Disabled,
+		CreatedAt:     u.CreatedAt,
+		UploadEnabled: u.UploadEnabled,
 		LibraryAccess: LibraryAccess{
 			Mode: LibraryAccessMode(u.LibraryAccess),
 		},
+	}
+	if u.UploadQuotaBytes > 0 {
+		out.UploadQuotaBytes = ptr(u.UploadQuotaBytes)
 	}
 	if u.DisplayName != "" {
 		out.DisplayName = ptr(u.DisplayName)

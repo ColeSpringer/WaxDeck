@@ -16,7 +16,7 @@ part 'server_sync_event.g.dart';
 /// One change to server-side state visible to the calling user (their own state, plus other users' shared playlists), with the current value hydrated fresh. `kind` is a string, not a closed enum, so new kinds can appear; clients must skip events whose `kind` they do not recognize. Hydrated `playlist` payloads omit a smart playlist's computed `itemCount`, like list pages. 
 ///
 /// Properties:
-/// * [kind] - What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). 
+/// * [kind] - What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). Curation surfaces emit marker kinds carrying only `pid`: `review` (a review entry changed; refetch the review endpoints), `upload` (an upload session changed), and `task` (a tool task changed). Markers hydrate nothing because those surfaces are live reads, not mirrored state. 
 /// * [pid] - The item, show, book, or playlist the event is about (absent for `prefs`). 
 /// * [playState] 
 /// * [prefs] 
@@ -25,7 +25,7 @@ part 'server_sync_event.g.dart';
 /// * [playlist] 
 @BuiltValue()
 abstract class ServerSyncEvent implements Built<ServerSyncEvent, ServerSyncEventBuilder> {
-  /// What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). 
+  /// What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). Curation surfaces emit marker kinds carrying only `pid`: `review` (a review entry changed; refetch the review endpoints), `upload` (an upload session changed), and `task` (a tool task changed). Markers hydrate nothing because those surfaces are live reads, not mirrored state. 
   @BuiltValueField(wireName: r'kind')
   String get kind;
 

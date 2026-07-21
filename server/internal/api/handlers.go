@@ -971,6 +971,14 @@ func ResponseErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 		writeError(w, http.StatusBadGateway, "directory-unavailable", kindMessage(err, "the external directory could not be reached"))
 	case service.KindService:
 		writeError(w, http.StatusBadGateway, "service-unreachable", kindMessage(err, "an external service could not be reached"))
+	case service.KindQuota:
+		writeError(w, http.StatusRequestEntityTooLarge, "quota-exceeded", kindMessage(err, "the upload would exceed your storage quota"))
+	case service.KindLocked:
+		writeError(w, http.StatusConflict, "field-locked", kindMessage(err, "the field is locked; pass force to override"))
+	case service.KindFormat:
+		writeError(w, http.StatusUnsupportedMediaType, "unsupported-format", kindMessage(err, "the file's format is not accepted"))
+	case service.KindFeature:
+		writeError(w, http.StatusNotImplemented, "feature-unavailable", kindMessage(err, "this server is not running the needed capability"))
 	default:
 		var se *service.Error
 		if errors.As(err, &se) && se.Msg != "" && se.Kind == service.KindInternal {

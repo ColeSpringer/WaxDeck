@@ -5,6 +5,7 @@ import 'auth/auth_controller.dart';
 import 'auth/login_screen.dart';
 import 'auth/setup_screen.dart';
 import 'library/library_screen.dart';
+import 'metadata/metadata_screen.dart';
 import 'prototype/editing_prototype_screen.dart';
 import 'settings/prefs_controller.dart';
 import 'sync/sync_providers.dart';
@@ -37,6 +38,13 @@ class WaxDeckApp extends ConsumerWidget {
           settings: settings,
           builder: (_) => const EditingPrototypeScreen(),
         ),
+        final String name when name.startsWith(MetadataScreen.routePrefix) =>
+          MaterialPageRoute(
+            settings: settings,
+            builder: (_) => MetadataScreen(
+              pid: name.substring(MetadataScreen.routePrefix.length),
+            ),
+          ),
         _ => null,
       },
     );

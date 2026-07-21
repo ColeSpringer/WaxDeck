@@ -2,15 +2,46 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../books/book_screen.dart';
+import '../health/health_screen.dart';
 import '../media_icons.dart';
+import '../organize/organize_screen.dart';
 import '../player/player_screen.dart';
 import '../playlists/playlists_screen.dart';
 import '../podcasts/podcasts_screen.dart';
 import '../radio/radio_screen.dart';
+import '../review/review_screen.dart';
 import '../settings/settings_screen.dart';
 import '../sync/sync_providers.dart';
+import '../tools/tasks_screen.dart';
+import '../uploads/add_to_library.dart';
+import '../uploads/uploads_screen.dart';
 import 'library_controller.dart';
+
+/// Curation surfaces reachable from the app bar menu. Administrators
+/// see all of them; everyone else only their own uploads.
+enum _CurationDestination {
+  review('curation-review', 'Review queue', adminOnly: true),
+  uploads('curation-uploads', 'Uploads', adminOnly: false),
+  health('curation-health', 'Health', adminOnly: true),
+  organize('curation-organize', 'Organize', adminOnly: true),
+  tasks('curation-tasks', 'Tasks', adminOnly: true);
+
+  const _CurationDestination(this.id, this.label, {required this.adminOnly});
+
+  final String id;
+  final String label;
+  final bool adminOnly;
+
+  Widget screen() => switch (this) {
+    review => const ReviewScreen(),
+    uploads => const UploadsScreen(),
+    health => const HealthScreen(),
+    organize => const OrganizeScreen(),
+    tasks => const TasksScreen(),
+  };
+}
 
 /// Artwork grid over the whole library with a media-type filter, cursor
 /// paged with infinite scroll, plus a continue-listening banner.
@@ -38,9 +69,66 @@ class LibraryScreen extends ConsumerWidget {
     final resume = ref.watch(continueListeningProvider).value;
 
     return Scaffold(
+      // Adding audio is a primary action, so it gets a button here
+      // rather than living inside the curation menu. Podcasts are added
+      // by subscribing to a feed (their own screen), so the button is
+      // hidden on that filter.
+      floatingActionButton: filter == LibraryFilter.podcasts
+          ? null
+          : Semantics(
+              identifier: 'add-to-library',
+              label: 'Add music',
+              button: true,
+              child: FloatingActionButton(
+                key: const Key('add-to-library'),
+                tooltip: 'Add to library',
+                onPressed: () => showAddToLibrarySheet(
+                  context,
+                  ref,
+                  initial: filter.mediaType,
+                ),
+                child: const Icon(Icons.add),
+              ),
+            ),
       appBar: AppBar(
         title: const Text('WaxDeck'),
         actions: [
+          Semantics(
+            identifier: 'curation-menu',
+            label: 'Curation',
+            child: PopupMenuButton<_CurationDestination>(
+              key: const Key('curation-menu'),
+              tooltip: 'Curation',
+              icon: const Icon(Icons.build_outlined),
+              onSelected: (destination) => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => destination.screen()),
+              ),
+              itemBuilder: (context) {
+                final isAdmin =
+                    ref
+                        .read(authControllerProvider)
+                        .value
+                        ?.user
+                        ?.roles
+                        .contains('admin') ??
+                    false;
+                return [
+                  for (final destination in _CurationDestination.values)
+                    if (isAdmin || !destination.adminOnly)
+                      PopupMenuItem(
+                        value: destination,
+                        child: Semantics(
+                          identifier: destination.id,
+                          child: Text(
+                            destination.label,
+                            key: ValueKey(destination.id),
+                          ),
+                        ),
+                      ),
+                ];
+              },
+            ),
+          ),
           Semantics(
             identifier: 'playlists-open',
             child: IconButton(

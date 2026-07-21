@@ -16,6 +16,12 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    # Run as the host user so the bind-mounted library (owned by whoever ran
+    # `make up`) is writable for imports and organization. `make up` sets these
+    # to the current user; they default to the image's built-in 10001 for a
+    # bare `docker compose up` (point WAXDECK_LIBRARY at a 10001-writable dir, or
+    # set WAXDECK_UID/WAXDECK_GID in .env, in that case).
+    user: "${WAXDECK_UID:-10001}:${WAXDECK_GID:-10001}"
     ports:
       # The ONLY published port of the stack.
       - "4420:4420"
@@ -25,6 +31,11 @@ services:
       # Root names must match WAXFLOW_ROOTS below: streams address
       # sources as <name>/<relpath> against the sidecar.
       WAXDECK_LIBRARY_ROOTS: lib=/library
+      # Roots (by name) the catalog may place files into, for uploads
+      # and URL acquisitions. The compose library is WaxDeck-managed by
+      # design (mounted read-write above), so it defaults to "lib"; set
+      # empty to keep the library strictly scan-only.
+      WAXDECK_MANAGED_ROOTS: ${WAXDECK_MANAGED_ROOTS:-lib}
       # WaxFlow is reached over the internal network only.
       WAXDECK_FLOW_URL: http://waxflow:4418
       # Must be one of the keys in WAXFLOW_API_KEYS below (see .env.example).
@@ -54,10 +65,14 @@ services:
       # Set to "true" when your feeds live on the LAN (relaxes the
       # private-address guard on feed and enclosure fetches).
       WAXDECK_ALLOW_PRIVATE_FEED_HOSTS: ${WAXDECK_ALLOW_PRIVATE_FEED_HOSTS:-false}
-      # YouTube acquisition bridge: channels and playlists as shows.
-      # Pair with the youtube profile's waxseal sidecar for the
-      # full-quality path.
-      WAXDECK_YOUTUBE: ${WAXDECK_YOUTUBE:-false}
+      # YouTube acquisition bridge: download videos, playlists, and
+      # channels, and subscribe to channels as podcasts. On by default
+      # (set WAXDECK_YOUTUBE=false to disable). Pair with the youtube
+      # profile's waxseal sidecar for the full-quality path.
+      WAXDECK_YOUTUBE: ${WAXDECK_YOUTUBE:-true}
+      # Embed the source thumbnail as cover art on acquired audio (until
+      # enrichment finds official artwork). On by default.
+      WAXDECK_YOUTUBE_THUMBNAIL: ${WAXDECK_YOUTUBE_THUMBNAIL:-true}
       WAXDECK_SEAL_URL: ${WAXDECK_SEAL_URL:-}
       WAXDECK_SEAL_API_KEY: ${WAXDECK_SEAL_API_KEY:-}
       WAXDECK_YOUTUBE_SPONSORBLOCK: ${WAXDECK_YOUTUBE_SPONSORBLOCK:-}
@@ -89,6 +104,9 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.waxflow
+    # Same user as waxdeck: the two share the catalog volume (waxbin.db plus its
+    # WAL sidecars, written by whichever opens it), so they must agree on UID.
+    user: "${WAXDECK_UID:-10001}:${WAXDECK_GID:-10001}"
     # No `ports:`, internal network only; WaxDeck proxies anything clients need.
     environment:
       WAXFLOW_ADDR: 0.0.0.0:4418

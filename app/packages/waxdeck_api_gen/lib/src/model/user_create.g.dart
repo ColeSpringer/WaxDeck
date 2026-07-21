@@ -17,6 +17,10 @@ class _$UserCreate extends UserCreate {
   final BuiltList<Role>? roles;
   @override
   final LibraryAccess? libraryAccess;
+  @override
+  final bool? uploadEnabled;
+  @override
+  final int? uploadQuotaBytes;
 
   factory _$UserCreate([void Function(UserCreateBuilder)? updates]) =>
       (UserCreateBuilder()..update(updates))._build();
@@ -27,6 +31,8 @@ class _$UserCreate extends UserCreate {
     this.displayName,
     this.roles,
     this.libraryAccess,
+    this.uploadEnabled,
+    this.uploadQuotaBytes,
   }) : super._();
   @override
   UserCreate rebuild(void Function(UserCreateBuilder) updates) =>
@@ -43,7 +49,9 @@ class _$UserCreate extends UserCreate {
         password == other.password &&
         displayName == other.displayName &&
         roles == other.roles &&
-        libraryAccess == other.libraryAccess;
+        libraryAccess == other.libraryAccess &&
+        uploadEnabled == other.uploadEnabled &&
+        uploadQuotaBytes == other.uploadQuotaBytes;
   }
 
   @override
@@ -54,6 +62,8 @@ class _$UserCreate extends UserCreate {
     _$hash = $jc(_$hash, displayName.hashCode);
     _$hash = $jc(_$hash, roles.hashCode);
     _$hash = $jc(_$hash, libraryAccess.hashCode);
+    _$hash = $jc(_$hash, uploadEnabled.hashCode);
+    _$hash = $jc(_$hash, uploadQuotaBytes.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -65,7 +75,9 @@ class _$UserCreate extends UserCreate {
           ..add('password', password)
           ..add('displayName', displayName)
           ..add('roles', roles)
-          ..add('libraryAccess', libraryAccess))
+          ..add('libraryAccess', libraryAccess)
+          ..add('uploadEnabled', uploadEnabled)
+          ..add('uploadQuotaBytes', uploadQuotaBytes))
         .toString();
   }
 }
@@ -95,6 +107,16 @@ class UserCreateBuilder implements Builder<UserCreate, UserCreateBuilder> {
   set libraryAccess(LibraryAccessBuilder? libraryAccess) =>
       _$this._libraryAccess = libraryAccess;
 
+  bool? _uploadEnabled;
+  bool? get uploadEnabled => _$this._uploadEnabled;
+  set uploadEnabled(bool? uploadEnabled) =>
+      _$this._uploadEnabled = uploadEnabled;
+
+  int? _uploadQuotaBytes;
+  int? get uploadQuotaBytes => _$this._uploadQuotaBytes;
+  set uploadQuotaBytes(int? uploadQuotaBytes) =>
+      _$this._uploadQuotaBytes = uploadQuotaBytes;
+
   UserCreateBuilder() {
     UserCreate._defaults(this);
   }
@@ -107,6 +129,8 @@ class UserCreateBuilder implements Builder<UserCreate, UserCreateBuilder> {
       _displayName = $v.displayName;
       _roles = $v.roles?.toBuilder();
       _libraryAccess = $v.libraryAccess?.toBuilder();
+      _uploadEnabled = $v.uploadEnabled;
+      _uploadQuotaBytes = $v.uploadQuotaBytes;
       _$v = null;
     }
     return this;
@@ -144,6 +168,8 @@ class UserCreateBuilder implements Builder<UserCreate, UserCreateBuilder> {
             displayName: displayName,
             roles: _roles?.build(),
             libraryAccess: _libraryAccess?.build(),
+            uploadEnabled: uploadEnabled,
+            uploadQuotaBytes: uploadQuotaBytes,
           );
     } catch (_) {
       late String _$failedField;

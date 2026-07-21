@@ -370,6 +370,109 @@ var migrations = []string{
 		updated_at_ns INTEGER NOT NULL
 	);
 	CREATE INDEX playback_sessions_user ON playback_sessions (user_id, active, updated_at_ns);`,
+
+	// The curation surface: the matching review queue with its durable
+	// identify work queue, resumable uploads, tool tasks (book merge and
+	// split, cue splits), the health sweep index, and the fix dispatch
+	// queue. Review payloads (tracks, candidates, the pre-apply snapshot
+	// for revert) are JSON documents: they are read and written whole,
+	// never queried into, and their shape belongs to the service layer.
+	// Upload rights live on the user row; quota use derives from live
+	// upload rows.
+	`ALTER TABLE users ADD COLUMN upload_enabled INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE users ADD COLUMN upload_quota_bytes INTEGER NOT NULL DEFAULT 0;
+	CREATE TABLE review_entries (
+		id             TEXT    PRIMARY KEY,
+		kind           TEXT    NOT NULL,
+		status         TEXT    NOT NULL,
+		media_type     TEXT    NOT NULL,
+		origin         TEXT    NOT NULL,
+		library_pid    TEXT    NOT NULL DEFAULT '',
+		uploaded_by    TEXT    NOT NULL DEFAULT '',
+		title          TEXT    NOT NULL DEFAULT '',
+		artist         TEXT    NOT NULL DEFAULT '',
+		track_count    INTEGER NOT NULL DEFAULT 0,
+		identifying    INTEGER NOT NULL DEFAULT 1,
+		best_mbid      TEXT    NOT NULL DEFAULT '',
+		best_title     TEXT    NOT NULL DEFAULT '',
+		best_artist    TEXT    NOT NULL DEFAULT '',
+		best_year      INTEGER NOT NULL DEFAULT 0,
+		best_similarity REAL   NOT NULL DEFAULT 0,
+		applied_mbid   TEXT    NOT NULL DEFAULT '',
+		auto           INTEGER NOT NULL DEFAULT 0,
+		payload        TEXT    NOT NULL DEFAULT '{}',
+		snapshot       TEXT    NOT NULL DEFAULT '',
+		created_at_ns  INTEGER NOT NULL,
+		decided_at_ns  INTEGER NOT NULL DEFAULT 0,
+		decided_by     TEXT    NOT NULL DEFAULT ''
+	);
+	CREATE INDEX review_entries_status ON review_entries (status, created_at_ns DESC, id);
+	CREATE INDEX review_entries_uploader ON review_entries (uploaded_by, created_at_ns DESC, id);
+	CREATE TABLE match_queue (
+		id             INTEGER PRIMARY KEY,
+		entry_id       TEXT    NOT NULL UNIQUE,
+		attempts       INTEGER NOT NULL DEFAULT 0,
+		lease_until_ns INTEGER NOT NULL DEFAULT 0,
+		next_at_ns     INTEGER NOT NULL DEFAULT 0,
+		last_error     TEXT    NOT NULL DEFAULT ''
+	);
+	CREATE TABLE uploads (
+		id             TEXT    PRIMARY KEY,
+		user_id        TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		file_name      TEXT    NOT NULL,
+		size_bytes     INTEGER NOT NULL,
+		received_bytes INTEGER NOT NULL DEFAULT 0,
+		media_type     TEXT    NOT NULL,
+		library_pid    TEXT    NOT NULL DEFAULT '',
+		sha256         TEXT    NOT NULL DEFAULT '',
+		state          TEXT    NOT NULL DEFAULT 'receiving',
+		staging_path   TEXT    NOT NULL DEFAULT '',
+		review_entry_id TEXT   NOT NULL DEFAULT '',
+		duplicate_pid  TEXT    NOT NULL DEFAULT '',
+		duplicate_kind TEXT    NOT NULL DEFAULT '',
+		item_pid       TEXT    NOT NULL DEFAULT '',
+		created_at_ns  INTEGER NOT NULL,
+		expires_at_ns  INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE INDEX uploads_user ON uploads (user_id, created_at_ns DESC, id);
+	CREATE INDEX uploads_item ON uploads (item_pid, user_id);
+	CREATE TABLE tool_tasks (
+		id             TEXT    PRIMARY KEY,
+		type           TEXT    NOT NULL,
+		state          TEXT    NOT NULL DEFAULT 'queued',
+		item_pid       TEXT    NOT NULL,
+		user_id        TEXT    NOT NULL DEFAULT '',
+		params         TEXT    NOT NULL DEFAULT '{}',
+		progress_pct   REAL    NOT NULL DEFAULT 0,
+		error          TEXT    NOT NULL DEFAULT '',
+		result_pids    TEXT    NOT NULL DEFAULT '[]',
+		attempts       INTEGER NOT NULL DEFAULT 0,
+		lease_until_ns INTEGER NOT NULL DEFAULT 0,
+		created_at_ns  INTEGER NOT NULL,
+		finished_at_ns INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE INDEX tool_tasks_user ON tool_tasks (user_id, created_at_ns DESC, id);
+	CREATE INDEX tool_tasks_state ON tool_tasks (state, lease_until_ns);
+	CREATE TABLE health_index (
+		item_pid    TEXT    PRIMARY KEY,
+		media_type  TEXT    NOT NULL,
+		title       TEXT    NOT NULL DEFAULT '',
+		artist      TEXT    NOT NULL DEFAULT '',
+		rules       TEXT    NOT NULL DEFAULT '[]',
+		rule_count  INTEGER NOT NULL DEFAULT 0,
+		swept_at_ns INTEGER NOT NULL
+	);
+	CREATE INDEX health_index_worst ON health_index (rule_count DESC, title, item_pid);
+	CREATE TABLE fix_queue (
+		id             INTEGER PRIMARY KEY,
+		item_pid       TEXT    NOT NULL,
+		rule           TEXT    NOT NULL,
+		attempts       INTEGER NOT NULL DEFAULT 0,
+		lease_until_ns INTEGER NOT NULL DEFAULT 0,
+		next_at_ns     INTEGER NOT NULL DEFAULT 0,
+		last_error     TEXT    NOT NULL DEFAULT '',
+		UNIQUE (item_pid, rule)
+	);`,
 }
 
 // Open opens (creating if needed) the database at path and applies

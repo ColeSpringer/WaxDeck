@@ -315,6 +315,104 @@ func audioFormats() []waxtap.Format {
 	}}
 }
 
+// opusFormats is a candidate list whose best-audio row is YouTube's highest
+// quality Opus stream, which the platform delivers in a WebM container.
+func opusFormats() []waxtap.Format {
+	return []waxtap.Format{{
+		Itag:     251,
+		MIMEType: `audio/webm; codecs="opus"`,
+		Codec:    "opus", Extension: "webm",
+		Bitrate: 160000, Channels: 2,
+		AudioQuality: waxtap.QualityHigh,
+	}}
+}
+
+// TestContainerExtForCodec locks the codec-to-container mapping: YouTube's best
+// audio (Opus in WebM) must stage as .opus, never .webm, so the catalog imports
+// it and cover art can be embedded.
+func TestContainerExtForCodec(t *testing.T) {
+	cases := []struct {
+		codec, native, want string
+	}{
+		{"opus", "webm", "opus"},     // the reported bug: Opus-in-WebM
+		{"vorbis", "webm", "ogg"},    // legacy Vorbis-in-WebM
+		{"mp4a.40.2", "m4a", "m4a"},  // AAC-LC
+		{"mp4a.40.5", "m4a", "m4a"},  // HE-AAC
+		{"mp4a.40.34", "m4a", "mp3"}, // MP3 in an MP4 descriptor
+		{"mp3", "mp3", "mp3"},
+		{"flac", "flac", "flac"},
+		{"", "m4a", "m4a"},   // unknown codec, recognized native container
+		{"", "webm", "opus"}, // unknown codec, unrecognized native: Ogg-Opus fallback
+	}
+	for _, c := range cases {
+		if got := containerExtForCodec(c.codec, c.native); got != c.want {
+			t.Errorf("containerExtForCodec(%q, %q) = %q, want %q", c.codec, c.native, got, c.want)
+		}
+	}
+}
+
+// TestTranscodeFor locks the format-preference mapping: "best"/empty is the
+// lossless copy (container from the codec), and each named format transcodes
+// into its own recognized, picture-capable container.
+func TestTranscodeFor(t *testing.T) {
+	best := opusFormats()
+	cases := []struct {
+		format  string
+		wantF   waxtap.TranscodeFormat
+		wantExt string
+	}{
+		{"", waxtap.FormatCopy, "opus"},
+		{"best", waxtap.FormatCopy, "opus"},
+		{"opus", waxtap.FormatOpus, "opus"},
+		{"mp3", waxtap.FormatMP3, "mp3"},
+		{"m4a", waxtap.FormatAAC, "m4a"},
+		{"flac", waxtap.FormatFLAC, "flac"},
+		{"weird", waxtap.FormatCopy, "opus"}, // unknown falls back to best
+	}
+	for _, c := range cases {
+		spec, ext := transcodeFor(c.format, best)
+		if spec.Format != c.wantF || ext != c.wantExt {
+			t.Errorf("transcodeFor(%q) = (%v, %q), want (%v, %q)", c.format, spec.Format, ext, c.wantF, c.wantExt)
+		}
+	}
+}
+
+// TestFetchFormatTranscodesToRequestedContainer checks a named format delivers
+// its own container through the acquisition capability path.
+func TestFetchFormatTranscodesToRequestedContainer(t *testing.T) {
+	f := channelFake(1)
+	f.infos[vid(1)].Formats = opusFormats()
+	f.payload = []byte("stand-in for transcoded mp3 bytes")
+	p := testProvider(t, f, nil)
+
+	var sink bytes.Buffer
+	res, err := p.FetchFormat(context.Background(), source.FetchRequest{URL: "https://www.youtube.com/watch?v=" + vid(1)}, &sink, "mp3")
+	if err != nil {
+		t.Fatalf("FetchFormat: %v", err)
+	}
+	if res.ContentType != "audio/mpeg" {
+		t.Errorf("ContentType = %q, want audio/mpeg", res.ContentType)
+	}
+}
+
+// TestFetchDeliversOpusInRecognizedContainer is the end-to-end guard for the
+// same bug through Fetch: an Opus best-audio row must surface as audio/opus.
+func TestFetchDeliversOpusInRecognizedContainer(t *testing.T) {
+	f := channelFake(1)
+	f.infos[vid(1)].Formats = opusFormats()
+	f.payload = []byte("deterministic bytes standing in for an ogg-opus container")
+	p := testProvider(t, f, nil)
+
+	var sink bytes.Buffer
+	res, err := p.Fetch(context.Background(), source.FetchRequest{URL: "https://www.youtube.com/watch?v=" + vid(1)}, &sink)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if res.ContentType != "audio/opus" {
+		t.Errorf("ContentType = %q, want audio/opus (never audio/webm)", res.ContentType)
+	}
+}
+
 func TestFetchStreamsBytesAndCleansUp(t *testing.T) {
 	f := channelFake(1)
 	f.infos[vid(1)].Formats = audioFormats()

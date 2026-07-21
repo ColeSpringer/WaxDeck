@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../player/player_screen.dart';
 import '../podcasts/episode_screen.dart' show formatCueTimestamp;
 import '../podcasts/show_notes.dart';
 import '../providers.dart';
+import '../tools/tasks_screen.dart';
 
 /// One audiobook's detail.
-final bookDetailProvider = FutureProvider.family<BookDetail, String>(
-  (ref, pid) => ref.watch(repositoryProvider).getBook(pid),
-);
+final bookDetailProvider = FutureProvider.autoDispose
+    .family<BookDetail, String>(
+      (ref, pid) => ref.watch(repositoryProvider).getBook(pid),
+    );
 
 /// One audiobook: header, description, resume, chapters, and per-book
 /// playback settings.
@@ -26,6 +29,7 @@ class BookScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(detail.value?.title ?? 'Audiobook'),
         actions: [
+          if (detail.value != null) _BookToolsMenu(book: detail.value!),
           if (detail.hasValue)
             Semantics(
               identifier: 'book-settings-open',
@@ -329,6 +333,98 @@ class _BookSettingsSheetState extends ConsumerState<_BookSettingsSheet> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The audiobook file tools, admin only. A multi-file book offers a
+/// merge into one chaptered file; a single-file book with chapters
+/// offers a split into per-chapter files. Both run through the
+/// streaming engine as background tasks, so the menu explains that the
+/// result appears in the tasks list.
+class _BookToolsMenu extends ConsumerWidget {
+  const _BookToolsMenu({required this.book});
+
+  final BookDetail book;
+
+  bool get _canMerge => book.parts.length > 1;
+  bool get _canSplit => book.parts.length <= 1 && book.chapters.isNotEmpty;
+
+  Future<void> _run(
+    BuildContext context,
+    WidgetRef ref,
+    Future<ToolTask> Function() start,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await start();
+      ref.invalidate(toolTasksProvider);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text('Queued. Follow it in Tasks.'),
+            action: SnackBarAction(
+              label: 'Tasks',
+              onPressed: () => navigator.push(
+                MaterialPageRoute<void>(builder: (_) => const TasksScreen()),
+              ),
+            ),
+          ),
+        );
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isAdmin =
+        ref
+            .watch(authControllerProvider)
+            .value
+            ?.user
+            ?.roles
+            .contains('admin') ??
+        false;
+    if (!isAdmin || (!_canMerge && !_canSplit)) {
+      return const SizedBox.shrink();
+    }
+    final repo = ref.read(repositoryProvider);
+    return Semantics(
+      identifier: 'book-tools-menu',
+      label: 'Audiobook tools',
+      button: true,
+      child: PopupMenuButton<String>(
+        key: const Key('book-tools-menu'),
+        tooltip: 'Audiobook tools',
+        icon: const Icon(Icons.auto_awesome_motion_outlined),
+        onSelected: (action) {
+          switch (action) {
+            case 'merge':
+              _run(context, ref, () => repo.mergeBook(book.pid));
+            case 'split':
+              _run(context, ref, () => repo.splitBook(book.pid));
+          }
+        },
+        itemBuilder: (context) => [
+          if (_canMerge)
+            PopupMenuItem(
+              key: const Key('book-merge'),
+              value: 'merge',
+              child: const Text('Merge into one chaptered file'),
+            ),
+          if (_canSplit)
+            PopupMenuItem(
+              key: const Key('book-split'),
+              value: 'split',
+              child: const Text('Split at chapters'),
+            ),
         ],
       ),
     );

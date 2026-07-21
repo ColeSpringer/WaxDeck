@@ -19,6 +19,8 @@ part 'user_create.g.dart';
 /// * [displayName] - Optional display name.
 /// * [roles] - Assigned roles; defaults to `[user]`.
 /// * [libraryAccess] 
+/// * [uploadEnabled] - Grant upload rights; defaults to false.
+/// * [uploadQuotaBytes] - Per-user upload cap in bytes; absent means none.
 @BuiltValue()
 abstract class UserCreate implements Built<UserCreate, UserCreateBuilder> {
   /// Login name, unique case-insensitively. Leading and trailing whitespace is rejected. 
@@ -39,6 +41,14 @@ abstract class UserCreate implements Built<UserCreate, UserCreateBuilder> {
 
   @BuiltValueField(wireName: r'libraryAccess')
   LibraryAccess? get libraryAccess;
+
+  /// Grant upload rights; defaults to false.
+  @BuiltValueField(wireName: r'uploadEnabled')
+  bool? get uploadEnabled;
+
+  /// Per-user upload cap in bytes; absent means none.
+  @BuiltValueField(wireName: r'uploadQuotaBytes')
+  int? get uploadQuotaBytes;
 
   UserCreate._();
 
@@ -92,6 +102,20 @@ class _$UserCreateSerializer implements PrimitiveSerializer<UserCreate> {
       yield serializers.serialize(
         object.libraryAccess,
         specifiedType: const FullType(LibraryAccess),
+      );
+    }
+    if (object.uploadEnabled != null) {
+      yield r'uploadEnabled';
+      yield serializers.serialize(
+        object.uploadEnabled,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.uploadQuotaBytes != null) {
+      yield r'uploadQuotaBytes';
+      yield serializers.serialize(
+        object.uploadQuotaBytes,
+        specifiedType: const FullType(int),
       );
     }
   }
@@ -151,6 +175,20 @@ class _$UserCreateSerializer implements PrimitiveSerializer<UserCreate> {
             specifiedType: const FullType(LibraryAccess),
           ) as LibraryAccess;
           result.libraryAccess.replace(valueDes);
+          break;
+        case r'uploadEnabled':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.uploadEnabled = valueDes;
+          break;
+        case r'uploadQuotaBytes':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.uploadQuotaBytes = valueDes;
           break;
         default:
           unhandled.add(key);

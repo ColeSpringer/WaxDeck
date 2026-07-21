@@ -1,0 +1,172 @@
+# Curation and metadata
+
+WaxDeck is a metadata completer as much as a player. This page covers
+the matching review queue, uploads, the metadata editor, the health
+dashboard, duplicates and upgrades, the file organizer, and the
+audiobook and CUE tooling.
+
+## Matching and the review queue
+
+WaxDeck identifies music against MusicBrainz the way beets does, not
+the way a lookup box does: files group into album units (tags first,
+directories for untagged files, disc folders folded in), candidate
+releases arrive by tagged MusicBrainz ids, acoustic fingerprints, and
+text search, every candidate is scored by weighted field distances
+over an optimal track assignment, and the unit is decided as a whole.
+A unit never half applies.
+
+Confident matches apply themselves and appear in the queue as
+auto-applied, with a revert button; everything else waits for review
+with ranked candidates, a match percentage, a per-field distance
+breakdown, and a side-by-side diff of current against proposed track
+metadata. Decisions:
+
+- **Approve** applies the chosen candidate (the ranked best by
+  default) and locks the applied fields so a rescan cannot undo the
+  acceptance.
+- **Keep as is** accepts the current metadata unchanged.
+- **Mark unofficial** is keep-as-is plus a locked `RELEASESTATUS`
+  custom tag: YouTube rips, remixes, live sets, and personal
+  recordings have no canonical release, and marking them says so.
+  Unofficial content is excluded from match retries and health
+  penalties, stays browsable by the tag, and remains fully
+  hand-editable. Files that arrive already tagged with a bootleg
+  status are treated the same way.
+- **Skip** dismisses the entry without touching anything.
+- **Revert** (on applied entries) restores the pre-apply snapshot and
+  unlocks the fields. Reverts of auto-applied entries feed the
+  calibration statistic the queue shows, so trust in auto-apply is
+  measured, not asserted.
+
+Per-library matching modes: `auto` (the default), `review` (nothing
+applies itself), and `off` for libraries the engine must never touch.
+
+Matching needs the network. MusicBrainz lookups are paced to their
+etiquette (one request per second) and cached; AcoustID fingerprint
+evidence requires an API key (`WAXDECK_ACOUSTID_KEY`) and the
+`fpcalc` binary, and matching degrades gracefully to tag and search
+evidence without them. `WAXDECK_MATCHING=false` disables the engine
+entirely.
+
+## Uploads
+
+Users with upload rights (an admin grant, with an optional per-user
+byte quota) can push audio from any client: uploads are chunked and
+resumable, carry a required media type label (music, podcast episode,
+audiobook), and stage outside the library until a review decision
+imports them. Items a user's own uploads bring into the library stay
+editable by that user afterward: the full-depth editor's item-scoped
+operations accept the uploader as well as administrators. The identify pipeline runs on every completed upload,
+so a well-tagged file usually arrives with its candidates already
+scored. Duplicate warnings (exact bytes, or the same recording in a
+different encoding) inform the decision instead of blocking it.
+
+Imports move files into the library, so at least one library root
+must be opted into managed placement with `WAXDECK_MANAGED_ROOTS`
+(root names, comma separated). Unlisted roots are never written: the
+conservative default is that WaxDeck moves nothing it did not place.
+
+## Acquiring from a URL
+
+Users with upload rights can also pull audio in by URL from the
+library's **+** button (Add from URL): a single YouTube video, a
+playlist, or a channel (bounded to two hundred entries per
+acquisition; subscribing the channel as a show is the archive-scale
+path). The downloader is on by default; it needs a managed library
+root for the files to land in (`WAXDECK_MANAGED_ROOTS`), and
+`WAXDECK_YOUTUBE=false` turns it off. See the getting-started guide. The download runs as a background task through
+the acquisition bridge, with SponsorBlock cuts and embedded source
+metadata (title, channel, thumbnail) plus provenance tags recording
+where the audio came from. The files then stage exactly like uploads
+and flow through the same identify and review pipeline, grouped into
+album units.
+
+This is where the honest-metadata story matters most: a ripped album
+playlist with clean titles will often match its release and arrive
+fully tagged, while an unofficial remix or live set may match nothing
+that exists outside that video. Both are first-class outcomes. The
+review queue offers keep-as-is and mark-unofficial beside any
+candidates, the source-derived metadata is preserved either way, and
+the person who acquired the content keeps item-scoped editing rights
+over it afterward, so hand-naming a remix does not require an
+administrator.
+
+## The metadata editor
+
+Every field in the vocabulary is editable, not a five-field form:
+scalar fields per media type (including identifiers like ISRC, ASIN,
+ISBN, and MusicBrainz ids, validated on write), typed credits with
+per-kind role vocabularies, lyrics (timed LRC or plain text),
+chapters on single-file audiobooks, front-cover artwork for items and
+entities, custom tags (which are full browse dimensions), and entity
+edits (sort names, identifiers, release group types) with their own
+provenance.
+
+The catalog database is the working copy: edits land there first and
+touch files only when the request opts into write-back. Edits lock
+their fields by default so scans and enrichment respect curation;
+locks are visible and reversible in the editor, and per-field
+provenance shows who set what (file tags, a user, enrichment, or the
+organizer). A write-back that fails after the catalog committed
+reports per-file detail and surfaces as an out-of-sync diagnostic
+rather than failing the edit. Lyrics write-back writes the `.lrc`
+sidecar so corrections stay portable to every other player.
+
+## Health dashboard
+
+The health sweep scores the library for completeness: missing or
+small artwork, missing identifiers, years, genres, lyrics, narrators
+and ASINs on books, files whose paths disagree with the organize
+template, files whose tags lag the catalog, legacy-only tag values,
+and corrupt audio. Items marked unofficial are exempt from the rules
+that assume a canonical release. Rules with an automated fix can be
+fixed in bulk; fixes run in the background at provider-etiquette
+pace. A fresh install shows a warming-up state with honest progress
+instead of a wall of red.
+
+## Duplicates and upgrades
+
+The audit's duplicate findings (artists, albums, release groups,
+genres) surface with suggested survivors; merging re-parents
+everything onto the survivor, play history included, and survives
+rescans because the survivor keeps its identity. Quality upgrade
+groups (the same recording in different encodings, found through the
+fingerprint index) resolve by keeping the best and trashing the rest,
+recoverable within the trash window.
+
+## Organizer
+
+Template-driven renames and moves with a dry-run preview, using the
+server's configured organize profiles. Sidecars (covers, lyrics, cue
+sheets) ride along with their files, moves are crash safe, and
+templates are sandboxed per path segment so they cannot escape the
+library root. WaxDeck never fights an externally managed library:
+organizing is always explicit.
+
+## Audiobook and CUE tooling
+
+With the streaming engine configured:
+
+- **Merge** a multi-file audiobook into one chaptered file: parts
+  join gaplessly, chapter marks land at the part boundaries with
+  sensible titles, tags and cover carry over, and everyone's resume
+  position survives the merge. The parts go to the trash unless kept.
+- **Split** a single-file audiobook at its chapters, or a CUE rip
+  into real per-track files (sample exact, lossless for lossless
+  sources). CUE albums already browse and play as native per-track
+  items without splitting; the physical split is for people who want
+  real files with working write-back and fingerprints.
+
+Tool tasks run in the background and report progress over the event
+channel; the task log lives under the tools API.
+
+## Enrichment
+
+The catalog's enrichment pass (MusicBrainz identity first, then
+providers in priority order) fills artwork, genres, lyrics, and book
+metadata, respecting locks and never overwriting curated values.
+WaxDeck registers its own providers ahead of the catalog's built-ins:
+Deezer and iTunes artwork (key free), Audnexus audiobook metadata
+(key free, keyed on ASIN), and fanart.tv artwork when
+`WAXDECK_FANARTTV_KEY` is set. The editor's per-item fetch uses the
+same providers for one item at a time.

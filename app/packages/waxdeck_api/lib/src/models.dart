@@ -659,6 +659,7 @@ class PodcastShow {
     this.episodeCount,
     this.lastPublishedAt,
     this.refreshDisabled = false,
+    this.explicit = false,
   });
 
   final String pid;
@@ -681,6 +682,10 @@ class PodcastShow {
   /// True when scheduled refresh was auto-disabled after repeated
   /// failures; a successful manual refresh re-enables it.
   final bool refreshDisabled;
+
+  /// Feed-declared explicit flag for the whole show; episodes carry
+  /// their own flag, which wins where the feed sets both.
+  final bool explicit;
 }
 
 /// The caller's per-subscription settings. The PUT endpoint replaces the
@@ -1443,4 +1448,958 @@ class PlaybackSessionInfo {
   /// The current entry, when the queue is known.
   PlaybackSessionEntry? get currentEntry =>
       index >= 0 && index < entries.length ? entries[index] : null;
+}
+
+/// Compact view of a review entry's best-scoring candidate.
+class CandidateSummary {
+  const CandidateSummary({
+    required this.mbid,
+    required this.title,
+    required this.artist,
+    this.year,
+    required this.similarityPct,
+  });
+
+  final String mbid;
+  final String title;
+  final String artist;
+  final int? year;
+
+  /// Similarity in percent, 0 to 100.
+  final double similarityPct;
+}
+
+/// One unit of work in the metadata review queue (usually an album).
+class ReviewEntry {
+  const ReviewEntry({
+    required this.id,
+    required this.kind,
+    required this.status,
+    required this.mediaType,
+    required this.origin,
+    this.title,
+    this.artist,
+    required this.trackCount,
+    this.libraryPid,
+    this.uploadedBy,
+    this.identifying = false,
+    this.best,
+    this.appliedMbid,
+    required this.createdAt,
+    this.decidedAt,
+    this.decidedBy,
+  });
+
+  final String id;
+
+  /// `match` or `import`; open vocabulary.
+  final String kind;
+
+  /// Lifecycle state: `pending`, `applied`, `auto-applied`, `as-is`,
+  /// `unofficial`, `skipped`, `discarded`, or `reverted`. Open
+  /// vocabulary.
+  final String status;
+  final MediaType mediaType;
+
+  /// Where the unit came from: `scan`, `upload`, or `rematch`. Open
+  /// vocabulary.
+  final String origin;
+  final String? title;
+  final String? artist;
+  final int trackCount;
+  final String? libraryPid;
+  final String? uploadedBy;
+
+  /// True while candidate lookup is still running for this entry.
+  final bool identifying;
+
+  /// The best-scoring candidate, when lookup produced any.
+  final CandidateSummary? best;
+
+  /// The release the decision applied, once decided.
+  final String? appliedMbid;
+  final DateTime createdAt;
+  final DateTime? decidedAt;
+  final String? decidedBy;
+}
+
+/// Full review entry detail: the local tracks plus every candidate.
+class ReviewEntryDetail extends ReviewEntry {
+  const ReviewEntryDetail({
+    required super.id,
+    required super.kind,
+    required super.status,
+    required super.mediaType,
+    required super.origin,
+    super.title,
+    super.artist,
+    required super.trackCount,
+    super.libraryPid,
+    super.uploadedBy,
+    super.identifying,
+    super.best,
+    super.appliedMbid,
+    required super.createdAt,
+    super.decidedAt,
+    super.decidedBy,
+    this.candidates = const [],
+    this.tracks = const [],
+  });
+
+  final List<ReviewCandidate> candidates;
+  final List<ReviewTrack> tracks;
+}
+
+/// One keyset-paginated page of review entries.
+class ReviewEntryPage {
+  const ReviewEntryPage({required this.entries, this.nextCursor});
+
+  final List<ReviewEntry> entries;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// One local track inside a review entry.
+class ReviewTrack {
+  const ReviewTrack({
+    this.pid,
+    required this.path,
+    required this.title,
+    this.artist,
+    this.trackNo,
+    this.discNo,
+    required this.durationMs,
+  });
+
+  /// Item pid, present once the track is cataloged.
+  final String? pid;
+  final String path;
+  final String title;
+  final String? artist;
+  final int? trackNo;
+  final int? discNo;
+  final int durationMs;
+}
+
+/// One release candidate for a review entry.
+class ReviewCandidate {
+  const ReviewCandidate({
+    required this.mbid,
+    this.releaseGroupMbid,
+    required this.title,
+    required this.artist,
+    this.year,
+    this.mediaCount,
+    this.trackCount,
+    this.country,
+    this.label,
+    this.catalogNumber,
+    this.compilation,
+    required this.similarityPct,
+    this.components = const [],
+    this.pairings = const [],
+    this.missingTitles = const [],
+    this.extraTrackIndexes = const [],
+  });
+
+  final String mbid;
+  final String? releaseGroupMbid;
+  final String title;
+  final String artist;
+  final int? year;
+  final int? mediaCount;
+  final int? trackCount;
+  final String? country;
+  final String? label;
+  final String? catalogNumber;
+  final bool? compilation;
+
+  /// Similarity in percent, 0 to 100.
+  final double similarityPct;
+
+  /// Per-field distance breakdown behind the similarity score.
+  final List<CandidateComponent> components;
+
+  /// Local-track-to-candidate-track pairings.
+  final List<CandidatePairing> pairings;
+
+  /// Candidate tracks with no local counterpart.
+  final List<String> missingTitles;
+
+  /// Local track indexes with no candidate counterpart.
+  final List<int> extraTrackIndexes;
+}
+
+/// One component of a candidate's similarity score.
+class CandidateComponent {
+  const CandidateComponent({
+    required this.name,
+    required this.distance,
+    required this.weight,
+  });
+
+  /// The field or penalty: `artist`, `album`, `year`, `tracks`,
+  /// `missing`, `extra`. Open vocabulary.
+  final String name;
+
+  /// Distance in 0 to 1, where 0 is identical.
+  final double distance;
+  final double weight;
+}
+
+/// One pairing of a local track with a candidate track.
+class CandidatePairing {
+  const CandidatePairing({
+    required this.trackIndex,
+    required this.position,
+    this.disc,
+    required this.title,
+    this.artist,
+    this.durationMs,
+    this.recordingMbid,
+    required this.distance,
+  });
+
+  /// Index into the entry's local track list.
+  final int trackIndex;
+
+  /// The paired candidate track's position on its disc.
+  final int position;
+  final int? disc;
+  final String title;
+  final String? artist;
+  final int? durationMs;
+  final String? recordingMbid;
+
+  /// Pairing distance in 0 to 1, where 0 is identical.
+  final double distance;
+}
+
+/// Review queue counters by lifecycle state.
+class ReviewStats {
+  const ReviewStats({
+    required this.pending,
+    this.identifying = 0,
+    required this.applied,
+    required this.autoApplied,
+    this.asIs = 0,
+    this.unofficial = 0,
+    this.skipped = 0,
+    required this.reverted,
+    required this.revertedAutoApplied,
+  });
+
+  final int pending;
+  final int identifying;
+  final int applied;
+  final int autoApplied;
+  final int asIs;
+  final int unofficial;
+  final int skipped;
+  final int reverted;
+  final int revertedAutoApplied;
+}
+
+/// Outcome of deciding one review entry.
+class ReviewDecideResult {
+  const ReviewDecideResult({required this.entry, this.warnings = const []});
+
+  final ReviewEntry entry;
+  final List<String> warnings;
+}
+
+/// Per-entry outcome of a bulk review decision.
+class ReviewBulkOutcome {
+  const ReviewBulkOutcome({
+    required this.entryId,
+    required this.ok,
+    this.error,
+  });
+
+  final String entryId;
+  final bool ok;
+  final String? error;
+}
+
+/// An existing item the uploaded file appears to duplicate.
+class DuplicateWarning {
+  const DuplicateWarning({
+    required this.itemPid,
+    required this.kind,
+    this.title,
+    this.artist,
+  });
+
+  final String itemPid;
+
+  /// Evidence level: `content` (byte-identical audio) or `fingerprint`
+  /// (acoustically the same recording). Open vocabulary.
+  final String kind;
+  final String? title;
+  final String? artist;
+}
+
+/// One resumable upload session.
+class UploadSession {
+  const UploadSession({
+    required this.id,
+    required this.fileName,
+    required this.sizeBytes,
+    required this.receivedBytes,
+    required this.mediaType,
+    this.libraryPid,
+    required this.state,
+    this.reviewEntryId,
+    this.duplicate,
+    this.uploadedBy,
+    required this.createdAt,
+    this.expiresAt,
+  });
+
+  final String id;
+  final String fileName;
+  final int sizeBytes;
+  final int receivedBytes;
+  final MediaType mediaType;
+  final String? libraryPid;
+
+  /// Session state: `receiving`, `staged`, `imported`, or `discarded`.
+  /// Open vocabulary.
+  final String state;
+
+  /// The review entry completion opened, once staged.
+  final String? reviewEntryId;
+  final DuplicateWarning? duplicate;
+  final String? uploadedBy;
+  final DateTime createdAt;
+  final DateTime? expiresAt;
+}
+
+/// One keyset-paginated page of upload sessions.
+class UploadPage {
+  const UploadPage({required this.uploads, this.nextCursor});
+
+  final List<UploadSession> uploads;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// One editable field and whether edits can write back to files.
+class EditableField {
+  const EditableField({required this.name, required this.writeBack});
+
+  final String name;
+  final bool writeBack;
+}
+
+/// The editable field vocabulary for one media kind.
+class KindFields {
+  const KindFields({
+    required this.kind,
+    required this.fields,
+    this.creditRoles = const [],
+  });
+
+  final MediaType kind;
+  final List<EditableField> fields;
+  final List<EditableField> creditRoles;
+}
+
+/// The editable field vocabulary for one entity type.
+class EntityTypeFields {
+  const EntityTypeFields({required this.entityType, required this.fields});
+
+  final String entityType;
+  final List<EditableField> fields;
+}
+
+/// The metadata editor vocabulary: per-kind item fields plus per-type
+/// entity fields.
+class MetadataFields {
+  const MetadataFields({required this.kinds, required this.entityTypes});
+
+  final List<KindFields> kinds;
+  final List<EntityTypeFields> entityTypes;
+}
+
+/// Where one metadata field's current value came from.
+class FieldProvenance {
+  const FieldProvenance({
+    required this.field,
+    required this.source,
+    this.provider,
+    required this.locked,
+    this.updatedAt,
+  });
+
+  final String field;
+
+  /// `file`, `provider`, or `user`. Open vocabulary.
+  final String source;
+
+  /// The provider name when [source] is `provider`.
+  final String? provider;
+  final bool locked;
+  final DateTime? updatedAt;
+}
+
+/// One credited role with its names, ordered as stored.
+class Credit {
+  const Credit({required this.role, required this.names});
+
+  final String role;
+  final List<String> names;
+}
+
+/// Whether an item has lyrics and where they came from.
+class LyricsState {
+  const LyricsState({required this.synced, required this.source, this.lrc});
+
+  final bool synced;
+
+  /// Open vocabulary.
+  final String source;
+
+  /// The stored LRC text, when synced.
+  final String? lrc;
+}
+
+/// One custom tag key with its values.
+class CustomTag {
+  const CustomTag({required this.key, required this.values});
+
+  final String key;
+  final List<String> values;
+}
+
+/// One standing write-back limitation on a backing file.
+class WriteBackIssue {
+  const WriteBackIssue({
+    required this.filePid,
+    required this.code,
+    this.tagKey,
+    this.detail,
+  });
+
+  final String filePid;
+
+  /// Stable machine-readable code. Open vocabulary.
+  final String code;
+  final String? tagKey;
+  final String? detail;
+}
+
+/// Everything the metadata editor shows for one item.
+class ItemMetadata {
+  const ItemMetadata({
+    required this.pid,
+    required this.mediaType,
+    required this.fields,
+    this.lockedFields = const [],
+    this.provenance = const [],
+    this.credits = const [],
+    this.lyrics,
+    this.chapters = const [],
+    this.customTags = const [],
+    this.unofficial = false,
+    this.virtualTrack = false,
+    this.hasArtwork = false,
+    this.albumPid,
+    this.artistPid,
+    this.releaseGroupPid,
+    this.writeBackIssues = const [],
+  });
+
+  final String pid;
+  final MediaType mediaType;
+  final Map<String, String> fields;
+  final List<String> lockedFields;
+  final List<FieldProvenance> provenance;
+  final List<Credit> credits;
+  final LyricsState? lyrics;
+  final List<ChapterMark> chapters;
+  final List<CustomTag> customTags;
+  final bool unofficial;
+
+  /// True for tracks carved out of a larger file (CUE-backed), which
+  /// never write back.
+  final bool virtualTrack;
+  final bool hasArtwork;
+  final String? albumPid;
+  final String? artistPid;
+  final String? releaseGroupPid;
+  final List<WriteBackIssue> writeBackIssues;
+}
+
+/// One file a write-back could not update.
+class WriteBackFailure {
+  const WriteBackFailure({
+    required this.filePid,
+    this.path,
+    required this.reason,
+  });
+
+  final String filePid;
+  final String? path;
+  final String reason;
+}
+
+/// Outcome of one metadata edit.
+class MetadataEditResult {
+  const MetadataEditResult({
+    required this.applied,
+    this.writeBackFailures = const [],
+    this.warnings = const [],
+  });
+
+  final bool applied;
+  final List<WriteBackFailure> writeBackFailures;
+  final List<String> warnings;
+}
+
+/// Outcome of a bulk metadata edit.
+class BulkEditResult {
+  const BulkEditResult({
+    required this.edited,
+    this.skipped = const [],
+    this.writeBackFailures = const [],
+  });
+
+  /// Pids that took the edit.
+  final List<String> edited;
+
+  /// Pids skipped over locks.
+  final List<String> skipped;
+  final List<WriteBackFailure> writeBackFailures;
+}
+
+/// Outcome of a custom tag edit.
+class TagEditResult {
+  const TagEditResult({required this.key, required this.stored});
+
+  final String key;
+
+  /// Number of values stored.
+  final int stored;
+}
+
+/// One curated field override on a browse entity.
+class EntityCuratedField {
+  const EntityCuratedField({
+    required this.field,
+    this.value,
+    required this.source,
+    required this.locked,
+    this.updatedAt,
+  });
+
+  final String field;
+  final String? value;
+
+  /// Open vocabulary.
+  final String source;
+  final bool locked;
+  final DateTime? updatedAt;
+}
+
+/// One chapter mark as sent to the chapter editor.
+class ChapterEdit {
+  const ChapterEdit({
+    required this.index,
+    this.title,
+    required this.startMs,
+    this.endMs,
+  });
+
+  final int index;
+  final String? title;
+  final int startMs;
+  final int? endMs;
+}
+
+/// Outcome of a single-item enrichment request: which of the wanted
+/// artifacts were applied and which were skipped.
+class EnrichItemResult {
+  const EnrichItemResult({this.applied = const [], this.skipped = const []});
+
+  final List<String> applied;
+  final List<String> skipped;
+}
+
+/// Failure count for one library health rule.
+class HealthRuleCount {
+  const HealthRuleCount({
+    required this.rule,
+    this.label,
+    required this.failing,
+    required this.fixable,
+  });
+
+  final String rule;
+  final String? label;
+  final int failing;
+
+  /// True when the fix endpoint can queue automatic repairs.
+  final bool fixable;
+}
+
+/// The library health scoreboard.
+class HealthSummary {
+  const HealthSummary({
+    required this.score,
+    required this.totalItems,
+    required this.evaluatedItems,
+    this.warmingUp = false,
+    this.sweptAt,
+    this.rules = const [],
+  });
+
+  /// Overall health in 0 to 100.
+  final double score;
+  final int totalItems;
+  final int evaluatedItems;
+
+  /// True while the first sweep is still filling in.
+  final bool warmingUp;
+  final DateTime? sweptAt;
+  final List<HealthRuleCount> rules;
+}
+
+/// One item failing at least one health rule.
+class HealthIssue {
+  const HealthIssue({
+    required this.pid,
+    required this.title,
+    this.artist,
+    required this.mediaType,
+    required this.rules,
+  });
+
+  final String pid;
+  final String title;
+  final String? artist;
+  final MediaType mediaType;
+
+  /// The rules this item fails.
+  final List<String> rules;
+}
+
+/// One keyset-paginated page of health issues.
+class HealthIssuePage {
+  const HealthIssuePage({required this.items, this.nextCursor});
+
+  final List<HealthIssue> items;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// One entity in a duplicate group.
+/// One catalog library (a scanned root).
+class LibraryInfo {
+  const LibraryInfo({required this.pid, required this.name, this.media});
+
+  final String pid;
+  final String name;
+
+  /// The content class the library holds (`music`, `audiobook`,
+  /// `mixed`), when declared.
+  final String? media;
+}
+
+class DuplicateEntity {
+  const DuplicateEntity({
+    required this.pid,
+    required this.name,
+    this.itemCount,
+  });
+
+  final String pid;
+  final String name;
+  final int? itemCount;
+}
+
+/// One detected duplicate cluster with a suggested survivor.
+class DuplicateGroup {
+  const DuplicateGroup({
+    required this.entityType,
+    required this.survivor,
+    required this.losers,
+    this.detail,
+  });
+
+  /// `album`, `artist`, `release-group`, or `genre`.
+  final String entityType;
+  final DuplicateEntity survivor;
+  final List<DuplicateEntity> losers;
+  final String? detail;
+}
+
+/// Outcome of a duplicate merge.
+class MergeOutcome {
+  const MergeOutcome({required this.merged, required this.childrenMoved});
+
+  final int merged;
+  final int childrenMoved;
+}
+
+/// One item in a quality upgrade group.
+class UpgradeMember {
+  const UpgradeMember({
+    required this.itemPid,
+    required this.title,
+    this.artist,
+    required this.codec,
+    this.bitrate,
+    this.sampleRate,
+    this.bitDepth,
+    required this.lossless,
+    required this.best,
+  });
+
+  final String itemPid;
+  final String title;
+  final String? artist;
+  final String codec;
+  final int? bitrate;
+  final int? sampleRate;
+  final int? bitDepth;
+  final bool lossless;
+
+  /// True for the member the server suggests keeping.
+  final bool best;
+}
+
+/// One recording present in more than one quality.
+class UpgradeGroup {
+  const UpgradeGroup({required this.members});
+
+  final List<UpgradeMember> members;
+}
+
+/// One file organization profile.
+class OrganizeProfile {
+  const OrganizeProfile({
+    required this.name,
+    this.musicTemplate,
+    this.audiobookTemplate,
+    this.podcastTemplate,
+    this.tagWrite = false,
+  });
+
+  final String name;
+  final String? musicTemplate;
+  final String? audiobookTemplate;
+  final String? podcastTemplate;
+
+  /// True when applying the profile also rewrites tags.
+  final bool tagWrite;
+}
+
+/// One planned file move.
+class OrganizeAction {
+  const OrganizeAction({
+    required this.itemPid,
+    required this.from,
+    required this.to,
+  });
+
+  final String itemPid;
+  final String from;
+  final String to;
+}
+
+/// A dry-run organize plan.
+class OrganizePlan {
+  const OrganizePlan({
+    required this.profile,
+    required this.totalActions,
+    this.actions = const [],
+    this.tagWrite = false,
+  });
+
+  final String profile;
+
+  /// Total planned moves; [actions] may be a truncated preview.
+  final int totalActions;
+  final List<OrganizeAction> actions;
+  final bool tagWrite;
+}
+
+/// One file an organize run could not move.
+class OrganizeFailure {
+  const OrganizeFailure({required this.path, required this.reason});
+
+  final String path;
+  final String reason;
+}
+
+/// Outcome of an applied organize run.
+class OrganizeReport {
+  const OrganizeReport({
+    required this.moved,
+    required this.skipped,
+    required this.failed,
+    this.failures = const [],
+  });
+
+  final int moved;
+  final int skipped;
+  final int failed;
+  final List<OrganizeFailure> failures;
+}
+
+/// One long-running library tool task.
+class ToolTask {
+  const ToolTask({
+    required this.id,
+    required this.type,
+    required this.state,
+    this.itemPid,
+    this.progressPct,
+    this.error,
+    this.resultPids = const [],
+    required this.createdAt,
+    this.finishedAt,
+  });
+
+  final String id;
+
+  /// `book-merge`, `book-split`, or `cue-split`. Open vocabulary.
+  final String type;
+
+  /// `queued`, `running`, `done`, or `failed`. Open vocabulary.
+  final String state;
+  final String? itemPid;
+  final double? progressPct;
+  final String? error;
+
+  /// Pids the task produced, once done.
+  final List<String> resultPids;
+  final DateTime createdAt;
+  final DateTime? finishedAt;
+}
+
+/// One keyset-paginated page of tool tasks.
+class ToolTaskPage {
+  const ToolTaskPage({required this.tasks, this.nextCursor});
+
+  final List<ToolTask> tasks;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// One configured enrichment provider.
+class EnrichmentProvider {
+  const EnrichmentProvider({
+    required this.name,
+    this.capabilities = const [],
+    required this.configured,
+    required this.builtin,
+  });
+
+  final String name;
+  final List<String> capabilities;
+  final bool configured;
+  final bool builtin;
+}
+
+/// Enriched-versus-total counts for one artifact class.
+class CoverageCount {
+  const CoverageCount({required this.enriched, required this.total});
+
+  final int enriched;
+  final int total;
+}
+
+/// How much of the library each enrichment artifact covers.
+class EnrichmentCoverage {
+  const EnrichmentCoverage({
+    required this.artists,
+    required this.releaseGroups,
+    required this.books,
+    required this.lyrics,
+  });
+
+  final CoverageCount artists;
+  final CoverageCount releaseGroups;
+  final CoverageCount books;
+  final CoverageCount lyrics;
+}
+
+/// The enrichment subsystem's provider roster and coverage.
+class EnrichmentStatus {
+  const EnrichmentStatus({
+    this.providers = const [],
+    required this.coverage,
+    required this.running,
+  });
+
+  final List<EnrichmentProvider> providers;
+  final EnrichmentCoverage coverage;
+
+  /// True while an enrichment job is running.
+  final bool running;
+}
+
+/// Which libraries an account may see.
+class LibraryAccess {
+  const LibraryAccess({required this.mode, this.libraryPids = const []});
+
+  /// `all` or `granted`.
+  final String mode;
+
+  /// The granted library pids when [mode] is `granted`.
+  final List<String> libraryPids;
+}
+
+/// One linked single-sign-on identity on an account.
+class LinkedIdentity {
+  const LinkedIdentity({required this.provider, this.email});
+
+  final String provider;
+  final String? email;
+}
+
+/// A WaxDeck account as visible to administrators.
+class UserAccount extends WaxDeckUser {
+  const UserAccount({
+    required super.id,
+    required super.username,
+    super.displayName,
+    super.roles,
+    required this.createdAt,
+    this.identities = const [],
+    required this.libraryAccess,
+    this.uploadEnabled = false,
+    this.uploadQuotaBytes,
+    this.disabled = false,
+    this.hasPassword = true,
+  });
+
+  final DateTime createdAt;
+  final List<LinkedIdentity> identities;
+  final LibraryAccess libraryAccess;
+
+  /// Whether the account may create upload sessions.
+  final bool uploadEnabled;
+
+  /// Per-user cap on concurrent staged upload bytes; null means the
+  /// server default.
+  final int? uploadQuotaBytes;
+  final bool disabled;
+  final bool hasPassword;
+}
+
+/// One keyset-paginated page of accounts.
+class UserPage {
+  const UserPage({required this.users, this.nextCursor});
+
+  final List<UserAccount> users;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
 }

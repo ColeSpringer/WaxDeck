@@ -1,0 +1,459 @@
+package service
+
+// Enrichment: provider status, the whole-library catalog pass, and the
+// synchronous per-item fetch shared by the editor's endpoint and the
+// health fix queue.
+
+import (
+	"context"
+	"strings"
+
+	"github.com/colespringer/waxbin"
+	"github.com/colespringer/waxbin/enrich"
+	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/query"
+	"github.com/colespringer/waxbin/read"
+)
+
+// Per-item enrichment want names, shared by the API surface and the
+// health fixer.
+const (
+	enrichWantCover  = "cover"
+	enrichWantLyrics = "lyrics"
+	enrichWantGenres = "genres"
+	enrichWantBook   = "book"
+)
+
+// enrichGenreCap bounds how many provider genres a per-item apply joins
+// into the genre scalar.
+const enrichGenreCap = 3
+
+// EnrichmentProviderDTO is one registered provider.
+type EnrichmentProviderDTO struct {
+	Name         string
+	Capabilities []string
+	Configured   bool
+	Builtin      bool
+}
+
+// CoverageCountDTO is enriched versus total for one entity class.
+type CoverageCountDTO struct {
+	Enriched int
+	Total    int
+}
+
+// EnrichmentCoverageDTO is the catalog's enrichment coverage.
+type EnrichmentCoverageDTO struct {
+	Artists       CoverageCountDTO
+	ReleaseGroups CoverageCountDTO
+	Books         CoverageCountDTO
+	Lyrics        CoverageCountDTO
+}
+
+// EnrichmentStatusDTO is the status surface aggregate.
+type EnrichmentStatusDTO struct {
+	Providers []EnrichmentProviderDTO
+	Coverage  EnrichmentCoverageDTO
+	Running   bool
+}
+
+// capabilityStrings renders a provider capability bitset as the API's
+// capability names.
+func capabilityStrings(c enrich.Capability) []string {
+	var out []string
+	if c.Has(enrich.CapIdentity) {
+		out = append(out, "identity")
+	}
+	if c.Has(enrich.CapGenres) {
+		out = append(out, "genres")
+	}
+	if c.Has(enrich.CapCover) {
+		out = append(out, "cover")
+	}
+	if c.Has(enrich.CapLyrics) {
+		out = append(out, "lyrics")
+	}
+	if c.Has(enrich.CapBookMeta) {
+		out = append(out, "book")
+	}
+	return out
+}
+
+// EnrichmentStatusFor reports the registered providers, the catalog's
+// enrichment coverage, and whether a whole-library pass is running.
+func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (EnrichmentStatusDTO, error) {
+	if !uc.Admin {
+		return EnrichmentStatusDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	out := EnrichmentStatusDTO{Providers: []EnrichmentProviderDTO{}}
+	// This server's own providers first (priority order). They are
+	// configured by construction: an injected provider is only wired
+	// when its key is set.
+	for _, p := range l.enrichProviders {
+		out.Providers = append(out.Providers, EnrichmentProviderDTO{
+			Name:         p.Name(),
+			Capabilities: capabilityStrings(p.Capabilities()),
+			Configured:   true,
+		})
+	}
+	// The catalog's key-free built-ins, listed statically: the facade
+	// does not enumerate them. The MusicBrainz identity spine is not a
+	// port provider and is not listed.
+	out.Providers = append(out.Providers,
+		EnrichmentProviderDTO{Name: "coverartarchive", Capabilities: []string{"cover"}, Configured: true, Builtin: true},
+		EnrichmentProviderDTO{Name: "listenbrainz", Capabilities: []string{"genres"}, Configured: true, Builtin: true},
+		EnrichmentProviderDTO{Name: "lrclib", Capabilities: []string{"lyrics"}, Configured: true, Builtin: true},
+	)
+
+	cov, err := l.lib.EnrichmentCoverage(ctx)
+	if err != nil {
+		return EnrichmentStatusDTO{}, classify(err)
+	}
+	out.Coverage.Artists.Enriched = cov.Artists
+	out.Coverage.ReleaseGroups.Enriched = cov.ReleaseGroups
+	out.Coverage.Books.Enriched = cov.Books
+	// Totals are best-effort from the read side: the coverage read
+	// reports enriched rows only. Artists come from the facet bucket
+	// count and books from a kind count. The facade exposes no
+	// release-group count (that total stays zero, meaning unknown), and
+	// per-track lyrics coverage is not reported upstream, so lyrics
+	// shows zero enriched over the music track count.
+	if fr, ferr := l.lib.Facet(ctx, query.New(query.EntityItems).Build(), read.GroupArtist, ""); ferr == nil {
+		n := 0
+		for _, b := range fr.Buckets {
+			if !b.IsUnknown {
+				n++
+			}
+		}
+		out.Coverage.Artists.Total = n
+	}
+	if n, cerr := l.lib.Count(ctx, query.New(query.EntityItems).
+		Where("kind", query.OpIs, string(model.KindBook)).Build(), ""); cerr == nil {
+		out.Coverage.Books.Total = n
+	}
+	if n, cerr := l.lib.Count(ctx, query.New(query.EntityTracks).Build(), ""); cerr == nil {
+		out.Coverage.Lyrics.Total = n
+	}
+
+	// Running: an enrich-kind catalog job still in flight.
+	if jobs, jerr := l.lib.Jobs(ctx, 50); jerr == nil {
+		for _, j := range jobs {
+			if j.Kind == "enrich" && j.State == model.JobRunning {
+				out.Running = true
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+// RunEnrichment starts the catalog's whole-library enrichment pass as a
+// background job and returns the job pid. The job launches on the
+// process context, not the request's, so it survives the 202 that
+// reported it (mirroring Rescan).
+func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool) (string, error) {
+	if !uc.Admin {
+		return "", &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{Force: force})
+	if err != nil {
+		return "", classify(err)
+	}
+	return apiPID(PrefixJob, pid), nil
+}
+
+// EnrichItemFor is the API's per-item enrichment: resolve the item
+// through visibility, then run the synchronous fetch.
+func (l *Library) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID string, wants []string) (applied, skipped []string, err error) {
+	if !l.CanCurateItem(ctx, uc, apiItemPID) {
+		return nil, nil, &Error{Kind: KindForbidden, Msg: "administrators, or the user whose upload brought the item in"}
+	}
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return l.EnrichItemNow(ctx, it.PID, wants)
+}
+
+// EnrichItemNow runs the server-registered providers for the wanted
+// artifacts against one item and applies what they return: fill when
+// empty, lock respecting, never touching an unofficial-marked item.
+// Applied entries read "cover: providername"; skipped entries read
+// "cover: reason".
+func (l *Library) EnrichItemNow(ctx context.Context, pid model.PID, wants []string) (applied, skipped []string, err error) {
+	applied, skipped = []string{}, []string{}
+	for _, w := range wants {
+		switch w {
+		case enrichWantCover, enrichWantLyrics, enrichWantGenres, enrichWantBook:
+		default:
+			return nil, nil, errInvalid("unknown enrichment want " + w)
+		}
+	}
+	it, err := l.lib.Get(ctx, pid)
+	if err != nil {
+		return nil, nil, classify(err)
+	}
+
+	// Unofficial content has no canonical release to enrich against.
+	tags, err := l.lib.ItemTags(ctx, pid)
+	if err != nil {
+		return nil, nil, classify(err)
+	}
+	for _, t := range tags {
+		if t.Key != releaseStatusKey {
+			continue
+		}
+		for _, v := range t.Values {
+			if v == releaseStatusUnofficial || v == releaseStatusBootleg {
+				for _, w := range wants {
+					skipped = append(skipped, w+": item is marked unofficial")
+				}
+				return applied, skipped, nil
+			}
+		}
+	}
+
+	locked := map[string]bool{}
+	prov, err := l.lib.Provenance(ctx, pid)
+	if err != nil {
+		return nil, nil, classify(err)
+	}
+	for _, p := range prov {
+		if p.Locked {
+			locked[p.Field] = true
+		}
+	}
+
+	for _, w := range wants {
+		var a, s string
+		switch w {
+		case enrichWantCover:
+			a, s = l.enrichCover(ctx, it, locked)
+		case enrichWantGenres:
+			a, s = l.enrichGenres(ctx, it, locked)
+		case enrichWantLyrics:
+			a, s = l.enrichLyrics(ctx, it, locked)
+		case enrichWantBook:
+			a, s = l.enrichBook(ctx, it, locked)
+		}
+		if a != "" {
+			applied = append(applied, a)
+		}
+		if s != "" {
+			skipped = append(skipped, s)
+		}
+	}
+	return applied, skipped, nil
+}
+
+// enrichProvidersWith returns the registered providers advertising the
+// wanted capability.
+func (l *Library) enrichProvidersWith(want enrich.Capability) []enrich.Provider {
+	var out []enrich.Provider
+	for _, p := range l.enrichProviders {
+		if p.Capabilities().Has(want) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// enrichCover fetches and stores cover art for one item. Presence is
+// judged through the art resolution chain, so an item already covered
+// by its album's art is left alone.
+func (l *Library) enrichCover(ctx context.Context, it *model.ItemView, locked map[string]bool) (appliedEntry, skippedEntry string) {
+	if locked["art"] {
+		return "", "cover: locked"
+	}
+	ref := model.EntityRef{Type: model.ArtTrack, PID: it.PID}
+	if it.Kind == model.KindEpisode {
+		ref.Type = model.ArtEpisode
+	}
+	if _, err := l.lib.ResolveArt(ctx, ref, 0); err == nil {
+		return "", "cover: already present"
+	}
+	providers := l.enrichProvidersWith(enrich.CapCover)
+	if len(providers) == 0 {
+		return "", "cover: no provider"
+	}
+	req := enrich.Request{
+		Type:   enrich.TargetReleaseGroup,
+		Title:  firstNonEmpty(it.Album, it.Title),
+		Artist: firstNonEmpty(it.AlbumArtist, it.Artist),
+	}
+	for _, p := range providers {
+		cand, err := p.Enrich(ctx, req)
+		if err != nil {
+			l.log.Warn("enrich: cover provider", "provider", p.Name(), "err", err)
+			continue
+		}
+		if cand == nil || cand.Cover == nil || len(cand.Cover.Data) == 0 {
+			continue
+		}
+		if err := l.lib.SetItemArt(ctx, it.PID, cand.Cover.Data, false, false, false); err != nil {
+			l.log.Warn("enrich: applying cover", "provider", p.Name(), "item", it.PID, "err", err)
+			continue
+		}
+		return "cover: " + p.Name(), ""
+	}
+	return "", "cover: no provider hit"
+}
+
+// enrichGenres fills the item's genre scalar from the first provider
+// that answers, joining at most enrichGenreCap names.
+func (l *Library) enrichGenres(ctx context.Context, it *model.ItemView, locked map[string]bool) (appliedEntry, skippedEntry string) {
+	if locked["genre"] {
+		return "", "genres: locked"
+	}
+	if it.Genre != "" {
+		return "", "genres: already present"
+	}
+	providers := l.enrichProvidersWith(enrich.CapGenres)
+	if len(providers) == 0 {
+		return "", "genres: no provider"
+	}
+	req := enrich.Request{
+		Type:   enrich.TargetReleaseGroup,
+		Title:  firstNonEmpty(it.Album, it.Title),
+		Artist: firstNonEmpty(it.AlbumArtist, it.Artist),
+	}
+	for _, p := range providers {
+		cand, err := p.Enrich(ctx, req)
+		if err != nil {
+			l.log.Warn("enrich: genre provider", "provider", p.Name(), "err", err)
+			continue
+		}
+		if cand == nil || len(cand.Genres) == 0 {
+			continue
+		}
+		genres := cand.Genres
+		if len(genres) > enrichGenreCap {
+			genres = genres[:enrichGenreCap]
+		}
+		if err := l.lib.EditFields(ctx, it.PID,
+			map[string]string{"genre": strings.Join(genres, "; ")},
+			waxbin.EditOptions{}); err != nil {
+			l.log.Warn("enrich: applying genres", "provider", p.Name(), "item", it.PID, "err", err)
+			continue
+		}
+		return "genres: " + p.Name(), ""
+	}
+	return "", "genres: no provider hit"
+}
+
+// enrichLyrics fetches lyrics for a music item. The catalog's lrclib
+// built-in is not on the injected-provider port, so with no registered
+// lyrics provider the want reports "no provider" and the whole-library
+// pass remains the way to fetch lyrics.
+func (l *Library) enrichLyrics(ctx context.Context, it *model.ItemView, locked map[string]bool) (appliedEntry, skippedEntry string) {
+	if it.Kind != model.KindTrack {
+		return "", "lyrics: music only"
+	}
+	if locked["lyrics"] {
+		return "", "lyrics: locked"
+	}
+	if ly, err := l.lib.Lyrics(ctx, it.PID); err == nil && ly.HasContent() {
+		return "", "lyrics: already present"
+	}
+	providers := l.enrichProvidersWith(enrich.CapLyrics)
+	if len(providers) == 0 {
+		return "", "lyrics: no provider"
+	}
+	req := enrich.Request{
+		Type:        enrich.TargetRecording,
+		Title:       it.Title,
+		Artist:      it.Artist,
+		Album:       it.Album,
+		DurationSec: int(it.DurationMS / 1000),
+	}
+	for _, p := range providers {
+		cand, err := p.Enrich(ctx, req)
+		if err != nil {
+			l.log.Warn("enrich: lyrics provider", "provider", p.Name(), "err", err)
+			continue
+		}
+		if cand == nil || !cand.Lyrics.HasContent() {
+			continue
+		}
+		if err := l.lib.SetLyrics(ctx, it.PID, cand.Lyrics, false, false); err != nil {
+			l.log.Warn("enrich: applying lyrics", "provider", p.Name(), "item", it.PID, "err", err)
+			continue
+		}
+		return "lyrics: " + p.Name(), ""
+	}
+	return "", "lyrics: no provider hit"
+}
+
+// enrichBook fills an audiobook's metadata (narrator, publisher,
+// description, identifiers) fill-when-empty. Book providers key on the
+// ASIN, so an item without one is skipped with the reason.
+func (l *Library) enrichBook(ctx context.Context, it *model.ItemView, locked map[string]bool) (appliedEntry, skippedEntry string) {
+	if it.Kind != model.KindBook {
+		return "", "book: not an audiobook"
+	}
+	if it.ASIN == "" {
+		return "", "book: book metadata needs an ASIN"
+	}
+	providers := l.enrichProvidersWith(enrich.CapBookMeta)
+	if len(providers) == 0 {
+		return "", "book: no provider"
+	}
+	detail, err := l.lib.Book(ctx, it.PID)
+	if err != nil {
+		l.log.Warn("enrich: reading book detail", "item", it.PID, "err", err)
+		return "", "book: unreadable"
+	}
+	req := enrich.Request{
+		Type:   enrich.TargetBook,
+		Title:  it.Title,
+		Artist: it.Artist,
+		ASIN:   it.ASIN,
+	}
+	for _, p := range providers {
+		cand, err := p.Enrich(ctx, req)
+		if err != nil {
+			l.log.Warn("enrich: book provider", "provider", p.Name(), "err", err)
+			continue
+		}
+		if cand == nil {
+			continue
+		}
+		edits := map[string]string{}
+		if cand.Publisher != "" && detail.Publisher == "" && !locked["publisher"] {
+			edits["publisher"] = cand.Publisher
+		}
+		if cand.ISBN != "" && detail.ISBN == "" && !locked["isbn"] {
+			edits["isbn"] = cand.ISBN
+		}
+		// Generic curated fields ride Candidate.Fields; only the book
+		// scalars this path can honestly fill-when-empty are accepted.
+		for k, v := range cand.Fields {
+			if v == "" || locked[k] {
+				continue
+			}
+			switch k {
+			case "narrator":
+				if it.Narrator == "" {
+					edits[k] = v
+				}
+			case "description":
+				if detail.Description == "" {
+					edits[k] = v
+				}
+			case "year":
+				if it.Year == 0 {
+					edits[k] = v
+				}
+			}
+		}
+		if len(edits) == 0 {
+			return "", "book: nothing new to fill"
+		}
+		if err := l.lib.EditFields(ctx, it.PID, edits, waxbin.EditOptions{}); err != nil {
+			l.log.Warn("enrich: applying book fields", "provider", p.Name(), "item", it.PID, "err", err)
+			continue
+		}
+		return "book: " + p.Name(), ""
+	}
+	return "", "book: no provider hit"
+}

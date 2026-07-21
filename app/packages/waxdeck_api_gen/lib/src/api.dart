@@ -12,16 +12,23 @@ import 'package:waxdeck_api_gen/src/auth/oauth.dart';
 import 'package:waxdeck_api_gen/src/api/admin_api.dart';
 import 'package:waxdeck_api_gen/src/api/auth_api.dart';
 import 'package:waxdeck_api_gen/src/api/books_api.dart';
+import 'package:waxdeck_api_gen/src/api/enrichment_api.dart';
+import 'package:waxdeck_api_gen/src/api/health_api.dart';
 import 'package:waxdeck_api_gen/src/api/library_api.dart';
+import 'package:waxdeck_api_gen/src/api/metadata_api.dart';
 import 'package:waxdeck_api_gen/src/api/notifications_api.dart';
+import 'package:waxdeck_api_gen/src/api/organize_api.dart';
 import 'package:waxdeck_api_gen/src/api/playback_api.dart';
 import 'package:waxdeck_api_gen/src/api/player_api.dart';
 import 'package:waxdeck_api_gen/src/api/playlists_api.dart';
 import 'package:waxdeck_api_gen/src/api/podcasts_api.dart';
 import 'package:waxdeck_api_gen/src/api/radio_api.dart';
+import 'package:waxdeck_api_gen/src/api/review_api.dart';
 import 'package:waxdeck_api_gen/src/api/scrobbling_api.dart';
 import 'package:waxdeck_api_gen/src/api/sync_api.dart';
 import 'package:waxdeck_api_gen/src/api/system_api.dart';
+import 'package:waxdeck_api_gen/src/api/tools_api.dart';
+import 'package:waxdeck_api_gen/src/api/uploads_api.dart';
 import 'package:waxdeck_api_gen/src/api/users_api.dart';
 
 class WaxdeckApiGen {
@@ -96,16 +103,40 @@ class WaxdeckApiGen {
     return BooksApi(dio, serializers);
   }
 
+  /// Get EnrichmentApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  EnrichmentApi getEnrichmentApi() {
+    return EnrichmentApi(dio, serializers);
+  }
+
+  /// Get HealthApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  HealthApi getHealthApi() {
+    return HealthApi(dio, serializers);
+  }
+
   /// Get LibraryApi instance, base route and serializer can be overridden by a given but be careful,
   /// by doing that all interceptors will not be executed
   LibraryApi getLibraryApi() {
     return LibraryApi(dio, serializers);
   }
 
+  /// Get MetadataApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  MetadataApi getMetadataApi() {
+    return MetadataApi(dio, serializers);
+  }
+
   /// Get NotificationsApi instance, base route and serializer can be overridden by a given but be careful,
   /// by doing that all interceptors will not be executed
   NotificationsApi getNotificationsApi() {
     return NotificationsApi(dio, serializers);
+  }
+
+  /// Get OrganizeApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  OrganizeApi getOrganizeApi() {
+    return OrganizeApi(dio, serializers);
   }
 
   /// Get PlaybackApi instance, base route and serializer can be overridden by a given but be careful,
@@ -138,6 +169,12 @@ class WaxdeckApiGen {
     return RadioApi(dio, serializers);
   }
 
+  /// Get ReviewApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  ReviewApi getReviewApi() {
+    return ReviewApi(dio, serializers);
+  }
+
   /// Get ScrobblingApi instance, base route and serializer can be overridden by a given but be careful,
   /// by doing that all interceptors will not be executed
   ScrobblingApi getScrobblingApi() {
@@ -154,6 +191,18 @@ class WaxdeckApiGen {
   /// by doing that all interceptors will not be executed
   SystemApi getSystemApi() {
     return SystemApi(dio, serializers);
+  }
+
+  /// Get ToolsApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  ToolsApi getToolsApi() {
+    return ToolsApi(dio, serializers);
+  }
+
+  /// Get UploadsApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  UploadsApi getUploadsApi() {
+    return UploadsApi(dio, serializers);
   }
 
   /// Get UsersApi instance, base route and serializer can be overridden by a given but be careful,

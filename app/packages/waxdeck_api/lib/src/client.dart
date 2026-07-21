@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:built_collection/built_collection.dart';
 import 'package:dio/dio.dart';
@@ -427,6 +428,351 @@ abstract interface class WaxDeckRepository {
   /// `POST /admin/notifications/test`: queues a test notification
   /// (administrators).
   Future<void> testNotifications();
+
+  /// `GET /review/queue`: keyset-paginated review entries, optionally
+  /// filtered by lifecycle [status].
+  Future<ReviewEntryPage> listReviewQueue({
+    String? status,
+    String? cursor,
+    int? limit,
+  });
+
+  /// `GET /review/queue/{entryId}`: one entry with its local tracks
+  /// and every candidate.
+  Future<ReviewEntryDetail> getReviewEntry(String entryId);
+
+  /// `POST /review/queue/{entryId}/decide`: decides one entry.
+  /// [action] is `approve`, `as-is`, `unofficial`, `skip`, or
+  /// `discard`; `approve` takes [candidateMbid] to pick a candidate
+  /// other than the best.
+  Future<ReviewDecideResult> decideReviewEntry(
+    String entryId, {
+    required String action,
+    String? candidateMbid,
+  });
+
+  /// `POST /review/queue/{entryId}/revert`: undoes a decided entry's
+  /// applied metadata and returns it to pending.
+  Future<ReviewEntry> revertReviewEntry(String entryId);
+
+  /// `POST /review/decide`: applies one [action] to many entries,
+  /// reporting per-entry outcomes instead of failing the batch.
+  Future<List<ReviewBulkOutcome>> decideReviewBulk(
+    List<String> entryIds, {
+    required String action,
+  });
+
+  /// `GET /review/stats`: queue counters by lifecycle state.
+  Future<ReviewStats> getReviewStats();
+
+  /// `GET /libraries`: every catalog library.
+  Future<List<LibraryInfo>> listLibraries();
+
+  /// `GET /libraries/{pid}/matching`: the library's matching mode
+  /// (`auto`, `review`, or `off`).
+  Future<String> getLibraryMatching(String libraryPid);
+
+  /// `PUT /libraries/{pid}/matching`: sets the library's matching
+  /// mode, returning the stored mode.
+  Future<String> setLibraryMatching(String libraryPid, String mode);
+
+  /// `GET /uploads`: keyset-paginated upload sessions visible to the
+  /// caller.
+  Future<UploadPage> listUploads({String? cursor, int? limit});
+
+  /// `POST /uploads`: opens a resumable upload session. [sha256] lets
+  /// the server flag byte-identical duplicates before any transfer.
+  Future<UploadSession> createUpload({
+    required String fileName,
+    required int sizeBytes,
+    required String mediaType,
+    String? libraryPid,
+    String? sha256,
+  });
+
+  /// `GET /uploads/{uploadId}`: one session's progress and state.
+  Future<UploadSession> getUpload(String uploadId);
+
+  /// `DELETE /uploads/{uploadId}`: discards a session and its staged
+  /// bytes.
+  Future<void> deleteUpload(String uploadId);
+
+  /// `PUT /uploads/{uploadId}/data`: appends one chunk at byte
+  /// [offset], returning the updated session. Resume by re-reading
+  /// the session's receivedBytes and continuing from there.
+  Future<UploadSession> putUploadData(
+    String uploadId, {
+    required int offset,
+    required Uint8List bytes,
+  });
+
+  /// `POST /uploads/{uploadId}/complete`: seals a fully received
+  /// session and hands it to the review pipeline.
+  Future<UploadSession> completeUpload(String uploadId);
+
+  /// `POST /acquisitions`: downloads audio from a source URL (a
+  /// single video, or a playlist or channel) through the acquisition
+  /// bridge as a background task; the files stage like uploads and
+  /// flow through the review pipeline.
+  Future<ToolTask> createAcquisition({
+    required String url,
+    required MediaType mediaType,
+    String? libraryPid,
+    String? format,
+  });
+
+  /// `GET /metadata/fields`: the metadata editor vocabulary.
+  Future<MetadataFields> getMetadataFields();
+
+  /// `GET /items/{pid}/metadata`: everything the metadata editor
+  /// shows for one item.
+  Future<ItemMetadata> getItemMetadata(String pid);
+
+  /// `PATCH /items/{pid}/metadata`: edits item fields. [lock] pins
+  /// the edited fields against later automatic updates; [force]
+  /// overwrites locked fields; [writeBack] also rewrites file tags.
+  Future<MetadataEditResult> editItemMetadata(
+    String pid, {
+    required Map<String, String> fields,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  });
+
+  /// `POST /items/bulk-edit`: applies one field edit to many items.
+  /// [skipLocked] passes over locked fields instead of failing.
+  Future<BulkEditResult> bulkEditMetadata({
+    required List<String> itemPids,
+    required Map<String, String> fields,
+    bool writeBack = false,
+    bool skipLocked = false,
+    bool force = false,
+  });
+
+  /// `PUT /items/{pid}/credits`: replaces one credited [role]'s
+  /// [names], in order.
+  Future<MetadataEditResult> setItemCredits(
+    String pid, {
+    required String role,
+    required List<String> names,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  });
+
+  /// `PUT /items/{pid}/lyrics`: stores synced ([lrc]) and/or [plain]
+  /// lyrics for a track.
+  Future<MetadataEditResult> setItemLyrics(
+    String pid, {
+    String? lrc,
+    String? plain,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  });
+
+  /// `DELETE /items/{pid}/lyrics`: removes the stored lyrics; files
+  /// are untouched.
+  Future<void> clearItemLyrics(String pid);
+
+  /// `PUT /books/{pid}/chapters`: replaces an audiobook's chapter
+  /// marks.
+  Future<MetadataEditResult> setBookChapters(
+    String pid, {
+    required List<ChapterEdit> chapters,
+    bool lock = true,
+    bool force = false,
+  });
+
+  /// `PUT /items/{pid}/artwork`: replaces an item's artwork with the
+  /// uploaded image [bytes].
+  Future<MetadataEditResult> setItemArtwork(
+    String pid, {
+    required Uint8List bytes,
+    bool writeBack = false,
+    bool lock = true,
+  });
+
+  /// `DELETE /items/{pid}/artwork`: removes the curated artwork.
+  Future<void> clearItemArtwork(String pid);
+
+  /// `PUT /entities/{entityType}/{entityPid}/artwork`: replaces a
+  /// browse entity's artwork with the uploaded image [bytes].
+  Future<MetadataEditResult> setEntityArtwork(
+    String entityType,
+    String entityPid, {
+    required Uint8List bytes,
+    bool writeBack = false,
+  });
+
+  /// `PUT /items/{pid}/tags/{key}`: replaces one custom tag's values.
+  Future<TagEditResult> setItemTag(
+    String pid,
+    String key, {
+    required List<String> values,
+    bool lock = true,
+    bool force = false,
+  });
+
+  /// `DELETE /items/{pid}/tags/{key}`: removes one custom tag.
+  Future<void> clearItemTag(String pid, String key);
+
+  /// `PUT /items/{pid}/locks`: locks or unlocks [fields], returning
+  /// the item's full locked-field list.
+  Future<List<String>> setItemLocks(
+    String pid, {
+    required List<String> fields,
+    required bool locked,
+  });
+
+  /// `PATCH /entities/{entityType}/{entityPid}`: edits a browse
+  /// entity's curated fields.
+  Future<MetadataEditResult> editEntity(
+    String entityType,
+    String entityPid, {
+    required Map<String, String> edits,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  });
+
+  /// `GET /entities/{entityType}/{entityPid}/curation`: the entity's
+  /// curated field overrides.
+  Future<List<EntityCuratedField>> getEntityCuration(
+    String entityType,
+    String entityPid,
+  );
+
+  /// `PUT /items/{pid}/release-status`: marks an item's release
+  /// official or unofficial.
+  Future<MetadataEditResult> setReleaseStatus(
+    String pid, {
+    required bool unofficial,
+  });
+
+  /// `POST /items/{pid}/rematch`: reopens identification for the
+  /// item's release, returning the review entry id to watch.
+  Future<String> rematchItem(String pid);
+
+  /// `POST /items/{pid}/enrich`: fetches the wanted artifacts
+  /// (`cover`, `lyrics`, `genres`, `book`) for one item now.
+  Future<EnrichItemResult> enrichItem(String pid, {required List<String> want});
+
+  /// `GET /library/health`: the library health scoreboard.
+  Future<HealthSummary> getLibraryHealth();
+
+  /// `GET /library/health/issues`: keyset-paginated failing items,
+  /// optionally filtered to one [rule].
+  Future<HealthIssuePage> listHealthIssues({
+    String? rule,
+    String? cursor,
+    int? limit,
+  });
+
+  /// `POST /library/health/sweep`: queues a full health re-evaluation.
+  Future<void> sweepLibraryHealth();
+
+  /// `POST /library/health/fix`: queues automatic repairs for one
+  /// [rule], on [itemPids] or on every failing item, returning the
+  /// queued count.
+  Future<int> fixHealthIssues({required String rule, List<String>? itemPids});
+
+  /// `GET /library/duplicates`: detected duplicate entity clusters.
+  Future<List<DuplicateGroup>> listDuplicates();
+
+  /// `POST /library/duplicates/merge`: merges [loserPids] into
+  /// [survivorPid]. [entityType] is `album`, `artist`,
+  /// `release-group`, or `genre`.
+  Future<MergeOutcome> mergeDuplicates({
+    required String entityType,
+    required String survivorPid,
+    required List<String> loserPids,
+  });
+
+  /// `GET /library/upgrades`: recordings present in more than one
+  /// quality.
+  Future<List<UpgradeGroup>> listUpgrades();
+
+  /// `POST /library/upgrades/resolve`: keeps one member and trashes
+  /// the rest, returning the trashed count.
+  Future<int> resolveUpgrade({
+    required String keepItemPid,
+    required List<String> removeItemPids,
+  });
+
+  /// `GET /organize/profiles`: the configured file organization
+  /// profiles.
+  Future<List<OrganizeProfile>> listOrganizeProfiles();
+
+  /// `POST /organize/preview`: dry-runs a profile over [itemPids] or
+  /// the whole library.
+  Future<OrganizePlan> previewOrganize({
+    required String profile,
+    List<String>? itemPids,
+  });
+
+  /// `POST /organize/apply`: applies a profile's moves.
+  Future<OrganizeReport> applyOrganize({
+    required String profile,
+    List<String>? itemPids,
+  });
+
+  /// `POST /books/{pid}/merge`: joins a multi-file audiobook into one
+  /// file, returning the queued task. [titles] overrides the derived
+  /// chapter titles.
+  Future<ToolTask> mergeBook(
+    String pid, {
+    List<String>? titles,
+    bool keepOriginals = false,
+  });
+
+  /// `POST /books/{pid}/split`: splits a single-file audiobook at its
+  /// chapter marks, returning the queued task.
+  Future<ToolTask> splitBook(String pid, {bool keepOriginals = false});
+
+  /// `POST /items/{pid}/split-cue`: carves a CUE-backed rip into real
+  /// per-track files, returning the queued task.
+  Future<ToolTask> splitCueRip(String pid, {bool keepOriginals = false});
+
+  /// `GET /tools/tasks`: keyset-paginated tool tasks, newest first.
+  Future<ToolTaskPage> listToolTasks({String? cursor, int? limit});
+
+  /// `GET /tools/tasks/{taskId}`: one task's progress and outcome.
+  Future<ToolTask> getToolTask(String taskId);
+
+  /// `GET /library/enrichment`: provider roster and coverage.
+  Future<EnrichmentStatus> getEnrichmentStatus();
+
+  /// `POST /library/enrichment/run`: starts a library-wide enrichment
+  /// pass, returning the job pid. [force] refetches artifacts that
+  /// already exist.
+  Future<String> runEnrichment({bool force = false});
+
+  /// `GET /users`: keyset-paginated accounts (administrators).
+  Future<UserPage> listUsers({String? cursor, int? limit});
+
+  /// `POST /users`: creates an account (administrators).
+  Future<UserAccount> createUser({
+    required String username,
+    required String password,
+    String? displayName,
+    List<String>? roles,
+    LibraryAccess? libraryAccess,
+    bool? uploadEnabled,
+    int? uploadQuotaBytes,
+  });
+
+  /// `PATCH /users/{userId}`: partial account update (administrators).
+  /// Absent fields keep their stored values.
+  Future<UserAccount> updateUser(
+    String userId, {
+    String? displayName,
+    List<String>? roles,
+    bool? disabled,
+    LibraryAccess? libraryAccess,
+    bool? uploadEnabled,
+    int? uploadQuotaBytes,
+  });
 }
 
 /// Thin repository layer over the generated dart-dio client.
@@ -1349,6 +1695,732 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<void> testNotifications() => _guard(() async {
     await _gen.getNotificationsApi().testNotifications();
+  });
+
+  @override
+  Future<ReviewEntryPage> listReviewQueue({
+    String? status,
+    String? cursor,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getReviewApi().listReviewQueue(
+      status: status,
+      cursor: cursor,
+      limit: limit,
+    );
+    return reviewEntryPageFromGen(_require(response.data));
+  });
+
+  @override
+  Future<ReviewEntryDetail> getReviewEntry(String entryId) => _guard(() async {
+    final response = await _gen.getReviewApi().getReviewEntry(entryId: entryId);
+    return reviewEntryDetailFromGen(_require(response.data));
+  });
+
+  @override
+  Future<ReviewDecideResult> decideReviewEntry(
+    String entryId, {
+    required String action,
+    String? candidateMbid,
+  }) => _guard(() async {
+    final response = await _gen.getReviewApi().decideReviewEntry(
+      entryId: entryId,
+      reviewDecision: gen.ReviewDecision(
+        (b) => b
+          ..action = reviewActionToGen(action)
+          ..candidateMbid = candidateMbid,
+      ),
+    );
+    final body = _require(response.data);
+    return ReviewDecideResult(
+      entry: reviewEntryFromGen(body.entry),
+      warnings: body.warnings?.toList() ?? const [],
+    );
+  });
+
+  @override
+  Future<ReviewEntry> revertReviewEntry(String entryId) => _guard(() async {
+    final response = await _gen.getReviewApi().revertReviewEntry(
+      entryId: entryId,
+    );
+    return reviewEntryFromGen(_require(response.data));
+  });
+
+  @override
+  Future<List<ReviewBulkOutcome>> decideReviewBulk(
+    List<String> entryIds, {
+    required String action,
+  }) => _guard(() async {
+    final response = await _gen.getReviewApi().decideReviewBulk(
+      reviewBulkDecision: gen.ReviewBulkDecision(
+        (b) => b
+          ..entryIds = ListBuilder<String>(entryIds)
+          ..action = reviewBulkActionToGen(action),
+      ),
+    );
+    return _require(
+      response.data,
+    ).results.map(reviewBulkOutcomeFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<ReviewStats> getReviewStats() => _guard(() async {
+    final response = await _gen.getReviewApi().getReviewStats();
+    return reviewStatsFromGen(_require(response.data));
+  });
+
+  @override
+  Future<List<LibraryInfo>> listLibraries() => _guard(() async {
+    final response = await _gen.getAdminApi().listLibraries();
+    return _require(
+      response.data,
+    ).libraries.map(libraryInfoFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<String> getLibraryMatching(String libraryPid) => _guard(() async {
+    final response = await _gen.getReviewApi().getLibraryMatching(
+      pid: libraryPid,
+    );
+    return libraryMatchingModeFromGen(_require(response.data));
+  });
+
+  @override
+  Future<String> setLibraryMatching(String libraryPid, String mode) =>
+      _guard(() async {
+        final response = await _gen.getReviewApi().setLibraryMatching(
+          pid: libraryPid,
+          libraryMatching: libraryMatchingModeToGen(mode),
+        );
+        return libraryMatchingModeFromGen(_require(response.data));
+      });
+
+  @override
+  Future<UploadPage> listUploads({String? cursor, int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getUploadsApi().listUploads(
+          cursor: cursor,
+          limit: limit,
+        );
+        return uploadPageFromGen(_require(response.data));
+      });
+
+  @override
+  Future<UploadSession> createUpload({
+    required String fileName,
+    required int sizeBytes,
+    required String mediaType,
+    String? libraryPid,
+    String? sha256,
+  }) => _guard(() async {
+    final response = await _gen.getUploadsApi().createUpload(
+      uploadCreate: gen.UploadCreate(
+        (b) => b
+          ..fileName = fileName
+          ..sizeBytes = sizeBytes
+          ..mediaType = gen.MediaType.valueOf(mediaType)
+          ..libraryPid = libraryPid
+          ..sha256 = sha256,
+      ),
+    );
+    return uploadSessionFromGen(_require(response.data));
+  });
+
+  @override
+  Future<UploadSession> getUpload(String uploadId) => _guard(() async {
+    final response = await _gen.getUploadsApi().getUpload(uploadId: uploadId);
+    return uploadSessionFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> deleteUpload(String uploadId) => _guard(() async {
+    await _gen.getUploadsApi().deleteUpload(uploadId: uploadId);
+  });
+
+  @override
+  Future<UploadSession> putUploadData(
+    String uploadId, {
+    required int offset,
+    required Uint8List bytes,
+  }) => _guard(() async {
+    final response = await _gen.getUploadsApi().putUploadData(
+      uploadId: uploadId,
+      offset: offset,
+      body: MultipartFile.fromBytes(bytes),
+    );
+    return uploadSessionFromGen(_require(response.data));
+  });
+
+  @override
+  Future<UploadSession> completeUpload(String uploadId) => _guard(() async {
+    final response = await _gen.getUploadsApi().completeUpload(
+      uploadId: uploadId,
+    );
+    return uploadSessionFromGen(_require(response.data));
+  });
+
+  @override
+  Future<ToolTask> createAcquisition({
+    required String url,
+    required MediaType mediaType,
+    String? libraryPid,
+    String? format,
+  }) => _guard(() async {
+    final response = await _gen.getUploadsApi().createAcquisition(
+      acquisitionRequest: gen.AcquisitionRequest(
+        (b) => b
+          ..url = url
+          ..mediaType = mediaTypeToGen(mediaType)
+          ..libraryPid = libraryPid
+          // "best" is the server default, so it rides as an absent field.
+          ..format = switch (format) {
+            null || '' || 'best' => null,
+            final f => gen.AcquisitionFormat.valueOf(f),
+          },
+      ),
+    );
+    return toolTaskFromGen(_require(response.data));
+  });
+
+  @override
+  Future<MetadataFields> getMetadataFields() => _guard(() async {
+    final response = await _gen.getMetadataApi().getMetadataFields();
+    return metadataFieldsFromGen(_require(response.data));
+  });
+
+  @override
+  Future<ItemMetadata> getItemMetadata(String pid) => _guard(() async {
+    final response = await _gen.getMetadataApi().getItemMetadata(pid: pid);
+    return itemMetadataFromGen(_require(response.data));
+  });
+
+  @override
+  Future<MetadataEditResult> editItemMetadata(
+    String pid, {
+    required Map<String, String> fields,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().editItemMetadata(
+      pid: pid,
+      metadataEdit: gen.MetadataEdit(
+        (b) => b
+          ..fields = MapBuilder<String, String>(fields)
+          ..writeBack = writeBack
+          ..lock = lock
+          ..force = force,
+      ),
+    );
+    return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<BulkEditResult> bulkEditMetadata({
+    required List<String> itemPids,
+    required Map<String, String> fields,
+    bool writeBack = false,
+    bool skipLocked = false,
+    bool force = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().bulkEditMetadata(
+      bulkEdit: gen.BulkEdit(
+        (b) => b
+          ..itemPids = ListBuilder<String>(itemPids)
+          ..fields = MapBuilder<String, String>(fields)
+          ..writeBack = writeBack
+          ..skipLocked = skipLocked
+          ..force = force,
+      ),
+    );
+    return bulkEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<MetadataEditResult> setItemCredits(
+    String pid, {
+    required String role,
+    required List<String> names,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setItemCredits(
+      pid: pid,
+      creditsEdit: gen.CreditsEdit(
+        (b) => b
+          ..role = role
+          ..names = ListBuilder<String>(names)
+          ..writeBack = writeBack
+          ..lock = lock
+          ..force = force,
+      ),
+    );
+    return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<MetadataEditResult> setItemLyrics(
+    String pid, {
+    String? lrc,
+    String? plain,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setItemLyrics(
+      pid: pid,
+      lyricsEdit: gen.LyricsEdit(
+        (b) => b
+          ..lrc = lrc
+          ..plain = plain
+          ..writeBack = writeBack
+          ..lock = lock
+          ..force = force,
+      ),
+    );
+    return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> clearItemLyrics(String pid) => _guard(() async {
+    await _gen.getMetadataApi().clearItemLyrics(pid: pid);
+  });
+
+  @override
+  Future<MetadataEditResult> setBookChapters(
+    String pid, {
+    required List<ChapterEdit> chapters,
+    bool lock = true,
+    bool force = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setBookChapters(
+      pid: pid,
+      chaptersEdit: gen.ChaptersEdit(
+        (b) => b
+          ..chapters = ListBuilder<gen.ChapterMark>(
+            chapters.map(chapterEditToGen),
+          )
+          ..lock = lock
+          ..force = force,
+      ),
+    );
+    return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<MetadataEditResult> setItemArtwork(
+    String pid, {
+    required Uint8List bytes,
+    bool writeBack = false,
+    bool lock = true,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setItemArtwork(
+      pid: pid,
+      body: MultipartFile.fromBytes(bytes),
+      writeBack: writeBack,
+      lock: lock,
+    );
+    return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> clearItemArtwork(String pid) => _guard(() async {
+    await _gen.getMetadataApi().clearItemArtwork(pid: pid);
+  });
+
+  @override
+  Future<MetadataEditResult> setEntityArtwork(
+    String entityType,
+    String entityPid, {
+    required Uint8List bytes,
+    bool writeBack = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setEntityArtwork(
+      entityType: entityType,
+      entityPid: entityPid,
+      body: MultipartFile.fromBytes(bytes),
+      writeBack: writeBack,
+    );
+    return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<TagEditResult> setItemTag(
+    String pid,
+    String key, {
+    required List<String> values,
+    bool lock = true,
+    bool force = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setItemTag(
+      pid: pid,
+      key: key,
+      tagEdit: gen.TagEdit(
+        (b) => b
+          ..values = ListBuilder<String>(values)
+          ..lock = lock
+          ..force = force,
+      ),
+    );
+    return tagEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> clearItemTag(String pid, String key) => _guard(() async {
+    await _gen.getMetadataApi().clearItemTag(pid: pid, key: key);
+  });
+
+  @override
+  Future<List<String>> setItemLocks(
+    String pid, {
+    required List<String> fields,
+    required bool locked,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setItemLocks(
+      pid: pid,
+      locksEdit: gen.LocksEdit(
+        (b) => b
+          ..fields = ListBuilder<String>(fields)
+          ..locked = locked,
+      ),
+    );
+    return _require(response.data).lockedFields.toList(growable: false);
+  });
+
+  @override
+  Future<MetadataEditResult> editEntity(
+    String entityType,
+    String entityPid, {
+    required Map<String, String> edits,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().editEntity(
+      entityType: entityType,
+      entityPid: entityPid,
+      entityEdit: gen.EntityEdit(
+        (b) => b
+          ..edits = MapBuilder<String, String>(edits)
+          ..writeBack = writeBack
+          ..lock = lock
+          ..force = force,
+      ),
+    );
+    return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<List<EntityCuratedField>> getEntityCuration(
+    String entityType,
+    String entityPid,
+  ) => _guard(() async {
+    final response = await _gen.getMetadataApi().getEntityCuration(
+      entityType: entityType,
+      entityPid: entityPid,
+    );
+    return _require(
+      response.data,
+    ).curated.map(entityCuratedFieldFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<MetadataEditResult> setReleaseStatus(
+    String pid, {
+    required bool unofficial,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setReleaseStatus(
+      pid: pid,
+      releaseStatusEdit: gen.ReleaseStatusEdit(
+        (b) => b..unofficial = unofficial,
+      ),
+    );
+    return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<String> rematchItem(String pid) => _guard(() async {
+    final response = await _gen.getMetadataApi().rematchItem(pid: pid);
+    return _require(response.data).reviewEntryId;
+  });
+
+  @override
+  Future<EnrichItemResult> enrichItem(
+    String pid, {
+    required List<String> want,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().enrichItem(
+      pid: pid,
+      enrichItemRequest: gen.EnrichItemRequest(
+        (b) => b
+          ..want = ListBuilder<gen.EnrichItemRequestWantEnum>(
+            want.map(gen.EnrichItemRequestWantEnum.valueOf),
+          ),
+      ),
+    );
+    return enrichItemResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<HealthSummary> getLibraryHealth() => _guard(() async {
+    final response = await _gen.getHealthApi().getLibraryHealth();
+    return healthSummaryFromGen(_require(response.data));
+  });
+
+  @override
+  Future<HealthIssuePage> listHealthIssues({
+    String? rule,
+    String? cursor,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getHealthApi().listHealthIssues(
+      rule: rule,
+      cursor: cursor,
+      limit: limit,
+    );
+    return healthIssuePageFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> sweepLibraryHealth() => _guard(() async {
+    await _gen.getHealthApi().sweepLibraryHealth();
+  });
+
+  @override
+  Future<int> fixHealthIssues({required String rule, List<String>? itemPids}) =>
+      _guard(() async {
+        final response = await _gen.getHealthApi().fixHealthIssues(
+          healthFixRequest: gen.HealthFixRequest(
+            (b) => b
+              ..rule = rule
+              ..itemPids = itemPids == null
+                  ? null
+                  : ListBuilder<String>(itemPids),
+          ),
+        );
+        return _require(response.data).queued;
+      });
+
+  @override
+  Future<List<DuplicateGroup>> listDuplicates() => _guard(() async {
+    final response = await _gen.getHealthApi().listDuplicates();
+    return _require(
+      response.data,
+    ).groups.map(duplicateGroupFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<MergeOutcome> mergeDuplicates({
+    required String entityType,
+    required String survivorPid,
+    required List<String> loserPids,
+  }) => _guard(() async {
+    final response = await _gen.getHealthApi().mergeDuplicates(
+      mergeRequest: gen.MergeRequest(
+        (b) => b
+          ..entityType = mergeEntityTypeToGen(entityType)
+          ..survivorPid = survivorPid
+          ..loserPids = ListBuilder<String>(loserPids),
+      ),
+    );
+    final body = _require(response.data);
+    return MergeOutcome(merged: body.merged, childrenMoved: body.childrenMoved);
+  });
+
+  @override
+  Future<List<UpgradeGroup>> listUpgrades() => _guard(() async {
+    final response = await _gen.getHealthApi().listUpgrades();
+    return _require(
+      response.data,
+    ).groups.map(upgradeGroupFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<int> resolveUpgrade({
+    required String keepItemPid,
+    required List<String> removeItemPids,
+  }) => _guard(() async {
+    final response = await _gen.getHealthApi().resolveUpgrade(
+      upgradeResolveRequest: gen.UpgradeResolveRequest(
+        (b) => b
+          ..keepItemPid = keepItemPid
+          ..removeItemPids = ListBuilder<String>(removeItemPids),
+      ),
+    );
+    return _require(response.data).trashed;
+  });
+
+  @override
+  Future<List<OrganizeProfile>> listOrganizeProfiles() => _guard(() async {
+    final response = await _gen.getOrganizeApi().listOrganizeProfiles();
+    return _require(
+      response.data,
+    ).profiles.map(organizeProfileFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<OrganizePlan> previewOrganize({
+    required String profile,
+    List<String>? itemPids,
+  }) => _guard(() async {
+    final response = await _gen.getOrganizeApi().previewOrganize(
+      organizeRequest: gen.OrganizeRequest(
+        (b) => b
+          ..profile = profile
+          ..itemPids = itemPids == null ? null : ListBuilder<String>(itemPids),
+      ),
+    );
+    return organizePlanFromGen(_require(response.data));
+  });
+
+  @override
+  Future<OrganizeReport> applyOrganize({
+    required String profile,
+    List<String>? itemPids,
+  }) => _guard(() async {
+    final response = await _gen.getOrganizeApi().applyOrganize(
+      organizeRequest: gen.OrganizeRequest(
+        (b) => b
+          ..profile = profile
+          ..itemPids = itemPids == null ? null : ListBuilder<String>(itemPids),
+      ),
+    );
+    return organizeReportFromGen(_require(response.data));
+  });
+
+  @override
+  Future<ToolTask> mergeBook(
+    String pid, {
+    List<String>? titles,
+    bool keepOriginals = false,
+  }) => _guard(() async {
+    final response = await _gen.getToolsApi().mergeBook(
+      pid: pid,
+      bookMergeRequest: gen.BookMergeRequest(
+        (b) => b
+          ..titles = titles == null ? null : ListBuilder<String>(titles)
+          ..keepOriginals = keepOriginals,
+      ),
+    );
+    return toolTaskFromGen(_require(response.data));
+  });
+
+  @override
+  Future<ToolTask> splitBook(String pid, {bool keepOriginals = false}) =>
+      _guard(() async {
+        final response = await _gen.getToolsApi().splitBook(
+          pid: pid,
+          bookSplitRequest: gen.BookSplitRequest(
+            (b) => b..keepOriginals = keepOriginals,
+          ),
+        );
+        return toolTaskFromGen(_require(response.data));
+      });
+
+  @override
+  Future<ToolTask> splitCueRip(String pid, {bool keepOriginals = false}) =>
+      _guard(() async {
+        final response = await _gen.getToolsApi().splitCueRip(
+          pid: pid,
+          cueSplitRequest: gen.CueSplitRequest(
+            (b) => b..keepOriginals = keepOriginals,
+          ),
+        );
+        return toolTaskFromGen(_require(response.data));
+      });
+
+  @override
+  Future<ToolTaskPage> listToolTasks({String? cursor, int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getToolsApi().listToolTasks(
+          cursor: cursor,
+          limit: limit,
+        );
+        return toolTaskPageFromGen(_require(response.data));
+      });
+
+  @override
+  Future<ToolTask> getToolTask(String taskId) => _guard(() async {
+    final response = await _gen.getToolsApi().getToolTask(taskId: taskId);
+    return toolTaskFromGen(_require(response.data));
+  });
+
+  @override
+  Future<EnrichmentStatus> getEnrichmentStatus() => _guard(() async {
+    final response = await _gen.getEnrichmentApi().getEnrichmentStatus();
+    return enrichmentStatusFromGen(_require(response.data));
+  });
+
+  @override
+  Future<String> runEnrichment({bool force = false}) => _guard(() async {
+    final response = await _gen.getEnrichmentApi().runEnrichment(
+      enrichmentRunRequest: gen.EnrichmentRunRequest((b) => b..force = force),
+    );
+    return _require(response.data).jobPid;
+  });
+
+  @override
+  Future<UserPage> listUsers({String? cursor, int? limit}) => _guard(() async {
+    final response = await _gen.getUsersApi().listUsers(
+      cursor: cursor,
+      limit: limit,
+    );
+    return userPageFromGen(_require(response.data));
+  });
+
+  @override
+  Future<UserAccount> createUser({
+    required String username,
+    required String password,
+    String? displayName,
+    List<String>? roles,
+    LibraryAccess? libraryAccess,
+    bool? uploadEnabled,
+    int? uploadQuotaBytes,
+  }) => _guard(() async {
+    final response = await _gen.getUsersApi().createUser(
+      userCreate: gen.UserCreate(
+        (b) => b
+          ..username = username
+          ..password = password
+          ..displayName = displayName
+          ..roles = rolesToGen(roles)
+          ..libraryAccess = libraryAccess == null
+              ? null
+              : libraryAccessToGen(libraryAccess).toBuilder()
+          ..uploadEnabled = uploadEnabled
+          ..uploadQuotaBytes = uploadQuotaBytes,
+      ),
+    );
+    return userAccountFromGen(_require(response.data));
+  });
+
+  @override
+  Future<UserAccount> updateUser(
+    String userId, {
+    String? displayName,
+    List<String>? roles,
+    bool? disabled,
+    LibraryAccess? libraryAccess,
+    bool? uploadEnabled,
+    int? uploadQuotaBytes,
+  }) => _guard(() async {
+    final response = await _gen.getUsersApi().updateUser(
+      userId: userId,
+      userUpdate: gen.UserUpdate(
+        (b) => b
+          ..displayName = displayName
+          ..roles = rolesToGen(roles)
+          ..disabled = disabled
+          ..libraryAccess = libraryAccess == null
+              ? null
+              : libraryAccessToGen(libraryAccess).toBuilder()
+          ..uploadEnabled = uploadEnabled
+          ..uploadQuotaBytes = uploadQuotaBytes,
+      ),
+    );
+    return userAccountFromGen(_require(response.data));
   });
 
   /// Runs [body], mapping transport failures to the structured error model.

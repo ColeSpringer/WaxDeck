@@ -26,15 +26,22 @@ type UserCtx struct {
 	// Libraries is the granted set (bare library PIDs) when
 	// AllLibraries is false.
 	Libraries map[string]bool
+	// UploadEnabled grants the upload surface (administrators always
+	// have it); UploadQuotaBytes caps live uploads, 0 meaning no cap.
+	UploadEnabled    bool
+	UploadQuotaBytes int64
 }
 
 // UserCtx assembles the per-request user context from an account row.
 func (l *Library) UserCtx(ctx context.Context, u *wdb.User) (*UserCtx, error) {
 	uc := &UserCtx{
-		ID:         u.ID,
-		CatalogPID: u.WaxbinUserPID,
-		Admin:      hasRole(u.Roles, "admin"),
+		ID:               u.ID,
+		CatalogPID:       u.WaxbinUserPID,
+		Admin:            hasRole(u.Roles, "admin"),
+		UploadEnabled:    u.UploadEnabled,
+		UploadQuotaBytes: u.UploadQuotaBytes,
 	}
+	uc.UploadEnabled = uc.UploadEnabled || uc.Admin
 	uc.AllLibraries = uc.Admin || u.LibraryAccess != "granted"
 	if !uc.AllLibraries {
 		pids, err := l.db.LibraryGrants(ctx, u.ID)

@@ -41,6 +41,20 @@ sidecar injection seam) all landed and are not repeated here.
 - **Batch path lookup in pidpath.** Locate is per-pid; hydrating a
   large delta page does N lookups. Inside budget today, so this is an
   efficiency ask, not a correctness one.
+- **Bulk art and lyrics presence.** The metadata-health sweep grades
+  every present item and has no query field for "has front cover" or
+  "has lyrics", so it does one `ResolveArt` and one `Lyrics` point read
+  per music item; a 100k library is a few hundred thousand reads per
+  sweep. A batch presence lookup (or presence flags on the item view /
+  query engine) collapses that to one pass. The sweep is a paced,
+  warming-up-gated background job today, so it is an efficiency ask, not
+  a correctness one.
+- **Bulk active-playback lookup.** Unsubscribing a podcast with
+  download removal checks whether each downloaded episode is currently
+  playing for any user, one `Playback().State(userPID, epPID)` per
+  (episode, user) pair. Fine at self-host scale (few users), but an
+  `ActiveStatesForEpisodes([]epPID)` (or a users-crossed variant) makes
+  it one query. Efficiency ask; the action is rare and user-triggered.
 - **Podcasting 2.0 funding, soundbites, medium, and person tags.**
   The feed parser skips them, so WaxDeck cannot surface them.
 - **Chapter marks on multi-file books.** Chapters exist only for
@@ -72,6 +86,31 @@ sidecar injection seam) all landed and are not repeated here.
   and ratings unimplementable against it; WaxDeck mirrors its own
   per-field stamps in a play_state_stamps table. Upstream stamps
   would retire the mirror.
+- **Scoped or per-item enrichment.** Enrich runs whole-catalog with a
+  Force flag and a Limit; there is no way to re-enrich one item or one
+  entity. WaxDeck's editor runs its own injected providers directly
+  for the per-item fetch button, which works but bypasses the engine's
+  provenance bookkeeping for the built-ins (CAA, ListenBrainz, LRCLIB
+  cannot be invoked per item at all).
+- **A multi-item edit batch with per-item field maps.** EditManyFields
+  applies one value set to every item, which fits bulk retags but not
+  a matching engine applying a different title and track number to
+  each member of an album unit. The apply path loops per-item edits
+  (atomic per item) and locks as it goes; an atomic per-unit batch
+  would make "a unit never half applies" a transaction instead of a
+  convention.
+- **An exact-content-hash lookup on the facade.** Files carry content
+  and essence hashes, but nothing resolves a hash to an item, so the
+  upload surface's pre-transfer duplicate warning (hash sent before
+  bytes move) can only answer from its own upload history. The
+  completion-time essence check covers correctness; the ask is purely
+  to make the early warning as good as the late one.
+- **A level-scoped artwork read.** ResolveArt walks the fallback chain
+  (item, album, release group, artist), so a caller cannot tell
+  item-own art from inherited art; the editor's has-artwork indicator
+  and the health sweep's missing-art rule both read true for an item
+  whose album carries the only cover. A read that reports which level
+  supplied the bytes (or an item-only probe) would make both honest.
 
 ## WaxFlow
 

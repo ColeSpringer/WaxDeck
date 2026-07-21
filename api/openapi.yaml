@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: WaxDeck API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     First-party REST API for WaxDeck: the self-hosted player, library manager,
     and metadata completer for music, podcasts, and audiobooks.
@@ -31,9 +31,21 @@ info:
     playback sessions with server-side queues, transfer between
     endpoints, gapless queue timelines through the streaming engine,
     and cast preflight diagnostics; the live command bus rides the
-    WebSocket channel in `api/events.md`). The shapes (keyset
-    pagination, typed PIDs, the structured error model, relative
-    media URLs) are load-bearing from day one.
+    WebSocket channel in `api/events.md`), and the curation surface:
+    the release matching review queue (scored candidates with
+    per-field distance breakdowns, approve, skip, keep-as-is, mark
+    unofficial, bulk decisions, revert, and calibration statistics),
+    resumable chunked uploads that flow through the same identify and
+    review pipeline, the full-depth metadata editor (every scalar
+    field, credits, lyrics, chapters, artwork, custom tags, entity
+    edits, field locks with provenance, database-first writes with
+    per-call file write-back), the metadata health dashboard with
+    bulk fixes, duplicate merge and quality upgrade resolution, the
+    template file organizer with dry-run previews, audiobook merge
+    and split tooling with chapter stamping and progress remapping,
+    CUE rip splitting, and library enrichment status and dispatch.
+    The shapes (keyset pagination, typed PIDs, the structured error
+    model, relative media URLs) are load-bearing from day one.
 
     Conventions:
     - All endpoints live under `/api/v1` (this document's `servers` entry).
@@ -41,7 +53,8 @@ info:
       `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook, `jb-` job,
       `lb-` library, `us-` user, `se-` session, `ap-` app password,
       `pl-` playlist, `rs-` radio station, `pr-` push registration,
-      `pe-` player endpoint, `ps-` playback session).
+      `pe-` player endpoint, `ps-` playback session, `rv-` review
+      entry, `up-` upload, `tk-` tool task).
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
@@ -64,9 +77,13 @@ info:
       scrobbling provider, could not be reached; try again later),
       `feature-unavailable` (the request needs an optional capability,
       such as the streaming engine's queue timelines or a cast
-      integration, that this server is not running), and
+      integration, that this server is not running),
       `endpoint-offline` (the target player endpoint is not currently
-      connected; refresh the endpoint list).
+      connected; refresh the endpoint list), `quota-exceeded` (the
+      upload would exceed the caller's storage quota), `field-locked`
+      (the edit targets a locked metadata field and did not set
+      `force`), and `unsupported-format` (the uploaded file's format
+      is not accepted by this server).
       New codes may appear; clients must treat unknown codes as opaque.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
@@ -132,6 +149,27 @@ info:
       audible to the room; the queue behind it is not private either).
       Controlling a session follows visibility: your own sessions
       always, another user's only on a shared endpoint.
+    - Curation surfaces (the review queue, the metadata editor and
+      entity edits, health fixes, duplicate merges, organizing, the
+      audiobook and CUE tools, enrichment dispatch) mutate the shared
+      catalog, so their mutations require the `admin` role. Uploads
+      and acquisitions are the exception: any user granted upload
+      rights can create them, sees their own sessions and the review
+      entries they produced, may decide those entries (the files land
+      only in a library the caller can see), and keeps item-scoped
+      editing rights over the items their own uploads and
+      acquisitions brought into the library (scalar fields, credits,
+      lyrics, chapters, artwork, custom tags, release status,
+      rematch, and per-item enrichment; entity-level edits stay
+      administrative). That last rule is what makes hand-curating
+      content with no canonical source practical: the person who
+      brought in an unofficial remix is the person who can name it.
+      Metadata edits write the catalog database first and touch
+      files only when the request opts into write-back; a write-back
+      that fails after the catalog committed reports the failure
+      detail in the response instead of failing the edit, and the
+      affected files surface as out-of-sync diagnostics until a
+      later write-back or rescan reconciles them.
   contact:
     name: WaxDeck
     url: https://github.com/ColeSpringer/WaxDeck
@@ -190,6 +228,43 @@ tags:
       mirroring of the catalog and of the caller's own server-side state.
   - name: admin
     description: Library maintenance operations.
+  - name: review
+    description: >
+      The release matching review queue: scored candidates with
+      per-field distance breakdowns, decisions (approve, skip,
+      keep-as-is, mark unofficial, revert), bulk decisions, and
+      auto-apply calibration statistics.
+  - name: uploads
+    description: >
+      Resumable chunked uploads of audio for all three media types.
+      Uploaded files stage outside the library, run through the
+      identify pipeline, and enter the library through the review
+      queue.
+  - name: metadata
+    description: >
+      The full-depth metadata editor: scalar fields, credits, lyrics,
+      chapters, artwork, custom tags, entity edits, field locks with
+      provenance, release status, rematching, and per-item
+      enrichment. Writes are database-first; file write-back is a
+      per-call opt-in.
+  - name: health
+    description: >
+      The metadata health dashboard: per-rule compliance, per-item
+      issues, sweeps, bulk fixes, duplicate entity merges, and
+      quality upgrade resolution.
+  - name: organize
+    description: >
+      Template-driven file organizing: profiles, dry-run previews,
+      and applying moves (sidecars ride along).
+  - name: tools
+    description: >
+      File tooling driven through the streaming engine's job API:
+      audiobook merge to a chaptered single file, chapter splits,
+      CUE rip splits, and the tool task log tracking them.
+  - name: enrichment
+    description: >
+      Library enrichment: provider status, coverage, and whole-library
+      dispatch.
 
 security:
   - cookieAuth: []
@@ -1720,6 +1795,65 @@ paths:
                 $ref: "#/components/schemas/Lyrics"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: setItemLyrics
+      summary: Set lyrics
+      description: >
+        Stores synced lines (LRC text) and/or a plain unsynchronized
+        block for a track, locking the lyrics artifact by default.
+        `writeBack` also writes the `.lrc` sidecar next to the file
+        (crash-safe write) and embeds where the format allows; the
+        response surfaces typed drop warnings from the tag library
+        (MP4 and Matroska refuse embedded synced lyrics, so only the
+        sidecar carries them there) instead of silently losing
+        content. Malformed LRC lines are reported with their line
+        numbers.
+      tags: [metadata]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LyricsEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: clearItemLyrics
+      summary: Clear lyrics
+      description: Removes the stored lyrics (files are untouched).
+      tags: [metadata]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "204":
+          description: Cleared.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "503":
@@ -3549,6 +3683,1754 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /review/queue:
+    get:
+      operationId: listReviewQueue
+      summary: List review queue entries
+      description: >
+        Keyset-paginated review queue, newest first. Administrators see
+        every entry; other callers see only entries produced by their
+        own uploads. Each entry is one album-sized unit: it applies or
+        declines as a whole, never track by track. `status` filters to
+        one lifecycle state (`pending` is the working queue; decided
+        entries remain listable for calibration and undo).
+      tags: [review]
+      parameters:
+        - name: status
+          in: query
+          description: >
+            Restrict to one status. Statuses are server-defined
+            strings; the current set is `pending`, `applied`,
+            `auto-applied`, `as-is`, `unofficial`, `skipped`,
+            `discarded`, and `reverted`. Unknown values yield an
+            empty page rather than an error.
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum entries per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of review entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewEntryPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /review/queue/{entryId}:
+    parameters:
+      - $ref: "#/components/parameters/ReviewEntryId"
+    get:
+      operationId: getReviewEntry
+      summary: Inspect one review entry
+      description: >
+        The full entry: the unit's files with their current metadata,
+        and every scored candidate with its per-field distance
+        breakdown, track pairings (the side-by-side diff renders from
+        these), missing tracks, and extra files. Candidates are ranked
+        best first. Visibility follows the queue listing.
+      tags: [review]
+      responses:
+        "200":
+          description: The entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewEntryDetail"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /review/queue/{entryId}/decide:
+    parameters:
+      - $ref: "#/components/parameters/ReviewEntryId"
+    post:
+      operationId: decideReviewEntry
+      summary: Decide a review entry
+      description: >
+        Applies one decision to a pending entry. `approve` applies the
+        chosen candidate's metadata to the whole unit (the ranked best
+        when `candidateMbid` is absent), locking the applied fields so
+        a rescan cannot undo the acceptance; for entries staging new
+        files (uploads and imports) the files enter the library first.
+        `as-is` accepts the unit's current metadata unchanged (staged
+        files enter the library as they are). `unofficial` is `as-is`
+        plus a locked `RELEASESTATUS` custom tag of `unofficial`,
+        which excludes the items from future match retries and from
+        health penalties (content with no canonical release is a
+        terminal state, not an error). `skip` dismisses the entry
+        without touching anything (staged files stay staged).
+        `discard` deletes staged files and exists only for entries
+        that carry them. Deciding an already-decided entry answers
+        `conflict`. Administrators may decide anything; other callers
+        only entries from their own uploads. A metadata write that
+        partially fails after the catalog committed reports per-file
+        detail in `warnings` and the entry still counts as decided.
+      tags: [review]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewDecision"
+      responses:
+        "200":
+          description: The decided entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewDecideResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /review/queue/{entryId}/revert:
+    parameters:
+      - $ref: "#/components/parameters/ReviewEntryId"
+    post:
+      operationId: revertReviewEntry
+      summary: Revert an applied match
+      description: >
+        Restores the metadata snapshot taken before an `applied` or
+        `auto-applied` entry was applied, unlocks the fields the apply
+        locked, and marks the entry `reverted`. Reverts of auto
+        applied entries feed the calibration statistics. Only
+        administrators and the deciding user may revert. Reverting
+        anything but an applied entry answers `conflict`.
+      tags: [review]
+      responses:
+        "200":
+          description: The reverted entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewEntry"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /review/decide:
+    post:
+      operationId: decideReviewBulk
+      summary: Decide many review entries
+      description: >
+        Applies one decision to many pending entries in a single call,
+        for keyboard-driven bulk triage. `approve` uses each entry's
+        own ranked best candidate (a per-entry candidate choice needs
+        the single-entry endpoint). Entries are decided independently:
+        one failure does not stop the rest, and the response reports
+        each outcome.
+      tags: [review]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewBulkDecision"
+      responses:
+        "200":
+          description: Per-entry outcomes, in request order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewBulkResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /review/stats:
+    get:
+      operationId: getReviewStats
+      summary: Review and calibration statistics
+      description: >
+        Queue depth and auto-apply calibration: how many entries auto
+        applied and how many of those were later reverted. The revert
+        rate is the trust signal the review surface shows next to the
+        auto-apply behavior; it is deliberately not the accuracy
+        metric that tunes thresholds (reverts are sparse and lagging).
+      tags: [review]
+      responses:
+        "200":
+          description: Current statistics.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewStats"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /uploads:
+    get:
+      operationId: listUploads
+      summary: List the caller's uploads
+      description: >
+        Keyset-paginated uploads, newest first: the caller's own, or
+        every user's for administrators. Finished uploads age out of
+        the listing once their staged file has entered the library and
+        the retention window passes.
+      tags: [uploads]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum uploads per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of uploads.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    post:
+      operationId: createUpload
+      summary: Start an upload
+      description: >
+        Creates a resumable upload session for one audio file. The
+        caller must hold upload rights; the declared size counts
+        against the caller's quota up front so a full quota fails
+        fast, and the file name's extension is checked against the
+        server's accepted formats. The required media type label
+        routes the file to the matching library kind; `libraryPid`
+        pins a specific library (required when several libraries of
+        that kind are visible to the caller). Passing the file's
+        SHA-256 up front lets the server warn about an exact
+        duplicate before any bytes move: the response's `duplicate`
+        names the existing item and the client can abandon the
+        session without spending bandwidth (a fingerprint-level
+        duplicate check still runs at completion). Bytes then flow
+        through the data endpoint in any number of chunks.
+      tags: [uploads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadCreate"
+      responses:
+        "201":
+          description: The created upload session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/QuotaExceeded"
+        "415":
+          $ref: "#/components/responses/UnsupportedFormat"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /uploads/{uploadId}:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    get:
+      operationId: getUpload
+      summary: Inspect an upload
+      description: >
+        Current session state, including `receivedBytes` for resuming
+        an interrupted transfer: continue by sending the next chunk at
+        that offset.
+      tags: [uploads]
+      responses:
+        "200":
+          description: The upload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteUpload
+      summary: Abandon an upload
+      description: >
+        Deletes the session and its staged bytes. An upload whose file
+        already entered the library cannot be deleted here (the item
+        lives in the library now; delete it there); that answers
+        `conflict`.
+      tags: [uploads]
+      responses:
+        "204":
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /uploads/{uploadId}/data:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    put:
+      operationId: putUploadData
+      summary: Send upload bytes
+      description: >
+        Appends one chunk of raw file bytes at `offset`, which must
+        equal the session's current `receivedBytes` (an interrupted
+        client re-reads the session and resumes; a mismatched offset
+        answers `conflict` and nothing is written). Chunks may be any
+        size up to 32 MiB. Bytes past the declared total size answer
+        `invalid-request`.
+      tags: [uploads]
+      parameters:
+        - name: offset
+          in: query
+          required: true
+          description: Byte offset this chunk starts at.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: The session after the chunk.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /uploads/{uploadId}/complete:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    post:
+      operationId: completeUpload
+      summary: Finish an upload
+      description: >
+        Verifies the received bytes (size, and SHA-256 when one was
+        declared), probes the audio (an undecodable file answers
+        `unsupported-format` and the session stays deletable), moves
+        the file into staging with crash-safe write discipline, and
+        opens a review entry for the identify pipeline. The response
+        carries `reviewEntryId` and any duplicate warning (an exact
+        content match or a fingerprint match against an existing
+        item); the duplicate warning does not block the review flow,
+        it informs the decision. Completing before every declared
+        byte arrived answers `conflict`.
+      tags: [uploads]
+      responses:
+        "200":
+          description: The completed upload with its review entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "415":
+          $ref: "#/components/responses/UnsupportedFormat"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /acquisitions:
+    post:
+      operationId: createAcquisition
+      summary: Acquire audio from a URL
+      description: >
+        Downloads audio from a source URL through the acquisition
+        bridge as a background task: a single video, or every entry
+        of a playlist or channel (bounded to the first two hundred
+        entries; the response task reports progress per item).
+        Downloaded files stage exactly like uploads, appear as
+        upload sessions, and flow through the same identify and
+        review pipeline, grouped into album units; the source's own
+        metadata (title, channel, thumbnail) arrives embedded, and
+        provenance tags record the origin, so content with no
+        canonical release reaches the review queue ready for
+        keep-as-is or mark-unofficial and stays hand-editable by
+        the acquiring user afterward. Needs upload rights and a
+        running acquisition bridge (`source-unavailable` without
+        one). Acquired bytes count against the caller's upload
+        quota; a quota hit stops the task and keeps what already
+        staged. Returns the tool task to follow (type `acquire`).
+      tags: [uploads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcquisitionRequest"
+      responses:
+        "202":
+          description: The queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "501":
+          $ref: "#/components/responses/SourceUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /metadata/fields:
+    get:
+      operationId: getMetadataFields
+      summary: Discover the editable field vocabulary
+      description: >
+        The editor's form vocabulary: every editable scalar field per
+        item kind (with which ones write back to files and which stay
+        database-only), the credit roles per kind, and the entity
+        edit fields per entity type. Editors build their forms from
+        this instead of hardcoding the vocabulary, the same pattern as
+        the smart playlist rule fields.
+      tags: [metadata]
+      responses:
+        "200":
+          description: The field vocabulary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataFields"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /items/{pid}/metadata:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getItemMetadata
+      summary: Read an item's full metadata
+      description: >
+        Everything the editor shows for one item: the scalar fields,
+        credits by role, lyrics presence, chapters (books), custom
+        tags, locks and per-field provenance (who set a value: file
+        tags, a user, enrichment, or organize), release status, file
+        write-back health (out-of-sync and lost-value diagnostics),
+        and whether the item is a virtual track carved from a shared
+        file (whose edits are always database-only by upstream
+        design). Readable by any user who can see the item; the
+        item-scoped mutations below require `admin`, or ownership of
+        the upload or acquisition that brought the item in.
+      tags: [metadata]
+      responses:
+        "200":
+          description: The item's metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemMetadata"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    patch:
+      operationId: editItemMetadata
+      summary: Edit scalar fields
+      description: >
+        Applies one or more scalar field edits atomically to the
+        catalog. `writeBack` additionally writes the new values into
+        the backing file's tags (refused by upstream design for
+        episodes, virtual tracks, and files shared by several items;
+        the edit still lands in the catalog and the response carries
+        the per-file failures). `lock` (default true) locks each
+        edited field against scans and enrichment; editing a field
+        someone locked earlier requires `force` or answers
+        `field-locked`. Unknown fields for the item's kind answer
+        `invalid-request`. Identifier fields (ISRC, ISBN, ASIN,
+        barcode) are format-checked here because upstream stores
+        them unvalidated.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/bulk-edit:
+    post:
+      operationId: bulkEditMetadata
+      summary: Edit fields on many items
+      description: >
+        Applies the same scalar field values to many items in one
+        atomic catalog batch (a different value per item needs
+        per-item calls). `skipLocked` skips items with locked target
+        fields and reports them instead of failing the batch;
+        without it a locked item fails the whole batch with
+        `field-locked`. Write-back failures are reported per item and
+        never undo the catalog batch.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkEdit"
+      responses:
+        "200":
+          description: Per-item outcomes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/credits:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setItemCredits
+      summary: Replace one credit role
+      description: >
+        Replaces the named people for one contributor role (composer,
+        lyricist, producer, narrator, and the rest of the per-kind
+        role vocabulary from the fields endpoint). Names resolve to
+        artist entities and deduplicate. An empty list clears the
+        role. `writeBack` writes the role's tag keys where a
+        round-trippable key exists (book translator and editor roles
+        are database-only by upstream design; the response says so
+        rather than failing).
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditsEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}/chapters:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setBookChapters
+      summary: Replace a book's chapters
+      description: >
+        Replaces the chapter list of a single-file audiobook (user
+        chapters win over embedded ones on read; multi-file books
+        keep their part boundaries as the navigation grain, an
+        upstream limit). Chapters must be ordered and non-overlapping
+        on the book timeline. An empty list restores the embedded
+        chapters.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChaptersEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/artwork:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setItemArtwork
+      summary: Set item artwork
+      description: >
+        Stores the raw image bytes as the item's front cover (the one
+        artwork slot upstream models), locking the artifact by
+        default. The body is the image itself, up to 16 MiB; the
+        server sniffs the format. `writeBack=true` embeds the cover
+        into every backing file. Existing art is replaced; the
+        request never downgrades silently because the caller chose
+        the image.
+      tags: [metadata]
+      parameters:
+        - name: writeBack
+          in: query
+          description: Also embed the cover into the backing files.
+          schema:
+            type: boolean
+            default: false
+        - name: lock
+          in: query
+          description: Lock the artwork against scans and enrichment.
+          schema:
+            type: boolean
+            default: true
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "415":
+          $ref: "#/components/responses/UnsupportedFormat"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: clearItemArtwork
+      summary: Clear item artwork
+      description: >
+        Removes the stored item art; resolution falls back to the
+        entity chain (album, release group, artist).
+      tags: [metadata]
+      responses:
+        "204":
+          description: Cleared.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /entities/{entityType}/{entityPid}/artwork:
+    parameters:
+      - $ref: "#/components/parameters/EntityType"
+      - $ref: "#/components/parameters/EntityPid"
+    put:
+      operationId: setEntityArtwork
+      summary: Set entity artwork
+      description: >
+        Stores the raw image bytes as durable front-cover art for an
+        album, artist, release group, or genre entity. Album art may
+        additionally embed into member files with `writeBack=true`;
+        other entity types are catalog-only.
+      tags: [metadata]
+      parameters:
+        - name: writeBack
+          in: query
+          description: >
+            Embed into member files (albums only; ignored elsewhere).
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedFormat"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/tags/{key}:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+      - name: key
+        in: path
+        required: true
+        description: >
+          The custom tag key. Keys canonicalize to uppercase ASCII;
+          keys the catalog owns through another surface (TITLE,
+          ARTIST, the credit roles, and the rest of the reserved set)
+          are rejected with `invalid-request`.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+    put:
+      operationId: setItemTag
+      summary: Set a custom tag
+      description: >
+        Replaces the ordered values of one custom tag on a track or
+        book, locking `tag.KEY` by default. Custom tags are full
+        browse dimensions: they filter, facet, and feed smart list
+        rules. An empty value list clears the tag.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagEdit"
+      responses:
+        "200":
+          description: The edit outcome, with the canonical key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: clearItemTag
+      summary: Clear a custom tag
+      description: >
+        Removes the tag and its lock. A reserved key (one the catalog
+        owns through another surface) answers `invalid-request`, like
+        setting one does.
+      tags: [metadata]
+      responses:
+        "204":
+          description: Cleared.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/locks:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setItemLocks
+      summary: Lock or unlock fields
+      description: >
+        Locks or unlocks the named fields against scans, enrichment,
+        and organize. Field names are the scalar vocabulary plus the
+        namespaced artifacts: `lyrics`, `chapters`, `art`,
+        `credit.ROLE`, and `tag.KEY`.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocksEdit"
+      responses:
+        "200":
+          description: The item's locked fields after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocksResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /entities/{entityType}/{entityPid}:
+    parameters:
+      - $ref: "#/components/parameters/EntityType"
+      - $ref: "#/components/parameters/EntityPid"
+    patch:
+      operationId: editEntity
+      summary: Edit entity fields
+      description: >
+        Edits an entity's own fields: sort name and MusicBrainz id
+        for artists; sort name, MusicBrainz id, and type for release
+        groups; sort name, MusicBrainz id, barcode, label, and
+        catalog number for albums. Entity edits carry their own
+        provenance, readable below. `writeBack` pushes the values
+        that have tag forms into member files.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntityEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /entities/{entityType}/{entityPid}/curation:
+    parameters:
+      - $ref: "#/components/parameters/EntityType"
+      - $ref: "#/components/parameters/EntityPid"
+    get:
+      operationId: getEntityCuration
+      summary: Read entity edit provenance
+      description: The entity's curated fields with source and time.
+      tags: [metadata]
+      responses:
+        "200":
+          description: Curated entity fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityCuration"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/release-status:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setReleaseStatus
+      summary: Mark content unofficial
+      description: >
+        Marks an item as having no canonical release (YouTube rips,
+        remixes, live sets, personal recordings) or clears the mark.
+        Marking sets a locked `RELEASESTATUS` custom tag of
+        `unofficial`, which excludes the item from match retries and
+        health penalties; the state is first-class, browsable, and
+        fully hand-editable, never an error condition.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReleaseStatusEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/rematch:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: rematchItem
+      summary: Requeue an item for matching
+      description: >
+        Rebuilds the album unit containing the item (its album
+        siblings ride along; a unit is always matched whole) and runs
+        the identify pipeline on it, opening a fresh pending review
+        entry. Items marked unofficial are eligible here (an explicit
+        rematch is the way back from that state). The entry id
+        returns immediately; candidates fill in asynchronously and
+        the entry updates over the event channel.
+      tags: [metadata]
+      responses:
+        "202":
+          description: The queued review entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RematchResult"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/enrich:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: enrichItem
+      summary: Enrich one item now
+      description: >
+        Runs the registered enrichment providers for the wanted
+        artifacts (cover art, lyrics, genres, book metadata) against
+        this one item synchronously and applies what they return,
+        respecting locks and never overwriting a non-empty curated
+        value. This is the editor's "fetch for me" button; the
+        whole-library pass lives under `/library/enrichment`.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrichItemRequest"
+      responses:
+        "200":
+          description: What was fetched and applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichItemResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/health:
+    get:
+      operationId: getLibraryHealth
+      summary: Metadata health summary
+      description: >
+        The library completeness score with its per-rule breakdown.
+        Health is computed by a background sweep; `warmingUp` is true
+        until the first sweep covers the library (a fresh install
+        shows honest progress instead of a wall of red), and
+        `sweptAt` dates the numbers. Items marked unofficial are
+        exempt from rules that assume a canonical release. Rule names
+        are server-defined strings; the current set is `missing-art`,
+        `small-art`, `missing-mbid`, `missing-year`, `missing-genre`,
+        `missing-lyrics`, `missing-narrator`, `missing-asin`,
+        `path-mismatch`, `write-unsynced`, `legacy-tags`, and
+        `corrupt-audio`.
+      tags: [health]
+      responses:
+        "200":
+          description: The health summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthSummary"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/health/issues:
+    get:
+      operationId: listHealthIssues
+      summary: List items failing health rules
+      description: >
+        Keyset-paginated items with outstanding issues, optionally
+        restricted to one rule, worst first (most failed rules, then
+        title). Each row carries every rule the item currently fails
+        so the list doubles as a per-item worklist.
+      tags: [health]
+      parameters:
+        - name: rule
+          in: query
+          description: Restrict to one rule name.
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum items per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of items with issues.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthIssuePage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/health/sweep:
+    post:
+      operationId: sweepLibraryHealth
+      summary: Re-sweep health now
+      description: >
+        Queues a full health sweep instead of waiting for the
+        scheduled one. Administrators only. The summary updates over
+        the event channel as the sweep progresses.
+      tags: [health]
+      responses:
+        "202":
+          description: Sweep queued.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/health/fix:
+    post:
+      operationId: fixHealthIssues
+      summary: Bulk-fix a health rule
+      description: >
+        Dispatches the fix that matches one rule across the named
+        items (or every item currently failing the rule when
+        `itemPids` is absent): enrichment fetches for missing art,
+        lyrics, genres, and identifiers; organize moves for path
+        mismatches; a write-back retry for out-of-sync files. Fixes
+        run in the background at provider-etiquette pace; the
+        response says how many items were queued. Rules with no
+        automated fix (`corrupt-audio`, `legacy-tags`) answer
+        `invalid-request` naming the rule.
+      tags: [health]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HealthFixRequest"
+      responses:
+        "202":
+          description: How much work was queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthFixResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/duplicates:
+    get:
+      operationId: listDuplicates
+      summary: List duplicate entities
+      description: >
+        Duplicate artist, album, release group, and genre groups from
+        the catalog audit, each with a suggested survivor (the audit
+        orders each finding survivor first). Merging re-parents every
+        child (tracks, albums, credits, play history rides along) and
+        the survivor keeps its pid, so a later rescan does not
+        resurrect the loser. The list is bounded to the first two
+        hundred groups; merge and re-list for more.
+      tags: [health]
+      responses:
+        "200":
+          description: Duplicate groups.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplicateGroups"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/duplicates/merge:
+    post:
+      operationId: mergeDuplicates
+      summary: Merge duplicate entities
+      description: >
+        Merges the losers into the survivor atomically. The losers'
+        children, credits, and play history re-parent onto the
+        survivor; identifiers union. Administrators only.
+      tags: [health]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MergeRequest"
+      responses:
+        "200":
+          description: The merge outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MergeResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/upgrades:
+    get:
+      operationId: listUpgrades
+      summary: List quality upgrade groups
+      description: >
+        Groups of the same recording in different encodings, found
+        through the fingerprint index, best quality first within each
+        group. The resolve endpoint keeps the best and trashes the
+        rest; play history merges onto the kept item.
+      tags: [health]
+      responses:
+        "200":
+          description: Upgrade groups.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpgradeGroups"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/upgrades/resolve:
+    post:
+      operationId: resolveUpgrade
+      summary: Keep the best encoding
+      description: >
+        Keeps one item of an upgrade group and moves the named
+        inferior encodings to the trash (recoverable within the
+        retention window). Administrators only.
+      tags: [health]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpgradeResolveRequest"
+      responses:
+        "200":
+          description: The resolution outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpgradeResolveResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /organize/profiles:
+    get:
+      operationId: listOrganizeProfiles
+      summary: List organize profiles
+      description: >
+        The server-configured organize profiles (path templates per
+        media kind, whether organize writes tags). Profiles are
+        server configuration, not API-editable: template mistakes
+        move files, so they change deliberately.
+      tags: [organize]
+      responses:
+        "200":
+          description: The profiles.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizeProfiles"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /organize/preview:
+    post:
+      operationId: previewOrganize
+      summary: Dry-run an organize pass
+      description: >
+        Plans the moves and renames a profile would make for the
+        named items (or the whole library when `itemPids` is absent)
+        without touching anything. The response carries the first
+        five hundred actions plus the total, so a whole-library
+        preview stays a bounded page; sidecars (covers, lyrics, cue
+        sheets) ride along with their file and are not listed
+        separately. Path templates are sandboxed upstream (per
+        segment sanitizing; a template cannot escape the library
+        root).
+      tags: [organize]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizeRequest"
+      responses:
+        "200":
+          description: The planned actions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizePlan"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /organize/apply:
+    post:
+      operationId: applyOrganize
+      summary: Apply an organize pass
+      description: >
+        Plans and applies the moves in one call (the plan is always
+        recomputed server-side; a stale preview cannot apply). Moves
+        are crash-safe per file and locked fields are respected.
+        Whole-library passes on large libraries take a while; the
+        request runs synchronously and reports the full outcome.
+        Administrators only.
+      tags: [organize]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizeRequest"
+      responses:
+        "200":
+          description: The applied outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizeReport"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}/merge:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: mergeBook
+      summary: Merge a multi-file book
+      description: >
+        Merges a multi-file audiobook into one chaptered file through
+        the streaming engine's job API: parts join gaplessly without
+        re-encoding, chapter marks land at the part boundaries
+        (titles from the request, falling back to each part's title
+        tag, then generated names), and richer tags plus the cover
+        carry over in a post-pass. Every user's resume position
+        remaps from part-relative to the merged timeline. The
+        original parts move to the trash unless `keepOriginals`.
+        Needs the streaming engine; answers `feature-unavailable`
+        without it. Returns a tool task to follow.
+      tags: [tools]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookMergeRequest"
+      responses:
+        "202":
+          description: The queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}/split:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: splitBook
+      summary: Split a book at its chapters
+      description: >
+        Splits a single-file audiobook into per-chapter files at its
+        chapter marks (sample-exact cuts, lossless for lossless
+        sources), tagging each piece from the book plus its chapter
+        title. Resume positions remap onto the pieces. The original
+        file moves to the trash unless `keepOriginals`. A book
+        without chapters answers `conflict`. Needs the streaming
+        engine.
+      tags: [tools]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookSplitRequest"
+      responses:
+        "202":
+          description: The queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/split-cue:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: splitCueRip
+      summary: Split a CUE rip into real files
+      description: >
+        Splits the single-file rip behind a CUE-carved album into one
+        real file per track (the pid may be any of the rip's virtual
+        tracks; the shared source resolves from it). Virtual tracks
+        already browse and play natively, so this physical split is
+        optional: it is for people who want real per-track files
+        (write-back and fingerprints work on them, two things
+        virtual tracks refuse by upstream design). Cuts come from
+        the cue sheet, sample-exact and lossless for lossless
+        sources; each piece is tagged from the sheet. Play state
+        carries over per track. The source file and sheet move to
+        the trash unless `keepOriginals`. Needs the streaming
+        engine.
+      tags: [tools]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CueSplitRequest"
+      responses:
+        "202":
+          description: The queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /tools/tasks:
+    get:
+      operationId: listToolTasks
+      summary: List tool tasks
+      description: >
+        Keyset-paginated tool tasks, newest first. Administrators see
+        every task; other callers see their own.
+      tags: [tools]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum tasks per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of tasks.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTaskPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /tools/tasks/{taskId}:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    get:
+      operationId: getToolTask
+      summary: Inspect a tool task
+      description: >
+        Current state and progress. Task lifecycle changes also
+        arrive over the event channel, so polling is a fallback,
+        not the model.
+      tags: [tools]
+      responses:
+        "200":
+          description: The task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /library/enrichment:
+    get:
+      operationId: getEnrichmentStatus
+      summary: Enrichment status and coverage
+      description: >
+        The registered enrichment providers (built-ins and the ones
+        this server adds, with what each can supply and whether it
+        is configured) and the catalog's enrichment coverage, plus
+        whether a whole-library pass is currently running.
+      tags: [enrichment]
+      responses:
+        "200":
+          description: The status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichmentStatus"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/enrichment/run:
+    post:
+      operationId: runEnrichment
+      summary: Run a whole-library enrichment pass
+      description: >
+        Starts the catalog's enrichment pass as a background job
+        (identity resolution first, then providers in priority
+        order, provider-paced). `force` re-enriches entities that
+        already enriched once. Locked and unofficial-marked content
+        is respected. Returns the catalog job to follow.
+        Administrators only.
+      tags: [enrichment]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrichmentRunRequest"
+      responses:
+        "202":
+          description: The started job.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichmentRunResult"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /libraries/{pid}/matching:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getLibraryMatching
+      summary: Read a library's matching mode
+      description: The library's automatic matching behavior.
+      tags: [review]
+      responses:
+        "200":
+          description: The mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryMatching"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: setLibraryMatching
+      summary: Set a library's matching mode
+      description: >
+        `auto` lets confident matches apply themselves and queues the
+        rest for review (the default), `review` queues everything (no
+        auto-apply), and `off` never matches the library's content
+        (as-is libraries: already-curated collections the engine must
+        not touch). Administrators only.
+      tags: [review]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryMatching"
+      responses:
+        "200":
+          description: The stored mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryMatching"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -3602,6 +5484,46 @@ components:
       schema:
         type: string
         pattern: "^ap-[0-9A-HJKMNP-TV-Z]{26}$"
+    ReviewEntryId:
+      name: entryId
+      in: path
+      required: true
+      description: Review entry PID (e.g. `rv-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^rv-[0-9A-HJKMNP-TV-Z]{26}$"
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      description: Upload PID (e.g. `up-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^up-[0-9A-HJKMNP-TV-Z]{26}$"
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      description: Tool task PID (e.g. `tk-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^tk-[0-9A-HJKMNP-TV-Z]{26}$"
+    EntityType:
+      name: entityType
+      in: path
+      required: true
+      description: The entity kind an entity operation targets.
+      schema:
+        type: string
+        enum: [album, artist, release-group, genre]
+    EntityPid:
+      name: entityPid
+      in: path
+      required: true
+      description: Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^[a-z]{2}-[0-9A-HJKMNP-TV-Z]{26}$"
 
   responses:
     InvalidRequest:
@@ -3696,6 +5618,33 @@ components:
         The target player endpoint is not currently connected (code
         `endpoint-offline`). Refresh the endpoint list; the device may
         have left the network or the client may have disconnected.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    QuotaExceeded:
+      description: >
+        The upload would exceed the caller's storage quota (code
+        `quota-exceeded`). The message names the quota and current
+        use.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    FieldLocked:
+      description: >
+        The edit targets a metadata field someone locked earlier and
+        the request did not set `force` (code `field-locked`). The
+        message names the field.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnsupportedFormat:
+      description: >
+        The file's format is not accepted (code `unsupported-format`):
+        the extension is outside the server's accepted set, or the
+        audio did not decode.
       content:
         application/json:
           schema:
@@ -3823,7 +5772,7 @@ components:
         - $ref: "#/components/schemas/User"
         - type: object
           description: Administrative account fields beyond the self view.
-          required: [disabled, libraryAccess, createdAt]
+          required: [disabled, libraryAccess, createdAt, uploadEnabled]
           properties:
             disabled:
               type: boolean
@@ -3832,6 +5781,17 @@ components:
                 revoked on disable.
             libraryAccess:
               $ref: "#/components/schemas/LibraryAccess"
+            uploadEnabled:
+              type: boolean
+              description: >
+                Whether the account may upload audio. Administrators
+                can always upload.
+            uploadQuotaBytes:
+              type: integer
+              format: int64
+              description: >
+                Total bytes of uploads the account may hold at once;
+                absent means no per-user cap.
             createdAt:
               type: string
               format: date-time
@@ -3919,6 +5879,14 @@ components:
             $ref: "#/components/schemas/Role"
         libraryAccess:
           $ref: "#/components/schemas/LibraryAccess"
+        uploadEnabled:
+          type: boolean
+          description: Grant upload rights; defaults to false.
+        uploadQuotaBytes:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Per-user upload cap in bytes; absent means none.
 
     UserUpdate:
       type: object
@@ -3942,6 +5910,15 @@ components:
             sessions.
         libraryAccess:
           $ref: "#/components/schemas/LibraryAccess"
+        uploadEnabled:
+          type: boolean
+          description: Grant or revoke upload rights.
+        uploadQuotaBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            New per-user upload cap in bytes; 0 removes the cap.
 
     UserPage:
       type: object
@@ -4780,7 +6757,12 @@ components:
             caller unsubscribed), `book-settings` (carries `pid`, the
             book, and `bookSettings`), or `playlist` (carries `pid`;
             `playlist` is the current state, absent when the playlist
-            was deleted or replaced under a new pid).
+            was deleted or replaced under a new pid). Curation surfaces
+            emit marker kinds carrying only `pid`: `review` (a review
+            entry changed; refetch the review endpoints), `upload` (an
+            upload session changed), and `task` (a tool task changed).
+            Markers hydrate nothing because those surfaces are live
+            reads, not mirrored state.
           example: play-state
         pid:
           type: string
@@ -5838,6 +7820,11 @@ components:
           description: >
             True when scheduled refresh is suspended after repeated feed
             failures. A successful manual refresh clears it.
+        explicit:
+          type: boolean
+          description: >
+            Feed-declared explicit flag for the whole show. Episodes
+            carry their own flag, which wins where the feed sets both.
 
     SubscriptionSettings:
       type: object
@@ -7097,3 +9084,1754 @@ components:
           description: Registrations, newest first.
           items:
             $ref: "#/components/schemas/PushRegistration"
+
+    ReviewEntry:
+      type: object
+      description: >
+        One review queue entry: an album-sized unit of files awaiting
+        or past a matching decision. The unit decides as a whole.
+      required: [id, kind, status, mediaType, origin, trackCount, createdAt, identifying]
+      properties:
+        id:
+          type: string
+          description: Entry pid.
+          example: rv-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          type: string
+          description: >
+            What deciding does: `match` retags items already in the
+            library; `import` additionally moves staged files (an
+            upload or inbox batch) into the library. A string, not a
+            closed enum.
+          example: match
+        status:
+          type: string
+          description: >
+            Lifecycle state: `pending`, `applied`, `auto-applied`,
+            `as-is`, `unofficial`, `skipped`, `discarded`, or
+            `reverted`. A string, not a closed enum.
+          example: pending
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        origin:
+          type: string
+          description: >
+            Where the unit came from: `scan`, `upload`, or `rematch`.
+            A string, not a closed enum.
+          example: scan
+        title:
+          type: string
+          description: Display title for the unit (the album guess).
+        artist:
+          type: string
+          description: Display artist for the unit.
+        trackCount:
+          type: integer
+          description: Files in the unit.
+        libraryPid:
+          type: string
+          description: The library the unit belongs (or will import) to.
+        uploadedBy:
+          type: string
+          description: >
+            The uploader's user pid, present on upload-origin entries.
+        identifying:
+          type: boolean
+          description: >
+            True while the identify pipeline still runs for this
+            entry; candidates and the best summary fill in when it
+            finishes (the entry invalidates over the event channel).
+        best:
+          $ref: "#/components/schemas/CandidateSummary"
+        appliedMbid:
+          type: string
+          description: >
+            The MusicBrainz release id an `applied` or `auto-applied`
+            entry applied.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the entry was created.
+        decidedAt:
+          type: string
+          format: date-time
+          description: When the entry was decided.
+        decidedBy:
+          type: string
+          description: >
+            The deciding user's pid; absent on `auto-applied` entries.
+
+    CandidateSummary:
+      type: object
+      description: The ranked-best candidate in one line.
+      required: [mbid, title, artist, similarityPct]
+      properties:
+        mbid:
+          type: string
+          description: MusicBrainz release id.
+        title:
+          type: string
+          description: Release title.
+        artist:
+          type: string
+          description: Release artist.
+        year:
+          type: integer
+          description: Release year, 0 when unknown.
+        similarityPct:
+          type: number
+          format: double
+          description: Match quality in percent (0 to 100).
+
+    ReviewEntryPage:
+      type: object
+      description: One page of review entries.
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          description: Entries, newest first.
+          items:
+            $ref: "#/components/schemas/ReviewEntry"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; omitted on the last.
+
+    ReviewTrack:
+      type: object
+      description: One file in a review unit with its current metadata.
+      required: [path, title, durationMs]
+      properties:
+        pid:
+          type: string
+          description: >
+            The catalog item pid; absent for staged files that have
+            not entered the library yet.
+        path:
+          type: string
+          description: >
+            The file's path (library-relative for cataloged items,
+            staging-relative for uploads).
+        title:
+          type: string
+          description: Current title (tag, or cleaned filename).
+        artist:
+          type: string
+          description: Current artist.
+        trackNo:
+          type: integer
+          description: Current track number, 0 when untagged.
+        discNo:
+          type: integer
+          description: Current disc number, 0 when untagged.
+        durationMs:
+          type: integer
+          format: int64
+          description: Audio length in milliseconds.
+
+    CandidateComponent:
+      type: object
+      description: >
+        One named contribution to a candidate's distance, so the queue
+        explains a score instead of asserting it.
+      required: [name, distance, weight]
+      properties:
+        name:
+          type: string
+          description: >
+            The field or penalty: `artist`, `album`, `year`,
+            `tracks`, `missing`, `extra`. A string, not a closed
+            enum.
+        distance:
+          type: number
+          format: double
+          description: Component distance in 0 to 1 (0 is identical).
+        weight:
+          type: number
+          format: double
+          description: The component's share of the total.
+
+    CandidatePairing:
+      type: object
+      description: >
+        One proposed file-to-release-track pairing; the side-by-side
+        diff renders current values (via `trackIndex` into the entry's
+        tracks) against these proposed values.
+      required: [trackIndex, position, title, distance]
+      properties:
+        trackIndex:
+          type: integer
+          description: Index into the entry's `tracks`.
+        position:
+          type: integer
+          description: Proposed track number on the release.
+        disc:
+          type: integer
+          description: Proposed disc number.
+        title:
+          type: string
+          description: Proposed title.
+        artist:
+          type: string
+          description: >
+            Proposed per-track artist, present when it differs from
+            the release artist (compilations).
+        durationMs:
+          type: integer
+          format: int64
+          description: The release track's length, 0 when unknown.
+        recordingMbid:
+          type: string
+          description: The MusicBrainz recording id this pairing maps to.
+        distance:
+          type: number
+          format: double
+          description: The pairing's own distance in 0 to 1.
+
+    ReviewCandidate:
+      type: object
+      description: One scored candidate release, ranked in the entry.
+      required: [mbid, title, artist, similarityPct, pairings]
+      properties:
+        mbid:
+          type: string
+          description: MusicBrainz release id.
+        releaseGroupMbid:
+          type: string
+          description: MusicBrainz release group id.
+        title:
+          type: string
+          description: Release title.
+        artist:
+          type: string
+          description: Release artist.
+        year:
+          type: integer
+          description: Release year, 0 when unknown.
+        mediaCount:
+          type: integer
+          description: Disc count, 0 when unknown.
+        trackCount:
+          type: integer
+          description: Track count on the release.
+        country:
+          type: string
+          description: Release country.
+        label:
+          type: string
+          description: Label name.
+        catalogNumber:
+          type: string
+          description: Label catalog number.
+        compilation:
+          type: boolean
+          description: True for various-artists releases.
+        similarityPct:
+          type: number
+          format: double
+          description: Match quality in percent (0 to 100).
+        components:
+          type: array
+          description: The distance breakdown.
+          items:
+            $ref: "#/components/schemas/CandidateComponent"
+        pairings:
+          type: array
+          description: Proposed track pairings.
+          items:
+            $ref: "#/components/schemas/CandidatePairing"
+        missingTitles:
+          type: array
+          description: >
+            Titles of release tracks no file matched (the rip is
+            missing them).
+          items:
+            type: string
+        extraTrackIndexes:
+          type: array
+          description: >
+            Indexes (into the entry's `tracks`) of files no release
+            track matched (bonus or junk files).
+          items:
+            type: integer
+
+    ReviewEntryDetail:
+      allOf:
+        - $ref: "#/components/schemas/ReviewEntry"
+        - type: object
+          description: The full entry with tracks and candidates.
+          required: [tracks, candidates]
+          properties:
+            tracks:
+              type: array
+              description: The unit's files in disc and track order.
+              items:
+                $ref: "#/components/schemas/ReviewTrack"
+            candidates:
+              type: array
+              description: Scored candidates, best first.
+              items:
+                $ref: "#/components/schemas/ReviewCandidate"
+      description: One review entry with its full evidence.
+
+    ReviewDecision:
+      type: object
+      description: A decision for one review entry.
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [approve, as-is, unofficial, skip, discard]
+          description: The decision to apply.
+        candidateMbid:
+          type: string
+          description: >
+            The candidate to approve; the ranked best when absent.
+            Only meaningful with `approve`.
+
+    ReviewDecideResult:
+      type: object
+      description: The outcome of a single-entry decision.
+      required: [entry]
+      properties:
+        entry:
+          $ref: "#/components/schemas/ReviewEntry"
+        warnings:
+          type: array
+          description: >
+            Non-fatal problems (per-file write-back failures, roles
+            without a tag form). The decision itself stood.
+          items:
+            type: string
+
+    ReviewBulkDecision:
+      type: object
+      description: One decision applied to many entries.
+      required: [entryIds, action]
+      properties:
+        entryIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          description: The entries to decide.
+          items:
+            type: string
+        action:
+          type: string
+          enum: [approve, as-is, unofficial, skip, discard]
+          description: >
+            The decision. `approve` uses each entry's ranked best
+            candidate.
+
+    ReviewBulkResult:
+      type: object
+      description: Per-entry outcomes of a bulk decision.
+      required: [results]
+      properties:
+        results:
+          type: array
+          description: One outcome per requested entry, in order.
+          items:
+            $ref: "#/components/schemas/ReviewBulkOutcome"
+
+    ReviewBulkOutcome:
+      type: object
+      description: One entry's outcome in a bulk decision.
+      required: [entryId, ok]
+      properties:
+        entryId:
+          type: string
+          description: The entry.
+        ok:
+          type: boolean
+          description: Whether the decision applied.
+        error:
+          type: string
+          description: Why it did not, when `ok` is false.
+
+    ReviewStats:
+      type: object
+      description: Queue depth and auto-apply calibration.
+      required: [pending, applied, autoApplied, reverted, revertedAutoApplied]
+      properties:
+        pending:
+          type: integer
+          description: Entries awaiting a decision.
+        identifying:
+          type: integer
+          description: Entries whose identify pipeline still runs.
+        applied:
+          type: integer
+          description: Entries a person approved.
+        autoApplied:
+          type: integer
+          description: Entries the engine applied on its own.
+        asIs:
+          type: integer
+          description: Entries accepted as they were.
+        unofficial:
+          type: integer
+          description: Entries marked as having no canonical release.
+        skipped:
+          type: integer
+          description: Entries dismissed without action.
+        reverted:
+          type: integer
+          description: Applied entries later reverted, total.
+        revertedAutoApplied:
+          type: integer
+          description: >
+            Auto-applied entries later reverted; with `autoApplied`
+            this is the observed auto-apply revert rate, the trust
+            signal the queue surfaces.
+
+    LibraryMatching:
+      type: object
+      description: A library's automatic matching behavior.
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          # "off" is quoted deliberately: YAML 1.1 parsers (the Dart
+          # generator's among them) read a bare off as boolean false,
+          # which silently became a "false" wire value once already.
+          enum: [auto, review, "off"]
+          description: The matching mode.
+
+    UploadCreate:
+      type: object
+      description: A new upload session.
+      required: [fileName, sizeBytes, mediaType]
+      properties:
+        fileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: >
+            The file's name (base name only; any path is rejected).
+            The extension picks the accepted-format check.
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Total file size in bytes.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        libraryPid:
+          type: string
+          description: >
+            Target library; required when several libraries of the
+            media type are visible to the caller.
+        sha256:
+          type: string
+          description: >
+            Lowercase hex SHA-256 of the file, for the up-front exact
+            duplicate warning and the completion integrity check.
+          pattern: "^[0-9a-f]{64}$"
+
+    Upload:
+      type: object
+      description: One upload session.
+      required: [id, fileName, sizeBytes, receivedBytes, mediaType, state, createdAt]
+      properties:
+        id:
+          type: string
+          description: Upload pid.
+          example: up-01JZX5N8QW3F4V9T2B7KD3M9R6
+        fileName:
+          type: string
+          description: The declared file name.
+        sizeBytes:
+          type: integer
+          format: int64
+          description: Declared total size.
+        receivedBytes:
+          type: integer
+          format: int64
+          description: >
+            Bytes stored so far; resume by sending the next chunk at
+            this offset.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        libraryPid:
+          type: string
+          description: Target library.
+        state:
+          type: string
+          description: >
+            Session state: `receiving` (bytes still arriving),
+            `staged` (complete, in the review pipeline), `imported`
+            (its file entered the library), or `discarded`. A
+            string, not a closed enum.
+          example: receiving
+        reviewEntryId:
+          type: string
+          description: The review entry completion opened.
+        duplicate:
+          $ref: "#/components/schemas/DuplicateWarning"
+        uploadedBy:
+          type: string
+          description: The uploader's user pid (admin listings).
+        createdAt:
+          type: string
+          format: date-time
+          description: When the session was created.
+        expiresAt:
+          type: string
+          format: date-time
+          description: >
+            When an unfinished session and its bytes are reclaimed.
+
+    DuplicateWarning:
+      type: object
+      description: >
+        The library appears to already contain this audio. A warning,
+        not a refusal: the review decision chooses what happens.
+      required: [itemPid, kind]
+      properties:
+        itemPid:
+          type: string
+          description: The existing item.
+        kind:
+          type: string
+          description: >
+            Evidence level: `content` (byte-identical audio) or
+            `fingerprint` (acoustically the same recording). A
+            string, not a closed enum.
+          example: content
+        title:
+          type: string
+          description: The existing item's title.
+        artist:
+          type: string
+          description: The existing item's artist.
+
+    UploadPage:
+      type: object
+      description: One page of uploads.
+      required: [uploads]
+      properties:
+        uploads:
+          type: array
+          description: Uploads, newest first.
+          items:
+            $ref: "#/components/schemas/Upload"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; omitted on the last.
+
+    MetadataFields:
+      type: object
+      description: The editor's field vocabulary.
+      required: [kinds, entityTypes]
+      properties:
+        kinds:
+          type: array
+          description: Editable fields per item kind.
+          items:
+            $ref: "#/components/schemas/KindFields"
+        entityTypes:
+          type: array
+          description: Editable fields per entity type.
+          items:
+            $ref: "#/components/schemas/EntityTypeFields"
+
+    KindFields:
+      type: object
+      description: One item kind's editable vocabulary.
+      required: [kind, fields, creditRoles]
+      properties:
+        kind:
+          $ref: "#/components/schemas/MediaType"
+        fields:
+          type: array
+          description: Editable scalar fields.
+          items:
+            $ref: "#/components/schemas/EditableField"
+        creditRoles:
+          type: array
+          description: >
+            Credit roles for the kind; roles marked database-only
+            have no round-trippable tag form.
+          items:
+            $ref: "#/components/schemas/EditableField"
+
+    EditableField:
+      type: object
+      description: One editable field or role.
+      required: [name, writeBack]
+      properties:
+        name:
+          type: string
+          description: The field or role name the edit APIs accept.
+          example: title
+        writeBack:
+          type: boolean
+          description: >
+            Whether the value can write into file tags; false means
+            database-only by upstream design.
+
+    EntityTypeFields:
+      type: object
+      description: One entity type's editable vocabulary.
+      required: [entityType, fields]
+      properties:
+        entityType:
+          type: string
+          description: "`album`, `artist`, or `release-group`."
+        fields:
+          type: array
+          description: Editable entity fields.
+          items:
+            $ref: "#/components/schemas/EditableField"
+
+    ItemMetadata:
+      type: object
+      description: Everything the editor shows for one item.
+      required: [pid, mediaType, fields, lockedFields, provenance, credits, customTags, unofficial, virtualTrack, hasArtwork, writeBackIssues]
+      properties:
+        pid:
+          type: string
+          description: The item.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            The item's scalar fields by name (the kind's vocabulary
+            from the fields endpoint); empty values are omitted.
+        lockedFields:
+          type: array
+          description: >
+            Currently locked fields, including namespaced artifacts
+            (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`).
+          items:
+            type: string
+        provenance:
+          type: array
+          description: Per-field provenance for curated fields.
+          items:
+            $ref: "#/components/schemas/FieldProvenance"
+        credits:
+          type: array
+          description: Credits by role.
+          items:
+            $ref: "#/components/schemas/Credit"
+        lyrics:
+          $ref: "#/components/schemas/LyricsState"
+        chapters:
+          type: array
+          description: Chapter marks (books).
+          items:
+            $ref: "#/components/schemas/ChapterMark"
+        customTags:
+          type: array
+          description: Custom tags.
+          items:
+            $ref: "#/components/schemas/CustomTag"
+        unofficial:
+          type: boolean
+          description: Whether the item is marked as having no canonical release.
+        virtualTrack:
+          type: boolean
+          description: >
+            True for tracks carved from a shared file (CUE rips):
+            their edits are always database-only and they export no
+            fingerprint, by upstream design.
+        hasArtwork:
+          type: boolean
+          description: Whether item-level art is stored.
+        albumPid:
+          type: string
+          description: The item's album entity, when any.
+        artistPid:
+          type: string
+          description: The item's artist entity, when any.
+        releaseGroupPid:
+          type: string
+          description: The item's release group entity, when any.
+        writeBackIssues:
+          type: array
+          description: >
+            Files whose on-disk tags are out of step with the catalog
+            (failed write-backs, values the format cannot store).
+          items:
+            $ref: "#/components/schemas/WriteBackIssue"
+
+    FieldProvenance:
+      type: object
+      description: Who set one field's current value.
+      required: [field, source, locked]
+      properties:
+        field:
+          type: string
+          description: The field, possibly namespaced.
+        source:
+          type: string
+          description: >
+            The producer: `tag`, `user`, `enrichment`, or
+            `organize`. A string, not a closed enum.
+        provider:
+          type: string
+          description: The enrichment provider, for enriched fields.
+        locked:
+          type: boolean
+          description: Whether the field is locked.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the value last changed.
+
+    Credit:
+      type: object
+      description: One credit role with its people.
+      required: [role, names]
+      properties:
+        role:
+          type: string
+          description: The role name.
+          example: producer
+        names:
+          type: array
+          description: The credited people, in stored order.
+          items:
+            type: string
+
+    LyricsState:
+      type: object
+      description: The stored lyrics, when any.
+      required: [synced, source]
+      properties:
+        synced:
+          type: boolean
+          description: Whether timed lines are stored.
+        source:
+          type: string
+          description: >
+            Where the stored copy came from: `lrc` (sidecar),
+            `embedded`, or `user`. A string, not a closed enum.
+        lrc:
+          type: string
+          description: >
+            The lyrics serialized as LRC text (timed lines when
+            synced, bare lines otherwise), the editor's working
+            format.
+
+    CustomTag:
+      type: object
+      description: One custom tag.
+      required: [key, values]
+      properties:
+        key:
+          type: string
+          description: Canonical uppercase key.
+          example: MOOD
+        values:
+          type: array
+          description: Ordered values.
+          items:
+            type: string
+
+    WriteBackIssue:
+      type: object
+      description: One file out of step with the catalog.
+      required: [filePid, code]
+      properties:
+        filePid:
+          type: string
+          description: The backing file.
+        code:
+          type: string
+          description: >
+            The diagnostic: `tag-write-unsynced` (a write-back was
+            refused or failed; the file's tags lag the catalog) or
+            `tag-write-lost` (the write ran but the format could not
+            store the value). A string, not a closed enum.
+        tagKey:
+          type: string
+          description: The affected tag key, when known.
+        detail:
+          type: string
+          description: Human-readable detail.
+
+    MetadataEdit:
+      type: object
+      description: Scalar field edits for one item.
+      required: [fields]
+      properties:
+        fields:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: string
+          description: >
+            Field name to new value; an empty string clears the
+            field. Names come from the kind's vocabulary.
+        writeBack:
+          type: boolean
+          default: false
+          description: Also write the new values into the file's tags.
+        lock:
+          type: boolean
+          default: true
+          description: Lock the edited fields.
+        force:
+          type: boolean
+          default: false
+          description: Override existing locks on the edited fields.
+
+    WriteBackFailure:
+      type: object
+      description: One file a write-back could not update.
+      required: [filePid, reason]
+      properties:
+        filePid:
+          type: string
+          description: The file.
+        path:
+          type: string
+          description: Its display path.
+        reason:
+          type: string
+          description: Why the write failed or was refused.
+
+    MetadataEditResult:
+      type: object
+      description: >
+        The outcome of a metadata mutation. The catalog write
+        succeeded whenever this shape returns; write-back trouble
+        and drop warnings ride along instead of failing the edit.
+      required: [applied]
+      properties:
+        applied:
+          type: boolean
+          description: Always true; the catalog committed.
+        writeBackFailures:
+          type: array
+          description: Files whose tags could not be updated.
+          items:
+            $ref: "#/components/schemas/WriteBackFailure"
+        warnings:
+          type: array
+          description: >
+            Non-fatal notes: typed drop warnings from the tag
+            library (a format refusing embedded synced lyrics, a
+            chapter cap), roles without a tag form, malformed LRC
+            lines skipped.
+          items:
+            type: string
+
+    BulkEdit:
+      type: object
+      description: The same scalar edits applied to many items.
+      required: [itemPids, fields]
+      properties:
+        itemPids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          description: The items to edit.
+          items:
+            type: string
+        fields:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: string
+          description: Field name to new value, applied to every item.
+        writeBack:
+          type: boolean
+          default: false
+          description: Also write into the files' tags.
+        skipLocked:
+          type: boolean
+          default: false
+          description: >
+            Skip items whose target fields are locked instead of
+            failing the batch.
+        force:
+          type: boolean
+          default: false
+          description: Override locks (mutually exclusive with `skipLocked`).
+
+    BulkEditResult:
+      type: object
+      description: Per-item outcomes of a bulk edit.
+      required: [edited, skipped]
+      properties:
+        edited:
+          type: array
+          description: Items whose catalog rows updated.
+          items:
+            type: string
+        skipped:
+          type: array
+          description: Items skipped for locks.
+          items:
+            type: string
+        writeBackFailures:
+          type: array
+          description: Files whose tags could not be updated.
+          items:
+            $ref: "#/components/schemas/WriteBackFailure"
+
+    CreditsEdit:
+      type: object
+      description: Replacement people for one credit role.
+      required: [role, names]
+      properties:
+        role:
+          type: string
+          description: The role, from the kind's role vocabulary.
+          example: producer
+        names:
+          type: array
+          maxItems: 100
+          description: The people; empty clears the role.
+          items:
+            type: string
+        writeBack:
+          type: boolean
+          default: false
+          description: Write the role's tag keys where a form exists.
+        lock:
+          type: boolean
+          default: true
+          description: Lock `credit.ROLE`.
+        force:
+          type: boolean
+          default: false
+          description: Override an existing lock.
+
+    LyricsEdit:
+      type: object
+      description: >
+        Replacement lyrics. At least one of `lrc` and `plain` must
+        carry content.
+      properties:
+        lrc:
+          type: string
+          maxLength: 200000
+          description: >
+            Timed lines as LRC text. Malformed lines are skipped and
+            reported as warnings with their line numbers.
+        plain:
+          type: string
+          maxLength: 200000
+          description: A plain unsynchronized block.
+        writeBack:
+          type: boolean
+          default: false
+          description: >
+            Write the `.lrc` sidecar next to the file and embed
+            where the format allows.
+        lock:
+          type: boolean
+          default: true
+          description: Lock the lyrics artifact.
+        force:
+          type: boolean
+          default: false
+          description: Override an existing lock.
+
+    ChaptersEdit:
+      type: object
+      description: A replacement chapter list.
+      required: [chapters]
+      properties:
+        chapters:
+          type: array
+          maxItems: 2000
+          description: >
+            Ordered, non-overlapping chapters on the book timeline;
+            empty restores the embedded chapters.
+          items:
+            $ref: "#/components/schemas/ChapterMark"
+        lock:
+          type: boolean
+          default: true
+          description: Lock the chapters artifact.
+        force:
+          type: boolean
+          default: false
+          description: Override an existing lock.
+
+    TagEdit:
+      type: object
+      description: Replacement values for one custom tag.
+      required: [values]
+      properties:
+        values:
+          type: array
+          maxItems: 100
+          description: Ordered values; empty clears the tag.
+          items:
+            type: string
+        lock:
+          type: boolean
+          default: true
+          description: Lock `tag.KEY`.
+        force:
+          type: boolean
+          default: false
+          description: Override an existing lock.
+
+    TagEditResult:
+      type: object
+      description: The outcome of a tag edit.
+      required: [key, stored]
+      properties:
+        key:
+          type: string
+          description: The canonical uppercase key actually used.
+        stored:
+          type: integer
+          description: Values stored after deduplication.
+
+    LocksEdit:
+      type: object
+      description: A lock or unlock for named fields.
+      required: [fields, locked]
+      properties:
+        fields:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The fields, possibly namespaced.
+          items:
+            type: string
+        locked:
+          type: boolean
+          description: True locks, false unlocks.
+
+    LocksResult:
+      type: object
+      description: The item's locks after the change.
+      required: [lockedFields]
+      properties:
+        lockedFields:
+          type: array
+          description: Every currently locked field.
+          items:
+            type: string
+
+    EntityEdit:
+      type: object
+      description: Entity field edits.
+      required: [edits]
+      properties:
+        edits:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: string
+          description: >
+            Field name to new value, from the entity type's
+            vocabulary; empty clears.
+        writeBack:
+          type: boolean
+          default: false
+          description: Push tag-formed values into member files.
+        lock:
+          type: boolean
+          default: true
+          description: Lock the edited entity fields.
+        force:
+          type: boolean
+          default: false
+          description: Override existing locks.
+
+    EntityCuration:
+      type: object
+      description: An entity's curated fields.
+      required: [curated]
+      properties:
+        curated:
+          type: array
+          description: Curated fields with provenance.
+          items:
+            $ref: "#/components/schemas/EntityCuratedField"
+
+    EntityCuratedField:
+      type: object
+      description: One curated entity field.
+      required: [field, source, locked]
+      properties:
+        field:
+          type: string
+          description: The field.
+        value:
+          type: string
+          description: The curated value.
+        source:
+          type: string
+          description: The producer, as in item provenance.
+        locked:
+          type: boolean
+          description: Whether the field is locked.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the value last changed.
+
+    ReleaseStatusEdit:
+      type: object
+      description: The unofficial mark.
+      required: [unofficial]
+      properties:
+        unofficial:
+          type: boolean
+          description: >
+            True marks the item as having no canonical release;
+            false clears the mark.
+
+    RematchResult:
+      type: object
+      description: The review entry a rematch opened.
+      required: [reviewEntryId]
+      properties:
+        reviewEntryId:
+          type: string
+          description: The pending entry; candidates fill in asynchronously.
+
+    EnrichItemRequest:
+      type: object
+      description: What to fetch for one item.
+      required: [want]
+      properties:
+        want:
+          type: array
+          minItems: 1
+          description: The artifacts to fetch.
+          items:
+            type: string
+            enum: [cover, lyrics, genres, book]
+
+    EnrichItemResult:
+      type: object
+      description: What a one-item enrichment fetched.
+      required: [applied, skipped]
+      properties:
+        applied:
+          type: array
+          description: >
+            Artifacts fetched and stored, each naming its provider
+            (for example `cover: fanarttv`).
+          items:
+            type: string
+        skipped:
+          type: array
+          description: >
+            Artifacts not stored, each naming why (locked, already
+            present, no provider hit, provider unconfigured).
+          items:
+            type: string
+
+    AcquisitionFormat:
+      type: string
+      description: >
+        Preferred delivered audio format for a URL acquisition. "best",
+        the default, copies the source's highest-quality audio with no
+        re-encode (Opus, in practice, for YouTube). The others transcode
+        to that container for device compatibility, at some quality cost
+        from a lossy source (FLAC is a lossless container of that same
+        lossy audio, not a quality gain).
+      enum: [best, opus, mp3, m4a, flac]
+      default: best
+
+    AcquisitionRequest:
+      type: object
+      description: One source URL to acquire.
+      required: [url, mediaType]
+      properties:
+        url:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: >
+            The source URL: a single video, a playlist, or a channel
+            the acquisition bridge understands.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        libraryPid:
+          type: string
+          description: >
+            Target library; required when several libraries of the
+            media type are visible to the caller.
+        format:
+          $ref: "#/components/schemas/AcquisitionFormat"
+
+    HealthSummary:
+      type: object
+      description: The library's metadata health at the last sweep.
+      required: [score, totalItems, evaluatedItems, warmingUp, rules]
+      properties:
+        score:
+          type: number
+          format: double
+          description: >
+            Library completeness score, 0 to 100: the weighted share
+            of evaluated items passing every rule that applies to
+            them.
+        totalItems:
+          type: integer
+          description: Items in scope for health.
+        evaluatedItems:
+          type: integer
+          description: Items the sweep has covered so far.
+        warmingUp:
+          type: boolean
+          description: >
+            True until the sweep first covers the library; the score
+            is provisional while true.
+        sweptAt:
+          type: string
+          format: date-time
+          description: When the last sweep finished.
+        rules:
+          type: array
+          description: Per-rule failure counts, heaviest first.
+          items:
+            $ref: "#/components/schemas/HealthRuleCount"
+
+    HealthRuleCount:
+      type: object
+      description: One rule's current standing.
+      required: [rule, failing, fixable]
+      properties:
+        rule:
+          type: string
+          description: The rule name.
+          example: missing-art
+        label:
+          type: string
+          description: Human-readable rule label.
+        failing:
+          type: integer
+          description: Items currently failing the rule.
+        fixable:
+          type: boolean
+          description: Whether the bulk-fix endpoint automates this rule.
+
+    HealthIssuePage:
+      type: object
+      description: One page of items with outstanding issues.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: Items, worst first.
+          items:
+            $ref: "#/components/schemas/HealthIssue"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; omitted on the last.
+
+    HealthIssue:
+      type: object
+      description: One item and the rules it fails.
+      required: [pid, title, mediaType, rules]
+      properties:
+        pid:
+          type: string
+          description: The item.
+        title:
+          type: string
+          description: Its title.
+        artist:
+          type: string
+          description: Its artist or author.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        rules:
+          type: array
+          description: The rules the item currently fails.
+          items:
+            type: string
+
+    HealthFixRequest:
+      type: object
+      description: A bulk fix for one rule.
+      required: [rule]
+      properties:
+        rule:
+          type: string
+          description: The rule to fix.
+          example: missing-art
+        itemPids:
+          type: array
+          maxItems: 1000
+          description: >
+            Restrict to these items; absent fixes everything
+            currently failing the rule.
+          items:
+            type: string
+
+    HealthFixResult:
+      type: object
+      description: How much fix work was queued.
+      required: [queued]
+      properties:
+        queued:
+          type: integer
+          description: Items queued for fixing.
+
+    DuplicateGroups:
+      type: object
+      description: Duplicate entity groups from the audit.
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          description: Groups, bounded to the first two hundred.
+          items:
+            $ref: "#/components/schemas/DuplicateGroup"
+
+    DuplicateGroup:
+      type: object
+      description: One duplicate finding.
+      required: [entityType, survivor, losers]
+      properties:
+        entityType:
+          type: string
+          description: "`artist`, `album`, `release-group`, or `genre`."
+        survivor:
+          $ref: "#/components/schemas/DuplicateEntity"
+        losers:
+          type: array
+          minItems: 1
+          description: The suggested merge losers.
+          items:
+            $ref: "#/components/schemas/DuplicateEntity"
+        detail:
+          type: string
+          description: The audit's explanation of the finding.
+
+    DuplicateEntity:
+      type: object
+      description: One entity in a duplicate group.
+      required: [pid, name]
+      properties:
+        pid:
+          type: string
+          description: The entity.
+        name:
+          type: string
+          description: Its display name.
+        itemCount:
+          type: integer
+          description: Items under the entity, when cheaply known.
+
+    MergeRequest:
+      type: object
+      description: A duplicate entity merge.
+      required: [entityType, survivorPid, loserPids]
+      properties:
+        entityType:
+          type: string
+          enum: [album, artist, release-group, genre]
+          description: What is being merged.
+        survivorPid:
+          type: string
+          description: The entity that keeps its pid.
+        loserPids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The entities merged into the survivor.
+          items:
+            type: string
+
+    MergeResult:
+      type: object
+      description: The merge outcome.
+      required: [merged, childrenMoved]
+      properties:
+        merged:
+          type: integer
+          description: Losers merged.
+        childrenMoved:
+          type: integer
+          description: Children re-parented onto the survivor.
+
+    UpgradeGroups:
+      type: object
+      description: Same-recording different-encoding groups.
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          description: Groups, best quality first within each.
+          items:
+            $ref: "#/components/schemas/UpgradeGroup"
+
+    UpgradeGroup:
+      type: object
+      description: One recording's encodings.
+      required: [members]
+      properties:
+        members:
+          type: array
+          minItems: 2
+          description: The encodings, best first.
+          items:
+            $ref: "#/components/schemas/UpgradeMember"
+
+    UpgradeMember:
+      type: object
+      description: One encoding of a recording.
+      required: [itemPid, title, codec, best, lossless]
+      properties:
+        itemPid:
+          type: string
+          description: The item.
+        title:
+          type: string
+          description: Its title.
+        artist:
+          type: string
+          description: Its artist.
+        codec:
+          type: string
+          description: Audio codec.
+        bitrate:
+          type: integer
+          description: Bitrate in bits per second, 0 when unknown.
+        sampleRate:
+          type: integer
+          description: Sample rate in Hz, 0 when unknown.
+        bitDepth:
+          type: integer
+          description: Bit depth, 0 when unknown or lossy.
+        lossless:
+          type: boolean
+          description: Whether the encoding is lossless.
+        best:
+          type: boolean
+          description: The group's suggested keeper.
+
+    UpgradeResolveRequest:
+      type: object
+      description: Keep one encoding, trash the rest.
+      required: [keepItemPid, removeItemPids]
+      properties:
+        keepItemPid:
+          type: string
+          description: The item to keep.
+        removeItemPids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The inferior encodings to trash.
+          items:
+            type: string
+
+    UpgradeResolveResult:
+      type: object
+      description: The resolution outcome.
+      required: [trashed]
+      properties:
+        trashed:
+          type: integer
+          description: Items moved to the trash.
+
+    OrganizeProfiles:
+      type: object
+      description: The server's organize profiles.
+      required: [profiles]
+      properties:
+        profiles:
+          type: array
+          description: Configured profiles.
+          items:
+            $ref: "#/components/schemas/OrganizeProfile"
+
+    OrganizeProfile:
+      type: object
+      description: One organize profile.
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The profile name organize requests reference.
+        musicTemplate:
+          type: string
+          description: Path template for music, when set.
+        audiobookTemplate:
+          type: string
+          description: Path template for audiobooks, when set.
+        podcastTemplate:
+          type: string
+          description: Path template for podcast files, when set.
+        tagWrite:
+          type: boolean
+          description: Whether organizing also writes tags.
+
+    OrganizeRequest:
+      type: object
+      description: The scope of an organize pass.
+      required: [profile]
+      properties:
+        profile:
+          type: string
+          description: The profile to apply.
+        itemPids:
+          type: array
+          maxItems: 1000
+          description: Restrict to these items; absent means the whole library.
+          items:
+            type: string
+
+    OrganizePlan:
+      type: object
+      description: A dry-run organize plan.
+      required: [profile, totalActions, actions]
+      properties:
+        profile:
+          type: string
+          description: The profile planned with.
+        totalActions:
+          type: integer
+          description: Moves the pass would make in total.
+        actions:
+          type: array
+          description: The first five hundred actions.
+          items:
+            $ref: "#/components/schemas/OrganizeAction"
+        tagWrite:
+          type: boolean
+          description: Whether applying would also write tags.
+
+    OrganizeAction:
+      type: object
+      description: One planned move.
+      required: [itemPid, from, to]
+      properties:
+        itemPid:
+          type: string
+          description: The item whose file moves.
+        from:
+          type: string
+          description: Current library-relative path.
+        to:
+          type: string
+          description: Planned library-relative path.
+
+    OrganizeReport:
+      type: object
+      description: The outcome of an applied organize pass.
+      required: [moved, skipped, failed]
+      properties:
+        moved:
+          type: integer
+          description: Files moved.
+        skipped:
+          type: integer
+          description: Files already in place.
+        failed:
+          type: integer
+          description: Files that could not move.
+        failures:
+          type: array
+          description: The failures, path and reason each.
+          items:
+            $ref: "#/components/schemas/OrganizeFailure"
+
+    OrganizeFailure:
+      type: object
+      description: One file organize could not move.
+      required: [path, reason]
+      properties:
+        path:
+          type: string
+          description: The file.
+        reason:
+          type: string
+          description: Why it did not move.
+
+    ToolTask:
+      type: object
+      description: One background tool task.
+      required: [id, type, state, createdAt]
+      properties:
+        id:
+          type: string
+          description: Task pid.
+          example: tk-01JZX5N8QW3F4V9T2B7KD3M9R6
+        type:
+          type: string
+          description: >
+            The operation: `book-merge`, `book-split`, `cue-split`,
+            or `acquire`. A string, not a closed enum.
+        state:
+          type: string
+          description: >
+            `queued`, `running`, `done`, or `failed`. A string, not
+            a closed enum.
+        itemPid:
+          type: string
+          description: The book or track the task was started from.
+        progressPct:
+          type: number
+          format: double
+          description: Progress in percent when the engine reports it.
+        error:
+          type: string
+          description: Why the task failed, when `failed`.
+        resultPids:
+          type: array
+          description: >
+            What the task produced once `done`: the merged book or
+            the split pieces (item pids), or the review entries an
+            acquisition opened (entry pids).
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+          description: When the task was queued.
+        finishedAt:
+          type: string
+          format: date-time
+          description: When it reached a terminal state.
+
+    ToolTaskPage:
+      type: object
+      description: One page of tool tasks.
+      required: [tasks]
+      properties:
+        tasks:
+          type: array
+          description: Tasks, newest first.
+          items:
+            $ref: "#/components/schemas/ToolTask"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; omitted on the last.
+
+    BookMergeRequest:
+      type: object
+      description: Options for a book merge.
+      properties:
+        titles:
+          type: array
+          maxItems: 2000
+          description: >
+            Chapter titles, one per part in order; absent or empty
+            entries fall back to each part's title tag, then a
+            generated name. A non-empty list must match the part
+            count.
+          items:
+            type: string
+        keepOriginals:
+          type: boolean
+          default: false
+          description: Keep the source parts instead of trashing them.
+
+    BookSplitRequest:
+      type: object
+      description: Options for a chapter split.
+      properties:
+        keepOriginals:
+          type: boolean
+          default: false
+          description: Keep the source file instead of trashing it.
+
+    CueSplitRequest:
+      type: object
+      description: Options for a CUE rip split.
+      properties:
+        keepOriginals:
+          type: boolean
+          default: false
+          description: >
+            Keep the source file and sheet instead of trashing them.
+
+    EnrichmentStatus:
+      type: object
+      description: Enrichment providers and coverage.
+      required: [providers, coverage, running]
+      properties:
+        providers:
+          type: array
+          description: >
+            Registered providers in priority order (this server's
+            own first, then the catalog's key-free built-ins).
+          items:
+            $ref: "#/components/schemas/EnrichmentProvider"
+        coverage:
+          $ref: "#/components/schemas/EnrichmentCoverage"
+        running:
+          type: boolean
+          description: Whether a whole-library pass is running now.
+
+    EnrichmentProvider:
+      type: object
+      description: One enrichment provider.
+      required: [name, capabilities, configured, builtin]
+      properties:
+        name:
+          type: string
+          description: Stable provider id.
+          example: fanarttv
+        capabilities:
+          type: array
+          description: >
+            What it supplies: `identity`, `genres`, `cover`,
+            `lyrics`, `book`. Strings, not a closed enum.
+          items:
+            type: string
+        configured:
+          type: boolean
+          description: >
+            Whether the provider can run (key-free providers always;
+            keyed ones once their key is set).
+        builtin:
+          type: boolean
+          description: True for the catalog's built-ins.
+
+    EnrichmentCoverage:
+      type: object
+      description: How much of the catalog has enriched.
+      required: [artists, releaseGroups, books, lyrics]
+      properties:
+        artists:
+          $ref: "#/components/schemas/CoverageCount"
+        releaseGroups:
+          $ref: "#/components/schemas/CoverageCount"
+        books:
+          $ref: "#/components/schemas/CoverageCount"
+        lyrics:
+          $ref: "#/components/schemas/CoverageCount"
+
+    CoverageCount:
+      type: object
+      description: Enriched versus total for one entity class.
+      required: [enriched, total]
+      properties:
+        enriched:
+          type: integer
+          description: Entities that completed enrichment.
+        total:
+          type: integer
+          description: Entities in scope.
+
+    EnrichmentRunRequest:
+      type: object
+      description: Options for a whole-library pass.
+      properties:
+        force:
+          type: boolean
+          default: false
+          description: Re-enrich entities that already enriched once.
+
+    EnrichmentRunResult:
+      type: object
+      description: The started pass.
+      required: [jobPid]
+      properties:
+        jobPid:
+          type: string
+          description: The catalog job to follow.

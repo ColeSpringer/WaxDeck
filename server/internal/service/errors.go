@@ -40,6 +40,19 @@ const (
 	// depends on, such as a scrobbling provider (502
 	// service-unreachable at the API).
 	KindService ErrorKind = "service-unreachable"
+	// KindQuota marks an upload the caller's storage quota refuses
+	// (413 quota-exceeded at the API).
+	KindQuota ErrorKind = "quota-exceeded"
+	// KindLocked marks an edit against a locked metadata field made
+	// without force (409 field-locked at the API).
+	KindLocked ErrorKind = "field-locked"
+	// KindFormat marks a file whose format the server does not accept
+	// (415 unsupported-format at the API).
+	KindFormat ErrorKind = "unsupported-format"
+	// KindFeature marks a request needing an optional capability this
+	// server is not running, such as the streaming engine (501
+	// feature-unavailable at the API).
+	KindFeature ErrorKind = "feature-unavailable"
 )
 
 // Error is a classified service failure.
@@ -89,8 +102,10 @@ func kindFromWaxErr(err error) ErrorKind {
 		return KindNotFound
 	case waxerr.CodeInvalid:
 		return KindInvalid
-	case waxerr.CodeConflict, waxerr.CodeLocked:
+	case waxerr.CodeConflict:
 		return KindConflict
+	case waxerr.CodeLocked:
+		return KindLocked
 	case waxerr.CodeUnsupported:
 		return KindUnsupported
 	default:

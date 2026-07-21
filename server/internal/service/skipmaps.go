@@ -154,11 +154,16 @@ func (l *Library) enqueueAnalysisForItem(ctx context.Context, pid model.PID) {
 	}
 }
 
-// FlowJobs is the analysis surface the bridge provides; a nil bridge
-// (no sidecar configured) disables skip maps.
+// FlowJobs is the jobs surface the bridge provides; a nil bridge (no
+// sidecar configured) disables skip maps and the file tooling. Paths
+// are absolute; the bridge maps them onto engine root refs itself.
 type FlowJobs interface {
 	JobsSupported() bool
 	AnalyzeSilence(ctx context.Context, path string) (flow.SilenceAnalysis, error)
+	CreateMergeJob(ctx context.Context, srcs []string, titles []string, format string) (string, error)
+	CreateSplitJob(ctx context.Context, src string, cuts []int64, cue string, format string) (string, error)
+	JobStatus(ctx context.Context, jobID string) (state string, progress float64, outputs int, errMsg string, err error)
+	DownloadJobResult(ctx context.Context, jobID string, index int, dst string) error
 }
 
 // SetFlowJobs wires the bridge's jobs surface after both sides exist

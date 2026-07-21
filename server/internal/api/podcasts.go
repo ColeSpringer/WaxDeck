@@ -536,6 +536,10 @@ func showJSON(show service.PodcastShow) PodcastShow {
 		v := true
 		out.RefreshDisabled = &v
 	}
+	if show.Explicit {
+		v := true
+		out.Explicit = &v
+	}
 	return out
 }
 

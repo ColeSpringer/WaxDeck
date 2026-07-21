@@ -17,22 +17,38 @@ import (
 	waxtap "github.com/colespringer/waxtap/v3"
 )
 
-// Fetch downloads one video's audio and streams it to w. WaxTap lands the file
-// atomically in WorkDir (remuxed to a clean container, with the configured
-// SponsorBlock cut and embeds applied), provenance tags are stamped best-effort,
-// and the bytes are then copied to w through the same tagged hasher WaxBin's
-// HTTP provider uses. The temp file is always removed.
+// Fetch downloads one video's audio and streams it to w, copying the source's
+// highest-quality audio without re-encoding. WaxTap lands the file atomically in
+// WorkDir (remuxed to a clean container, with the configured SponsorBlock cut
+// and embeds applied), provenance tags are stamped best-effort, and the bytes
+// are then copied to w through the same tagged hasher WaxBin's HTTP provider
+// uses. The temp file is always removed.
 func (p *Provider) Fetch(ctx context.Context, req source.FetchRequest, w io.Writer) (*source.FetchResult, error) {
+	return p.fetch(ctx, req, w, "")
+}
+
+// FetchFormat downloads honoring a preferred output format. An empty format (or
+// "best") copies the source's highest-quality audio; "opus", "mp3", "m4a", and
+// "flac" transcode to that container. It satisfies the acquisition path's
+// optional format capability.
+func (p *Provider) FetchFormat(ctx context.Context, req source.FetchRequest, w io.Writer, format string) (*source.FetchResult, error) {
+	return p.fetch(ctx, req, w, format)
+}
+
+func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writer, format string) (*source.FetchResult, error) {
 	const op = "waxtapsource.Fetch"
 
 	// A FormatCopy remux muxes into the container named by the output path's
 	// extension, so pick the extension from the same best-audio row the download
-	// will select (aac lands in m4a, opus in webm).
+	// will select. The raw YouTube container (Opus-in-WebM) is remuxed, losslessly,
+	// into the codec's recognized picture-capable container instead (Ogg-Opus),
+	// which both the catalog imports and cover art can be embedded into. A
+	// requested transcode names its own container (opus, mp3, m4a, flac).
 	v, err := p.tap.Info(ctx, req.URL, waxtap.InfoBasic)
 	if err != nil {
 		return nil, err
 	}
-	ext := pickExtension(v.Formats)
+	tspec, ext := transcodeFor(format, v.Formats)
 
 	tmp, err := os.CreateTemp(p.cfg.WorkDir, "fetch-*."+ext)
 	if err != nil {
@@ -53,7 +69,7 @@ func (p *Provider) Fetch(ctx context.Context, req source.FetchRequest, w io.Writ
 		URL: req.URL,
 		ProcessSpec: waxtap.ProcessSpec{
 			Output:         waxtap.ToFile(path),
-			Transcode:      &waxtap.TranscodeSpec{Format: waxtap.FormatCopy},
+			Transcode:      &tspec,
 			Cut:            cut,
 			EmbedThumbnail: p.cfg.EmbedThumbnail,
 			EmbedMetadata:  p.cfg.EmbedMetadata,
@@ -92,7 +108,9 @@ func (p *Provider) Fetch(ctx context.Context, req source.FetchRequest, w io.Writ
 	return &source.FetchResult{
 		Bytes:       n,
 		ContentHash: finalize(),
-		ContentType: contentTypeFor(res.OutputFormat.Extension, path),
+		// ext is the container the file was actually muxed into (FormatCopy writes
+		// the output path's container), so it names the delivered content exactly.
+		ContentType: contentTypeFor(ext, path),
 	}, nil
 }
 
@@ -119,17 +137,68 @@ func (p *Provider) stampProvenance(ctx context.Context, path, sourceURL, videoID
 	}
 }
 
-// pickExtension chooses the staging extension from the best-audio row the
-// download facade would select (BestAudio with the stereo default under
-// MinimizeLoss). It falls back to webm, WaxTap's own staging fallback, when
-// selection fails or the row carries no extension.
-func pickExtension(formats []waxtap.Format) string {
+// transcodeFor maps a caller's format preference to the WaxTap transcode spec
+// and the delivered container extension. An empty or unrecognized preference is
+// the lossless best-audio copy, whose container the codec decides; a named
+// format transcodes into its own recognized, picture-capable container.
+func transcodeFor(format string, formats []waxtap.Format) (waxtap.TranscodeSpec, string) {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "opus":
+		return waxtap.TranscodeSpec{Format: waxtap.FormatOpus}, "opus"
+	case "mp3":
+		return waxtap.TranscodeSpec{Format: waxtap.FormatMP3}, "mp3"
+	case "m4a", "aac":
+		return waxtap.TranscodeSpec{Format: waxtap.FormatAAC}, "m4a"
+	case "flac":
+		return waxtap.TranscodeSpec{Format: waxtap.FormatFLAC}, "flac"
+	default:
+		return waxtap.TranscodeSpec{Format: waxtap.FormatCopy}, stagingExtension(formats)
+	}
+}
+
+// stagingExtension chooses the delivered container from the best-audio row the
+// download will select (BestAudio with the stereo default under MinimizeLoss,
+// mirroring the Download defaults so the extension names the codec the copy
+// carries). The container has to satisfy two consumers the raw YouTube container
+// does not: the catalog imports only known audio extensions (no .webm/.mka), and
+// cover art embeds only into a picture-capable container. So the selected codec
+// is remuxed, losslessly, into its recognized picture-capable native container.
+// YouTube's best audio is Opus, so Ogg-Opus is the fallback when selection
+// cannot name a codec.
+func stagingExtension(formats []waxtap.Format) string {
 	idx, err := waxtap.BestAudio().WithChannels(waxtap.LayoutStereo).
 		Select(formats, waxtap.MinimizeLoss(), waxtap.Target{})
-	if err != nil || formats[idx].Extension == "" {
-		return "webm"
+	if err != nil {
+		return "opus"
 	}
-	return formats[idx].Extension
+	return containerExtForCodec(formats[idx].Codec, formats[idx].Extension)
+}
+
+// containerExtForCodec maps a normalized codec id to the recognized,
+// picture-capable container extension WaxDeck stages it in: Opus and Vorbis to
+// Ogg, AAC to m4a, MP3 and FLAC to their own. It falls back to the row's native
+// extension when that is already a recognized audio container, else to Ogg-Opus.
+func containerExtForCodec(codec, native string) string {
+	c := strings.ToLower(codec)
+	switch {
+	case strings.HasPrefix(c, "opus"):
+		return "opus"
+	case strings.HasPrefix(c, "vorbis"):
+		return "ogg"
+	// mp4a.40.34 is MP3 carried in an MP4 descriptor, so it is caught before the
+	// general mp4a (AAC, any profile) case below.
+	case c == "mp4a.40.34", strings.HasPrefix(c, "mp3"):
+		return "mp3"
+	case strings.HasPrefix(c, "mp4a"), strings.HasPrefix(c, "aac"):
+		return "m4a"
+	case strings.HasPrefix(c, "flac"):
+		return "flac"
+	}
+	switch strings.ToLower(native) {
+	case "m4a", "mp3", "ogg", "oga", "opus", "flac", "aac", "wav", "aiff", "aif":
+		return strings.ToLower(native)
+	}
+	return "opus"
 }
 
 // contentTypeFor maps the delivered container to a media type, preferring the
@@ -145,10 +214,14 @@ func contentTypeFor(ext, path string) string {
 		return "audio/aac"
 	case "webm":
 		return "audio/webm"
-	case "ogg", "oga", "opus":
+	case "opus":
+		return "audio/opus"
+	case "ogg", "oga":
 		return "audio/ogg"
 	case "mp3":
 		return "audio/mpeg"
+	case "flac":
+		return "audio/flac"
 	case "mka":
 		return "audio/x-matroska"
 	default:

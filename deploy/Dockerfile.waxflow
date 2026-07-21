@@ -23,7 +23,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w -X main.version=${VERSION}" \
       -o /out/waxflow ./cmd/waxflow-catalog
-RUN mkdir -p /out/state/data /out/state/cache && chown -R 10001:10001 /out/state
+# World-writable so the sidecar accepts whatever UID the compose stack runs it
+# as (it shares the catalog volume with waxdeck, which runs as the host user).
+RUN mkdir -p /out/state/data /out/state/cache \
+    && chown -R 10001:10001 /out/state \
+    && chmod -R 0777 /out/state
 
 ## --- stage 2: runtime -----------------------------------------------------------
 FROM gcr.io/distroless/static-debian12

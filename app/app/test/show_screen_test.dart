@@ -200,4 +200,30 @@ void main() {
     expect(repo.unsubscribeCalls, [showPid]);
     expect(find.byKey(const Key('podcast-subscribe')), findsOneWidget);
   });
+
+  testWidgets('explicit flags render as badges on the show and episodes', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow(showPid, explicit: true))
+      ..episodesByShow[showPid] = [
+        testEpisode(downloadedPid, title: 'Marked Episode', explicit: true),
+        testEpisode(remotePid, title: 'Clean Episode', downloaded: false),
+      ];
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('show-explicit-$showPid')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('episode-explicit-$downloadedPid')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('episode-explicit-$remotePid')),
+      findsNothing,
+    );
+  });
 }

@@ -44,11 +44,16 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libchromaprint-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# UID 10001 matches the Wax* container convention (see WaxFlow).
+# UID 10001 matches the Wax* container convention (see WaxFlow), and is the
+# default. The compose stack overrides it with the host user's UID/GID (so the
+# bind-mounted library, owned by the host user, is writable); the Docker-managed
+# data and podcast volumes are made world-writable so they accept whatever UID
+# the container runs as, without an entrypoint chown dance.
 RUN groupadd --system --gid 10001 waxdeck \
     && useradd --system --uid 10001 --gid 10001 --home-dir /data --shell /usr/sbin/nologin waxdeck \
-    && mkdir -p /data /library \
-    && chown waxdeck:waxdeck /data
+    && mkdir -p /data /library /podcasts \
+    && chown waxdeck:waxdeck /data /podcasts \
+    && chmod 0777 /data /podcasts
 
 COPY --from=build /out/waxdeck /usr/local/bin/waxdeck
 

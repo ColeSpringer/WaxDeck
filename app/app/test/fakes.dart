@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 /// In-memory repository for widget tests. Pagination uses the item index as
@@ -1336,6 +1338,988 @@ class FakeRepository implements WaxDeckRepository {
   Future<void> testNotifications() async {
     notificationTests++;
   }
+
+  /// Review entries served by the queue endpoints.
+  List<ReviewEntry> reviewEntries = [];
+
+  /// Full details by entry id; absent ids derive from the entry.
+  final Map<String, ReviewEntryDetail> reviewEntryDetails = {};
+
+  /// Thrown by the review endpoints when set.
+  WaxDeckApiException? reviewError;
+
+  final List<({String entryId, String action, String? candidateMbid})>
+  decideReviewCalls = [];
+  final List<String> revertedReviewEntryIds = [];
+
+  /// Matching modes by library pid; unset libraries answer `auto`.
+  final Map<String, String> matchingModes = {};
+
+  /// Catalog libraries the fake reports.
+  final List<LibraryInfo> libraries = [];
+
+  ReviewEntry _reviewEntryById(String entryId) {
+    return reviewEntries.firstWhere(
+      (e) => e.id == entryId,
+      orElse: () => throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such review entry',
+        statusCode: 404,
+      ),
+    );
+  }
+
+  ReviewEntry _withStatus(ReviewEntry e, String status) => ReviewEntry(
+    id: e.id,
+    kind: e.kind,
+    status: status,
+    mediaType: e.mediaType,
+    origin: e.origin,
+    title: e.title,
+    artist: e.artist,
+    trackCount: e.trackCount,
+    libraryPid: e.libraryPid,
+    uploadedBy: e.uploadedBy,
+    identifying: false,
+    best: e.best,
+    appliedMbid: e.appliedMbid,
+    createdAt: e.createdAt,
+    decidedAt: status == 'pending' ? null : DateTime.utc(2026, 7, 2),
+    decidedBy: status == 'pending' ? null : 'admin',
+  );
+
+  static String _statusForAction(String action) => switch (action) {
+    'approve' => 'applied',
+    'skip' => 'skipped',
+    'discard' => 'discarded',
+    _ => action,
+  };
+
+  @override
+  Future<ReviewEntryPage> listReviewQueue({
+    String? status,
+    String? cursor,
+    int? limit,
+  }) async {
+    final error = reviewError;
+    if (error != null) throw error;
+    final filtered = status == null
+        ? reviewEntries
+        : reviewEntries.where((e) => e.status == status).toList();
+    final start = cursor == null ? 0 : int.parse(cursor);
+    final pageSize = limit ?? 50;
+    final end = (start + pageSize).clamp(0, filtered.length);
+    return ReviewEntryPage(
+      entries: filtered.sublist(start.clamp(0, filtered.length), end),
+      nextCursor: end < filtered.length ? '$end' : null,
+    );
+  }
+
+  @override
+  Future<ReviewEntryDetail> getReviewEntry(String entryId) async {
+    final error = reviewError;
+    if (error != null) throw error;
+    final canned = reviewEntryDetails[entryId];
+    if (canned != null) return canned;
+    final e = _reviewEntryById(entryId);
+    return ReviewEntryDetail(
+      id: e.id,
+      kind: e.kind,
+      status: e.status,
+      mediaType: e.mediaType,
+      origin: e.origin,
+      title: e.title,
+      artist: e.artist,
+      trackCount: e.trackCount,
+      libraryPid: e.libraryPid,
+      uploadedBy: e.uploadedBy,
+      identifying: e.identifying,
+      best: e.best,
+      appliedMbid: e.appliedMbid,
+      createdAt: e.createdAt,
+      decidedAt: e.decidedAt,
+      decidedBy: e.decidedBy,
+    );
+  }
+
+  ReviewEntry _decide(String entryId, String action) {
+    final updated = _withStatus(
+      _reviewEntryById(entryId),
+      _statusForAction(action),
+    );
+    reviewEntries = [
+      for (final e in reviewEntries)
+        if (e.id == entryId) updated else e,
+    ];
+    return updated;
+  }
+
+  @override
+  Future<ReviewDecideResult> decideReviewEntry(
+    String entryId, {
+    required String action,
+    String? candidateMbid,
+  }) async {
+    decideReviewCalls.add((
+      entryId: entryId,
+      action: action,
+      candidateMbid: candidateMbid,
+    ));
+    final error = reviewError;
+    if (error != null) throw error;
+    return ReviewDecideResult(entry: _decide(entryId, action));
+  }
+
+  @override
+  Future<ReviewEntry> revertReviewEntry(String entryId) async {
+    final error = reviewError;
+    if (error != null) throw error;
+    revertedReviewEntryIds.add(entryId);
+    final updated = _withStatus(_reviewEntryById(entryId), 'pending');
+    reviewEntries = [
+      for (final e in reviewEntries)
+        if (e.id == entryId) updated else e,
+    ];
+    return updated;
+  }
+
+  @override
+  Future<List<ReviewBulkOutcome>> decideReviewBulk(
+    List<String> entryIds, {
+    required String action,
+  }) async {
+    final error = reviewError;
+    if (error != null) throw error;
+    return [
+      for (final id in entryIds)
+        if (reviewEntries.any((e) => e.id == id))
+          ReviewBulkOutcome(entryId: (_decide(id, action)).id, ok: true)
+        else
+          ReviewBulkOutcome(entryId: id, ok: false, error: 'not-found'),
+    ];
+  }
+
+  @override
+  Future<ReviewStats> getReviewStats() async {
+    int count(String status) =>
+        reviewEntries.where((e) => e.status == status).length;
+    return ReviewStats(
+      pending: count('pending'),
+      identifying: reviewEntries.where((e) => e.identifying).length,
+      applied: count('applied'),
+      autoApplied: count('auto-applied'),
+      asIs: count('as-is'),
+      unofficial: count('unofficial'),
+      skipped: count('skipped'),
+      reverted: count('reverted'),
+      revertedAutoApplied: 0,
+    );
+  }
+
+  @override
+  Future<List<LibraryInfo>> listLibraries() async =>
+      List.unmodifiable(libraries);
+
+  @override
+  Future<String> getLibraryMatching(String libraryPid) async =>
+      matchingModes[libraryPid] ?? 'auto';
+
+  @override
+  Future<String> setLibraryMatching(String libraryPid, String mode) async =>
+      matchingModes[libraryPid] = mode;
+
+  /// Upload sessions by id.
+  final Map<String, UploadSession> uploadsById = {};
+
+  /// Thrown by the upload endpoints when set.
+  WaxDeckApiException? uploadError;
+
+  final List<({String uploadId, int offset, int byteCount})>
+  putUploadDataCalls = [];
+  int _uploadSeq = 0;
+
+  UploadSession _uploadById(String uploadId) {
+    final upload = uploadsById[uploadId];
+    if (upload == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such upload',
+        statusCode: 404,
+      );
+    }
+    return upload;
+  }
+
+  UploadSession _uploadWith(
+    UploadSession u, {
+    int? receivedBytes,
+    String? state,
+  }) => UploadSession(
+    id: u.id,
+    fileName: u.fileName,
+    sizeBytes: u.sizeBytes,
+    receivedBytes: receivedBytes ?? u.receivedBytes,
+    mediaType: u.mediaType,
+    libraryPid: u.libraryPid,
+    state: state ?? u.state,
+    reviewEntryId: u.reviewEntryId,
+    duplicate: u.duplicate,
+    uploadedBy: u.uploadedBy,
+    createdAt: u.createdAt,
+    expiresAt: u.expiresAt,
+  );
+
+  @override
+  Future<UploadPage> listUploads({String? cursor, int? limit}) async {
+    final error = uploadError;
+    if (error != null) throw error;
+    return UploadPage(uploads: uploadsById.values.toList());
+  }
+
+  @override
+  Future<UploadSession> createUpload({
+    required String fileName,
+    required int sizeBytes,
+    required String mediaType,
+    String? libraryPid,
+    String? sha256,
+  }) async {
+    final error = uploadError;
+    if (error != null) throw error;
+    final upload = UploadSession(
+      id: 'up-FAKE${_uploadSeq++}',
+      fileName: fileName,
+      sizeBytes: sizeBytes,
+      receivedBytes: 0,
+      mediaType: MediaType.values.firstWhere(
+        (m) => m.wireName == mediaType,
+        orElse: () => MediaType.music,
+      ),
+      libraryPid: libraryPid,
+      state: 'receiving',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    uploadsById[upload.id] = upload;
+    return upload;
+  }
+
+  @override
+  Future<UploadSession> getUpload(String uploadId) async =>
+      _uploadById(uploadId);
+
+  @override
+  Future<void> deleteUpload(String uploadId) async {
+    uploadsById.remove(uploadId);
+  }
+
+  @override
+  Future<UploadSession> putUploadData(
+    String uploadId, {
+    required int offset,
+    required Uint8List bytes,
+  }) async {
+    final error = uploadError;
+    if (error != null) throw error;
+    putUploadDataCalls.add((
+      uploadId: uploadId,
+      offset: offset,
+      byteCount: bytes.length,
+    ));
+    final updated = _uploadWith(
+      _uploadById(uploadId),
+      receivedBytes: offset + bytes.length,
+    );
+    uploadsById[uploadId] = updated;
+    return updated;
+  }
+
+  final List<({String url, MediaType mediaType, String? format})>
+  acquisitionCalls = [];
+
+  @override
+  Future<ToolTask> createAcquisition({
+    required String url,
+    required MediaType mediaType,
+    String? libraryPid,
+    String? format,
+  }) async {
+    final error = uploadError;
+    if (error != null) throw error;
+    acquisitionCalls.add((url: url, mediaType: mediaType, format: format));
+    final task = ToolTask(
+      id: 'tt-FAKE${_toolTaskSeq++}',
+      type: 'acquire',
+      state: 'queued',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    toolTasksById[task.id] = task;
+    return task;
+  }
+
+  @override
+  Future<UploadSession> completeUpload(String uploadId) async {
+    final error = uploadError;
+    if (error != null) throw error;
+    final upload = _uploadById(uploadId);
+    if (upload.receivedBytes < upload.sizeBytes) {
+      throw const WaxDeckApiException(
+        code: 'conflict',
+        message: 'upload incomplete',
+        statusCode: 409,
+      );
+    }
+    final updated = _uploadWith(upload, state: 'staged');
+    uploadsById[uploadId] = updated;
+    return updated;
+  }
+
+  /// Thrown by the metadata endpoints when set.
+  WaxDeckApiException? metadataError;
+
+  /// Editor state by item pid.
+  final Map<String, Map<String, String>> itemFieldsByPid = {};
+  final Map<String, Set<String>> lockedFieldsByPid = {};
+  final Map<String, List<Credit>> creditsByPid = {};
+  final Map<String, LyricsState> lyricsByPid = {};
+  final Map<String, Map<String, List<String>>> tagsByPid = {};
+  final Map<String, List<ChapterEdit>> chapterEditsByPid = {};
+  final Set<String> artworkPids = {};
+  final Set<String> unofficialPids = {};
+
+  /// Entity curation by `entityType/entityPid`.
+  final Map<String, Map<String, String>> entityEditsByKey = {};
+  final Map<String, List<EntityCuratedField>> entityCurationByKey = {};
+
+  final List<({String pid, Map<String, String> fields, bool writeBack})>
+  editItemMetadataCalls = [];
+  final List<({String entityType, String entityPid, int byteCount})>
+  entityArtworkCalls = [];
+  final List<String> rematchCalls = [];
+  final List<({String pid, List<String> want})> enrichItemCalls = [];
+  final List<({String pid, List<String> fields, bool locked})>
+  setItemLocksCalls = [];
+  final List<({String pid, bool unofficial})> setReleaseStatusCalls = [];
+
+  /// The editor vocabulary served by [getMetadataFields].
+  MetadataFields metadataFields = const MetadataFields(
+    kinds: [
+      KindFields(
+        kind: MediaType.music,
+        fields: [
+          EditableField(name: 'title', writeBack: true),
+          EditableField(name: 'artist', writeBack: true),
+          EditableField(name: 'album', writeBack: true),
+          EditableField(name: 'year', writeBack: true),
+        ],
+        creditRoles: [EditableField(name: 'composer', writeBack: true)],
+      ),
+    ],
+    entityTypes: [
+      EntityTypeFields(
+        entityType: 'artist',
+        fields: [EditableField(name: 'name', writeBack: false)],
+      ),
+    ],
+  );
+
+  void _requireUnlocked(String pid, Iterable<String> fields, bool force) {
+    if (force) return;
+    final locked = lockedFieldsByPid[pid] ?? const {};
+    if (fields.any(locked.contains)) {
+      throw const WaxDeckApiException(
+        code: 'conflict',
+        message: 'field locked',
+        statusCode: 409,
+      );
+    }
+  }
+
+  @override
+  Future<MetadataFields> getMetadataFields() async => metadataFields;
+
+  @override
+  Future<ItemMetadata> getItemMetadata(String pid) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    final item = libraryItems.where((i) => i.pid == pid).firstOrNull;
+    return ItemMetadata(
+      pid: pid,
+      mediaType: item?.mediaType ?? MediaType.music,
+      fields: Map.of(itemFieldsByPid[pid] ?? const {}),
+      lockedFields: (lockedFieldsByPid[pid] ?? const <String>{}).toList()
+        ..sort(),
+      credits: creditsByPid[pid] ?? const [],
+      lyrics: lyricsByPid[pid],
+      customTags: [
+        for (final entry in (tagsByPid[pid] ?? const {}).entries)
+          CustomTag(key: entry.key, values: entry.value),
+      ],
+      unofficial: unofficialPids.contains(pid),
+      hasArtwork: artworkPids.contains(pid),
+    );
+  }
+
+  @override
+  Future<MetadataEditResult> editItemMetadata(
+    String pid, {
+    required Map<String, String> fields,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    editItemMetadataCalls.add((
+      pid: pid,
+      fields: Map.of(fields),
+      writeBack: writeBack,
+    ));
+    _requireUnlocked(pid, fields.keys, force);
+    (itemFieldsByPid[pid] ??= {}).addAll(fields);
+    if (lock) (lockedFieldsByPid[pid] ??= {}).addAll(fields.keys);
+    return const MetadataEditResult(applied: true);
+  }
+
+  @override
+  Future<BulkEditResult> bulkEditMetadata({
+    required List<String> itemPids,
+    required Map<String, String> fields,
+    bool writeBack = false,
+    bool skipLocked = false,
+    bool force = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    final edited = <String>[];
+    final skipped = <String>[];
+    for (final pid in itemPids) {
+      final locked = lockedFieldsByPid[pid] ?? const {};
+      if (!force && skipLocked && fields.keys.any(locked.contains)) {
+        skipped.add(pid);
+        continue;
+      }
+      _requireUnlocked(pid, fields.keys, force);
+      (itemFieldsByPid[pid] ??= {}).addAll(fields);
+      edited.add(pid);
+    }
+    return BulkEditResult(edited: edited, skipped: skipped);
+  }
+
+  @override
+  Future<MetadataEditResult> setItemCredits(
+    String pid, {
+    required String role,
+    required List<String> names,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    final credits = creditsByPid[pid] ?? const <Credit>[];
+    creditsByPid[pid] = [
+      for (final c in credits)
+        if (c.role != role) c,
+      Credit(role: role, names: List.of(names)),
+    ];
+    return const MetadataEditResult(applied: true);
+  }
+
+  @override
+  Future<MetadataEditResult> setItemLyrics(
+    String pid, {
+    String? lrc,
+    String? plain,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    lyricsByPid[pid] = LyricsState(
+      synced: lrc != null,
+      source: 'user',
+      lrc: lrc,
+    );
+    return const MetadataEditResult(applied: true);
+  }
+
+  @override
+  Future<void> clearItemLyrics(String pid) async {
+    lyricsByPid.remove(pid);
+  }
+
+  @override
+  Future<MetadataEditResult> setBookChapters(
+    String pid, {
+    required List<ChapterEdit> chapters,
+    bool lock = true,
+    bool force = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    chapterEditsByPid[pid] = List.of(chapters);
+    return const MetadataEditResult(applied: true);
+  }
+
+  @override
+  Future<MetadataEditResult> setItemArtwork(
+    String pid, {
+    required Uint8List bytes,
+    bool writeBack = false,
+    bool lock = true,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    artworkPids.add(pid);
+    return const MetadataEditResult(applied: true);
+  }
+
+  @override
+  Future<void> clearItemArtwork(String pid) async {
+    artworkPids.remove(pid);
+  }
+
+  @override
+  Future<MetadataEditResult> setEntityArtwork(
+    String entityType,
+    String entityPid, {
+    required Uint8List bytes,
+    bool writeBack = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    entityArtworkCalls.add((
+      entityType: entityType,
+      entityPid: entityPid,
+      byteCount: bytes.length,
+    ));
+    return const MetadataEditResult(applied: true);
+  }
+
+  @override
+  Future<TagEditResult> setItemTag(
+    String pid,
+    String key, {
+    required List<String> values,
+    bool lock = true,
+    bool force = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    (tagsByPid[pid] ??= {})[key] = List.of(values);
+    return TagEditResult(key: key, stored: values.length);
+  }
+
+  @override
+  Future<void> clearItemTag(String pid, String key) async {
+    tagsByPid[pid]?.remove(key);
+  }
+
+  @override
+  Future<List<String>> setItemLocks(
+    String pid, {
+    required List<String> fields,
+    required bool locked,
+  }) async {
+    setItemLocksCalls.add((pid: pid, fields: List.of(fields), locked: locked));
+    final locks = lockedFieldsByPid[pid] ??= {};
+    locked ? locks.addAll(fields) : locks.removeAll(fields);
+    return locks.toList()..sort();
+  }
+
+  @override
+  Future<MetadataEditResult> editEntity(
+    String entityType,
+    String entityPid, {
+    required Map<String, String> edits,
+    bool writeBack = false,
+    bool lock = true,
+    bool force = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    (entityEditsByKey['$entityType/$entityPid'] ??= {}).addAll(edits);
+    return const MetadataEditResult(applied: true);
+  }
+
+  @override
+  Future<List<EntityCuratedField>> getEntityCuration(
+    String entityType,
+    String entityPid,
+  ) async {
+    final key = '$entityType/$entityPid';
+    final canned = entityCurationByKey[key];
+    if (canned != null) return canned;
+    return [
+      for (final entry in (entityEditsByKey[key] ?? const {}).entries)
+        EntityCuratedField(
+          field: entry.key,
+          value: entry.value,
+          source: 'user',
+          locked: true,
+        ),
+    ];
+  }
+
+  @override
+  Future<MetadataEditResult> setReleaseStatus(
+    String pid, {
+    required bool unofficial,
+  }) async {
+    setReleaseStatusCalls.add((pid: pid, unofficial: unofficial));
+    unofficial ? unofficialPids.add(pid) : unofficialPids.remove(pid);
+    return const MetadataEditResult(applied: true);
+  }
+
+  @override
+  Future<String> rematchItem(String pid) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    rematchCalls.add(pid);
+    final entry = ReviewEntry(
+      id: 're-FAKE${reviewEntries.length}',
+      kind: 'match',
+      status: 'pending',
+      mediaType: MediaType.music,
+      origin: 'rematch',
+      trackCount: 1,
+      identifying: true,
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    reviewEntries = [...reviewEntries, entry];
+    return entry.id;
+  }
+
+  @override
+  Future<EnrichItemResult> enrichItem(
+    String pid, {
+    required List<String> want,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    enrichItemCalls.add((pid: pid, want: List.of(want)));
+    return EnrichItemResult(applied: List.of(want));
+  }
+
+  /// Health state served by the health endpoints.
+  HealthSummary healthSummary = const HealthSummary(
+    score: 100,
+    totalItems: 0,
+    evaluatedItems: 0,
+  );
+  List<HealthIssue> healthIssues = [];
+
+  /// Thrown by the health endpoints when set.
+  WaxDeckApiException? healthError;
+
+  int sweepCalls = 0;
+  final List<({String rule, List<String>? itemPids})> fixHealthCalls = [];
+
+  List<DuplicateGroup> duplicateGroups = const [];
+  final List<({String entityType, String survivorPid, List<String> loserPids})>
+  mergeDuplicatesCalls = [];
+
+  List<UpgradeGroup> upgradeGroups = const [];
+  final List<({String keepItemPid, List<String> removeItemPids})>
+  resolveUpgradeCalls = [];
+
+  @override
+  Future<HealthSummary> getLibraryHealth() async {
+    final error = healthError;
+    if (error != null) throw error;
+    return healthSummary;
+  }
+
+  @override
+  Future<HealthIssuePage> listHealthIssues({
+    String? rule,
+    String? cursor,
+    int? limit,
+  }) async {
+    final error = healthError;
+    if (error != null) throw error;
+    final filtered = rule == null
+        ? healthIssues
+        : healthIssues.where((i) => i.rules.contains(rule)).toList();
+    final start = cursor == null ? 0 : int.parse(cursor);
+    final pageSize = limit ?? 100;
+    final end = (start + pageSize).clamp(0, filtered.length);
+    return HealthIssuePage(
+      items: filtered.sublist(start.clamp(0, filtered.length), end),
+      nextCursor: end < filtered.length ? '$end' : null,
+    );
+  }
+
+  @override
+  Future<void> sweepLibraryHealth() async {
+    sweepCalls++;
+  }
+
+  @override
+  Future<int> fixHealthIssues({
+    required String rule,
+    List<String>? itemPids,
+  }) async {
+    final error = healthError;
+    if (error != null) throw error;
+    fixHealthCalls.add((rule: rule, itemPids: itemPids));
+    return itemPids?.length ??
+        healthIssues.where((i) => i.rules.contains(rule)).length;
+  }
+
+  @override
+  Future<List<DuplicateGroup>> listDuplicates() async =>
+      List.of(duplicateGroups);
+
+  @override
+  Future<MergeOutcome> mergeDuplicates({
+    required String entityType,
+    required String survivorPid,
+    required List<String> loserPids,
+  }) async {
+    final error = healthError;
+    if (error != null) throw error;
+    mergeDuplicatesCalls.add((
+      entityType: entityType,
+      survivorPid: survivorPid,
+      loserPids: List.of(loserPids),
+    ));
+    duplicateGroups = [
+      for (final g in duplicateGroups)
+        if (g.survivor.pid != survivorPid) g,
+    ];
+    return MergeOutcome(merged: loserPids.length, childrenMoved: 0);
+  }
+
+  @override
+  Future<List<UpgradeGroup>> listUpgrades() async => List.of(upgradeGroups);
+
+  @override
+  Future<int> resolveUpgrade({
+    required String keepItemPid,
+    required List<String> removeItemPids,
+  }) async {
+    final error = healthError;
+    if (error != null) throw error;
+    resolveUpgradeCalls.add((
+      keepItemPid: keepItemPid,
+      removeItemPids: List.of(removeItemPids),
+    ));
+    upgradeGroups = [
+      for (final g in upgradeGroups)
+        if (!g.members.any((m) => m.itemPid == keepItemPid)) g,
+    ];
+    return removeItemPids.length;
+  }
+
+  /// Organize profiles and canned results.
+  List<OrganizeProfile> organizeProfiles = const [
+    OrganizeProfile(name: 'default'),
+  ];
+  OrganizePlan? organizePlanResult;
+  OrganizeReport organizeReportResult = const OrganizeReport(
+    moved: 0,
+    skipped: 0,
+    failed: 0,
+  );
+
+  final List<({String profile, List<String>? itemPids})> previewOrganizeCalls =
+      [];
+  final List<({String profile, List<String>? itemPids})> applyOrganizeCalls =
+      [];
+
+  @override
+  Future<List<OrganizeProfile>> listOrganizeProfiles() async =>
+      List.of(organizeProfiles);
+
+  @override
+  Future<OrganizePlan> previewOrganize({
+    required String profile,
+    List<String>? itemPids,
+  }) async {
+    previewOrganizeCalls.add((profile: profile, itemPids: itemPids));
+    return organizePlanResult ??
+        OrganizePlan(profile: profile, totalActions: 0);
+  }
+
+  @override
+  Future<OrganizeReport> applyOrganize({
+    required String profile,
+    List<String>? itemPids,
+  }) async {
+    applyOrganizeCalls.add((profile: profile, itemPids: itemPids));
+    return organizeReportResult;
+  }
+
+  /// Tool tasks by id, in creation order.
+  final Map<String, ToolTask> toolTasksById = {};
+
+  /// Thrown by the tool endpoints when set.
+  WaxDeckApiException? toolError;
+
+  final List<({String pid, List<String>? titles, bool keepOriginals})>
+  mergeBookCalls = [];
+  final List<({String pid, bool keepOriginals})> splitBookCalls = [];
+  final List<({String pid, bool keepOriginals})> splitCueCalls = [];
+  int _toolTaskSeq = 0;
+
+  ToolTask _startToolTask(String type, String pid) {
+    final task = ToolTask(
+      id: 'tt-FAKE${_toolTaskSeq++}',
+      type: type,
+      state: 'queued',
+      itemPid: pid,
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    toolTasksById[task.id] = task;
+    return task;
+  }
+
+  @override
+  Future<ToolTask> mergeBook(
+    String pid, {
+    List<String>? titles,
+    bool keepOriginals = false,
+  }) async {
+    final error = toolError;
+    if (error != null) throw error;
+    mergeBookCalls.add((
+      pid: pid,
+      titles: titles,
+      keepOriginals: keepOriginals,
+    ));
+    return _startToolTask('book-merge', pid);
+  }
+
+  @override
+  Future<ToolTask> splitBook(String pid, {bool keepOriginals = false}) async {
+    final error = toolError;
+    if (error != null) throw error;
+    splitBookCalls.add((pid: pid, keepOriginals: keepOriginals));
+    return _startToolTask('book-split', pid);
+  }
+
+  @override
+  Future<ToolTask> splitCueRip(String pid, {bool keepOriginals = false}) async {
+    final error = toolError;
+    if (error != null) throw error;
+    splitCueCalls.add((pid: pid, keepOriginals: keepOriginals));
+    return _startToolTask('cue-split', pid);
+  }
+
+  @override
+  Future<ToolTaskPage> listToolTasks({String? cursor, int? limit}) async {
+    final error = toolError;
+    if (error != null) throw error;
+    return ToolTaskPage(tasks: toolTasksById.values.toList());
+  }
+
+  @override
+  Future<ToolTask> getToolTask(String taskId) async {
+    final task = toolTasksById[taskId];
+    if (task == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such task',
+        statusCode: 404,
+      );
+    }
+    return task;
+  }
+
+  /// Enrichment status served by [getEnrichmentStatus].
+  EnrichmentStatus enrichmentStatus = const EnrichmentStatus(
+    coverage: EnrichmentCoverage(
+      artists: CoverageCount(enriched: 0, total: 0),
+      releaseGroups: CoverageCount(enriched: 0, total: 0),
+      books: CoverageCount(enriched: 0, total: 0),
+      lyrics: CoverageCount(enriched: 0, total: 0),
+    ),
+    running: false,
+  );
+
+  /// The force flags passed to [runEnrichment], in order.
+  final List<bool> runEnrichmentCalls = [];
+
+  @override
+  Future<EnrichmentStatus> getEnrichmentStatus() async => enrichmentStatus;
+
+  @override
+  Future<String> runEnrichment({bool force = false}) async {
+    runEnrichmentCalls.add(force);
+    return 'jb-FAKEENRICH';
+  }
+
+  /// Accounts by id, served and mutated by the admin user endpoints.
+  final Map<String, UserAccount> usersById = {};
+  int _userSeq = 0;
+
+  @override
+  Future<UserPage> listUsers({String? cursor, int? limit}) async {
+    final error = listError;
+    if (error != null) throw error;
+    return UserPage(users: usersById.values.toList());
+  }
+
+  @override
+  Future<UserAccount> createUser({
+    required String username,
+    required String password,
+    String? displayName,
+    List<String>? roles,
+    LibraryAccess? libraryAccess,
+    bool? uploadEnabled,
+    int? uploadQuotaBytes,
+  }) async {
+    final account = UserAccount(
+      id: 'us-FAKE${_userSeq++}',
+      username: username,
+      displayName: displayName,
+      roles: roles ?? const ['user'],
+      createdAt: DateTime.utc(2026, 7, 1),
+      libraryAccess: libraryAccess ?? const LibraryAccess(mode: 'all'),
+      uploadEnabled: uploadEnabled ?? false,
+      uploadQuotaBytes: uploadQuotaBytes,
+    );
+    usersById[account.id] = account;
+    return account;
+  }
+
+  @override
+  Future<UserAccount> updateUser(
+    String userId, {
+    String? displayName,
+    List<String>? roles,
+    bool? disabled,
+    LibraryAccess? libraryAccess,
+    bool? uploadEnabled,
+    int? uploadQuotaBytes,
+  }) async {
+    final current = usersById[userId];
+    if (current == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such user',
+        statusCode: 404,
+      );
+    }
+    final updated = UserAccount(
+      id: current.id,
+      username: current.username,
+      displayName: displayName ?? current.displayName,
+      roles: roles ?? current.roles,
+      createdAt: current.createdAt,
+      identities: current.identities,
+      libraryAccess: libraryAccess ?? current.libraryAccess,
+      uploadEnabled: uploadEnabled ?? current.uploadEnabled,
+      uploadQuotaBytes: uploadQuotaBytes ?? current.uploadQuotaBytes,
+      disabled: disabled ?? current.disabled,
+      hasPassword: current.hasPassword,
+    );
+    usersById[userId] = updated;
+    return updated;
+  }
 }
 
 /// Handy device-session factory for tests.
@@ -1376,6 +2360,7 @@ PodcastShow testShow(
   String? author = 'Barliman Butterbur',
   String? feedUrl = 'https://pony.example/feed.xml',
   String? descriptionHtml,
+  bool explicit = false,
 }) => PodcastShow(
   pid: pid,
   title: title,
@@ -1383,6 +2368,7 @@ PodcastShow testShow(
   feedUrl: feedUrl,
   descriptionHtml: descriptionHtml,
   sourceType: 'rss',
+  explicit: explicit,
 );
 
 /// Handy episode factory for tests.
@@ -1396,6 +2382,7 @@ EpisodeSummary testEpisode(
   bool downloaded = true,
   String? fetchState,
   bool hasTranscript = false,
+  bool explicit = false,
 }) => EpisodeSummary(
   pid: pid,
   mediaType: MediaType.podcast,
@@ -1407,6 +2394,59 @@ EpisodeSummary testEpisode(
   downloaded: downloaded,
   fetchState: fetchState,
   hasTranscript: hasTranscript,
+  explicit: explicit,
+);
+
+/// Handy review-entry factory for tests.
+ReviewEntry testReviewEntry(
+  String id, {
+  String kind = 'match',
+  String status = 'pending',
+  MediaType mediaType = MediaType.music,
+  String origin = 'scan',
+  String? title = 'Neon Meridian',
+  String? artist = 'The Cardinal Waves',
+  int trackCount = 10,
+  String? uploadedBy,
+  bool identifying = false,
+  CandidateSummary? best,
+}) => ReviewEntry(
+  id: id,
+  kind: kind,
+  status: status,
+  mediaType: mediaType,
+  origin: origin,
+  title: title,
+  artist: artist,
+  trackCount: trackCount,
+  uploadedBy: uploadedBy,
+  identifying: identifying,
+  best: best,
+  createdAt: DateTime.utc(2026, 7, 1),
+);
+
+/// Handy upload-session factory for tests.
+UploadSession testUpload(
+  String id, {
+  String fileName = 'neon-meridian.flac',
+  int sizeBytes = 4194304,
+  int receivedBytes = 0,
+  MediaType mediaType = MediaType.music,
+  String state = 'receiving',
+  String? reviewEntryId,
+  DuplicateWarning? duplicate,
+  String? uploadedBy,
+}) => UploadSession(
+  id: id,
+  fileName: fileName,
+  sizeBytes: sizeBytes,
+  receivedBytes: receivedBytes,
+  mediaType: mediaType,
+  state: state,
+  reviewEntryId: reviewEntryId,
+  duplicate: duplicate,
+  uploadedBy: uploadedBy,
+  createdAt: DateTime.utc(2026, 7, 1),
 );
 
 /// Handy audiobook factory for tests. With [partCount] above one the

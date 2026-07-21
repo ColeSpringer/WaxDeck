@@ -72,4 +72,30 @@ void main() {
 
     expect(find.text('Nothing here yet'), findsOneWidget);
   });
+
+  testWidgets('the add button acquires from a URL', (tester) async {
+    final repo = FakeRepository();
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('add-to-library')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-from-url')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('acquire-url')),
+      'https://tube.example/watch?v=abc',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('acquire-submit')));
+    await tester.pumpAndSettle();
+
+    expect(repo.acquisitionCalls, hasLength(1));
+    expect(
+      repo.acquisitionCalls.single.url,
+      'https://tube.example/watch?v=abc',
+    );
+    expect(repo.acquisitionCalls.single.mediaType, MediaType.music);
+  });
 }

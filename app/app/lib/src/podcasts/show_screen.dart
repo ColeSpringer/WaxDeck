@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../player/player_screen.dart';
 import '../providers.dart';
 import 'episode_screen.dart';
+import 'explicit_badge.dart';
 import 'podcasts_controller.dart';
 import 'show_notes.dart';
 
@@ -235,7 +236,16 @@ class _ShowHeader extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(show.title, style: textTheme.titleLarge),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (show.explicit)
+                          ExplicitBadge(key: ValueKey('show-explicit-$pid')),
+                        Expanded(
+                          child: Text(show.title, style: textTheme.titleLarge),
+                        ),
+                      ],
+                    ),
                     if (show.author != null)
                       Text(
                         show.author!,
@@ -359,10 +369,18 @@ class _EpisodeRow extends ConsumerWidget {
       button: true,
       child: ListTile(
         key: ValueKey('episode-${episode.pid}'),
-        title: Text(
-          episode.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
+        title: Row(
+          children: [
+            if (episode.explicit)
+              ExplicitBadge(key: ValueKey('episode-explicit-${episode.pid}')),
+            Expanded(
+              child: Text(
+                episode.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
         subtitle: Text(subtitleParts.join(' | ')),
         trailing: Row(

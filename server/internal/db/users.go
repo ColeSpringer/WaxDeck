@@ -21,8 +21,12 @@ type User struct {
 	Disabled      bool
 	LibraryAccess string
 	WaxbinUserPID string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	// UploadEnabled grants the upload surface; UploadQuotaBytes caps the
+	// account's live uploads (0 means no per-user cap).
+	UploadEnabled    bool
+	UploadQuotaBytes int64
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // Identity is one linked OIDC identity.
@@ -41,14 +45,15 @@ var ErrNotFound = errors.New("db: not found")
 // insert).
 var ErrConflict = errors.New("db: conflict")
 
-const userCols = "id, username, display_name, password_hash, roles, disabled, library_access, waxbin_user_pid, created_at_ns, updated_at_ns"
+const userCols = "id, username, display_name, password_hash, roles, disabled, library_access, waxbin_user_pid, upload_enabled, upload_quota_bytes, created_at_ns, updated_at_ns"
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	var roles string
 	var created, updated int64
 	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &roles,
-		&u.Disabled, &u.LibraryAccess, &u.WaxbinUserPID, &created, &updated)
+		&u.Disabled, &u.LibraryAccess, &u.WaxbinUserPID, &u.UploadEnabled,
+		&u.UploadQuotaBytes, &created, &updated)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -79,14 +84,16 @@ func joinRoles(roles []string) string { return strings.Join(roles, ",") }
 func (d *DB) CreateUser(ctx context.Context, u *User, onlyIfNoAdmin bool) error {
 	now := time.Now().UnixNano()
 	stmt := `INSERT INTO users (id, username, username_ci, display_name, password_hash, roles,
-	                            disabled, library_access, waxbin_user_pid, created_at_ns, updated_at_ns)
-	         SELECT ?,?,?,?,?,?,?,?,?,?,?`
+	                            disabled, library_access, waxbin_user_pid, upload_enabled,
+	                            upload_quota_bytes, created_at_ns, updated_at_ns)
+	         SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?`
 	if onlyIfNoAdmin {
 		stmt += ` WHERE NOT EXISTS (SELECT 1 FROM users WHERE ` + enabledAdminPredicate + `)`
 	}
 	res, err := d.w.ExecContext(ctx, stmt,
 		u.ID, u.Username, strings.ToLower(u.Username), u.DisplayName, u.PasswordHash,
-		joinRoles(u.Roles), u.Disabled, u.LibraryAccess, u.WaxbinUserPID, now, now)
+		joinRoles(u.Roles), u.Disabled, u.LibraryAccess, u.WaxbinUserPID, u.UploadEnabled,
+		u.UploadQuotaBytes, now, now)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrConflict
@@ -126,6 +133,26 @@ func (d *DB) CountEnabledAdmins(ctx context.Context) (int, error) {
 	return n, err
 }
 
+// EnabledAdminIDs lists enabled administrator ids, for fan-out of
+// curation events to everyone who can see the shared surfaces.
+func (d *DB) EnabledAdminIDs(ctx context.Context) ([]string, error) {
+	rows, err := d.r.QueryContext(ctx,
+		`SELECT id FROM users WHERE `+enabledAdminPredicate+` ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // UpdateUser persists the mutable account fields. When
 // requireOtherAdmin is set, the update carries its own guard: it
 // applies only while another enabled administrator exists, in one
@@ -140,10 +167,10 @@ func (d *DB) UpdateUser(ctx context.Context, u *User, requireOtherAdmin bool) er
 	}
 	res, err := d.w.ExecContext(ctx,
 		`UPDATE users SET display_name = ?, password_hash = ?, roles = ?, disabled = ?,
-		        library_access = ?, updated_at_ns = ?
+		        library_access = ?, upload_enabled = ?, upload_quota_bytes = ?, updated_at_ns = ?
 		 WHERE id = ?`+guard,
 		u.DisplayName, u.PasswordHash, joinRoles(u.Roles), u.Disabled,
-		u.LibraryAccess, time.Now().UnixNano(), u.ID)
+		u.LibraryAccess, u.UploadEnabled, u.UploadQuotaBytes, time.Now().UnixNano(), u.ID)
 	if err != nil {
 		return err
 	}

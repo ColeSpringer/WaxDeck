@@ -110,7 +110,13 @@ plus one cursorless topic:
   relays only what a summary mirror can act on.
 - `user` (`serverSeq`): the calling user's own WaxDeck-side state (playback
   state, preferences, podcast subscriptions and their settings, per-book
-  playback settings), from the `event_log` table.
+  playback settings), from the `event_log` table. Curation surfaces ride
+  this stream as marker kinds (`review`, `upload`, `task`) carrying only
+  the pid to refetch by: the review queue, upload sessions, and tool
+  tasks are live reads, not mirrored state, so the markers hydrate
+  nothing. Review markers fan out to every administrator plus the
+  entry's uploader; upload and task markers go to their owner and the
+  administrators.
 - `player` (no cursor): the caller's visible player-endpoint and
   playback-session *lists* changed (an endpoint appeared or went offline,
   a session started, ended, or moved to another endpoint, or a session's

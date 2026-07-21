@@ -3,11 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../library/library_controller.dart';
+import '../metadata/metadata_controller.dart';
 import '../player/play_state_controller.dart';
 import '../playlists/playlists_controller.dart';
 import '../podcasts/podcasts_controller.dart';
 import '../providers.dart';
+import '../review/review_controller.dart';
 import '../settings/prefs_controller.dart';
+import '../tools/tasks_screen.dart';
+import '../uploads/uploads_controller.dart';
 import '../connect/connect_providers.dart';
 import 'live_invalidations.dart';
 import 'test_env/test_env.dart';
@@ -82,6 +86,9 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     ref.invalidate(episodeDetailProvider);
     // A catalog change can shift any smart playlist's evaluation.
     ref.invalidate(playlistDetailProvider);
+    // Applied review decisions and enrichment rewrite item metadata
+    // server-side; an open editor must refetch what it shows.
+    ref.invalidate(metadataControllerProvider);
   }
 
   void invalidateUserState() {
@@ -98,6 +105,13 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     // star, a rating) can shift a user-state smart rule's evaluation.
     ref.invalidate(playlistsProvider);
     ref.invalidate(playlistDetailProvider);
+    // Review, upload, and tool-task markers ride the user stream; the
+    // curation screens refetch their lists and open details.
+    ref.invalidate(reviewQueueProvider);
+    ref.invalidate(reviewStatsProvider);
+    ref.invalidate(reviewEntryProvider);
+    ref.invalidate(uploadsProvider);
+    ref.invalidate(toolTasksProvider);
   }
 
   final engine = ref.watch(syncEngineProvider);

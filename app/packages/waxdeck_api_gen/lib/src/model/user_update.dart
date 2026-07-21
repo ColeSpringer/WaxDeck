@@ -18,6 +18,8 @@ part 'user_update.g.dart';
 /// * [roles] - Replacement role set.
 /// * [disabled] - Disable or re-enable the account. Disabling revokes its live sessions. 
 /// * [libraryAccess] 
+/// * [uploadEnabled] - Grant or revoke upload rights.
+/// * [uploadQuotaBytes] - New per-user upload cap in bytes; 0 removes the cap. 
 @BuiltValue()
 abstract class UserUpdate implements Built<UserUpdate, UserUpdateBuilder> {
   /// New display name; empty clears it.
@@ -34,6 +36,14 @@ abstract class UserUpdate implements Built<UserUpdate, UserUpdateBuilder> {
 
   @BuiltValueField(wireName: r'libraryAccess')
   LibraryAccess? get libraryAccess;
+
+  /// Grant or revoke upload rights.
+  @BuiltValueField(wireName: r'uploadEnabled')
+  bool? get uploadEnabled;
+
+  /// New per-user upload cap in bytes; 0 removes the cap. 
+  @BuiltValueField(wireName: r'uploadQuotaBytes')
+  int? get uploadQuotaBytes;
 
   UserUpdate._();
 
@@ -86,6 +96,20 @@ class _$UserUpdateSerializer implements PrimitiveSerializer<UserUpdate> {
         specifiedType: const FullType(LibraryAccess),
       );
     }
+    if (object.uploadEnabled != null) {
+      yield r'uploadEnabled';
+      yield serializers.serialize(
+        object.uploadEnabled,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.uploadQuotaBytes != null) {
+      yield r'uploadQuotaBytes';
+      yield serializers.serialize(
+        object.uploadQuotaBytes,
+        specifiedType: const FullType(int),
+      );
+    }
   }
 
   @override
@@ -136,6 +160,20 @@ class _$UserUpdateSerializer implements PrimitiveSerializer<UserUpdate> {
             specifiedType: const FullType(LibraryAccess),
           ) as LibraryAccess;
           result.libraryAccess.replace(valueDes);
+          break;
+        case r'uploadEnabled':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.uploadEnabled = valueDes;
+          break;
+        case r'uploadQuotaBytes':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.uploadQuotaBytes = valueDes;
           break;
         default:
           unhandled.add(key);

@@ -186,7 +186,14 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 // ranges included) and the bridge over it.
 func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg service.Config, media *auth.MediaTokens, svc *service.Library, log *slog.Logger) *flow.Bridge {
 	t.Helper()
+	// toolJobs answers the merge and split job surface with real
+	// synthesized audio; analyze jobs fall through to the static
+	// handling below. Defined in tools_integration_test.go.
+	toolJobs := newFakeToolJobStore(t, h.library)
 	fakeFlow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if toolJobs.handle(w, r) {
+			return
+		}
 		switch r.URL.Path {
 		case "/caps":
 			fmt.Fprint(w, `{
