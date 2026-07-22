@@ -1,0 +1,230 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /items/{pid}/similar:
+    get:
+      operationId: getSimilarTracks
+      summary: Similar tracks
+      description: >
+        Tracks similar to this one. With embedding coverage the list is
+        sonic (a live nearest-neighbor scan over the seed's embedding);
+        without it the list falls back to metadata heuristics (same
+        genre and artist neighborhoods). `basis` reports which one
+        answered. The seed itself is never in the list. Results honor
+        the caller's library visibility.
+      tags: [discovery]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: limit
+          in: query
+          description: Maximum tracks returned.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Similar tracks, most similar first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarTracks"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /mixes/instant:
+    post:
+      operationId: createInstantMix
+      summary: Instant mix
+      description: >
+        Builds a mix from a seed: a track or artist pid, or a genre
+        name. Exactly one seed field must be set. With embedding
+        coverage the mix is sonic and `adventurousness` widens it: 0
+        hugs the seed's closest neighbors, 1 wanders far into the
+        neighbor graph. Without coverage the mix falls back to metadata
+        heuristics (seed genre and artist neighborhoods, weighted
+        toward starred and most-played), where `adventurousness`
+        loosens the genre bound. The mix is computed fresh per call
+        and not persisted; clients wanting endless radio request
+        another mix excluding what already played. Results honor the
+        caller's library visibility.
+      tags: [discovery]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstantMixRequest"
+      responses:
+        "200":
+          description: The mix.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstantMix"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /mixes/path:
+    get:
+      operationId: getSonicPath
+      summary: Sonic path between two tracks
+      description: >
+        A listening path from one track to another through sonically
+        adjacent tracks: each hop moves along precomputed
+        nearest-neighbor edges, so the path drifts gradually from the
+        first track's sound to the second's. Needs embedding coverage
+        for both endpoints; answers `feature-unavailable` when the
+        similarity surface is not running or either endpoint has no
+        embedding yet (there is no metadata fallback for paths).
+        `complete` is false when the graph connects the endpoints only
+        partially; the returned prefix still drifts toward the target.
+        Results honor the caller's library visibility.
+      tags: [discovery]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Starting track pid.
+          schema:
+            type: string
+            pattern: "^tr-[0-9A-HJKMNP-TV-Z]{26}$"
+        - name: to
+          in: query
+          required: true
+          description: Destination track pid.
+          schema:
+            type: string
+            pattern: "^tr-[0-9A-HJKMNP-TV-Z]{26}$"
+        - name: length
+          in: query
+          description: >
+            Requested number of tracks including both endpoints. The
+            path may be shorter when the graph distance is small.
+          schema:
+            type: integer
+            minimum: 3
+            maximum: 50
+            default: 12
+      responses:
+        "200":
+          description: The path, starting track first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SonicPath"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
+
+components:
+  schemas:
+    MixBasis:
+      type: string
+      description: >
+        Which engine answered a discovery request: `sonic` used stored
+        audio embeddings, `metadata` used genre and artist heuristics
+        (the zero-setup fallback).
+      enum: [sonic, metadata]
+
+    SimilarTracks:
+      type: object
+      description: Tracks similar to a seed, most similar first.
+      required: [basis, items]
+      properties:
+        basis:
+          $ref: "#/components/schemas/MixBasis"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+
+    InstantMixRequest:
+      type: object
+      description: >
+        A mix seed. Exactly one of `seedPid` and `genre` must be set.
+      properties:
+        seedPid:
+          type: string
+          description: >
+            Seed track (`tr-`) or artist (`ar-`) pid. To mix from an
+            album, seed with one of its tracks (the catalog's item
+            query addresses entities by display string, so an album
+            pid alone does not resolve to members yet).
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        genre:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Seed genre name, matched case-insensitively.
+          example: blues
+        adventurousness:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.4
+          description: >
+            How far the mix wanders from the seed. 0 hugs the seed's
+            closest sonic neighbors; 1 wanders far. On the metadata
+            fallback this loosens the genre bound instead.
+        size:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+          description: Requested mix length in tracks.
+        excludePids:
+          type: array
+          maxItems: 500
+          description: >
+            Tracks to leave out (already played in this radio
+            session). The seed is always excluded.
+          items:
+            type: string
+
+    InstantMix:
+      type: object
+      description: A computed mix. Not persisted; order is play order.
+      required: [basis, items]
+      properties:
+        basis:
+          $ref: "#/components/schemas/MixBasis"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+
+    SonicPath:
+      type: object
+      description: >
+        A sonic path between two tracks, starting track first,
+        destination last when `complete`.
+      required: [complete, items]
+      properties:
+        complete:
+          type: boolean
+          description: >
+            Whether the path reaches the destination. False when the
+            neighbor graph connects the endpoints only partially; the
+            returned prefix still drifts toward the target.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSummary"

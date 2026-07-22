@@ -1,0 +1,341 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /radio/stations:
+    get:
+      operationId: listRadioStations
+      summary: List radio stations
+      description: >
+        The server's internet radio station library, shared by all
+        users, ordered by name. Unpaginated; the library is capped at
+        500 stations.
+      tags: [radio]
+      responses:
+        "200":
+          description: All stations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioStationList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    post:
+      operationId: createRadioStation
+      summary: Add a radio station
+      description: >
+        Adds a station to the shared library. Any user may add
+        stations; edits and deletion are open to any user too (the
+        library is a shared household surface, like the catalog).
+        Stream URLs must be http or https, and because the server
+        proxies station streams, URLs that resolve to loopback,
+        link-local, or private address ranges are rejected with
+        `invalid-request` (and re-checked at fetch time, after
+        redirects, with a bounded redirect depth), so a station entry
+        can never read internal services. A server option permits
+        private-range stream URLs for households running their own
+        LAN icecast. Conflict (code `conflict`) means a station with
+        this stream URL already exists, or the 500-station cap is
+        reached.
+      tags: [radio]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RadioStationEdit"
+      responses:
+        "201":
+          description: The created station.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioStation"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /radio/stations/{pid}:
+    get:
+      operationId: getRadioStation
+      summary: Get one radio station
+      description: One station by pid.
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The station.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioStation"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateRadioStation
+      summary: Update a radio station
+      description: >
+        Replaces a station's fields, under the same stream URL rules
+        as creation (scheme, private-range rejection, and duplicate
+        conflict).
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RadioStationEdit"
+      responses:
+        "200":
+          description: The updated station.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioStation"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      operationId: deleteRadioStation
+      summary: Delete a radio station
+      description: Removes a station from the shared library.
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "204":
+          description: Station deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /radio/stations/{pid}/play-info:
+    get:
+      operationId: getRadioPlayInfo
+      summary: Resolve a playable station stream
+      description: >
+        Mints a short-lived tokenized URL for the station's stream,
+        proxied through this server's origin (so web clients are never
+        blocked by the station's missing CORS headers and mixed
+        content never arises). The proxy passes ICY station metadata
+        headers through (never icy-metaint: the in-stream metadata it
+        announces is consumed by the proxy, so clients receive clean
+        audio and read the current title from nowPlaying here
+        instead) and serves the stream as a live, unseekable body.
+        Re-request when playback is restarted; the token has a
+        bounded lifetime but an already-open stream is never cut by
+        token expiry.
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The stream URL.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioPlayInfo"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /radio/directory:
+    get:
+      operationId: searchRadioDirectory
+      summary: Search the station directory
+      description: >
+        Searches a public radio station directory (radio-browser.info)
+        by name so stations can be added without pasting stream URLs.
+        Requires internet; when the directory cannot be reached the
+        endpoint answers `directory-unavailable` and manual entry
+        still works.
+      tags: [radio]
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: Station name search terms.
+          schema:
+            type: string
+            minLength: 2
+        - name: limit
+          in: query
+          description: Maximum directory entries to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        "200":
+          description: Directory matches, best first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioDirectoryResults"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "502":
+          description: >
+            The station directory could not be reached (code
+            `directory-unavailable`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    RadioStation:
+      type: object
+      description: One internet radio station in the shared library.
+      required: [pid, name, streamUrl, createdAt]
+      properties:
+        pid:
+          type: string
+          description: Type-prefixed ULID.
+          example: rs-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: Display name.
+          example: FIP
+        streamUrl:
+          type: string
+          description: The station's stream URL.
+          example: https://icecast.radiofrance.fr/fip-midfi.mp3
+        homepageUrl:
+          type: string
+          description: The station's website, when known.
+        logoUrl:
+          type: string
+          description: >
+            Station logo URL, when known. Clients fetch logos
+            directly (they are not proxied), so an http logo may be
+            blocked as mixed content on an https UI; render the
+            placeholder in that case.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the station was added.
+
+    RadioStationList:
+      type: object
+      description: The whole station library.
+      required: [stations]
+      properties:
+        stations:
+          type: array
+          description: Stations ordered by name.
+          items:
+            $ref: "#/components/schemas/RadioStation"
+
+    RadioStationEdit:
+      type: object
+      description: Station fields for create and update.
+      required: [name, streamUrl]
+      properties:
+        name:
+          type: string
+          description: Display name.
+          minLength: 1
+          maxLength: 200
+        streamUrl:
+          type: string
+          description: The station's stream URL; http or https.
+        homepageUrl:
+          type: string
+          description: The station's website.
+        logoUrl:
+          type: string
+          description: Station logo URL.
+
+    RadioPlayInfo:
+      type: object
+      description: A resolved, tokenized station stream.
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: >
+            Origin-relative proxied stream URL carrying a short-lived
+            media token.
+          example: /media/radio/rs-01JZX5N8QW3F4V9T2B7KD3M9R6?mt=abc
+        nowPlaying:
+          type: string
+          description: >
+            The most recent in-stream ICY title the proxy observed for
+            this station. Present only while a proxied listener has
+            the stream open and the station publishes StreamTitle
+            metadata; it reflects what the station last announced, not
+            a guarantee of what is audible right now. The listener may
+            be any user (stations are a shared library, so the field's
+            presence reveals that someone on this server is streaming
+            the station). The value is best-effort UTF-8 from an
+            untrusted station and should be treated as plain display
+            text; an empty announced title is reported as absent.
+            Clients that show it should re-poll this endpoint on the
+            order of every 15 seconds during playback. Every response
+            carries a freshly tokenized url; while already playing,
+            ignore the new url and keep the open stream (polling opens
+            no new connection to the station). On a first request,
+            before anyone has the stream open, the field is
+            necessarily absent.
+          example: Charlie Parker - Ornithology
+
+    RadioDirectoryEntry:
+      type: object
+      description: One station directory match.
+      required: [name, streamUrl]
+      properties:
+        name:
+          type: string
+          description: Station name as listed in the directory.
+        streamUrl:
+          type: string
+          description: Resolved stream URL.
+        homepageUrl:
+          type: string
+          description: Station website.
+        logoUrl:
+          type: string
+          description: Station logo URL.
+        tags:
+          type: string
+          description: Comma-separated directory tags.
+          example: jazz,eclectic
+        country:
+          type: string
+          description: Directory country name.
+        codec:
+          type: string
+          description: Directory-reported stream codec.
+          example: MP3
+        bitrateKbps:
+          type: integer
+          description: Directory-reported bitrate in kbit/s, 0 when unknown.
+
+    RadioDirectoryResults:
+      type: object
+      description: Station directory matches.
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          description: Matches, best first.
+          items:
+            $ref: "#/components/schemas/RadioDirectoryEntry"

@@ -1,0 +1,148 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /library/enrichment:
+    get:
+      operationId: getEnrichmentStatus
+      summary: Enrichment status and coverage
+      description: >
+        The registered enrichment providers (built-ins and the ones
+        this server adds, with what each can supply and whether it
+        is configured) and the catalog's enrichment coverage, plus
+        whether a whole-library pass is currently running.
+      tags: [enrichment]
+      responses:
+        "200":
+          description: The status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichmentStatus"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/enrichment/run:
+    post:
+      operationId: runEnrichment
+      summary: Run a whole-library enrichment pass
+      description: >
+        Starts the catalog's enrichment pass as a background job
+        (identity resolution first, then providers in priority
+        order, provider-paced). `force` re-enriches entities that
+        already enriched once. Locked and unofficial-marked content
+        is respected. Returns the catalog job to follow.
+        Administrators only.
+      tags: [enrichment]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrichmentRunRequest"
+      responses:
+        "202":
+          description: The started job.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichmentRunResult"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  schemas:
+    EnrichmentStatus:
+      type: object
+      description: Enrichment providers and coverage.
+      required: [providers, coverage, running]
+      properties:
+        providers:
+          type: array
+          description: >
+            Registered providers in priority order (this server's
+            own first, then the catalog's key-free built-ins).
+          items:
+            $ref: "#/components/schemas/EnrichmentProvider"
+        coverage:
+          $ref: "#/components/schemas/EnrichmentCoverage"
+        running:
+          type: boolean
+          description: Whether a whole-library pass is running now.
+
+    EnrichmentProvider:
+      type: object
+      description: One enrichment provider.
+      required: [name, capabilities, configured, builtin]
+      properties:
+        name:
+          type: string
+          description: Stable provider id.
+          example: fanarttv
+        capabilities:
+          type: array
+          description: >
+            What it supplies: `identity`, `genres`, `cover`,
+            `lyrics`, `book`. Strings, not a closed enum.
+          items:
+            type: string
+        configured:
+          type: boolean
+          description: >
+            Whether the provider can run (key-free providers always;
+            keyed ones once their key is set).
+        builtin:
+          type: boolean
+          description: True for the catalog's built-ins.
+
+    EnrichmentCoverage:
+      type: object
+      description: How much of the catalog has enriched.
+      required: [artists, releaseGroups, books, lyrics]
+      properties:
+        artists:
+          $ref: "#/components/schemas/CoverageCount"
+        releaseGroups:
+          $ref: "#/components/schemas/CoverageCount"
+        books:
+          $ref: "#/components/schemas/CoverageCount"
+        lyrics:
+          $ref: "#/components/schemas/CoverageCount"
+
+    CoverageCount:
+      type: object
+      description: Enriched versus total for one entity class.
+      required: [enriched, total]
+      properties:
+        enriched:
+          type: integer
+          description: Entities that completed enrichment.
+        total:
+          type: integer
+          description: Entities in scope.
+
+    EnrichmentRunRequest:
+      type: object
+      description: Options for a whole-library pass.
+      properties:
+        force:
+          type: boolean
+          default: false
+          description: Re-enrich entities that already enriched once.
+
+    EnrichmentRunResult:
+      type: object
+      description: The started pass.
+      required: [jobPid]
+      properties:
+        jobPid:
+          type: string
+          description: The catalog job to follow.

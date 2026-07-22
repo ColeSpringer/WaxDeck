@@ -1,0 +1,1381 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /items/{pid}/lyrics:
+    get:
+      operationId: getItemLyrics
+      summary: Get an item's lyrics
+      description: >
+        Lyrics for the item: synced lines when available, an unsynced text
+        block otherwise. 404 when the item has no lyrics at all.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The item's lyrics.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lyrics"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: setItemLyrics
+      summary: Set lyrics
+      description: >
+        Stores synced lines (LRC text) and/or a plain unsynchronized
+        block for a track, locking the lyrics artifact by default.
+        `writeBack` also writes the `.lrc` sidecar next to the file
+        (crash-safe write) and embeds where the format allows; the
+        response surfaces typed drop warnings from the tag library
+        (MP4 and Matroska refuse embedded synced lyrics, so only the
+        sidecar carries them there) instead of silently losing
+        content. Malformed LRC lines are reported with their line
+        numbers.
+      tags: [metadata]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LyricsEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: clearItemLyrics
+      summary: Clear lyrics
+      description: Removes the stored lyrics (files are untouched).
+      tags: [metadata]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "204":
+          description: Cleared.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /metadata/fields:
+    get:
+      operationId: getMetadataFields
+      summary: Discover the editable field vocabulary
+      description: >
+        The editor's form vocabulary: every editable scalar field per
+        item kind (with which ones write back to files and which stay
+        database-only), the credit roles per kind, and the entity
+        edit fields per entity type. Editors build their forms from
+        this instead of hardcoding the vocabulary, the same pattern as
+        the smart playlist rule fields.
+      tags: [metadata]
+      responses:
+        "200":
+          description: The field vocabulary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataFields"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /items/{pid}/metadata:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getItemMetadata
+      summary: Read an item's full metadata
+      description: >
+        Everything the editor shows for one item: the scalar fields,
+        credits by role, lyrics presence, chapters (books), custom
+        tags, locks and per-field provenance (who set a value: file
+        tags, a user, enrichment, or organize), release status, file
+        write-back health (out-of-sync and lost-value diagnostics),
+        and whether the item is a virtual track carved from a shared
+        file (whose edits are always database-only by upstream
+        design). Readable by any user who can see the item; the
+        item-scoped mutations below require `admin`, or ownership of
+        the upload or acquisition that brought the item in.
+      tags: [metadata]
+      responses:
+        "200":
+          description: The item's metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemMetadata"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    patch:
+      operationId: editItemMetadata
+      summary: Edit scalar fields
+      description: >
+        Applies one or more scalar field edits atomically to the
+        catalog. `writeBack` additionally writes the new values into
+        the backing file's tags (refused by upstream design for
+        episodes, virtual tracks, and files shared by several items;
+        the edit still lands in the catalog and the response carries
+        the per-file failures). `lock` (default true) locks each
+        edited field against scans and enrichment; editing a field
+        someone locked earlier requires `force` or answers
+        `field-locked`. Unknown fields for the item's kind answer
+        `invalid-request`. Identifier fields (ISRC, ISBN, ASIN,
+        barcode) are format-checked here because upstream stores
+        them unvalidated.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetadataEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/bulk-edit:
+    post:
+      operationId: bulkEditMetadata
+      summary: Edit fields on many items
+      description: >
+        Applies the same scalar field values to many items in one
+        atomic catalog batch (a different value per item needs
+        per-item calls). `skipLocked` skips items with locked target
+        fields and reports them instead of failing the batch;
+        without it a locked item fails the whole batch with
+        `field-locked`. Write-back failures are reported per item and
+        never undo the catalog batch.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkEdit"
+      responses:
+        "200":
+          description: Per-item outcomes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/credits:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setItemCredits
+      summary: Replace one credit role
+      description: >
+        Replaces the named people for one contributor role (composer,
+        lyricist, producer, narrator, and the rest of the per-kind
+        role vocabulary from the fields endpoint). Names resolve to
+        artist entities and deduplicate. An empty list clears the
+        role. `writeBack` writes the role's tag keys where a
+        round-trippable key exists (book translator and editor roles
+        are database-only by upstream design; the response says so
+        rather than failing).
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditsEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}/chapters:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setBookChapters
+      summary: Replace a book's chapters
+      description: >
+        Replaces the chapter list of a single-file audiobook (user
+        chapters win over embedded ones on read; multi-file books
+        keep their part boundaries as the navigation grain, an
+        upstream limit). Chapters must be ordered and non-overlapping
+        on the book timeline. An empty list restores the embedded
+        chapters.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChaptersEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/artwork:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setItemArtwork
+      summary: Set item artwork
+      description: >
+        Stores the raw image bytes as the item's front cover (the one
+        artwork slot upstream models), locking the artifact by
+        default. The body is the image itself, up to 16 MiB; the
+        server sniffs the format. `writeBack=true` embeds the cover
+        into every backing file. Existing art is replaced; the
+        request never downgrades silently because the caller chose
+        the image.
+      tags: [metadata]
+      parameters:
+        - name: writeBack
+          in: query
+          description: Also embed the cover into the backing files.
+          schema:
+            type: boolean
+            default: false
+        - name: lock
+          in: query
+          description: Lock the artwork against scans and enrichment.
+          schema:
+            type: boolean
+            default: true
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "415":
+          $ref: "#/components/responses/UnsupportedFormat"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: clearItemArtwork
+      summary: Clear item artwork
+      description: >
+        Removes the stored item art; resolution falls back to the
+        entity chain (album, release group, artist).
+      tags: [metadata]
+      responses:
+        "204":
+          description: Cleared.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /entities/{entityType}/{entityPid}/artwork:
+    parameters:
+      - $ref: "#/components/parameters/EntityType"
+      - $ref: "#/components/parameters/EntityPid"
+    put:
+      operationId: setEntityArtwork
+      summary: Set entity artwork
+      description: >
+        Stores the raw image bytes as durable front-cover art for an
+        album, artist, release group, or genre entity. Album art may
+        additionally embed into member files with `writeBack=true`;
+        other entity types are catalog-only.
+      tags: [metadata]
+      parameters:
+        - name: writeBack
+          in: query
+          description: >
+            Embed into member files (albums only; ignored elsewhere).
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedFormat"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/tags/{key}:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+      - name: key
+        in: path
+        required: true
+        description: >
+          The custom tag key. Keys canonicalize to uppercase ASCII;
+          keys the catalog owns through another surface (TITLE,
+          ARTIST, the credit roles, and the rest of the reserved set)
+          are rejected with `invalid-request`.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+    put:
+      operationId: setItemTag
+      summary: Set a custom tag
+      description: >
+        Replaces the ordered values of one custom tag on a track or
+        book, locking `tag.KEY` by default. Custom tags are full
+        browse dimensions: they filter, facet, and feed smart list
+        rules. An empty value list clears the tag.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagEdit"
+      responses:
+        "200":
+          description: The edit outcome, with the canonical key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: clearItemTag
+      summary: Clear a custom tag
+      description: >
+        Removes the tag and its lock. A reserved key (one the catalog
+        owns through another surface) answers `invalid-request`, like
+        setting one does.
+      tags: [metadata]
+      responses:
+        "204":
+          description: Cleared.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/locks:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setItemLocks
+      summary: Lock or unlock fields
+      description: >
+        Locks or unlocks the named fields against scans, enrichment,
+        and organize. Field names are the scalar vocabulary plus the
+        namespaced artifacts: `lyrics`, `chapters`, `art`,
+        `credit.ROLE`, and `tag.KEY`.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocksEdit"
+      responses:
+        "200":
+          description: The item's locked fields after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocksResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /entities/{entityType}/{entityPid}:
+    parameters:
+      - $ref: "#/components/parameters/EntityType"
+      - $ref: "#/components/parameters/EntityPid"
+    patch:
+      operationId: editEntity
+      summary: Edit entity fields
+      description: >
+        Edits an entity's own fields: sort name and MusicBrainz id
+        for artists; sort name, MusicBrainz id, and type for release
+        groups; sort name, MusicBrainz id, barcode, label, and
+        catalog number for albums. Entity edits carry their own
+        provenance, readable below. `writeBack` pushes the values
+        that have tag forms into member files.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntityEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/FieldLocked"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /entities/{entityType}/{entityPid}/curation:
+    parameters:
+      - $ref: "#/components/parameters/EntityType"
+      - $ref: "#/components/parameters/EntityPid"
+    get:
+      operationId: getEntityCuration
+      summary: Read entity edit provenance
+      description: The entity's curated fields with source and time.
+      tags: [metadata]
+      responses:
+        "200":
+          description: Curated entity fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityCuration"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/release-status:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setReleaseStatus
+      summary: Mark content unofficial
+      description: >
+        Marks an item as having no canonical release (YouTube rips,
+        remixes, live sets, personal recordings) or clears the mark.
+        Marking sets a locked `RELEASESTATUS` custom tag of
+        `unofficial`, which excludes the item from match retries and
+        health penalties; the state is first-class, browsable, and
+        fully hand-editable, never an error condition.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReleaseStatusEdit"
+      responses:
+        "200":
+          description: The edit outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataEditResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/rematch:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: rematchItem
+      summary: Requeue an item for matching
+      description: >
+        Rebuilds the album unit containing the item (its album
+        siblings ride along; a unit is always matched whole) and runs
+        the identify pipeline on it, opening a fresh pending review
+        entry. Items marked unofficial are eligible here (an explicit
+        rematch is the way back from that state). The entry id
+        returns immediately; candidates fill in asynchronously and
+        the entry updates over the event channel.
+      tags: [metadata]
+      responses:
+        "202":
+          description: The queued review entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RematchResult"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/enrich:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: enrichItem
+      summary: Enrich one item now
+      description: >
+        Runs the registered enrichment providers for the wanted
+        artifacts (cover art, lyrics, genres, book metadata) against
+        this one item synchronously and applies what they return,
+        respecting locks and never overwriting a non-empty curated
+        value. This is the editor's "fetch for me" button; the
+        whole-library pass lives under `/library/enrichment`.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrichItemRequest"
+      responses:
+        "200":
+          description: What was fetched and applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichItemResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  parameters:
+    EntityType:
+      name: entityType
+      in: path
+      required: true
+      description: The entity kind an entity operation targets.
+      schema:
+        type: string
+        enum: [album, artist, release-group, genre]
+
+    EntityPid:
+      name: entityPid
+      in: path
+      required: true
+      description: Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^[a-z]{2}-[0-9A-HJKMNP-TV-Z]{26}$"
+  responses:
+    FieldLocked:
+      description: >
+        The edit targets a metadata field someone locked earlier and
+        the request did not set `force` (code `field-locked`). The
+        message names the field.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Lyrics:
+      type: object
+      description: >
+        Lyrics for one item. At least one of `synced` and `unsynced` is
+        non-empty.
+      required: [pid, source]
+      properties:
+        pid:
+          type: string
+          description: The item these lyrics belong to.
+        source:
+          type: string
+          description: Where the lyrics came from (`lrc` sidecar, `embedded` tag).
+          example: lrc
+        synced:
+          type: array
+          description: Time-synced lines, ordered by `timeMs`.
+          items:
+            $ref: "#/components/schemas/SyncedLine"
+        unsynced:
+          type: string
+          description: Plain text block when no synced lines exist.
+
+    SyncedLine:
+      type: object
+      description: One time-synced lyric line.
+      required: [timeMs, text]
+      properties:
+        timeMs:
+          type: integer
+          format: int64
+          description: Line start in milliseconds.
+        text:
+          type: string
+          description: Line text.
+
+    MetadataFields:
+      type: object
+      description: The editor's field vocabulary.
+      required: [kinds, entityTypes]
+      properties:
+        kinds:
+          type: array
+          description: Editable fields per item kind.
+          items:
+            $ref: "#/components/schemas/KindFields"
+        entityTypes:
+          type: array
+          description: Editable fields per entity type.
+          items:
+            $ref: "#/components/schemas/EntityTypeFields"
+
+    KindFields:
+      type: object
+      description: One item kind's editable vocabulary.
+      required: [kind, fields, creditRoles]
+      properties:
+        kind:
+          $ref: "#/components/schemas/MediaType"
+        fields:
+          type: array
+          description: Editable scalar fields.
+          items:
+            $ref: "#/components/schemas/EditableField"
+        creditRoles:
+          type: array
+          description: >
+            Credit roles for the kind; roles marked database-only
+            have no round-trippable tag form.
+          items:
+            $ref: "#/components/schemas/EditableField"
+
+    EditableField:
+      type: object
+      description: One editable field or role.
+      required: [name, writeBack]
+      properties:
+        name:
+          type: string
+          description: The field or role name the edit APIs accept.
+          example: title
+        writeBack:
+          type: boolean
+          description: >
+            Whether the value can write into file tags; false means
+            database-only by upstream design.
+
+    EntityTypeFields:
+      type: object
+      description: One entity type's editable vocabulary.
+      required: [entityType, fields]
+      properties:
+        entityType:
+          type: string
+          description: "`album`, `artist`, or `release-group`."
+        fields:
+          type: array
+          description: Editable entity fields.
+          items:
+            $ref: "#/components/schemas/EditableField"
+
+    ItemMetadata:
+      type: object
+      description: Everything the editor shows for one item.
+      required: [pid, mediaType, fields, lockedFields, provenance, credits, customTags, unofficial, virtualTrack, hasArtwork, writeBackIssues]
+      properties:
+        pid:
+          type: string
+          description: The item.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            The item's scalar fields by name (the kind's vocabulary
+            from the fields endpoint); empty values are omitted.
+        lockedFields:
+          type: array
+          description: >
+            Currently locked fields, including namespaced artifacts
+            (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`).
+          items:
+            type: string
+        provenance:
+          type: array
+          description: Per-field provenance for curated fields.
+          items:
+            $ref: "#/components/schemas/FieldProvenance"
+        credits:
+          type: array
+          description: Credits by role.
+          items:
+            $ref: "#/components/schemas/Credit"
+        lyrics:
+          $ref: "#/components/schemas/LyricsState"
+        chapters:
+          type: array
+          description: Chapter marks (books).
+          items:
+            $ref: "#/components/schemas/ChapterMark"
+        customTags:
+          type: array
+          description: Custom tags.
+          items:
+            $ref: "#/components/schemas/CustomTag"
+        unofficial:
+          type: boolean
+          description: Whether the item is marked as having no canonical release.
+        virtualTrack:
+          type: boolean
+          description: >
+            True for tracks carved from a shared file (CUE rips):
+            their edits are always database-only and they export no
+            fingerprint, by upstream design.
+        hasArtwork:
+          type: boolean
+          description: Whether item-level art is stored.
+        albumPid:
+          type: string
+          description: The item's album entity, when any.
+        artistPid:
+          type: string
+          description: The item's artist entity, when any.
+        releaseGroupPid:
+          type: string
+          description: The item's release group entity, when any.
+        writeBackIssues:
+          type: array
+          description: >
+            Files whose on-disk tags are out of step with the catalog
+            (failed write-backs, values the format cannot store).
+          items:
+            $ref: "#/components/schemas/WriteBackIssue"
+
+    FieldProvenance:
+      type: object
+      description: Who set one field's current value.
+      required: [field, source, locked]
+      properties:
+        field:
+          type: string
+          description: The field, possibly namespaced.
+        source:
+          type: string
+          description: >
+            The producer: `tag`, `user`, `enrichment`, or
+            `organize`. A string, not a closed enum.
+        provider:
+          type: string
+          description: The enrichment provider, for enriched fields.
+        locked:
+          type: boolean
+          description: Whether the field is locked.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the value last changed.
+
+    Credit:
+      type: object
+      description: One credit role with its people.
+      required: [role, names]
+      properties:
+        role:
+          type: string
+          description: The role name.
+          example: producer
+        names:
+          type: array
+          description: The credited people, in stored order.
+          items:
+            type: string
+
+    LyricsState:
+      type: object
+      description: The stored lyrics, when any.
+      required: [synced, source]
+      properties:
+        synced:
+          type: boolean
+          description: Whether timed lines are stored.
+        source:
+          type: string
+          description: >
+            Where the stored copy came from: `lrc` (sidecar),
+            `embedded`, or `user`. A string, not a closed enum.
+        lrc:
+          type: string
+          description: >
+            The lyrics serialized as LRC text (timed lines when
+            synced, bare lines otherwise), the editor's working
+            format.
+
+    CustomTag:
+      type: object
+      description: One custom tag.
+      required: [key, values]
+      properties:
+        key:
+          type: string
+          description: Canonical uppercase key.
+          example: MOOD
+        values:
+          type: array
+          description: Ordered values.
+          items:
+            type: string
+
+    WriteBackIssue:
+      type: object
+      description: One file out of step with the catalog.
+      required: [filePid, code]
+      properties:
+        filePid:
+          type: string
+          description: The backing file.
+        code:
+          type: string
+          description: >
+            The diagnostic: `tag-write-unsynced` (a write-back was
+            refused or failed; the file's tags lag the catalog) or
+            `tag-write-lost` (the write ran but the format could not
+            store the value). A string, not a closed enum.
+        tagKey:
+          type: string
+          description: The affected tag key, when known.
+        detail:
+          type: string
+          description: Human-readable detail.
+
+    MetadataEdit:
+      type: object
+      description: Scalar field edits for one item.
+      required: [fields]
+      properties:
+        fields:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: string
+          description: >
+            Field name to new value; an empty string clears the
+            field. Names come from the kind's vocabulary.
+        writeBack:
+          type: boolean
+          default: false
+          description: Also write the new values into the file's tags.
+        lock:
+          type: boolean
+          default: true
+          description: Lock the edited fields.
+        force:
+          type: boolean
+          default: false
+          description: Override existing locks on the edited fields.
+
+    WriteBackFailure:
+      type: object
+      description: One file a write-back could not update.
+      required: [filePid, reason]
+      properties:
+        filePid:
+          type: string
+          description: The file.
+        path:
+          type: string
+          description: Its display path.
+        reason:
+          type: string
+          description: Why the write failed or was refused.
+
+    MetadataEditResult:
+      type: object
+      description: >
+        The outcome of a metadata mutation. The catalog write
+        succeeded whenever this shape returns; write-back trouble
+        and drop warnings ride along instead of failing the edit.
+      required: [applied]
+      properties:
+        applied:
+          type: boolean
+          description: Always true; the catalog committed.
+        writeBackFailures:
+          type: array
+          description: Files whose tags could not be updated.
+          items:
+            $ref: "#/components/schemas/WriteBackFailure"
+        warnings:
+          type: array
+          description: >
+            Non-fatal notes: typed drop warnings from the tag
+            library (a format refusing embedded synced lyrics, a
+            chapter cap), roles without a tag form, malformed LRC
+            lines skipped.
+          items:
+            type: string
+
+    BulkEdit:
+      type: object
+      description: The same scalar edits applied to many items.
+      required: [itemPids, fields]
+      properties:
+        itemPids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          description: The items to edit.
+          items:
+            type: string
+        fields:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: string
+          description: Field name to new value, applied to every item.
+        writeBack:
+          type: boolean
+          default: false
+          description: Also write into the files' tags.
+        skipLocked:
+          type: boolean
+          default: false
+          description: >
+            Skip items whose target fields are locked instead of
+            failing the batch.
+        force:
+          type: boolean
+          default: false
+          description: Override locks (mutually exclusive with `skipLocked`).
+
+    BulkEditResult:
+      type: object
+      description: Per-item outcomes of a bulk edit.
+      required: [edited, skipped]
+      properties:
+        edited:
+          type: array
+          description: Items whose catalog rows updated.
+          items:
+            type: string
+        skipped:
+          type: array
+          description: Items skipped for locks.
+          items:
+            type: string
+        writeBackFailures:
+          type: array
+          description: Files whose tags could not be updated.
+          items:
+            $ref: "#/components/schemas/WriteBackFailure"
+
+    CreditsEdit:
+      type: object
+      description: Replacement people for one credit role.
+      required: [role, names]
+      properties:
+        role:
+          type: string
+          description: The role, from the kind's role vocabulary.
+          example: producer
+        names:
+          type: array
+          maxItems: 100
+          description: The people; empty clears the role.
+          items:
+            type: string
+        writeBack:
+          type: boolean
+          default: false
+          description: Write the role's tag keys where a form exists.
+        lock:
+          type: boolean
+          default: true
+          description: Lock `credit.ROLE`.
+        force:
+          type: boolean
+          default: false
+          description: Override an existing lock.
+
+    LyricsEdit:
+      type: object
+      description: >
+        Replacement lyrics. At least one of `lrc` and `plain` must
+        carry content.
+      properties:
+        lrc:
+          type: string
+          maxLength: 200000
+          description: >
+            Timed lines as LRC text. Malformed lines are skipped and
+            reported as warnings with their line numbers.
+        plain:
+          type: string
+          maxLength: 200000
+          description: A plain unsynchronized block.
+        writeBack:
+          type: boolean
+          default: false
+          description: >
+            Write the `.lrc` sidecar next to the file and embed
+            where the format allows.
+        lock:
+          type: boolean
+          default: true
+          description: Lock the lyrics artifact.
+        force:
+          type: boolean
+          default: false
+          description: Override an existing lock.
+
+    ChaptersEdit:
+      type: object
+      description: A replacement chapter list.
+      required: [chapters]
+      properties:
+        chapters:
+          type: array
+          maxItems: 2000
+          description: >
+            Ordered, non-overlapping chapters on the book timeline;
+            empty restores the embedded chapters.
+          items:
+            $ref: "#/components/schemas/ChapterMark"
+        lock:
+          type: boolean
+          default: true
+          description: Lock the chapters artifact.
+        force:
+          type: boolean
+          default: false
+          description: Override an existing lock.
+
+    TagEdit:
+      type: object
+      description: Replacement values for one custom tag.
+      required: [values]
+      properties:
+        values:
+          type: array
+          maxItems: 100
+          description: Ordered values; empty clears the tag.
+          items:
+            type: string
+        lock:
+          type: boolean
+          default: true
+          description: Lock `tag.KEY`.
+        force:
+          type: boolean
+          default: false
+          description: Override an existing lock.
+
+    TagEditResult:
+      type: object
+      description: The outcome of a tag edit.
+      required: [key, stored]
+      properties:
+        key:
+          type: string
+          description: The canonical uppercase key actually used.
+        stored:
+          type: integer
+          description: Values stored after deduplication.
+
+    LocksEdit:
+      type: object
+      description: A lock or unlock for named fields.
+      required: [fields, locked]
+      properties:
+        fields:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The fields, possibly namespaced.
+          items:
+            type: string
+        locked:
+          type: boolean
+          description: True locks, false unlocks.
+
+    LocksResult:
+      type: object
+      description: The item's locks after the change.
+      required: [lockedFields]
+      properties:
+        lockedFields:
+          type: array
+          description: Every currently locked field.
+          items:
+            type: string
+
+    EntityEdit:
+      type: object
+      description: Entity field edits.
+      required: [edits]
+      properties:
+        edits:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: string
+          description: >
+            Field name to new value, from the entity type's
+            vocabulary; empty clears.
+        writeBack:
+          type: boolean
+          default: false
+          description: Push tag-formed values into member files.
+        lock:
+          type: boolean
+          default: true
+          description: Lock the edited entity fields.
+        force:
+          type: boolean
+          default: false
+          description: Override existing locks.
+
+    EntityCuration:
+      type: object
+      description: An entity's curated fields.
+      required: [curated]
+      properties:
+        curated:
+          type: array
+          description: Curated fields with provenance.
+          items:
+            $ref: "#/components/schemas/EntityCuratedField"
+
+    EntityCuratedField:
+      type: object
+      description: One curated entity field.
+      required: [field, source, locked]
+      properties:
+        field:
+          type: string
+          description: The field.
+        value:
+          type: string
+          description: The curated value.
+        source:
+          type: string
+          description: The producer, as in item provenance.
+        locked:
+          type: boolean
+          description: Whether the field is locked.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the value last changed.
+
+    ReleaseStatusEdit:
+      type: object
+      description: The unofficial mark.
+      required: [unofficial]
+      properties:
+        unofficial:
+          type: boolean
+          description: >
+            True marks the item as having no canonical release;
+            false clears the mark.
+
+    RematchResult:
+      type: object
+      description: The review entry a rematch opened.
+      required: [reviewEntryId]
+      properties:
+        reviewEntryId:
+          type: string
+          description: The pending entry; candidates fill in asynchronously.
+
+    EnrichItemRequest:
+      type: object
+      description: What to fetch for one item.
+      required: [want]
+      properties:
+        want:
+          type: array
+          minItems: 1
+          description: The artifacts to fetch.
+          items:
+            type: string
+            enum: [cover, lyrics, genres, book]
+
+    EnrichItemResult:
+      type: object
+      description: What a one-item enrichment fetched.
+      required: [applied, skipped]
+      properties:
+        applied:
+          type: array
+          description: >
+            Artifacts fetched and stored, each naming its provider
+            (for example `cover: fanarttv`).
+          items:
+            type: string
+        skipped:
+          type: array
+          description: >
+            Artifacts not stored, each naming why (locked, already
+            present, no provider hit, provider unconfigured).
+          items:
+            type: string

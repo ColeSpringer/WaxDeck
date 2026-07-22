@@ -1,0 +1,1069 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      summary: List accounts
+      description: >
+        Keyset-paginated list of all accounts, ordered by username.
+        Administrators only.
+      tags: [users]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum accounts per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of accounts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createUser
+      summary: Create an account
+      description: >
+        Creates a local account. Administrators only. Usernames are unique
+        case-insensitively; a taken name answers `conflict`. The account is
+        immediately able to log in with the given password.
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccount"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /users/{userId}:
+    get:
+      operationId: getUser
+      summary: Get one account
+      description: >
+        Full account detail. Administrators can read any account; everyone
+        else only their own.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccount"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateUser
+      summary: Update an account
+      description: >
+        Partial update: absent fields are unchanged. Administrators can
+        update any field on any account; everyone else can change only
+        their own `displayName`, and a non-administrator supplying any
+        other field is rejected with `forbidden`, never silently
+        ignored. Changes that would leave the server without an enabled
+        administrator (demoting or disabling the last one) answer
+        `conflict`. Setting `displayName` to the empty string clears it.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: The updated account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccount"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      operationId: deleteUser
+      summary: Delete an account
+      description: >
+        Deletes the account and revokes all its sessions. Administrators
+        only, and never the calling account or the last enabled
+        administrator (`conflict`). The user's listening history in the
+        catalog is orphaned, not destroyed.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Account deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /users/{userId}/password:
+    put:
+      operationId: setPassword
+      summary: Set an account's password
+      description: >
+        Changes the account's password and revokes the account's
+        sessions. Changing your own password always requires
+        `currentPassword` (administrators included); a wrong value
+        answers `forbidden`, and the session making the request is the
+        only one that survives. An administrator resetting another
+        account's password omits `currentPassword`, and every one of
+        that account's sessions is revoked. Setting a password on an
+        OIDC-provisioned account enables local login for it. App
+        passwords are separate credentials and survive a password
+        change; revoke them individually.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordChange"
+      responses:
+        "204":
+          description: Password changed.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{userId}/sessions:
+    delete:
+      operationId: revokeUserSessions
+      summary: Revoke all of an account's sessions
+      description: >
+        Signs the account out everywhere by revoking every live session it
+        has. When callers target their own account, the session making this
+        request survives. Administrators can target any account; everyone
+        else only their own.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Sessions revoked.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/requests:
+    get:
+      operationId: listSignupRequests
+      summary: List pending signup requests
+      description: >
+        Keyset-paginated pending accounts (self-serve registrations
+        awaiting a decision), oldest first so the queue drains in
+        arrival order. Administrators only. Pending accounts also
+        carry `pending: true` when they appear anywhere else.
+      tags: [users]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum requests per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of pending accounts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /users/requests/{userId}/approve:
+    post:
+      operationId: approveSignupRequest
+      summary: Approve a signup request
+      description: >
+        Approves a pending account so it can log in, assigning its
+        role, library access, and permissions in the same step (absent
+        fields keep the registration defaults: the `user` role, access
+        to every library, and default permissions). Administrators
+        only. A user that is not pending answers `conflict`.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupApproval"
+      responses:
+        "200":
+          description: The approved, now-active account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccount"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /users/requests/{userId}/reject:
+    post:
+      operationId: rejectSignupRequest
+      summary: Reject a signup request
+      description: >
+        Rejects and deletes a pending account. The username becomes
+        available again. Administrators only. A user that is not
+        pending answers `conflict` (reject never deletes an active
+        account).
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Request rejected and removed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /invites:
+    get:
+      operationId: listInvites
+      summary: List invites
+      description: >
+        Every invite, newest first, revoked and exhausted ones
+        included (the list is the record of who was let in with
+        what). Invite tokens are never returned here; a token is
+        shown exactly once, by the create response. Administrators
+        only.
+      tags: [users]
+      responses:
+        "200":
+          description: All invites.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createInvite
+      summary: Create an invite
+      description: >
+        Creates an invite link token that pre-approves signup with the
+        given role, library access, and permissions (absent fields use
+        the registration defaults). The response is the only place the
+        token ever appears; the server stores a hash. Administrators
+        only.
+      tags: [users]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteCreate"
+      responses:
+        "201":
+          description: The invite, with its token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteCreated"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /invites/{inviteId}:
+    delete:
+      operationId: revokeInvite
+      summary: Revoke an invite
+      description: >
+        Revokes the invite so its token stops working. Accounts it
+        already admitted are unaffected. The invite stays listed as
+        revoked. Administrators only.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/InviteId"
+      responses:
+        "204":
+          description: Invite revoked.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/me/prefs:
+    get:
+      operationId: getPrefs
+      summary: Get the caller's preferences
+      description: >
+        The calling user's preferences. Unset fields are absent; clients
+        apply their own defaults.
+      tags: [users]
+      responses:
+        "200":
+          description: The caller's preferences.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prefs"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    put:
+      operationId: putPrefs
+      summary: Replace the caller's preferences
+      description: >
+        Replaces the calling user's preferences with the given object:
+        absent fields are cleared back to unset. Returns the stored
+        result; comparing it against what was sent reveals anything the
+        server did not store. Field values are validated (unknown
+        timezone, malformed locale, or unknown theme is rejected).
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Prefs"
+      responses:
+        "200":
+          description: The stored preferences.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prefs"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /users/me/app-passwords:
+    get:
+      operationId: listAppPasswords
+      summary: List the caller's app passwords
+      description: >
+        The calling user's app passwords, newest first. App passwords are
+        dedicated per-client credentials for the compatibility APIs
+        (Subsonic and, later, gpodder), which require the server to hold a
+        recoverable secret; the login password is never usable there. The
+        secret itself is only ever returned by creation. App passwords
+        stop authenticating the moment their account is disabled, and are
+        deliberately independent of the login password: changing or
+        resetting it leaves them working (revoke them here). Unpaginated:
+        a user's app passwords are a small, bounded set.
+      tags: [users]
+      responses:
+        "200":
+          description: The caller's app passwords.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppPasswordList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    post:
+      operationId: createAppPassword
+      summary: Create an app password
+      description: >
+        Generates a new app password for the calling user and returns the
+        secret exactly once; it is not recoverable through the API
+        afterwards. The secret is 26 characters of server-generated
+        randomness (at least 128 bits); users never choose it. The client
+        using it authenticates against the compatibility APIs with the
+        account's username and this secret. The label distinguishes
+        entries in the list (for example the client app's name); labels
+        need not be unique. An account holds at most 50 app passwords;
+        creating past the cap answers `conflict`.
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppPasswordCreate"
+      responses:
+        "201":
+          description: App password created; the secret appears only here.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppPasswordCreated"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /users/me/app-passwords/{appPasswordId}:
+    delete:
+      operationId: revokeAppPassword
+      summary: Revoke an app password
+      description: >
+        Revokes one of the calling user's app passwords. Clients holding it
+        fail their next compatibility-API request immediately.
+      tags: [users]
+      parameters:
+        - $ref: "#/components/parameters/AppPasswordId"
+      responses:
+        "204":
+          description: App password revoked.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: User PID (e.g. `us-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^us-[0-9A-HJKMNP-TV-Z]{26}$"
+
+    AppPasswordId:
+      name: appPasswordId
+      in: path
+      required: true
+      description: App password PID (e.g. `ap-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^ap-[0-9A-HJKMNP-TV-Z]{26}$"
+
+    InviteId:
+      name: inviteId
+      in: path
+      required: true
+      description: Invite PID (e.g. `iv-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^iv-[0-9A-HJKMNP-TV-Z]{26}$"
+  schemas:
+    User:
+      type: object
+      description: A WaxDeck account as visible to its owner.
+      required: [id, username, roles, uploadEnabled]
+      properties:
+        id:
+          type: string
+          description: Stable user identifier.
+          example: us-01JZX5N8QW3F4V9T2B7KD3M9R6
+        username:
+          type: string
+          description: Login name.
+          example: admin
+        displayName:
+          type: string
+          description: Optional display name; falls back to `username`.
+        roles:
+          type: array
+          description: Assigned roles (`admin`, `user`).
+          items:
+            type: string
+            example: admin
+        uploadEnabled:
+          type: boolean
+          description: >
+            Whether the account may upload audio. On self views
+            (login, session) this is the *effective* value —
+            administrators always may, whatever their stored flag
+            says — and clients gate their upload affordances on it.
+            On administrative account views (`UserAccount`) it is the
+            stored per-account flag the account editor round-trips;
+            an administrator's own stored flag may therefore read
+            false while their effective right is true. Defined once
+            here because the generators flatten `UserAccount`'s
+            `allOf` over this schema; a duplicate declaration there
+            would silently lose.
+
+    UserAccount:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          description: Administrative account fields beyond the self view.
+          # uploadEnabled stays in this required list (it is required on
+          # account views) but is defined once, on User: the generators
+          # flatten this allOf, and a duplicate property definition here
+          # would silently override the merged field in one of them.
+          required: [disabled, libraryAccess, createdAt, uploadEnabled, pending, permissions]
+          properties:
+            disabled:
+              type: boolean
+              description: >
+                Disabled accounts cannot log in and their live sessions are
+                revoked on disable.
+            pending:
+              type: boolean
+              description: >
+                True for a self-serve registration still awaiting an
+                administrator's decision. Pending accounts cannot log
+                in; approve or reject them through the signup request
+                endpoints.
+            libraryAccess:
+              $ref: "#/components/schemas/LibraryAccess"
+            permissions:
+              $ref: "#/components/schemas/Permissions"
+            uploadQuotaBytes:
+              type: integer
+              format: int64
+              description: >
+                Total bytes of uploads the account may hold at once;
+                absent means no per-user cap.
+            createdAt:
+              type: string
+              format: date-time
+              description: When the account was created.
+            hasPassword:
+              type: boolean
+              description: >
+                Whether local password login is enabled for the account
+                (false for accounts provisioned by OIDC that never set one).
+            identities:
+              type: array
+              description: Linked single sign-on identities.
+              items:
+                $ref: "#/components/schemas/LinkedIdentity"
+      description: An account as visible to administrators (and to its owner).
+
+    LinkedIdentity:
+      type: object
+      description: One linked OIDC identity.
+      required: [provider]
+      properties:
+        provider:
+          type: string
+          description: Provider id the identity belongs to.
+          example: dex
+        email:
+          type: string
+          description: Email reported by the provider at last login, if any.
+
+    LibraryAccess:
+      type: object
+      description: >
+        Which libraries an account can see. `all` grants every library
+        including ones added later; `granted` limits visibility to
+        `libraryPids`. Administrators always see everything regardless of
+        this setting.
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [all, granted]
+          description: Access mode.
+        libraryPids:
+          type: array
+          description: >
+            Visible libraries when mode is `granted`; ignored for `all`.
+          items:
+            type: string
+            example: lb-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    Role:
+      type: string
+      enum: [admin, user]
+      description: >
+        An assignable account role. A shared named schema on purpose:
+        identical inline enums make the Dart generator emit one enum class
+        into two files, which does not compile.
+
+    UserCreate:
+      type: object
+      description: A new local account.
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Login name, unique case-insensitively. Leading and trailing
+            whitespace is rejected.
+          example: frodo
+        password:
+          type: string
+          minLength: 8
+          format: password
+          description: Initial password (at least 8 characters).
+        displayName:
+          type: string
+          maxLength: 128
+          description: Optional display name.
+        roles:
+          type: array
+          description: Assigned roles; defaults to `[user]`.
+          items:
+            $ref: "#/components/schemas/Role"
+        libraryAccess:
+          $ref: "#/components/schemas/LibraryAccess"
+        uploadEnabled:
+          type: boolean
+          description: Grant upload rights; defaults to false.
+        uploadQuotaBytes:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Per-user upload cap in bytes; absent means none.
+        permissions:
+          $ref: "#/components/schemas/Permissions"
+
+    UserUpdate:
+      type: object
+      description: >
+        Partial account update: absent fields are unchanged. Setting
+        `displayName` to the empty string clears it.
+      properties:
+        displayName:
+          type: string
+          maxLength: 128
+          description: New display name; empty clears it.
+        roles:
+          type: array
+          description: Replacement role set.
+          items:
+            $ref: "#/components/schemas/Role"
+        disabled:
+          type: boolean
+          description: >
+            Disable or re-enable the account. Disabling revokes its live
+            sessions.
+        libraryAccess:
+          $ref: "#/components/schemas/LibraryAccess"
+        uploadEnabled:
+          type: boolean
+          description: Grant or revoke upload rights.
+        uploadQuotaBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            New per-user upload cap in bytes; 0 removes the cap.
+        permissions:
+          $ref: "#/components/schemas/Permissions"
+
+    UserPage:
+      type: object
+      description: One keyset-paginated page of accounts.
+      required: [users]
+      properties:
+        users:
+          type: array
+          description: >
+            Accounts, in the endpoint's documented order (the account
+            list orders by username; the signup request queue oldest
+            first).
+          items:
+            $ref: "#/components/schemas/UserAccount"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
+
+    PasswordChange:
+      type: object
+      description: A password change.
+      required: [newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          description: >
+            The account's current password. Required when changing your own
+            password; administrators resetting another account omit it.
+        newPassword:
+          type: string
+          minLength: 8
+          format: password
+          description: The new password (at least 8 characters).
+
+    Prefs:
+      type: object
+      additionalProperties: false
+      description: >
+        Per-user preferences that sync across clients. All fields are
+        optional; unset fields are absent and clients apply their own
+        defaults. Unknown fields are rejected.
+      properties:
+        timezone:
+          type: string
+          description: >
+            IANA timezone name (for example `Europe/Amsterdam`). Drives
+            streaks, heatmaps, and other calendar-bucketed statistics.
+          example: America/Denver
+        locale:
+          type: string
+          description: Preferred BCP 47 locale tag (for example `en-US`).
+          example: en-US
+        theme:
+          type: string
+          enum: [system, dark, light, oled]
+          description: Preferred app theme.
+        sharedStatsOptOut:
+          type: boolean
+          description: >
+            Leave the server-wide aggregate stats (the server year in
+            review). Household members are enrolled by default; opting
+            out removes this user's listening from every server-wide
+            figure. Personal stats are unaffected.
+
+    AppPassword:
+      type: object
+      description: One app password, without its secret.
+      required: [id, label, createdAt]
+      properties:
+        id:
+          type: string
+          description: App password PID.
+          example: ap-01JZX5N8QW3F4V9T2B7KD3M9R6
+        label:
+          type: string
+          description: Human-readable label given at creation.
+          example: Symfonium on Pixel 9
+        createdAt:
+          type: string
+          format: date-time
+          description: When the app password was created.
+        lastUsedAt:
+          type: string
+          format: date-time
+          description: >
+            When the app password last authenticated a request (coarse,
+            minutes). Absent when it has never been used.
+
+    AppPasswordList:
+      type: object
+      description: The caller's app passwords, newest first.
+      required: [appPasswords]
+      properties:
+        appPasswords:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppPassword"
+
+    AppPasswordCreate:
+      type: object
+      description: A new app password.
+      required: [label]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: >
+            Label shown in the app password list, usually the client app
+            this password is for.
+          example: Symfonium on Pixel 9
+
+    AppPasswordCreated:
+      allOf:
+        - $ref: "#/components/schemas/AppPassword"
+        - type: object
+          required: [secret]
+          properties:
+            secret:
+              type: string
+              description: >
+                The generated password, shown exactly once. The client
+                authenticates against the compatibility APIs with the
+                account's username and this value.
+      description: A newly created app password, including its one-time-visible secret.
+
+    Permissions:
+      type: object
+      description: >
+        Per-account permission toggles. Administrators implicitly
+        hold every permission and no tag rules apply to them.
+        Defaults for a new account: everything below true except
+        `delete`, and no tag rules.
+      required: [download, delete, explicitContent, sharedOutputs, managePodcasts]
+      properties:
+        download:
+          type: boolean
+          description: >
+            May download original files for offline use (the download
+            endpoint and the sync download-info surface).
+        delete:
+          type: boolean
+          description: >
+            May delete visible library items to the trash. Permanent
+            deletion always needs the admin role.
+        explicitContent:
+          type: boolean
+          description: >
+            May see and play content flagged explicit. False hides
+            RSS-flagged podcast shows and episodes; for music the
+            honest control is a tag deny rule on the advisory tag,
+            because most music has no canonical explicit flag.
+        sharedOutputs:
+          type: boolean
+          description: >
+            May control shared device endpoints (cast targets, DLNA
+            renderers, the jukebox output). The caller's own client
+            endpoints are always controllable.
+        managePodcasts:
+          type: boolean
+          description: >
+            May subscribe, unsubscribe, add shows, and trigger
+            episode fetches. False leaves existing subscriptions
+            playable but frozen.
+        maxTranscodeKbps:
+          type: integer
+          description: >
+            Per-account transcode bitrate ceiling in kbit/s,
+            overriding the server default. Absent or 0 means the
+            server default applies.
+        tagAllow:
+          type: array
+          description: >
+            When non-empty, only items matching every rule are
+            visible to the account (kids-mode allow-listing). Applies
+            to music and audiobook items; podcast visibility rides
+            `explicitContent`.
+          items:
+            $ref: "#/components/schemas/TagRule"
+        tagDeny:
+          type: array
+          description: >
+            Items matching any rule are hidden from the account. An
+            item without the rule's tag passes a deny rule (absence
+            is not a match), which is the exact deny-list contract.
+          items:
+            $ref: "#/components/schemas/TagRule"
+
+    TagRule:
+      type: object
+      description: >
+        One tag predicate. With `value`, the rule matches items whose
+        custom tag `key` equals it (case-insensitively); without,
+        the rule matches items carrying `key` at all.
+      required: [key]
+      properties:
+        key:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Custom tag key, e.g. `ITUNESADVISORY`.
+        value:
+          type: string
+          maxLength: 256
+          description: Tag value to match; absent matches any value.
+
+    SignupApproval:
+      type: object
+      description: >
+        What the approved account becomes. Absent fields keep the
+        registration defaults (the `user` role, access to every
+        library, default permissions).
+      properties:
+        roles:
+          type: array
+          description: Assigned roles.
+          items:
+            $ref: "#/components/schemas/Role"
+        libraryAccess:
+          $ref: "#/components/schemas/LibraryAccess"
+        permissions:
+          $ref: "#/components/schemas/Permissions"
+        uploadEnabled:
+          type: boolean
+          description: Grant upload rights.
+        uploadQuotaBytes:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Per-user upload cap in bytes.
+
+    Invite:
+      type: object
+      description: One invite link's record.
+      required: [id, roles, uploadEnabled, maxUses, usedCount, revoked, createdAt]
+      properties:
+        id:
+          type: string
+          description: Invite PID.
+          example: iv-01JZX5N8QW3F4V9T2B7KD3M9R6
+        note:
+          type: string
+          description: Free-form label ("for grandma").
+        roles:
+          type: array
+          description: Roles the invite assigns.
+          items:
+            $ref: "#/components/schemas/Role"
+        libraryAccess:
+          $ref: "#/components/schemas/LibraryAccess"
+        permissions:
+          $ref: "#/components/schemas/Permissions"
+        uploadEnabled:
+          type: boolean
+          description: Whether admitted accounts get upload rights.
+        maxUses:
+          type: integer
+          description: How many accounts the invite admits; 0 is unlimited.
+        usedCount:
+          type: integer
+          description: How many accounts it has admitted.
+        revoked:
+          type: boolean
+          description: Whether the invite was revoked.
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the token stops working; absent never expires.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the invite was created.
+        createdBy:
+          type: string
+          description: Username of the administrator who created it.
+
+    InviteCreate:
+      type: object
+      description: >
+        A new invite. Absent fields use the registration defaults
+        (the `user` role, access to every library, default
+        permissions, one use, no expiry).
+      properties:
+        note:
+          type: string
+          maxLength: 128
+          description: Free-form label.
+        roles:
+          type: array
+          description: Roles to assign.
+          items:
+            $ref: "#/components/schemas/Role"
+        libraryAccess:
+          $ref: "#/components/schemas/LibraryAccess"
+        permissions:
+          $ref: "#/components/schemas/Permissions"
+        uploadEnabled:
+          type: boolean
+          description: Grant upload rights; defaults to false.
+        maxUses:
+          type: integer
+          minimum: 0
+          default: 1
+          description: How many accounts it may admit; 0 is unlimited.
+        expiresAt:
+          type: string
+          format: date-time
+          description: Expiry; absent never expires.
+
+    InviteCreated:
+      allOf:
+        - $ref: "#/components/schemas/Invite"
+        - type: object
+          description: The create response, carrying the token.
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: >
+                The invite token, shown exactly once. The server
+                stores only a hash.
+      description: A created invite with its one-time-visible token.
+
+    InviteList:
+      type: object
+      description: All invites.
+      required: [invites]
+      properties:
+        invites:
+          type: array
+          description: Invites, newest first.
+          items:
+            $ref: "#/components/schemas/Invite"

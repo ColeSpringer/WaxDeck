@@ -1,0 +1,1086 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /playlists:
+    get:
+      operationId: listPlaylists
+      summary: List playlists visible to the caller
+      description: >
+        Keyset-paginated list of the caller's own playlists plus every
+        shared playlist, ordered by name then pid. Smart playlist
+        entries omit `itemCount` (membership is computed on read);
+        fetch the playlist detail for a computed count.
+      tags: [playlists]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum playlists per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: containsItem
+          in: query
+          description: >
+            An item pid. Restricts the page to static playlists whose
+            stored members include the item, for add-to-playlist
+            surfaces that mark existing membership. Smart playlists
+            are always omitted from a filtered listing.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: One page of playlists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    post:
+      operationId: createPlaylist
+      summary: Create a playlist
+      description: >
+        Creates a manual (`static`) or rule-based (`smart`) playlist
+        owned by the caller. A smart playlist requires `rule` and
+        rejects `itemPids`; a static playlist rejects `rule` and may
+        seed initial members via `itemPids` (invisible or unknown
+        items fail the request). The rule is validated on write:
+        unknown fields, unknown operators, unknown node types, or
+        operator and field combinations the engine rejects answer
+        `invalid-request` with a message naming the offending
+        condition.
+      tags: [playlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistCreate"
+      responses:
+        "201":
+          description: The created playlist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/rule-fields:
+    get:
+      operationId: getRuleFields
+      summary: Discover smart rule fields
+      description: >
+        The field vocabulary for smart playlist rules: every rule
+        field with its value kind, the operators it accepts, whether
+        it reads per-user state, and whether it can sort; plus the
+        catalog's custom tag keys (usable as `tag.KEY` fields) with
+        item counts, most used first. Rule editors build their
+        dropdowns from this instead of hardcoding the vocabulary.
+      tags: [playlists]
+      responses:
+        "200":
+          description: The rule field vocabulary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuleFields"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/preview:
+    post:
+      operationId: previewSmartRule
+      summary: Preview a smart rule
+      description: >
+        Evaluates a rule without storing anything and returns the
+        first matching items plus the total match count, computed
+        against the caller's own user state and library visibility.
+        Rule editors call this while the user builds the rule.
+      tags: [playlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SmartRule"
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum preview items to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Preview items and total match count.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistPreview"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/m3u:
+    post:
+      operationId: importPlaylistM3u
+      summary: Import an M3U8 playlist
+      description: >
+        Creates a static playlist from an M3U8 document, matching each
+        entry to a cataloged item by exact path or unique
+        relative-path suffix. Unmatched paths are skipped and
+        reported, never invented; an empty document yields an empty
+        playlist.
+      tags: [playlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/M3uImport"
+      responses:
+        "201":
+          description: The created playlist and per-entry match results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/M3uImportResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}:
+    get:
+      operationId: getPlaylist
+      summary: Get one playlist
+      description: >
+        Playlist detail. For a smart playlist this includes the rule
+        and a freshly computed `itemCount` (evaluated as the owner for
+        shared lists, as the caller for the caller's own).
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The playlist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    patch:
+      operationId: updatePlaylist
+      summary: Update a playlist
+      description: >
+        Partial update: renames a playlist, changes its visibility, or
+        replaces a smart playlist's rule. Owner only. Omitted
+        properties stay unchanged (this is a PATCH; a bare rename
+        never touches the rule). Replacing the rule reissues the
+        playlist's pid (see the conventions): the response carries the
+        new pid with `previousPid` set and the old pid stops
+        resolving. Supplying `rule` for a static playlist answers
+        `invalid-request`. Changing a shared playlist to `private`
+        removes it from other users' view; their sync streams see it
+        become absent.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistUpdate"
+      responses:
+        "200":
+          description: The updated playlist, possibly under a new pid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: deletePlaylist
+      summary: Delete a playlist
+      description: Deletes a playlist. Owner only.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "204":
+          description: Playlist deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}/items:
+    get:
+      operationId: listPlaylistItems
+      summary: List a playlist's items
+      description: >
+        The playlist's members in order: stored order for a static
+        playlist, rule order for a smart playlist (evaluated against
+        the owner's user state for shared lists, the caller's for
+        their own). Items outside the caller's library visibility are
+        omitted, so a static playlist's `position` values are not
+        guaranteed contiguous for restricted viewers; use `position`,
+        never the row index, when removing members.
+        Keyset-paginated within one evaluation; a membership change
+        between pages may shift entries.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: cursor
+          in: query
+          description: >
+            Opaque cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum items per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of playlist items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistItemsPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: replacePlaylistItems
+      summary: Replace a static playlist's members
+      description: >
+        Replaces the full ordered member list; this is also the
+        reorder primitive (send the same members in the new order).
+        Owner only; static playlists only (a smart playlist's
+        membership is its rule). Unknown or invisible items fail the
+        request. When the playlist holds members outside the owner's
+        current library visibility the replace is refused with
+        `conflict` (a list built from what the owner can see would
+        silently drop them); appends still work. Playlist edits are
+        live-only: clients must not queue them for offline replay
+        (a stale full-list replay would revert another device's
+        edits). The optional `baseUpdatedAt` precondition makes the
+        lost-update window explicit: when supplied and older than the
+        playlist's current `updatedAt`, the replace answers
+        `conflict` and the client refetches before retrying.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistItemsUpdate"
+      responses:
+        "204":
+          description: Members replaced.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    post:
+      operationId: addPlaylistItems
+      summary: Append items to a static playlist
+      description: >
+        Appends items in the given order. Owner only; static playlists
+        only. Duplicates are allowed (a playlist may repeat a track);
+        clients wanting dedupe check membership first.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistItemsUpdate"
+      responses:
+        "204":
+          description: Items appended.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}/items/{position}:
+    delete:
+      operationId: removePlaylistItemAt
+      summary: Remove one member by position
+      description: >
+        Removes the member at the given zero-based position in the
+        stored order. Owner only; static playlists only. Positions are
+        the unfiltered stored order (visibility filtering never shifts
+        them); take them from the item listing's `position` field, not
+        from a rendered row index.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: position
+          in: path
+          required: true
+          description: Zero-based position in the stored member order.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "204":
+          description: Member removed.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}/m3u:
+    get:
+      operationId: exportPlaylistM3u
+      summary: Export a playlist as M3U8
+      description: >
+        The playlist as an M3U8 document, for interop with path-based
+        players. Entries are the cataloged display paths (absolute
+        server-side paths); exposing them is deliberate, since
+        playlists reach only this server's own users and path-based
+        interop is the point of the format. A smart playlist exports
+        its current evaluation. The import side matches by exact path
+        or unique relative-path suffix, so documents exported from a
+        differently-rooted server still resolve.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The M3U8 document.
+          content:
+            audio/x-mpegurl:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/import:
+    post:
+      operationId: importPlaylist
+      summary: Import a streaming-service playlist
+      description: >
+        Imports a playlist exported from a streaming service, matching
+        each entry against the library through the portable-ref
+        resolve ladder (exact identifiers first, then fingerprints,
+        then descriptive artist, title, album, and duration matching).
+        Sources: `spotify` (Exportify CSV), `applemusic` (the
+        tab-separated export), `ytmusic` (Google Takeout CSV), `csv`
+        (generic with artist, title, album, duration columns), `text`
+        (one `Artist - Title` per line), and `portable` (the `refs`
+        array from another WaxDeck's portable export). When any entry
+        resolves, a manual playlist is created with the resolved
+        tracks in order and `missing` reports the rest; when nothing
+        resolves, no playlist is created and `playlistPid` is absent.
+        Unresolved entries carrying an ISRC are upgraded to a
+        recording identifier through MusicBrainz when the server has
+        internet, within a bounded lookup budget; without it the
+        import still runs on the descriptive rung.
+      tags: [playlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistImportRequest"
+      responses:
+        "200":
+          description: The import report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistImportResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}/portable:
+    get:
+      operationId: exportPlaylistPortable
+      summary: Export a playlist as portable refs
+      description: >
+        Exports a playlist as portable refs: catalog-independent
+        identity descriptors (audio essence, external identifiers,
+        acoustic fingerprint, descriptive fields) that resolve on any
+        other WaxDeck through the playlist import endpoint's
+        `portable` source. Smart playlists export their current
+        evaluation.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The portable playlist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortablePlaylist"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  schemas:
+    PlaylistImportRequest:
+      type: object
+      description: >
+        A playlist to import. `payload` carries the export text for
+        the text sources; `refs` carries portable refs for the
+        `portable` source. Exactly the field matching `source` must
+        be set.
+      required: [source]
+      properties:
+        source:
+          type: string
+          description: >
+            The export format: `spotify` (Exportify CSV), `applemusic`
+            (tab-separated export), `ytmusic` (Google Takeout CSV),
+            `csv` (generic with artist, title, album, duration
+            columns), `text` (one `Artist - Title` per line), or
+            `portable` (another WaxDeck's portable export).
+          enum: [spotify, applemusic, ytmusic, csv, text, portable]
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: >
+            Name for the created playlist. Defaults to a name found in
+            the export, or `Imported playlist`.
+        payload:
+          type: string
+          maxLength: 4000000
+          description: The export file's text content (text sources).
+        refs:
+          type: array
+          maxItems: 10000
+          description: Portable refs (the `portable` source).
+          items:
+            $ref: "#/components/schemas/PortableRef"
+
+    PlaylistImportResult:
+      type: object
+      description: The import report.
+      required: [name, requested, resolved, missing, rungs]
+      properties:
+        playlistPid:
+          type: string
+          description: >
+            The created playlist. Absent when nothing resolved (no
+            playlist is created).
+          example: pl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: The playlist name used.
+        requested:
+          type: integer
+          description: Entries found in the export.
+        resolved:
+          type: integer
+          description: Entries matched to library items.
+        missing:
+          type: array
+          description: >
+            Entries with no library match, in export order: the
+            missing-tracks report.
+          items:
+            $ref: "#/components/schemas/PlaylistImportMiss"
+        rungs:
+          $ref: "#/components/schemas/ResolveRungCounts"
+
+    PlaylistImportMiss:
+      type: object
+      description: One unmatched import entry.
+      required: [title]
+      properties:
+        artist:
+          type: string
+          description: The entry's artist, as exported.
+        title:
+          type: string
+          description: The entry's title, as exported.
+        album:
+          type: string
+          description: The entry's album, as exported.
+        durationMs:
+          type: integer
+          format: int64
+          description: The entry's duration, when the export carried one.
+
+    ResolveRungCounts:
+      type: object
+      description: >
+        How many entries each resolve-ladder rung matched, most
+        confident rung first. A high `descriptive` share means fuzzy
+        matches worth spot-checking.
+      required: [essence, strongId, fingerprint, descriptive]
+      properties:
+        essence:
+          type: integer
+          description: Identical audio bytes.
+        strongId:
+          type: integer
+          description: Exact external identifier (recording MBID, ASIN, ISBN).
+        fingerprint:
+          type: integer
+          description: Same recording, different encoding.
+        descriptive:
+          type: integer
+          description: Fuzzy artist, title, album, and duration match.
+
+    PortableRef:
+      type: object
+      description: >
+        A catalog-independent identity descriptor for one playable
+        item, carrying the progressively fuzzier anchors the resolve
+        ladder walks. Produced by the portable export; consumed by the
+        `portable` import source.
+      required: [kind, title]
+      properties:
+        kind:
+          type: string
+          description: What the ref describes.
+          enum: [track, book, episode]
+        essence:
+          type: string
+          description: Exact-rip audio-essence hash.
+        fingerprint:
+          type: string
+          format: byte
+          description: Packed acoustic fingerprint, base64.
+        fingerprintAlgo:
+          type: integer
+          description: "Fingerprint algorithm: 1 pure-Go, 100 Chromaprint."
+        mbid:
+          type: string
+          description: Recording MBID (track) or release MBID (book).
+        asin:
+          type: string
+          description: Audiobook ASIN.
+        isbn:
+          type: string
+          description: Audiobook ISBN.
+        isrc:
+          type: string
+          description: >
+            Recording ISRC. Import upgrades it to a recording MBID
+            through MusicBrainz when the server has internet.
+        artist:
+          type: string
+          description: Track artist, or book author.
+        title:
+          type: string
+          description: Display title.
+        album:
+          type: string
+          description: Track album, or book series.
+        durationMs:
+          type: integer
+          format: int64
+          description: Duration in milliseconds.
+
+    PortablePlaylist:
+      type: object
+      description: A playlist exported as portable refs, in playlist order.
+      required: [name, refs]
+      properties:
+        name:
+          type: string
+          description: The playlist's name.
+        refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortableRef"
+
+    Playlist:
+      type: object
+      description: >
+        A playlist: a manual ordered list (`static`) or a rule
+        evaluated per user on read (`smart`). `rule` is present only
+        for smart playlists. `itemCount` is the stored member count
+        for a static playlist; for a smart playlist it is computed on
+        detail reads and omitted from list pages.
+      required: [pid, name, kind, visibility, ownerName, isOwner, createdAt, updatedAt]
+      properties:
+        pid:
+          type: string
+          description: >
+            Type-prefixed ULID. Stable for the playlist's lifetime,
+            except that replacing a smart playlist's rule reissues it
+            (see the conventions).
+          example: pl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        previousPid:
+          type: string
+          description: >
+            The pid this playlist replaced. Present on a rule-replace
+            response, on the reissued playlist's sync events, and on
+            its detail reads, so clients relink instead of treating
+            the reissue as a delete and create. Absent for playlists
+            never reissued.
+        name:
+          type: string
+          description: Display name.
+          example: Rainy day blues
+        kind:
+          type: string
+          description: >
+            `static` (manual ordered members) or `smart` (rule
+            evaluated on read). A string, not a closed enum; clients
+            must treat unknown kinds as read-only.
+          example: smart
+        visibility:
+          type: string
+          description: >
+            `private` (owner only) or `shared` (readable by every
+            user). A string, not a closed enum.
+          example: private
+        ownerName:
+          type: string
+          description: The owning user's display name.
+          example: cole
+        isOwner:
+          type: boolean
+          description: True when the caller owns this playlist and may edit it.
+        itemCount:
+          type: integer
+          description: >
+            Member count. Stored count for static playlists; computed
+            for smart playlists on detail reads and absent on list
+            pages.
+        rule:
+          $ref: "#/components/schemas/SmartRule"
+        createdAt:
+          type: string
+          format: date-time
+          description: >
+            When the playlist was created. Restarts on a rule-replace
+            reissue; clients that care about original creation order
+            follow `previousPid`.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the playlist row last changed.
+
+    PlaylistPage:
+      type: object
+      description: One keyset-paginated page of playlists.
+      required: [playlists]
+      properties:
+        playlists:
+          type: array
+          description: Playlists ordered by name then pid.
+          items:
+            $ref: "#/components/schemas/Playlist"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
+
+    PlaylistCreate:
+      type: object
+      description: Create a playlist.
+      required: [name, kind]
+      properties:
+        name:
+          type: string
+          description: Display name.
+          minLength: 1
+          maxLength: 200
+        kind:
+          type: string
+          description: "`static` or `smart`."
+          example: static
+        visibility:
+          type: string
+          description: "`private` (default) or `shared`."
+        rule:
+          $ref: "#/components/schemas/SmartRule"
+        itemPids:
+          type: array
+          description: >
+            Initial members for a static playlist, in order. Invalid
+            with `smart`.
+          items:
+            type: string
+
+    PlaylistUpdate:
+      type: object
+      description: >
+        Update a playlist. Omitted properties stay unchanged; `rule`
+        applies only to smart playlists and reissues the pid.
+      properties:
+        name:
+          type: string
+          description: New display name.
+          minLength: 1
+          maxLength: 200
+        visibility:
+          type: string
+          description: "`private` or `shared`."
+        rule:
+          $ref: "#/components/schemas/SmartRule"
+
+    PlaylistItemsUpdate:
+      type: object
+      description: The full ordered member list, or members to append.
+      required: [itemPids]
+      properties:
+        itemPids:
+          type: array
+          description: Item pids in playback order.
+          maxItems: 10000
+          items:
+            type: string
+        baseUpdatedAt:
+          type: string
+          format: date-time
+          description: >
+            Optional lost-update precondition for the replace
+            endpoint: the playlist `updatedAt` this member list was
+            built from, echoed back as read. The comparison is at
+            millisecond granularity, so a client date-time type that
+            cannot hold the server's full precision still matches. A
+            replace against a playlist that changed since then
+            answers `conflict`. Ignored by the append endpoint.
+
+    PlaylistEntry:
+      type: object
+      description: One playlist member.
+      required: [item]
+      properties:
+        position:
+          type: integer
+          description: >
+            Zero-based position in the stored member order. Present
+            only for static playlists; this is the value the removal
+            endpoint takes.
+        item:
+          $ref: "#/components/schemas/ItemSummary"
+
+    PlaylistItemsPage:
+      type: object
+      description: One page of playlist members.
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          description: Members in playlist order.
+          items:
+            $ref: "#/components/schemas/PlaylistEntry"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
+
+    SmartRule:
+      type: object
+      description: >
+        A smart playlist rule: a condition tree, optional sort order,
+        and an optional row limit. Rules are evaluated per user on
+        read; fields that read user state (stars, ratings, play
+        counts) bind to the evaluating user at that moment. Without
+        `sorts` the engine orders by title ascending so results are
+        deterministic. Rules are bounded on write: at most 200 nodes
+        total and at most 10 levels of nesting; larger rules answer
+        `invalid-request`.
+      required: [root]
+      properties:
+        root:
+          $ref: "#/components/schemas/RuleNode"
+        sorts:
+          type: array
+          description: Sort order, applied in sequence.
+          maxItems: 4
+          items:
+            $ref: "#/components/schemas/RuleSort"
+        limit:
+          type: integer
+          description: >
+            Maximum members, applied after sorting. Zero or absent
+            means unlimited.
+          minimum: 0
+
+    RuleNode:
+      type: object
+      description: >
+        One node of a rule's condition tree. `type` selects the shape:
+        `all` (every child must match) and `any` (at least one child
+        must match) carry `nodes`; `not` inverts its single `node`;
+        `condition` compares one `field` with `op` against `value` (or
+        `values` for `inTheRange`, exactly two, low then high). An
+        `all` with no children matches everything; an `any` with no
+        children matches nothing. Unknown `type` strings are rejected
+        on write. Condition values are strings on the wire regardless
+        of the field's kind: numbers in decimal, booleans as `true`
+        or `false`, dates as absolute RFC 3339 timestamps (there are
+        no relative date operators; a rule meaning "recently" must be
+        re-saved to move its cutoff), media types as `music`,
+        `podcast`, or `audiobook`. `inTheRange` is inclusive on both
+        ends. The field vocabulary and each field's accepted
+        operators come from the rule-fields endpoint; custom tags are
+        addressed as `tag.KEY`.
+      required: [type]
+      properties:
+        type:
+          type: string
+          description: "`all`, `any`, `not`, or `condition`."
+          example: condition
+        nodes:
+          type: array
+          description: Children of an `all` or `any` group.
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/RuleNode"
+        node:
+          $ref: "#/components/schemas/RuleNode"
+        field:
+          type: string
+          description: Field name from the rule-fields vocabulary.
+          example: rating
+        op:
+          type: string
+          description: >
+            Operator: one of `is`, `isNot`, `contains`, `startsWith`,
+            `endsWith`, `gt`, `lt`, `gte`, `lte`, `inTheRange`,
+            `before`, `after`, `isPresent`, `isMissing`. Each field
+            accepts a subset; see the rule-fields endpoint.
+          example: gte
+        value:
+          type: string
+          description: Comparison value, string-encoded per the field's kind.
+          example: "80"
+        values:
+          type: array
+          description: Exactly two values for `inTheRange`, low then high.
+          minItems: 2
+          maxItems: 2
+          items:
+            type: string
+
+    RuleSort:
+      type: object
+      description: One sort key.
+      required: [field]
+      properties:
+        field:
+          type: string
+          description: A sortable field from the rule-fields vocabulary.
+          example: lastPlayedAt
+        desc:
+          type: boolean
+          description: Descending when true.
+
+    RuleField:
+      type: object
+      description: One rule field and what it accepts.
+      required: [name, kind, ops, userState, sortable]
+      properties:
+        name:
+          type: string
+          description: Field name as used in conditions and sorts.
+          example: rating
+        kind:
+          type: string
+          description: >
+            Value kind: `text`, `number`, `date`, `boolean`, or
+            `mediaType`. A string, not a closed enum. Editors render
+            the value input from this.
+          example: number
+        ops:
+          type: array
+          description: Operators this field accepts.
+          items:
+            type: string
+        userState:
+          type: boolean
+          description: >
+            True when the field reads the evaluating user's playback
+            state rather than shared catalog data.
+        sortable:
+          type: boolean
+          description: True when the field may appear in `sorts`.
+        description:
+          type: string
+          description: Short human-readable meaning, for editor tooltips.
+
+    RuleTagKey:
+      type: object
+      description: One custom tag key usable as a `tag.KEY` field.
+      required: [key, itemCount]
+      properties:
+        key:
+          type: string
+          description: Canonical tag key; address it as `tag.KEY`.
+          example: MOOD
+        itemCount:
+          type: integer
+          description: Distinct items carrying this key.
+
+    RuleFields:
+      type: object
+      description: >
+        The rule field vocabulary for smart rule editors. `tag.KEY`
+        fields are uniform and therefore not repeated per key: they
+        are text-kind, accept `is`, `isNot`, `contains`,
+        `startsWith`, `endsWith`, `isPresent`, and `isMissing` (never
+        the ordered operators), and can never sort. On a tag field
+        `isNot` matches items that do not carry that value, including
+        items without the tag at all: the deny-list reading.
+      required: [fields, tagKeys]
+      properties:
+        fields:
+          type: array
+          description: Every rule field.
+          items:
+            $ref: "#/components/schemas/RuleField"
+        tagKeys:
+          type: array
+          description: Custom tag keys, most used first.
+          items:
+            $ref: "#/components/schemas/RuleTagKey"
+
+    PlaylistPreview:
+      type: object
+      description: A stateless rule evaluation.
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          description: >
+            The first matching items in rule order, honoring the
+            rule's own `limit`.
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+        total:
+          type: integer
+          description: >
+            Total items the condition tree matches for the caller,
+            ignoring the rule's `limit`, so editors can render
+            "matches N items, keeping the first L".
+
+    M3uImport:
+      type: object
+      description: An M3U8 document to import as a static playlist.
+      required: [name, content]
+      properties:
+        name:
+          type: string
+          description: Name for the created playlist.
+          minLength: 1
+          maxLength: 200
+        visibility:
+          type: string
+          description: "`private` (default) or `shared`."
+        content:
+          type: string
+          description: The M3U8 document text.
+          maxLength: 1048576
+
+    M3uImportResult:
+      type: object
+      description: The import outcome.
+      required: [playlist, matched, unmatched]
+      properties:
+        playlist:
+          $ref: "#/components/schemas/Playlist"
+        matched:
+          type: integer
+          description: Entries matched to cataloged items.
+        unmatched:
+          type: integer
+          description: Entries no cataloged item matched.
+        unmatchedPaths:
+          type: array
+          description: The unmatched entry paths, in document order.
+          items:
+            type: string

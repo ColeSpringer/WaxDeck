@@ -1,0 +1,186 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+# Cross-domain components: the error model, shared responses and parameters,
+# and entity summaries referenced from many domains.
+components:
+  parameters:
+    Pid:
+      name: pid
+      in: path
+      required: true
+      description: Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^[a-z]{2}-[0-9A-HJKMNP-TV-Z]{26}$"
+  responses:
+    InvalidRequest:
+      description: Malformed request (bad cursor, invalid parameter, bad body).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    Unauthenticated:
+      description: >
+        No valid credentials were presented: a missing or invalid
+        session, bearer token, login password, or one-time code.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    Forbidden:
+      description: The caller is authenticated but not allowed to do this.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    NotFound:
+      description: No resource with that PID is visible to the caller.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    Conflict:
+      description: The request conflicts with current state (for example, a running job).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    CatalogMaintenance:
+      description: >
+        The catalog is temporarily handed to a maintenance operation (code
+        `catalog-maintenance`). Retry shortly; already-playing streams are
+        unaffected.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    SourceUnavailable:
+      description: >
+        The request needs an acquisition source integration that this
+        server is not running (code `source-unavailable`), for example a
+        YouTube subscription on a server without the YouTube bridge.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    FeatureUnavailable:
+      description: >
+        The request needs an optional capability this server is not
+        running (code `feature-unavailable`), for example queue
+        timelines on a server without the streaming engine.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    UnsupportedFormat:
+      description: >
+        The file's format is not accepted (code `unsupported-format`):
+        the extension is outside the server's accepted set, or the
+        audio did not decode.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    ReadOnly:
+      description: >
+        The target library, or the whole server, is in read-only mode
+        (code `read-only`): file-writing operations are refused while
+        reads, playback, and per-user state keep working.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      description: >
+        Structured error. `code` is a stable machine-readable string (see the
+        API-level description for defined codes); `message` is human-readable
+        and not stable.
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+          example: not-found
+        message:
+          type: string
+          description: Human-readable explanation (not stable, do not parse).
+          example: no item with pid tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    MediaType:
+      type: string
+      description: The three first-class media types.
+      enum: [music, podcast, audiobook]
+
+    ItemSummary:
+      type: object
+      description: >
+        Compact item representation used by list endpoints and client-side
+        library mirrors (~summary row).
+      required: [pid, mediaType, title, durationMs]
+      properties:
+        pid:
+          type: string
+          description: Type-prefixed ULID.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        title:
+          type: string
+          description: Display title.
+          example: Prancing Pony Blues
+        artist:
+          type: string
+          description: Primary display artist / author / show name.
+        album:
+          type: string
+          description: Album / series / podcast title, when applicable.
+        durationMs:
+          type: integer
+          format: int64
+          description: >
+            Duration in milliseconds. For a multi-file audiobook this
+            is the total across all parts; for a not-yet-fetched
+            podcast episode it is the feed-declared duration, or 0
+            when the feed declares none.
+          example: 214000
+        artUrl:
+          type: string
+          description: >
+            Origin-relative URL of the item's artwork endpoint. Always
+            populated; the endpoint itself returns 404 for items with no
+            artwork, so clients keep a placeholder ready.
+          example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/art
+
+    ChapterMark:
+      type: object
+      description: One chapter mark on an item's timeline.
+      required: [index, startMs]
+      properties:
+        index:
+          type: integer
+          description: Zero-based chapter position.
+        title:
+          type: string
+          description: Chapter title.
+        startMs:
+          type: integer
+          format: int64
+          description: >
+            Chapter start in milliseconds (book-timeline milliseconds
+            for multi-part audiobooks).
+        endMs:
+          type: integer
+          format: int64
+          description: >
+            Chapter end in milliseconds, exclusive. Absent for
+            open-ended final chapters.

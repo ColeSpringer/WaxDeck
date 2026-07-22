@@ -1,0 +1,277 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /similarity/status:
+    get:
+      operationId: getSimilarityStatus
+      summary: Similarity analysis status
+      description: >
+        Coverage of the sonic-similarity surface: whether a worker
+        token is configured, which embedding model the stored vectors
+        carry, how much of the library is embedded, and the analysis
+        backlog. Clients use `coveragePct` to decide whether to show
+        sonic affordances (the adventurousness knob, sonic paths).
+      tags: [similarity]
+      responses:
+        "200":
+          description: The status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarityStatus"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /similarity/work:
+    get:
+      operationId: pullSimilarityWork
+      summary: Pull analysis work (worker)
+      description: >
+        Leases a batch of tracks awaiting embedding. Each work item
+        names the track and where to pull decode-ready audio; the
+        worker computes an embedding per item and posts the batch
+        back. Leases expire on their own, so a crashed worker's items
+        return to the queue without cleanup. An empty batch means the
+        library is fully embedded; workers should sleep
+        `retryAfterSeconds` before polling again. Requires the worker
+        token.
+      tags: [similarity]
+      security:
+        - workerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum work items leased.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: Leased work items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarityWorkPage"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /similarity/embeddings:
+    post:
+      operationId: reportEmbeddings
+      summary: Post computed embeddings (worker)
+      description: >
+        Records a batch of computed embeddings. Vectors are keyed by
+        the track's audio essence, so an identical rip re-imported
+        later never needs re-analysis. All vectors in one batch carry
+        the batch's `model` and `dims`; a vector whose length differs
+        from `dims` is rejected per item. Posting a different `model`
+        than the stored vectors replaces coverage model-wide: mixed
+        models never compare, so the server drops stored vectors of
+        other models as new ones arrive. Ingest also maintains the
+        nearest-neighbor graph that powers sonic paths. Requires the
+        worker token.
+      tags: [similarity]
+      security:
+        - workerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmbeddingReport"
+      responses:
+        "200":
+          description: The ingest outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmbeddingIngestResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+components:
+  schemas:
+    SimilarityStatus:
+      type: object
+      description: Coverage of the sonic-similarity surface.
+      required: [enabled, embeddedTracks, totalTracks, coveragePct, queueDepth]
+      properties:
+        enabled:
+          type: boolean
+          description: >
+            Whether an analyzer can feed this surface: the server's
+            embedded analyzer is running, or an external worker token
+            is configured.
+        model:
+          type: string
+          description: >
+            The embedding model the stored vectors carry. Absent before
+            the first ingest.
+          example: waxdeck-melstat-v1
+        dims:
+          type: integer
+          description: Stored vector dimensionality. Absent before the first ingest.
+          example: 192
+        embeddedTracks:
+          type: integer
+          description: Tracks with a stored embedding.
+        totalTracks:
+          type: integer
+          description: Tracks eligible for analysis.
+        coveragePct:
+          type: number
+          description: >
+            `embeddedTracks` over `totalTracks`, 0 to 100. Clients
+            show sonic affordances when coverage is meaningful.
+        queueDepth:
+          type: integer
+          description: Tracks awaiting analysis.
+        lastIngestAt:
+          type: string
+          format: date-time
+          description: >
+            When a worker last posted embeddings. Absent before the
+            first ingest.
+
+    SimilarityWorkPage:
+      type: object
+      description: A leased batch of analysis work.
+      required: [items, retryAfterSeconds]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimilarityWorkItem"
+        retryAfterSeconds:
+          type: integer
+          description: >
+            How long an idle worker should sleep before polling again.
+            Meaningful when `items` is empty.
+
+    SimilarityWorkItem:
+      type: object
+      description: One track awaiting embedding.
+      required: [pid, essence, audioUrl, durationMs, mediaType]
+      properties:
+        pid:
+          type: string
+          description: The track to analyze.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        essence:
+          type: string
+          description: >
+            The track's audio-essence hash. Echo it back with the
+            vector; embeddings are keyed by essence so identical audio
+            never re-analyzes.
+        audioUrl:
+          type: string
+          description: >
+            Origin-relative URL serving decode-ready audio (16 kHz
+            mono, gain untouched). Append `format=flac` for lossless
+            at roughly half the bytes (remote workers); the default is
+            WAV. Authenticate with the same worker token.
+          example: /media/analysis/tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        localPath:
+          type: string
+          description: >
+            Library-relative path of the source file, present only
+            when the server is configured to expose paths to same-host
+            workers (`WAXDECK_WORKER_LOCAL_PATHS`); such workers mount
+            the library read-only and decode locally instead of
+            pulling audio over HTTP.
+        durationMs:
+          type: integer
+          format: int64
+          description: Track duration in milliseconds.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+
+    EmbeddingReport:
+      type: object
+      description: A batch of computed embeddings.
+      required: [model, dims, embeddings]
+      properties:
+        model:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: >
+            Model and version tag the vectors were computed with.
+            Vectors of different models never compare; changing the
+            tag restarts coverage.
+          example: waxdeck-melstat-v1
+        dims:
+          type: integer
+          minimum: 8
+          maximum: 4096
+          description: Vector dimensionality; every vector's length must match.
+        embeddings:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/EmbeddingUpload"
+
+    EmbeddingUpload:
+      type: object
+      description: One track's embedding.
+      required: [pid, essence, vector]
+      properties:
+        pid:
+          type: string
+          description: The analyzed track (from the work item).
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        essence:
+          type: string
+          description: The audio-essence hash (from the work item).
+        vector:
+          type: array
+          minItems: 8
+          maxItems: 4096
+          description: >
+            The embedding. The server L2-normalizes vectors at ingest,
+            so any consistent scale works.
+          items:
+            type: number
+
+    EmbeddingIngestResult:
+      type: object
+      description: Outcome of an embedding ingest batch.
+      required: [accepted, replaced]
+      properties:
+        accepted:
+          type: integer
+          description: Vectors stored for the first time.
+        replaced:
+          type: integer
+          description: Vectors that overwrote a stored one (re-analysis).
+        rejected:
+          type: array
+          description: Vectors the server refused, and why.
+          items:
+            $ref: "#/components/schemas/RejectedEmbedding"
+
+    RejectedEmbedding:
+      type: object
+      description: One refused embedding.
+      required: [code, message]
+      properties:
+        pid:
+          type: string
+          description: The refused item's pid, when it was parseable.
+        essence:
+          type: string
+          description: The refused item's essence hash, when it was parseable.
+        code:
+          type: string
+          description: >
+            Stable machine-readable reason (`not-found`,
+            `invalid-request`).
+        message:
+          type: string
+          description: Human-readable explanation.

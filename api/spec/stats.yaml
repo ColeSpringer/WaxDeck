@@ -1,0 +1,593 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /stats/listening:
+    get:
+      operationId: getListeningStats
+      summary: Listening time statistics
+      description: >
+        The caller's listening time over a range, bucketed for charts.
+        Calendar bucketing uses the caller's preferred timezone (UTC
+        when unset). `timeSavedMs` sums the silence-trim and speed-up
+        savings clients report on their listen sessions.
+      tags: [stats]
+      parameters:
+        - name: range
+          in: query
+          description: How far back to aggregate, ending now.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, 365d, all]
+            default: 30d
+        - name: bucket
+          in: query
+          description: Chart bucket size.
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: day
+      responses:
+        "200":
+          description: Aggregated listening time.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListeningStats"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /stats/heatmap:
+    get:
+      operationId: getListeningHeatmap
+      summary: Calendar heatmap and streaks
+      description: >
+        Per-day listening for one calendar year in the caller's
+        preferred timezone, plus listening streaks. Days without
+        listening are omitted. The current streak counts consecutive
+        days ending today or yesterday (an unfinished today does not
+        break it).
+      tags: [stats]
+      parameters:
+        - name: year
+          in: query
+          description: >
+            Calendar year in the caller's timezone. Defaults to the
+            current year.
+          schema:
+            type: integer
+            minimum: 1970
+            maximum: 2200
+      responses:
+        "200":
+          description: The heatmap.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListeningHeatmap"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /stats/top:
+    get:
+      operationId: getTopList
+      summary: Top artists, albums, genres, or shows
+      description: >
+        The caller's most-listened entries of one kind over a range,
+        ranked by listening time. `shows` covers podcasts; spoken-word
+        listening dominates by raw time, so music kinds only count
+        music sessions and `shows` only counts podcast sessions.
+      tags: [stats]
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          description: Which top list.
+          schema:
+            type: string
+            enum: [artists, albums, genres, shows]
+        - name: range
+          in: query
+          description: How far back to aggregate, ending now.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, 365d, all]
+            default: 30d
+        - name: limit
+          in: query
+          description: Maximum entries returned.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        "200":
+          description: The ranked list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /stats/sessions:
+    get:
+      operationId: listListenLog
+      summary: Listen session log
+      description: >
+        The caller's recorded listen sessions, newest first, with the
+        reporting client, so "what played on which device when" is
+        answerable. Optionally filtered to one client label.
+      tags: [stats]
+      parameters:
+        - name: client
+          in: query
+          description: Only sessions reported by this client label.
+          schema:
+            type: string
+            maxLength: 128
+        - name: cursor
+          in: query
+          description: Opaque keyset cursor from a previous page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Page size.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of the session log.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenLogPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /stats/year-in-review:
+    get:
+      operationId: getYearInReview
+      summary: Year in review
+      description: >
+        The caller's listening recap for one calendar year in the
+        caller's preferred timezone: totals, month-by-month shape, top
+        lists across music, podcasts, and audiobooks, the longest
+        streak, and what joined the library. Always available for any
+        year with data (rolling stats, not December-only).
+      tags: [stats]
+      parameters:
+        - name: year
+          in: query
+          description: >
+            Calendar year in the caller's timezone. Defaults to the
+            current year.
+          schema:
+            type: integer
+            minimum: 1970
+            maximum: 2200
+      responses:
+        "200":
+          description: The recap.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/YearInReview"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /stats/server-year-in-review:
+    get:
+      operationId: getServerYearInReview
+      summary: Server-wide year in review
+      description: >
+        The whole server's listening recap for one calendar year,
+        aggregated across every user who has not opted out of shared
+        stats (the `sharedStatsOptOut` preference; opted-out users'
+        listening is absent from every figure, and `participants`
+        counts only the enrolled). Visible to every signed-in user.
+        Bucketing uses each participant's own timezone.
+      tags: [stats]
+      parameters:
+        - name: year
+          in: query
+          description: Calendar year. Defaults to the current year.
+          schema:
+            type: integer
+            minimum: 1970
+            maximum: 2200
+      responses:
+        "200":
+          description: The server-wide recap.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerYearInReview"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  schemas:
+    ListeningStats:
+      type: object
+      description: Aggregated listening time for one user.
+      required: [range, bucket, timezone, totalMs, sessions, timeSavedMs, buckets, byMediaType]
+      properties:
+        range:
+          type: string
+          description: The range that was aggregated.
+          enum: [7d, 30d, 90d, 365d, all]
+        bucket:
+          type: string
+          description: The bucket size used.
+          enum: [day, week, month]
+        timezone:
+          type: string
+          description: >
+            IANA timezone the calendar bucketing used (the caller's
+            preference, `UTC` when unset).
+          example: America/Denver
+        totalMs:
+          type: integer
+          format: int64
+          description: Total milliseconds listened in the range.
+        sessions:
+          type: integer
+          description: Listen sessions in the range.
+        timeSavedMs:
+          type: integer
+          format: int64
+          description: >
+            Milliseconds saved by silence trimming and speed-up in the
+            range, as reported by clients.
+        buckets:
+          type: array
+          description: Chart buckets, oldest first. Empty buckets are omitted.
+          items:
+            $ref: "#/components/schemas/ListeningBucket"
+        byMediaType:
+          type: array
+          description: Listening split by media type, most-listened first.
+          items:
+            $ref: "#/components/schemas/MediaTypeListening"
+
+    ListeningBucket:
+      type: object
+      description: One chart bucket.
+      required: [start, ms, sessions]
+      properties:
+        start:
+          type: string
+          format: date
+          description: >
+            First calendar day of the bucket in the caller's timezone.
+        ms:
+          type: integer
+          format: int64
+          description: Milliseconds listened in the bucket.
+        sessions:
+          type: integer
+          description: Listen sessions in the bucket.
+
+    MediaTypeListening:
+      type: object
+      description: Listening total for one media type.
+      required: [mediaType, ms, sessions]
+      properties:
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        ms:
+          type: integer
+          format: int64
+          description: Milliseconds listened.
+        sessions:
+          type: integer
+          description: Listen sessions.
+
+    ListeningHeatmap:
+      type: object
+      description: Per-day listening for one calendar year, plus streaks.
+      required: [year, timezone, days, currentStreakDays, longestStreakDays]
+      properties:
+        year:
+          type: integer
+          description: The calendar year.
+          example: 2026
+        timezone:
+          type: string
+          description: IANA timezone the days were bucketed in.
+          example: America/Denver
+        days:
+          type: array
+          description: Days with listening, chronological.
+          items:
+            $ref: "#/components/schemas/HeatmapDay"
+        currentStreakDays:
+          type: integer
+          description: >
+            Consecutive listening days ending today or yesterday, in
+            the caller's timezone. Crosses year boundaries. 0 when the
+            streak is broken.
+        longestStreakDays:
+          type: integer
+          description: >
+            The longest run of consecutive listening days that touches
+            the requested year. Crosses year boundaries.
+
+    HeatmapDay:
+      type: object
+      description: One day's listening.
+      required: [date, ms, sessions]
+      properties:
+        date:
+          type: string
+          format: date
+          description: The calendar day in the caller's timezone.
+        ms:
+          type: integer
+          format: int64
+          description: Milliseconds listened that day.
+        sessions:
+          type: integer
+          description: Listen sessions that day.
+
+    TopList:
+      type: object
+      description: One ranked top list.
+      required: [kind, range, entries]
+      properties:
+        kind:
+          type: string
+          description: Which top list this is.
+          enum: [artists, albums, genres, shows]
+        range:
+          type: string
+          description: The range that was aggregated.
+          enum: [7d, 30d, 90d, 365d, all]
+        entries:
+          type: array
+          description: Ranked entries, most listening time first.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+
+    TopEntry:
+      type: object
+      description: One top-list entry.
+      required: [name, plays, ms]
+      properties:
+        name:
+          type: string
+          description: Display name (artist, album, genre, or show).
+          example: Muddy Waters
+        pid:
+          type: string
+          description: >
+            The entry's pid when the entry is a catalog entity (absent
+            for genres, and for names that no longer resolve).
+          example: ar-01JZX5N8QW3F4V9T2B7KD3M9R6
+        artUrl:
+          type: string
+          description: >
+            Origin-relative artwork URL, when the entry has one.
+          example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/art
+        plays:
+          type: integer
+          description: Listen sessions attributed to the entry in the range.
+        ms:
+          type: integer
+          format: int64
+          description: Milliseconds listened in the range.
+
+    ListenLogPage:
+      type: object
+      description: One page of the caller's listen session log, newest first.
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListenLogEntry"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page; absent on the last page.
+
+    ListenLogEntry:
+      type: object
+      description: One recorded listen session.
+      required: [pid, mediaType, startedAt, msPlayed, finished, client, source]
+      properties:
+        pid:
+          type: string
+          description: The item that was played.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        title:
+          type: string
+          description: >
+            The item's display title at read time. Absent when the
+            item has left the catalog entirely.
+        artist:
+          type: string
+          description: The item's display artist, author, or show.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        startedAt:
+          type: string
+          format: date-time
+          description: When playback started.
+        msPlayed:
+          type: integer
+          format: int64
+          description: Milliseconds actually heard.
+        skippedMs:
+          type: integer
+          format: int64
+          description: >
+            Milliseconds saved by silence trimming and speed-up, when
+            the client reported them.
+        finished:
+          type: boolean
+          description: Whether playback reached the end of the item.
+        client:
+          type: string
+          description: The reporting client label.
+          example: waxdeck-web
+        source:
+          type: string
+          description: "`live` playback or a backdated `import`."
+          enum: [live, import]
+
+    YearInReview:
+      type: object
+      description: >
+        One user's listening recap for one calendar year, computed in
+        the caller's preferred timezone.
+      required:
+        [year, timezone, totalMs, sessions, distinctItems, newInLibrary,
+         timeSavedMs, longestStreakDays, byMonth, byMediaType, topArtists,
+         topTracks, topGenres, topShows]
+      properties:
+        year:
+          type: integer
+          description: The calendar year.
+          example: 2026
+        timezone:
+          type: string
+          description: IANA timezone the recap was computed in.
+          example: America/Denver
+        totalMs:
+          type: integer
+          format: int64
+          description: Total milliseconds listened that year.
+        sessions:
+          type: integer
+          description: Listen sessions that year.
+        distinctItems:
+          type: integer
+          description: Distinct tracks, episodes, and books played that year.
+        newInLibrary:
+          type: integer
+          description: Items that joined the library that year.
+        timeSavedMs:
+          type: integer
+          format: int64
+          description: >
+            Milliseconds saved by silence trimming and speed-up that
+            year, as reported by clients.
+        longestStreakDays:
+          type: integer
+          description: The year's longest run of consecutive listening days.
+        byMonth:
+          type: array
+          description: >
+            Month-by-month listening, January first. All twelve months
+            are present, zeros included, so clients chart the year's
+            shape directly.
+          items:
+            $ref: "#/components/schemas/MonthListening"
+        byMediaType:
+          type: array
+          description: Listening split by media type, most-listened first.
+          items:
+            $ref: "#/components/schemas/MediaTypeListening"
+        topArtists:
+          type: array
+          description: Most-listened music artists that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topTracks:
+          type: array
+          description: Most-listened tracks that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topGenres:
+          type: array
+          description: Most-listened music genres that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topShows:
+          type: array
+          description: Most-listened podcast shows that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+
+    MonthListening:
+      type: object
+      description: One month's listening.
+      required: [month, ms, sessions]
+      properties:
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: Calendar month, 1 is January.
+        ms:
+          type: integer
+          format: int64
+          description: Milliseconds listened that month.
+        sessions:
+          type: integer
+          description: Listen sessions that month.
+
+    ServerYearInReview:
+      type: object
+      description: >
+        The whole server's listening recap for one calendar year,
+        aggregated across users who have not opted out of shared
+        stats. Each participant's listening is bucketed in their own
+        timezone.
+      required: [year, participants, totalMs, sessions, topArtists, topTracks, topGenres]
+      properties:
+        year:
+          type: integer
+          description: The calendar year.
+          example: 2026
+        participants:
+          type: integer
+          description: >
+            Users whose listening is included (those who have not
+            opted out and listened that year).
+        totalMs:
+          type: integer
+          format: int64
+          description: Total milliseconds listened across participants.
+        sessions:
+          type: integer
+          description: Listen sessions across participants.
+        topArtists:
+          type: array
+          description: The server's most-listened music artists that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topTracks:
+          type: array
+          description: The server's most-listened tracks that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topGenres:
+          type: array
+          description: The server's most-listened music genres that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"

@@ -1,0 +1,528 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /library/health:
+    get:
+      operationId: getLibraryHealth
+      summary: Metadata health summary
+      description: >
+        The library completeness score with its per-rule breakdown.
+        Health is computed by a background sweep; `warmingUp` is true
+        until the first sweep covers the library (a fresh install
+        shows honest progress instead of a wall of red), and
+        `sweptAt` dates the numbers. Items marked unofficial are
+        exempt from rules that assume a canonical release. Rule names
+        are server-defined strings; the current set is `missing-art`,
+        `small-art`, `missing-mbid`, `missing-year`, `missing-genre`,
+        `missing-lyrics`, `missing-narrator`, `missing-asin`,
+        `path-mismatch`, `write-unsynced`, `legacy-tags`, and
+        `corrupt-audio`.
+      tags: [health]
+      responses:
+        "200":
+          description: The health summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthSummary"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/health/issues:
+    get:
+      operationId: listHealthIssues
+      summary: List items failing health rules
+      description: >
+        Keyset-paginated items with outstanding issues, optionally
+        restricted to one rule, worst first (most failed rules, then
+        title). Each row carries every rule the item currently fails
+        so the list doubles as a per-item worklist.
+      tags: [health]
+      parameters:
+        - name: rule
+          in: query
+          description: Restrict to one rule name.
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum items per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of items with issues.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthIssuePage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/health/sweep:
+    post:
+      operationId: sweepLibraryHealth
+      summary: Re-sweep health now
+      description: >
+        Queues a full health sweep instead of waiting for the
+        scheduled one. Administrators only. The summary updates over
+        the event channel as the sweep progresses.
+      tags: [health]
+      responses:
+        "202":
+          description: Sweep queued.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/health/fix:
+    post:
+      operationId: fixHealthIssues
+      summary: Bulk-fix a health rule
+      description: >
+        Dispatches the fix that matches one rule across the named
+        items (or every item currently failing the rule when
+        `itemPids` is absent): enrichment fetches for missing art,
+        lyrics, genres, and identifiers; organize moves for path
+        mismatches; a write-back retry for out-of-sync files. Fixes
+        run in the background at provider-etiquette pace; the
+        response says how many items were queued. Rules with no
+        automated fix (`corrupt-audio`, `legacy-tags`) answer
+        `invalid-request` naming the rule.
+      tags: [health]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HealthFixRequest"
+      responses:
+        "202":
+          description: How much work was queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthFixResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/duplicates:
+    get:
+      operationId: listDuplicates
+      summary: List duplicate entities
+      description: >
+        Duplicate artist, album, release group, and genre groups from
+        the catalog audit, each with a suggested survivor (the audit
+        orders each finding survivor first). Merging re-parents every
+        child (tracks, albums, credits, play history rides along) and
+        the survivor keeps its pid, so a later rescan does not
+        resurrect the loser. The list is bounded to the first two
+        hundred groups; merge and re-list for more.
+      tags: [health]
+      responses:
+        "200":
+          description: Duplicate groups.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplicateGroups"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/duplicates/merge:
+    post:
+      operationId: mergeDuplicates
+      summary: Merge duplicate entities
+      description: >
+        Merges the losers into the survivor atomically. The losers'
+        children, credits, and play history re-parent onto the
+        survivor; identifiers union. Administrators only.
+      tags: [health]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MergeRequest"
+      responses:
+        "200":
+          description: The merge outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MergeResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/upgrades:
+    get:
+      operationId: listUpgrades
+      summary: List quality upgrade groups
+      description: >
+        Groups of the same recording in different encodings, found
+        through the fingerprint index, best quality first within each
+        group. The resolve endpoint keeps the best and trashes the
+        rest; play history merges onto the kept item.
+      tags: [health]
+      responses:
+        "200":
+          description: Upgrade groups.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpgradeGroups"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/upgrades/resolve:
+    post:
+      operationId: resolveUpgrade
+      summary: Keep the best encoding
+      description: >
+        Keeps one item of an upgrade group and moves the named
+        inferior encodings to the trash (recoverable within the
+        retention window). Administrators only.
+      tags: [health]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpgradeResolveRequest"
+      responses:
+        "200":
+          description: The resolution outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpgradeResolveResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  schemas:
+    HealthSummary:
+      type: object
+      description: The library's metadata health at the last sweep.
+      required: [score, totalItems, evaluatedItems, warmingUp, rules]
+      properties:
+        score:
+          type: number
+          format: double
+          description: >
+            Library completeness score, 0 to 100: the weighted share
+            of evaluated items passing every rule that applies to
+            them.
+        totalItems:
+          type: integer
+          description: Items in scope for health.
+        evaluatedItems:
+          type: integer
+          description: Items the sweep has covered so far.
+        warmingUp:
+          type: boolean
+          description: >
+            True until the sweep first covers the library; the score
+            is provisional while true.
+        sweptAt:
+          type: string
+          format: date-time
+          description: When the last sweep finished.
+        rules:
+          type: array
+          description: Per-rule failure counts, heaviest first.
+          items:
+            $ref: "#/components/schemas/HealthRuleCount"
+
+    HealthRuleCount:
+      type: object
+      description: One rule's current standing.
+      required: [rule, failing, fixable]
+      properties:
+        rule:
+          type: string
+          description: The rule name.
+          example: missing-art
+        label:
+          type: string
+          description: Human-readable rule label.
+        failing:
+          type: integer
+          description: Items currently failing the rule.
+        fixable:
+          type: boolean
+          description: Whether the bulk-fix endpoint automates this rule.
+
+    HealthIssuePage:
+      type: object
+      description: One page of items with outstanding issues.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: Items, worst first.
+          items:
+            $ref: "#/components/schemas/HealthIssue"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; omitted on the last.
+
+    HealthIssue:
+      type: object
+      description: One item and the rules it fails.
+      required: [pid, title, mediaType, rules]
+      properties:
+        pid:
+          type: string
+          description: The item.
+        title:
+          type: string
+          description: Its title.
+        artist:
+          type: string
+          description: Its artist or author.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        rules:
+          type: array
+          description: The rules the item currently fails.
+          items:
+            type: string
+
+    HealthFixRequest:
+      type: object
+      description: A bulk fix for one rule.
+      required: [rule]
+      properties:
+        rule:
+          type: string
+          description: The rule to fix.
+          example: missing-art
+        itemPids:
+          type: array
+          maxItems: 1000
+          description: >
+            Restrict to these items; absent fixes everything
+            currently failing the rule.
+          items:
+            type: string
+
+    HealthFixResult:
+      type: object
+      description: How much fix work was queued.
+      required: [queued]
+      properties:
+        queued:
+          type: integer
+          description: Items queued for fixing.
+
+    DuplicateGroups:
+      type: object
+      description: Duplicate entity groups from the audit.
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          description: Groups, bounded to the first two hundred.
+          items:
+            $ref: "#/components/schemas/DuplicateGroup"
+
+    DuplicateGroup:
+      type: object
+      description: One duplicate finding.
+      required: [entityType, survivor, losers]
+      properties:
+        entityType:
+          type: string
+          description: "`artist`, `album`, `release-group`, or `genre`."
+        survivor:
+          $ref: "#/components/schemas/DuplicateEntity"
+        losers:
+          type: array
+          minItems: 1
+          description: The suggested merge losers.
+          items:
+            $ref: "#/components/schemas/DuplicateEntity"
+        detail:
+          type: string
+          description: The audit's explanation of the finding.
+
+    DuplicateEntity:
+      type: object
+      description: One entity in a duplicate group.
+      required: [pid, name]
+      properties:
+        pid:
+          type: string
+          description: The entity.
+        name:
+          type: string
+          description: Its display name.
+        itemCount:
+          type: integer
+          description: Items under the entity, when cheaply known.
+
+    MergeRequest:
+      type: object
+      description: A duplicate entity merge.
+      required: [entityType, survivorPid, loserPids]
+      properties:
+        entityType:
+          type: string
+          enum: [album, artist, release-group, genre]
+          description: What is being merged.
+        survivorPid:
+          type: string
+          description: The entity that keeps its pid.
+        loserPids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The entities merged into the survivor.
+          items:
+            type: string
+
+    MergeResult:
+      type: object
+      description: The merge outcome.
+      required: [merged, childrenMoved]
+      properties:
+        merged:
+          type: integer
+          description: Losers merged.
+        childrenMoved:
+          type: integer
+          description: Children re-parented onto the survivor.
+
+    UpgradeGroups:
+      type: object
+      description: Same-recording different-encoding groups.
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          description: Groups, best quality first within each.
+          items:
+            $ref: "#/components/schemas/UpgradeGroup"
+
+    UpgradeGroup:
+      type: object
+      description: One recording's encodings.
+      required: [members]
+      properties:
+        members:
+          type: array
+          minItems: 2
+          description: The encodings, best first.
+          items:
+            $ref: "#/components/schemas/UpgradeMember"
+
+    UpgradeMember:
+      type: object
+      description: One encoding of a recording.
+      required: [itemPid, title, codec, best, lossless]
+      properties:
+        itemPid:
+          type: string
+          description: The item.
+        title:
+          type: string
+          description: Its title.
+        artist:
+          type: string
+          description: Its artist.
+        codec:
+          type: string
+          description: Audio codec.
+        bitrate:
+          type: integer
+          description: Bitrate in bits per second, 0 when unknown.
+        sampleRate:
+          type: integer
+          description: Sample rate in Hz, 0 when unknown.
+        bitDepth:
+          type: integer
+          description: Bit depth, 0 when unknown or lossy.
+        lossless:
+          type: boolean
+          description: Whether the encoding is lossless.
+        best:
+          type: boolean
+          description: The group's suggested keeper.
+
+    UpgradeResolveRequest:
+      type: object
+      description: Keep one encoding, trash the rest.
+      required: [keepItemPid, removeItemPids]
+      properties:
+        keepItemPid:
+          type: string
+          description: The item to keep.
+        removeItemPids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The inferior encodings to trash.
+          items:
+            type: string
+
+    UpgradeResolveResult:
+      type: object
+      description: The resolution outcome.
+      required: [trashed]
+      properties:
+        trashed:
+          type: integer
+          description: Items moved to the trash.

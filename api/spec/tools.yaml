@@ -1,0 +1,344 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /books/{pid}/merge:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: mergeBook
+      summary: Merge a multi-file book
+      description: >
+        Merges a multi-file audiobook into one chaptered file through
+        the streaming engine's job API: parts join gaplessly without
+        re-encoding, chapter marks land at the part boundaries
+        (titles from the request, falling back to each part's title
+        tag, then generated names), and richer tags plus the cover
+        carry over in a post-pass. Every user's resume position
+        remaps from part-relative to the merged timeline. The
+        original parts move to the trash unless `keepOriginals`.
+        Needs the streaming engine; answers `feature-unavailable`
+        without it. Returns a tool task to follow.
+      tags: [tools]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookMergeRequest"
+      responses:
+        "202":
+          description: The queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}/split:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: splitBook
+      summary: Split a book at its chapters
+      description: >
+        Splits a single-file audiobook into per-chapter files at its
+        chapter marks (sample-exact cuts, lossless for lossless
+        sources), tagging each piece from the book plus its chapter
+        title. Resume positions remap onto the pieces. The original
+        file moves to the trash unless `keepOriginals`. A book
+        without chapters answers `conflict`. Needs the streaming
+        engine.
+      tags: [tools]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookSplitRequest"
+      responses:
+        "202":
+          description: The queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/split-cue:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    post:
+      operationId: splitCueRip
+      summary: Split a CUE rip into real files
+      description: >
+        Splits the single-file rip behind a CUE-carved album into one
+        real file per track (the pid may be any of the rip's virtual
+        tracks; the shared source resolves from it). Virtual tracks
+        already browse and play natively, so this physical split is
+        optional: it is for people who want real per-track files
+        (write-back and fingerprints work on them, two things
+        virtual tracks refuse by upstream design). Cuts come from
+        the cue sheet, sample-exact and lossless for lossless
+        sources; each piece is tagged from the sheet. Play state
+        carries over per track. The source file and sheet move to
+        the trash unless `keepOriginals`. Needs the streaming
+        engine.
+      tags: [tools]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CueSplitRequest"
+      responses:
+        "202":
+          description: The queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /tools/tasks:
+    get:
+      operationId: listToolTasks
+      summary: List tool tasks
+      description: >
+        Keyset-paginated tool tasks, newest first. Administrators see
+        every task; other callers see their own.
+      tags: [tools]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum tasks per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of tasks.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTaskPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /tools/tasks/{taskId}:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    get:
+      operationId: getToolTask
+      summary: Inspect a tool task
+      description: >
+        Current state and progress. Task lifecycle changes also
+        arrive over the event channel, so polling is a fallback,
+        not the model.
+      tags: [tools]
+      responses:
+        "200":
+          description: The task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /tools/tasks/{taskId}/events:
+    get:
+      operationId: streamToolTaskEvents
+      summary: Stream a tool task's progress
+      description: >
+        Server-sent events for one task: an event named `task` whose
+        data is the `ToolTask` JSON, emitted immediately on connect
+        and again on every state or progress change (streaming-engine
+        job progress is relayed onto the task as it runs), then a
+        final event named `done` after the task reaches a terminal
+        state, after which the stream closes. Reconnecting is always
+        safe: the first event replays current state. Same visibility
+        as reading the task. The WebSocket channel carries the same
+        lifecycle as invalidations; this stream exists for consumers
+        that want the payloads pushed.
+      tags: [tools]
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: The event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: "`text/event-stream` frames as described."
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      description: Tool task PID (e.g. `tk-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^tk-[0-9A-HJKMNP-TV-Z]{26}$"
+  schemas:
+    ToolTask:
+      type: object
+      description: One background tool task.
+      required: [id, type, state, createdAt]
+      properties:
+        id:
+          type: string
+          description: Task pid.
+          example: tk-01JZX5N8QW3F4V9T2B7KD3M9R6
+        type:
+          type: string
+          description: >
+            The operation: `book-merge`, `book-split`, `cue-split`,
+            or `acquire`. A string, not a closed enum.
+        state:
+          type: string
+          description: >
+            `queued`, `running`, `done`, or `failed`. A string, not
+            a closed enum.
+        itemPid:
+          type: string
+          description: The book or track the task was started from.
+        progressPct:
+          type: number
+          format: double
+          description: Progress in percent when the engine reports it.
+        error:
+          type: string
+          description: Why the task failed, when `failed`.
+        resultPids:
+          type: array
+          description: >
+            What the task produced once `done`: the merged book or
+            the split pieces (item pids), or the review entries an
+            acquisition opened (entry pids).
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+          description: When the task was queued.
+        finishedAt:
+          type: string
+          format: date-time
+          description: When it reached a terminal state.
+        summary:
+          type: object
+          additionalProperties: true
+          description: >
+            Task-type-specific result detail once the task finishes,
+            for example a migration import's match-and-write report.
+            Shapes are documented per task type and may grow fields.
+
+    ToolTaskPage:
+      type: object
+      description: One page of tool tasks.
+      required: [tasks]
+      properties:
+        tasks:
+          type: array
+          description: Tasks, newest first.
+          items:
+            $ref: "#/components/schemas/ToolTask"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; omitted on the last.
+
+    BookMergeRequest:
+      type: object
+      description: Options for a book merge.
+      properties:
+        titles:
+          type: array
+          maxItems: 2000
+          description: >
+            Chapter titles, one per part in order; absent or empty
+            entries fall back to each part's title tag, then a
+            generated name. A non-empty list must match the part
+            count.
+          items:
+            type: string
+        keepOriginals:
+          type: boolean
+          default: false
+          description: Keep the source parts instead of trashing them.
+
+    BookSplitRequest:
+      type: object
+      description: Options for a chapter split.
+      properties:
+        keepOriginals:
+          type: boolean
+          default: false
+          description: Keep the source file instead of trashing it.
+
+    CueSplitRequest:
+      type: object
+      description: Options for a CUE rip split.
+      properties:
+        keepOriginals:
+          type: boolean
+          default: false
+          description: >
+            Keep the source file and sheet instead of trashing them.

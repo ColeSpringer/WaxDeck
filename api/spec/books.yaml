@@ -1,0 +1,226 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /books/{pid}:
+    get:
+      operationId: getBook
+      summary: Get one audiobook's detail
+      description: >
+        Full audiobook detail: contributors, series membership, chapters
+        on the book timeline, backing parts in reading order, and the
+        calling user's per-book playback settings. Positions everywhere
+        on this surface are book-timeline milliseconds spanning all
+        parts.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The book.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookDetail"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}/resume:
+    get:
+      operationId: getBookResume
+      summary: Where the caller left off in a book
+      description: >
+        The calling user's resume point on the book timeline, with the
+        chapter that position falls in (when the book has chapters).
+        This is the cross-device resume answer: the position reflects
+        the newest checkpoint from any device after the server's
+        per-medium reconciliation.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The caller's resume point.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookResume"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}/settings:
+    put:
+      operationId: putBookSettings
+      summary: Replace the caller's playback settings for a book
+      description: >
+        Full replace of the calling user's per-book playback settings
+        (speed memory, voice boost, silence trimming). Absent fields
+        reset to their defaults, so clients send the complete object.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookSettings"
+      responses:
+        "200":
+          description: The stored settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookSettings"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  schemas:
+    BookPart:
+      type: object
+      description: >
+        One backing file of an audiobook, in reading order. `index` is
+        the join key across the whole surface: it matches play-info's
+        `partIndex`, the skip-map `partIndex`, and the same position in
+        download-info's `files` array.
+      required: [index, startMs, durationMs]
+      properties:
+        index:
+          type: integer
+          description: Zero-based reading-order position.
+        startMs:
+          type: integer
+          format: int64
+          description: Book-timeline millisecond offset where this part begins.
+        durationMs:
+          type: integer
+          format: int64
+          description: Part duration in milliseconds.
+        displayName:
+          type: string
+          description: Human-readable part name (the file's base name).
+
+    BookSettings:
+      type: object
+      description: >
+        The calling user's per-book playback settings. All fields are
+        optional; an absent field means the server default. `PUT`
+        replaces the whole object.
+      properties:
+        speed:
+          type: number
+          format: double
+          minimum: 0.5
+          maximum: 3.5
+          description: Playback speed memory for this book.
+        voiceBoost:
+          type: boolean
+          description: Apply spoken-word loudness normalization for this book.
+        trimSilence:
+          type: boolean
+          description: Trim mapped silence spans when playing this book.
+
+    BookDetail:
+      type: object
+      description: >
+        Full audiobook detail. All positions are book-timeline
+        milliseconds spanning every part.
+      required: [pid, title, durationMs, authors, narrators, chapters, parts]
+      properties:
+        pid:
+          type: string
+          description: Book PID.
+          example: bk-01JZX5N8QW3F4V9T2B7KD3M9R6
+        title:
+          type: string
+          description: Book title.
+        subtitle:
+          type: string
+          description: Subtitle, when known.
+        authors:
+          type: array
+          description: Author display names, in credit order.
+          items:
+            type: string
+        narrators:
+          type: array
+          description: Narrator display names, in credit order.
+          items:
+            type: string
+        series:
+          type: string
+          description: Series name, when the book belongs to one.
+        seriesSequence:
+          type: string
+          description: >
+            Position within the series, as the source states it
+            (decimals like `1.5` are preserved).
+        publisher:
+          type: string
+          description: Publisher, when known.
+        asin:
+          type: string
+          description: Audible ASIN, when known.
+        isbn:
+          type: string
+          description: ISBN, when known.
+        edition:
+          type: string
+          description: Edition label, when known.
+        abridged:
+          type: boolean
+          description: Whether this edition is abridged, when known.
+        descriptionHtml:
+          type: string
+          description: >
+            Book description as sanitized HTML (server-side allowlist;
+            safe to render directly).
+        durationMs:
+          type: integer
+          format: int64
+          description: Total duration across all parts, in milliseconds.
+        artUrl:
+          type: string
+          description: Origin-relative URL of the book's artwork endpoint.
+        chapters:
+          type: array
+          description: Chapters on the book timeline, ordered by `startMs`.
+          items:
+            $ref: "#/components/schemas/ChapterMark"
+        parts:
+          type: array
+          minItems: 1
+          description: Backing files in reading order.
+          items:
+            $ref: "#/components/schemas/BookPart"
+        settings:
+          $ref: "#/components/schemas/BookSettings"
+
+    BookResume:
+      type: object
+      description: The calling user's resume point in one book.
+      required: [positionMs]
+      properties:
+        positionMs:
+          type: integer
+          format: int64
+          description: Book-timeline resume position in milliseconds.
+        chapter:
+          $ref: "#/components/schemas/ChapterMark"
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this position was last written.

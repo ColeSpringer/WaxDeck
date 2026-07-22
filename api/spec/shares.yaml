@@ -1,0 +1,222 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /shares:
+    get:
+      operationId: listShares
+      summary: List share links
+      description: >
+        The caller's share links, newest first, including expired ones
+        (marked by `expiresAt` in the past) so they can be renewed or
+        cleaned up. Administrators may pass `all=true` to list every
+        user's shares.
+      tags: [shares]
+      parameters:
+        - name: all
+          in: query
+          description: >
+            List every user's shares (administrators only; `forbidden`
+            otherwise).
+          schema:
+            type: boolean
+            default: false
+        - name: cursor
+          in: query
+          description: Opaque keyset cursor from a previous page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Page size.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of share links.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharePage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createShare
+      summary: Create a share link
+      description: >
+        Creates a public share link for a track, book, or episode the
+        caller can see, or a playlist the caller owns. Playlists
+        require ownership because the public page serves the owner's
+        member view for the link's whole life: another user's shared
+        playlist is theirs to publish, not the viewer's, and their
+        later edits or a flip back to private must not leak through a
+        link they cannot revoke. (Albums share through a playlist of
+        their tracks for now: an album pid alone does not resolve to
+        members server-side.) The link is a capability
+        URL: anyone holding it can open the landing page and listen
+        until it expires or is revoked. Episodes accept `positionMs`
+        for copy-link-at-timestamp. `allowDownload` additionally
+        offers the original file and requires the caller's own
+        download permission. Episodes of private feeds (feeds with
+        credentials) refuse with `forbidden`: a capability URL must
+        not leak paid content. Anonymous playback through the link is
+        billed against the caller's transcode and bandwidth limits.
+      tags: [shares]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShareCreate"
+      responses:
+        "201":
+          description: The share link.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Share"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /shares/{shareId}:
+    delete:
+      operationId: revokeShare
+      summary: Revoke a share link
+      description: >
+        Revokes a share link immediately: the landing page and its
+        media URLs stop resolving. The owner or an administrator may
+        revoke.
+      tags: [shares]
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+      responses:
+        "204":
+          description: Revoked.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    ShareId:
+      name: shareId
+      in: path
+      required: true
+      description: Share PID (e.g. `sh-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^sh-[0-9A-HJKMNP-TV-Z]{26}$"
+  schemas:
+    Share:
+      type: object
+      description: One public share link.
+      required:
+        [pid, url, targetPid, targetKind, targetTitle, allowDownload,
+         createdAt, plays]
+      properties:
+        pid:
+          type: string
+          description: Share PID.
+          example: sh-01JZX5N8QW3F4V9T2B7KD3M9R6
+        url:
+          type: string
+          description: >
+            Origin-relative capability URL of the landing page.
+            Anyone holding the full URL can open it; treat it as the
+            secret it is.
+          example: /s/01JZX5N8QW3F4V9T2B7KD3M9R6.aBcDeFgHiJkLmNoPqRsTuV
+        targetPid:
+          type: string
+          description: The shared track, playlist, book, or episode.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        targetKind:
+          type: string
+          description: What kind of thing the share opens.
+          enum: [track, playlist, book, episode]
+        targetTitle:
+          type: string
+          description: The target's display title at read time.
+          example: Prancing Pony Blues
+        allowDownload:
+          type: boolean
+          description: Whether the landing page offers the original file.
+        positionMs:
+          type: integer
+          format: int64
+          description: >
+            Start position for copy-link-at-timestamp shares
+            (episodes). Absent otherwise.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the share was created.
+        expiresAt:
+          type: string
+          format: date-time
+          description: >
+            When the link stops resolving. Absent for links without
+            expiry.
+        plays:
+          type: integer
+          description: Anonymous plays through the link so far.
+
+    SharePage:
+      type: object
+      description: One page of share links, newest first.
+      required: [shares]
+      properties:
+        shares:
+          type: array
+          items:
+            $ref: "#/components/schemas/Share"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page; absent on the last page.
+
+    ShareCreate:
+      type: object
+      description: A new share link.
+      required: [pid]
+      properties:
+        pid:
+          type: string
+          description: >
+            The track (`tr-`), playlist (`pl-`), book (`bk-`), or
+            episode (`ep-`) to share. Must be visible to the caller.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        expiresInHours:
+          type: integer
+          minimum: 1
+          maximum: 8760
+          description: >
+            Lifetime in hours from creation. Omitted means the link
+            never expires (it can still be revoked).
+        allowDownload:
+          type: boolean
+          default: false
+          description: >
+            Offer the original file on the landing page. Requires the
+            caller's own download permission.
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Start position for copy-link-at-timestamp (episodes only;
+            `invalid-request` on other kinds).

@@ -1,0 +1,432 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+# WebSocket frame DTOs for the event channel (api/events.md). No REST path
+# references them; oapi-codegen skip-prune and a spectral override keep them.
+components:
+  schemas:
+    WsSubscribeFrame:
+      type: object
+      description: >
+        The WebSocket subscribe frame, sent by the client as the first and
+        only client-to-server message on the event channel (transport in
+        `api/events.md`). Clients pass the cursors their mirror is at; a
+        client with no mirror yet omits them, receives only live
+        invalidations, and snapshots through the sync endpoints (before
+        or after subscribing; both orders are sound because invalidations
+        carry no data).
+      properties:
+        catalogSince:
+          type: string
+          description: The client's opaque catalog change cursor.
+        serverSince:
+          type: string
+          description: The client's opaque server change cursor.
+        topics:
+          type: array
+          description: >
+            Topics to receive (`catalog`, `user`, `player`). Omit for
+            all topics. Unknown topic names are ignored. The `player`
+            topic has no cursor (it invalidates ephemeral lists, not a
+            mirrored stream), so subscribing never prompts an initial
+            `player` invalidate; clients that render endpoint or
+            session lists pull them on connect.
+          items:
+            type: string
+            example: catalog
+
+    WsEventFrame:
+      type: object
+      description: >
+        One server-to-client frame on the WebSocket event channel
+        (transport in `api/events.md`). An `invalidate` frame tells the
+        client the named topic moved: for `catalog` pull `/sync/catalog`
+        and for `user` pull `/sync/server` from the client's own
+        cursor; for `player` pull `/player/endpoints` and
+        `/player/sessions`, which always return current truth (no
+        cursor). Invalidations are coalesced server-side, so one frame
+        can cover many changes, and carry no data, so a redundant pull
+        is harmless. A `resync` frame means continuity was lost for the
+        named stream, or for every stream when `topic` is absent
+        (client queue overflow, pruned history): drop the affected
+        mirror halves, re-mirror through the sync endpoints, then close
+        the socket, reconnect, and resubscribe with the fresh cursors.
+        `resync` never names `player` (there is nothing to replay).
+        `type` and `topic` are strings, not closed enums; clients must
+        ignore frames whose `type` they do not recognize.
+      required: [type]
+      properties:
+        type:
+          type: string
+          description: "Frame discriminator: `invalidate` or `resync`."
+          example: invalidate
+        topic:
+          type: string
+          description: >
+            Which topic the frame is about (`catalog`, `user`, or
+            `player`). Always present on `invalidate`; on `resync` its
+            absence means every stream.
+          example: catalog
+
+    WsCommandFrame:
+      type: object
+      description: >
+        Client-to-server command on the WebSocket command bus
+        (transport in `api/events.md`). Targets a session by id;
+        `verb` is one of `play`, `pause`, `stop`, `seek`, `next`,
+        `previous`, `set-volume`, `set-rate`, `set-queue`,
+        `set-repeat`, `set-shuffle` (open string; unknown verbs answer
+        an error frame). Arguments are absolute state, never deltas.
+        Answered exactly once, with an ack or an error echoing `id`.
+      required: [type, id, sessionId, verb]
+      properties:
+        type:
+          type: string
+          description: Always `cmd`.
+          example: cmd
+        id:
+          type: string
+          maxLength: 64
+          description: Client-chosen correlation id, echoed on the answer.
+          example: c7
+        sessionId:
+          type: string
+          description: The target session.
+          example: ps-01JZX5N8QW3F4V9T2B7KD3M9R6
+        verb:
+          type: string
+          description: The command verb.
+          example: seek
+        positionMs:
+          type: integer
+          format: int64
+          description: For `seek` and optionally `set-queue`.
+        volume:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: For `set-volume`, 0 to 1.
+        rate:
+          type: number
+          format: double
+          minimum: 0.25
+          maximum: 5
+          description: For `set-rate`.
+        itemPids:
+          type: array
+          description: For `set-queue`, the new queue in play order.
+          maxItems: 500
+          items:
+            type: string
+        index:
+          type: integer
+          description: For `set-queue`, the entry to play.
+        repeat:
+          type: string
+          description: "For `set-repeat`: `off`, `all`, or `one`."
+        shuffle:
+          type: boolean
+          description: For `set-shuffle`.
+
+    WsAckFrame:
+      type: object
+      description: >
+        Server answer to a successful `cmd` or `register-endpoint`
+        frame, echoing its `id`. Command acks carry the updated
+        session snapshot when the server has one; for commands routed
+        to a playing client (mirror sessions) the snapshot may lag or
+        be absent, because the client's own report is what updates the
+        mirror; controllers render those from the following `session`
+        frame. Registration acks carry the endpoint id.
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          description: Always `ack`.
+          example: ack
+        id:
+          type: string
+          description: The answered frame's correlation id.
+        endpointId:
+          type: string
+          description: On registration acks, the endpoint's id.
+          example: pe-01JZX5N8QW3F4V9T2B7KD3M9R6
+        session:
+          $ref: "#/components/schemas/PlaybackSession"
+
+    WsErrorFrame:
+      type: object
+      description: >
+        Server answer to a failed client frame, echoing its `id` when
+        one was readable. `code` draws from the API error vocabulary
+        plus `timeout` (a routed command's target did not answer
+        within the routing deadline).
+      required: [type, code, message]
+      properties:
+        type:
+          type: string
+          description: Always `error`.
+          example: error
+        id:
+          type: string
+          description: The failed frame's correlation id, when known.
+        code:
+          type: string
+          description: Machine-readable error code.
+          example: endpoint-offline
+        message:
+          type: string
+          description: Human-readable detail.
+
+    WsRegisterEndpointFrame:
+      type: object
+      description: >
+        Client-to-server: declare this connection a controllable
+        player endpoint. Answered with an ack carrying `endpointId`.
+        The endpoint lives while the connection does.
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          description: Always `register-endpoint`.
+          example: register-endpoint
+        id:
+          type: string
+          maxLength: 64
+          description: Correlation id for the ack.
+        name:
+          type: string
+          maxLength: 128
+          description: >
+            Display name. Defaults to the device session's label.
+        volumeControl:
+          type: boolean
+          description: Whether this client can apply `set-volume`.
+        rateControl:
+          type: boolean
+          description: Whether this client can apply `set-rate`.
+
+    WsEndpointCommandFrame:
+      type: object
+      description: >
+        Server-to-client command routed to a registered client
+        endpoint. Verbs are the command verbs plus `load` (adopt this
+        queue at this index and position; the client resolves
+        play-info itself). The client executes against its local
+        engine and answers exactly once with a `cmd-result`, then
+        reports state.
+      required: [type, id, sessionId, verb]
+      properties:
+        type:
+          type: string
+          description: Always `endpoint-cmd`.
+          example: endpoint-cmd
+        id:
+          type: string
+          description: Server-chosen correlation id for the result.
+        sessionId:
+          type: string
+          description: The session this command belongs to.
+        verb:
+          type: string
+          description: The command verb.
+          example: load
+        itemPids:
+          type: array
+          description: For `load` and `set-queue`.
+          items:
+            type: string
+        index:
+          type: integer
+          description: For `load` and `set-queue`.
+        positionMs:
+          type: integer
+          format: int64
+          description: For `load`, `seek`, and optionally `set-queue`.
+        play:
+          type: boolean
+          description: For `load`, whether to start playing.
+        volume:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: For `set-volume`.
+        rate:
+          type: number
+          format: double
+          minimum: 0.25
+          maximum: 5
+          description: For `set-rate`.
+        repeat:
+          type: string
+          description: For `set-repeat`.
+        shuffle:
+          type: boolean
+          description: For `set-shuffle`.
+
+    WsCommandResultFrame:
+      type: object
+      description: >
+        Client-to-server answer to an `endpoint-cmd`, echoing its
+        `id`. Sent exactly once per routed command.
+      required: [type, id, ok]
+      properties:
+        type:
+          type: string
+          description: Always `cmd-result`.
+          example: cmd-result
+        id:
+          type: string
+          description: The routed command's correlation id.
+        ok:
+          type: boolean
+          description: Whether the command was applied.
+        code:
+          type: string
+          description: Machine-readable failure code when `ok` is false.
+        message:
+          type: string
+          description: Human-readable failure detail when `ok` is false.
+
+    WsSessionReportFrame:
+      type: object
+      description: >
+        Client-to-server state report from a playing client: sent on
+        every state change (play, pause, seek, track change, queue
+        change) and at least every five seconds while playing. The
+        steady fields (`playing`, `positionMs`, `index`, `rate`,
+        `volume`, `repeat`, `shuffle`) carry current truth on every
+        report; a track advance is just a report with the new `index`.
+        `itemPids` rides only the reports where the queue itself
+        changed, together with a bumped `queueVersion`, plus the
+        first report of a connection that is already playing (the one
+        that creates or re-creates the mirror session; a creating
+        report without `itemPids` is ignored, since a session without
+        a queue is unrenderable). The server answers a creating report
+        with a `session` frame carrying the assigned id; other reports
+        are unacknowledged.
+      required: [type, playing, positionMs, index]
+      properties:
+        type:
+          type: string
+          description: Always `session-report`.
+          example: session-report
+        playing:
+          type: boolean
+          description: Whether local playback is running.
+        positionMs:
+          type: integer
+          format: int64
+          description: Position within the current entry.
+        index:
+          type: integer
+          description: Zero-based index of the current entry.
+        rate:
+          type: number
+          format: double
+          minimum: 0.25
+          maximum: 5
+          description: Playback rate.
+        volume:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: Local volume, 0 to 1, when the client controls one.
+        itemPids:
+          type: array
+          description: >
+            The queue in play order, only on reports where it changed
+            (and on the creating report).
+          maxItems: 500
+          items:
+            type: string
+        queueVersion:
+          type: integer
+          format: int64
+          description: >
+            The client's queue generation, bumped when its queue
+            changes. An edge signal only: the version the server
+            publishes on the session is its own monotone counter.
+        repeat:
+          type: string
+          description: "`off`, `all`, or `one`."
+        shuffle:
+          type: boolean
+          description: Whether shuffle is on.
+
+    WsSessionFrame:
+      type: object
+      description: >
+        Server-to-client session state: pushed to the watcher of a
+        session on every change and about once per second while
+        playing, and to a reporting client when its session identity
+        changes or ends. A frame whose session carries `ended` true is
+        terminal for that id.
+      required: [type, session]
+      properties:
+        type:
+          type: string
+          description: Always `session`.
+          example: session
+        session:
+          $ref: "#/components/schemas/PlaybackSession"
+
+    WsWatchFrame:
+      type: object
+      description: >
+        Client-to-server: follow one session's live state. Watching
+        follows session visibility (your own sessions, others' on
+        shared endpoints). A new watch replaces the previous one;
+        omitting `sessionId` stops watching. A successful watch is not
+        acked (the current state arrives immediately as a `session`
+        frame); a watch of an unknown or invisible session answers an
+        `error` frame with `not-found`, echoing `id` when sent.
+      required: [type]
+      properties:
+        type:
+          type: string
+          description: Always `watch`.
+          example: watch
+        id:
+          type: string
+          maxLength: 64
+          description: Optional correlation id, echoed on a failure.
+        sessionId:
+          type: string
+          description: The session to follow.
+          example: ps-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    WsPingFrame:
+      type: object
+      description: >
+        Client-to-server clock probe for NTP-style offset estimation
+        (unrelated to WebSocket protocol pings).
+      required: [type, t]
+      properties:
+        type:
+          type: string
+          description: Always `ping`.
+          example: ping
+        t:
+          type: integer
+          format: int64
+          description: Opaque client timestamp, echoed back verbatim.
+
+    WsPongFrame:
+      type: object
+      description: Server answer to a `ping` frame.
+      required: [type, t, at]
+      properties:
+        type:
+          type: string
+          description: Always `pong`.
+          example: pong
+        t:
+          type: integer
+          format: int64
+          description: The ping's `t`, echoed verbatim.
+        at:
+          type: integer
+          format: int64
+          description: Server clock in Unix milliseconds at handling time.

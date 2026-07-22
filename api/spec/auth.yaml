@@ -1,0 +1,704 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+# Also holds all of components.securitySchemes: scheme names are referenced
+# from security requirements by name, not by $ref.
+paths:
+  /auth/login:
+    post:
+      operationId: login
+      summary: Log in and establish a session
+      description: >
+        Verifies local-account credentials, establishes a session, and sets
+        the `waxdeck_session` HttpOnly cookie. Native clients use the same
+        endpoint and read the bearer token from the response body instead of
+        the cookie; passing `deviceName` labels the session in the device
+        list. Invalid credentials and disabled accounts answer 401 without
+        distinguishing the two. Repeated failures are rate limited per
+        source and account.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Session established.
+          headers:
+            Set-Cookie:
+              description: "`waxdeck_session` HttpOnly SameSite=Lax session cookie."
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: End the current session
+      description: >
+        Revokes the presented session (cookie or bearer token) and clears the
+        session cookie. Succeeds even if no session is active.
+      tags: [auth]
+      security: []
+      responses:
+        "204":
+          description: Session ended.
+          headers:
+            Set-Cookie:
+              description: Expired `waxdeck_session` cookie.
+              schema:
+                type: string
+
+  /auth/session:
+    get:
+      operationId: getSession
+      summary: Inspect the current session
+      description: >
+        Returns whether the caller is authenticated and, if so, the session's
+        user and CSRF token. Unauthenticated callers get
+        `authenticated: false`, not a 401. Clients use this at startup to
+        decide whether to show the login screen.
+      tags: [auth]
+      security: []
+      responses:
+        "200":
+          description: Current session state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionInfo"
+
+  /auth/bootstrap:
+    get:
+      operationId: getBootstrapStatus
+      summary: Check whether first-run setup is needed
+      description: >
+        Reports whether the server is still waiting for its first
+        administrator. Clients probe this when a session check comes back
+        unauthenticated and route to the setup screen instead of the
+        login screen while `required` is true. Setup stays required as
+        long as no enabled administrator exists, so an OIDC login that
+        provisioned a plain account first never strands the server
+        adminless.
+      tags: [auth]
+      security: []
+      responses:
+        "200":
+          description: Bootstrap state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootstrapStatus"
+    post:
+      operationId: bootstrap
+      summary: Create the first administrator
+      description: >
+        Creates an administrator account and logs it in (cookie plus
+        bearer token, exactly like login). Available only while the
+        server has no enabled administrator; once one exists this
+        endpoint answers `conflict` forever. Not rate limited
+        separately: it is a door that closes the moment an
+        administrator exists.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BootstrapRequest"
+      responses:
+        "200":
+          description: Administrator created and logged in.
+          headers:
+            Set-Cookie:
+              description: "`waxdeck_session` HttpOnly SameSite=Lax session cookie."
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /auth/signup:
+    post:
+      operationId: signup
+      summary: Request an account
+      description: >
+        Self-serve registration. Without an invite token it requires the
+        administrator to have enabled open signup, and the account lands
+        pending: it cannot log in until an administrator approves it
+        (`state` is `pending`). With a valid invite token the account is
+        pre-approved and can log in immediately with the role, library
+        access, and permissions the invite carries (`state` is
+        `active`); invites work whether or not open signup is enabled.
+        A taken username answers `conflict` (an unavoidable existence
+        probe; the rate limit bounds it). Signup disabled and no invite,
+        or an invalid, expired, exhausted, or revoked invite token,
+        answer `forbidden`. Rate limited per address.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+      responses:
+        "201":
+          description: The registration outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignupResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: Rotate the caller's bearer token
+      description: >
+        Issues a replacement bearer token for the calling device session and
+        invalidates the presented one after a short overlap window (so
+        requests already in flight with the old token do not fail). Native
+        clients call this periodically; the session itself (its id, device
+        name, and history) is unchanged. Cookie-authenticated callers have
+        nothing to rotate and get `invalid-request`.
+      tags: [auth]
+      responses:
+        "200":
+          description: Replacement token for the same session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /auth/sessions:
+    get:
+      operationId: listSessions
+      summary: List the caller's sessions and devices
+      description: >
+        Every live session belonging to the calling user, newest first: web
+        logins and native devices, with the one serving this request marked
+        `current`. This doubles as the device list; revoke an entry to sign
+        that device out. Unpaginated: a user's live sessions are a small,
+        bounded set.
+      tags: [auth]
+      responses:
+        "200":
+          description: The caller's sessions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /auth/sessions/{sessionId}:
+    delete:
+      operationId: revokeSession
+      summary: Revoke one of the caller's sessions
+      description: >
+        Revokes one of the calling user's sessions immediately: the device
+        holding it is signed out and its next request fails with 401.
+        Revoking the session serving this request is allowed and acts as
+        a logout (the response then also expires the session cookie).
+        Only the caller's own sessions are visible here; an administrator
+        signs another user out via that user's account endpoints.
+      tags: [auth]
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "204":
+          description: Session revoked.
+          headers:
+            Set-Cookie:
+              description: >
+                Expired `waxdeck_session` cookie, present only when the
+                revoked session is the one serving this request.
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /auth/oidc/providers:
+    get:
+      operationId: listOidcProviders
+      summary: List configured OIDC providers
+      description: >
+        The single sign-on providers this server is configured with, for
+        rendering login buttons. Empty when OIDC is not configured. Each
+        provider carries the origin-relative URL that starts its flow.
+      tags: [auth]
+      security: []
+      responses:
+        "200":
+          description: Configured providers (possibly none).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OidcProviders"
+
+  /auth/oidc/start:
+    get:
+      operationId: startOidc
+      summary: Start an OIDC login
+      description: >
+        Redirects the browser to the identity provider's authorization
+        endpoint (authorization code with PKCE, server-mediated: the
+        provider only ever redirects back to this server). `mode` selects
+        how the flow completes after the callback: `web` sets the session
+        cookie and redirects into the SPA; `app` redirects to the
+        `waxdeck://auth` deep link with a one-time code; `loopback`
+        redirects to `http://127.0.0.1:{port}/callback` with a one-time
+        code; `code` shows the one-time code on a plain page for manual
+        copy. One-time codes are exchanged at `/auth/oidc/exchange`.
+      tags: [auth]
+      security: []
+      parameters:
+        - name: provider
+          in: query
+          required: true
+          description: Provider id from `/auth/oidc/providers`.
+          schema:
+            type: string
+        - name: mode
+          in: query
+          description: How the flow completes after the provider callback.
+          schema:
+            type: string
+            enum: [web, app, loopback, code]
+            default: web
+        - name: redirect
+          in: query
+          description: >
+            Where the browser lands after a `web`-mode login: a
+            single-slash-rooted path (for example `/library`). Values
+            starting `//` or containing a scheme or authority are
+            rejected, never coerced, since this redirect fires after the
+            session cookie is set. Defaults to `/`.
+          schema:
+            type: string
+        - name: challenge
+          in: query
+          description: >
+            Proof-of-possession binding for `app`, `loopback`, and `code`
+            modes: the base64url SHA-256 of a client-held secret, exactly
+            like a PKCE code challenge. When given, the resulting
+            one-time code can only be redeemed together with the matching
+            `verifier`, so a code intercepted in transit (a rogue app
+            claiming the deep-link scheme) is useless alone. First-party
+            clients always send one.
+          schema:
+            type: string
+        - name: port
+          in: query
+          description: >
+            Loopback port for `loopback` mode. Required for that mode,
+            ignored otherwise.
+          schema:
+            type: integer
+            minimum: 1024
+            maximum: 65535
+      responses:
+        "302":
+          description: Redirect to the identity provider.
+          headers:
+            Location:
+              description: The provider's authorization URL.
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /auth/oidc/callback:
+    get:
+      operationId: oidcCallback
+      summary: OIDC provider callback
+      description: >
+        The redirect URI registered with the identity provider; browsers
+        arrive here from the provider, clients never call it directly.
+        Exchanges the authorization code, verifies the ID token, resolves
+        the account, then completes per the flow's `mode`: `web` sets the
+        session cookie and redirects into the SPA; `app` redirects to the
+        `waxdeck://auth` deep link carrying a one-time code; `loopback`
+        redirects to the flow's loopback URL with the code; `code` renders
+        the code as plain HTML for manual copy. Account resolution is by
+        provider identity (issuer and subject) only: a first login
+        provisions a fresh account, disambiguating a taken username with
+        a suffix, and never links onto an existing local account by
+        username or email (silent merges are an account-takeover class;
+        linking is an explicit future admin action). Provider errors and
+        unknown or expired `state` render a plain error page, since there
+        is no client context to return a structured error to. Every value
+        interpolated into these HTML pages (codes, provider error text)
+        is HTML-escaped, and the code page carries nothing derived from
+        the user agent.
+      tags: [auth]
+      security: []
+      parameters:
+        - name: code
+          in: query
+          description: Authorization code from the provider.
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: Opaque state issued by `/auth/oidc/start`.
+          schema:
+            type: string
+        - name: error
+          in: query
+          description: Provider-reported error code, when the provider denied the flow.
+          schema:
+            type: string
+        - name: error_description
+          in: query
+          description: Provider-reported human-readable error detail.
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Flow completion redirect (`web`, `app`, and `loopback` modes).
+          headers:
+            Location:
+              description: SPA path, deep link, or loopback URL per the flow's mode.
+              schema:
+                type: string
+            Set-Cookie:
+              description: "`waxdeck_session` cookie (`web` mode only)."
+              schema:
+                type: string
+        "200":
+          description: One-time code page (`code` mode) or a plain error page.
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /auth/oidc/exchange:
+    post:
+      operationId: exchangeOidcCode
+      summary: Exchange a one-time OIDC code for a session
+      description: >
+        Redeems the one-time code delivered by an `app`, `loopback`, or
+        `code` mode OIDC flow for a session (bearer token plus user, exactly
+        like login). Codes are single-use and expire within minutes;
+        redeeming one again fails. Guessing is rate limited.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OidcExchangeRequest"
+      responses:
+        "200":
+          description: Session established.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: waxdeck_session
+      description: HttpOnly SameSite=Lax session cookie (web).
+
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Per-device rotating bearer token (native clients).
+
+    workerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Server-configured worker token (the `WAXDECK_WORKER_TOKENS`
+        setting) for external analysis workers. A server-level
+        integration credential, not a user: worker endpoints ignore
+        library visibility. Never accepted on user endpoints.
+  parameters:
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      description: Session PID (e.g. `se-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^se-[0-9A-HJKMNP-TV-Z]{26}$"
+  responses:
+    RateLimited:
+      description: Too many attempts (code `rate-limited`). Back off and retry later.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    LoginRequest:
+      type: object
+      description: Credentials for local-account login.
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          description: Account username.
+          example: admin
+        password:
+          type: string
+          minLength: 1
+          format: password
+          description: Account password.
+        deviceName:
+          type: string
+          maxLength: 128
+          description: >
+            Human-readable label for this session in the device list (for
+            example `Pixel 9` or `Study desktop`). Native clients pass one;
+            web logins usually omit it.
+
+    LoginResponse:
+      type: object
+      description: Established session plus a bearer token for native clients.
+      required: [user, token, csrfToken]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+          description: >
+            Opaque bearer token equivalent to the session cookie. Native
+            clients store it in the OS keychain; web clients ignore it and rely
+            on the cookie.
+        csrfToken:
+          type: string
+          description: >
+            CSRF token for cookie-authenticated mutations (sent back as the
+            `X-CSRF-Token` header). Irrelevant to bearer-token callers.
+
+    SessionInfo:
+      type: object
+      description: Whether the caller is authenticated, and as whom.
+      required: [authenticated]
+      properties:
+        authenticated:
+          type: boolean
+          description: True when a valid session or token was presented.
+        user:
+          $ref: "#/components/schemas/User"
+        csrfToken:
+          type: string
+          description: >
+            CSRF token for cookie-authenticated mutations. Present only when
+            authenticated.
+
+    BootstrapStatus:
+      type: object
+      description: Whether first-run setup is still waiting for an administrator.
+      required: [required]
+      properties:
+        required:
+          type: boolean
+          description: True while the server has no enabled administrator.
+        signupEnabled:
+          type: boolean
+          description: >
+            Whether open self-serve signup is enabled, so the login
+            screen knows to offer "request an account". Invite links
+            work regardless of this flag.
+
+    BootstrapRequest:
+      type: object
+      description: The first administrator account.
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Administrator login name.
+          example: admin
+        password:
+          type: string
+          minLength: 8
+          format: password
+          description: Administrator password (at least 8 characters).
+        displayName:
+          type: string
+          maxLength: 128
+          description: Optional display name.
+
+    DeviceSession:
+      type: object
+      description: One live session, as shown in the device list.
+      required: [id, kind, createdAt, current]
+      properties:
+        id:
+          type: string
+          description: Session identifier.
+          example: se-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          type: string
+          enum: [web, device]
+          description: >
+            `web` sessions authenticate with the cookie; `device` sessions
+            with a bearer token.
+        deviceName:
+          type: string
+          description: Client-supplied label, when the login provided one.
+        client:
+          type: string
+          description: Client software hint (from the login's user agent).
+        createdAt:
+          type: string
+          format: date-time
+          description: When the session was established.
+        lastSeenAt:
+          type: string
+          format: date-time
+          description: When the session last made a request (coarse, minutes).
+        current:
+          type: boolean
+          description: True for the session serving this request.
+
+    SessionList:
+      type: object
+      description: The caller's live sessions, newest first.
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeviceSession"
+
+    OidcProvider:
+      type: object
+      description: One configured OIDC provider.
+      required: [id, displayName, startUrl]
+      properties:
+        id:
+          type: string
+          description: Stable provider id, referenced by `/auth/oidc/start`.
+          example: dex
+        displayName:
+          type: string
+          description: Human-readable name for the login button.
+          example: Company SSO
+        startUrl:
+          type: string
+          description: >
+            Origin-relative URL that starts this provider's login flow
+            (web mode; other modes add their query parameters).
+          example: /api/v1/auth/oidc/start?provider=dex
+
+    OidcProviders:
+      type: object
+      description: The configured OIDC providers.
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/OidcProvider"
+
+    OidcExchangeRequest:
+      type: object
+      description: A one-time OIDC completion code to redeem for a session.
+      required: [code]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: The one-time code delivered by the flow's redirect or code page.
+        verifier:
+          type: string
+          description: >
+            The secret whose SHA-256 was sent as `challenge` when the
+            flow started. Required when the flow carried a challenge;
+            a missing or wrong value fails the exchange.
+        deviceName:
+          type: string
+          maxLength: 128
+          description: Device-list label for the resulting session.
+
+    SignupRequest:
+      type: object
+      description: A self-serve registration.
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Requested login name, unique case-insensitively. Leading
+            and trailing whitespace is rejected.
+          example: samwise
+        password:
+          type: string
+          minLength: 8
+          format: password
+          description: The account password (at least 8 characters).
+        displayName:
+          type: string
+          maxLength: 128
+          description: Optional display name.
+        inviteToken:
+          type: string
+          maxLength: 256
+          description: >
+            An invite token. A valid one pre-approves the account
+            with the role, access, and permissions the invite
+            carries.
+
+    SignupResult:
+      type: object
+      description: What a registration produced.
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [pending, active]
+          description: >
+            `pending` awaits an administrator's approval before it
+            can log in; `active` (invited) can log in immediately.

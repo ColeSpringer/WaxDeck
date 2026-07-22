@@ -1,0 +1,38 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness and version probe
+      description: >
+        Unauthenticated liveness probe. Reports the server version and the API
+        version it serves.
+      tags: [system]
+      security: []
+      responses:
+        "200":
+          description: Server is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+components:
+  schemas:
+    Health:
+      type: object
+      description: Liveness and version information.
+      required: [status, version, apiVersion]
+      properties:
+        status:
+          type: string
+          description: Always `ok` when the server can respond.
+          example: ok
+        version:
+          type: string
+          description: Server build version.
+          example: 0.1.0-dev
+        apiVersion:
+          type: integer
+          description: Major API version served under `/api/v1`.
+          example: 1

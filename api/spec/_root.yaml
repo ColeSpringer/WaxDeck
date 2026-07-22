@@ -1,0 +1,355 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+# Preamble only: openapi, info, servers, tags, security. Paths and components
+# live in the domain fragments, one file per API tag.
+openapi: 3.0.3
+info:
+  title: WaxDeck API
+  version: 0.11.0
+  description: |
+    First-party REST API for WaxDeck: the self-hosted player, library manager,
+    and metadata completer for music, podcasts, and audiobooks.
+
+    Current scope: health, accounts and sessions (local passwords and OIDC),
+    user administration with roles and per-library visibility, per-user
+    preferences, library browse and search, item detail, artwork, lyrics,
+    play-info, playback state (resume, stars, ratings), listen session
+    ingest, library scanning, delta sync for offline-first clients (with
+    the WebSocket event channel specified in `api/events.md`; its frame
+    payloads are components in this document), offline downloads of
+    original files, app passwords for the compatibility APIs, podcasts
+    (per-user subscriptions over globally cataloged shows, episode
+    browsing with sanitized show notes, transcripts, OPML round trips,
+    server-side episode fetching, and YouTube channels as shows),
+    audiobooks (book detail with chapters and parts, chapter-aware
+    resume, per-book playback settings), silence skip maps for
+    client-side trimming, playlists (manual ordered lists and smart
+    playlists whose rules are evaluated per user on read, with a rule
+    preview and a field discovery endpoint for rule editors, plus M3U8
+    round trips), internet radio stations (a shared station library
+    with directory search), outbound scrobbling connections (Last.fm
+    and ListenBrainz per user, delivered from a durable server-side
+    queue), notification targets in two scopes (administrator-managed
+    server destinations for operations events and per-user personal
+    destinations with per-target event selection, delivering natively
+    to Pushover, ntfy, Gotify, Discord webhooks, generic webhooks, an
+    Apprise relay, and UnifiedPush endpoints), and multi-device
+    playback control (player endpoints,
+    playback sessions with server-side queues, transfer between
+    endpoints, gapless queue timelines through the streaming engine,
+    and cast preflight diagnostics; the live command bus rides the
+    WebSocket channel in `api/events.md`), and the curation surface:
+    the release matching review queue (scored candidates with
+    per-field distance breakdowns, approve, skip, keep-as-is, mark
+    unofficial, bulk decisions, revert, and calibration statistics),
+    resumable chunked uploads that flow through the same identify and
+    review pipeline, the full-depth metadata editor (every scalar
+    field, credits, lyrics, chapters, artwork, custom tags, entity
+    edits, field locks with provenance, database-first writes with
+    per-call file write-back), the metadata health dashboard with
+    bulk fixes, duplicate merge and quality upgrade resolution, the
+    template file organizer with dry-run previews, audiobook merge
+    and split tooling with chapter stamping and progress remapping,
+    CUE rip splitting, and library enrichment status and dispatch,
+    and the administration surface: granular per-account permissions
+    with tag allow and deny lists, self-serve signup requests with
+    admin approval and invite links, the admin-action audit log,
+    scheduled scans, backups, and pruning (cron expressions), backup
+    archives with staged restore, the deletion surface and the trash
+    (list, restore, empty), read-only library mode, transcoding
+    limits, and the migration assistant that imports listening state
+    from other servers, and the discovery and stats surface: sonic
+    similarity over per-track audio embeddings (computed by an
+    optional external analysis worker speaking the worker API in
+    this document), similar tracks, instant mixes from any seed
+    with an adventurousness knob, sonic paths between two tracks,
+    listening statistics (time by period, calendar heatmaps with
+    streaks, top lists, the per-device session log, a time-saved
+    counter), a per-user and server-wide year in review, public
+    share links whose landing pages are server-rendered plain HTML,
+    and streaming-service playlist import with a missing-tracks
+    report plus portable playlist export for exchange between
+    catalogs. The shapes (keyset pagination, typed PIDs,
+    the structured error model, relative media URLs) are load-bearing
+    from day one.
+
+    Conventions:
+    - All endpoints live under `/api/v1` (this document's `servers` entry).
+    - Identifiers (`pid`) are type-prefixed ULIDs (`tr-` track, `al-` album,
+      `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook, `jb-` job,
+      `lb-` library, `us-` user, `se-` session, `ap-` app password,
+      `pl-` playlist, `rs-` radio station, `nt-` notification target,
+      `pe-` player endpoint, `ps-` playback session, `rv-` review
+      entry, `up-` upload, `tk-` tool task, `iv-` invite, `bu-` backup
+      archive, `th-` trash entry, `sh-` share link).
+    - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
+      never offsets.
+    - Errors are always the `Error` schema. `code` is a stable machine-readable
+      string; currently defined codes: `invalid-request`, `unauthenticated`,
+      `forbidden`, `not-found`, `conflict`, `internal`, `rate-limited` (too
+      many attempts; retry later), `stream-stale` (a minted media URL no longer
+      matches the file on disk, a metadata-only retag included since the
+      pin is byte identity; re-request the info endpoint that minted it), `catalog-maintenance`
+      (the catalog is temporarily handed to a maintenance operation; retry
+      shortly), `sync-reset` (a sync cursor predates the retained change
+      history; drop the local mirror and re-mirror from a fresh snapshot),
+      `feed-unreachable` (an upstream feed could not be fetched or parsed;
+      the feed's own server answered an error, timed out, or returned
+      something that is not a feed), `source-unavailable` (the request
+      needs an acquisition source integration, such as the YouTube bridge,
+      that this server is not running), `directory-unavailable` (an
+      external directory service, such as the radio station directory,
+      could not be reached; try again later), `service-unreachable`
+      (an external service this request depends on, such as a
+      scrobbling provider, could not be reached; try again later),
+      `feature-unavailable` (the request needs an optional capability,
+      such as the streaming engine's queue timelines or a cast
+      integration, that this server is not running),
+      `endpoint-offline` (the target player endpoint is not currently
+      connected; refresh the endpoint list), `quota-exceeded` (the
+      upload would exceed the caller's storage quota, or an imported
+      backup archive exceeds the server's size limit), `field-locked`
+      (the edit targets a locked metadata field and did not set
+      `force`), `unsupported-format` (the uploaded file's format
+      is not accepted by this server), `read-only` (the target
+      library, or the whole server, is in read-only mode: uploads,
+      organizing, file write-back, deletion, and the file tools are
+      refused while reads and playback keep working), and
+      `transcode-limited` (the server's or the caller's concurrent
+      transcode session limit is reached; retry when a session ends,
+      or play a direct-play format).
+      New codes may appear; clients must treat unknown codes as opaque.
+    - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
+      server origin, the same origin that serves this API and the web UI.
+    - Public share links live at `/s/{token}` on the server origin, outside
+      `/api/v1`. The landing page is server-rendered plain HTML (an audio
+      element, artwork, OpenGraph and Twitter card tags) so link previews
+      and app-less phones work; it never loads the SPA. `/s/{token}/stream`,
+      `/s/{token}/art`, and `/s/{token}/download` serve the media. The token
+      is a signed capability: possession grants access until the share
+      expires or is revoked, no account needed. Share pages send
+      `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex`, and
+      anonymous listeners' transcodes and bandwidth are billed against the
+      share owner's limits with per-share concurrency caps.
+    - The similarity worker API (`/similarity/work`,
+      `/similarity/embeddings`, and the audio pull at
+      `/media/analysis/{pid}`) authenticates with a server-configured
+      worker token (`workerAuth`), not a user credential. Workers are a
+      server-level integration: they see every item regardless of library
+      visibility grants. The audio pull is a raw media route like
+      `/media/stream`: it accepts `format=wav` (loopback workers) or
+      `format=flac` (remote workers; losslessly identical input at roughly
+      half the bytes), always decoded to 16 kHz mono with gain untouched.
+    - Cross-site request forgery: state-changing requests (POST, PUT, PATCH,
+      DELETE) authenticated by the session cookie must carry an
+      `X-CSRF-Token` header matching the session's CSRF token, which login
+      and session inspection return in their bodies (a synchronizer token;
+      it is never a cookie). Requests authenticated by a bearer token are
+      exempt. A cookie-authenticated mutation without a matching token is
+      rejected with `forbidden`. Login, logout, and the other endpoints
+      declaring `security: []` are exempt (the residual forced-login and
+      forced-logout CSRF nuisances are accepted; `SameSite=Lax` cookies
+      and the single-origin UI bound them).
+    - The server never enables cross-origin credentialed access: no CORS
+      headers are emitted, and session cookies stay `SameSite=Lax`. The
+      CSRF-token readback model depends on this; deployments must not
+      layer permissive CORS onto the API origin.
+    - Every item read and mutation is scoped to the libraries visible to the
+      calling user: an item outside the caller's visibility behaves exactly
+      as if it did not exist (`not-found`), and list endpoints omit such
+      items (a page may carry fewer than `limit` items and still have a
+      `nextCursor`).
+    - Podcast subscriptions additionally scope the caller's own catalog
+      view: shows and their episodes appear in item listings, discovery
+      browse, search, and catalog sync only while the caller subscribes
+      to the show, so unsubscribing removes a show from your library
+      surfaces while the catalog keeps everything (files, other users'
+      subscriptions, playback history). Subscribing or unsubscribing
+      therefore retires the caller's outstanding catalog sync cursors:
+      the next delta answers `sync-reset` and the re-mirror reflects the
+      new membership. Show detail, a show's episode list, and episode
+      reads stay available to any caller who can see the podcast
+      library, so shows can be browsed before subscribing.
+    - Playlists are per-user with a visibility flag: `private` playlists
+      exist only for their owner (other callers get `not-found`),
+      `shared` playlists are readable by every user but writable only
+      by their owner. A shared smart playlist evaluates user-state
+      rules (stars, ratings, play counts) against the owner's data:
+      viewers see the owner's list, not their own recomputation. Item
+      reads through a playlist still apply the caller's own library
+      visibility, so a viewer may see fewer items than the owner.
+      Replacing a smart playlist's rule reissues its pid: the update
+      response carries the new pid with `previousPid` set to the old
+      one, the old pid stops resolving, and `createdAt` restarts. The
+      caller's server sync stream carries exactly two `playlist`
+      events for a reissue, the old pid absent and the new pid
+      present (the new pid's hydrated playlist carries
+      `previousPid`), so mirrors relink instead of seeing an
+      unrelated delete and create. A client whose rule-replace
+      response was lost recovers by re-listing and matching
+      `previousPid`. Clients treat the pid as stable only between
+      rule changes.
+    - Player endpoints and playback sessions are ephemeral control-plane
+      state, not mirrored data: reads always return current truth, there
+      are no cursors, and lifecycle changes reach connected clients as
+      `player`-topic invalidations on the WebSocket channel. A client
+      endpoint (a signed-in first-party client that registered itself as
+      controllable) is visible only to its owning user; device endpoints
+      the server drives itself (cast targets, DLNA renderers, the
+      jukebox output) are shared and visible to every user. A playback
+      session is visible to its owner always, and to other users exactly
+      when it plays on a shared endpoint (what a shared speaker plays is
+      audible to the room; the queue behind it is not private either).
+      Controlling a session follows visibility: your own sessions
+      always, another user's only on a shared endpoint.
+    - Curation surfaces (the review queue, the metadata editor and
+      entity edits, health fixes, duplicate merges, organizing, the
+      audiobook and CUE tools, enrichment dispatch) mutate the shared
+      catalog, so their mutations require the `admin` role. Uploads
+      and acquisitions are the exception: any user granted upload
+      rights can create them, sees their own sessions and the review
+      entries they produced, may decide those entries (the files land
+      only in a library the caller can see), and keeps item-scoped
+      editing rights over the items their own uploads and
+      acquisitions brought into the library (scalar fields, credits,
+      lyrics, chapters, artwork, custom tags, release status,
+      rematch, and per-item enrichment; entity-level edits stay
+      administrative). That last rule is what makes hand-curating
+      content with no canonical source practical: the person who
+      brought in an unofficial remix is the person who can name it.
+      Metadata edits write the catalog database first and touch
+      files only when the request opts into write-back; a write-back
+      that fails after the catalog committed reports the failure
+      detail in the response instead of failing the edit, and the
+      affected files surface as out-of-sync diagnostics until a
+      later write-back or rescan reconciles them.
+  contact:
+    name: WaxDeck
+    url: https://github.com/ColeSpringer/WaxDeck
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: /api/v1
+    description: Same-origin API root.
+
+tags:
+  - name: system
+    description: Health and server metadata.
+  - name: auth
+    description: Sessions, devices, first-run bootstrap, and OIDC single sign-on.
+  - name: users
+    description: Account administration, roles, library visibility, and preferences.
+  - name: library
+    description: Browse, search, and inspect library items.
+  - name: podcasts
+    description: >
+      Per-user podcast subscriptions over globally cataloged shows:
+      subscribe, browse episodes, transcripts, OPML, refresh, and
+      server-side episode fetching.
+  - name: books
+    description: Audiobook detail, chapter-aware resume, and per-book settings.
+  - name: playlists
+    description: >
+      Manual ordered playlists and smart playlists: rule-based lists
+      evaluated per user on read, with a stateless rule preview, field
+      discovery for rule editors, and M3U8 import and export.
+  - name: radio
+    description: >
+      Internet radio: a shared station library, directory search, and
+      proxied station streaming.
+  - name: scrobbling
+    description: >
+      Outbound scrobbling connections per user: Last.fm and
+      ListenBrainz, with server-side queueing and delivery.
+  - name: notifications
+    description: >
+      Notification targets in two scopes: administrator-managed
+      server destinations for operations events, and per-user
+      personal destinations (including UnifiedPush endpoints) with
+      per-target event selection.
+  - name: playback
+    description: Resolve playable streams, playback state, and listen accounting.
+  - name: player
+    description: >
+      Multi-device control: player endpoints, playback sessions with
+      server-side queues, transfer between endpoints, gapless queue
+      timelines, and cast preflight diagnostics. Live verbs ride the
+      WebSocket command bus (`api/events.md`).
+  - name: sync
+    description: >
+      Delta sync for offline-first clients: snapshot and changed-since
+      mirroring of the catalog and of the caller's own server-side state.
+  - name: admin
+    description: >
+      Server administration: library maintenance, runtime settings,
+      the audit log, backups and staged restore, scheduled jobs,
+      the trash, transcoding limits, and the migration assistant.
+  - name: review
+    description: >
+      The release matching review queue: scored candidates with
+      per-field distance breakdowns, decisions (approve, skip,
+      keep-as-is, mark unofficial, revert), bulk decisions, and
+      auto-apply calibration statistics.
+  - name: uploads
+    description: >
+      Resumable chunked uploads of audio for all three media types.
+      Uploaded files stage outside the library, run through the
+      identify pipeline, and enter the library through the review
+      queue.
+  - name: metadata
+    description: >
+      The full-depth metadata editor: scalar fields, credits, lyrics,
+      chapters, artwork, custom tags, entity edits, field locks with
+      provenance, release status, rematching, and per-item
+      enrichment. Writes are database-first; file write-back is a
+      per-call opt-in.
+  - name: health
+    description: >
+      The metadata health dashboard: per-rule compliance, per-item
+      issues, sweeps, bulk fixes, duplicate entity merges, and
+      quality upgrade resolution.
+  - name: organize
+    description: >
+      Template-driven file organizing: profiles, dry-run previews,
+      and applying moves (sidecars ride along).
+  - name: tools
+    description: >
+      File tooling driven through the streaming engine's job API:
+      audiobook merge to a chaptered single file, chapter splits,
+      CUE rip splits, and the tool task log tracking them.
+  - name: enrichment
+    description: >
+      Library enrichment: provider status, coverage, and whole-library
+      dispatch.
+  - name: discovery
+    description: >
+      Sonic discovery: similar tracks, instant mixes from any seed
+      with an adventurousness knob, and sonic paths between two
+      tracks. Sonic results need embedding coverage from the
+      similarity worker; every surface degrades to metadata-based
+      heuristics so discovery works with zero setup.
+  - name: stats
+    description: >
+      Listening statistics: time by period, calendar heatmaps with
+      streaks, top lists, the per-device session log, and the
+      per-user and server-wide year in review. Calendar bucketing
+      uses the caller's preferred timezone.
+  - name: shares
+    description: >
+      Public share links for tracks, playlists, books, and episodes:
+      expiring capability URLs whose landing pages are server-rendered
+      plain HTML at `/s/{token}`.
+  - name: similarity
+    description: >
+      Sonic-analysis status and the external worker API. The server
+      analyzes its own library by default (the embedded analyzer);
+      the worker API lets an external process take that job over:
+      workers pull decode-ready audio, compute per-track embeddings,
+      and post them back, and the server maintains the neighbor
+      graph that powers sonic discovery either way. Worker endpoints
+      authenticate with a server-configured worker token.
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []

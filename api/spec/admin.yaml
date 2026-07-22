@@ -1,0 +1,1410 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /libraries:
+    get:
+      operationId: listLibraries
+      summary: List libraries
+      description: >
+        The catalog's libraries, for granting per-library visibility.
+        Administrators only. Unpaginated: libraries are a handful of roots,
+        not a collection that grows with content.
+      tags: [admin]
+      responses:
+        "200":
+          description: All libraries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Libraries"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/rescan:
+    post:
+      operationId: rescanLibrary
+      summary: Start a library rescan
+      description: >
+        Starts an asynchronous scan of every library root and returns the job
+        tracking it. Poll the job to observe progress and completion. Scans
+        serialize with other catalog jobs; starting one while another runs
+        returns the conflict error. Administrators only.
+      tags: [admin]
+      responses:
+        "202":
+          description: Scan started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /jobs/{pid}:
+    get:
+      operationId: getJob
+      summary: Get one job's state
+      description: State and progress of a server-run catalog job.
+      tags: [admin]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The job.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /libraries/{pid}/read-only:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getLibraryReadOnly
+      summary: Read a library's read-only mode
+      description: >
+        Whether the library refuses writes. The effective state is
+        this flag or the server-wide `readOnly` setting; the response
+        reports the per-library flag only. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: The flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryReadOnly"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: setLibraryReadOnly
+      summary: Set a library's read-only mode
+      description: >
+        A read-only library refuses uploads, organizing, file
+        write-back, deletion, and the file tools with code
+        `read-only`, while reads, playback, and per-user state
+        (stars, progress, playlists) keep working. For media mounted
+        read-only on principle. Podcast libraries need a writable
+        root for episode fetching, and the flag refuses fetches into
+        the library too. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryReadOnly"
+      responses:
+        "200":
+          description: The stored flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryReadOnly"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /jobs:
+    get:
+      operationId: listJobs
+      summary: List recent catalog jobs
+      description: >
+        Recent server-run catalog jobs (scans, analysis, enrichment,
+        organize runs, deletes), newest first. Bounded by `limit`
+        rather than cursor-paged (a recent-history window, not a
+        mirrorable list). The live counterpart of the tool task log
+        for engine-side work. Administrators only.
+      tags: [admin]
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum jobs returned.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Recent jobs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /admin/audit:
+    get:
+      operationId: listAuditEvents
+      summary: List admin-action audit events
+      description: >
+        Keyset-paginated audit log of administrative and destructive
+        actions (account changes, permission changes, deletions,
+        merges, backup and restore operations, trash operations,
+        settings changes), newest first, with the acting user, the
+        target, and action detail. Names are denormalized at write
+        time so entries outlive their actors and targets. The
+        scheduled prune keeps a bounded history (the newest tens of
+        thousands of entries). Administrators only.
+      tags: [admin]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum events per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: action
+          in: query
+          description: >
+            Only events whose action equals this value, or starts
+            with it when it ends in a dot (`playlist.` matches every
+            playlist action).
+          schema:
+            type: string
+        - name: actorId
+          in: query
+          description: Only events performed by this user.
+          schema:
+            type: string
+        - name: targetPid
+          in: query
+          description: Only events targeting this PID.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: One page of audit events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditEventPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /admin/settings:
+    get:
+      operationId: getAdminSettings
+      summary: Read the server's runtime settings
+      description: >
+        The runtime-editable server settings. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: Current settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSettings"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: putAdminSettings
+      summary: Replace the server's runtime settings
+      description: >
+        Replaces the runtime settings with the given object and
+        returns the stored result. Settings apply immediately, no
+        restart. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSettings"
+      responses:
+        "200":
+          description: The stored settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSettings"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /admin/transcoding:
+    get:
+      operationId: getTranscodingLimits
+      summary: Read the transcoding limits
+      description: >
+        The server's transcode session limits and default bitrate
+        ceiling. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: Current limits.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscodingLimits"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: putTranscodingLimits
+      summary: Replace the transcoding limits
+      description: >
+        Replaces the transcode limits and returns the stored result.
+        Limits are enforced at the media proxy when a stream needs
+        the streaming engine: direct-played originals never count.
+        An over-limit stream request answers `transcode-limited`.
+        A per-account bitrate ceiling on the account's permissions
+        overrides `defaultMaxBitrateKbps`. Administrators only
+        (administrators' own streams are exempt from the per-user
+        cap but count toward and respect the global one).
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranscodingLimits"
+      responses:
+        "200":
+          description: The stored limits.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscodingLimits"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /admin/scrobbling:
+    get:
+      operationId: getScrobblingConfig
+      summary: Read the server's scrobbling credentials state
+      description: >
+        Whether the server holds Last.fm API application credentials
+        (the pair that identifies this install to Last.fm; each user
+        still links their own account through the browser flow), and
+        where they came from: `settings` (set through this surface),
+        `environment`, or `none`. The shared secret is never read
+        back. ListenBrainz needs no server credentials and does not
+        appear here. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: The credential state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrobblingAdminConfig"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: putScrobblingConfig
+      summary: Set the server's Last.fm API credentials
+      description: >
+        Stores the Last.fm API key and shared secret (register the
+        pair at last.fm/api/account/create). Both values set stores
+        them, the secret sealed at rest; both empty clears the stored
+        pair, falling back to environment credentials when the server
+        has them; a half-set pair answers `invalid-request`. A
+        runtime-stored pair takes precedence over the environment
+        one. Changing the API key invalidates users' existing Last.fm
+        connections (session keys bind to the application that minted
+        them); their delivery status surfaces it and reconnecting
+        fixes it. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScrobblingAdminConfigPut"
+      responses:
+        "200":
+          description: The stored credential state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrobblingAdminConfig"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /admin/schedules:
+    get:
+      operationId: listSchedules
+      summary: List the scheduled jobs
+      description: >
+        Every schedulable job kind with its cron expression, enabled
+        state, and last and next run. Kinds are fixed: `scan` (a full
+        library scan), `backup` (a backup archive with retention
+        applied), and `prune` (event log, replay-guard stamp, audit
+        history, and playback session history pruning, under
+        server-owned horizons). Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: All schedules.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    # No POST: the schedule set is closed; each kind exists exactly once.
+
+  /admin/schedules/{kind}:
+    put:
+      operationId: putSchedule
+      summary: Set a scheduled job's cron and enabled state
+      description: >
+        Sets one schedule. `cron` is a five-field cron expression
+        (minute, hour, day of month, month, day of week; `*`, lists,
+        ranges, and `*/n` steps), evaluated in the server's local
+        time. A malformed expression answers `invalid-request` and
+        names the field. Administrators only.
+      tags: [admin]
+      parameters:
+        - $ref: "#/components/parameters/ScheduleKind"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchedulePut"
+      responses:
+        "200":
+          description: The stored schedule.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /admin/backups:
+    get:
+      operationId: listBackups
+      summary: List backup archives
+      description: >
+        Every backup archive the server holds, newest first,
+        including the one currently being written (state `running`)
+        and imported archives. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: All backups.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createBackup
+      summary: Create a backup now
+      description: >
+        Starts writing a backup archive in the background and answers
+        immediately with the `running` backup; poll the list for
+        completion. Administrators only. The archive holds both
+        databases (the catalog via its own backup facility, the
+        server database via a consistent snapshot) plus server-managed
+        settings; media files are never included, and the encryption
+        keyfile is excluded by design (an archive holding both the
+        database and the key is plaintext-equivalent for stored
+        credentials — keep the keyfile safe separately). Retention
+        (`backupKeepCount`/`backupKeepBytes` in the runtime settings)
+        is applied after every successful backup, oldest first.
+        Answers `conflict` while another backup is running.
+      tags: [admin]
+      responses:
+        "202":
+          description: The started backup.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Backup"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /admin/backups/import:
+    post:
+      operationId: importBackup
+      summary: Upload a backup archive
+      description: >
+        Uploads a backup archive produced by another WaxDeck instance
+        (the new-host restore path: upload here, then stage a
+        restore). The body is the raw zip. The archive is validated
+        before it is accepted; something that is not a WaxDeck backup
+        answers `invalid-request`. Imported archives join the list
+        with trigger `imported` and are exempt from retention.
+        Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: The imported backup.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Backup"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: The archive exceeds the server's size limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/backups/restore:
+    get:
+      operationId: getStagedRestore
+      summary: Inspect the staged restore
+      description: >
+        The currently staged restore plan, when one exists (`not-found`
+        otherwise). Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: The staged plan.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestorePlan"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: cancelStagedRestore
+      summary: Cancel the staged restore
+      description: >
+        Unstages a staged restore before it is applied. The next
+        server start proceeds normally. Administrators only.
+      tags: [admin]
+      responses:
+        "204":
+          description: Restore unstaged.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/backups/{backupId}:
+    parameters:
+      - $ref: "#/components/parameters/BackupId"
+    get:
+      operationId: getBackup
+      summary: Inspect a backup
+      description: One backup archive's record. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: The backup.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Backup"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteBackup
+      summary: Delete a backup archive
+      description: >
+        Deletes the archive file and its record. The backup a staged
+        restore points at cannot be deleted (`conflict`).
+        Administrators only.
+      tags: [admin]
+      responses:
+        "204":
+          description: Backup deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /admin/backups/{backupId}/archive:
+    get:
+      operationId: downloadBackup
+      summary: Download a backup archive
+      description: >
+        The archive itself, as a zip. Only finished archives download;
+        a running or failed backup answers `conflict`. Administrators
+        only.
+      tags: [admin]
+      parameters:
+        - $ref: "#/components/parameters/BackupId"
+      responses:
+        "200":
+          description: The archive.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /admin/backups/{backupId}/restore:
+    post:
+      operationId: stageRestore
+      summary: Stage a restore from a backup
+      description: >
+        Validates the archive and stages it for restore. The restore
+        applies at the next server start: the current databases are
+        set aside (not deleted), the archive's databases are moved
+        into place, cross-database references are swept back to
+        consistency, and credentials sealed under a key this host
+        does not hold are marked pending re-auth. The response is
+        the plan: whether the encryption keyfile this server holds
+        matches the one the archive's credentials were sealed under,
+        and exactly which credentials break when it does not. Staging
+        replaces any previously staged restore. Answers `conflict`
+        for a backup still being written or one that failed.
+        Administrators only.
+      tags: [admin]
+      parameters:
+        - $ref: "#/components/parameters/BackupId"
+      responses:
+        "200":
+          description: The staged plan.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestorePlan"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /admin/trash:
+    get:
+      operationId: listTrash
+      summary: List the trash
+      description: >
+        The catalog's deletion undo journal, newest first: every
+        file deleted to the trash and not yet purged, with what it
+        was and where it lived. Bounded by `limit` rather than
+        cursor-paged: the journal is small by nature and the source
+        surface is limit-only. Administrators only.
+      tags: [admin]
+      parameters:
+        - name: includeRestored
+          in: query
+          description: Also list entries that were already restored.
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          description: Maximum entries returned.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 200
+      responses:
+        "200":
+          description: Trash entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrashList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /admin/trash/{trashId}/restore:
+    post:
+      operationId: restoreTrashEntry
+      summary: Restore a trashed file
+      description: >
+        Moves the file back to its original path and re-catalogs it,
+        un-archiving its item. Refuses when the original path is
+        occupied (`conflict`). Administrators only.
+      tags: [admin]
+      parameters:
+        - $ref: "#/components/parameters/TrashId"
+      responses:
+        "204":
+          description: File restored and re-cataloged.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /admin/trash/empty:
+    post:
+      operationId: emptyTrash
+      summary: Empty the trash
+      description: >
+        Permanently deletes every active trashed file and reports
+        what was reclaimed. Irreversible. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: What the pass purged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrashEmptyResult"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /admin/migrations:
+    post:
+      operationId: createMigration
+      summary: Import listening state from another server
+      description: >
+        Starts a migration import as a background task and answers
+        with the tool task to follow (type `import-<source>`; the
+        finished task's `summary` carries the report: what matched,
+        what did not, and what was written). Sources: `navidrome`
+        and `subsonic` pull stars, ratings, play counts, and
+        bookmarks from a running server over its Subsonic API
+        (`serverUrl` + `username` + `password`); `audiobookshelf`
+        pulls book progress over its REST API (`serverUrl` +
+        `token`). Podcast subscriptions migrate via the existing
+        OPML import. Items are matched through the portable-ref
+        ladder (identifiers, then fingerprints, then descriptive
+        metadata); play history lands as backdated import-source
+        listen sessions with deterministic idempotency ids, so
+        re-running an import never doubles anything. `dryRun`
+        matches and reports without writing. The URL must resolve
+        to a global address unless the server allows private
+        fetches. Credentials are held only for the task's duration.
+        Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MigrationCreate"
+      responses:
+        "202":
+          description: The import task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+components:
+  parameters:
+    BackupId:
+      name: backupId
+      in: path
+      required: true
+      description: Backup PID (e.g. `bu-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^bu-[0-9A-HJKMNP-TV-Z]{26}$"
+
+    TrashId:
+      name: trashId
+      in: path
+      required: true
+      description: Trash entry PID (e.g. `th-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^th-[0-9A-HJKMNP-TV-Z]{26}$"
+
+    ScheduleKind:
+      name: kind
+      in: path
+      required: true
+      description: Which scheduled job.
+      schema:
+        $ref: "#/components/schemas/ScheduleKind"
+  schemas:
+    Library:
+      type: object
+      description: One catalog library (a scanned root).
+      required: [pid, name]
+      properties:
+        pid:
+          type: string
+          description: Library PID.
+          example: lb-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: Display name (the configured root name).
+          example: music
+        media:
+          type: string
+          description: >
+            Content class the library holds. Currently `music`,
+            `audiobook`, `podcast`, or `mixed`; new values may appear.
+          example: music
+
+    Libraries:
+      type: object
+      description: All catalog libraries.
+      required: [libraries]
+      properties:
+        libraries:
+          type: array
+          items:
+            $ref: "#/components/schemas/Library"
+
+    Job:
+      type: object
+      description: A server-run catalog job.
+      required: [pid, kind, state]
+      properties:
+        pid:
+          type: string
+          description: Job PID.
+          example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          type: string
+          description: What the job does (`scan`, `analyze`, `enrich`, `organize`).
+          example: scan
+        state:
+          type: string
+          description: >
+            Job lifecycle state. Currently `running`, `done`, `failed`,
+            `crashed`, or `canceled`; new states may appear, and clients
+            must treat unknown values as "not finished successfully yet"
+            rather than failing.
+          example: running
+        progress:
+          type: number
+          format: double
+          description: >
+            Completion fraction in [0, 1]. Absent when the job has not yet
+            reported progress or cannot estimate it.
+        message:
+          type: string
+          description: Human-readable progress note.
+        error:
+          type: string
+          description: Failure detail for `failed`/`crashed` jobs.
+
+    AuditEvent:
+      type: object
+      description: One recorded administrative action.
+      required: [id, action, createdAt]
+      properties:
+        id:
+          type: string
+          description: Opaque event id, unique and time-ordered.
+        actorId:
+          type: string
+          description: >
+            The acting user's PID; absent for server-initiated
+            actions (scheduled jobs, startup restore).
+        actorName:
+          type: string
+          description: >
+            The acting username at the time of the action (kept
+            verbatim if the account is later renamed or deleted).
+        action:
+          type: string
+          description: >
+            Dotted action name, resource first: `user.create`,
+            `user.update`, `user.delete`, `user.approve`,
+            `user.reject`, `invite.create`, `invite.revoke`,
+            `playlist.delete`, `items.delete`, `entity.merge`,
+            `trash.restore`, `trash.empty`, `backup.create`,
+            `backup.delete`, `restore.stage`, `restore.apply`,
+            `settings.update`, `schedule.update`, `library.read-only`,
+            `transcoding.update`, `migration.run`, and more as
+            surfaces grow. Open vocabulary; filter by prefix.
+        targetKind:
+          type: string
+          description: What kind of thing was acted on (`user`, `playlist`, ...).
+        targetPid:
+          type: string
+          description: The acted-on resource's PID, when it has one.
+        targetName:
+          type: string
+          description: >
+            The target's display name at the time of the action
+            (survives the target's deletion).
+        detail:
+          type: object
+          additionalProperties: true
+          description: >
+            Action-specific structure: what changed, from what, to
+            what. Shapes are stable per action but may grow fields.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the action happened.
+
+    AuditEventPage:
+      type: object
+      description: One page of audit events.
+      required: [events]
+      properties:
+        events:
+          type: array
+          description: Events, newest first.
+          items:
+            $ref: "#/components/schemas/AuditEvent"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
+
+    AdminSettings:
+      type: object
+      description: Runtime-editable server settings.
+      required: [signupEnabled, readOnly, backupKeepCount, backupKeepBytes]
+      properties:
+        signupEnabled:
+          type: boolean
+          description: >
+            Whether open self-serve signup is accepted (registrations
+            land pending). Invite links work regardless.
+        readOnly:
+          type: boolean
+          description: >
+            Server-wide read-only mode: every library behaves
+            read-only (uploads, organizing, write-back, deletion,
+            and the file tools are refused with code `read-only`).
+        sonicAnalysis:
+          type: boolean
+          description: >
+            Whether the server analyzes its own library for sonic
+            similarity in the background (the embedded analyzer).
+            Applies immediately; turning it off mid-library keeps the
+            embeddings already computed. The boot default comes from
+            `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it
+            once saved. External workers are unaffected (their access
+            is the worker-token configuration). Optional on PUT so
+            settings writers predating this field never change it:
+            absent keeps the current value. Always present in
+            responses.
+        backupKeepCount:
+          type: integer
+          minimum: 0
+          description: >
+            How many backup archives to keep; older ones are deleted
+            after each successful backup. 0 keeps every archive.
+        backupKeepBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Total archive bytes to keep, oldest deleted first when
+            exceeded. 0 is unlimited. Imported archives are exempt.
+
+    TranscodingLimits:
+      type: object
+      description: >
+        Transcode session limits, enforced at the media proxy when a
+        stream engages the streaming engine (direct-played originals
+        never count).
+      required: [maxConcurrent, maxConcurrentPerUser, defaultMaxBitrateKbps]
+      properties:
+        maxConcurrent:
+          type: integer
+          minimum: 0
+          description: >
+            Server-wide concurrent transcode session cap; 0 is
+            unlimited (the streaming engine's own admission control
+            remains the backstop).
+        maxConcurrentPerUser:
+          type: integer
+          minimum: 0
+          description: >
+            Per-account concurrent transcode session cap; 0 is
+            unlimited. Administrators are exempt.
+        defaultMaxBitrateKbps:
+          type: integer
+          minimum: 0
+          description: >
+            Default transcode bitrate ceiling in kbit/s for accounts
+            without their own `maxTranscodeKbps`; 0 is unlimited.
+
+    ScheduleKind:
+      type: string
+      enum: [scan, backup, prune]
+      description: >
+        A schedulable job kind. A shared named schema on purpose (the
+        path parameter and the schedule object both use it): identical
+        inline enums make the Dart generator emit one enum class into
+        two files, which does not compile.
+
+    ScrobblingAdminConfig:
+      type: object
+      description: The server-level scrobbling credential state.
+      required: [lastfmConfigured, lastfmSource, lastfmSecretSet]
+      properties:
+        lastfmConfigured:
+          type: boolean
+          description: >
+            Whether a usable Last.fm API credential pair is in effect
+            (users can link accounts and the connect button enables).
+        lastfmSource:
+          type: string
+          description: >
+            Where the effective pair came from: `settings`,
+            `environment`, or `none`. An open string.
+        lastfmApiKey:
+          type: string
+          description: >
+            The effective API key, for display in the admin form.
+            Present only when configured; the shared secret is never
+            returned.
+        lastfmSecretSet:
+          type: boolean
+          description: Whether a shared secret is stored.
+
+    ScrobblingAdminConfigPut:
+      type: object
+      description: >
+        A Last.fm API credential change: both values to set, both
+        empty to clear back to environment credentials.
+      required: [lastfmApiKey, lastfmSecret]
+      properties:
+        lastfmApiKey:
+          type: string
+          maxLength: 128
+          description: The Last.fm API key.
+        lastfmSecret:
+          type: string
+          maxLength: 128
+          format: password
+          description: The Last.fm shared secret.
+
+    Schedule:
+      type: object
+      description: One scheduled job's configuration and history.
+      required: [kind, cron, enabled]
+      properties:
+        kind:
+          $ref: "#/components/schemas/ScheduleKind"
+        cron:
+          type: string
+          description: >
+            Five-field cron expression (minute, hour, day of month,
+            month, day of week), server-local time.
+          example: "0 3 * * *"
+        enabled:
+          type: boolean
+          description: Whether the schedule fires.
+        lastRunAt:
+          type: string
+          format: date-time
+          description: When the job last ran; absent if never.
+        lastStatus:
+          type: string
+          description: "`ok` or `failed` for the last run. An open string."
+        lastError:
+          type: string
+          description: Failure detail when the last run failed.
+        nextRunAt:
+          type: string
+          format: date-time
+          description: The next firing time while enabled.
+
+    ScheduleList:
+      type: object
+      description: Every schedule.
+      required: [schedules]
+      properties:
+        schedules:
+          type: array
+          description: One entry per kind.
+          items:
+            $ref: "#/components/schemas/Schedule"
+
+    SchedulePut:
+      type: object
+      description: A schedule change.
+      required: [cron, enabled]
+      properties:
+        cron:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Five-field cron expression.
+          example: "0 3 * * *"
+        enabled:
+          type: boolean
+          description: Whether the schedule fires.
+
+    Backup:
+      type: object
+      description: One backup archive.
+      required: [id, state, trigger, fileName, createdAt]
+      properties:
+        id:
+          type: string
+          description: Backup PID.
+          example: bu-01JZX5N8QW3F4V9T2B7KD3M9R6
+        state:
+          type: string
+          description: >
+            `running`, `done`, or `failed`. A string, not a closed
+            enum.
+        trigger:
+          type: string
+          description: >
+            What produced it: `manual`, `scheduled`, or `imported`.
+            A string, not a closed enum.
+        fileName:
+          type: string
+          description: Archive file name.
+          example: waxdeck-backup-20260721-030000.zip
+        sizeBytes:
+          type: integer
+          format: int64
+          description: Archive size once written.
+        error:
+          type: string
+          description: Why the backup failed, when `failed`.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the backup started (or was imported).
+        finishedAt:
+          type: string
+          format: date-time
+          description: When it reached a terminal state.
+
+    BackupList:
+      type: object
+      description: All backup archives.
+      required: [backups]
+      properties:
+        backups:
+          type: array
+          description: Backups, newest first.
+          items:
+            $ref: "#/components/schemas/Backup"
+
+    RestorePlan:
+      type: object
+      description: >
+        A staged restore: what will happen at the next server start.
+      required: [backupId, stagedAt, keyfilePresent, keyfileMatches, sealedCasualties, warnings]
+      properties:
+        backupId:
+          type: string
+          description: The backup the restore applies.
+        stagedAt:
+          type: string
+          format: date-time
+          description: When the restore was staged.
+        keyfilePresent:
+          type: boolean
+          description: Whether this server holds an encryption key.
+        keyfileMatches:
+          type: boolean
+          description: >
+            Whether this server's key opens the archive's sealed
+            credentials. False means every entry in
+            `sealedCasualties` becomes unusable after restore and is
+            marked pending re-auth instead of surfacing as scattered
+            errors.
+        sealedCasualties:
+          type: array
+          description: >
+            The credentials that break when the key does not match;
+            empty when it does.
+          items:
+            $ref: "#/components/schemas/SealedCasualty"
+        warnings:
+          type: array
+          description: >
+            Human-readable cautions (schema differences, a
+            server-version gap, an archive older than the current
+            data).
+          items:
+            type: string
+
+    SealedCasualty:
+      type: object
+      description: One credential a key-mismatched restore breaks.
+      required: [kind, name]
+      properties:
+        kind:
+          type: string
+          description: >
+            What kind of credential: `app-password`, `private-feed`,
+            `scrobble-connection`, or others as integrations grow.
+            An open string.
+        name:
+          type: string
+          description: Which one, in user terms ("Symfonium on the
+            kitchen tablet", the feed's show title).
+
+    TrashEntry:
+      type: object
+      description: One file in the catalog's deletion undo journal.
+      required: [id, name, reason, sizeBytes, trashedAt]
+      properties:
+        id:
+          type: string
+          description: Trash entry PID.
+          example: th-01JZX5N8QW3F4V9T2B7KD3M9R6
+        itemPid:
+          type: string
+          description: The item the file belonged to.
+        name:
+          type: string
+          description: The file's original library-relative path.
+          example: "Album/01 Track.flac"
+        reason:
+          type: string
+          description: >
+            Why it was deleted: `user`, `prune`, or `permanent`. An
+            open string.
+        sizeBytes:
+          type: integer
+          format: int64
+          description: File size.
+        trashedAt:
+          type: string
+          format: date-time
+          description: When it was deleted.
+        restoredAt:
+          type: string
+          format: date-time
+          description: When it was restored; absent while trashed.
+
+    TrashList:
+      type: object
+      description: The trash journal.
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          description: Entries, newest first.
+          items:
+            $ref: "#/components/schemas/TrashEntry"
+
+    TrashEmptyResult:
+      type: object
+      description: What an empty-trash pass did.
+      required: [purged, errored, reclaimedBytes]
+      properties:
+        purged:
+          type: integer
+          description: Files permanently deleted.
+        errored:
+          type: integer
+          description: Files that could not be purged (retry later).
+        reclaimedBytes:
+          type: integer
+          format: int64
+          description: Disk space reclaimed.
+
+    MigrationCreate:
+      type: object
+      description: A migration import to start.
+      required: [source, serverUrl]
+      properties:
+        source:
+          type: string
+          description: >
+            Where to pull from: `navidrome` and `subsonic` (a running
+            server's Subsonic API), or `audiobookshelf` (its REST
+            API). An open string; unknown sources answer
+            `invalid-request` naming the supported set.
+          example: navidrome
+        serverUrl:
+          type: string
+          maxLength: 512
+          description: The source server's base URL.
+          example: "https://navidrome.example.net"
+        username:
+          type: string
+          maxLength: 128
+          description: Login for Subsonic-API sources.
+        password:
+          type: string
+          maxLength: 256
+          format: password
+          description: Password for Subsonic-API sources.
+        token:
+          type: string
+          maxLength: 512
+          format: password
+          description: API token for token-authenticated sources.
+        options:
+          $ref: "#/components/schemas/MigrationOptions"
+        dryRun:
+          type: boolean
+          default: false
+          description: Match and report without writing anything.
+
+    MigrationOptions:
+      type: object
+      description: What to import. Everything defaults to true.
+      properties:
+        stars:
+          type: boolean
+          default: true
+          description: Starred songs, albums, and artists.
+        ratings:
+          type: boolean
+          default: true
+          description: Song and album ratings.
+        history:
+          type: boolean
+          default: true
+          description: >
+            Play counts, as backdated import-source listen sessions
+            with deterministic ids (re-runs never double-count).
+        progress:
+          type: boolean
+          default: true
+          description: >
+            In-progress positions (Subsonic bookmarks, Audiobookshelf
+            media progress) onto matched items' resume state.
+
+    JobList:
+      type: object
+      description: Recent catalog jobs.
+      required: [jobs]
+      properties:
+        jobs:
+          type: array
+          description: Jobs, newest first.
+          items:
+            $ref: "#/components/schemas/Job"
+
+    LibraryReadOnly:
+      type: object
+      description: A library's read-only flag.
+      required: [readOnly]
+      properties:
+        readOnly:
+          type: boolean
+          description: Whether the library refuses writes.
+        libraryPid:
+          type: string
+          description: The library (response only).
+          example: lb-01JZX5N8QW3F4V9T2B7KD3M9R6

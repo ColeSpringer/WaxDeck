@@ -1,6 +1,7 @@
 # ADR-0001: Contract-first API with generated server and client
 
-Date: 2026-07-11. Status: accepted
+Date: 2026-07-11. Status: accepted (authoring layout amended by ADR-0013:
+the spec is edited as fragments in `api/spec/` and bundled)
 
 ## Context
 

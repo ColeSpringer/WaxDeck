@@ -1,0 +1,214 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /organize/profiles:
+    get:
+      operationId: listOrganizeProfiles
+      summary: List organize profiles
+      description: >
+        The server-configured organize profiles (path templates per
+        media kind, whether organize writes tags). Profiles are
+        server configuration, not API-editable: template mistakes
+        move files, so they change deliberately.
+      tags: [organize]
+      responses:
+        "200":
+          description: The profiles.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizeProfiles"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /organize/preview:
+    post:
+      operationId: previewOrganize
+      summary: Dry-run an organize pass
+      description: >
+        Plans the moves and renames a profile would make for the
+        named items (or the whole library when `itemPids` is absent)
+        without touching anything. The response carries the first
+        five hundred actions plus the total, so a whole-library
+        preview stays a bounded page; sidecars (covers, lyrics, cue
+        sheets) ride along with their file and are not listed
+        separately. Path templates are sandboxed upstream (per
+        segment sanitizing; a template cannot escape the library
+        root).
+      tags: [organize]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizeRequest"
+      responses:
+        "200":
+          description: The planned actions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizePlan"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /organize/apply:
+    post:
+      operationId: applyOrganize
+      summary: Apply an organize pass
+      description: >
+        Plans and applies the moves in one call (the plan is always
+        recomputed server-side; a stale preview cannot apply). Moves
+        are crash-safe per file and locked fields are respected.
+        Whole-library passes on large libraries take a while; the
+        request runs synchronously and reports the full outcome.
+        Administrators only.
+      tags: [organize]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizeRequest"
+      responses:
+        "200":
+          description: The applied outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizeReport"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  schemas:
+    OrganizeProfiles:
+      type: object
+      description: The server's organize profiles.
+      required: [profiles]
+      properties:
+        profiles:
+          type: array
+          description: Configured profiles.
+          items:
+            $ref: "#/components/schemas/OrganizeProfile"
+
+    OrganizeProfile:
+      type: object
+      description: One organize profile.
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The profile name organize requests reference.
+        musicTemplate:
+          type: string
+          description: Path template for music, when set.
+        audiobookTemplate:
+          type: string
+          description: Path template for audiobooks, when set.
+        podcastTemplate:
+          type: string
+          description: Path template for podcast files, when set.
+        tagWrite:
+          type: boolean
+          description: Whether organizing also writes tags.
+
+    OrganizeRequest:
+      type: object
+      description: The scope of an organize pass.
+      required: [profile]
+      properties:
+        profile:
+          type: string
+          description: The profile to apply.
+        itemPids:
+          type: array
+          maxItems: 1000
+          description: Restrict to these items; absent means the whole library.
+          items:
+            type: string
+
+    OrganizePlan:
+      type: object
+      description: A dry-run organize plan.
+      required: [profile, totalActions, actions]
+      properties:
+        profile:
+          type: string
+          description: The profile planned with.
+        totalActions:
+          type: integer
+          description: Moves the pass would make in total.
+        actions:
+          type: array
+          description: The first five hundred actions.
+          items:
+            $ref: "#/components/schemas/OrganizeAction"
+        tagWrite:
+          type: boolean
+          description: Whether applying would also write tags.
+
+    OrganizeAction:
+      type: object
+      description: One planned move.
+      required: [itemPid, from, to]
+      properties:
+        itemPid:
+          type: string
+          description: The item whose file moves.
+        from:
+          type: string
+          description: Current library-relative path.
+        to:
+          type: string
+          description: Planned library-relative path.
+
+    OrganizeReport:
+      type: object
+      description: The outcome of an applied organize pass.
+      required: [moved, skipped, failed]
+      properties:
+        moved:
+          type: integer
+          description: Files moved.
+        skipped:
+          type: integer
+          description: Files already in place.
+        failed:
+          type: integer
+          description: Files that could not move.
+        failures:
+          type: array
+          description: The failures, path and reason each.
+          items:
+            $ref: "#/components/schemas/OrganizeFailure"
+
+    OrganizeFailure:
+      type: object
+      description: One file organize could not move.
+      required: [path, reason]
+      properties:
+        path:
+          type: string
+          description: The file.
+        reason:
+          type: string
+          description: Why it did not move.

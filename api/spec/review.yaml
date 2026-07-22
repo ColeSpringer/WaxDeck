@@ -1,0 +1,700 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /review/queue:
+    get:
+      operationId: listReviewQueue
+      summary: List review queue entries
+      description: >
+        Keyset-paginated review queue, newest first. Administrators see
+        every entry; other callers see only entries produced by their
+        own uploads. Each entry is one album-sized unit: it applies or
+        declines as a whole, never track by track. `status` filters to
+        one lifecycle state (`pending` is the working queue; decided
+        entries remain listable for calibration and undo).
+      tags: [review]
+      parameters:
+        - name: status
+          in: query
+          description: >
+            Restrict to one status. Statuses are server-defined
+            strings; the current set is `pending`, `applied`,
+            `auto-applied`, `as-is`, `unofficial`, `skipped`,
+            `discarded`, and `reverted`. Unknown values yield an
+            empty page rather than an error.
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum entries per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of review entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewEntryPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /review/queue/{entryId}:
+    parameters:
+      - $ref: "#/components/parameters/ReviewEntryId"
+    get:
+      operationId: getReviewEntry
+      summary: Inspect one review entry
+      description: >
+        The full entry: the unit's files with their current metadata,
+        and every scored candidate with its per-field distance
+        breakdown, track pairings (the side-by-side diff renders from
+        these), missing tracks, and extra files. Candidates are ranked
+        best first. Visibility follows the queue listing.
+      tags: [review]
+      responses:
+        "200":
+          description: The entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewEntryDetail"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /review/queue/{entryId}/decide:
+    parameters:
+      - $ref: "#/components/parameters/ReviewEntryId"
+    post:
+      operationId: decideReviewEntry
+      summary: Decide a review entry
+      description: >
+        Applies one decision to a pending entry. `approve` applies the
+        chosen candidate's metadata to the whole unit (the ranked best
+        when `candidateMbid` is absent), locking the applied fields so
+        a rescan cannot undo the acceptance; for entries staging new
+        files (uploads and imports) the files enter the library first.
+        `as-is` accepts the unit's current metadata unchanged (staged
+        files enter the library as they are). `unofficial` is `as-is`
+        plus a locked `RELEASESTATUS` custom tag of `unofficial`,
+        which excludes the items from future match retries and from
+        health penalties (content with no canonical release is a
+        terminal state, not an error). `skip` dismisses the entry
+        without touching anything (staged files stay staged).
+        `discard` deletes staged files and exists only for entries
+        that carry them. Deciding an already-decided entry answers
+        `conflict`. Administrators may decide anything; other callers
+        only entries from their own uploads. A metadata write that
+        partially fails after the catalog committed reports per-file
+        detail in `warnings` and the entry still counts as decided.
+      tags: [review]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewDecision"
+      responses:
+        "200":
+          description: The decided entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewDecideResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /review/queue/{entryId}/revert:
+    parameters:
+      - $ref: "#/components/parameters/ReviewEntryId"
+    post:
+      operationId: revertReviewEntry
+      summary: Revert an applied match
+      description: >
+        Restores the metadata snapshot taken before an `applied` or
+        `auto-applied` entry was applied, unlocks the fields the apply
+        locked, and marks the entry `reverted`. Reverts of auto
+        applied entries feed the calibration statistics. Only
+        administrators and the deciding user may revert. Reverting
+        anything but an applied entry answers `conflict`.
+      tags: [review]
+      responses:
+        "200":
+          description: The reverted entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewEntry"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /review/decide:
+    post:
+      operationId: decideReviewBulk
+      summary: Decide many review entries
+      description: >
+        Applies one decision to many pending entries in a single call,
+        for keyboard-driven bulk triage. `approve` uses each entry's
+        own ranked best candidate (a per-entry candidate choice needs
+        the single-entry endpoint). Entries are decided independently:
+        one failure does not stop the rest, and the response reports
+        each outcome.
+      tags: [review]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewBulkDecision"
+      responses:
+        "200":
+          description: Per-entry outcomes, in request order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewBulkResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /review/stats:
+    get:
+      operationId: getReviewStats
+      summary: Review and calibration statistics
+      description: >
+        Queue depth and auto-apply calibration: how many entries auto
+        applied and how many of those were later reverted. The revert
+        rate is the trust signal the review surface shows next to the
+        auto-apply behavior; it is deliberately not the accuracy
+        metric that tunes thresholds (reverts are sparse and lagging).
+      tags: [review]
+      responses:
+        "200":
+          description: Current statistics.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewStats"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /libraries/{pid}/matching:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    get:
+      operationId: getLibraryMatching
+      summary: Read a library's matching mode
+      description: The library's automatic matching behavior.
+      tags: [review]
+      responses:
+        "200":
+          description: The mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryMatching"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: setLibraryMatching
+      summary: Set a library's matching mode
+      description: >
+        `auto` lets confident matches apply themselves and queues the
+        rest for review (the default), `review` queues everything (no
+        auto-apply), and `off` never matches the library's content
+        (as-is libraries: already-curated collections the engine must
+        not touch). Administrators only.
+      tags: [review]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryMatching"
+      responses:
+        "200":
+          description: The stored mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryMatching"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  parameters:
+    ReviewEntryId:
+      name: entryId
+      in: path
+      required: true
+      description: Review entry PID (e.g. `rv-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^rv-[0-9A-HJKMNP-TV-Z]{26}$"
+  schemas:
+    ReviewEntry:
+      type: object
+      description: >
+        One review queue entry: an album-sized unit of files awaiting
+        or past a matching decision. The unit decides as a whole.
+      required: [id, kind, status, mediaType, origin, trackCount, createdAt, identifying]
+      properties:
+        id:
+          type: string
+          description: Entry pid.
+          example: rv-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          type: string
+          description: >
+            What deciding does: `match` retags items already in the
+            library; `import` additionally moves staged files (an
+            upload or inbox batch) into the library. A string, not a
+            closed enum.
+          example: match
+        status:
+          type: string
+          description: >
+            Lifecycle state: `pending`, `applied`, `auto-applied`,
+            `as-is`, `unofficial`, `skipped`, `discarded`, or
+            `reverted`. A string, not a closed enum.
+          example: pending
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        origin:
+          type: string
+          description: >
+            Where the unit came from: `scan`, `upload`, or `rematch`.
+            A string, not a closed enum.
+          example: scan
+        title:
+          type: string
+          description: Display title for the unit (the album guess).
+        artist:
+          type: string
+          description: Display artist for the unit.
+        trackCount:
+          type: integer
+          description: Files in the unit.
+        libraryPid:
+          type: string
+          description: The library the unit belongs (or will import) to.
+        uploadedBy:
+          type: string
+          description: >
+            The uploader's user pid, present on upload-origin entries.
+        identifying:
+          type: boolean
+          description: >
+            True while the identify pipeline still runs for this
+            entry; candidates and the best summary fill in when it
+            finishes (the entry invalidates over the event channel).
+        best:
+          $ref: "#/components/schemas/CandidateSummary"
+        appliedMbid:
+          type: string
+          description: >
+            The MusicBrainz release id an `applied` or `auto-applied`
+            entry applied.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the entry was created.
+        decidedAt:
+          type: string
+          format: date-time
+          description: When the entry was decided.
+        decidedBy:
+          type: string
+          description: >
+            The deciding user's pid; absent on `auto-applied` entries.
+
+    CandidateSummary:
+      type: object
+      description: The ranked-best candidate in one line.
+      required: [mbid, title, artist, similarityPct]
+      properties:
+        mbid:
+          type: string
+          description: MusicBrainz release id.
+        title:
+          type: string
+          description: Release title.
+        artist:
+          type: string
+          description: Release artist.
+        year:
+          type: integer
+          description: Release year, 0 when unknown.
+        similarityPct:
+          type: number
+          format: double
+          description: Match quality in percent (0 to 100).
+
+    ReviewEntryPage:
+      type: object
+      description: One page of review entries.
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          description: Entries, newest first.
+          items:
+            $ref: "#/components/schemas/ReviewEntry"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; omitted on the last.
+
+    ReviewTrack:
+      type: object
+      description: One file in a review unit with its current metadata.
+      required: [path, title, durationMs]
+      properties:
+        pid:
+          type: string
+          description: >
+            The catalog item pid; absent for staged files that have
+            not entered the library yet.
+        path:
+          type: string
+          description: >
+            The file's path (library-relative for cataloged items,
+            staging-relative for uploads).
+        title:
+          type: string
+          description: Current title (tag, or cleaned filename).
+        artist:
+          type: string
+          description: Current artist.
+        trackNo:
+          type: integer
+          description: Current track number, 0 when untagged.
+        discNo:
+          type: integer
+          description: Current disc number, 0 when untagged.
+        durationMs:
+          type: integer
+          format: int64
+          description: Audio length in milliseconds.
+
+    CandidateComponent:
+      type: object
+      description: >
+        One named contribution to a candidate's distance, so the queue
+        explains a score instead of asserting it.
+      required: [name, distance, weight]
+      properties:
+        name:
+          type: string
+          description: >
+            The field or penalty: `artist`, `album`, `year`,
+            `tracks`, `missing`, `extra`. A string, not a closed
+            enum.
+        distance:
+          type: number
+          format: double
+          description: Component distance in 0 to 1 (0 is identical).
+        weight:
+          type: number
+          format: double
+          description: The component's share of the total.
+
+    CandidatePairing:
+      type: object
+      description: >
+        One proposed file-to-release-track pairing; the side-by-side
+        diff renders current values (via `trackIndex` into the entry's
+        tracks) against these proposed values.
+      required: [trackIndex, position, title, distance]
+      properties:
+        trackIndex:
+          type: integer
+          description: Index into the entry's `tracks`.
+        position:
+          type: integer
+          description: Proposed track number on the release.
+        disc:
+          type: integer
+          description: Proposed disc number.
+        title:
+          type: string
+          description: Proposed title.
+        artist:
+          type: string
+          description: >
+            Proposed per-track artist, present when it differs from
+            the release artist (compilations).
+        durationMs:
+          type: integer
+          format: int64
+          description: The release track's length, 0 when unknown.
+        recordingMbid:
+          type: string
+          description: The MusicBrainz recording id this pairing maps to.
+        distance:
+          type: number
+          format: double
+          description: The pairing's own distance in 0 to 1.
+
+    ReviewCandidate:
+      type: object
+      description: One scored candidate release, ranked in the entry.
+      required: [mbid, title, artist, similarityPct, pairings]
+      properties:
+        mbid:
+          type: string
+          description: MusicBrainz release id.
+        releaseGroupMbid:
+          type: string
+          description: MusicBrainz release group id.
+        title:
+          type: string
+          description: Release title.
+        artist:
+          type: string
+          description: Release artist.
+        year:
+          type: integer
+          description: Release year, 0 when unknown.
+        mediaCount:
+          type: integer
+          description: Disc count, 0 when unknown.
+        trackCount:
+          type: integer
+          description: Track count on the release.
+        country:
+          type: string
+          description: Release country.
+        label:
+          type: string
+          description: Label name.
+        catalogNumber:
+          type: string
+          description: Label catalog number.
+        compilation:
+          type: boolean
+          description: True for various-artists releases.
+        similarityPct:
+          type: number
+          format: double
+          description: Match quality in percent (0 to 100).
+        components:
+          type: array
+          description: The distance breakdown.
+          items:
+            $ref: "#/components/schemas/CandidateComponent"
+        pairings:
+          type: array
+          description: Proposed track pairings.
+          items:
+            $ref: "#/components/schemas/CandidatePairing"
+        missingTitles:
+          type: array
+          description: >
+            Titles of release tracks no file matched (the rip is
+            missing them).
+          items:
+            type: string
+        extraTrackIndexes:
+          type: array
+          description: >
+            Indexes (into the entry's `tracks`) of files no release
+            track matched (bonus or junk files).
+          items:
+            type: integer
+
+    ReviewEntryDetail:
+      allOf:
+        - $ref: "#/components/schemas/ReviewEntry"
+        - type: object
+          description: The full entry with tracks and candidates.
+          required: [tracks, candidates]
+          properties:
+            tracks:
+              type: array
+              description: The unit's files in disc and track order.
+              items:
+                $ref: "#/components/schemas/ReviewTrack"
+            candidates:
+              type: array
+              description: Scored candidates, best first.
+              items:
+                $ref: "#/components/schemas/ReviewCandidate"
+      description: One review entry with its full evidence.
+
+    ReviewDecision:
+      type: object
+      description: A decision for one review entry.
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [approve, as-is, unofficial, skip, discard]
+          description: The decision to apply.
+        candidateMbid:
+          type: string
+          description: >
+            The candidate to approve; the ranked best when absent.
+            Only meaningful with `approve`.
+
+    ReviewDecideResult:
+      type: object
+      description: The outcome of a single-entry decision.
+      required: [entry]
+      properties:
+        entry:
+          $ref: "#/components/schemas/ReviewEntry"
+        warnings:
+          type: array
+          description: >
+            Non-fatal problems (per-file write-back failures, roles
+            without a tag form). The decision itself stood.
+          items:
+            type: string
+
+    ReviewBulkDecision:
+      type: object
+      description: One decision applied to many entries.
+      required: [entryIds, action]
+      properties:
+        entryIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          description: The entries to decide.
+          items:
+            type: string
+        action:
+          type: string
+          enum: [approve, as-is, unofficial, skip, discard]
+          description: >
+            The decision. `approve` uses each entry's ranked best
+            candidate.
+
+    ReviewBulkResult:
+      type: object
+      description: Per-entry outcomes of a bulk decision.
+      required: [results]
+      properties:
+        results:
+          type: array
+          description: One outcome per requested entry, in order.
+          items:
+            $ref: "#/components/schemas/ReviewBulkOutcome"
+
+    ReviewBulkOutcome:
+      type: object
+      description: One entry's outcome in a bulk decision.
+      required: [entryId, ok]
+      properties:
+        entryId:
+          type: string
+          description: The entry.
+        ok:
+          type: boolean
+          description: Whether the decision applied.
+        error:
+          type: string
+          description: Why it did not, when `ok` is false.
+
+    ReviewStats:
+      type: object
+      description: Queue depth and auto-apply calibration.
+      required: [pending, applied, autoApplied, reverted, revertedAutoApplied]
+      properties:
+        pending:
+          type: integer
+          description: Entries awaiting a decision.
+        identifying:
+          type: integer
+          description: Entries whose identify pipeline still runs.
+        applied:
+          type: integer
+          description: Entries a person approved.
+        autoApplied:
+          type: integer
+          description: Entries the engine applied on its own.
+        asIs:
+          type: integer
+          description: Entries accepted as they were.
+        unofficial:
+          type: integer
+          description: Entries marked as having no canonical release.
+        skipped:
+          type: integer
+          description: Entries dismissed without action.
+        reverted:
+          type: integer
+          description: Applied entries later reverted, total.
+        revertedAutoApplied:
+          type: integer
+          description: >
+            Auto-applied entries later reverted; with `autoApplied`
+            this is the observed auto-apply revert rate, the trust
+            signal the queue surfaces.
+
+    LibraryMatching:
+      type: object
+      description: A library's automatic matching behavior.
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          # "off" is quoted deliberately: YAML 1.1 parsers (the Dart
+          # generator's among them) read a bare off as boolean false,
+          # which silently became a "false" wire value once already.
+          enum: [auto, review, "off"]
+          description: The matching mode.

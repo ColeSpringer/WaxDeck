@@ -1,0 +1,645 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /uploads:
+    get:
+      operationId: listUploads
+      summary: List the caller's uploads
+      description: >
+        Keyset-paginated uploads, newest first: the caller's own, or
+        every user's for administrators. Finished uploads age out of
+        the listing once their staged file has entered the library and
+        the retention window passes.
+      tags: [uploads]
+      parameters:
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`.
+            Omit for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum uploads per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of uploads.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    post:
+      operationId: createUpload
+      summary: Start an upload
+      description: >
+        Creates a resumable upload session for one audio file. The
+        caller must hold upload rights; the declared size counts
+        against the caller's quota up front so a full quota fails
+        fast, and the file name's extension is checked against the
+        server's accepted formats. The required media type label
+        routes the file to the matching library kind; `libraryPid`
+        pins a specific library (required when several libraries of
+        that kind are visible to the caller). Passing the file's
+        SHA-256 up front lets the server warn about an exact
+        duplicate before any bytes move: the response's `duplicate`
+        names the existing item and the client can abandon the
+        session without spending bandwidth (a fingerprint-level
+        duplicate check still runs at completion). Bytes then flow
+        through the data endpoint in any number of chunks.
+      tags: [uploads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadCreate"
+      responses:
+        "201":
+          description: The created upload session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
+        "413":
+          $ref: "#/components/responses/QuotaExceeded"
+        "415":
+          $ref: "#/components/responses/UnsupportedFormat"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /uploads/{uploadId}:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    get:
+      operationId: getUpload
+      summary: Inspect an upload
+      description: >
+        Current session state, including `receivedBytes` for resuming
+        an interrupted transfer: continue by sending the next chunk at
+        that offset.
+      tags: [uploads]
+      responses:
+        "200":
+          description: The upload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteUpload
+      summary: Abandon an upload
+      description: >
+        Deletes the session and its staged bytes. An upload whose file
+        already entered the library cannot be deleted here (the item
+        lives in the library now; delete it there); that answers
+        `conflict`.
+      tags: [uploads]
+      responses:
+        "204":
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /uploads/{uploadId}/data:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    put:
+      operationId: putUploadData
+      summary: Send upload bytes
+      description: >
+        Appends one chunk of raw file bytes at `offset`, which must
+        equal the session's current `receivedBytes` (an interrupted
+        client re-reads the session and resumes; a mismatched offset
+        answers `conflict` and nothing is written). Chunks may be any
+        size up to 32 MiB. Bytes past the declared total size answer
+        `invalid-request`.
+      tags: [uploads]
+      parameters:
+        - name: offset
+          in: query
+          required: true
+          description: Byte offset this chunk starts at.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: The session after the chunk.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /uploads/{uploadId}/complete:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    post:
+      operationId: completeUpload
+      summary: Finish an upload
+      description: >
+        Verifies the received bytes (size, and SHA-256 when one was
+        declared), probes the audio (an undecodable file answers
+        `unsupported-format` and the session stays deletable), moves
+        the file into staging with crash-safe write discipline, and
+        opens a review entry for the identify pipeline. The response
+        carries `reviewEntryId` and any duplicate warning (an exact
+        content match or a fingerprint match against an existing
+        item); the duplicate warning does not block the review flow,
+        it informs the decision. Completing before every declared
+        byte arrived answers `conflict`.
+      tags: [uploads]
+      responses:
+        "200":
+          description: The completed upload with its review entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "415":
+          $ref: "#/components/responses/UnsupportedFormat"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /uploads/batches:
+    post:
+      operationId: createUploadBatch
+      summary: Open an upload batch
+      description: >
+        Opens a batch that groups several upload sessions into review
+        units by the declared grouping intent: `album` opens one
+        multi-file review entry over every staged member, `tracks`
+        opens one entry per file, and `auto` clusters members into
+        album units by their tags and relative paths. Members join by
+        passing `batchId` (and optionally `batchPath`) at session
+        creation and must declare the batch's media type. The batch
+        stays open for 24 hours or until the finalize call; members
+        keep the normal upload retention. Nothing about a single
+        upload changes: a session without a batch opens its own
+        review entry at completion exactly as before.
+      tags: [uploads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadBatchCreate"
+      responses:
+        "201":
+          description: The opened batch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadBatch"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /uploads/batches/{batchId}/complete:
+    parameters:
+      - $ref: "#/components/parameters/UploadBatchId"
+    post:
+      operationId: completeUploadBatch
+      summary: Finalize an upload batch
+      description: >
+        Declares the batch complete: every member staged so far is
+        grouped per the batch's grouping intent and the review
+        entries open (their ids land in `reviewEntryIds`). Members
+        still receiving bytes fall back to opening their own
+        per-file entry when they later complete. Call this exactly
+        when the client finishes sending members — after per-file
+        failures too, so the files that did arrive are reviewed
+        (a batch whose every member was deleted finalizes empty).
+        Only the batch's owner (or an administrator) may finalize;
+        anyone else sees `not-found`. Idempotent: finalizing a
+        finalized batch answers the same batch again. Finalizing a
+        batch the server has already expired answers `conflict` —
+        its members were grouped with what had arrived when the
+        server closed it.
+      tags: [uploads]
+      responses:
+        "200":
+          description: The finalized batch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadBatch"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /acquisitions:
+    post:
+      operationId: createAcquisition
+      summary: Acquire audio from a URL
+      description: >
+        Downloads audio from a source URL through the acquisition
+        bridge as a background task: a single video, or every entry
+        of a playlist or channel (bounded to the first two hundred
+        entries; the response task reports progress per item).
+        Downloaded files stage exactly like uploads, appear as
+        upload sessions, and flow through the same identify and
+        review pipeline, grouped into album units; the source's own
+        metadata (title, channel, thumbnail) arrives embedded, and
+        provenance tags record the origin, so content with no
+        canonical release reaches the review queue ready for
+        keep-as-is or mark-unofficial and stays hand-editable by
+        the acquiring user afterward. Needs upload rights and a
+        running acquisition bridge (`source-unavailable` without
+        one). Acquired bytes count against the caller's upload
+        quota; a quota hit stops the task and keeps what already
+        staged. Returns the tool task to follow (type `acquire`).
+      tags: [uploads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcquisitionRequest"
+      responses:
+        "202":
+          description: The queued task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
+        "501":
+          $ref: "#/components/responses/SourceUnavailable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  parameters:
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      description: Upload PID (e.g. `up-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^up-[0-9A-HJKMNP-TV-Z]{26}$"
+
+    UploadBatchId:
+      name: batchId
+      in: path
+      required: true
+      description: Upload batch PID (e.g. `ub-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^ub-[0-9A-HJKMNP-TV-Z]{26}$"
+  responses:
+    QuotaExceeded:
+      description: >
+        The upload would exceed the caller's storage quota (code
+        `quota-exceeded`). The message names the quota and current
+        use.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    UploadCreate:
+      type: object
+      description: A new upload session.
+      required: [fileName, sizeBytes, mediaType]
+      properties:
+        fileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: >
+            The file's name (base name only; any path is rejected).
+            The extension picks the accepted-format check.
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Total file size in bytes.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        libraryPid:
+          type: string
+          description: >
+            Target library; required when several libraries of the
+            media type are visible to the caller.
+        sha256:
+          type: string
+          description: >
+            Lowercase hex SHA-256 of the file, for the up-front exact
+            duplicate warning and the completion integrity check.
+          pattern: "^[0-9a-f]{64}$"
+        batchId:
+          type: string
+          description: >
+            Joins the session to an open upload batch owned by the
+            caller; its grouping intent then decides how this file
+            reaches the review queue. The session must declare the
+            batch's media type and library. Referencing a batch that
+            is not open, or not the caller's, or mismatching either
+            field, answers `invalid-request`.
+          example: ub-01JZX5N8QW3F4V9T2B7KD3M9R6
+        batchPath:
+          type: string
+          maxLength: 512
+          description: >
+            The file's directory relative to the picked or dropped
+            folder, forward-slash separated (empty or absent for a
+            file at the top). The `auto` grouping clusters by it, so
+            disc subfolders (`CD1`, `Disc 2`) fold into one album.
+            Must stay relative — absolute paths and `..` segments
+            are rejected, as is passing it without `batchId`.
+            `fileName` stays a bare name regardless.
+          example: The Wall/CD1
+
+    Upload:
+      type: object
+      description: One upload session.
+      required: [id, fileName, sizeBytes, receivedBytes, mediaType, state, createdAt]
+      properties:
+        id:
+          type: string
+          description: Upload pid.
+          example: up-01JZX5N8QW3F4V9T2B7KD3M9R6
+        fileName:
+          type: string
+          description: The declared file name.
+        sizeBytes:
+          type: integer
+          format: int64
+          description: Declared total size.
+        receivedBytes:
+          type: integer
+          format: int64
+          description: >
+            Bytes stored so far; resume by sending the next chunk at
+            this offset.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        libraryPid:
+          type: string
+          description: Target library.
+        state:
+          type: string
+          description: >
+            Session state: `receiving` (bytes still arriving),
+            `staged` (complete, in the review pipeline), `imported`
+            (its file entered the library), or `discarded`. A
+            string, not a closed enum.
+          example: receiving
+        reviewEntryId:
+          type: string
+          description: >
+            The review entry the file landed in. Opened at completion
+            for a solo session; for a batch member, filled when the
+            batch finalizes — or at its own completion, for a member
+            that finished only after the batch closed.
+        batchId:
+          type: string
+          description: The batch the session joined, if any.
+        duplicate:
+          $ref: "#/components/schemas/DuplicateWarning"
+        uploadedBy:
+          type: string
+          description: The uploader's user pid (admin listings).
+        createdAt:
+          type: string
+          format: date-time
+          description: When the session was created.
+        expiresAt:
+          type: string
+          format: date-time
+          description: >
+            When an unfinished session and its bytes are reclaimed.
+
+    DuplicateWarning:
+      type: object
+      description: >
+        The library appears to already contain this audio. A warning,
+        not a refusal: the review decision chooses what happens.
+      required: [itemPid, kind]
+      properties:
+        itemPid:
+          type: string
+          description: The existing item.
+        kind:
+          type: string
+          description: >
+            Evidence level: `content` (byte-identical audio) or
+            `fingerprint` (acoustically the same recording). A
+            string, not a closed enum.
+          example: content
+        title:
+          type: string
+          description: The existing item's title.
+        artist:
+          type: string
+          description: The existing item's artist.
+
+    UploadGrouping:
+      type: string
+      enum: [auto, album, tracks]
+      description: >
+        How a batch's staged files reach the review queue: `album`
+        opens one multi-file entry over all of them, `tracks` one
+        entry per file, and `auto` clusters them into album units by
+        their tags and relative paths (disc subfolders fold into
+        their parent).
+
+    UploadBatchCreate:
+      type: object
+      description: A new upload batch.
+      required: [grouping, mediaType]
+      properties:
+        grouping:
+          $ref: "#/components/schemas/UploadGrouping"
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        libraryPid:
+          type: string
+          description: >
+            Target library for every member; required when several
+            libraries of the media type are visible to the caller.
+            Members re-declare it at session creation and must
+            match (a differing member value answers
+            `invalid-request`).
+
+    UploadBatch:
+      type: object
+      description: One upload batch.
+      required: [id, grouping, mediaType, state, reviewEntryIds, createdAt, expiresAt]
+      properties:
+        id:
+          type: string
+          description: Batch pid.
+          example: ub-01JZX5N8QW3F4V9T2B7KD3M9R6
+        grouping:
+          $ref: "#/components/schemas/UploadGrouping"
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        libraryPid:
+          type: string
+          description: Target library.
+        state:
+          type: string
+          description: >
+            Batch state: `open` (accepting members), `finalized`
+            (the finalize call grouped its members), or `expired`
+            (the 24-hour window lapsed and the server finalized it
+            with what had arrived). A string, not a closed enum.
+          example: open
+        reviewEntryIds:
+          type: array
+          description: >
+            The review entries finalization opened; empty until the
+            batch closes, and empty on a batch whose every member
+            was deleted before finalizing.
+          items:
+            type: string
+            example: rv-01JZX5N8QW3F4V9T2B7KD3M9R6
+        createdAt:
+          type: string
+          format: date-time
+          description: When the batch was opened.
+        expiresAt:
+          type: string
+          format: date-time
+          description: >
+            The deadline after which the server may auto-finalize an
+            open batch with the members staged by then (a background
+            sweep, so an overdue batch can stay open a little past
+            this).
+
+    UploadQuota:
+      type: object
+      description: >
+        The caller's upload allowance: always their own, even for
+        administrators listing everyone's sessions. Treat absence
+        on a page as unknown, not unlimited.
+      required: [bytesInUse]
+      properties:
+        bytesInUse:
+          type: integer
+          format: int64
+          description: >
+            Declared bytes of the caller's live sessions (everything
+            not discarded); what quota checks charge.
+        quotaBytes:
+          type: integer
+          format: int64
+          description: >
+            The account's cap on `bytesInUse`; absent means no
+            per-user cap.
+
+    UploadPage:
+      type: object
+      description: One page of uploads.
+      required: [uploads]
+      properties:
+        uploads:
+          type: array
+          description: Uploads, newest first.
+          items:
+            $ref: "#/components/schemas/Upload"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; omitted on the last.
+        quota:
+          $ref: "#/components/schemas/UploadQuota"
+
+    AcquisitionFormat:
+      type: string
+      description: >
+        Preferred delivered audio format for a URL acquisition. "best",
+        the default, copies the source's highest-quality audio with no
+        re-encode (Opus, in practice, for YouTube). The others transcode
+        to that container for device compatibility, at some quality cost
+        from a lossy source (FLAC is a lossless container of that same
+        lossy audio, not a quality gain).
+      enum: [best, opus, mp3, m4a, flac]
+      default: best
+
+    AcquisitionRequest:
+      type: object
+      description: One source URL to acquire.
+      required: [url, mediaType]
+      properties:
+        url:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: >
+            The source URL: a single video, a playlist, or a channel
+            the acquisition bridge understands.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        libraryPid:
+          type: string
+          description: >
+            Target library; required when several libraries of the
+            media type are visible to the caller.
+        format:
+          $ref: "#/components/schemas/AcquisitionFormat"

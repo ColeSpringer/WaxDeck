@@ -11,7 +11,7 @@ audiobooks**.
 
 | Path | What |
 |---|---|
-| `api/` | The contract: `openapi.yaml` (REST, `/api/v1`) + `events.md` (WebSocket envelope). First artifact, single source of truth: server handlers and the Dart client are generated from it. |
+| `api/` | The contract: `spec/` (hand-edited fragments, one per API domain) bundled into `openapi.yaml` (REST, `/api/v1`) + `events.md` (WebSocket envelope). First artifact, single source of truth: server handlers and the Dart client are generated from it. |
 | `server/` | Go module. `oapi-codegen` strict-server over stdlib `net/http`; embeds the Flutter web build. |
 | `app/` | Flutter workspace (melos/pub workspace): `packages/waxdeck_api_gen` (generated dio client), `packages/waxdeck_api` (hand-written repository layer over it), `app` (adaptive shell). |
 | `deploy/` | `compose.yaml` + profiles, `Dockerfile`, `.env.example`. |
@@ -39,9 +39,12 @@ docker compose up -d                # waxdeck on :4420, waxflow internal-only
 
 ## Contract-first rule
 
-`api/openapi.yaml` is the single source of truth. Never hand-edit generated code
-(`server/internal/api/gen.go`, `app/packages/waxdeck_api_gen/`). Change the spec,
-run `make generate`, commit both. CI fails on drift and on breaking spec changes.
+The contract is the single source of truth, authored as fragments in `api/spec/`
+and bundled into `api/openapi.yaml` by `make generate`. Never hand-edit generated
+code (`api/openapi.yaml`, `server/internal/api/gen.go`,
+`app/packages/waxdeck_api_gen/`). Edit fragments, run `make generate`, commit
+fragments, bundle, and generated code together. CI fails on drift and on breaking
+spec changes.
 
 ## License
 

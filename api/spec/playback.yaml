@@ -1,0 +1,837 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /items/{pid}/play-info:
+    get:
+      operationId: getPlayInfo
+      summary: Resolve a playable stream for an item
+      description: >
+        Returns everything a client needs to start playback: a short-TTL,
+        origin-relative stream URL (media-token authenticated, so it is playable
+        by bare `<audio>` elements, cast devices, and DLNA renderers that cannot
+        send headers), the served format, and expiry. Clients re-request
+        play-info when a stream URL expires or the server signals
+        `stream-stale`. On a server running without the streaming
+        engine, the url serves the item's original file bytes directly
+        (ranged, no transcoding, in whatever format the file is in)
+        through the same endpoint downloads use, attachment
+        disposition and byte-identity pin included; expiry is
+        enforced per request, so an in-flight fetch completes but a
+        later range request after `expiresAt` answers
+        `unauthenticated` and the client re-requests play-info. An
+        item carved out of a larger file additionally carries
+        `spanStartMs`/`spanEndMs` and the client plays only that
+        window; a client that does not implement the window MUST
+        treat a span-bearing response as unplayable rather than play
+        the served audio whole. A multi-file audiobook resolves one
+        part per call:
+        pass `positionMs` (book-timeline milliseconds) to get the part
+        containing that position, and read `partIndex`, `partCount`, and
+        `partStartMs` from the response; when playback crosses the end of
+        a part, re-request play-info with the new book-timeline position.
+        The response's `durationMs` is always the duration of what the
+        client plays: the resolved part for multi-file books, and the
+        item's own window, never the backing file, for span-carved
+        direct playback; the book total
+        lives on the item summary and the book detail. Positions reported
+        to play-state for multi-file books are always book-timeline
+        milliseconds (`partStartMs` plus the in-part position). A podcast
+        episode whose audio has not been fetched to the server yet
+        answers `conflict`; queue it with the episode fetch endpoint and
+        retry when the catalog reports it present.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: positionMs
+          in: query
+          description: >
+            Book-timeline position in milliseconds; selects which part of
+            a multi-file audiobook to resolve. Omitting it resolves the
+            first part. Ignored for single-file items.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: voiceBoost
+          in: query
+          description: >
+            Request server-side spoken-word loudness normalization
+            (compression plus leveling gain) applied to the stream, for
+            clients without local DSP. Precedence is resolved here, at
+            mint time: when this parameter is present it wins; when
+            absent, the caller's stored setting for the show or book
+            applies. Honored only for podcast episodes and audiobooks,
+            only when the streaming engine supports it, and only when
+            the item's measured loudness is known; the response's
+            `voiceBoost` always reports the actual outcome. Applying it
+            forces a transcode.
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Stream resolution for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayInfo"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The item cannot stream yet (code `conflict`): a podcast
+            episode whose audio has not been fetched to the server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/download-info:
+    get:
+      operationId: getDownloadInfo
+      summary: Resolve an offline download for an item
+      description: >
+        Returns everything a client needs to download the item's original
+        bytes for offline playback: one entry per backing file (a track
+        has one; a multi-file audiobook lists every part in reading
+        order), each with a short-TTL, origin-relative,
+        media-token-authenticated URL serving the untranscoded file with
+        range support, so interrupted downloads resume. The download
+        responses carry a `Content-Disposition` derived from each entry's
+        `fileName` and an `ETag` equal to the entry's `etag`, a strong
+        validator of the exact file bytes: resume ranges with
+        `If-Range: <etag>`, and when it no longer matches (the file was
+        retagged, replaced, or upgraded) restart that file's transfer.
+        The separate `essenceHash` identifies the audio content
+        independently of tags and location; clients key their download
+        store on it, so a retag or move never forces a re-download of
+        audio they already hold (the restarted transfer replaces the
+        stored file under the same key). Items carved out of a larger
+        file (CUE-backed virtual tracks) resolve to their containing
+        file plus a `spanStartMs`/`spanEndMs` playback window. When a
+        URL expires mid-download, re-request download-info and resume by
+        range against the fresh URL. A download URL whose file changed
+        on disk answers `stream-stale`; re-request download-info.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: Download resolution for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadInfo"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/play-state:
+    get:
+      operationId: getPlayState
+      summary: Get the caller's playback state for an item
+      description: >
+        The calling user's saved playback state for the item: resume
+        position, play count, and flags. Items never played return a zero
+        state, not a 404.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The caller's state for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayState"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    put:
+      operationId: putPlayState
+      summary: Checkpoint the caller's playback position
+      description: >
+        Persists the calling user's resume position for the item. Every call
+        writes through, so clients keep the cadence coarse: checkpoint on
+        pause, stop, and track change, and every few seconds during
+        playback, never per tick.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayStateUpdate"
+      responses:
+        "204":
+          description: Position saved.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/star:
+    put:
+      operationId: setStar
+      summary: Star or unstar an item
+      description: >
+        Sets the calling user's star on the item and returns the resulting
+        playback state. Starring is idempotent: setting the current value
+        again succeeds without changing the star's set time.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StarUpdate"
+      responses:
+        "200":
+          description: The caller's updated state for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayState"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/rating:
+    put:
+      operationId: setRating
+      summary: Rate an item
+      description: >
+        Sets or clears the calling user's rating for the item and returns
+        the resulting playback state. Ratings are 0 to 100; clients render
+        them on whatever scale they like (a five-star widget maps to
+        0/20/40/60/80/100). Null clears the rating.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RatingUpdate"
+      responses:
+        "200":
+          description: The caller's updated state for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayState"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/skip-map:
+    get:
+      operationId: getSkipMap
+      summary: Get an item's silence skip map
+      description: >
+        Precomputed silence spans for client-side trimming of spoken-word
+        content: clients skip a mapped span by seeking to its end, so
+        positions stay honest on every platform and the hours-saved
+        arithmetic is exact (trimming therefore needs a seekable
+        stream). Maps are keyed to the item's audio essence and to the
+        upstream detector version, so a re-encode or a detector
+        revision invalidates them; offline clients compare the
+        response's `essenceHash` against their download store to spot
+        a stale stored map. Maps are per audio file: for a multi-file
+        audiobook, pass `partIndex` to get the map of one part, with
+        spans in that part's own timeline. Only podcast episodes and
+        audiobooks are mapped; other items, and episodes whose audio
+        is not fetched to the server yet, answer `unavailable` (an
+        episode may become mappable after its fetch). When no map
+        exists yet the server queues analysis and answers `pending`;
+        poll again later (analysis runs in the background at low
+        priority, and repeated polls coalesce onto the single queued
+        analysis). Downloads for offline playback should fetch and
+        store this map alongside the audio, or trimming silently stops
+        working in airplane mode.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: partIndex
+          in: query
+          description: >
+            Zero-based part of a multi-file audiobook to map. Ignored
+            for single-file items.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: The skip map, or its pending or unavailable state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkipMap"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /play-states:
+    post:
+      operationId: listPlayStates
+      summary: Read the caller's playback state for many items
+      description: >
+        Batch read of the calling user's playback state, for hydrating a
+        client mirror without one request per item (a device restoring
+        thousands of downloads asks in pages of 500). A POST because the
+        PID list rides the body; nothing changes server-side. The
+        response carries states only for requested items the caller can
+        see and has ever touched; an absent PID means a zero state (or no
+        visibility, which looks identical by design). Order is not
+        significant.
+      tags: [playback]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayStateQuery"
+      responses:
+        "200":
+          description: The caller's states for the requested items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayStateList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /listens:
+    post:
+      operationId: reportListens
+      summary: Report listen sessions
+      description: >
+        Ingests one or more listen sessions. Every session carries a
+        client-generated idempotency ID; the server deduplicates on ingest,
+        so replaying a batch (an offline queue flushing alongside a live
+        report of the same session) can never double-count. Sessions from
+        other services ride the same path with `source` set, carrying their
+        original timestamps (backdated imports). Per-session rejections in
+        the response are permanent (the session can never be recorded);
+        transient conditions fail the whole request instead, and clients
+        retry the batch, which deduplication makes safe.
+      tags: [playback]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListenReport"
+      responses:
+        "200":
+          description: Ingest outcome for the batch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenIngestResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  schemas:
+    StarUpdate:
+      type: object
+      description: A star or unstar.
+      required: [starred]
+      properties:
+        starred:
+          type: boolean
+          description: The new star state.
+        recordedAt:
+          type: string
+          format: date-time
+          description: >
+            When the change was made on the client, sent only when
+            replaying an offline queue. The server skips the write when
+            the item's star changed more recently than this, so a stale
+            offline toggle never resurrects an undone state. Live
+            mutations omit it and always apply.
+
+    RatingUpdate:
+      type: object
+      description: A rating change.
+      required: [rating]
+      properties:
+        rating:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: The new rating (0 to 100), or null to clear it.
+        recordedAt:
+          type: string
+          format: date-time
+          description: >
+            When the change was made on the client, sent only when
+            replaying an offline queue. The server skips the write when
+            the item's rating changed more recently than this. Live
+            mutations omit it and always apply.
+
+    PlayState:
+      type: object
+      description: The calling user's playback state for one item.
+      required: [pid, positionMs, played, finished, playCount, starred]
+      properties:
+        pid:
+          type: string
+          description: The item this state belongs to.
+        positionMs:
+          type: integer
+          format: int64
+          description: >
+            Resume position in milliseconds. For multi-file audiobooks
+            this is always a book-timeline position spanning all parts.
+        played:
+          type: boolean
+          description: >
+            Whether the item has crossed its played threshold. The
+            server derives this from the position reached against the
+            item's full duration (per-medium thresholds), never from a
+            listened-milliseconds ratio, so silence trimming and speed
+            changes cannot distort it.
+        finished:
+          type: boolean
+          description: >
+            Whether the item was completed. For multi-file audiobooks
+            the server derives completion from the book-timeline
+            position; a client-reported finished flag alone does not
+            finish a book.
+        playCount:
+          type: integer
+          description: How many times the item has been played.
+        starred:
+          type: boolean
+          description: Whether the caller starred the item.
+        rating:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: The caller's rating (0 to 100); absent or null when unrated.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this state last changed.
+
+    PlayStateQuery:
+      type: object
+      description: A batch play-state read request.
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          description: Items to read the caller's state for.
+          items:
+            type: string
+            example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    PlayStateList:
+      type: object
+      description: The caller's playback states for a requested batch.
+      required: [states]
+      properties:
+        states:
+          type: array
+          description: >
+            One entry per requested item with recorded state; items with
+            zero state are absent.
+          items:
+            $ref: "#/components/schemas/PlayState"
+
+    PlayStateUpdate:
+      type: object
+      description: A resume-position checkpoint.
+      required: [positionMs]
+      properties:
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Playback position in milliseconds. For multi-file
+            audiobooks always a book-timeline position (play-info's
+            `partStartMs` plus the in-part position).
+        recordedAt:
+          type: string
+          format: date-time
+          description: >
+            When the checkpoint was recorded on the client, sent only when
+            replaying an offline queue. The server reconciles replays per
+            medium: audiobooks and long tracks are recency-primary (the
+            most recently recorded position wins, so a stale replay never
+            drags a 14-hour book backward or forward), while music and
+            podcast episodes are furthest-position-wins with a recency
+            guard (the further position wins unless the nearer one is
+            substantially more recent, honoring a deliberate rewind).
+            Future-dated values are clamped to the server clock. Live
+            checkpoints omit it and always apply. The response does not
+            reveal whether a replay was applied or skipped: after
+            flushing an offline queue, clients learn the winning state
+            through `/sync/server` (a skipped replay means the winner is
+            already in the event stream).
+
+    ListenSession:
+      type: object
+      description: >
+        One listen session as reported by a client. `sessionId` is a
+        client-generated idempotency ID; replaying a session with the same
+        ID never double-counts. Deduplication is per user across all of the
+        user's clients, so IDs must be globally random (ULID or UUID), never
+        a per-device counter.
+      required: [sessionId, pid, startedAt, msPlayed]
+      properties:
+        sessionId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Client-generated idempotency ID for this session, unique across
+            all of the user's clients (use a ULID or UUID).
+          example: 01JZX5N8QW3F4V9T2B7KD3M9R6
+        pid:
+          type: string
+          description: The item that was played.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        startedAt:
+          type: string
+          format: date-time
+          description: >
+            When playback started. Historical for backdated imports; the
+            server preserves it as reported.
+        msPlayed:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Milliseconds actually heard (excludes pauses and seeks).
+        skippedMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Milliseconds of content the listener did not sit through
+            thanks to silence trimming and playback speed above 1x,
+            for the time-saved counter. Omit when neither applies.
+        finished:
+          type: boolean
+          description: Whether playback reached the end of the item.
+        client:
+          type: string
+          maxLength: 128
+          description: Client identifier (app name and platform).
+          example: waxdeck-web
+        source:
+          type: string
+          description: >
+            Where the session originates. `live` is a WaxDeck client
+            reporting its own playback; `import` is a backdated session from
+            another service's history.
+          enum: [live, import]
+          default: live
+
+    ListenReport:
+      type: object
+      description: A batch of listen sessions (a flush of an offline queue, or one live session).
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/ListenSession"
+
+    ListenIngestResult:
+      type: object
+      description: Outcome of a listen ingest batch.
+      required: [accepted, duplicates]
+      properties:
+        accepted:
+          type: integer
+          description: Sessions recorded for the first time.
+        duplicates:
+          type: integer
+          description: Sessions already recorded (replay of a known `sessionId`); ignored without error.
+        rejected:
+          type: array
+          description: Sessions that could not be recorded at all (unknown item, malformed fields).
+          items:
+            $ref: "#/components/schemas/RejectedListen"
+
+    RejectedListen:
+      type: object
+      description: One session the server refused, and why.
+      required: [sessionId, code, message]
+      properties:
+        sessionId:
+          type: string
+          description: The refused session's idempotency ID.
+        code:
+          type: string
+          description: Stable machine-readable reason (`not-found`, `invalid-request`).
+        message:
+          type: string
+          description: Human-readable explanation.
+
+    DownloadFile:
+      type: object
+      description: One downloadable backing file of an item.
+      required: [url, mimeType, sizeBytes, fileName, essenceHash, etag]
+      properties:
+        url:
+          type: string
+          description: >
+            Origin-relative, media-token-authenticated download URL serving
+            this file's original bytes with range support.
+          example: /media/download?pid=tr-01JZX5N8QW3F4V9T2B7KD3M9R6&mt=abc123
+        mimeType:
+          type: string
+          description: MIME type of the file.
+          example: audio/flac
+        sizeBytes:
+          type: integer
+          format: int64
+          description: Exact size of the file in bytes.
+        fileName:
+          type: string
+          description: >
+            Suggested file name (the original base name), also sent as the
+            download's `Content-Disposition`.
+          example: 03 Prancing Pony Blues.flac
+        essenceHash:
+          type: string
+          description: >
+            Content hash of the file's audio essence, stable across retags
+            and moves: the download-store key.
+        etag:
+          type: string
+          description: >
+            Strong validator of the exact file bytes, served as the
+            download's `ETag`. Changes on any rewrite of the file,
+            including retags that leave `essenceHash` unchanged; a
+            mismatch means restart this file's transfer instead of
+            resuming a range.
+
+    DownloadInfo:
+      type: object
+      description: Everything a client needs to download one item's original bytes.
+      required: [pid, files, expiresAt]
+      properties:
+        pid:
+          type: string
+          description: The resolved item's PID.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        files:
+          type: array
+          minItems: 1
+          description: >
+            The item's backing files in playback order. One entry for a
+            track or single-file book; one per part for a multi-file
+            audiobook; exactly one (the containing file) for an item
+            carved out of a larger file.
+          items:
+            $ref: "#/components/schemas/DownloadFile"
+        spanStartMs:
+          type: integer
+          format: int64
+          description: >
+            Start of the item's playback window within its single backing
+            file, in milliseconds. Present only for items carved out of a
+            larger file (CUE-backed virtual tracks); offline playback
+            plays the window, not the whole file.
+        spanEndMs:
+          type: integer
+          format: int64
+          description: >
+            End of the playback window in milliseconds, exclusive.
+            Present exactly when `spanStartMs` is.
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the embedded media tokens stop being accepted.
+
+    PlayInfo:
+      type: object
+      description: Everything a client needs to begin playback of one item.
+      required: [pid, url, mimeType, durationMs, seekable, expiresAt]
+      properties:
+        pid:
+          type: string
+          description: The resolved item's PID.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        url:
+          type: string
+          description: >
+            Origin-relative, media-token-authenticated stream URL. Short TTL;
+            re-request play-info on expiry or a `stream-stale` error.
+          example: /media/stream?pid=tr-01JZX5N8QW3F4V9T2B7KD3M9R6&mt=abc123
+        mimeType:
+          type: string
+          description: MIME type the stream will be served as.
+          example: audio/flac
+        durationMs:
+          type: integer
+          format: int64
+          description: Duration in milliseconds.
+          example: 214000
+        seekable:
+          type: boolean
+          description: Whether the stream supports sample-exact seeking.
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the embedded media token stops being accepted.
+        partIndex:
+          type: integer
+          description: >
+            Zero-based index of the resolved part within a multi-file
+            audiobook. Present exactly when `partCount` is.
+        partCount:
+          type: integer
+          description: >
+            Number of parts in a multi-file audiobook. Present only for
+            multi-file books; single-file items omit the part fields
+            entirely.
+        partStartMs:
+          type: integer
+          format: int64
+          description: >
+            Book-timeline millisecond offset where the resolved part
+            begins. In-part positions plus this offset give the
+            book-timeline positions that play-state expects. Present
+            exactly when `partCount` is.
+        voiceBoost:
+          type: boolean
+          description: >
+            True when the stream applies server-side spoken-word loudness
+            normalization. Absent or false otherwise, including when it
+            was requested but cannot be applied yet (unsupported by the
+            sidecar, or loudness not measured yet).
+        spanStartMs:
+          type: integer
+          format: int64
+          description: >
+            Present exactly with `spanEndMs`, and only when the url
+            serves the item's whole backing file while the item is a
+            window into it (direct playback of a track carved from a
+            larger rip, on a server running without the streaming
+            engine): the client must play only the
+            [`spanStartMs`, `spanEndMs`) window of the served audio.
+            Absent whenever the server cuts the stream itself.
+            `durationMs` remains the item's own duration, never the
+            backing file's.
+        spanEndMs:
+          type: integer
+          format: int64
+          description: >
+            End of the playback window in served-audio milliseconds.
+            Present exactly when `spanStartMs` is.
+
+    SkipSpan:
+      type: object
+      description: One silence span to skip.
+      required: [startMs, endMs]
+      properties:
+        startMs:
+          type: integer
+          format: int64
+          description: Span start in milliseconds.
+        endMs:
+          type: integer
+          format: int64
+          description: Span end in milliseconds, exclusive.
+
+    SkipMap:
+      type: object
+      description: >
+        Precomputed silence spans for one audio file, keyed to its
+        audio essence and the upstream detector version. Spans are in
+        the mapped file's own timeline (for a multi-file audiobook,
+        the requested part's timeline, not the book's).
+      required: [state]
+      properties:
+        state:
+          type: string
+          description: >
+            `ready` (spans present), `pending` (analysis queued or
+            running; poll again later), or `unavailable` (this item is
+            not mapped: not spoken-word content, audio not fetched to
+            the server yet, or the streaming engine cannot analyze).
+            Open set; treat unknown values as `unavailable`.
+          example: ready
+        essenceHash:
+          type: string
+          description: >
+            Content hash of the mapped file's audio essence, matching
+            the download surface's `essenceHash`; a stored map whose
+            hash no longer matches the stored audio is stale.
+        partIndex:
+          type: integer
+          description: >
+            The mapped part of a multi-file audiobook. Present only
+            for multi-file books.
+        version:
+          type: string
+          description: Upstream silence-detector revision the map was built by.
+          example: silence-1
+        thresholdDb:
+          type: number
+          format: double
+          description: Detection threshold in dBFS.
+        minSeconds:
+          type: number
+          format: double
+          description: Minimum span length in seconds.
+        spans:
+          type: array
+          description: Silence spans ordered by `startMs` (`ready` only).
+          items:
+            $ref: "#/components/schemas/SkipSpan"
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the map was computed.

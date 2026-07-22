@@ -1,0 +1,257 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /users/me/scrobblers:
+    get:
+      operationId: listScrobblers
+      summary: List the caller's scrobbling connections
+      description: >
+        The calling user's outbound scrobbling connections, one entry
+        per known service. A service is `available` when the server can
+        offer it (Last.fm needs server-configured API credentials;
+        ListenBrainz is always available) and `connected` once the
+        caller has linked an account. Accepted listens for music are
+        queued and delivered to every connected service, surviving
+        restarts and outages.
+      tags: [scrobbling]
+      responses:
+        "200":
+          description: The caller's scrobbling connections.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrobblerList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /users/me/scrobblers/listenbrainz:
+    put:
+      operationId: connectListenBrainz
+      summary: Connect ListenBrainz
+      description: >
+        Stores the caller's ListenBrainz user token after validating it
+        against the service. The token is sealed at rest and never
+        returned. Supplying a new token replaces the old one. An
+        optional `apiUrl` points the connection at a
+        ListenBrainz-compatible server (Maloja and friends); omitted
+        means listenbrainz.org.
+      tags: [scrobbling]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListenBrainzConnect"
+      responses:
+        "200":
+          description: Connected; the validated connection state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scrobbler"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "502":
+          description: >
+            The scrobbling service could not be reached to validate
+            the token (code `service-unreachable`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: disconnectListenBrainz
+      summary: Disconnect ListenBrainz
+      description: >
+        Removes the caller's ListenBrainz connection and drops its
+        queued deliveries.
+      tags: [scrobbling]
+      responses:
+        "204":
+          description: Disconnected.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/me/scrobblers/lastfm:
+    delete:
+      operationId: disconnectLastfm
+      summary: Disconnect Last.fm
+      description: >
+        Removes the caller's Last.fm connection and drops its queued
+        deliveries.
+      tags: [scrobbling]
+      responses:
+        "204":
+          description: Disconnected.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/me/scrobblers/lastfm/connect:
+    post:
+      operationId: startLastfmConnect
+      summary: Start linking a Last.fm account
+      description: >
+        Mints a short-lived one-time state and returns the Last.fm
+        authorization URL for the caller to open in a browser. After
+        the user approves, Last.fm redirects to this server's callback,
+        which completes the session-key exchange and stores the sealed
+        session key. Requires server-configured Last.fm API
+        credentials; without them this endpoint answers
+        `source-unavailable`.
+      tags: [scrobbling]
+      responses:
+        "200":
+          description: The authorization URL to open.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LastfmConnectStart"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "501":
+          $ref: "#/components/responses/SourceUnavailable"
+
+  /scrobble/lastfm/callback:
+    get:
+      operationId: lastfmCallback
+      summary: Last.fm authorization callback
+      description: >
+        The redirect target Last.fm sends the user back to after
+        approving access. Authenticated by the one-time `state` minted
+        by the connect endpoint (bound to the requesting user, single
+        use, short-lived), not by a session: the browser tab may not
+        carry one. Completes the session-key exchange and renders a
+        small confirmation page for the user to close.
+      tags: [scrobbling]
+      security: []
+      parameters:
+        - name: state
+          in: query
+          required: true
+          description: The one-time state from the connect endpoint.
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          description: The authorization token appended by Last.fm.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Connection completed; a human-readable confirmation page.
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          description: Unknown, expired, or reused state; a human-readable error page.
+          content:
+            text/html:
+              schema:
+                type: string
+        "502":
+          description: Last.fm could not be reached to complete the exchange; a human-readable error page.
+          content:
+            text/html:
+              schema:
+                type: string
+
+components:
+  schemas:
+    Scrobbler:
+      type: object
+      description: One outbound scrobbling connection slot.
+      required: [service, available, connected]
+      properties:
+        service:
+          type: string
+          description: >
+            `lastfm` or `listenbrainz`. A string, not a closed enum;
+            clients must skip services they do not recognize.
+          example: listenbrainz
+        available:
+          type: boolean
+          description: >
+            True when the server can offer this service (Last.fm
+            requires server-configured API credentials).
+        connected:
+          type: boolean
+          description: True when the caller has linked an account.
+        username:
+          type: string
+          description: >
+            The linked account's username, when the service reports
+            one.
+        apiUrl:
+          type: string
+          description: >
+            The API base a ListenBrainz-compatible connection points
+            at. Absent for listenbrainz.org and for Last.fm.
+        lastSuccessAt:
+          type: string
+          format: date-time
+          description: >
+            When this connection last delivered a scrobble. Absent
+            until the first delivery succeeds. Reconnecting resets
+            it: the stamp belongs to the current credential.
+        lastError:
+          type: string
+          maxLength: 300
+          description: >
+            The most recent delivery failure, present only while the
+            connection is unhealthy: set when a delivery attempt
+            fails, cleared by the next successful delivery and by
+            reconnecting. A connection can carry both lastSuccessAt
+            and lastError (it worked before it broke). A short
+            human-readable summary suitable for display; never
+            contains the credential. All three delivery stamps are
+            absent whenever connected is false.
+        lastErrorAt:
+          type: string
+          format: date-time
+          description: >
+            When lastError was recorded. Present exactly when
+            lastError is.
+
+    ScrobblerList:
+      type: object
+      description: The caller's scrobbling connection slots.
+      required: [scrobblers]
+      properties:
+        scrobblers:
+          type: array
+          description: One entry per known service.
+          items:
+            $ref: "#/components/schemas/Scrobbler"
+
+    ListenBrainzConnect:
+      type: object
+      description: A ListenBrainz user token to link.
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: The user token from the ListenBrainz profile page.
+          minLength: 1
+        apiUrl:
+          type: string
+          description: >
+            Base URL of a ListenBrainz-compatible API server. Omit for
+            listenbrainz.org.
+
+    LastfmConnectStart:
+      type: object
+      description: The Last.fm authorization hand-off.
+      required: [authUrl]
+      properties:
+        authUrl:
+          type: string
+          description: >
+            The Last.fm authorization URL to open in a browser; it
+            redirects back to this server's callback on approval.

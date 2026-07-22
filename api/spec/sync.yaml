@@ -1,0 +1,273 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /sync/catalog:
+    get:
+      operationId: syncCatalog
+      summary: Mirror the catalog (snapshot or changed-since delta)
+      description: >
+        The catalog half of delta sync, feeding client-side library mirrors
+        with hydrated item summaries (episodes carry their full episode
+        summaries, and podcast shows ride the same stream as
+        `upsert-show` entries; see the entry schema). Shows and episodes
+        are scoped to the caller's own subscriptions, and a subscription
+        change retires the caller's cursors the same way a visibility
+        grant change does (410 `sync-reset`, then re-mirror). Two modes.
+        Without `since`: a snapshot, keyset-paged via `cursor`; every
+        page carries
+        `nextSince`, an opaque change cursor captured at or before the
+        first page's read, which the client stores and syncs from after
+        mirroring every page (changes landing mid-snapshot are covered by
+        the first delta). With `since`: the changes after that cursor, as
+        `upsert` entries carrying fresh summaries and `delete` tombstones
+        for items that no longer exist or whose change left them outside
+        the caller's library visibility (a file re-homed under an
+        ungranted root keeps its item PID; a tombstone for an item never
+        mirrored is a no-op); entries are coalesced within a page (an item may
+        recur on later pages; application is idempotent, latest wins).
+        The returned `nextSince` advances the cursor, and `more` signals
+        another page should be fetched immediately. Snapshots contain
+        only items the caller can see, and a change to the caller's
+        visibility grants invalidates their catalog cursors, so the next
+        delta answers 410 `sync-reset` and the re-snapshot reflects the
+        new grants. 410 likewise answers any cursor the server can no
+        longer serve contiguously (pruned change history, a rebuilt
+        catalog): drop the mirror and snapshot again. Snapshot-minted
+        cursors stay serviceable for at least the server's change
+        retention horizon. The WebSocket channel (`api/events.md`)
+        signals when to pull deltas; polling works without it.
+      tags: [sync]
+      parameters:
+        - name: since
+          in: query
+          description: >
+            Opaque change cursor from a previous response's `nextSince`.
+            Mutually exclusive with `cursor`.
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous snapshot page's
+            `nextCursor`. Omit together with `since` for the first
+            snapshot page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum entries per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 500
+      responses:
+        "200":
+          description: One page of the snapshot or delta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogSyncPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "410":
+          $ref: "#/components/responses/SyncReset"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /sync/server:
+    get:
+      operationId: syncServer
+      summary: Mirror the caller's server-side state (changed-since delta)
+      description: >
+        The server half of delta sync: the calling user's own state
+        changes (playback state, preferences, podcast subscriptions,
+        per-book settings, playlists), on the server change cursor.
+        Without `since` it mints a fresh cursor (`nextSince` with no
+        events): new mirrors start there and hydrate the play states
+        they care about through `/play-states` (play states are only
+        meaningful for items a client holds), subscriptions through
+        `/podcasts`, book settings through the book detail, and
+        playlists through `/playlists`. With `since` it returns
+        the caller's events after that cursor with freshly hydrated
+        state, coalesced within a page (an item may recur on later pages;
+        application is idempotent), plus `more` for immediate
+        continuation. Only state visible to the caller ever appears
+        here; that is the caller's own state, plus `playlist` events
+        for other users' shared playlists (shared playlists are
+        visible to everyone, so their changes reach every user's
+        stream). A `since` the server can no longer serve contiguously
+        answers 410 `sync-reset`: re-mint and re-hydrate.
+      tags: [sync]
+      parameters:
+        - name: since
+          in: query
+          description: >
+            Opaque server change cursor from a previous response's
+            `nextSince`. Omit to mint a fresh cursor.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum events per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 500
+      responses:
+        "200":
+          description: One page of the caller's state changes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerSyncPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "410":
+          $ref: "#/components/responses/SyncReset"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  responses:
+    SyncReset:
+      description: >
+        The sync cursor predates the retained change history or belongs to
+        a previous catalog generation (code `sync-reset`). Drop the local
+        mirror and re-mirror from a fresh snapshot.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    CatalogSyncEntry:
+      type: object
+      description: >
+        One mirrored catalog change: an `upsert` carrying the item's
+        current summary, an `upsert-show` carrying a podcast show's
+        current summary (shows are catalog entities but not items, so
+        they ride their own operation and clients from before this
+        operation existed drop them harmlessly), or a `delete`
+        tombstone carrying only the PID (which removes the PID from
+        whichever mirror table holds it). An `upsert` for a podcast
+        episode carries `item` and additionally `episode`, the full
+        episode summary; clients that only know items keep reading
+        `item`. Snapshot pages contain only upserts, of both kinds.
+        `op` is a string, not a closed enum, so new operations can
+        appear; clients must drop entries whose `op` they do not
+        recognize.
+      required: [op, pid]
+      properties:
+        op:
+          type: string
+          description: >
+            What the mirror should do with this entry: `upsert` (store
+            `item`, and `episode` when present), `upsert-show` (store
+            `show`), or `delete` (remove the PID).
+          example: upsert
+        pid:
+          type: string
+          description: The item or show the entry is about.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        item:
+          $ref: "#/components/schemas/ItemSummary"
+        episode:
+          $ref: "#/components/schemas/EpisodeSummary"
+        show:
+          $ref: "#/components/schemas/PodcastShow"
+
+    CatalogSyncPage:
+      type: object
+      description: One page of catalog sync entries (snapshot or delta).
+      required: [entries, nextSince]
+      properties:
+        entries:
+          type: array
+          description: Mirror entries, coalesced within the page.
+          items:
+            $ref: "#/components/schemas/CatalogSyncEntry"
+        nextCursor:
+          type: string
+          description: >
+            Keyset cursor for the next snapshot page. Absent on the last
+            snapshot page and on delta pages.
+        nextSince:
+          type: string
+          description: >
+            Opaque change cursor to sync from next. On snapshot pages it
+            repeats the cursor captured at the snapshot's start; on delta
+            pages it advances past this page's changes.
+        more:
+          type: boolean
+          description: >
+            True when another delta page is already available; fetch it
+            immediately with `since` set to this page's `nextSince`.
+            Absent in snapshot mode (`nextCursor` plays that role).
+
+    ServerSyncEvent:
+      type: object
+      description: >
+        One change to server-side state visible to the calling user
+        (their own state, plus other users' shared playlists), with
+        the current value hydrated fresh. `kind` is a string, not a
+        closed enum, so new kinds can appear; clients must skip events
+        whose `kind` they do not recognize. Hydrated `playlist`
+        payloads omit a smart playlist's computed `itemCount`, like
+        list pages.
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          description: >
+            What changed: `play-state` (carries `pid` and `playState`),
+            `prefs` (carries `prefs`), `subscription` (carries `pid`, the
+            show; `subscription` is the current state, absent when the
+            caller unsubscribed), `book-settings` (carries `pid`, the
+            book, and `bookSettings`), or `playlist` (carries `pid`;
+            `playlist` is the current state, absent when the playlist
+            was deleted or replaced under a new pid). Curation surfaces
+            emit marker kinds carrying only `pid`: `review` (a review
+            entry changed; refetch the review endpoints), `upload` (an
+            upload session changed), and `task` (a tool task changed).
+            Markers hydrate nothing because those surfaces are live
+            reads, not mirrored state.
+          example: play-state
+        pid:
+          type: string
+          description: >
+            The item, show, book, or playlist the event is about
+            (absent for `prefs`).
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        playState:
+          $ref: "#/components/schemas/PlayState"
+        prefs:
+          $ref: "#/components/schemas/Prefs"
+        subscription:
+          $ref: "#/components/schemas/Subscription"
+        bookSettings:
+          $ref: "#/components/schemas/BookSettings"
+        playlist:
+          $ref: "#/components/schemas/Playlist"
+
+    ServerSyncPage:
+      type: object
+      description: One page of the caller's server-side state changes.
+      required: [events, nextSince]
+      properties:
+        events:
+          type: array
+          description: State changes, coalesced within the page.
+          items:
+            $ref: "#/components/schemas/ServerSyncEvent"
+        nextSince:
+          type: string
+          description: Opaque server change cursor to sync from next.
+        more:
+          type: boolean
+          description: >
+            True when another page is already available; fetch it
+            immediately with `since` set to this page's `nextSince`.

@@ -1,7 +1,8 @@
-.PHONY: generate gen-go gen-dart lint spec-lint test test-server test-fixtures test-app \
+.PHONY: generate spec-bundle gen-go gen-dart lint spec-lint test test-server test-fixtures test-app \
         web build run up down logs drift-check oasdiff e2e dist clean
 
 SPEC        := api/openapi.yaml
+SPEC_SRC    := api/spec
 WEB_DIST    := server/internal/web/dist
 APP_WEB_OUT := app/app/build/web
 
@@ -9,11 +10,22 @@ APP_WEB_OUT := app/app/build/web
 
 generate: gen-go gen-dart
 
-gen-go:
+# The contract is authored as fragments in api/spec/ (one file per API
+# domain); specbundle assembles the single bundled spec that every
+# consumer reads. The bundle stays committed; drift-check keeps it fresh.
+# Deliberately phony, not an mtime-ruled file target: a fresh checkout
+# gives the bundle and the fragments equal mtimes, so a file target could
+# skip bundling exactly where drift-check needs it to run. The tool is
+# fast and no-ops when output is unchanged; make runs a shared
+# prerequisite once per invocation, -j included.
+spec-bundle:
+	cd server && go run ./cmd/specbundle -src ../$(SPEC_SRC) -out ../$(SPEC)
+
+gen-go: spec-bundle
 	cd server && go tool oapi-codegen -config ../tools/oapi-codegen.yaml ../$(SPEC)
 	cd server && gofmt -w internal/api/gen.go
 
-gen-dart:
+gen-dart: spec-bundle
 	tools/generate-dart.sh
 
 ## --- quality gates -----------------------------------------------------------
@@ -25,6 +37,8 @@ lint: spec-lint
 	cd app && dart format --set-exit-if-changed app/lib app/test app/integration_test app/tool packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib packages/waxdeck_data/lib packages/waxdeck_data/test >/dev/null
 	cd app && flutter analyze --no-pub
 
+# Lints the committed bundle as-is (lint never mutates the tree);
+# bundle freshness against the fragments is drift-check's job.
 spec-lint:
 	npx --yes @stoplight/spectral-cli lint --fail-severity=warn $(SPEC)
 

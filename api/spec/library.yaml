@@ -1,0 +1,464 @@
+# WaxDeck API contract fragment; assembled into api/openapi.yaml by `make generate`.
+paths:
+  /library/items:
+    get:
+      operationId: listItems
+      summary: Browse library items
+      description: >
+        Keyset-paginated list of library items, optionally filtered by media
+        type. Ordering is stable (title, then pid) so cursors never skip or
+        duplicate.
+      tags: [library]
+      parameters:
+        - name: mediaType
+          in: query
+          description: Restrict results to one media type.
+          schema:
+            $ref: "#/components/schemas/MediaType"
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum items per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/browse:
+    get:
+      operationId: browseList
+      summary: Browse a discovery list
+      description: >
+        Keyset-paginated discovery lists over the whole library: newest,
+        recently added, most played, recently played, random, starred, and
+        alphabetical. Play-derived lists reflect the calling user's own
+        listening state.
+      tags: [library]
+      parameters:
+        - name: list
+          in: query
+          required: true
+          description: Which discovery list to page through.
+          schema:
+            $ref: "#/components/schemas/DiscoveryList"
+        - name: seed
+          in: query
+          description: >
+            Shuffle seed for the `random` list. The same seed pages through
+            the same shuffled order, so paging stays stable. When omitted the
+            server picks a fresh seed and returns it as the page's `seed`;
+            pass that value back with the cursor for later pages. A cursor is
+            only valid together with the same `list` and `seed` it was issued
+            for.
+          schema:
+            type: integer
+            format: int64
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum items per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of the list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/search:
+    get:
+      operationId: search
+      summary: Search the library
+      description: >
+        Full-text search across artists, albums, tracks, books, and episodes.
+        Results are grouped by kind and ranked within each group; each group
+        is capped at `limit` hits.
+      tags: [library]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query. Must contain at least one non-whitespace character.
+          schema:
+            type: string
+            minLength: 1
+        - name: limit
+          in: query
+          description: Maximum hits per result group.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Grouped search results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}:
+    get:
+      operationId: getItem
+      summary: Get one item's detail
+      description: Full detail for a single library item.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/art:
+    get:
+      operationId: getItemArt
+      summary: Get artwork
+      description: >
+        Artwork as image bytes: the original at full size, or a square-fit
+        thumbnail when `size` is given. Besides item PIDs this endpoint also
+        accepts album (`al-`), artist (`ar-`), and podcast show (`pc-`)
+        PIDs, so search hits and subscription lists can render artwork
+        directly. Items without any artwork in their fallback chain return
+        404. Responses carry a content-addressed `ETag`; revalidate with
+        `If-None-Match` instead of refetching.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: size
+          in: query
+          description: >
+            Longest-edge bound in pixels for a thumbnail. Omit for the
+            original image.
+          schema:
+            type: integer
+            minimum: 16
+            maximum: 2048
+        - name: If-None-Match
+          in: header
+          description: Previously returned `ETag`; a match answers 304 with no body.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The artwork image.
+          headers:
+            ETag:
+              description: Content-addressed validator for the returned bytes.
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: The cached copy is still current.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/items/delete:
+    post:
+      operationId: deleteLibraryItems
+      summary: Delete library items
+      description: >
+        Deletes items' files, to the catalog trash by default
+        (reversible from the trash surface) or permanently (`mode`
+        `permanent`, administrators only). `dryRun` answers the plan
+        (which files, how many bytes) without deleting, and the
+        response reports the same entries when it applies. Deleting
+        needs the `delete` permission or the admin role, and every
+        pid must be visible to the caller (`not-found` otherwise).
+        Items keep their catalog identity: an item that loses its
+        last file is archived, not erased, and play history
+        survives. A read-only library answers `read-only`.
+      tags: [library]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteItemsRequest"
+      responses:
+        "200":
+          description: The plan (dry run) or the applied result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteItemsResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+components:
+  schemas:
+    DiscoveryList:
+      type: string
+      description: >
+        Discovery lists for browsing. `most-played`, `recently-played`, and
+        `starred` reflect the calling user's own listening state.
+      enum:
+        - newest
+        - recently-added
+        - most-played
+        - recently-played
+        - random
+        - starred
+        - alphabetical
+
+    SearchHit:
+      type: object
+      description: One ranked search hit.
+      required: [pid, kind, title]
+      properties:
+        pid:
+          type: string
+          description: Type-prefixed ULID of the hit.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          type: string
+          description: What the hit is (`artist`, `album`, `track`, `book`, `episode`).
+          example: track
+        title:
+          type: string
+          description: Display title.
+        subtitle:
+          type: string
+          description: Context line (artist for a track, author for a book).
+
+    SearchResults:
+      type: object
+      description: Search results grouped by kind, ranked within each group.
+      required: [query, artists, albums, tracks, books, episodes]
+      properties:
+        query:
+          type: string
+          description: The query these results answer.
+        artists:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        albums:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        books:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        episodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        truncated:
+          type: boolean
+          description: True when any group was capped at the limit.
+
+    Item:
+      allOf:
+        - $ref: "#/components/schemas/ItemSummary"
+        - type: object
+          description: Extended detail fields beyond the summary row.
+          properties:
+            genres:
+              type: array
+              description: Display genres.
+              items:
+                type: string
+                example: blues
+            year:
+              type: integer
+              description: Release / publication year.
+              example: 2024
+            trackNumber:
+              type: integer
+              description: Track position within its disc (music).
+            discNumber:
+              type: integer
+              description: Disc number within a multi-disc release (music).
+            codec:
+              type: string
+              description: Source audio codec.
+              example: flac
+            container:
+              type: string
+              description: Source file container.
+              example: flac
+            sampleRate:
+              type: integer
+              description: Source sample rate in Hz.
+              example: 44100
+            bitrate:
+              type: integer
+              description: Source bitrate in bits per second, when known.
+            addedAt:
+              type: string
+              format: date-time
+              description: When the item entered the library.
+      description: Full detail for a single library item.
+
+    ItemPage:
+      type: object
+      description: One keyset-paginated page of items.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: Items in stable order.
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+        nextCursor:
+          type: string
+          description: >
+            Opaque cursor for the next page. Absent on the last page.
+        seed:
+          type: integer
+          format: int64
+          description: >
+            The effective shuffle seed. Present only on `random` browse
+            pages; pass it back together with `nextCursor` so later pages
+            keep the same order.
+
+    DeleteItemsRequest:
+      type: object
+      description: A deletion (or a dry-run plan) over library items.
+      required: [pids]
+      properties:
+        pids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          description: The items whose files to delete.
+          items:
+            type: string
+        mode:
+          type: string
+          enum: [trash, permanent]
+          default: trash
+          description: >
+            `trash` is reversible from the trash surface;
+            `permanent` bypasses it (administrators only).
+        dryRun:
+          type: boolean
+          default: false
+          description: Answer the plan without deleting.
+
+    DeleteItemsResult:
+      type: object
+      description: What a deletion did, or would do.
+      required: [applied, mode, entries]
+      properties:
+        applied:
+          type: boolean
+          description: False for a dry run.
+        mode:
+          type: string
+          description: The mode that was (or would be) used.
+        entries:
+          type: array
+          description: Per-item breakdown.
+          items:
+            $ref: "#/components/schemas/DeletePlanEntry"
+
+    DeletePlanEntry:
+      type: object
+      description: One item's part of a deletion.
+      required: [pid, files, bytes]
+      properties:
+        pid:
+          type: string
+          description: The item.
+        name:
+          type: string
+          description: Display name.
+        files:
+          type: integer
+          description: Files deleted (or to delete).
+        bytes:
+          type: integer
+          format: int64
+          description: Bytes reclaimed (or to reclaim).
