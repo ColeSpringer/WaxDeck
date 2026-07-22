@@ -1,9 +1,0 @@
-# Keeps GitHub Actions pins current. The release workflow pins
-# third-party actions to commit SHAs (it holds packages:write); this
-# is what moves those pins forward.
-version: 2
-updates:
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: monthly
