@@ -192,6 +192,12 @@ type Library struct {
 	// process is proxying the stream).
 	radioTitles   map[string]radioTitle
 	radioTitlesMu sync.Mutex
+	// batchFinalizeMu serializes upload-batch finalization (the flip,
+	// entry opening, and member linking as one unit): two concurrent
+	// finalizes of one batch would otherwise both gather the same
+	// still-unlinked members and open duplicate review entries.
+	// Process-wide is fine — finalizes are rare and database-only.
+	batchFinalizeMu sync.Mutex
 	// lastfmPtr holds the swappable outbound Last.fm client (admin
 	// credential changes rebuild it at runtime); envLastfmKey/Secret
 	// keep the environment pair as the fallback when no runtime pair is

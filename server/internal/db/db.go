@@ -477,10 +477,13 @@ const baselineSchema = `
 		received_bytes INTEGER NOT NULL DEFAULT 0,
 		media_type     TEXT    NOT NULL,
 		library_pid    TEXT    NOT NULL DEFAULT '',
+		batch_id       TEXT    NOT NULL DEFAULT '',
+		batch_path     TEXT    NOT NULL DEFAULT '',
 		sha256         TEXT    NOT NULL DEFAULT '',
 		state          TEXT    NOT NULL DEFAULT 'receiving',
 		staging_path   TEXT    NOT NULL DEFAULT '',
 		review_entry_id TEXT   NOT NULL DEFAULT '',
+		track_doc      TEXT    NOT NULL DEFAULT '',
 		duplicate_pid  TEXT    NOT NULL DEFAULT '',
 		duplicate_kind TEXT    NOT NULL DEFAULT '',
 		item_pid       TEXT    NOT NULL DEFAULT '',
@@ -489,6 +492,25 @@ const baselineSchema = `
 	);
 	CREATE INDEX uploads_user ON uploads (user_id, created_at_ns DESC, id);
 	CREATE INDEX uploads_item ON uploads (item_pid, user_id);
+	CREATE INDEX uploads_batch ON uploads (batch_id) WHERE batch_id != '';
+
+	-- Upload batches group several sessions into review units by a
+	-- declared grouping intent (one album, separate tracks, or
+	-- auto-clustering over tags and batch-relative paths). A member's
+	-- parsed track document waits in uploads.track_doc until the batch
+	-- finalizes; review_entry_ids records what finalization opened.
+	CREATE TABLE upload_batches (
+		id               TEXT    PRIMARY KEY,
+		user_id          TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		grouping         TEXT    NOT NULL,
+		media_type       TEXT    NOT NULL,
+		library_pid      TEXT    NOT NULL DEFAULT '',
+		state            TEXT    NOT NULL DEFAULT 'open',
+		review_entry_ids TEXT    NOT NULL DEFAULT '[]',
+		created_at_ns    INTEGER NOT NULL,
+		expires_at_ns    INTEGER NOT NULL
+	);
+	CREATE INDEX upload_batches_state ON upload_batches (state, expires_at_ns);
 	CREATE TABLE tool_tasks (
 		id             TEXT    PRIMARY KEY,
 		type           TEXT    NOT NULL,

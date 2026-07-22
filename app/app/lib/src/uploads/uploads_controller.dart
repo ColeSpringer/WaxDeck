@@ -4,36 +4,47 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import 'file_picker_port.dart';
 import 'local_file_reader.dart';
 
-/// Bytes retained for resuming a failed transfer, keyed by upload id.
-/// Container-scoped so an event invalidation mid-upload cannot drop the
-/// retry buffer with the controller rebuild. Only the byte-backed flow
-/// (small picks, web) lands here; path-backed uploads retain the path.
-final _retryBytesProvider = Provider<Map<String, Uint8List>>((_) => {});
-
 /// Local file paths retained for resuming a failed path-backed
-/// transfer, keyed by upload id. Paths, never bytes: an audiobook-
-/// sized share must not live in heap memory for the life of a retry
-/// affordance.
+/// transfer, keyed by upload id. Container-scoped so an event
+/// invalidation mid-upload cannot drop the retry affordance with the
+/// controller rebuild. Paths, never bytes: an audiobook-sized share
+/// must not live in heap memory for the life of a retry affordance.
 final _retryPathsProvider = Provider<Map<String, String>>((_) => {});
 
-/// Accumulated pages of the caller's upload sessions, plus which of
-/// them failed locally mid-transfer and can retry.
+/// Windowed read accessors retained for resuming a failed
+/// reader-backed transfer (web picks and drops), keyed by upload id.
+/// The accessor holds a browser file handle, not bytes.
+final _retryReadersProvider =
+    Provider<Map<String, Stream<List<int>> Function([int? start, int? end])>>(
+      (_) => {},
+    );
+
+/// Accumulated pages of the caller's upload sessions, the caller's
+/// quota snapshot, plus which sessions failed locally mid-transfer and
+/// can retry.
 class UploadsState {
   const UploadsState({
     required this.uploads,
     this.nextCursor,
+    this.quota,
     this.loadingMore = false,
     this.failed = const {},
   });
 
   final List<UploadSession> uploads;
   final String? nextCursor;
+
+  /// The caller's own allowance, from the freshest page.
+  final UploadQuota? quota;
+
   final bool loadingMore;
 
-  /// Upload ids whose transfer failed in this app session; their bytes
-  /// are retained so Retry can resume from what the server received.
+  /// Upload ids whose transfer failed in this app session; their
+  /// source reference is retained so Retry can resume from what the
+  /// server received.
   final Set<String> failed;
 
   bool get hasMore => nextCursor != null;
@@ -43,7 +54,9 @@ class UploadsState {
 class UploadsController extends AsyncNotifier<UploadsState> {
   static const pageSize = 50;
 
-  /// Chunk size for the resumable transfer loop: 1 MiB.
+  /// Chunk size for the resumable transfer loop: 1 MiB. Also the most
+  /// of any file that sits in memory at once — sources are lazy
+  /// references windowed through here.
   static const chunkBytes = 1024 * 1024;
 
   var _generation = 0;
@@ -57,10 +70,11 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     return UploadsState(
       uploads: page.uploads,
       nextCursor: page.nextCursor,
+      quota: page.quota,
       failed: {
         for (final id in [
-          ...ref.read(_retryBytesProvider).keys,
           ...ref.read(_retryPathsProvider).keys,
+          ...ref.read(_retryReadersProvider).keys,
         ])
           if (page.uploads.any((u) => u.id == id)) id,
       },
@@ -81,6 +95,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
         UploadsState(
           uploads: [...current.uploads, ...page.uploads],
           nextCursor: page.nextCursor,
+          quota: page.quota ?? current.quota,
           failed: current.failed,
         ),
       );
@@ -90,47 +105,102 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     }
   }
 
-  /// Opens a session for one picked file and streams its bytes up in
-  /// [chunkBytes] chunks, then seals it. A transfer failure marks the
-  /// row failed and keeps the bytes for [retry]; the create failure
-  /// itself propagates to the caller since no row exists yet.
-  Future<void> upload({
-    required String fileName,
-    required Uint8List bytes,
+  /// Uploads one picked file, dispatching on how its bytes are
+  /// reachable: path-backed sources stream from disk, reader-backed
+  /// ones window through their lazy accessor. [batchId] and
+  /// [batchPath] join the session to a batch.
+  Future<void> uploadPicked(
+    PickedAudioFile file, {
     required String mediaType,
+    String? batchId,
   }) async {
-    final session = await ref
-        .read(repositoryProvider)
-        .createUpload(
-          fileName: fileName,
-          sizeBytes: bytes.length,
-          mediaType: mediaType,
-        );
-    _upsert(session);
-    ref.read(_retryBytesProvider)[session.id] = bytes;
-    await _transfer(session.id, bytes, from: 0);
+    final path = file.path;
+    if (path != null) {
+      await uploadFromPath(
+        fileName: file.name,
+        path: path,
+        mediaType: mediaType,
+        batchId: batchId,
+        batchPath: file.relativeDir,
+        sizeBytes: file.size,
+      );
+      return;
+    }
+    final openRead = file.openRead;
+    if (openRead == null) {
+      throw StateError('picked file carries neither a path nor a reader');
+    }
+    await uploadFromReader(
+      fileName: file.name,
+      size: file.size,
+      openRead: openRead,
+      mediaType: mediaType,
+      batchId: batchId,
+      batchPath: file.relativeDir,
+    );
   }
 
   /// Opens a session for one local file and streams it up in
   /// [chunkBytes] windows read straight from disk, so the file never
-  /// sits whole in memory. Failure handling matches [upload], with the
-  /// path retained for [retry] instead of bytes.
+  /// sits whole in memory. A transfer failure marks the row failed
+  /// and keeps the path for [retry]; the create failure itself
+  /// propagates to the caller since no row exists yet. [sizeBytes]
+  /// skips a redundant stat when the pick already measured the file.
   Future<void> uploadFromPath({
     required String fileName,
     required String path,
     required String mediaType,
+    String? batchId,
+    String? batchPath,
+    int? sizeBytes,
   }) async {
-    final size = await localFileLength(path);
+    final size = sizeBytes ?? await localFileLength(path);
     final session = await ref
         .read(repositoryProvider)
         .createUpload(
           fileName: fileName,
           sizeBytes: size,
           mediaType: mediaType,
+          batchId: batchId,
+          batchPath: _cleanBatchPath(batchId, batchPath),
         );
     _upsert(session);
     ref.read(_retryPathsProvider)[session.id] = path;
     await _transferFromPath(session.id, path, size, from: 0);
+  }
+
+  /// Opens a session for a reader-backed source (web picks and drops)
+  /// and streams it up in [chunkBytes] windows pulled lazily from the
+  /// accessor — only the window in flight materializes. Failure
+  /// handling matches [uploadFromPath], with the accessor retained
+  /// for [retry].
+  Future<void> uploadFromReader({
+    required String fileName,
+    required int size,
+    required Stream<List<int>> Function([int? start, int? end]) openRead,
+    required String mediaType,
+    String? batchId,
+    String? batchPath,
+  }) async {
+    final session = await ref
+        .read(repositoryProvider)
+        .createUpload(
+          fileName: fileName,
+          sizeBytes: size,
+          mediaType: mediaType,
+          batchId: batchId,
+          batchPath: _cleanBatchPath(batchId, batchPath),
+        );
+    _upsert(session);
+    ref.read(_retryReadersProvider)[session.id] = openRead;
+    await _transferFromReader(session.id, openRead, size, from: 0);
+  }
+
+  /// batchPath only travels with a batch, and an empty hint rides as
+  /// absent.
+  static String? _cleanBatchPath(String? batchId, String? batchPath) {
+    if (batchId == null || batchPath == null || batchPath.isEmpty) return null;
+    return batchPath;
   }
 
   /// Resumes a failed transfer from what the server already received.
@@ -147,17 +217,22 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       );
       return;
     }
-    final bytes = ref.read(_retryBytesProvider)[uploadId];
-    if (bytes == null) return;
+    final openRead = ref.read(_retryReadersProvider)[uploadId];
+    if (openRead == null) return;
     final session = await ref.read(repositoryProvider).getUpload(uploadId);
-    await _transfer(uploadId, bytes, from: session.receivedBytes);
+    await _transferFromReader(
+      uploadId,
+      openRead,
+      session.sizeBytes,
+      from: session.receivedBytes,
+    );
   }
 
   /// Discards a session and its staged bytes.
   Future<void> discard(String uploadId) async {
     await ref.read(repositoryProvider).deleteUpload(uploadId);
-    ref.read(_retryBytesProvider).remove(uploadId);
     ref.read(_retryPathsProvider).remove(uploadId);
+    ref.read(_retryReadersProvider).remove(uploadId);
     if (!ref.mounted) return;
     ref.invalidateSelf();
   }
@@ -168,14 +243,47 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     int size, {
     required int from,
   }) async {
+    await _transferWindows(
+      uploadId,
+      size,
+      from: from,
+      read: (offset, want) => readLocalFileRange(path, offset, want),
+      onSealed: () => ref.read(_retryPathsProvider).remove(uploadId),
+    );
+  }
+
+  Future<void> _transferFromReader(
+    String uploadId,
+    Stream<List<int>> Function([int? start, int? end]) openRead,
+    int size, {
+    required int from,
+  }) async {
+    await _transferWindows(
+      uploadId,
+      size,
+      from: from,
+      read: (offset, want) => _collectRange(openRead, offset, offset + want),
+      onSealed: () => ref.read(_retryReadersProvider).remove(uploadId),
+    );
+  }
+
+  /// The shared transfer loop: reads [chunkBytes] windows from the
+  /// source, appends each at its offset, then seals the session.
+  Future<void> _transferWindows(
+    String uploadId,
+    int size, {
+    required int from,
+    required Future<Uint8List> Function(int offset, int want) read,
+    required void Function() onSealed,
+  }) async {
     final repository = ref.read(repositoryProvider);
     try {
       var offset = from;
       while (offset < size) {
         final want = (size - offset).clamp(0, chunkBytes);
-        final window = await readLocalFileRange(path, offset, want);
+        final window = await read(offset, want);
         if (window.isEmpty) {
-          throw StateError('the shared file shrank mid-upload: $path');
+          throw StateError('the picked file shrank mid-upload');
         }
         final session = await repository.putUploadData(
           uploadId,
@@ -186,7 +294,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
         _upsert(session);
       }
       final sealed = await repository.completeUpload(uploadId);
-      ref.read(_retryPathsProvider).remove(uploadId);
+      onSealed();
       _upsert(sealed);
       _markFailed(uploadId, failed: false);
     } on WaxDeckApiException {
@@ -195,33 +303,17 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     }
   }
 
-  Future<void> _transfer(
-    String uploadId,
-    Uint8List bytes, {
-    required int from,
-  }) async {
-    final repository = ref.read(repositoryProvider);
-    final retained = ref.read(_retryBytesProvider);
-    try {
-      var offset = from;
-      while (offset < bytes.length) {
-        final end = (offset + chunkBytes).clamp(0, bytes.length);
-        final session = await repository.putUploadData(
-          uploadId,
-          offset: offset,
-          bytes: Uint8List.sublistView(bytes, offset, end),
-        );
-        offset = end;
-        _upsert(session);
-      }
-      final sealed = await repository.completeUpload(uploadId);
-      retained.remove(uploadId);
-      _upsert(sealed);
-      _markFailed(uploadId, failed: false);
-    } on WaxDeckApiException {
-      _markFailed(uploadId, failed: true);
-      rethrow;
+  /// Collects one `[start, end)` window from a lazy read accessor.
+  static Future<Uint8List> _collectRange(
+    Stream<List<int>> Function([int? start, int? end]) openRead,
+    int start,
+    int end,
+  ) async {
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in openRead(start, end)) {
+      builder.add(chunk);
     }
+    return builder.takeBytes();
   }
 
   void _upsert(UploadSession session) {
@@ -238,6 +330,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
               ]
             : [session, ...current.uploads],
         nextCursor: current.nextCursor,
+        quota: current.quota,
         loadingMore: current.loadingMore,
         failed: current.failed,
       ),
@@ -254,6 +347,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       UploadsState(
         uploads: current.uploads,
         nextCursor: current.nextCursor,
+        quota: current.quota,
         loadingMore: current.loadingMore,
         failed: set,
       ),
@@ -264,6 +358,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       UploadsState(
         uploads: s.uploads,
         nextCursor: s.nextCursor,
+        quota: s.quota,
         loadingMore: loadingMore,
         failed: s.failed,
       );

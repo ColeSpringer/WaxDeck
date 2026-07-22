@@ -1,15 +1,57 @@
-import 'dart:typed_data';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// One picked audio file, fully read into memory. Upload sessions chunk
-/// straight from these bytes, so the port never hands platform file
-/// handles to widget code.
-class PickedAudioFile {
-  const PickedAudioFile({required this.name, required this.bytes});
+import 'file_picker_impl.dart' as impl;
 
+/// Audio extensions the pickers offer and the drop areas accept
+/// (lowercase, no dot): a hardcoded mirror of the server's default
+/// accepted-format set (uploadFormatSet in
+/// server/internal/service/uploads.go — keep in step). Native dialogs
+/// keep an "All files" group so a custom WAXDECK_UPLOAD_FORMATS set
+/// stays reachable; the server's session create is the real gate.
+const kAcceptedAudioExtensions = {
+  'flac', 'mp3', 'm4a', 'm4b', 'aac', 'ogg', 'oga', 'opus', //
+  'wav', 'aif', 'aiff', 'mka', 'webm',
+};
+
+/// Whether the file name's extension is in the accepted set
+/// (case-insensitive; extensionless names never match).
+bool hasAcceptedExtension(String name, Set<String> extensions) {
+  final dot = name.lastIndexOf('.');
+  if (dot < 0 || dot == name.length - 1) return false;
+  return extensions.contains(name.substring(dot + 1).toLowerCase());
+}
+
+/// One picked or dropped file as a lazy reference: the transfer pulls
+/// bytes in windows when it needs them, so a multi-hundred-megabyte
+/// album never sits whole in memory. Native picks carry [path] and
+/// stream from disk; web picks carry [openRead] over the browser's
+/// file handle.
+class PickedAudioFile {
+  const PickedAudioFile({
+    required this.name,
+    required this.size,
+    this.relativeDir = '',
+    this.path,
+    this.openRead,
+  });
+
+  /// Bare file name.
   final String name;
-  final Uint8List bytes;
+
+  /// Size in bytes, known up front for the session declaration.
+  final int size;
+
+  /// Directory relative to the picked or dropped folder, forward-slash
+  /// separated; empty for a file at the top. Carried to the server as
+  /// the batch's clustering hint (`batchPath`).
+  final String relativeDir;
+
+  /// Local filesystem path, set for native picks and drops.
+  final String? path;
+
+  /// Windowed byte-stream accessor reading `[start, end)` lazily; set
+  /// for web picks and drops (and usable everywhere it is set).
+  final Stream<List<int>> Function([int? start, int? end])? openRead;
 }
 
 /// Platform file picking behind a WaxDeck-owned interface, so screens
@@ -18,10 +60,29 @@ abstract interface class FilePickerPort {
   /// Opens the platform picker and resolves to the chosen audio files;
   /// empty when the user cancels.
   Future<List<PickedAudioFile>> pickAudioFiles();
+
+  /// Whether [pickAudioFolder] works here (desktop only: Android
+  /// folder access means SAF tree URIs, which this port does not
+  /// speak, and web has no folder dialog).
+  bool get canPickFolders;
+
+  /// Picks a folder and returns its audio files recursively, with
+  /// [PickedAudioFile.relativeDir] carrying the in-folder hierarchy
+  /// rooted at the folder's own name; empty when the user cancels.
+  Future<List<PickedAudioFile>> pickAudioFolder();
+
+  /// Picks one arbitrary file filtered to [extensions] (the backup
+  /// archive case); null when the user cancels.
+  Future<PickedAudioFile?> pickFile({
+    required Set<String> extensions,
+    required String label,
+  });
 }
 
-/// Unavailable by default, like the download manager on web: the real
-/// pickers (native file dialogs, web drag-and-drop) land with a later
-/// platform wiring pass. The uploads screen hides its pick affordance
-/// while this is null.
-final filePickerProvider = Provider<FilePickerPort?>((ref) => null);
+/// The platform port. Null on platforms with no picker wiring — and in
+/// widget tests overriding it so — which hides every pick affordance;
+/// that hide-when-null contract predates the real implementations and
+/// stands.
+final filePickerProvider = Provider<FilePickerPort?>(
+  (ref) => impl.createFilePickerPort(),
+);

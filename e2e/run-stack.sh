@@ -9,9 +9,12 @@ E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="$E2E_DIR/.run"
 
 rm -rf "$RUN_DIR"
-mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,feed}
+mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,feed,upload-src}
 
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR/library" -preset all >/dev/null)
+# Source files for the manual-upload journey: outside the scanned
+# library, so they only ever enter it through the upload pipeline.
+(cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR/upload-src" -preset upload >/dev/null)
 (cd "$E2E_DIR/../server" && go build -o "$RUN_DIR/waxflow-catalog" ./cmd/waxflow-catalog)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR/testidp" ./cmd/testidp)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR/feedserv" ./cmd/feedserv)

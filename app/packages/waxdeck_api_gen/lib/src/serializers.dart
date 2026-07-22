@@ -280,8 +280,12 @@ import 'package:waxdeck_api_gen/src/model/upgrade_member.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_resolve_request.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_resolve_result.dart';
 import 'package:waxdeck_api_gen/src/model/upload.dart';
+import 'package:waxdeck_api_gen/src/model/upload_batch.dart';
+import 'package:waxdeck_api_gen/src/model/upload_batch_create.dart';
 import 'package:waxdeck_api_gen/src/model/upload_create.dart';
+import 'package:waxdeck_api_gen/src/model/upload_grouping.dart';
 import 'package:waxdeck_api_gen/src/model/upload_page.dart';
+import 'package:waxdeck_api_gen/src/model/upload_quota.dart';
 import 'package:waxdeck_api_gen/src/model/user.dart';
 import 'package:waxdeck_api_gen/src/model/user_account.dart';
 import 'package:waxdeck_api_gen/src/model/user_create.dart';
@@ -573,8 +577,12 @@ part 'serializers.g.dart';
   UpgradeResolveRequest,
   UpgradeResolveResult,
   Upload,
+  UploadBatch,
+  UploadBatchCreate,
   UploadCreate,
+  UploadGrouping,
   UploadPage,
+  UploadQuota,
   User,$User,
   UserAccount,
   UserCreate,

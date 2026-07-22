@@ -20,11 +20,11 @@ part 'user_account.g.dart';
 /// * [username] - Login name.
 /// * [displayName] - Optional display name; falls back to `username`.
 /// * [roles] - Assigned roles (`admin`, `user`).
+/// * [uploadEnabled] - Whether the account may upload audio. On self views (login, session) this is the *effective* value — administrators always may, whatever their stored flag says — and clients gate their upload affordances on it. On administrative account views (`UserAccount`) it is the stored per-account flag the account editor round-trips; an administrator's own stored flag may therefore read false while their effective right is true. Defined once here because the generators flatten `UserAccount`'s `allOf` over this schema; a duplicate declaration there would silently lose. 
 /// * [disabled] - Disabled accounts cannot log in and their live sessions are revoked on disable. 
 /// * [pending] - True for a self-serve registration still awaiting an administrator's decision. Pending accounts cannot log in; approve or reject them through the signup request endpoints. 
 /// * [libraryAccess] 
 /// * [permissions] 
-/// * [uploadEnabled] - Whether the account may upload audio. Administrators can always upload. 
 /// * [uploadQuotaBytes] - Total bytes of uploads the account may hold at once; absent means no per-user cap. 
 /// * [createdAt] - When the account was created.
 /// * [hasPassword] - Whether local password login is enabled for the account (false for accounts provisioned by OIDC that never set one). 
@@ -48,10 +48,6 @@ abstract class UserAccount implements User, Built<UserAccount, UserAccountBuilde
 
   @BuiltValueField(wireName: r'libraryAccess')
   LibraryAccess get libraryAccess;
-
-  /// Whether the account may upload audio. Administrators can always upload. 
-  @BuiltValueField(wireName: r'uploadEnabled')
-  bool get uploadEnabled;
 
   /// Disabled accounts cannot log in and their live sessions are revoked on disable. 
   @BuiltValueField(wireName: r'disabled')

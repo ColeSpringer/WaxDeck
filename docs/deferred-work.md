@@ -234,15 +234,13 @@ here waits on upstream.
   resolution path does not expose dimensions cheaply; the rule needs
   either a size probe during the sweep or an upstream dimensions
   report on resolved art.
-- `[in-repo]` **The file picker (and drag-and-drop) is a null stub.** The
-  library's add button and the uploads screen expose "Add from URL"
-  today; the "Upload a file" option only appears once a
-  `FilePickerPort` is wired (`filePickerProvider` defaults to null).
-  That pass adds the native file dialog per platform and web
-  drag-and-drop (a drop target over the library and uploads as
-  surfaces), both behind the existing port so the flow above needs no
-  change. URL acquisition and the API upload endpoints work without
-  it.
+- `[in-repo]` **Android folder picking is excluded from the upload
+  surface.** File picking works on every platform (the endorsed
+  `file_selector_android` implementation covers in-app file picks),
+  but Android folder access means SAF tree URIs, which the
+  `FilePickerPort` deliberately does not speak; the "Upload a folder"
+  tile hides there (`canPickFolders`). Multi-select plus auto
+  grouping covers the album case on Android meanwhile.
 - `[in-repo]` **Upload dedupe's up-front hash check only sees prior
   uploads.** The pre-transfer warning (client sends the SHA-256 before
   bytes move) answers from upload history, not the whole catalog; the
@@ -333,10 +331,6 @@ here waits on upstream.
   count as sessions; they ride the streaming engine's own liveSlots
   admission control (the documented backstop). A per-timeline
   session notion would close the gap.
-- `[in-repo]` **Backup archive upload has no UI.** The server accepts
-  POST /admin/backups/import (the new-host restore path); the web UI
-  exposes download, stage, and cancel but not the upload itself,
-  which needs the file-picker port that is itself still a stub.
 - `[in-repo]` **No radio-scrobbling off switch.** Radio plays scrobble
   by default for users with scrobble connections, behind the
   transition-and-parse guards; a per-user preference (and possibly a

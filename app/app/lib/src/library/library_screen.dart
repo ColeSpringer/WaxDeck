@@ -22,14 +22,17 @@ import '../stats/stats_screen.dart';
 import '../sync/sync_providers.dart';
 import '../tools/tasks_screen.dart';
 import '../uploads/add_to_library.dart';
+import '../uploads/audio_drop_area.dart';
 import '../uploads/uploads_screen.dart';
 import 'library_controller.dart';
 
 /// Curation surfaces reachable from the app bar menu. Administrators
-/// see all of them; everyone else only their own uploads.
+/// see all of them; everyone else only their own uploads — and only
+/// while they hold upload rights, without which the uploads screen is
+/// an empty list they can do nothing on.
 enum _CurationDestination {
   review('curation-review', 'Review queue', adminOnly: true),
-  uploads('curation-uploads', 'Uploads', adminOnly: false),
+  uploads('curation-uploads', 'Uploads', adminOnly: false, needsUpload: true),
   health('curation-health', 'Health', adminOnly: true),
   organize('curation-organize', 'Organize', adminOnly: true),
   tasks('curation-tasks', 'Tasks', adminOnly: true),
@@ -39,11 +42,20 @@ enum _CurationDestination {
   trash('curation-trash', 'Trash', adminOnly: true),
   migrate('curation-migrate', 'Import from another server', adminOnly: true);
 
-  const _CurationDestination(this.id, this.label, {required this.adminOnly});
+  const _CurationDestination(
+    this.id,
+    this.label, {
+    required this.adminOnly,
+    this.needsUpload = false,
+  });
 
   final String id;
   final String label;
   final bool adminOnly;
+
+  /// Hidden without effective upload rights (admins always hold
+  /// them).
+  final bool needsUpload;
 
   Widget screen() => switch (this) {
     review => const ReviewScreen(),
@@ -83,13 +95,17 @@ class LibraryScreen extends ConsumerWidget {
     final library = ref.watch(libraryControllerProvider);
     final filter = ref.watch(libraryFilterProvider);
     final resume = ref.watch(continueListeningProvider).value;
+    final canUpload =
+        ref.watch(authControllerProvider).value?.user?.uploadEnabled ?? false;
 
     return Scaffold(
       // Adding audio is a primary action, so it gets a button here
       // rather than living inside the curation menu. Podcasts are added
       // by subscribing to a feed (their own screen), so the button is
-      // hidden on that filter.
-      floatingActionButton: filter == LibraryFilter.podcasts
+      // hidden on that filter — and everywhere for accounts without
+      // upload rights, which every path behind it needs (URL
+      // acquisition included).
+      floatingActionButton: filter == LibraryFilter.podcasts || !canUpload
           ? null
           : Semantics(
               identifier: 'add-to-library',
@@ -120,17 +136,13 @@ class LibraryScreen extends ConsumerWidget {
                 MaterialPageRoute<void>(builder: (_) => destination.screen()),
               ),
               itemBuilder: (context) {
-                final isAdmin =
-                    ref
-                        .read(authControllerProvider)
-                        .value
-                        ?.user
-                        ?.roles
-                        .contains('admin') ??
-                    false;
+                final user = ref.read(authControllerProvider).value?.user;
+                final isAdmin = user?.roles.contains('admin') ?? false;
+                final uploads = user?.uploadEnabled ?? false;
                 return [
                   for (final destination in _CurationDestination.values)
-                    if (isAdmin || !destination.adminOnly)
+                    if ((isAdmin || !destination.adminOnly) &&
+                        (uploads || !destination.needsUpload))
                       PopupMenuItem(
                         value: destination,
                         child: Semantics(
@@ -204,59 +216,64 @@ class LibraryScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (ref.watch(offlineProvider))
-            Semantics(
-              identifier: 'offline-banner',
-              child: Container(
+      body: AudioDropArea(
+        enabled: canUpload,
+        onDropped: (files) =>
+            uploadPickedFiles(context, ref, files, initial: filter.mediaType),
+        child: Column(
+          children: [
+            if (ref.watch(offlineProvider))
+              Semantics(
+                identifier: 'offline-banner',
+                child: Container(
+                  width: double.infinity,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.cloud_off, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Offline: showing the local library',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: SizedBox(
                 width: double.infinity,
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.cloud_off, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Offline: showing the local library',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
+                child: SegmentedButton<LibraryFilter>(
+                  segments: [
+                    for (final f in LibraryFilter.values)
+                      ButtonSegment(value: f, label: Text(f.label)),
                   ],
+                  selected: {filter},
+                  onSelectionChanged: (selection) => ref
+                      .read(libraryFilterProvider.notifier)
+                      .select(selection.first),
                 ),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<LibraryFilter>(
-                segments: [
-                  for (final f in LibraryFilter.values)
-                    ButtonSegment(value: f, label: Text(f.label)),
-                ],
-                selected: {filter},
-                onSelectionChanged: (selection) => ref
-                    .read(libraryFilterProvider.notifier)
-                    .select(selection.first),
+            if (resume != null)
+              _ResumeBanner(
+                item: resume,
+                onTap: () => _openPlayer(context, resume),
               ),
+            Expanded(
+              child: switch (library) {
+                AsyncData(:final value) => _grid(context, ref, value),
+                AsyncError(:final error) => _errorView(context, ref, error),
+                _ => const Center(child: CircularProgressIndicator()),
+              },
             ),
-          ),
-          if (resume != null)
-            _ResumeBanner(
-              item: resume,
-              onTap: () => _openPlayer(context, resume),
-            ),
-          Expanded(
-            child: switch (library) {
-              AsyncData(:final value) => _grid(context, ref, value),
-              AsyncError(:final error) => _errorView(context, ref, error),
-              _ => const Center(child: CircularProgressIndicator()),
-            },
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

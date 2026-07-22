@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../auth/auth_controller.dart';
 import '../providers.dart';
 import 'library_controller.dart';
+import '../format_bytes.dart';
 
 /// The "Delete files..." overflow on an item screen. Rendered for
 /// administrators; the server enforces the permission either way. The
@@ -17,16 +18,6 @@ class ItemDeleteAction extends ConsumerWidget {
   /// Called after a successful deletion, when the surrounding screen
   /// should leave (its item is gone).
   final VoidCallback? onDeleted;
-
-  static String formatBytes(int bytes) {
-    if (bytes >= 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-    }
-    if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / 1024).toStringAsFixed(0)} KB';
-  }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -114,7 +105,7 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
         children: [
           Text(
             'This removes ${plan.totalFiles} files, '
-            '${ItemDeleteAction.formatBytes(plan.totalBytes)}.',
+            '${formatBytes(plan.totalBytes)}.',
             key: const Key('item-delete-preview'),
           ),
           const SizedBox(height: 8),

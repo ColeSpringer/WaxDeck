@@ -62,12 +62,20 @@ type UploadDTO struct {
 	ReceivedBytes int64
 	MediaType     string
 	LibraryPID    string
+	BatchID       string
 	State         string
 	ReviewEntryID string
 	Duplicate     *DuplicateDTO
 	UploadedBy    string
 	CreatedAt     time.Time
 	ExpiresAt     time.Time
+}
+
+// UploadQuotaDTO is the caller's allowance snapshot: declared bytes of
+// live sessions against the account cap (0 meaning no cap).
+type UploadQuotaDTO struct {
+	BytesInUse int64
+	QuotaBytes int64
 }
 
 // DuplicateDTO is the dedupe warning payload.
@@ -85,6 +93,8 @@ type UploadCreateParams struct {
 	MediaType  string
 	LibraryPID string
 	SHA256     string
+	BatchID    string
+	BatchPath  string
 }
 
 func uploadDTO(u wdb.Upload) UploadDTO {
@@ -95,6 +105,7 @@ func uploadDTO(u wdb.Upload) UploadDTO {
 		ReceivedBytes: u.ReceivedBytes,
 		MediaType:     u.MediaType,
 		LibraryPID:    u.LibraryPID,
+		BatchID:       u.BatchID,
 		State:         u.State,
 		ReviewEntryID: u.ReviewEntryID,
 		UploadedBy:    u.UserID,
@@ -115,6 +126,27 @@ func (l *Library) requireUploader(uc *UserCtx) error {
 		return &Error{Kind: KindForbidden, Msg: "your account has no upload rights"}
 	}
 	return nil
+}
+
+// validateUploadTargetLibrary checks a caller-named target library
+// for the upload surfaces (sessions and batches): it must exist, be
+// visible to the caller, and be writable. Empty means the server
+// routes by media type and passes here.
+func (l *Library) validateUploadTargetLibrary(ctx context.Context, uc *UserCtx, apiPID string) error {
+	if apiPID == "" {
+		return nil
+	}
+	prefix, pid, ok := parseAPIPID(apiPID)
+	if !ok || prefix != PrefixLibrary {
+		return errNotFound("no such library")
+	}
+	if _, err := l.libraryByPID(ctx, pid); err != nil {
+		return err
+	}
+	if !uc.AllLibraries && !uc.Libraries[string(pid)] {
+		return errNotFound("no such library")
+	}
+	return l.CheckWritable(ctx, string(pid))
 }
 
 // CreateUpload opens a resumable session, charging the declared size
@@ -140,20 +172,11 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 	if _, ok := kindForMediaType(p.MediaType); !ok {
 		return UploadDTO{}, errInvalid("unknown media type")
 	}
-	if p.LibraryPID != "" {
-		prefix, pid, ok := parseAPIPID(p.LibraryPID)
-		if !ok || prefix != PrefixLibrary {
-			return UploadDTO{}, errNotFound("no such library")
-		}
-		if _, err := l.libraryByPID(ctx, pid); err != nil {
-			return UploadDTO{}, err
-		}
-		if !uc.AllLibraries && !uc.Libraries[string(pid)] {
-			return UploadDTO{}, errNotFound("no such library")
-		}
-		if err := l.CheckWritable(ctx, string(pid)); err != nil {
-			return UploadDTO{}, err
-		}
+	if err := l.validateUploadTargetLibrary(ctx, uc, p.LibraryPID); err != nil {
+		return UploadDTO{}, err
+	}
+	if err := l.batchForMember(ctx, uc, &p); err != nil {
+		return UploadDTO{}, err
 	}
 	if uc.UploadQuotaBytes > 0 {
 		used, err := l.db.UploadBytesInUse(ctx, uc.ID)
@@ -174,6 +197,8 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 		SizeBytes:   p.SizeBytes,
 		MediaType:   p.MediaType,
 		LibraryPID:  p.LibraryPID,
+		BatchID:     p.BatchID,
+		BatchPath:   p.BatchPath,
 		SHA256:      strings.ToLower(p.SHA256),
 		State:       uploadReceiving,
 		CreatedAtNS: time.Now().UnixNano(),
@@ -256,20 +281,27 @@ func (l *Library) GetUpload(ctx context.Context, uc *UserCtx, id string) (Upload
 }
 
 // ListUploadsPage pages the caller's sessions (everyone's for
-// administrators).
-func (l *Library) ListUploadsPage(ctx context.Context, uc *UserCtx, cursor string, limit int) ([]UploadDTO, string, error) {
+// administrators). The quota snapshot is always the caller's own; it
+// rides the page because usage is volatile and the uploads screen
+// refetches this listing anyway.
+func (l *Library) ListUploadsPage(ctx context.Context, uc *UserCtx, cursor string, limit int) ([]UploadDTO, string, UploadQuotaDTO, error) {
 	owner := uc.ID
 	if uc.Admin {
 		owner = ""
 	}
 	beforeNS, beforeID, err := decodeTimeCursor(cursor)
 	if err != nil {
-		return nil, "", errInvalid("bad cursor")
+		return nil, "", UploadQuotaDTO{}, errInvalid("bad cursor")
 	}
 	rows, err := l.db.ListUploads(ctx, owner, beforeNS, beforeID, limit)
 	if err != nil {
-		return nil, "", &Error{Kind: KindInternal, Err: err}
+		return nil, "", UploadQuotaDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
+	used, err := l.db.UploadBytesInUse(ctx, uc.ID)
+	if err != nil {
+		return nil, "", UploadQuotaDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
+	quota := UploadQuotaDTO{BytesInUse: used, QuotaBytes: uc.UploadQuotaBytes}
 	out := make([]UploadDTO, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, l.hydrateUploadDuplicate(ctx, r))
@@ -279,7 +311,7 @@ func (l *Library) ListUploadsPage(ctx context.Context, uc *UserCtx, cursor strin
 		last := rows[len(rows)-1]
 		next = encodeTimeCursor(last.CreatedAtNS, last.ID)
 	}
-	return out, next, nil
+	return out, next, quota, nil
 }
 
 // AppendUploadData writes one chunk at offset, which must equal the
@@ -431,6 +463,23 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 		DurationMS:  int64(fpDur) * 1000,
 		Tags:        tags,
 		Fingerprint: fp,
+	}
+	if u.BatchID != "" {
+		// A batch member defers entry opening to the batch finalize,
+		// persisting the built document instead. The conditional write
+		// races finalize correctly under either ordering: it lands only
+		// while the batch is open (finalize's gather then covers the
+		// member), and a batch closed mid-work affects zero rows, so
+		// the member falls through to the per-file path below —
+		// exactly one review entry either way.
+		staged, err := l.db.StageBatchMember(ctx, u, marshalJSON(track))
+		if err != nil {
+			return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
+		}
+		if staged {
+			l.emitUserEvent(ctx, uc.ID, eventUpload, u.ID)
+			return l.hydrateUploadDuplicate(ctx, u), nil
+		}
 	}
 	entry := wdb.ReviewEntry{
 		Kind:       reviewKindImport,
@@ -603,12 +652,20 @@ func (l *Library) discardPendingEntry(ctx context.Context, reviewEntryID, decide
 }
 
 // DrainExpiredUploads reclaims one batch of expired sessions; true
-// means it did work.
+// means a session was fully reclaimed. A round where every row failed
+// reports false so the caller's drain loop waits for the next tick
+// instead of hot-looping over the same failures (a failed row stays
+// expired and is re-listed).
 func (l *Library) DrainExpiredUploads(ctx context.Context) bool {
 	rows, err := l.db.ExpiredUploads(ctx, time.Now().UnixNano(), 20)
-	if err != nil || len(rows) == 0 {
+	if err != nil {
+		l.log.Warn("listing expired uploads", "err", err)
 		return false
 	}
+	if len(rows) == 0 {
+		return false
+	}
+	progress := false
 	for _, u := range rows {
 		if err := os.RemoveAll(filepath.Join(l.stagingDir, u.ID)); err != nil {
 			l.log.Warn("reclaiming expired upload", "upload", u.ID, "err", err)
@@ -617,13 +674,15 @@ func (l *Library) DrainExpiredUploads(ctx context.Context) bool {
 		u.State = uploadDiscarded
 		if err := l.db.UpdateUpload(ctx, u); err != nil {
 			l.log.Warn("marking upload expired", "upload", u.ID, "err", err)
+			continue
 		}
+		progress = true
 		// A completed-but-undecided upload has a pending entry pointing at the
 		// file just removed; close it so it cannot later import a missing path.
 		l.discardPendingEntry(ctx, u.ReviewEntryID, "")
 		l.emitUserEvent(ctx, u.UserID, eventUpload, u.ID)
 	}
-	return true
+	return progress
 }
 
 // flatTags flattens a parsed document's typed tag projection into the

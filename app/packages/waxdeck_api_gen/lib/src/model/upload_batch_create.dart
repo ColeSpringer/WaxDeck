@@ -1,0 +1,145 @@
+//
+// AUTO-GENERATED FILE, DO NOT MODIFY!
+//
+
+// ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/media_type.dart';
+import 'package:waxdeck_api_gen/src/model/upload_grouping.dart';
+import 'package:built_value/built_value.dart';
+import 'package:built_value/serializer.dart';
+
+part 'upload_batch_create.g.dart';
+
+/// A new upload batch.
+///
+/// Properties:
+/// * [grouping] 
+/// * [mediaType] 
+/// * [libraryPid] - Target library for every member; required when several libraries of the media type are visible to the caller. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). 
+@BuiltValue()
+abstract class UploadBatchCreate implements Built<UploadBatchCreate, UploadBatchCreateBuilder> {
+  @BuiltValueField(wireName: r'grouping')
+  UploadGrouping get grouping;
+  // enum groupingEnum {  auto,  album,  tracks,  };
+
+  @BuiltValueField(wireName: r'mediaType')
+  MediaType get mediaType;
+  // enum mediaTypeEnum {  music,  podcast,  audiobook,  };
+
+  /// Target library for every member; required when several libraries of the media type are visible to the caller. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). 
+  @BuiltValueField(wireName: r'libraryPid')
+  String? get libraryPid;
+
+  UploadBatchCreate._();
+
+  factory UploadBatchCreate([void updates(UploadBatchCreateBuilder b)]) = _$UploadBatchCreate;
+
+  @BuiltValueHook(initializeBuilder: true)
+  static void _defaults(UploadBatchCreateBuilder b) => b;
+
+  @BuiltValueSerializer(custom: true)
+  static Serializer<UploadBatchCreate> get serializer => _$UploadBatchCreateSerializer();
+}
+
+class _$UploadBatchCreateSerializer implements PrimitiveSerializer<UploadBatchCreate> {
+  @override
+  final Iterable<Type> types = const [UploadBatchCreate, _$UploadBatchCreate];
+
+  @override
+  final String wireName = r'UploadBatchCreate';
+
+  Iterable<Object?> _serializeProperties(
+    Serializers serializers,
+    UploadBatchCreate object, {
+    FullType specifiedType = FullType.unspecified,
+  }) sync* {
+    yield r'grouping';
+    yield serializers.serialize(
+      object.grouping,
+      specifiedType: const FullType(UploadGrouping),
+    );
+    yield r'mediaType';
+    yield serializers.serialize(
+      object.mediaType,
+      specifiedType: const FullType(MediaType),
+    );
+    if (object.libraryPid != null) {
+      yield r'libraryPid';
+      yield serializers.serialize(
+        object.libraryPid,
+        specifiedType: const FullType(String),
+      );
+    }
+  }
+
+  @override
+  Object serialize(
+    Serializers serializers,
+    UploadBatchCreate object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
+    return _serializeProperties(serializers, object, specifiedType: specifiedType).toList();
+  }
+
+  void _deserializeProperties(
+    Serializers serializers,
+    Object serialized, {
+    FullType specifiedType = FullType.unspecified,
+    required List<Object?> serializedList,
+    required UploadBatchCreateBuilder result,
+    required List<Object?> unhandled,
+  }) {
+    for (var i = 0; i < serializedList.length; i += 2) {
+      final key = serializedList[i] as String;
+      final value = serializedList[i + 1];
+      switch (key) {
+        case r'grouping':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(UploadGrouping),
+          ) as UploadGrouping;
+          result.grouping = valueDes;
+          break;
+        case r'mediaType':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(MediaType),
+          ) as MediaType;
+          result.mediaType = valueDes;
+          break;
+        case r'libraryPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.libraryPid = valueDes;
+          break;
+        default:
+          unhandled.add(key);
+          unhandled.add(value);
+          break;
+      }
+    }
+  }
+
+  @override
+  UploadBatchCreate deserialize(
+    Serializers serializers,
+    Object serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
+    final result = UploadBatchCreateBuilder();
+    final serializedList = (serialized as Iterable<Object?>).toList();
+    final unhandled = <Object?>[];
+    _deserializeProperties(
+      serializers,
+      serialized,
+      specifiedType: specifiedType,
+      serializedList: serializedList,
+      unhandled: unhandled,
+      result: result,
+    );
+    return result.build();
+  }
+}
+

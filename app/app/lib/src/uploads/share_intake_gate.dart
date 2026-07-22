@@ -59,6 +59,27 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     List<SharedFile> files,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    // A multi-file share groups through a batch with auto-detection —
+    // no dialog: the share sheet is a fire-and-forget gesture, and
+    // auto clustering does the right thing for an album share while
+    // leaving unrelated files separate.
+    String? batchId;
+    if (files.length > 1) {
+      try {
+        final batch = await ref
+            .read(repositoryProvider)
+            .createUploadBatch(
+              grouping: UploadGrouping.auto,
+              mediaType: MediaType.music.wireName,
+            );
+        batchId = batch.id;
+      } on WaxDeckApiException catch (e) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(e.message)));
+        return;
+      }
+    }
     for (final file in files) {
       try {
         // Path-backed: the platform side already staged the share to
@@ -70,12 +91,23 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
               fileName: file.name,
               path: file.path,
               mediaType: MediaType.music.wireName,
+              batchId: batchId,
             );
       } on WaxDeckApiException catch (e) {
         messenger
           ..hideCurrentSnackBar()
           ..showSnackBar(SnackBar(content: Text('${file.name}: ${e.message}')));
       }
+    }
+    if (batchId != null) {
+      try {
+        await ref.read(repositoryProvider).completeUploadBatch(batchId);
+      } on WaxDeckApiException catch (e) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(e.message)));
+      }
+      ref.invalidate(uploadsProvider);
     }
   }
 

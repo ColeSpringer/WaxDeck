@@ -21,6 +21,9 @@ func uploadJSON(u service.UploadDTO) Upload {
 	if u.LibraryPID != "" {
 		out.LibraryPid = ptr(u.LibraryPID)
 	}
+	if u.BatchID != "" {
+		out.BatchId = ptr(u.BatchID)
+	}
 	if u.ReviewEntryID != "" {
 		out.ReviewEntryId = ptr(u.ReviewEntryID)
 	}
@@ -51,7 +54,7 @@ func (s *Server) ListUploads(ctx context.Context, req ListUploadsRequestObject) 
 	if !ok {
 		return ListUploads400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit out of range"))}, nil
 	}
-	uploads, next, err := s.svc.ListUploadsPage(ctx, uc, deref(req.Params.Cursor), limit)
+	uploads, next, quota, err := s.svc.ListUploadsPage(ctx, uc, deref(req.Params.Cursor), limit)
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {
 			return ListUploads400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
@@ -65,6 +68,11 @@ func (s *Server) ListUploads(ctx context.Context, req ListUploadsRequestObject) 
 	if next != "" {
 		page.NextCursor = ptr(next)
 	}
+	q := UploadQuota{BytesInUse: quota.BytesInUse}
+	if quota.QuotaBytes > 0 {
+		q.QuotaBytes = ptr(quota.QuotaBytes)
+	}
+	page.Quota = &q
 	return ListUploads200JSONResponse(page), nil
 }
 
@@ -82,6 +90,8 @@ func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject
 		MediaType:  string(req.Body.MediaType),
 		LibraryPID: deref(req.Body.LibraryPid),
 		SHA256:     deref(req.Body.Sha256),
+		BatchID:    deref(req.Body.BatchId),
+		BatchPath:  deref(req.Body.BatchPath),
 	})
 	if err != nil {
 		switch service.KindOf(err) {
@@ -172,6 +182,67 @@ func (s *Server) CompleteUpload(ctx context.Context, req CompleteUploadRequestOb
 		return nil, err
 	}
 	return CompleteUpload200JSONResponse(uploadJSON(u)), nil
+}
+
+func uploadBatchJSON(b service.UploadBatchDTO) UploadBatch {
+	out := UploadBatch{
+		Id:        b.ID,
+		Grouping:  UploadGrouping(b.Grouping),
+		MediaType: MediaType(b.MediaType),
+		State:     b.State,
+		// Required in the schema: an entry-less batch answers [].
+		ReviewEntryIds: make([]string, 0, len(b.ReviewEntryIDs)),
+		CreatedAt:      b.CreatedAt,
+		ExpiresAt:      b.ExpiresAt,
+	}
+	out.ReviewEntryIds = append(out.ReviewEntryIds, b.ReviewEntryIDs...)
+	if b.LibraryPID != "" {
+		out.LibraryPid = ptr(b.LibraryPID)
+	}
+	return out
+}
+
+func (s *Server) CreateUploadBatch(ctx context.Context, req CreateUploadBatchRequestObject) (CreateUploadBatchResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return CreateUploadBatch400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a batch body is required"))}, nil
+	}
+	b, err := s.svc.CreateUploadBatch(ctx, uc, service.UploadBatchCreateParams{
+		Grouping:   string(req.Body.Grouping),
+		MediaType:  string(req.Body.MediaType),
+		LibraryPID: deref(req.Body.LibraryPid),
+	})
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid, service.KindNotFound:
+			return CreateUploadBatch400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return CreateUploadBatch403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return CreateUploadBatch201JSONResponse(uploadBatchJSON(b)), nil
+}
+
+func (s *Server) CompleteUploadBatch(ctx context.Context, req CompleteUploadBatchRequestObject) (CompleteUploadBatchResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	b, err := s.svc.CompleteUploadBatch(ctx, uc, string(req.BatchId))
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
+			return CompleteUploadBatch404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such upload batch"))}, nil
+		case service.KindConflict:
+			return CompleteUploadBatch409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return CompleteUploadBatch200JSONResponse(uploadBatchJSON(b)), nil
 }
 
 func (s *Server) CreateAcquisition(ctx context.Context, req CreateAcquisitionRequestObject) (CreateAcquisitionResponseObject, error) {

@@ -50,8 +50,20 @@ Future<void> showAddToLibrarySheet(
               child: ListTile(
                 key: const Key('add-upload-file'),
                 leading: const Icon(Icons.upload_file),
-                title: const Text('Upload a file'),
+                title: const Text('Upload files'),
                 onTap: () => Navigator.of(sheetContext).pop('file'),
+              ),
+            ),
+          if (picker != null && picker.canPickFolders)
+            Semantics(
+              identifier: 'add-upload-folder',
+              button: true,
+              child: ListTile(
+                key: const Key('add-upload-folder'),
+                leading: const Icon(Icons.drive_folder_upload),
+                title: const Text('Upload a folder'),
+                subtitle: const Text('An album or a collection'),
+                onTap: () => Navigator.of(sheetContext).pop('folder'),
               ),
             ),
         ],
@@ -65,6 +77,10 @@ Future<void> showAddToLibrarySheet(
     case 'file':
       if (picker != null) {
         await pickAndUpload(context, ref, picker, initial: defaultType);
+      }
+    case 'folder':
+      if (picker != null) {
+        await pickFolderAndUpload(context, ref, picker, initial: defaultType);
       }
   }
 }
@@ -123,31 +139,96 @@ Future<void> acquireFromUrl(
   }
 }
 
-/// Picks files and uploads them, one review entry per file.
+/// Picks files and hands them to the shared upload flow.
 Future<void> pickAndUpload(
   BuildContext context,
   WidgetRef ref,
   FilePickerPort picker, {
   MediaType? initial,
 }) async {
-  final messenger = ScaffoldMessenger.of(context);
   final files = await picker.pickAudioFiles();
   if (files.isEmpty || !context.mounted) return;
-  final mediaType = await showDialog<String>(
-    context: context,
-    builder: (_) => MediaTypeDialog(initial: initial ?? MediaType.music),
-  );
-  if (mediaType == null) return;
+  await uploadPickedFiles(context, ref, files, initial: initial);
+}
+
+/// Picks a folder and hands its audio files to the shared upload
+/// flow, their in-folder hierarchy riding along as the clustering
+/// hint.
+Future<void> pickFolderAndUpload(
+  BuildContext context,
+  WidgetRef ref,
+  FilePickerPort picker, {
+  MediaType? initial,
+}) async {
+  final files = await picker.pickAudioFolder();
+  if (files.isEmpty || !context.mounted) return;
+  await uploadPickedFiles(context, ref, files, initial: initial);
+}
+
+/// The one upload flow behind every entry point (picker, folder,
+/// drag-and-drop): asks the media type — and, for several files, the
+/// grouping intent — opens the batch, uploads every file, and
+/// finalizes. Per-file failures surface and the loop continues; the
+/// finalize runs regardless so the files that did arrive reach
+/// review.
+Future<void> uploadPickedFiles(
+  BuildContext context,
+  WidgetRef ref,
+  List<PickedAudioFile> files, {
+  MediaType? initial,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final choice =
+      await showDialog<({MediaType mediaType, UploadGrouping grouping})>(
+        context: context,
+        builder: (_) => MediaTypeDialog(
+          initial: initial ?? MediaType.music,
+          fileCount: files.length,
+        ),
+      );
+  if (choice == null) return;
+  final repository = ref.read(repositoryProvider);
+  String? batchId;
+  if (files.length > 1) {
+    try {
+      final batch = await repository.createUploadBatch(
+        grouping: choice.grouping,
+        mediaType: choice.mediaType.wireName,
+      );
+      batchId = batch.id;
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    }
+  }
   for (final file in files) {
     try {
       await ref
           .read(uploadsProvider.notifier)
-          .upload(fileName: file.name, bytes: file.bytes, mediaType: mediaType);
+          .uploadPicked(
+            file,
+            mediaType: choice.mediaType.wireName,
+            batchId: batchId,
+          );
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text('${file.name}: ${e.message}')));
     }
+  }
+  if (batchId != null) {
+    try {
+      await repository.completeUploadBatch(batchId);
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+    }
+    // Finalization filled the members' review entries; refresh the
+    // rows.
+    ref.invalidate(uploadsProvider);
   }
 }
 
@@ -248,11 +329,22 @@ class _AcquireDialogState extends State<AcquireDialog> {
   }
 }
 
-/// The media-type prompt before a file upload.
+/// The media-type prompt before an upload; with several files it also
+/// asks the grouping intent, so an album folder never floods the
+/// review queue with per-file entries by accident — and a mixed grab
+/// of singles never merges into one album.
 class MediaTypeDialog extends StatefulWidget {
-  const MediaTypeDialog({super.key, this.initial = MediaType.music});
+  const MediaTypeDialog({
+    super.key,
+    this.initial = MediaType.music,
+    this.fileCount = 1,
+  });
 
   final MediaType initial;
+
+  /// How many files are about to upload; above one, the grouping
+  /// question appears.
+  final int fileCount;
 
   @override
   State<MediaTypeDialog> createState() => _MediaTypeDialogState();
@@ -260,14 +352,37 @@ class MediaTypeDialog extends StatefulWidget {
 
 class _MediaTypeDialogState extends State<MediaTypeDialog> {
   late var _mediaType = widget.initial;
+  var _grouping = UploadGrouping.auto;
 
   @override
   Widget build(BuildContext context) {
+    final several = widget.fileCount > 1;
     return AlertDialog(
-      title: const Text('What are you uploading?'),
-      content: MediaTypeSelector(
-        value: _mediaType,
-        onChanged: (value) => setState(() => _mediaType = value),
+      title: Text(
+        several
+            ? 'What are these ${widget.fileCount} files?'
+            : 'What are you uploading?',
+      ),
+      // Scrollable: with the grouping selector the content outgrows a
+      // short viewport (a phone in landscape) and an AlertDialog does
+      // not scroll on its own.
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            MediaTypeSelector(
+              value: _mediaType,
+              onChanged: (value) => setState(() => _mediaType = value),
+            ),
+            if (several) ...[
+              const SizedBox(height: 12),
+              UploadGroupingSelector(
+                value: _grouping,
+                onChanged: (value) => setState(() => _grouping = value),
+              ),
+            ],
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -280,11 +395,74 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
           button: true,
           child: FilledButton(
             key: const Key('upload-media-confirm'),
-            onPressed: () => Navigator.of(context).pop(_mediaType.wireName),
+            onPressed: () => Navigator.of(
+              context,
+            ).pop((mediaType: _mediaType, grouping: _grouping)),
             child: const Text('Upload'),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The grouping-intent selector for a multi-file upload.
+class UploadGroupingSelector extends StatelessWidget {
+  const UploadGroupingSelector({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final UploadGrouping value;
+  final ValueChanged<UploadGrouping> onChanged;
+
+  static const _options = [
+    (
+      UploadGrouping.auto,
+      'Auto-detect',
+      'Group into albums by their tags and folders',
+    ),
+    (UploadGrouping.album, 'One album', 'Review all files as one release'),
+    (UploadGrouping.tracks, 'Separate tracks', 'Review every file on its own'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      identifier: 'upload-grouping',
+      child: Column(
+        key: const Key('upload-grouping'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'How should these files be grouped?',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          for (final (grouping, label, help) in _options)
+            Semantics(
+              identifier: 'upload-grouping-${grouping.wireName}',
+              button: true,
+              child: ListTile(
+                key: Key('upload-grouping-${grouping.wireName}'),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: Icon(
+                  value == grouping
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color: value == grouping
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
+                ),
+                title: Text(label),
+                subtitle: Text(help),
+                onTap: () => onChanged(grouping),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

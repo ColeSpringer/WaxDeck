@@ -16,6 +16,7 @@ part 'user.g.dart';
 /// * [username] - Login name.
 /// * [displayName] - Optional display name; falls back to `username`.
 /// * [roles] - Assigned roles (`admin`, `user`).
+/// * [uploadEnabled] - Whether the account may upload audio. On self views (login, session) this is the *effective* value — administrators always may, whatever their stored flag says — and clients gate their upload affordances on it. On administrative account views (`UserAccount`) it is the stored per-account flag the account editor round-trips; an administrator's own stored flag may therefore read false while their effective right is true. Defined once here because the generators flatten `UserAccount`'s `allOf` over this schema; a duplicate declaration there would silently lose. 
 @BuiltValue(instantiable: false)
 abstract class User  {
   /// Stable user identifier.
@@ -33,6 +34,10 @@ abstract class User  {
   /// Assigned roles (`admin`, `user`).
   @BuiltValueField(wireName: r'roles')
   BuiltList<String> get roles;
+
+  /// Whether the account may upload audio. On self views (login, session) this is the *effective* value — administrators always may, whatever their stored flag says — and clients gate their upload affordances on it. On administrative account views (`UserAccount`) it is the stored per-account flag the account editor round-trips; an administrator's own stored flag may therefore read false while their effective right is true. Defined once here because the generators flatten `UserAccount`'s `allOf` over this schema; a duplicate declaration there would silently lose. 
+  @BuiltValueField(wireName: r'uploadEnabled')
+  bool get uploadEnabled;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<User> get serializer => _$UserSerializer();
@@ -71,6 +76,11 @@ class _$UserSerializer implements PrimitiveSerializer<User> {
     yield serializers.serialize(
       object.roles,
       specifiedType: const FullType(BuiltList, [FullType(String)]),
+    );
+    yield r'uploadEnabled';
+    yield serializers.serialize(
+      object.uploadEnabled,
+      specifiedType: const FullType(bool),
     );
   }
 
@@ -162,6 +172,13 @@ class _$$UserSerializer implements PrimitiveSerializer<$User> {
             specifiedType: const FullType(BuiltList, [FullType(String)]),
           ) as BuiltList<String>;
           result.roles.replace(valueDes);
+          break;
+        case r'uploadEnabled':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.uploadEnabled = valueDes;
           break;
         default:
           unhandled.add(key);

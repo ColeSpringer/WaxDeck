@@ -3,11 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../uploads/audio_drop_area.dart';
+import '../uploads/file_picker_port.dart';
 import 'admin_providers.dart';
+import '../format_bytes.dart';
 
-/// Backup archives with create, download, delete, and staged restore,
-/// plus the maintenance schedules and backup retention knobs. One
-/// screen because they are one story: when and what the server keeps.
+/// Backup archives with create, import, download, delete, and staged
+/// restore, plus the maintenance schedules and backup retention knobs.
+/// One screen because they are one story: when and what the server
+/// keeps.
 class BackupsScreen extends ConsumerWidget {
   const BackupsScreen({super.key});
 
@@ -18,6 +22,46 @@ class BackupsScreen extends ConsumerWidget {
       ref.invalidate(backupsProvider);
     } on WaxDeckApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _pickAndImport(BuildContext context, WidgetRef ref) async {
+    final picker = ref.read(filePickerProvider);
+    if (picker == null) return;
+    final file = await picker.pickFile(
+      extensions: const {'zip'},
+      label: 'Backup archive',
+    );
+    if (file == null || !context.mounted) return;
+    await _importArchive(context, ref, file);
+  }
+
+  /// Streams an archive up whole — never buffered in memory: archives
+  /// carry both databases and a large catalog easily exceeds a hundred
+  /// megabytes. Every picked reference carries a lazy reader (disk on
+  /// native, the browser file handle on web).
+  static Future<void> _importArchive(
+    BuildContext context,
+    WidgetRef ref,
+    PickedAudioFile file,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final openRead = file.openRead;
+    if (openRead == null) return;
+    try {
+      await ref
+          .read(repositoryProvider)
+          .importBackup(sizeBytes: file.size, openRead: () => openRead());
+      ref.invalidate(backupsProvider);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('${file.name} imported; stage its restore')),
+        );
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -36,72 +80,98 @@ class BackupsScreen extends ConsumerWidget {
     final backups = ref.watch(backupsProvider);
     final staged = ref.watch(stagedRestoreProvider).value;
     final anyRunning = backups.value?.any((b) => b.state == 'running') ?? false;
+    final picker = ref.watch(filePickerProvider);
     return Semantics(
       identifier: 'admin-backups',
       container: true,
       child: Scaffold(
         appBar: AppBar(title: const Text('Backups')),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (staged != null)
-              _RestoreBanner(
-                plan: staged,
-                onCancel: () => _cancelRestore(context, ref),
-              ),
-            Semantics(
-              identifier: 'backup-create',
-              child: FilledButton.icon(
-                key: const Key('backup-create'),
-                onPressed: anyRunning
-                    ? null
-                    : () => _createBackup(context, ref),
-                icon: const Icon(Icons.archive_outlined),
-                label: Text(anyRunning ? 'Backing up...' : 'Back up now'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            switch (backups) {
-              AsyncData(:final value) when value.isEmpty => const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('No backups yet'),
-              ),
-              AsyncData(:final value) => Column(
-                children: [
-                  for (final backup in value) _BackupRow(backup: backup),
-                ],
-              ),
-              AsyncError(:final error) => Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  error is WaxDeckApiException
-                      ? error.message
-                      : 'Could not load backups',
+        body: AudioDropArea(
+          extensions: const {'zip'},
+          hint: 'Drop a backup archive to import',
+          onDropped: (files) async {
+            for (final file in files) {
+              if (!context.mounted) return;
+              await _importArchive(context, ref, file);
+            }
+          },
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (staged != null)
+                _RestoreBanner(
+                  plan: staged,
+                  onCancel: () => _cancelRestore(context, ref),
                 ),
-              ),
-              _ => const Center(child: CircularProgressIndicator()),
-            },
-            const SizedBox(height: 16),
-            Text('Schedules', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            switch (ref.watch(schedulesProvider)) {
-              AsyncData(:final value) => Column(
+              Row(
                 children: [
-                  for (final schedule in value)
-                    _ScheduleRow(
-                      key: ValueKey('schedule-${schedule.kind}'),
-                      schedule: schedule,
+                  Semantics(
+                    identifier: 'backup-create',
+                    child: FilledButton.icon(
+                      key: const Key('backup-create'),
+                      onPressed: anyRunning
+                          ? null
+                          : () => _createBackup(context, ref),
+                      icon: const Icon(Icons.archive_outlined),
+                      label: Text(anyRunning ? 'Backing up...' : 'Back up now'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (picker != null)
+                    Semantics(
+                      identifier: 'backup-import',
+                      child: OutlinedButton.icon(
+                        key: const Key('backup-import'),
+                        onPressed: () => _pickAndImport(context, ref),
+                        icon: const Icon(Icons.unarchive_outlined),
+                        label: const Text('Import archive'),
+                      ),
                     ),
                 ],
               ),
-              AsyncError() => const Text('Could not load schedules'),
-              _ => const Center(child: CircularProgressIndicator()),
-            },
-            const SizedBox(height: 16),
-            Text('Retention', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            const _RetentionFields(),
-          ],
+              const SizedBox(height: 8),
+              switch (backups) {
+                AsyncData(:final value) when value.isEmpty => const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No backups yet'),
+                ),
+                AsyncData(:final value) => Column(
+                  children: [
+                    for (final backup in value) _BackupRow(backup: backup),
+                  ],
+                ),
+                AsyncError(:final error) => Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    error is WaxDeckApiException
+                        ? error.message
+                        : 'Could not load backups',
+                  ),
+                ),
+                _ => const Center(child: CircularProgressIndicator()),
+              },
+              const SizedBox(height: 16),
+              Text('Schedules', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              switch (ref.watch(schedulesProvider)) {
+                AsyncData(:final value) => Column(
+                  children: [
+                    for (final schedule in value)
+                      _ScheduleRow(
+                        key: ValueKey('schedule-${schedule.kind}'),
+                        schedule: schedule,
+                      ),
+                  ],
+                ),
+                AsyncError() => const Text('Could not load schedules'),
+                _ => const Center(child: CircularProgressIndicator()),
+              },
+              const SizedBox(height: 16),
+              Text('Retention', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              const _RetentionFields(),
+            ],
+          ),
         ),
       ),
     );
@@ -155,16 +225,6 @@ class _BackupRow extends ConsumerWidget {
   const _BackupRow({required this.backup});
 
   final Backup backup;
-
-  static String formatBytes(int bytes) {
-    if (bytes >= 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-    }
-    if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / 1024).toStringAsFixed(0)} KB';
-  }
 
   static String _date(DateTime at) {
     final local = at.toLocal();

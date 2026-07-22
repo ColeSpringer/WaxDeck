@@ -24,6 +24,8 @@ class _$Upload extends Upload {
   @override
   final String? reviewEntryId;
   @override
+  final String? batchId;
+  @override
   final DuplicateWarning? duplicate;
   @override
   final String? uploadedBy;
@@ -44,6 +46,7 @@ class _$Upload extends Upload {
     this.libraryPid,
     required this.state,
     this.reviewEntryId,
+    this.batchId,
     this.duplicate,
     this.uploadedBy,
     required this.createdAt,
@@ -68,6 +71,7 @@ class _$Upload extends Upload {
         libraryPid == other.libraryPid &&
         state == other.state &&
         reviewEntryId == other.reviewEntryId &&
+        batchId == other.batchId &&
         duplicate == other.duplicate &&
         uploadedBy == other.uploadedBy &&
         createdAt == other.createdAt &&
@@ -85,6 +89,7 @@ class _$Upload extends Upload {
     _$hash = $jc(_$hash, libraryPid.hashCode);
     _$hash = $jc(_$hash, state.hashCode);
     _$hash = $jc(_$hash, reviewEntryId.hashCode);
+    _$hash = $jc(_$hash, batchId.hashCode);
     _$hash = $jc(_$hash, duplicate.hashCode);
     _$hash = $jc(_$hash, uploadedBy.hashCode);
     _$hash = $jc(_$hash, createdAt.hashCode);
@@ -104,6 +109,7 @@ class _$Upload extends Upload {
           ..add('libraryPid', libraryPid)
           ..add('state', state)
           ..add('reviewEntryId', reviewEntryId)
+          ..add('batchId', batchId)
           ..add('duplicate', duplicate)
           ..add('uploadedBy', uploadedBy)
           ..add('createdAt', createdAt)
@@ -149,6 +155,10 @@ class UploadBuilder implements Builder<Upload, UploadBuilder> {
   set reviewEntryId(String? reviewEntryId) =>
       _$this._reviewEntryId = reviewEntryId;
 
+  String? _batchId;
+  String? get batchId => _$this._batchId;
+  set batchId(String? batchId) => _$this._batchId = batchId;
+
   DuplicateWarningBuilder? _duplicate;
   DuplicateWarningBuilder get duplicate =>
       _$this._duplicate ??= DuplicateWarningBuilder();
@@ -182,6 +192,7 @@ class UploadBuilder implements Builder<Upload, UploadBuilder> {
       _libraryPid = $v.libraryPid;
       _state = $v.state;
       _reviewEntryId = $v.reviewEntryId;
+      _batchId = $v.batchId;
       _duplicate = $v.duplicate?.toBuilder();
       _uploadedBy = $v.uploadedBy;
       _createdAt = $v.createdAt;
@@ -238,6 +249,7 @@ class UploadBuilder implements Builder<Upload, UploadBuilder> {
               'state',
             ),
             reviewEntryId: reviewEntryId,
+            batchId: batchId,
             duplicate: _duplicate?.build(),
             uploadedBy: uploadedBy,
             createdAt: BuiltValueNullFieldError.checkNotNull(

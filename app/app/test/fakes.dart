@@ -1773,6 +1773,10 @@ class FakeRepository implements WaxDeckRepository {
   /// tests use it to trip failures at a chosen chunk.
   void Function()? onPutUploadData;
 
+  /// Runs before each createUpload, ahead of the [uploadError] check;
+  /// tests use it to fail a chosen file in a multi-file flow.
+  void Function(String fileName)? onCreateUpload;
+
   final List<({String uploadId, int offset, int byteCount})>
   putUploadDataCalls = [];
   int _uploadSeq = 0;
@@ -1800,6 +1804,7 @@ class FakeRepository implements WaxDeckRepository {
     receivedBytes: receivedBytes ?? u.receivedBytes,
     mediaType: u.mediaType,
     libraryPid: u.libraryPid,
+    batchId: u.batchId,
     state: state ?? u.state,
     reviewEntryId: u.reviewEntryId,
     duplicate: u.duplicate,
@@ -1808,11 +1813,78 @@ class FakeRepository implements WaxDeckRepository {
     expiresAt: u.expiresAt,
   );
 
+  /// The quota snapshot every uploads page carries.
+  UploadQuota? uploadPageQuota;
+
   @override
   Future<UploadPage> listUploads({String? cursor, int? limit}) async {
     final error = uploadError;
     if (error != null) throw error;
-    return UploadPage(uploads: uploadsById.values.toList());
+    return UploadPage(
+      uploads: uploadsById.values.toList(),
+      quota: uploadPageQuota,
+    );
+  }
+
+  /// Batches by id, and the member joins each session declared.
+  final Map<String, UploadBatch> batchesById = {};
+  final List<({String uploadId, String batchId, String? batchPath})>
+  batchJoins = [];
+  final List<String> completedBatchIds = [];
+  int _batchSeq = 0;
+
+  @override
+  Future<UploadBatch> createUploadBatch({
+    required UploadGrouping grouping,
+    required String mediaType,
+    String? libraryPid,
+  }) async {
+    final error = uploadError;
+    if (error != null) throw error;
+    final batch = UploadBatch(
+      id: 'ub-FAKE${_batchSeq++}',
+      grouping: grouping,
+      mediaType: MediaType.values.firstWhere(
+        (m) => m.wireName == mediaType,
+        orElse: () => MediaType.music,
+      ),
+      libraryPid: libraryPid,
+      state: 'open',
+      createdAt: DateTime.utc(2026, 7, 1),
+      expiresAt: DateTime.utc(2026, 7, 2),
+    );
+    batchesById[batch.id] = batch;
+    return batch;
+  }
+
+  @override
+  Future<UploadBatch> completeUploadBatch(String batchId) async {
+    final error = uploadError;
+    if (error != null) throw error;
+    final batch = batchesById[batchId];
+    if (batch == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such upload batch',
+        statusCode: 404,
+      );
+    }
+    completedBatchIds.add(batchId);
+    final done = UploadBatch(
+      id: batch.id,
+      grouping: batch.grouping,
+      mediaType: batch.mediaType,
+      libraryPid: batch.libraryPid,
+      state: 'finalized',
+      reviewEntryIds: [
+        for (final join in batchJoins)
+          if (join.batchId == batchId) 'rv-of-${join.uploadId}',
+      ],
+      createdAt: batch.createdAt,
+      expiresAt: batch.expiresAt,
+    );
+    batchesById[batchId] = done;
+    return done;
   }
 
   @override
@@ -1822,7 +1894,10 @@ class FakeRepository implements WaxDeckRepository {
     required String mediaType,
     String? libraryPid,
     String? sha256,
+    String? batchId,
+    String? batchPath,
   }) async {
+    onCreateUpload?.call(fileName);
     final error = uploadError;
     if (error != null) throw error;
     final upload = UploadSession(
@@ -1835,9 +1910,17 @@ class FakeRepository implements WaxDeckRepository {
         orElse: () => MediaType.music,
       ),
       libraryPid: libraryPid,
+      batchId: batchId,
       state: 'receiving',
       createdAt: DateTime.utc(2026, 7, 1),
     );
+    if (batchId != null) {
+      batchJoins.add((
+        uploadId: upload.id,
+        batchId: batchId,
+        batchPath: batchPath,
+      ));
+    }
     uploadsById[upload.id] = upload;
     return upload;
   }
@@ -2939,6 +3022,33 @@ class FakeRepository implements WaxDeckRepository {
     backupsById.remove(backupId);
   }
 
+  /// Byte counts of each imported archive, drained from its stream.
+  final List<int> importBackupByteCounts = [];
+
+  @override
+  Future<Backup> importBackup({
+    required int sizeBytes,
+    required Stream<List<int>> Function() openRead,
+  }) async {
+    final error = adminError;
+    if (error != null) throw error;
+    var received = 0;
+    await for (final chunk in openRead()) {
+      received += chunk.length;
+    }
+    importBackupByteCounts.add(received);
+    final backup = Backup(
+      id: 'ba-FAKE${_backupSeq++}',
+      state: 'done',
+      trigger: 'imported',
+      fileName: 'imported-$_backupSeq.zip',
+      sizeBytes: received,
+      createdAt: DateTime.utc(2026, 7, 20, 12),
+    );
+    backupsById[backup.id] = backup;
+    return backup;
+  }
+
   @override
   String backupArchiveUrl(String backupId) =>
       '/api/v1/admin/backups/$backupId/archive';
@@ -3567,6 +3677,7 @@ UploadSession testUpload(
   int sizeBytes = 4194304,
   int receivedBytes = 0,
   MediaType mediaType = MediaType.music,
+  String? batchId,
   String state = 'receiving',
   String? reviewEntryId,
   DuplicateWarning? duplicate,
@@ -3577,12 +3688,26 @@ UploadSession testUpload(
   sizeBytes: sizeBytes,
   receivedBytes: receivedBytes,
   mediaType: mediaType,
+  batchId: batchId,
   state: state,
   reviewEntryId: reviewEntryId,
   duplicate: duplicate,
   uploadedBy: uploadedBy,
   createdAt: DateTime.utc(2026, 7, 1),
 );
+
+/// A signed-in session whose user holds effective upload rights, for
+/// screens gating their upload affordances.
+SessionState testUploaderSession({List<String> roles = const ['user']}) =>
+    SessionState(
+      authenticated: true,
+      user: WaxDeckUser(
+        id: 'us-uploader',
+        username: 'uploader',
+        roles: roles,
+        uploadEnabled: true,
+      ),
+    );
 
 /// Handy audiobook factory for tests. With [partCount] above one the
 /// book splits into equal parts of [durationMs] / [partCount] each.

@@ -237,11 +237,19 @@ func (s *Server) expiredSessionCookie() string {
 	}).String()
 }
 
-// userJSON renders the self view of an account.
+// userJSON renders the self view of an account. uploadEnabled is the
+// effective right (administrators always hold it), so every client
+// surface gates its upload affordances off this one field.
 func userJSON(u *wdb.User) User {
 	out := User{Id: u.ID, Username: u.Username, Roles: u.Roles}
 	if u.DisplayName != "" {
 		out.DisplayName = ptr(u.DisplayName)
+	}
+	out.UploadEnabled = u.UploadEnabled
+	for _, r := range u.Roles {
+		if r == "admin" {
+			out.UploadEnabled = true
+		}
 	}
 	return out
 }

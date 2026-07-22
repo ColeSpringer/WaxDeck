@@ -5,6 +5,7 @@
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
 import 'package:waxdeck_api_gen/src/model/upload.dart';
+import 'package:waxdeck_api_gen/src/model/upload_quota.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -15,6 +16,7 @@ part 'upload_page.g.dart';
 /// Properties:
 /// * [uploads] - Uploads, newest first.
 /// * [nextCursor] - Cursor for the next page; omitted on the last.
+/// * [quota] 
 @BuiltValue()
 abstract class UploadPage implements Built<UploadPage, UploadPageBuilder> {
   /// Uploads, newest first.
@@ -24,6 +26,9 @@ abstract class UploadPage implements Built<UploadPage, UploadPageBuilder> {
   /// Cursor for the next page; omitted on the last.
   @BuiltValueField(wireName: r'nextCursor')
   String? get nextCursor;
+
+  @BuiltValueField(wireName: r'quota')
+  UploadQuota? get quota;
 
   UploadPage._();
 
@@ -58,6 +63,13 @@ class _$UploadPageSerializer implements PrimitiveSerializer<UploadPage> {
       yield serializers.serialize(
         object.nextCursor,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.quota != null) {
+      yield r'quota';
+      yield serializers.serialize(
+        object.quota,
+        specifiedType: const FullType(UploadQuota),
       );
     }
   }
@@ -96,6 +108,13 @@ class _$UploadPageSerializer implements PrimitiveSerializer<UploadPage> {
             specifiedType: const FullType(String),
           ) as String;
           result.nextCursor = valueDes;
+          break;
+        case r'quota':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(UploadQuota),
+          ) as UploadQuota;
+          result.quota.replace(valueDes);
           break;
         default:
           unhandled.add(key);

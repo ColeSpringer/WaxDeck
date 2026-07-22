@@ -625,13 +625,31 @@ abstract interface class WaxDeckRepository {
 
   /// `POST /uploads`: opens a resumable upload session. [sha256] lets
   /// the server flag byte-identical duplicates before any transfer.
+  /// [batchId] joins the session to an open batch; [batchPath] is the
+  /// file's directory relative to the picked folder, the `auto`
+  /// grouping's clustering hint.
   Future<UploadSession> createUpload({
     required String fileName,
     required int sizeBytes,
     required String mediaType,
     String? libraryPid,
     String? sha256,
+    String? batchId,
+    String? batchPath,
   });
+
+  /// `POST /uploads/batches`: opens a batch grouping several sessions
+  /// into review units by the declared intent.
+  Future<UploadBatch> createUploadBatch({
+    required UploadGrouping grouping,
+    required String mediaType,
+    String? libraryPid,
+  });
+
+  /// `POST /uploads/batches/{batchId}/complete`: finalizes a batch —
+  /// members staged so far are grouped and their review entries open.
+  /// Idempotent.
+  Future<UploadBatch> completeUploadBatch(String batchId);
 
   /// `GET /uploads/{uploadId}`: one session's progress and state.
   Future<UploadSession> getUpload(String uploadId);
@@ -1052,6 +1070,15 @@ abstract interface class WaxDeckRepository {
   /// browser or handing to a download manager; the bytes are never
   /// pulled through this client.
   String backupArchiveUrl(String backupId);
+
+  /// `POST /admin/backups/import`: uploads an archive produced by
+  /// another instance (administrators). The zip streams from
+  /// [openRead] — archives carry whole databases and easily exceed
+  /// what should sit in memory, so the body is never buffered whole.
+  Future<Backup> importBackup({
+    required int sizeBytes,
+    required Stream<List<int>> Function() openRead,
+  });
 
   /// `POST /admin/backups/{backupId}/restore`: stages the archive for
   /// restore at the next server restart, returning the plan
@@ -2433,6 +2460,8 @@ class WaxDeckClient implements WaxDeckRepository {
     required String mediaType,
     String? libraryPid,
     String? sha256,
+    String? batchId,
+    String? batchPath,
   }) => _guard(() async {
     final response = await _gen.getUploadsApi().createUpload(
       uploadCreate: gen.UploadCreate(
@@ -2441,10 +2470,37 @@ class WaxDeckClient implements WaxDeckRepository {
           ..sizeBytes = sizeBytes
           ..mediaType = gen.MediaType.valueOf(mediaType)
           ..libraryPid = libraryPid
-          ..sha256 = sha256,
+          ..sha256 = sha256
+          ..batchId = batchId
+          ..batchPath = batchPath,
       ),
     );
     return uploadSessionFromGen(_require(response.data));
+  });
+
+  @override
+  Future<UploadBatch> createUploadBatch({
+    required UploadGrouping grouping,
+    required String mediaType,
+    String? libraryPid,
+  }) => _guard(() async {
+    final response = await _gen.getUploadsApi().createUploadBatch(
+      uploadBatchCreate: gen.UploadBatchCreate(
+        (b) => b
+          ..grouping = uploadGroupingToGen(grouping)
+          ..mediaType = gen.MediaType.valueOf(mediaType)
+          ..libraryPid = libraryPid,
+      ),
+    );
+    return uploadBatchFromGen(_require(response.data));
+  });
+
+  @override
+  Future<UploadBatch> completeUploadBatch(String batchId) => _guard(() async {
+    final response = await _gen.getUploadsApi().completeUploadBatch(
+      batchId: batchId,
+    );
+    return uploadBatchFromGen(_require(response.data));
   });
 
   @override
@@ -3303,6 +3359,20 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   String backupArchiveUrl(String backupId) =>
       '$_baseUrl/api/v1/admin/backups/$backupId/archive';
+
+  @override
+  Future<Backup> importBackup({
+    required int sizeBytes,
+    required Stream<List<int>> Function() openRead,
+  }) => _guard(() async {
+    final response = await _gen.getAdminApi().importBackup(
+      // fromStream defers the read to request time, so the archive
+      // flows through in transport-sized pieces instead of being
+      // buffered whole.
+      body: MultipartFile.fromStream(openRead, sizeBytes),
+    );
+    return backupFromGen(_require(response.data));
+  });
 
   @override
   Future<RestorePlan> stageRestore(String backupId) => _guard(() async {

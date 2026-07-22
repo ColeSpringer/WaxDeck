@@ -43,23 +43,29 @@ test('a session mirrors to the server and relays remote control', async ({
   const toggle = sem(a.page, 'player-toggle');
   await toggle.waitFor({ timeout: 30_000 });
 
-  // A's playback reaches the server as a mirror session.
+  // A's playback reaches the server as a mirror session. Parallel
+  // specs play their own tracks under the same account, so A's
+  // session is found by its track, never assumed to be the first.
+  type MirrorSession = {
+    id: string;
+    authority: string;
+    entries: Array<{ pid: string }>;
+  };
+  let session: MirrorSession | undefined;
   await expect
     .poll(
       async () => {
         const res = await request.get('/api/v1/player/sessions', authed(token));
         const body = await res.json();
-        return body.sessions.length;
+        session = (body.sessions as MirrorSession[]).find(
+          (s) => s.entries?.[0]?.pid === target.pid,
+        );
+        return session !== undefined;
       },
-      { timeout: 15_000 },
+      { timeout: 15_000, message: "A's session should mirror to the server" },
     )
-    .toBeGreaterThan(0);
-  const sessions = await (
-    await request.get('/api/v1/player/sessions', authed(token))
-  ).json();
-  const session = sessions.sessions[0];
-  expect(session.authority).toBe('mirror');
-  expect(session.entries[0].pid).toBe(target.pid);
+    .toBe(true);
+  expect(session!.authority).toBe('mirror');
 
   // A's endpoint lists too.
   const endpoints = await (
@@ -77,7 +83,7 @@ test('a session mirrors to the server and relays remote control', async ({
   await devices.waitFor({ timeout: 30_000 });
   await devices.click({ force: true });
 
-  const sessionRow = sem(b.page, `session-${session.id}`);
+  const sessionRow = sem(b.page, `session-${session!.id}`);
   await sessionRow.waitFor({ timeout: 15_000 });
   await sessionRow.scrollIntoViewIfNeeded();
   await sessionRow.click({ force: true });
@@ -92,7 +98,7 @@ test('a session mirrors to the server and relays remote control', async ({
     .poll(
       async () => {
         const res = await request.get(
-          `/api/v1/player/sessions/${session.id}`,
+          `/api/v1/player/sessions/${session!.id}`,
           authed(token),
         );
         if (res.status() !== 200) return 'gone';

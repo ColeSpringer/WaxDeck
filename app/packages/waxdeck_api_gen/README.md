@@ -469,8 +469,10 @@ Class | Method | HTTP request | Description
 [*ToolsApi*](doc/ToolsApi.md) | [**splitCueRip**](doc/ToolsApi.md#splitcuerip) | **POST** /items/{pid}/split-cue | Split a CUE rip into real files
 [*ToolsApi*](doc/ToolsApi.md) | [**streamToolTaskEvents**](doc/ToolsApi.md#streamtooltaskevents) | **GET** /tools/tasks/{taskId}/events | Stream a tool task&#39;s progress
 [*UploadsApi*](doc/UploadsApi.md) | [**completeUpload**](doc/UploadsApi.md#completeupload) | **POST** /uploads/{uploadId}/complete | Finish an upload
+[*UploadsApi*](doc/UploadsApi.md) | [**completeUploadBatch**](doc/UploadsApi.md#completeuploadbatch) | **POST** /uploads/batches/{batchId}/complete | Finalize an upload batch
 [*UploadsApi*](doc/UploadsApi.md) | [**createAcquisition**](doc/UploadsApi.md#createacquisition) | **POST** /acquisitions | Acquire audio from a URL
 [*UploadsApi*](doc/UploadsApi.md) | [**createUpload**](doc/UploadsApi.md#createupload) | **POST** /uploads | Start an upload
+[*UploadsApi*](doc/UploadsApi.md) | [**createUploadBatch**](doc/UploadsApi.md#createuploadbatch) | **POST** /uploads/batches | Open an upload batch
 [*UploadsApi*](doc/UploadsApi.md) | [**deleteUpload**](doc/UploadsApi.md#deleteupload) | **DELETE** /uploads/{uploadId} | Abandon an upload
 [*UploadsApi*](doc/UploadsApi.md) | [**getUpload**](doc/UploadsApi.md#getupload) | **GET** /uploads/{uploadId} | Inspect an upload
 [*UploadsApi*](doc/UploadsApi.md) | [**listUploads**](doc/UploadsApi.md#listuploads) | **GET** /uploads | List the caller&#39;s uploads
@@ -763,8 +765,12 @@ Class | Method | HTTP request | Description
  - [UpgradeResolveRequest](doc/UpgradeResolveRequest.md)
  - [UpgradeResolveResult](doc/UpgradeResolveResult.md)
  - [Upload](doc/Upload.md)
+ - [UploadBatch](doc/UploadBatch.md)
+ - [UploadBatchCreate](doc/UploadBatchCreate.md)
  - [UploadCreate](doc/UploadCreate.md)
+ - [UploadGrouping](doc/UploadGrouping.md)
  - [UploadPage](doc/UploadPage.md)
+ - [UploadQuota](doc/UploadQuota.md)
  - [User](doc/User.md)
  - [UserAccount](doc/UserAccount.md)
  - [UserCreate](doc/UserCreate.md)

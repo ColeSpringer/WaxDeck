@@ -4,6 +4,8 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
+  desktop_drop
+  file_selector_windows
   flutter_secure_storage_windows
   media_kit_libs_windows_audio
   url_launcher_windows

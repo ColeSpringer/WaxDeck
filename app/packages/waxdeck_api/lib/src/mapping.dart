@@ -50,6 +50,7 @@ WaxDeckUser userFromGen(gen.User user) {
     username: user.username,
     displayName: user.displayName,
     roles: user.roles.toList(),
+    uploadEnabled: user.uploadEnabled,
   );
 }
 
@@ -1001,6 +1002,7 @@ UploadSession uploadSessionFromGen(gen.Upload upload) {
     receivedBytes: upload.receivedBytes,
     mediaType: mediaTypeFromGen(upload.mediaType),
     libraryPid: upload.libraryPid,
+    batchId: upload.batchId,
     state: upload.state,
     reviewEntryId: upload.reviewEntryId,
     duplicate: duplicate == null ? null : duplicateWarningFromGen(duplicate),
@@ -1011,9 +1013,46 @@ UploadSession uploadSessionFromGen(gen.Upload upload) {
 }
 
 UploadPage uploadPageFromGen(gen.UploadPage page) {
+  final quota = page.quota;
   return UploadPage(
     uploads: page.uploads.map(uploadSessionFromGen).toList(),
     nextCursor: page.nextCursor,
+    quota: quota == null ? null : uploadQuotaFromGen(quota),
+  );
+}
+
+UploadQuota uploadQuotaFromGen(gen.UploadQuota quota) {
+  return UploadQuota(
+    bytesInUse: quota.bytesInUse,
+    quotaBytes: quota.quotaBytes,
+  );
+}
+
+UploadGrouping uploadGroupingFromGen(gen.UploadGrouping grouping) {
+  return UploadGrouping.values.firstWhere(
+    (g) => g.wireName == grouping.name,
+    orElse: () => UploadGrouping.auto,
+  );
+}
+
+gen.UploadGrouping uploadGroupingToGen(UploadGrouping grouping) {
+  return switch (grouping) {
+    UploadGrouping.auto => gen.UploadGrouping.auto,
+    UploadGrouping.album => gen.UploadGrouping.album,
+    UploadGrouping.tracks => gen.UploadGrouping.tracks,
+  };
+}
+
+UploadBatch uploadBatchFromGen(gen.UploadBatch batch) {
+  return UploadBatch(
+    id: batch.id,
+    grouping: uploadGroupingFromGen(batch.grouping),
+    mediaType: mediaTypeFromGen(batch.mediaType),
+    libraryPid: batch.libraryPid,
+    state: batch.state,
+    reviewEntryIds: batch.reviewEntryIds.toList(),
+    createdAt: batch.createdAt.toUtc(),
+    expiresAt: batch.expiresAt.toUtc(),
   );
 }
 

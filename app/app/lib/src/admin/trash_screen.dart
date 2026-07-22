@@ -3,21 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'admin_providers.dart';
+import '../format_bytes.dart';
 
 /// The server-side trash: what deletions parked, restorable per entry,
 /// purgeable as a whole.
 class TrashScreen extends ConsumerWidget {
   const TrashScreen({super.key});
-
-  static String formatBytes(int bytes) {
-    if (bytes >= 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-    }
-    if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / 1024).toStringAsFixed(0)} KB';
-  }
 
   Future<void> _restore(
     BuildContext context,
@@ -167,7 +158,7 @@ class _TrashRow extends StatelessWidget {
           ],
         ),
         subtitle: Text(
-          '${TrashScreen.formatBytes(entry.sizeBytes)}, ${entry.reason}, '
+          '${formatBytes(entry.sizeBytes)}, ${entry.reason}, '
           '${_date(entry.trashedAt)}',
         ),
         trailing: restored

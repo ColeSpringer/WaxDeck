@@ -1,5 +1,13 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { ensureAdmin, authed, waitForLibrary } from './helpers';
+import {
+  ADMIN_PASS,
+  ADMIN_USER,
+  authed,
+  clickThrough,
+  ensureAdmin,
+  typeInto,
+  waitForLibrary,
+} from './helpers';
 
 // The admin-and-ops surface, driven over the API against the live
 // stack: the audit log answering "who deleted this playlist", the
@@ -254,4 +262,70 @@ test('read-only mode refuses uploads and releases', async ({ request }) => {
     });
     expect(off.ok()).toBeTruthy();
   }
+});
+
+test('an exported archive imports back through the backups screen', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(180_000);
+  const token = await ensureAdmin(request);
+
+  // A genuine archive to round-trip: create (or reuse) one and
+  // download its bytes — the import endpoint validates real WaxDeck
+  // backups, so a synthetic zip would be refused.
+  const started = await request.post('/api/v1/admin/backups', authed(token));
+  expect([202, 409]).toContain(started.status());
+  let archiveId = '';
+  await expect(async () => {
+    const list = await request.get('/api/v1/admin/backups', authed(token));
+    expect(list.ok()).toBeTruthy();
+    const done = ((await list.json()).backups as Array<{ id: string; state: string }>).find(
+      (b) => b.state === 'done',
+    );
+    expect(done, 'a finished backup appears').toBeTruthy();
+    archiveId = done!.id;
+  }).toPass({ timeout: 60_000 });
+  const archive = await request.get(
+    `/api/v1/admin/backups/${archiveId}/archive`,
+    authed(token),
+  );
+  expect(archive.ok()).toBeTruthy();
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const pathMod = await import('node:path');
+  const zipPath = pathMod.join(
+    await fs.mkdtemp(pathMod.join(os.tmpdir(), 'waxdeck-e2e-')),
+    'roundtrip.zip',
+  );
+  await fs.writeFile(zipPath, await archive.body());
+
+  // Import it back through the backups screen.
+  const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
+  await page.goto('/');
+  const username = page.getByRole('textbox', { name: 'Username' });
+  await username.waitFor({ timeout: 30_000 });
+  await typeInto(page, username, ADMIN_USER);
+  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await clickThrough(page.locator(sem('curation-menu')), page.locator(sem('curation-backups')));
+  await clickThrough(page.locator(sem('curation-backups')), page.locator(sem('backup-import')));
+
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator(sem('backup-import')).click({ force: true });
+  await (await chooser).setFiles(zipPath);
+
+  // The imported archive joins the listing with its own trigger.
+  await expect(async () => {
+    const list = await request.get('/api/v1/admin/backups', authed(token));
+    expect(list.ok()).toBeTruthy();
+    const backups = (await list.json()).backups as Array<{
+      trigger: string;
+      state: string;
+    }>;
+    expect(
+      backups.some((b) => b.trigger === 'imported' && b.state === 'done'),
+      'the imported archive appears in the list',
+    ).toBeTruthy();
+  }).toPass({ timeout: 60_000 });
 });

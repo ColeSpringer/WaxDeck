@@ -336,6 +336,31 @@ func DemoLibrary() []Spec {
 	}
 }
 
+// UploadSources is the manual-upload journey's source material: a
+// two-track album whose artist, album, and titles appear in no other
+// preset, so an end-to-end import can assert them uniquely against
+// the scanned library. Durations are distinct from every other preset
+// for the same fingerprint-dedup reason as DemoLibrary.
+func UploadSources() []Spec {
+	track := func(name, title, trackNo string, d time.Duration) Spec {
+		return Spec{
+			Name:     name,
+			Codec:    CodecMP3,
+			Duration: d,
+			Tags: map[string]string{
+				"TITLE":       title,
+				"ARTIST":      "Courier North",
+				"ALBUM":       "Paper Lanterns",
+				"TRACKNUMBER": trackNo,
+			},
+		}
+	}
+	return []Spec{
+		track("lantern-one", "Paper Lanterns", "1", 4200*time.Millisecond),
+		track("lantern-two", "River Static", "2", 4700*time.Millisecond),
+	}
+}
+
 // ConformanceMedia returns the single tone the audio-engine conformance
 // suite plays against real engines: long enough that mid-file seek
 // targets are meaningfully far apart, still under the duration cap.

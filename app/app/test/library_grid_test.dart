@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/library/library_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
+  overrides: [
+    repositoryProvider.overrideWithValue(repo),
+    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+    filePickerProvider.overrideWithValue(null),
+  ],
   child: const MaterialApp(home: LibraryScreen()),
 );
 
@@ -73,8 +79,15 @@ void main() {
     expect(find.text('Nothing here yet'), findsOneWidget);
   });
 
+  testWidgets('the add button hides without upload rights', (tester) async {
+    await tester.pumpWidget(_host(FakeRepository()));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('add-to-library')), findsNothing);
+  });
+
   testWidgets('the add button acquires from a URL', (tester) async {
-    final repo = FakeRepository();
+    final repo = FakeRepository(sessionState: testUploaderSession());
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 

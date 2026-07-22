@@ -13,6 +13,8 @@ import 'package:waxdeck_api_gen/src/model/acquisition_request.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task.dart';
 import 'package:waxdeck_api_gen/src/model/upload.dart';
+import 'package:waxdeck_api_gen/src/model/upload_batch.dart';
+import 'package:waxdeck_api_gen/src/model/upload_batch_create.dart';
 import 'package:waxdeck_api_gen/src/model/upload_create.dart';
 import 'package:waxdeck_api_gen/src/model/upload_page.dart';
 
@@ -99,6 +101,92 @@ class UploadsApi {
     }
 
     return Response<Upload>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Finalize an upload batch
+  /// Declares the batch complete: every member staged so far is grouped per the batch&#39;s grouping intent and the review entries open (their ids land in &#x60;reviewEntryIds&#x60;). Members still receiving bytes fall back to opening their own per-file entry when they later complete. Call this exactly when the client finishes sending members — after per-file failures too, so the files that did arrive are reviewed (a batch whose every member was deleted finalizes empty). Only the batch&#39;s owner (or an administrator) may finalize; anyone else sees &#x60;not-found&#x60;. Idempotent: finalizing a finalized batch answers the same batch again. Finalizing a batch the server has already expired answers &#x60;conflict&#x60; — its members were grouped with what had arrived when the server closed it. 
+  ///
+  /// Parameters:
+  /// * [batchId] - Upload batch PID (e.g. `ub-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [UploadBatch] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<UploadBatch>> completeUploadBatch({ 
+    required String batchId,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/uploads/batches/{batchId}/complete'.replaceAll('{' r'batchId' '}', encodeQueryParameter(_serializers, batchId, const FullType(String)).toString());
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    UploadBatch? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(UploadBatch),
+      ) as UploadBatch;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<UploadBatch>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -311,6 +399,112 @@ class UploadsApi {
     }
 
     return Response<Upload>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Open an upload batch
+  /// Opens a batch that groups several upload sessions into review units by the declared grouping intent: &#x60;album&#x60; opens one multi-file review entry over every staged member, &#x60;tracks&#x60; opens one entry per file, and &#x60;auto&#x60; clusters members into album units by their tags and relative paths. Members join by passing &#x60;batchId&#x60; (and optionally &#x60;batchPath&#x60;) at session creation and must declare the batch&#39;s media type. The batch stays open for 24 hours or until the finalize call; members keep the normal upload retention. Nothing about a single upload changes: a session without a batch opens its own review entry at completion exactly as before. 
+  ///
+  /// Parameters:
+  /// * [uploadBatchCreate] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [UploadBatch] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<UploadBatch>> createUploadBatch({ 
+    required UploadBatchCreate uploadBatchCreate,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/uploads/batches';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(UploadBatchCreate);
+      _bodyData = _serializers.serialize(uploadBatchCreate, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    UploadBatch? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(UploadBatch),
+      ) as UploadBatch;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<UploadBatch>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

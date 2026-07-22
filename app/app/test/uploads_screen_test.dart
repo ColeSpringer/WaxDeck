@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck/src/uploads/uploads_screen.dart';
@@ -10,19 +11,45 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
 
+/// A picker resolving to fixed reader-backed files, mirroring the web
+/// port's lazy-reference shape.
 class _FakePicker implements FilePickerPort {
   _FakePicker(this.files);
 
   final List<PickedAudioFile> files;
 
   @override
+  bool get canPickFolders => false;
+
+  @override
   Future<List<PickedAudioFile>> pickAudioFiles() async => files;
+
+  @override
+  Future<List<PickedAudioFile>> pickAudioFolder() async => const [];
+
+  @override
+  Future<PickedAudioFile?> pickFile({
+    required Set<String> extensions,
+    required String label,
+  }) async => files.isEmpty ? null : files.first;
 }
+
+/// A lazy in-memory source with the port's windowed-read contract.
+PickedAudioFile readerFile(String name, Uint8List bytes, {String dir = ''}) =>
+    PickedAudioFile(
+      name: name,
+      size: bytes.length,
+      relativeDir: dir,
+      openRead: ([int? start, int? end]) => Stream.value(
+        Uint8List.sublistView(bytes, start ?? 0, end ?? bytes.length),
+      ),
+    );
 
 Widget _host(FakeRepository repo, {FilePickerPort? picker}) => ProviderScope(
   overrides: [
     repositoryProvider.overrideWithValue(repo),
-    if (picker != null) filePickerProvider.overrideWithValue(picker),
+    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+    filePickerProvider.overrideWithValue(picker),
   ],
   child: const MaterialApp(home: UploadsScreen()),
 );
@@ -80,22 +107,81 @@ void main() {
     expect(find.byKey(const ValueKey('upload-review-up-2')), findsOneWidget);
   });
 
-  testWidgets('hides the pick button while no picker port is wired', (
+  testWidgets('groups batch members under one header even interleaved', (
     tester,
   ) async {
-    await tester.pumpWidget(_host(FakeRepository()));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('upload-pick')), findsNothing);
-    expect(find.text('No uploads yet'), findsOneWidget);
-  });
-
-  testWidgets('add from URL queues an acquisition', (tester) async {
     final repo = FakeRepository();
+    // A solo session lands between the batch's members (a concurrent
+    // upload from another tab interleaves creation order); the batch
+    // still buckets under a single header.
+    repo.uploadsById['up-b'] = testUpload(
+      'up-b',
+      fileName: 'one.flac',
+      batchId: 'ub-1',
+      state: 'staged',
+    );
+    repo.uploadsById['up-a'] = testUpload(
+      'up-a',
+      fileName: 'solo.flac',
+      state: 'staged',
+    );
+    repo.uploadsById['up-c'] = testUpload(
+      'up-c',
+      fileName: 'two.flac',
+      batchId: 'ub-1',
+      state: 'staged',
+    );
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    // Always visible, picker port or not.
+    expect(find.byKey(const ValueKey('upload-batch-ub-1')), findsOneWidget);
+    expect(find.text('Uploaded together · 2 files'), findsOneWidget);
+    expect(find.byKey(const ValueKey('upload-row-up-a')), findsOneWidget);
+  });
+
+  testWidgets('shows the quota header with usage against the cap', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.uploadPageQuota = const UploadQuota(
+      bytesInUse: 512 * 1024,
+      quotaBytes: 1024 * 1024,
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('upload-quota')), findsOneWidget);
+    expect(find.text('512 KB of 1.0 MB used'), findsOneWidget);
+  });
+
+  testWidgets('hides upload affordances without upload rights', (tester) async {
+    final repo = FakeRepository();
+    final picker = _FakePicker([readerFile('cut.flac', Uint8List(10))]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('upload-pick')), findsNothing);
+    expect(find.byKey(const Key('upload-from-url')), findsNothing);
+    expect(find.text('No uploads yet'), findsOneWidget);
+  });
+
+  testWidgets('hides the pick button while no picker port is wired', (
+    tester,
+  ) async {
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('upload-pick')), findsNothing);
+    // URL acquisition needs no picker, only rights.
+    expect(find.byKey(const Key('upload-from-url')), findsOneWidget);
+  });
+
+  testWidgets('add from URL queues an acquisition', (tester) async {
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const Key('upload-from-url')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('acquire-dialog')), findsOneWidget);
@@ -119,7 +205,7 @@ void main() {
   });
 
   testWidgets('acquiring can pick a download format', (tester) async {
-    final repo = FakeRepository();
+    final repo = FakeRepository(sessionState: testUploaderSession());
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
@@ -143,20 +229,19 @@ void main() {
     expect(repo.acquisitionCalls.single.format, 'mp3');
   });
 
-  testWidgets('picking a file chunks it up and seals the session', (
-    tester,
-  ) async {
-    final repo = FakeRepository();
-    // 2.5 MiB: two full 1 MiB chunks plus a remainder.
-    final bytes = Uint8List(2621440);
+  testWidgets('picking one file windows it up without a batch', (tester) async {
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    // 2.5 MiB: two full 1 MiB windows plus a remainder.
     final picker = _FakePicker([
-      PickedAudioFile(name: 'fresh-cut.flac', bytes: bytes),
+      readerFile('fresh-cut.flac', Uint8List(2621440)),
     ]);
     await tester.pumpWidget(_host(repo, picker: picker));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('upload-pick')));
     await tester.pumpAndSettle();
+    // A single file asks no grouping question.
+    expect(find.byKey(const Key('upload-grouping')), findsNothing);
     await tester.tap(find.byKey(const Key('upload-media-confirm')));
     await tester.pumpAndSettle();
 
@@ -168,6 +253,65 @@ void main() {
     final session = repo.uploadsById.values.single;
     expect(session.state, 'staged');
     expect(session.mediaType, MediaType.music);
+    expect(repo.batchesById, isEmpty);
     expect(find.text('staged'), findsOneWidget);
+  });
+
+  testWidgets('several files ask the grouping and flow through a batch', (
+    tester,
+  ) async {
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    final picker = _FakePicker([
+      readerFile('a1.flac', Uint8List(64), dir: 'Long Form'),
+      readerFile('a2.flac', Uint8List(64), dir: 'Long Form'),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('upload-pick')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('upload-grouping')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('upload-grouping-album')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('upload-media-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(repo.batchesById, hasLength(1));
+    final batch = repo.batchesById.values.single;
+    expect(batch.grouping, UploadGrouping.album);
+    expect(repo.batchJoins, hasLength(2));
+    expect(repo.batchJoins[0].batchPath, 'Long Form');
+    expect(repo.completedBatchIds, [batch.id]);
+  });
+
+  testWidgets('a failing file does not stop the batch or its finalize', (
+    tester,
+  ) async {
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    repo.onCreateUpload = (fileName) {
+      repo.uploadError = fileName == 'broken.flac'
+          ? const WaxDeckApiException(
+              code: 'unsupported-format',
+              message: 'files of type "flac" are not accepted',
+              statusCode: 415,
+            )
+          : null;
+    };
+    final picker = _FakePicker([
+      readerFile('ok-one.flac', Uint8List(32)),
+      readerFile('broken.flac', Uint8List(32)),
+      readerFile('ok-two.flac', Uint8List(32)),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('upload-pick')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('upload-media-confirm')));
+    await tester.pumpAndSettle();
+
+    // Both good files joined and the finalize ran exactly once.
+    expect(repo.batchJoins, hasLength(2));
+    expect(repo.completedBatchIds, hasLength(1));
   });
 }

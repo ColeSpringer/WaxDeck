@@ -59,7 +59,34 @@ editable by that user afterward: the full-depth editor's item-scoped
 operations accept the uploader as well as administrators. The identify pipeline runs on every completed upload,
 so a well-tagged file usually arrives with its candidates already
 scored. Duplicate warnings (exact bytes, or the same recording in a
-different encoding) inform the decision instead of blocking it.
+different encoding) inform the decision instead of blocking it. The
+uploads screen shows the account's quota usage at the top of the
+session list.
+
+Files reach the flow three ways: a file picker on every platform, a
+folder picker on desktop (Linux, macOS, Windows — Android folder
+access means SAF tree URIs, which the picker port does not speak),
+and drag-and-drop onto the library or uploads screen on web and
+desktop. Web transfers read the browser's file handles in windows, so
+picking a multi-hundred-megabyte album never loads it into memory.
+
+Uploading several files at once asks a grouping question so an album
+folder does not flood the review queue with per-file entries:
+**Auto-detect** (the default) clusters files into album units by
+their tags and relative folders — disc subfolders like `CD1` fold
+into one release — **One album** reviews everything as a single
+release, and **Separate tracks** opens one entry per file. The
+grouping rides an upload batch: members upload individually
+(per-file failures never sink the rest), and the batch finalizes
+into review entries when the transfer finishes — or within a day,
+with whatever arrived, if the client vanished. Files shared to the
+Android app group by auto-detection without asking.
+
+The client's pick dialogs filter to the default accepted-format set
+(a hardcoded mirror of the server's list); a server running a custom
+`WAXDECK_UPLOAD_FORMATS` still accepts its formats through the
+dialogs' "All files" group, and the server-side format check at
+session create is the real gate either way.
 
 Imports move files into the library, so at least one library root
 must be opted into managed placement with `WAXDECK_MANAGED_ROOTS`

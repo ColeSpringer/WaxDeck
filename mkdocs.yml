@@ -57,6 +57,7 @@ nav:
       - The matching engine: adr/0009-the-matching-engine.md
       - The waxdeck.db baseline and ownership audit: adr/0010-waxdeck-db-baseline-and-ownership-audit.md
       - Notification providers and two-scope targets: adr/0011-notification-providers.md
+      - Upload batches and grouped review entries: adr/0012-upload-batches.md
 
 # Working notes for agents and maintainers; built but unlisted.
 not_in_nav: |

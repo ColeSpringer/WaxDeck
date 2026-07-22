@@ -11,11 +11,14 @@ class _$UploadPage extends UploadPage {
   final BuiltList<Upload> uploads;
   @override
   final String? nextCursor;
+  @override
+  final UploadQuota? quota;
 
   factory _$UploadPage([void Function(UploadPageBuilder)? updates]) =>
       (UploadPageBuilder()..update(updates))._build();
 
-  _$UploadPage._({required this.uploads, this.nextCursor}) : super._();
+  _$UploadPage._({required this.uploads, this.nextCursor, this.quota})
+    : super._();
   @override
   UploadPage rebuild(void Function(UploadPageBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -28,7 +31,8 @@ class _$UploadPage extends UploadPage {
     if (identical(other, this)) return true;
     return other is UploadPage &&
         uploads == other.uploads &&
-        nextCursor == other.nextCursor;
+        nextCursor == other.nextCursor &&
+        quota == other.quota;
   }
 
   @override
@@ -36,6 +40,7 @@ class _$UploadPage extends UploadPage {
     var _$hash = 0;
     _$hash = $jc(_$hash, uploads.hashCode);
     _$hash = $jc(_$hash, nextCursor.hashCode);
+    _$hash = $jc(_$hash, quota.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -44,7 +49,8 @@ class _$UploadPage extends UploadPage {
   String toString() {
     return (newBuiltValueToStringHelper(r'UploadPage')
           ..add('uploads', uploads)
-          ..add('nextCursor', nextCursor))
+          ..add('nextCursor', nextCursor)
+          ..add('quota', quota))
         .toString();
   }
 }
@@ -60,6 +66,10 @@ class UploadPageBuilder implements Builder<UploadPage, UploadPageBuilder> {
   String? get nextCursor => _$this._nextCursor;
   set nextCursor(String? nextCursor) => _$this._nextCursor = nextCursor;
 
+  UploadQuotaBuilder? _quota;
+  UploadQuotaBuilder get quota => _$this._quota ??= UploadQuotaBuilder();
+  set quota(UploadQuotaBuilder? quota) => _$this._quota = quota;
+
   UploadPageBuilder() {
     UploadPage._defaults(this);
   }
@@ -69,6 +79,7 @@ class UploadPageBuilder implements Builder<UploadPage, UploadPageBuilder> {
     if ($v != null) {
       _uploads = $v.uploads.toBuilder();
       _nextCursor = $v.nextCursor;
+      _quota = $v.quota?.toBuilder();
       _$v = null;
     }
     return this;
@@ -92,12 +103,19 @@ class UploadPageBuilder implements Builder<UploadPage, UploadPageBuilder> {
     try {
       _$result =
           _$v ??
-          _$UploadPage._(uploads: uploads.build(), nextCursor: nextCursor);
+          _$UploadPage._(
+            uploads: uploads.build(),
+            nextCursor: nextCursor,
+            quota: _quota?.build(),
+          );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'uploads';
         uploads.build();
+
+        _$failedField = 'quota';
+        _quota?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'UploadPage',

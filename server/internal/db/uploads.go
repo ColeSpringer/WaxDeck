@@ -16,10 +16,19 @@ type Upload struct {
 	ReceivedBytes int64
 	MediaType     string
 	LibraryPID    string
+	// BatchID and BatchPath join the session to an upload batch:
+	// BatchPath is the file's directory relative to the picked folder,
+	// the auto grouping's clustering hint.
+	BatchID       string
+	BatchPath     string
 	SHA256        string
 	State         string
 	StagingPath   string
 	ReviewEntryID string
+	// TrackDoc holds a batch member's parsed review track document
+	// (JSON) between completion and batch finalize, so finalization
+	// never re-parses or re-fingerprints.
+	TrackDoc      string
 	DuplicatePID  string
 	DuplicateKind string
 	// ItemPID links an imported session to the catalog item it became,
@@ -30,15 +39,15 @@ type Upload struct {
 }
 
 const uploadCols = `id, user_id, file_name, size_bytes, received_bytes, media_type,
-	library_pid, sha256, state, staging_path, review_entry_id, duplicate_pid,
-	duplicate_kind, item_pid, created_at_ns, expires_at_ns`
+	library_pid, batch_id, batch_path, sha256, state, staging_path, review_entry_id,
+	track_doc, duplicate_pid, duplicate_kind, item_pid, created_at_ns, expires_at_ns`
 
 func scanUpload(row interface{ Scan(...any) error }) (Upload, error) {
 	var u Upload
 	err := row.Scan(&u.ID, &u.UserID, &u.FileName, &u.SizeBytes, &u.ReceivedBytes,
-		&u.MediaType, &u.LibraryPID, &u.SHA256, &u.State, &u.StagingPath,
-		&u.ReviewEntryID, &u.DuplicatePID, &u.DuplicateKind, &u.ItemPID,
-		&u.CreatedAtNS, &u.ExpiresAtNS)
+		&u.MediaType, &u.LibraryPID, &u.BatchID, &u.BatchPath, &u.SHA256, &u.State,
+		&u.StagingPath, &u.ReviewEntryID, &u.TrackDoc, &u.DuplicatePID,
+		&u.DuplicateKind, &u.ItemPID, &u.CreatedAtNS, &u.ExpiresAtNS)
 	return u, err
 }
 
@@ -46,10 +55,11 @@ func scanUpload(row interface{ Scan(...any) error }) (Upload, error) {
 func (d *DB) InsertUpload(ctx context.Context, u Upload) error {
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO uploads (`+uploadCols+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, u.UserID, u.FileName, u.SizeBytes, u.ReceivedBytes, u.MediaType,
-		u.LibraryPID, u.SHA256, u.State, u.StagingPath, u.ReviewEntryID,
-		u.DuplicatePID, u.DuplicateKind, u.ItemPID, u.CreatedAtNS, u.ExpiresAtNS)
+		u.LibraryPID, u.BatchID, u.BatchPath, u.SHA256, u.State, u.StagingPath,
+		u.ReviewEntryID, u.TrackDoc, u.DuplicatePID, u.DuplicateKind, u.ItemPID,
+		u.CreatedAtNS, u.ExpiresAtNS)
 	if err != nil {
 		return fmt.Errorf("db: inserting upload: %w", err)
 	}
@@ -182,11 +192,18 @@ func (d *DB) UploadBytesInUse(ctx context.Context, userID string) (int64, error)
 }
 
 // ExpiredUploads returns sessions past their expiry that still hold
-// staged bytes, for the janitor to reclaim.
+// staged bytes, for the janitor to reclaim. Members of a still-open
+// batch are exempt: under the default retention this never bites
+// (member retention far exceeds the batch window), but the retention
+// is operator-configurable and a short one must not let the session
+// janitor reap staged members before their batch finalizes. Once the
+// batch closes, members return to normal retention.
 func (d *DB) ExpiredUploads(ctx context.Context, nowNS int64, limit int) ([]Upload, error) {
 	rows, err := d.r.QueryContext(ctx, `
 		SELECT `+uploadCols+` FROM uploads
 		WHERE expires_at_ns > 0 AND expires_at_ns < ? AND state IN ('receiving', 'staged')
+			AND (batch_id = '' OR NOT EXISTS (
+				SELECT 1 FROM upload_batches b WHERE b.id = batch_id AND b.state = 'open'))
 		ORDER BY expires_at_ns LIMIT ?`, nowNS, limit)
 	if err != nil {
 		return nil, fmt.Errorf("db: listing expired uploads: %w", err)

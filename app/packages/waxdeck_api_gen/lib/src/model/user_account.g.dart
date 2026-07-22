@@ -18,8 +18,6 @@ class _$UserAccount extends UserAccount {
   @override
   final LibraryAccess libraryAccess;
   @override
-  final bool uploadEnabled;
-  @override
   final bool disabled;
   @override
   final bool? hasPassword;
@@ -33,6 +31,8 @@ class _$UserAccount extends UserAccount {
   final String? displayName;
   @override
   final BuiltList<String> roles;
+  @override
+  final bool uploadEnabled;
 
   factory _$UserAccount([void Function(UserAccountBuilder)? updates]) =>
       (UserAccountBuilder()..update(updates))._build();
@@ -43,7 +43,6 @@ class _$UserAccount extends UserAccount {
     required this.permissions,
     required this.pending,
     required this.libraryAccess,
-    required this.uploadEnabled,
     required this.disabled,
     this.hasPassword,
     this.uploadQuotaBytes,
@@ -51,6 +50,7 @@ class _$UserAccount extends UserAccount {
     required this.username,
     this.displayName,
     required this.roles,
+    required this.uploadEnabled,
   }) : super._();
   @override
   UserAccount rebuild(void Function(UserAccountBuilder) updates) =>
@@ -68,14 +68,14 @@ class _$UserAccount extends UserAccount {
         permissions == other.permissions &&
         pending == other.pending &&
         libraryAccess == other.libraryAccess &&
-        uploadEnabled == other.uploadEnabled &&
         disabled == other.disabled &&
         hasPassword == other.hasPassword &&
         uploadQuotaBytes == other.uploadQuotaBytes &&
         id == other.id &&
         username == other.username &&
         displayName == other.displayName &&
-        roles == other.roles;
+        roles == other.roles &&
+        uploadEnabled == other.uploadEnabled;
   }
 
   @override
@@ -86,7 +86,6 @@ class _$UserAccount extends UserAccount {
     _$hash = $jc(_$hash, permissions.hashCode);
     _$hash = $jc(_$hash, pending.hashCode);
     _$hash = $jc(_$hash, libraryAccess.hashCode);
-    _$hash = $jc(_$hash, uploadEnabled.hashCode);
     _$hash = $jc(_$hash, disabled.hashCode);
     _$hash = $jc(_$hash, hasPassword.hashCode);
     _$hash = $jc(_$hash, uploadQuotaBytes.hashCode);
@@ -94,6 +93,7 @@ class _$UserAccount extends UserAccount {
     _$hash = $jc(_$hash, username.hashCode);
     _$hash = $jc(_$hash, displayName.hashCode);
     _$hash = $jc(_$hash, roles.hashCode);
+    _$hash = $jc(_$hash, uploadEnabled.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -106,14 +106,14 @@ class _$UserAccount extends UserAccount {
           ..add('permissions', permissions)
           ..add('pending', pending)
           ..add('libraryAccess', libraryAccess)
-          ..add('uploadEnabled', uploadEnabled)
           ..add('disabled', disabled)
           ..add('hasPassword', hasPassword)
           ..add('uploadQuotaBytes', uploadQuotaBytes)
           ..add('id', id)
           ..add('username', username)
           ..add('displayName', displayName)
-          ..add('roles', roles))
+          ..add('roles', roles)
+          ..add('uploadEnabled', uploadEnabled))
         .toString();
   }
 }
@@ -148,11 +148,6 @@ class UserAccountBuilder
   set libraryAccess(covariant LibraryAccessBuilder? libraryAccess) =>
       _$this._libraryAccess = libraryAccess;
 
-  bool? _uploadEnabled;
-  bool? get uploadEnabled => _$this._uploadEnabled;
-  set uploadEnabled(covariant bool? uploadEnabled) =>
-      _$this._uploadEnabled = uploadEnabled;
-
   bool? _disabled;
   bool? get disabled => _$this._disabled;
   set disabled(covariant bool? disabled) => _$this._disabled = disabled;
@@ -184,6 +179,11 @@ class UserAccountBuilder
   ListBuilder<String> get roles => _$this._roles ??= ListBuilder<String>();
   set roles(covariant ListBuilder<String>? roles) => _$this._roles = roles;
 
+  bool? _uploadEnabled;
+  bool? get uploadEnabled => _$this._uploadEnabled;
+  set uploadEnabled(covariant bool? uploadEnabled) =>
+      _$this._uploadEnabled = uploadEnabled;
+
   UserAccountBuilder() {
     UserAccount._defaults(this);
   }
@@ -196,7 +196,6 @@ class UserAccountBuilder
       _permissions = $v.permissions.toBuilder();
       _pending = $v.pending;
       _libraryAccess = $v.libraryAccess.toBuilder();
-      _uploadEnabled = $v.uploadEnabled;
       _disabled = $v.disabled;
       _hasPassword = $v.hasPassword;
       _uploadQuotaBytes = $v.uploadQuotaBytes;
@@ -204,6 +203,7 @@ class UserAccountBuilder
       _username = $v.username;
       _displayName = $v.displayName;
       _roles = $v.roles.toBuilder();
+      _uploadEnabled = $v.uploadEnabled;
       _$v = null;
     }
     return this;
@@ -241,11 +241,6 @@ class UserAccountBuilder
               'pending',
             ),
             libraryAccess: libraryAccess.build(),
-            uploadEnabled: BuiltValueNullFieldError.checkNotNull(
-              uploadEnabled,
-              r'UserAccount',
-              'uploadEnabled',
-            ),
             disabled: BuiltValueNullFieldError.checkNotNull(
               disabled,
               r'UserAccount',
@@ -261,6 +256,11 @@ class UserAccountBuilder
             ),
             displayName: displayName,
             roles: roles.build(),
+            uploadEnabled: BuiltValueNullFieldError.checkNotNull(
+              uploadEnabled,
+              r'UserAccount',
+              'uploadEnabled',
+            ),
           );
     } catch (_) {
       late String _$failedField;

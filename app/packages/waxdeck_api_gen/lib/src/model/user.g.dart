@@ -20,6 +20,9 @@ abstract mixin class UserBuilder {
 
   ListBuilder<String> get roles;
   set roles(ListBuilder<String>? roles);
+
+  bool? get uploadEnabled;
+  set uploadEnabled(bool? uploadEnabled);
 }
 
 class _$$User extends $User {
@@ -31,6 +34,8 @@ class _$$User extends $User {
   final String? displayName;
   @override
   final BuiltList<String> roles;
+  @override
+  final bool uploadEnabled;
 
   factory _$$User([void Function($UserBuilder)? updates]) =>
       ($UserBuilder()..update(updates))._build();
@@ -40,6 +45,7 @@ class _$$User extends $User {
     required this.username,
     this.displayName,
     required this.roles,
+    required this.uploadEnabled,
   }) : super._();
   @override
   $User rebuild(void Function($UserBuilder) updates) =>
@@ -55,7 +61,8 @@ class _$$User extends $User {
         id == other.id &&
         username == other.username &&
         displayName == other.displayName &&
-        roles == other.roles;
+        roles == other.roles &&
+        uploadEnabled == other.uploadEnabled;
   }
 
   @override
@@ -65,6 +72,7 @@ class _$$User extends $User {
     _$hash = $jc(_$hash, username.hashCode);
     _$hash = $jc(_$hash, displayName.hashCode);
     _$hash = $jc(_$hash, roles.hashCode);
+    _$hash = $jc(_$hash, uploadEnabled.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -75,7 +83,8 @@ class _$$User extends $User {
           ..add('id', id)
           ..add('username', username)
           ..add('displayName', displayName)
-          ..add('roles', roles))
+          ..add('roles', roles)
+          ..add('uploadEnabled', uploadEnabled))
         .toString();
   }
 }
@@ -100,6 +109,11 @@ class $UserBuilder implements Builder<$User, $UserBuilder>, UserBuilder {
   ListBuilder<String> get roles => _$this._roles ??= ListBuilder<String>();
   set roles(covariant ListBuilder<String>? roles) => _$this._roles = roles;
 
+  bool? _uploadEnabled;
+  bool? get uploadEnabled => _$this._uploadEnabled;
+  set uploadEnabled(covariant bool? uploadEnabled) =>
+      _$this._uploadEnabled = uploadEnabled;
+
   $UserBuilder() {
     $User._defaults(this);
   }
@@ -111,6 +125,7 @@ class $UserBuilder implements Builder<$User, $UserBuilder>, UserBuilder {
       _username = $v.username;
       _displayName = $v.displayName;
       _roles = $v.roles.toBuilder();
+      _uploadEnabled = $v.uploadEnabled;
       _$v = null;
     }
     return this;
@@ -143,6 +158,11 @@ class $UserBuilder implements Builder<$User, $UserBuilder>, UserBuilder {
             ),
             displayName: displayName,
             roles: roles.build(),
+            uploadEnabled: BuiltValueNullFieldError.checkNotNull(
+              uploadEnabled,
+              r'$User',
+              'uploadEnabled',
+            ),
           );
     } catch (_) {
       late String _$failedField;

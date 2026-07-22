@@ -4631,6 +4631,83 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /uploads/batches:
+    post:
+      operationId: createUploadBatch
+      summary: Open an upload batch
+      description: >
+        Opens a batch that groups several upload sessions into review
+        units by the declared grouping intent: `album` opens one
+        multi-file review entry over every staged member, `tracks`
+        opens one entry per file, and `auto` clusters members into
+        album units by their tags and relative paths. Members join by
+        passing `batchId` (and optionally `batchPath`) at session
+        creation and must declare the batch's media type. The batch
+        stays open for 24 hours or until the finalize call; members
+        keep the normal upload retention. Nothing about a single
+        upload changes: a session without a batch opens its own
+        review entry at completion exactly as before.
+      tags: [uploads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadBatchCreate"
+      responses:
+        "201":
+          description: The opened batch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadBatch"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /uploads/batches/{batchId}/complete:
+    parameters:
+      - $ref: "#/components/parameters/UploadBatchId"
+    post:
+      operationId: completeUploadBatch
+      summary: Finalize an upload batch
+      description: >
+        Declares the batch complete: every member staged so far is
+        grouped per the batch's grouping intent and the review
+        entries open (their ids land in `reviewEntryIds`). Members
+        still receiving bytes fall back to opening their own
+        per-file entry when they later complete. Call this exactly
+        when the client finishes sending members — after per-file
+        failures too, so the files that did arrive are reviewed
+        (a batch whose every member was deleted finalizes empty).
+        Only the batch's owner (or an administrator) may finalize;
+        anyone else sees `not-found`. Idempotent: finalizing a
+        finalized batch answers the same batch again. Finalizing a
+        batch the server has already expired answers `conflict` —
+        its members were grouped with what had arrived when the
+        server closed it.
+      tags: [uploads]
+      responses:
+        "200":
+          description: The finalized batch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadBatch"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /acquisitions:
     post:
       operationId: createAcquisition
@@ -7495,6 +7572,14 @@ components:
       schema:
         type: string
         pattern: "^up-[0-9A-HJKMNP-TV-Z]{26}$"
+    UploadBatchId:
+      name: batchId
+      in: path
+      required: true
+      description: Upload batch PID (e.g. `ub-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^ub-[0-9A-HJKMNP-TV-Z]{26}$"
     TaskId:
       name: taskId
       in: path
@@ -7798,7 +7883,7 @@ components:
     User:
       type: object
       description: A WaxDeck account as visible to its owner.
-      required: [id, username, roles]
+      required: [id, username, roles, uploadEnabled]
       properties:
         id:
           type: string
@@ -7817,12 +7902,30 @@ components:
           items:
             type: string
             example: admin
+        uploadEnabled:
+          type: boolean
+          description: >
+            Whether the account may upload audio. On self views
+            (login, session) this is the *effective* value —
+            administrators always may, whatever their stored flag
+            says — and clients gate their upload affordances on it.
+            On administrative account views (`UserAccount`) it is the
+            stored per-account flag the account editor round-trips;
+            an administrator's own stored flag may therefore read
+            false while their effective right is true. Defined once
+            here because the generators flatten `UserAccount`'s
+            `allOf` over this schema; a duplicate declaration there
+            would silently lose.
 
     UserAccount:
       allOf:
         - $ref: "#/components/schemas/User"
         - type: object
           description: Administrative account fields beyond the self view.
+          # uploadEnabled stays in this required list (it is required on
+          # account views) but is defined once, on User: the generators
+          # flatten this allOf, and a duplicate property definition here
+          # would silently override the merged field in one of them.
           required: [disabled, libraryAccess, createdAt, uploadEnabled, pending, permissions]
           properties:
             disabled:
@@ -7841,11 +7944,6 @@ components:
               $ref: "#/components/schemas/LibraryAccess"
             permissions:
               $ref: "#/components/schemas/Permissions"
-            uploadEnabled:
-              type: boolean
-              description: >
-                Whether the account may upload audio. Administrators
-                can always upload.
             uploadQuotaBytes:
               type: integer
               format: int64
@@ -12650,6 +12748,28 @@ components:
             Lowercase hex SHA-256 of the file, for the up-front exact
             duplicate warning and the completion integrity check.
           pattern: "^[0-9a-f]{64}$"
+        batchId:
+          type: string
+          description: >
+            Joins the session to an open upload batch owned by the
+            caller; its grouping intent then decides how this file
+            reaches the review queue. The session must declare the
+            batch's media type and library. Referencing a batch that
+            is not open, or not the caller's, or mismatching either
+            field, answers `invalid-request`.
+          example: ub-01JZX5N8QW3F4V9T2B7KD3M9R6
+        batchPath:
+          type: string
+          maxLength: 512
+          description: >
+            The file's directory relative to the picked or dropped
+            folder, forward-slash separated (empty or absent for a
+            file at the top). The `auto` grouping clusters by it, so
+            disc subfolders (`CD1`, `Disc 2`) fold into one album.
+            Must stay relative — absolute paths and `..` segments
+            are rejected, as is passing it without `batchId`.
+            `fileName` stays a bare name regardless.
+          example: The Wall/CD1
 
     Upload:
       type: object
@@ -12688,7 +12808,14 @@ components:
           example: receiving
         reviewEntryId:
           type: string
-          description: The review entry completion opened.
+          description: >
+            The review entry the file landed in. Opened at completion
+            for a solo session; for a batch member, filled when the
+            batch finalizes — or at its own completion, for a member
+            that finished only after the batch closed.
+        batchId:
+          type: string
+          description: The batch the session joined, if any.
         duplicate:
           $ref: "#/components/schemas/DuplicateWarning"
         uploadedBy:
@@ -12728,6 +12855,101 @@ components:
           type: string
           description: The existing item's artist.
 
+    UploadGrouping:
+      type: string
+      enum: [auto, album, tracks]
+      description: >
+        How a batch's staged files reach the review queue: `album`
+        opens one multi-file entry over all of them, `tracks` one
+        entry per file, and `auto` clusters them into album units by
+        their tags and relative paths (disc subfolders fold into
+        their parent).
+
+    UploadBatchCreate:
+      type: object
+      description: A new upload batch.
+      required: [grouping, mediaType]
+      properties:
+        grouping:
+          $ref: "#/components/schemas/UploadGrouping"
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        libraryPid:
+          type: string
+          description: >
+            Target library for every member; required when several
+            libraries of the media type are visible to the caller.
+            Members re-declare it at session creation and must
+            match (a differing member value answers
+            `invalid-request`).
+
+    UploadBatch:
+      type: object
+      description: One upload batch.
+      required: [id, grouping, mediaType, state, reviewEntryIds, createdAt, expiresAt]
+      properties:
+        id:
+          type: string
+          description: Batch pid.
+          example: ub-01JZX5N8QW3F4V9T2B7KD3M9R6
+        grouping:
+          $ref: "#/components/schemas/UploadGrouping"
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        libraryPid:
+          type: string
+          description: Target library.
+        state:
+          type: string
+          description: >
+            Batch state: `open` (accepting members), `finalized`
+            (the finalize call grouped its members), or `expired`
+            (the 24-hour window lapsed and the server finalized it
+            with what had arrived). A string, not a closed enum.
+          example: open
+        reviewEntryIds:
+          type: array
+          description: >
+            The review entries finalization opened; empty until the
+            batch closes, and empty on a batch whose every member
+            was deleted before finalizing.
+          items:
+            type: string
+            example: rv-01JZX5N8QW3F4V9T2B7KD3M9R6
+        createdAt:
+          type: string
+          format: date-time
+          description: When the batch was opened.
+        expiresAt:
+          type: string
+          format: date-time
+          description: >
+            The deadline after which the server may auto-finalize an
+            open batch with the members staged by then (a background
+            sweep, so an overdue batch can stay open a little past
+            this).
+
+    UploadQuota:
+      type: object
+      description: >
+        The caller's upload allowance: always their own, even for
+        administrators listing everyone's sessions. Treat absence
+        on a page as unknown, not unlimited.
+      required: [bytesInUse]
+      properties:
+        bytesInUse:
+          type: integer
+          format: int64
+          description: >
+            Declared bytes of the caller's live sessions (everything
+            not discarded); what quota checks charge.
+        quotaBytes:
+          type: integer
+          format: int64
+          description: >
+            The account's cap on `bytesInUse`; absent means no
+            per-user cap.
+
     UploadPage:
       type: object
       description: One page of uploads.
@@ -12741,6 +12963,8 @@ components:
         nextCursor:
           type: string
           description: Cursor for the next page; omitted on the last.
+        quota:
+          $ref: "#/components/schemas/UploadQuota"
 
     MetadataFields:
       type: object

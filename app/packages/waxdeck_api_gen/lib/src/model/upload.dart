@@ -20,7 +20,8 @@ part 'upload.g.dart';
 /// * [mediaType] 
 /// * [libraryPid] - Target library.
 /// * [state] - Session state: `receiving` (bytes still arriving), `staged` (complete, in the review pipeline), `imported` (its file entered the library), or `discarded`. A string, not a closed enum. 
-/// * [reviewEntryId] - The review entry completion opened.
+/// * [reviewEntryId] - The review entry the file landed in. Opened at completion for a solo session; for a batch member, filled when the batch finalizes — or at its own completion, for a member that finished only after the batch closed. 
+/// * [batchId] - The batch the session joined, if any.
 /// * [duplicate] 
 /// * [uploadedBy] - The uploader's user pid (admin listings).
 /// * [createdAt] - When the session was created.
@@ -55,9 +56,13 @@ abstract class Upload implements Built<Upload, UploadBuilder> {
   @BuiltValueField(wireName: r'state')
   String get state;
 
-  /// The review entry completion opened.
+  /// The review entry the file landed in. Opened at completion for a solo session; for a batch member, filled when the batch finalizes — or at its own completion, for a member that finished only after the batch closed. 
   @BuiltValueField(wireName: r'reviewEntryId')
   String? get reviewEntryId;
+
+  /// The batch the session joined, if any.
+  @BuiltValueField(wireName: r'batchId')
+  String? get batchId;
 
   @BuiltValueField(wireName: r'duplicate')
   DuplicateWarning? get duplicate;
@@ -138,6 +143,13 @@ class _$UploadSerializer implements PrimitiveSerializer<Upload> {
       yield r'reviewEntryId';
       yield serializers.serialize(
         object.reviewEntryId,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.batchId != null) {
+      yield r'batchId';
+      yield serializers.serialize(
+        object.batchId,
         specifiedType: const FullType(String),
       );
     }
@@ -245,6 +257,13 @@ class _$UploadSerializer implements PrimitiveSerializer<Upload> {
             specifiedType: const FullType(String),
           ) as String;
           result.reviewEntryId = valueDes;
+          break;
+        case r'batchId':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.batchId = valueDes;
           break;
         case r'duplicate':
           final valueDes = serializers.deserialize(

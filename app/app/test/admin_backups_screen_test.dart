@@ -1,21 +1,53 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/backups_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
 
+/// A picker resolving pickFile to one fixed archive.
+class _ZipPicker implements FilePickerPort {
+  _ZipPicker(this.archive);
+
+  final PickedAudioFile? archive;
+
+  @override
+  bool get canPickFolders => false;
+
+  @override
+  Future<List<PickedAudioFile>> pickAudioFiles() async => const [];
+
+  @override
+  Future<List<PickedAudioFile>> pickAudioFolder() async => const [];
+
+  @override
+  Future<PickedAudioFile?> pickFile({
+    required Set<String> extensions,
+    required String label,
+  }) async => archive;
+}
+
 /// A viewport tall enough to hold archives, schedules, and retention,
 /// so no test scrolls through lazily built rows.
-Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
+Future<void> _pump(
+  WidgetTester tester,
+  FakeRepository repo, {
+  FilePickerPort? picker,
+}) async {
   tester.view.physicalSize = const Size(1200, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        filePickerProvider.overrideWithValue(picker),
+      ],
       child: const MaterialApp(home: BackupsScreen()),
     ),
   );
@@ -135,5 +167,37 @@ void main() {
 
     expect(repo.schedules['backup']!.cron, '30 4 * * 1');
     expect(repo.schedules['backup']!.enabled, isTrue);
+  });
+
+  testWidgets('importing an archive streams it and refreshes the list', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    final zipBytes = Uint8List.fromList(List.filled(6144, 7));
+    final picker = _ZipPicker(
+      PickedAudioFile(
+        name: 'waxdeck-elsewhere.zip',
+        size: zipBytes.length,
+        openRead: ([int? start, int? end]) => Stream.value(
+          Uint8List.sublistView(zipBytes, start ?? 0, end ?? zipBytes.length),
+        ),
+      ),
+    );
+    await _pump(tester, repo, picker: picker);
+
+    await tester.tap(find.byKey(const Key('backup-import')));
+    await tester.pumpAndSettle();
+
+    expect(repo.importBackupByteCounts, [zipBytes.length]);
+    // The imported archive joined the listing.
+    expect(find.textContaining('imported'), findsWidgets);
+  });
+
+  testWidgets('hides the import button without a picker port', (tester) async {
+    final repo = FakeRepository();
+    await _pump(tester, repo);
+
+    expect(find.byKey(const Key('backup-import')), findsNothing);
+    expect(find.byKey(const Key('backup-create')), findsOneWidget);
   });
 }

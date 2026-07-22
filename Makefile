@@ -50,11 +50,14 @@ drift-check: generate
 # api/oasdiff-allow.txt, when present, lists deliberately accepted
 # breaking changes (one oasdiff output line per entry); it is temporary
 # by construction and is deleted once the base ref contains the change.
+# --flatten-allof diffs the merged (effective) schemas: both generators
+# flatten allOf, so a property moving between an allOf branch and its
+# base is a no-op on the wire and must not read as a break.
 BASE ?= origin/main
 OASDIFF_ALLOW := api/oasdiff-allow.txt
 oasdiff:
 	git show "$(BASE):$(SPEC)" > .oasdiff-base.yaml
-	go run github.com/oasdiff/oasdiff@v1.11.7 breaking .oasdiff-base.yaml $(SPEC) --fail-on WARN \
+	go run github.com/oasdiff/oasdiff@v1.11.7 breaking .oasdiff-base.yaml $(SPEC) --fail-on WARN --flatten-allof \
 		$(if $(wildcard $(OASDIFF_ALLOW)),--err-ignore $(OASDIFF_ALLOW) --warn-ignore $(OASDIFF_ALLOW)); \
 	status=$$?; rm -f .oasdiff-base.yaml; exit $$status
 

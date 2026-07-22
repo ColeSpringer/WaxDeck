@@ -2,18 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
+import '../format_bytes.dart';
 import '../media_icons.dart';
 import '../review/review_entry_screen.dart';
 import 'add_to_library.dart';
+import 'audio_drop_area.dart';
 import 'file_picker_port.dart';
 import 'uploads_controller.dart';
 
-/// The caller's upload sessions with the pick-and-transfer flow.
-///
-/// The pick button only appears when a [FilePickerPort] is wired; the
-/// default provider is null until the platform pickers (native file
-/// dialogs, web drag-and-drop) land with a later wiring pass, so the
-/// screen stays a read-only session list until then.
+/// The caller's upload sessions with the pick-and-transfer flow, the
+/// quota header, and drag-and-drop. Pick affordances appear when a
+/// [FilePickerPort] is wired and the caller holds upload rights;
+/// without either, the screen stays a read-only session list.
 class UploadsScreen extends ConsumerWidget {
   const UploadsScreen({super.key});
 
@@ -68,11 +69,13 @@ class UploadsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final uploads = ref.watch(uploadsProvider);
     final picker = ref.watch(filePickerProvider);
+    final canUpload =
+        ref.watch(authControllerProvider).value?.user?.uploadEnabled ?? false;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Uploads'),
         actions: [
-          if (picker != null)
+          if (picker != null && canUpload)
             Semantics(
               identifier: 'upload-pick',
               label: 'Upload files',
@@ -84,24 +87,29 @@ class UploadsScreen extends ConsumerWidget {
                 onPressed: () => pickAndUpload(context, ref, picker),
               ),
             ),
-          Semantics(
-            identifier: 'upload-from-url',
-            label: 'Add from URL',
-            button: true,
-            child: IconButton(
-              key: const Key('upload-from-url'),
-              tooltip: 'Add from URL',
-              icon: const Icon(Icons.add_link),
-              onPressed: () => acquireFromUrl(context, ref),
+          if (canUpload)
+            Semantics(
+              identifier: 'upload-from-url',
+              label: 'Add from URL',
+              button: true,
+              child: IconButton(
+                key: const Key('upload-from-url'),
+                tooltip: 'Add from URL',
+                icon: const Icon(Icons.add_link),
+                onPressed: () => acquireFromUrl(context, ref),
+              ),
             ),
-          ),
         ],
       ),
-      body: switch (uploads) {
-        AsyncData(:final value) => _list(context, ref, value),
-        AsyncError(:final error) => _errorView(context, ref, error),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+      body: AudioDropArea(
+        enabled: canUpload,
+        onDropped: (files) => uploadPickedFiles(context, ref, files),
+        child: switch (uploads) {
+          AsyncData(:final value) => _list(context, ref, value),
+          AsyncError(:final error) => _errorView(context, ref, error),
+          _ => const Center(child: CircularProgressIndicator()),
+        },
+      ),
     );
   }
 
@@ -125,9 +133,17 @@ class UploadsScreen extends ConsumerWidget {
   }
 
   Widget _list(BuildContext context, WidgetRef ref, UploadsState state) {
+    final quota = state.quota;
     if (state.uploads.isEmpty) {
-      return const Center(child: Text('No uploads yet'));
+      return Column(
+        children: [
+          if (quota != null)
+            _QuotaHeader(key: const Key('upload-quota'), quota: quota),
+          const Expanded(child: Center(child: Text('No uploads yet'))),
+        ],
+      );
     }
+    final rows = _groupedRows(state);
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         final metrics = notification.metrics;
@@ -138,19 +154,156 @@ class UploadsScreen extends ConsumerWidget {
       },
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: state.uploads.length + (state.loadingMore ? 1 : 0),
+        itemCount:
+            rows.length + (quota == null ? 0 : 1) + (state.loadingMore ? 1 : 0),
         itemBuilder: (context, index) {
-          if (index >= state.uploads.length) {
+          if (quota != null) {
+            if (index == 0) {
+              return _QuotaHeader(key: const Key('upload-quota'), quota: quota);
+            }
+            index--;
+          }
+          if (index >= rows.length) {
             return const Center(child: CircularProgressIndicator());
           }
-          final upload = state.uploads[index];
-          return _UploadRow(
-            upload: upload,
-            failed: state.failed.contains(upload.id),
-            onRetry: () => _retry(context, ref, upload.id),
-            onDiscard: () => _discard(context, ref, upload),
-          );
+          // Keys ride the top-level items so the list's element
+          // reconciliation tracks rows across inserts and removals,
+          // not just the finders inside them.
+          return switch (rows[index]) {
+            _BatchHeaderRow(:final batchId, :final count) => _BatchHeader(
+              key: ValueKey('upload-batch-$batchId'),
+              batchId: batchId,
+              count: count,
+            ),
+            _SessionRow(:final upload) => _UploadRow(
+              key: ValueKey('upload-row-${upload.id}'),
+              upload: upload,
+              failed: state.failed.contains(upload.id),
+              onRetry: () => _retry(context, ref, upload.id),
+              onDiscard: () => _discard(context, ref, upload),
+            ),
+          };
         },
+      ),
+    );
+  }
+
+  /// Renders the listing with each batch's members bucketed under one
+  /// header at the batch's first (newest) appearance. Members usually
+  /// arrive adjacent in the creation-ordered listing, but a concurrent
+  /// solo upload (another tab, a share) can interleave them; bucketing
+  /// keeps one header per batch either way. Grouping is purely visual
+  /// and client-side (there is no batch listing endpoint), and a batch
+  /// spanning a page boundary still splits across pages.
+  static List<_ListRow> _groupedRows(UploadsState state) {
+    final byBatch = <String, List<UploadSession>>{};
+    for (final upload in state.uploads) {
+      final batchId = upload.batchId;
+      if (batchId != null) {
+        byBatch.putIfAbsent(batchId, () => []).add(upload);
+      }
+    }
+    final rows = <_ListRow>[];
+    final emitted = <String>{};
+    for (final upload in state.uploads) {
+      final batchId = upload.batchId;
+      if (batchId == null) {
+        rows.add(_SessionRow(upload));
+        continue;
+      }
+      if (!emitted.add(batchId)) continue;
+      final members = byBatch[batchId]!;
+      rows.add(_BatchHeaderRow(batchId: batchId, count: members.length));
+      rows.addAll(members.map(_SessionRow.new));
+    }
+    return rows;
+  }
+}
+
+sealed class _ListRow {
+  const _ListRow();
+}
+
+class _SessionRow extends _ListRow {
+  const _SessionRow(this.upload);
+
+  final UploadSession upload;
+}
+
+class _BatchHeaderRow extends _ListRow {
+  const _BatchHeaderRow({required this.batchId, required this.count});
+
+  final String batchId;
+  final int count;
+}
+
+class _BatchHeader extends StatelessWidget {
+  const _BatchHeader({super.key, required this.batchId, required this.count});
+
+  final String batchId;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Semantics(
+      identifier: 'upload-batch-$batchId',
+      child: Padding(
+        padding: const EdgeInsets.only(top: 12, bottom: 4),
+        child: Row(
+          children: [
+            Icon(
+              Icons.library_add,
+              size: 16,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Uploaded together · $count ${count == 1 ? 'file' : 'files'}',
+              style: textTheme.labelMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The caller's allowance: usage, and the cap with a fill bar when one
+/// is set.
+class _QuotaHeader extends StatelessWidget {
+  const _QuotaHeader({super.key, required this.quota});
+
+  final UploadQuota quota;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final cap = quota.quotaBytes;
+    return Semantics(
+      identifier: 'upload-quota',
+      child: Padding(
+        padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              cap == null
+                  ? '${formatBytes(quota.bytesInUse)} of uploads in use'
+                  : '${formatBytes(quota.bytesInUse)} of '
+                        '${formatBytes(cap)} used',
+              style: textTheme.bodySmall,
+            ),
+            if (cap != null && cap > 0) ...[
+              const SizedBox(height: 4),
+              LinearProgressIndicator(
+                value: (quota.bytesInUse / cap).clamp(0.0, 1.0),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -158,6 +311,7 @@ class UploadsScreen extends ConsumerWidget {
 
 class _UploadRow extends StatelessWidget {
   const _UploadRow({
+    super.key,
     required this.upload,
     required this.failed,
     required this.onRetry,
@@ -187,7 +341,6 @@ class _UploadRow extends StatelessWidget {
       identifier: 'upload-row-${upload.id}',
       label: upload.fileName,
       child: Card(
-        key: ValueKey('upload-row-${upload.id}'),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(

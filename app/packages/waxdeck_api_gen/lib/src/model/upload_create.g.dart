@@ -17,6 +17,10 @@ class _$UploadCreate extends UploadCreate {
   final String? libraryPid;
   @override
   final String? sha256;
+  @override
+  final String? batchId;
+  @override
+  final String? batchPath;
 
   factory _$UploadCreate([void Function(UploadCreateBuilder)? updates]) =>
       (UploadCreateBuilder()..update(updates))._build();
@@ -27,6 +31,8 @@ class _$UploadCreate extends UploadCreate {
     required this.mediaType,
     this.libraryPid,
     this.sha256,
+    this.batchId,
+    this.batchPath,
   }) : super._();
   @override
   UploadCreate rebuild(void Function(UploadCreateBuilder) updates) =>
@@ -43,7 +49,9 @@ class _$UploadCreate extends UploadCreate {
         sizeBytes == other.sizeBytes &&
         mediaType == other.mediaType &&
         libraryPid == other.libraryPid &&
-        sha256 == other.sha256;
+        sha256 == other.sha256 &&
+        batchId == other.batchId &&
+        batchPath == other.batchPath;
   }
 
   @override
@@ -54,6 +62,8 @@ class _$UploadCreate extends UploadCreate {
     _$hash = $jc(_$hash, mediaType.hashCode);
     _$hash = $jc(_$hash, libraryPid.hashCode);
     _$hash = $jc(_$hash, sha256.hashCode);
+    _$hash = $jc(_$hash, batchId.hashCode);
+    _$hash = $jc(_$hash, batchPath.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -65,7 +75,9 @@ class _$UploadCreate extends UploadCreate {
           ..add('sizeBytes', sizeBytes)
           ..add('mediaType', mediaType)
           ..add('libraryPid', libraryPid)
-          ..add('sha256', sha256))
+          ..add('sha256', sha256)
+          ..add('batchId', batchId)
+          ..add('batchPath', batchPath))
         .toString();
   }
 }
@@ -94,6 +106,14 @@ class UploadCreateBuilder
   String? get sha256 => _$this._sha256;
   set sha256(String? sha256) => _$this._sha256 = sha256;
 
+  String? _batchId;
+  String? get batchId => _$this._batchId;
+  set batchId(String? batchId) => _$this._batchId = batchId;
+
+  String? _batchPath;
+  String? get batchPath => _$this._batchPath;
+  set batchPath(String? batchPath) => _$this._batchPath = batchPath;
+
   UploadCreateBuilder() {
     UploadCreate._defaults(this);
   }
@@ -106,6 +126,8 @@ class UploadCreateBuilder
       _mediaType = $v.mediaType;
       _libraryPid = $v.libraryPid;
       _sha256 = $v.sha256;
+      _batchId = $v.batchId;
+      _batchPath = $v.batchPath;
       _$v = null;
     }
     return this;
@@ -145,6 +167,8 @@ class UploadCreateBuilder
           ),
           libraryPid: libraryPid,
           sha256: sha256,
+          batchId: batchId,
+          batchPath: batchPath,
         );
     replace(_$result);
     return _$result;

@@ -294,8 +294,12 @@ Serializers _$serializers =
           ..add(UpgradeResolveRequest.serializer)
           ..add(UpgradeResolveResult.serializer)
           ..add(Upload.serializer)
+          ..add(UploadBatch.serializer)
+          ..add(UploadBatchCreate.serializer)
           ..add(UploadCreate.serializer)
+          ..add(UploadGrouping.serializer)
           ..add(UploadPage.serializer)
+          ..add(UploadQuota.serializer)
           ..add(UserAccount.serializer)
           ..add(UserCreate.serializer)
           ..add(UserPage.serializer)
@@ -737,6 +741,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(SkipSpan)]),
             () => ListBuilder<SkipSpan>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

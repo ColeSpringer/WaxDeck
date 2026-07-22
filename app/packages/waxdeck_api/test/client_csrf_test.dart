@@ -43,6 +43,7 @@ const _userJson = {
   'id': 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
   'username': 'admin',
   'roles': ['admin'],
+  'uploadEnabled': true,
 };
 
 Map<String, Object> _loginJson({

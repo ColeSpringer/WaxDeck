@@ -75,12 +75,17 @@ class WaxDeckUser {
     required this.username,
     this.displayName,
     this.roles = const [],
+    this.uploadEnabled = false,
   });
 
   final String id;
   final String username;
   final String? displayName;
   final List<String> roles;
+
+  /// The *effective* upload right (administrators always hold it);
+  /// upload affordances gate on this.
+  final bool uploadEnabled;
 
   /// Name to show in UI chrome.
   String get label => displayName ?? username;
@@ -1811,6 +1816,7 @@ class UploadSession {
     required this.receivedBytes,
     required this.mediaType,
     this.libraryPid,
+    this.batchId,
     required this.state,
     this.reviewEntryId,
     this.duplicate,
@@ -1826,11 +1832,15 @@ class UploadSession {
   final MediaType mediaType;
   final String? libraryPid;
 
+  /// The upload batch the session joined, if any.
+  final String? batchId;
+
   /// Session state: `receiving`, `staged`, `imported`, or `discarded`.
   /// Open vocabulary.
   final String state;
 
-  /// The review entry completion opened, once staged.
+  /// The review entry the file landed in: at completion for a solo
+  /// session, at batch finalize for a member.
   final String? reviewEntryId;
   final DuplicateWarning? duplicate;
   final String? uploadedBy;
@@ -1838,12 +1848,71 @@ class UploadSession {
   final DateTime? expiresAt;
 }
 
+/// How an upload batch's files reach the review queue.
+enum UploadGrouping {
+  /// Cluster into album units by tags and relative paths.
+  auto('auto'),
+
+  /// One multi-file review entry over every member.
+  album('album'),
+
+  /// One review entry per file.
+  tracks('tracks');
+
+  const UploadGrouping(this.wireName);
+
+  /// Value as it appears on the wire.
+  final String wireName;
+}
+
+/// One upload batch: several sessions grouped into review units by a
+/// declared intent.
+class UploadBatch {
+  const UploadBatch({
+    required this.id,
+    required this.grouping,
+    required this.mediaType,
+    this.libraryPid,
+    required this.state,
+    this.reviewEntryIds = const [],
+    required this.createdAt,
+    required this.expiresAt,
+  });
+
+  final String id;
+  final UploadGrouping grouping;
+  final MediaType mediaType;
+  final String? libraryPid;
+
+  /// Batch state: `open`, `finalized`, or `expired`. Open vocabulary.
+  final String state;
+
+  /// The review entries finalization opened; empty while open.
+  final List<String> reviewEntryIds;
+  final DateTime createdAt;
+  final DateTime expiresAt;
+}
+
+/// The caller's upload allowance: bytes of live sessions against the
+/// account cap.
+class UploadQuota {
+  const UploadQuota({required this.bytesInUse, this.quotaBytes});
+
+  final int bytesInUse;
+
+  /// The cap on [bytesInUse]; null means no per-user cap.
+  final int? quotaBytes;
+}
+
 /// One keyset-paginated page of upload sessions.
 class UploadPage {
-  const UploadPage({required this.uploads, this.nextCursor});
+  const UploadPage({required this.uploads, this.nextCursor, this.quota});
 
   final List<UploadSession> uploads;
   final String? nextCursor;
+
+  /// The caller's own allowance snapshot; null when unknown.
+  final UploadQuota? quota;
 
   bool get hasMore => nextCursor != null;
 }

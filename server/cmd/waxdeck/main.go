@@ -691,6 +691,13 @@ func run() error {
 			case <-ctx.Done():
 				return nil
 			case <-tick.C:
+				// Overdue batches finalize first (their members regain
+				// normal retention), then expired sessions reclaim.
+				for svc.DrainExpiredUploadBatches(ctx) {
+					if ctx.Err() != nil {
+						return nil
+					}
+				}
 				for svc.DrainExpiredUploads(ctx) {
 					if ctx.Err() != nil {
 						return nil
