@@ -4,8 +4,8 @@ Running WaxDeck for a household means letting people in, keeping the
 server healthy, and being able to undo mistakes. This page covers the
 administration surface: accounts and permissions, signup requests and
 invites, the audit log, backups and restore, scheduled jobs, the
-trash, read-only mode, transcoding limits, Prometheus metrics, and
-moving in from another server.
+trash, upload oversight, read-only mode, transcoding limits,
+Prometheus metrics, and moving in from another server.
 
 ## Accounts, roles, and permissions
 
@@ -14,6 +14,13 @@ the API. Every account has a role (`admin` or `user`), library
 visibility (every library, or an explicit set), and a set of
 permission toggles:
 
+- **Upload** — bring audio into the library: chunked uploads from
+  any client, and URL acquisitions, both staged for a review
+  decision instead of landing directly. The grant carries
+  item-scoped metadata editing over what the account's uploads
+  bring in, and an optional per-account byte quota caps the total
+  uploads the account may hold at once (acquired bytes count
+  against it too).
 - **Download** — fetch original files for offline use.
 - **Delete** — delete visible library items to the trash. Permanent
   deletion is always admin-only.
@@ -36,9 +43,11 @@ permission toggles:
 - **Max transcode bitrate** — a per-account ceiling on transcoded
   streams, overriding the server default.
 
-Administrators hold every permission implicitly. Changing a user's
-content rules retires their sync cursors, so offline clients re-mirror
-under the new rules instead of keeping stale content.
+Administrators hold every permission implicitly. A new account starts
+with everything granted except delete and upload, and no tag rules.
+Changing a user's content rules retires their sync cursors, so offline
+clients re-mirror under the new rules instead of keeping stale
+content.
 
 ## Signup requests and invites
 
@@ -117,6 +126,23 @@ the catalog (re-scanned and un-archived), and empties the trash
 permanently, reporting the space reclaimed. Deleting items from the
 item page previews what will be deleted (files, bytes) before anything
 moves.
+
+## Upload oversight
+
+Uploaded and acquired files stage under the data directory, never in
+a library root, until a review decision imports them; staged bytes
+live on the data volume and are not part of backups (which hold only
+the databases). The uploads screen lists an uploader's own sessions;
+administrators see every account's, with who owns each. Any
+unfinished or undecided session can be deleted there, freeing
+its staged bytes and closing its pending review entry; a file that
+already entered the library is deleted in the library instead, like
+any other item. Staging never needs manual sweeping: stalled
+transfers and staged files nobody decides on are reclaimed a week
+after the session opened, their pending review entries closed with
+them. Granting upload rights and setting quotas is covered above;
+the upload flow itself, grouping, and the review pipeline are in the
+[curation guide](curation-and-metadata.md).
 
 ## Read-only mode
 
