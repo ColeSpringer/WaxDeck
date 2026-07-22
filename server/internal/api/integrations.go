@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"net/http"
@@ -412,55 +413,179 @@ func (s *Server) DeleteAllPushRegistrations(ctx context.Context, _ DeleteAllPush
 
 // --- notifications ----------------------------------------------------------------
 
-func (s *Server) GetNotificationConfig(ctx context.Context, _ GetNotificationConfigRequestObject) (GetNotificationConfigResponseObject, error) {
+func (s *Server) ListNotificationEvents(ctx context.Context, _ ListNotificationEventsRequestObject) (ListNotificationEventsResponseObject, error) {
+	if _, _, err := s.requireUserCtx(ctx); err != nil {
+		return nil, err
+	}
+	events := s.svc.NotifyEvents()
+	out := NotificationEventList{Events: make([]NotificationEvent, 0, len(events))}
+	for _, e := range events {
+		out.Events = append(out.Events, NotificationEvent{
+			Name:        e.Name,
+			Scope:       NotificationScope(e.Scope),
+			Description: e.Description,
+		})
+	}
+	return ListNotificationEvents200JSONResponse(out), nil
+}
+
+func (s *Server) ListServerNotificationTargets(ctx context.Context, _ ListServerNotificationTargetsRequestObject) (ListServerNotificationTargetsResponseObject, error) {
 	_, p, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if !p.IsAdmin() {
-		return GetNotificationConfig403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+		return ListServerNotificationTargets403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
-	cfg, err := s.svc.NotificationSettings(ctx)
+	rows, err := s.svc.ListServerNotificationTargets(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return GetNotificationConfig200JSONResponse(notificationConfigJSON(cfg)), nil
+	return ListServerNotificationTargets200JSONResponse(notificationTargetListJSON(rows)), nil
 }
 
-func (s *Server) PutNotificationConfig(ctx context.Context, req PutNotificationConfigRequestObject) (PutNotificationConfigResponseObject, error) {
+func (s *Server) CreateServerNotificationTarget(ctx context.Context, req CreateServerNotificationTargetRequestObject) (CreateServerNotificationTargetResponseObject, error) {
 	if req.Body == nil {
-		return PutNotificationConfig400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+		return CreateServerNotificationTarget400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
 	_, p, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if !p.IsAdmin() {
-		return PutNotificationConfig403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+		return CreateServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
-	targets := ""
-	if req.Body.Targets != nil {
-		targets = *req.Body.Targets
-	}
-	cfg, err := s.svc.PutNotificationSettings(ctx, req.Body.AppriseUrl, targets, req.Body.EnabledEvents)
+	in, err := notificationTargetInputFromWire(string(req.Body.Kind), req.Body.Label, req.Body.Config, req.Body.EnabledEvents)
 	if err != nil {
 		return nil, err
 	}
-	return PutNotificationConfig200JSONResponse(notificationConfigJSON(cfg)), nil
+	created, err := s.svc.CreateServerNotificationTarget(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return CreateServerNotificationTarget201JSONResponse(notificationTargetJSON(created)), nil
 }
 
-func (s *Server) TestNotifications(ctx context.Context, _ TestNotificationsRequestObject) (TestNotificationsResponseObject, error) {
+func (s *Server) UpdateServerNotificationTarget(ctx context.Context, req UpdateServerNotificationTargetRequestObject) (UpdateServerNotificationTargetResponseObject, error) {
+	if req.Body == nil {
+		return UpdateServerNotificationTarget400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
 	_, p, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if !p.IsAdmin() {
-		return TestNotifications403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+		return UpdateServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
-	if err := s.svc.TestNotifications(ctx); err != nil {
+	in, err := notificationTargetInputFromWire("", req.Body.Label, req.Body.Config, req.Body.EnabledEvents)
+	if err != nil {
 		return nil, err
 	}
-	return TestNotifications202Response{}, nil
+	updated, err := s.svc.UpdateServerNotificationTarget(ctx, req.TargetId, in)
+	if err != nil {
+		return nil, err
+	}
+	return UpdateServerNotificationTarget200JSONResponse(notificationTargetJSON(updated)), nil
+}
+
+func (s *Server) DeleteServerNotificationTarget(ctx context.Context, req DeleteServerNotificationTargetRequestObject) (DeleteServerNotificationTargetResponseObject, error) {
+	_, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return DeleteServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if err := s.svc.DeleteServerNotificationTarget(ctx, req.TargetId); err != nil {
+		return nil, err
+	}
+	return DeleteServerNotificationTarget204Response{}, nil
+}
+
+func (s *Server) TestServerNotificationTarget(ctx context.Context, req TestServerNotificationTargetRequestObject) (TestServerNotificationTargetResponseObject, error) {
+	_, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return TestServerNotificationTarget403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if err := s.svc.TestServerNotificationTarget(ctx, req.TargetId); err != nil {
+		return nil, err
+	}
+	return TestServerNotificationTarget202Response{}, nil
+}
+
+func (s *Server) ListMyNotificationTargets(ctx context.Context, _ ListMyNotificationTargetsRequestObject) (ListMyNotificationTargetsResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.svc.ListMyNotificationTargets(ctx, uc)
+	if err != nil {
+		return nil, err
+	}
+	return ListMyNotificationTargets200JSONResponse(notificationTargetListJSON(rows)), nil
+}
+
+func (s *Server) CreateMyNotificationTarget(ctx context.Context, req CreateMyNotificationTargetRequestObject) (CreateMyNotificationTargetResponseObject, error) {
+	if req.Body == nil {
+		return CreateMyNotificationTarget400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	in, err := notificationTargetInputFromWire(string(req.Body.Kind), req.Body.Label, req.Body.Config, req.Body.EnabledEvents)
+	if err != nil {
+		return nil, err
+	}
+	created, err := s.svc.CreateMyNotificationTarget(ctx, uc, in)
+	if err != nil {
+		return nil, err
+	}
+	return CreateMyNotificationTarget201JSONResponse(notificationTargetJSON(created)), nil
+}
+
+func (s *Server) UpdateMyNotificationTarget(ctx context.Context, req UpdateMyNotificationTargetRequestObject) (UpdateMyNotificationTargetResponseObject, error) {
+	if req.Body == nil {
+		return UpdateMyNotificationTarget400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	in, err := notificationTargetInputFromWire("", req.Body.Label, req.Body.Config, req.Body.EnabledEvents)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := s.svc.UpdateMyNotificationTarget(ctx, uc, req.TargetId, in)
+	if err != nil {
+		return nil, err
+	}
+	return UpdateMyNotificationTarget200JSONResponse(notificationTargetJSON(updated)), nil
+}
+
+func (s *Server) DeleteMyNotificationTarget(ctx context.Context, req DeleteMyNotificationTargetRequestObject) (DeleteMyNotificationTargetResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.DeleteMyNotificationTarget(ctx, uc, req.TargetId); err != nil {
+		return nil, err
+	}
+	return DeleteMyNotificationTarget204Response{}, nil
+}
+
+func (s *Server) TestMyNotificationTarget(ctx context.Context, req TestMyNotificationTargetRequestObject) (TestMyNotificationTargetResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.TestMyNotificationTarget(ctx, uc, req.TargetId); err != nil {
+		return nil, err
+	}
+	return TestMyNotificationTarget202Response{}, nil
 }
 
 // --- wire conversion --------------------------------------------------------------
@@ -518,14 +643,56 @@ func pushRegistrationJSON(r service.PushRegistration) PushRegistration {
 	return out
 }
 
-func notificationConfigJSON(cfg service.NotificationConfig) NotificationConfig {
-	out := NotificationConfig{
-		AppriseUrl:    cfg.AppriseURL,
-		EnabledEvents: cfg.EnabledEvents,
-		KnownEvents:   cfg.KnownEvents,
+// notificationTargetInputFromWire converts one create or update body.
+// The free-form config object round-trips through JSON so the service
+// and providers see the raw document; kind is empty on updates (fixed
+// at creation, resolved from the stored row).
+func notificationTargetInputFromWire(kind string, label *string, config map[string]interface{}, events []string) (service.NotificationTargetInput, error) {
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return service.NotificationTargetInput{}, &service.Error{Kind: service.KindInvalid, Msg: "config is not a valid document"}
 	}
-	if cfg.Targets != "" {
-		out.Targets = ptr(cfg.Targets)
+	in := service.NotificationTargetInput{
+		Kind:          kind,
+		Config:        json.RawMessage(raw),
+		EnabledEvents: events,
+	}
+	if label != nil {
+		in.Label = *label
+	}
+	return in, nil
+}
+
+func notificationTargetListJSON(rows []service.NotificationTarget) NotificationTargetList {
+	out := NotificationTargetList{Targets: make([]NotificationTarget, 0, len(rows))}
+	for _, r := range rows {
+		out.Targets = append(out.Targets, notificationTargetJSON(r))
+	}
+	return out
+}
+
+func notificationTargetJSON(t service.NotificationTarget) NotificationTarget {
+	config := map[string]interface{}{}
+	// The service hands the opened document; an unreadable one already
+	// degraded to {} there.
+	_ = json.Unmarshal(t.Config, &config)
+	out := NotificationTarget{
+		Pid:           t.PID,
+		Kind:          NotificationTargetKind(t.Kind),
+		Scope:         NotificationScope(t.Scope),
+		Config:        config,
+		EnabledEvents: t.EnabledEvents,
+		CreatedAt:     t.CreatedAt,
+	}
+	if t.Label != "" {
+		out.Label = ptr(t.Label)
+	}
+	if !t.LastSuccessAt.IsZero() {
+		out.LastSuccessAt = ptr(t.LastSuccessAt)
+	}
+	if t.LastError != "" {
+		out.LastError = ptr(t.LastError)
+		out.LastErrorAt = ptr(t.LastErrorAt)
 	}
 	return out
 }

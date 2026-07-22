@@ -137,8 +137,14 @@ import 'package:waxdeck_api_gen/src/model/migration_options.dart';
 import 'package:waxdeck_api_gen/src/model/mix_basis.dart';
 import 'package:waxdeck_api_gen/src/model/model_library.dart';
 import 'package:waxdeck_api_gen/src/model/month_listening.dart';
-import 'package:waxdeck_api_gen/src/model/notification_config.dart';
-import 'package:waxdeck_api_gen/src/model/notification_config_update.dart';
+import 'package:waxdeck_api_gen/src/model/notification_event.dart';
+import 'package:waxdeck_api_gen/src/model/notification_event_list.dart';
+import 'package:waxdeck_api_gen/src/model/notification_scope.dart';
+import 'package:waxdeck_api_gen/src/model/notification_target.dart';
+import 'package:waxdeck_api_gen/src/model/notification_target_create.dart';
+import 'package:waxdeck_api_gen/src/model/notification_target_kind.dart';
+import 'package:waxdeck_api_gen/src/model/notification_target_list.dart';
+import 'package:waxdeck_api_gen/src/model/notification_target_update.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_exchange_request.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_provider.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_providers.dart';
@@ -424,8 +430,14 @@ part 'serializers.g.dart';
   MixBasis,
   ModelLibrary,
   MonthListening,
-  NotificationConfig,
-  NotificationConfigUpdate,
+  NotificationEvent,
+  NotificationEventList,
+  NotificationScope,
+  NotificationTarget,
+  NotificationTargetCreate,
+  NotificationTargetKind,
+  NotificationTargetList,
+  NotificationTargetUpdate,
   OidcExchangeRequest,
   OidcProvider,
   OidcProviders,

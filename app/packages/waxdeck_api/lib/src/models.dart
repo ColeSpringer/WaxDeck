@@ -1306,19 +1306,58 @@ class Scrobbler {
   final DateTime? lastErrorAt;
 }
 
-/// The server's notification relay configuration (administrators).
-class NotificationConfig {
-  const NotificationConfig({
-    required this.appriseUrl,
-    required this.enabledEvents,
-    required this.knownEvents,
-    this.targets,
+/// One notification event the server can emit: catalog entry for the
+/// per-target event checklist.
+class NotifyEvent {
+  const NotifyEvent({
+    required this.name,
+    required this.scope,
+    required this.description,
   });
 
-  final String appriseUrl;
-  final String? targets;
+  final String name;
+
+  /// `server` (operations events, admin surfaces) or `user`.
+  final String scope;
+  final String description;
+}
+
+/// One notification delivery destination. [config] is the kind's
+/// free-form configuration document, returned verbatim to the owner
+/// so it round-trips through the editor; the server seals it at rest.
+class NotificationTarget {
+  const NotificationTarget({
+    required this.pid,
+    required this.kind,
+    required this.scope,
+    required this.config,
+    required this.enabledEvents,
+    required this.createdAt,
+    this.label,
+    this.lastSuccessAt,
+    this.lastError,
+    this.lastErrorAt,
+  });
+
+  final String pid;
+
+  /// `pushover`, `ntfy`, `gotify`, `discord`, `webhook`, `apprise`,
+  /// or `unifiedpush`; fixed at creation.
+  final String kind;
+
+  /// `server` (administrator-managed) or `user` (personal).
+  final String scope;
+  final String? label;
+  final Map<String, Object?> config;
   final List<String> enabledEvents;
-  final List<String> knownEvents;
+  final DateTime createdAt;
+
+  /// Delivery health: the last successful delivery, and the standing
+  /// error while the target is unhealthy (cleared by the next
+  /// success).
+  final DateTime? lastSuccessAt;
+  final String? lastError;
+  final DateTime? lastErrorAt;
 }
 
 /// One UnifiedPush endpoint registration.

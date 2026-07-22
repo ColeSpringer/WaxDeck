@@ -63,6 +63,12 @@ type backupAuditor interface {
 	Audit(ctx context.Context, actor *UserCtx, action string, target AuditTarget, detail map[string]any)
 }
 
+// backupNotifier announces backup outcomes on the server notification
+// scope; *Library satisfies it.
+type backupNotifier interface {
+	EmitServerNotification(ctx context.Context, event, title, body string)
+}
+
 // SealedCasualty is one sealed credential a restore onto a different
 // key cannot recover (an app password, a private feed's password, a
 // scrobble connection). Kind names the credential class, Name the
@@ -127,6 +133,7 @@ type Backups struct {
 	db      *wdb.DB
 	catalog backupCatalog
 	audit   backupAuditor
+	notify  backupNotifier
 	log     *slog.Logger
 	dataDir string
 	prober  KeyProber
@@ -147,10 +154,10 @@ type Backups struct {
 // marker at its top level). prober may be nil until the key preflight
 // is wired; staging then reports the gap as a warning.
 func NewBackups(l *Library, dataDir string, prober KeyProber) *Backups {
-	return newBackups(l.db, l.lib, l, l.log, dataDir, prober)
+	return newBackups(l.db, l.lib, l, l, l.log, dataDir, prober)
 }
 
-func newBackups(store *wdb.DB, catalog backupCatalog, audit backupAuditor, log *slog.Logger, dataDir string, prober KeyProber) *Backups {
+func newBackups(store *wdb.DB, catalog backupCatalog, audit backupAuditor, notify backupNotifier, log *slog.Logger, dataDir string, prober KeyProber) *Backups {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
@@ -158,6 +165,7 @@ func newBackups(store *wdb.DB, catalog backupCatalog, audit backupAuditor, log *
 		db:      store,
 		catalog: catalog,
 		audit:   audit,
+		notify:  notify,
 		log:     log,
 		dataDir: dataDir,
 		prober:  prober,
@@ -270,8 +278,12 @@ func (b *Backups) Run(ctx context.Context, id string) error {
 		map[string]any{"origin": row.Origin, "state": row.State,
 			"sizeBytes": row.SizeBytes, "error": row.Error})
 	if buildErr != nil {
+		b.notify.EmitServerNotification(ctx, "backup-failed",
+			"Backup failed", row.FileName+": "+buildErr.Error())
 		return &Error{Kind: KindInternal, Err: buildErr}
 	}
+	b.notify.EmitServerNotification(ctx, "backup-completed",
+		"Backup completed", fmt.Sprintf("%s, %.1f MB.", row.FileName, float64(row.SizeBytes)/1e6))
 	if err := b.applyRetention(ctx); err != nil {
 		// Retention failing must not fail the backup that just landed.
 		b.log.Warn("applying backup retention", "err", err)

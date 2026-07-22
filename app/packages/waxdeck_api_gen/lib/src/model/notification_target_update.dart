@@ -4,66 +4,67 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
-part 'notification_config_update.g.dart';
+part 'notification_target_update.g.dart';
 
-/// Replaces the notification relay configuration.
+/// Replaces a target's label, config, and enabled events; the kind is fixed at creation. 
 ///
 /// Properties:
-/// * [appriseUrl] - Apprise API server base URL; empty disables.
-/// * [targets] - Apprise target URLs; empty uses the server's own.
-/// * [enabledEvents] - Event names to deliver.
+/// * [label] - Display label.
+/// * [config] - The kind's delivery configuration, replaced whole.
+/// * [enabledEvents] - Catalog event names to deliver, under the same scope rules as creation. 
 @BuiltValue()
-abstract class NotificationConfigUpdate implements Built<NotificationConfigUpdate, NotificationConfigUpdateBuilder> {
-  /// Apprise API server base URL; empty disables.
-  @BuiltValueField(wireName: r'appriseUrl')
-  String get appriseUrl;
+abstract class NotificationTargetUpdate implements Built<NotificationTargetUpdate, NotificationTargetUpdateBuilder> {
+  /// Display label.
+  @BuiltValueField(wireName: r'label')
+  String? get label;
 
-  /// Apprise target URLs; empty uses the server's own.
-  @BuiltValueField(wireName: r'targets')
-  String? get targets;
+  /// The kind's delivery configuration, replaced whole.
+  @BuiltValueField(wireName: r'config')
+  BuiltMap<String, JsonObject?> get config;
 
-  /// Event names to deliver.
+  /// Catalog event names to deliver, under the same scope rules as creation. 
   @BuiltValueField(wireName: r'enabledEvents')
   BuiltList<String> get enabledEvents;
 
-  NotificationConfigUpdate._();
+  NotificationTargetUpdate._();
 
-  factory NotificationConfigUpdate([void updates(NotificationConfigUpdateBuilder b)]) = _$NotificationConfigUpdate;
+  factory NotificationTargetUpdate([void updates(NotificationTargetUpdateBuilder b)]) = _$NotificationTargetUpdate;
 
   @BuiltValueHook(initializeBuilder: true)
-  static void _defaults(NotificationConfigUpdateBuilder b) => b;
+  static void _defaults(NotificationTargetUpdateBuilder b) => b;
 
   @BuiltValueSerializer(custom: true)
-  static Serializer<NotificationConfigUpdate> get serializer => _$NotificationConfigUpdateSerializer();
+  static Serializer<NotificationTargetUpdate> get serializer => _$NotificationTargetUpdateSerializer();
 }
 
-class _$NotificationConfigUpdateSerializer implements PrimitiveSerializer<NotificationConfigUpdate> {
+class _$NotificationTargetUpdateSerializer implements PrimitiveSerializer<NotificationTargetUpdate> {
   @override
-  final Iterable<Type> types = const [NotificationConfigUpdate, _$NotificationConfigUpdate];
+  final Iterable<Type> types = const [NotificationTargetUpdate, _$NotificationTargetUpdate];
 
   @override
-  final String wireName = r'NotificationConfigUpdate';
+  final String wireName = r'NotificationTargetUpdate';
 
   Iterable<Object?> _serializeProperties(
     Serializers serializers,
-    NotificationConfigUpdate object, {
+    NotificationTargetUpdate object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
-    yield r'appriseUrl';
-    yield serializers.serialize(
-      object.appriseUrl,
-      specifiedType: const FullType(String),
-    );
-    if (object.targets != null) {
-      yield r'targets';
+    if (object.label != null) {
+      yield r'label';
       yield serializers.serialize(
-        object.targets,
+        object.label,
         specifiedType: const FullType(String),
       );
     }
+    yield r'config';
+    yield serializers.serialize(
+      object.config,
+      specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+    );
     yield r'enabledEvents';
     yield serializers.serialize(
       object.enabledEvents,
@@ -74,7 +75,7 @@ class _$NotificationConfigUpdateSerializer implements PrimitiveSerializer<Notifi
   @override
   Object serialize(
     Serializers serializers,
-    NotificationConfigUpdate object, {
+    NotificationTargetUpdate object, {
     FullType specifiedType = FullType.unspecified,
   }) {
     return _serializeProperties(serializers, object, specifiedType: specifiedType).toList();
@@ -85,26 +86,26 @@ class _$NotificationConfigUpdateSerializer implements PrimitiveSerializer<Notifi
     Object serialized, {
     FullType specifiedType = FullType.unspecified,
     required List<Object?> serializedList,
-    required NotificationConfigUpdateBuilder result,
+    required NotificationTargetUpdateBuilder result,
     required List<Object?> unhandled,
   }) {
     for (var i = 0; i < serializedList.length; i += 2) {
       final key = serializedList[i] as String;
       final value = serializedList[i + 1];
       switch (key) {
-        case r'appriseUrl':
+        case r'label':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(String),
           ) as String;
-          result.appriseUrl = valueDes;
+          result.label = valueDes;
           break;
-        case r'targets':
+        case r'config':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
-          result.targets = valueDes;
+            specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+          ) as BuiltMap<String, JsonObject?>;
+          result.config.replace(valueDes);
           break;
         case r'enabledEvents':
           final valueDes = serializers.deserialize(
@@ -122,12 +123,12 @@ class _$NotificationConfigUpdateSerializer implements PrimitiveSerializer<Notifi
   }
 
   @override
-  NotificationConfigUpdate deserialize(
+  NotificationTargetUpdate deserialize(
     Serializers serializers,
     Object serialized, {
     FullType specifiedType = FullType.unspecified,
   }) {
-    final result = NotificationConfigUpdateBuilder();
+    final result = NotificationTargetUpdateBuilder();
     final serializedList = (serialized as Iterable<Object?>).toList();
     final unhandled = <Object?>[];
     _deserializeProperties(

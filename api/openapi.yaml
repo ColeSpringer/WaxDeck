@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: WaxDeck API
-  version: 0.10.0
+  version: 0.11.0
   description: |
     First-party REST API for WaxDeck: the self-hosted player, library manager,
     and metadata completer for music, podcasts, and audiobooks.
@@ -25,9 +25,12 @@ info:
     round trips), internet radio stations (a shared station library
     with directory search), outbound scrobbling connections (Last.fm
     and ListenBrainz per user, delivered from a durable server-side
-    queue), server notifications (an Apprise relay configured by
-    administrators), UnifiedPush registrations for push-transported
-    events, and multi-device playback control (player endpoints,
+    queue), notification targets in two scopes (administrator-managed
+    server destinations for operations events and per-user personal
+    destinations with per-target event selection, delivering natively
+    to Pushover, ntfy, Gotify, Discord webhooks, generic webhooks, an
+    Apprise relay, and UnifiedPush endpoints), and multi-device
+    playback control (player endpoints,
     playback sessions with server-side queues, transfer between
     endpoints, gapless queue timelines through the streaming engine,
     and cast preflight diagnostics; the live command bus rides the
@@ -71,7 +74,7 @@ info:
     - Identifiers (`pid`) are type-prefixed ULIDs (`tr-` track, `al-` album,
       `ar-` artist, `pc-` podcast, `ep-` episode, `bk-` audiobook, `jb-` job,
       `lb-` library, `us-` user, `se-` session, `ap-` app password,
-      `pl-` playlist, `rs-` radio station, `pr-` push registration,
+      `pl-` playlist, `rs-` radio station, `nt-` notification target,
       `pe-` player endpoint, `ps-` playback session, `rv-` review
       entry, `up-` upload, `tk-` tool task, `iv-` invite, `bu-` backup
       archive, `th-` trash entry, `sh-` share link).
@@ -258,8 +261,10 @@ tags:
       ListenBrainz, with server-side queueing and delivery.
   - name: notifications
     description: >
-      Server notifications: the Apprise relay configuration and
-      per-user UnifiedPush registrations.
+      Notification targets in two scopes: administrator-managed
+      server destinations for operations events, and per-user
+      personal destinations (including UnifiedPush endpoints) with
+      per-target event selection.
   - name: playback
     description: Resolve playable streams, playback state, and listen accounting.
   - name: player
@@ -1463,13 +1468,172 @@ paths:
               schema:
                 type: string
 
+  /notifications/events:
+    get:
+      operationId: listNotificationEvents
+      summary: List the notification event catalog
+      description: >
+        Every notification event this server can emit, with its scope:
+        `server` events describe server operations and deliver to
+        server-scope targets (plus admin-owned personal targets that
+        opted in), `user` events concern one user and deliver to that
+        user's personal targets. Clients build the per-target event
+        checklist from this catalog; a target's `enabledEvents` must
+        name events from it. The reserved `test` event never appears
+        here: per-target tests are requested through the target's test
+        endpoint and bypass event selection.
+      tags: [notifications]
+      responses:
+        "200":
+          description: The event catalog.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationEventList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /users/me/notification-targets:
+    get:
+      operationId: listMyNotificationTargets
+      summary: List the caller's notification targets
+      description: >
+        The calling user's personal notification targets, including
+        UnifiedPush registrations (kind `unifiedpush`; the
+        push-registration endpoints are a compatibility view over the
+        same rows). `config` is returned verbatim to the owner,
+        service tokens included, so the configuration can be
+        round-tripped for editing; it is sealed at rest. Unpaginated:
+        the per-kind cap keeps the list small.
+      tags: [notifications]
+      responses:
+        "200":
+          description: The caller's targets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTargetList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    post:
+      operationId: createMyNotificationTarget
+      summary: Create a personal notification target
+      description: >
+        Creates one personal delivery destination. `config` carries
+        the kind's fields (see the NotificationTarget schema);
+        validation is per kind and unknown config fields are refused.
+        `enabledEvents` names catalog events this target receives:
+        user-scope events for everyone, server-scope events only when
+        the caller is an administrator. Each user may hold at most 20
+        targets per kind; conflict (code `conflict`) means the cap is
+        reached, or that a `unifiedpush` target for the same endpoint
+        already exists. On servers that refuse private notification
+        hosts, a URL-carrying config resolving to a private address is
+        refused at write time (and again at delivery time);
+        `unifiedpush` endpoints are deliberately exempt, since
+        self-hosted LAN distributors are legitimate.
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationTargetCreate"
+      responses:
+        "201":
+          description: Target created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTarget"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /users/me/notification-targets/{targetId}:
+    put:
+      operationId: updateMyNotificationTarget
+      summary: Update a personal notification target
+      description: >
+        Replaces the target's label, config, and enabled events; an
+        omitted label clears it. The kind is fixed at creation. The
+        stored config is replaced whole, so clients edit the
+        round-tripped document, and creation rules re-apply: per-kind
+        config validation, the event scope rules, and the
+        private-address refusal for user-pointed URLs. Changing a
+        `unifiedpush` target's endpoint to one another target already
+        holds answers conflict (code `conflict`).
+      tags: [notifications]
+      parameters:
+        - $ref: "#/components/parameters/TargetId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationTargetUpdate"
+      responses:
+        "200":
+          description: The updated target.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTarget"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      operationId: deleteMyNotificationTarget
+      summary: Delete a personal notification target
+      description: >
+        Removes the target; its queued deliveries are dropped.
+      tags: [notifications]
+      parameters:
+        - $ref: "#/components/parameters/TargetId"
+      responses:
+        "204":
+          description: Target removed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/me/notification-targets/{targetId}/test:
+    post:
+      operationId: testMyNotificationTarget
+      summary: Test a personal notification target
+      description: >
+        Queues one test delivery to this target, bypassing event
+        selection. Answers as soon as the test is queued; the outcome
+        lands on the target's health fields (`lastSuccessAt`,
+        `lastError`, `lastErrorAt`), which the settings surface polls.
+      tags: [notifications]
+      parameters:
+        - $ref: "#/components/parameters/TargetId"
+      responses:
+        "202":
+          description: Test queued.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /users/me/push-registrations:
     get:
       operationId: listPushRegistrations
       summary: List the caller's push registrations
       description: >
-        The calling user's UnifiedPush registrations. Unpaginated; the
-        per-user cap is small.
+        The calling user's UnifiedPush registrations: a compatibility
+        view over the caller's `unifiedpush` notification targets.
+        Unpaginated; the per-user cap is small.
       tags: [notifications]
       responses:
         "200":
@@ -1486,9 +1650,13 @@ paths:
       description: >
         Registers a UnifiedPush endpoint URL (obtained by the client
         from its distributor) for push-transported event
-        notifications. Re-registering the same endpoint URL updates
-        its label and returns the existing registration. Each user may
-        hold at most 20 registrations; conflict (code `conflict`)
+        notifications, stored as a `unifiedpush` notification target.
+        A genuinely new endpoint starts enabled for every user-scope
+        event; re-registering a known endpoint URL (UnifiedPush
+        clients re-post at every app start) refreshes the label and
+        returns the existing registration without touching the event
+        selection made in the notification-targets surface. Each user
+        may hold at most 20 registrations; conflict (code `conflict`)
         means the cap is reached, so remove a stale registration
         first. The endpoint URL must be https and is used exactly as
         supplied: posting to caller-chosen URLs is inherent to
@@ -1545,10 +1713,10 @@ paths:
         - name: registrationId
           in: path
           required: true
-          description: The push registration's pid.
+          description: The registration's notification-target pid.
           schema:
             type: string
-          example: pr-01JZX5N8QW3F4V9T2B7KD3M9R6
+          example: nt-01JZX5N8QW3F4V9T2B7KD3M9R6
       responses:
         "204":
           description: Registration removed.
@@ -1747,84 +1915,147 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
-  /admin/notifications:
+  /admin/notification-targets:
     get:
-      operationId: getNotificationConfig
-      summary: Read the notification configuration
+      operationId: listServerNotificationTargets
+      summary: List the server-scope notification targets
       description: >
-        The server's notification relay configuration and the catalog
-        of known event names. Administrators only. Delivery goes
-        through an Apprise API server (self-hosted, one integration
-        for many services); WaxDeck posts each enabled event's title
-        and body to it. `knownEvents` is the server's current event
-        catalog: enable a subset via `enabledEvents`. Unknown names in
-        `enabledEvents` are kept verbatim (a later server version may
-        define them) but deliver nothing. `appriseUrl` and `targets`
-        commonly embed service tokens; this endpoint returns them
-        verbatim, a deliberate choice so administrators can round-trip
-        the configuration (the surface is admin-only, and the tokens
-        are for the administrator's own notification services).
+        The server-scope notification targets: administrator-managed
+        destinations that receive server-operations events
+        (signup requests, backup outcomes). Administrators only.
+        `config` is returned verbatim, service tokens included, the
+        same documented round-trip decision the admin configuration
+        surface has always made; it is sealed at rest. Unpaginated:
+        the per-kind cap keeps the list small.
       tags: [notifications]
       responses:
         "200":
-          description: The current configuration.
+          description: The server-scope targets.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NotificationConfig"
+                $ref: "#/components/schemas/NotificationTargetList"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
-    put:
-      operationId: putNotificationConfig
-      summary: Replace the notification configuration
+    post:
+      operationId: createServerNotificationTarget
+      summary: Create a server-scope notification target
       description: >
-        Replaces the notification relay configuration; this is a full
-        replace, so an omitted `targets` clears it. Administrators
-        only. An empty `appriseUrl` disables Apprise delivery without
-        touching UnifiedPush registrations.
+        Creates one server-scope delivery destination. Administrators
+        only. `config` carries the kind's fields (see the
+        NotificationTarget schema); validation is per kind and unknown
+        config fields are refused. `enabledEvents` names server-scope
+        catalog events. Server-scope destinations are administrator
+        configured, so their URLs are not subject to the
+        private-address refusal that guards user-pointed ones. The
+        server may hold at most 20 targets per kind; conflict (code
+        `conflict`) means the cap is reached, or that a `unifiedpush`
+        target for the same endpoint already exists.
       tags: [notifications]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/NotificationConfigUpdate"
+              $ref: "#/components/schemas/NotificationTargetCreate"
       responses:
-        "200":
-          description: The stored configuration.
+        "201":
+          description: Target created.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NotificationConfig"
+                $ref: "#/components/schemas/NotificationTarget"
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
-    post:
-      operationId: testNotifications
-      summary: Send a test notification
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /admin/notification-targets/{targetId}:
+    put:
+      operationId: updateServerNotificationTarget
+      summary: Update a server-scope notification target
       description: >
-        Queues a test notification through the configured relay and
-        every push registration, so administrators can verify delivery
-        without waiting for a real event. Answers accepted as soon as
-        the test is queued; delivery outcome is observable in the
-        server log. With no Apprise URL configured and no push
-        registrations there is nothing to deliver to, and the request
-        answers `invalid-request` saying so.
+        Replaces the target's label, config, and enabled events; an
+        omitted label clears it. Administrators only. The kind is
+        fixed at creation; the stored config is replaced whole, so
+        clients edit the round-tripped document, and creation rules
+        re-apply (per-kind config validation and the event scope
+        rules). Changing a `unifiedpush` target's endpoint to one
+        another target already holds answers conflict (code
+        `conflict`).
       tags: [notifications]
+      parameters:
+        - $ref: "#/components/parameters/TargetId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationTargetUpdate"
+      responses:
+        "200":
+          description: The updated target.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTarget"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      operationId: deleteServerNotificationTarget
+      summary: Delete a server-scope notification target
+      description: >
+        Removes the target; its queued deliveries are dropped.
+        Administrators only.
+      tags: [notifications]
+      parameters:
+        - $ref: "#/components/parameters/TargetId"
+      responses:
+        "204":
+          description: Target removed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/notification-targets/{targetId}/test:
+    post:
+      operationId: testServerNotificationTarget
+      summary: Test a server-scope notification target
+      description: >
+        Queues one test delivery to this target, bypassing event
+        selection. Administrators only. Answers as soon as the test is
+        queued; the outcome lands on the target's health fields
+        (`lastSuccessAt`, `lastError`), which the settings surface
+        polls.
+      tags: [notifications]
+      parameters:
+        - $ref: "#/components/parameters/TargetId"
       responses:
         "202":
           description: Test queued.
-        "400":
-          $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /jobs/{pid}:
     get:
@@ -7304,6 +7535,14 @@ components:
       schema:
         type: string
         pattern: "^sh-[0-9A-HJKMNP-TV-Z]{26}$"
+    TargetId:
+      name: targetId
+      in: path
+      required: true
+      description: Notification target PID (e.g. `nt-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^nt-[0-9A-HJKMNP-TV-Z]{26}$"
     ScheduleKind:
       name: kind
       in: path
@@ -11745,62 +11984,194 @@ components:
             The Last.fm authorization URL to open in a browser; it
             redirects back to this server's callback on approval.
 
-    NotificationConfig:
-      type: object
-      description: The server's notification relay configuration.
-      required: [appriseUrl, enabledEvents, knownEvents]
-      properties:
-        appriseUrl:
-          type: string
-          description: >
-            Base URL of the Apprise API server to relay through
-            (its notify endpoint is derived). Empty disables Apprise
-            delivery.
-        targets:
-          type: string
-          description: >
-            Apprise target URLs (comma or space separated) passed with
-            each notification. Empty relies on the Apprise server's
-            own configured targets.
-        enabledEvents:
-          type: array
-          description: Event names to deliver.
-          items:
-            type: string
-        knownEvents:
-          type: array
-          description: >
-            The server's current event catalog, for building the
-            settings surface.
-          items:
-            type: string
+    NotificationScope:
+      type: string
+      enum: [server, user]
+      description: >
+        Where a notification event or target belongs: `server` is the
+        administrator-managed operations scope, `user` a single user's
+        personal scope. A shared named schema on purpose: identical
+        inline enums make the Dart generator emit one enum class into
+        two files, which does not compile.
 
-    NotificationConfigUpdate:
-      type: object
-      description: Replaces the notification relay configuration.
-      required: [appriseUrl, enabledEvents]
-      properties:
-        appriseUrl:
-          type: string
-          description: Apprise API server base URL; empty disables.
-        targets:
-          type: string
-          description: Apprise target URLs; empty uses the server's own.
-        enabledEvents:
-          type: array
-          description: Event names to deliver.
-          items:
-            type: string
+    NotificationTargetKind:
+      type: string
+      enum: [pushover, ntfy, gotify, discord, webhook, apprise, unifiedpush]
+      description: >
+        A notification delivery provider. A shared named schema on
+        purpose, like NotificationScope.
 
-    PushRegistration:
+    NotificationEvent:
       type: object
-      description: One UnifiedPush endpoint registration.
-      required: [pid, endpoint, createdAt]
+      description: One notification event the server can emit.
+      required: [name, scope, description]
+      properties:
+        name:
+          type: string
+          description: Stable event name.
+          example: episode-downloaded
+        scope:
+          $ref: "#/components/schemas/NotificationScope"
+        description:
+          type: string
+          description: Human-readable event description for the checklist.
+
+    NotificationEventList:
+      type: object
+      description: The server's notification event catalog.
+      required: [events]
+      properties:
+        events:
+          type: array
+          description: Every event this server can emit, server scope first.
+          items:
+            $ref: "#/components/schemas/NotificationEvent"
+
+    NotificationTarget:
+      type: object
+      description: >
+        One notification delivery destination. `config` is a free-form
+        object whose fields depend on `kind` (a discriminated union is
+        deliberately avoided; validation is server-side and per kind,
+        and unknown fields are refused):
+        `pushover` takes `token` (application API token), `userKey`,
+        and optional integer `priority` (-2 quietest to 2 emergency;
+        emergency deliveries use the service's minimum retry cadence);
+        `ntfy` takes `topic`, optional `serverUrl` (default
+        `https://ntfy.sh`), and optional `accessToken` (sent as a
+        Bearer token);
+        `gotify` takes `serverUrl` and `token` (sent as a header, so
+        it stays out of URLs and logs) and optional integer `priority`
+        (0 to 10);
+        `discord` takes `webhookUrl`, which must be a discord.com or
+        discordapp.com webhook URL;
+        `webhook` takes `url` and posts
+        `{event, title, body, timestamp}` as JSON with timestamp in
+        RFC 3339 UTC;
+        `apprise` takes `serverUrl` (the Apprise API server base; its
+        notify endpoint is derived unless the URL already names a
+        path) and optional `targets` (comma or space separated Apprise
+        target URLs; empty relies on the Apprise server's own
+        configuration);
+        `unifiedpush` takes `endpoint` (the distributor-issued https
+        URL, unique per owner).
+      required: [pid, kind, scope, config, enabledEvents, createdAt]
       properties:
         pid:
           type: string
           description: Type-prefixed ULID.
-          example: pr-01JZX5N8QW3F4V9T2B7KD3M9R6
+          example: nt-01JZX5N8QW3F4V9T2B7KD3M9R6
+        kind:
+          $ref: "#/components/schemas/NotificationTargetKind"
+        scope:
+          $ref: "#/components/schemas/NotificationScope"
+        label:
+          type: string
+          description: Display label, usually the service or device name.
+        config:
+          type: object
+          additionalProperties: true
+          description: >
+            The kind's delivery configuration, returned verbatim to
+            the owner (see the schema description for per-kind
+            fields). Sealed at rest.
+        enabledEvents:
+          type: array
+          description: >
+            Catalog event names this target receives. Empty delivers
+            nothing but per-target tests.
+          items:
+            type: string
+        lastSuccessAt:
+          type: string
+          format: date-time
+          description: When a delivery last succeeded; absent before the first.
+        lastError:
+          type: string
+          description: The most recent delivery error; absent when the last delivery succeeded.
+        lastErrorAt:
+          type: string
+          format: date-time
+          description: >
+            When the most recent delivery error happened; cleared,
+            like `lastError`, by a subsequent success.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the target was created.
+
+    NotificationTargetCreate:
+      type: object
+      description: A notification target to create.
+      required: [kind, config, enabledEvents]
+      properties:
+        kind:
+          $ref: "#/components/schemas/NotificationTargetKind"
+        label:
+          type: string
+          description: Display label.
+          maxLength: 100
+        config:
+          type: object
+          additionalProperties: true
+          description: >
+            The kind's delivery configuration (see the
+            NotificationTarget schema for per-kind fields).
+        enabledEvents:
+          type: array
+          description: >
+            Catalog event names to deliver. Scope rules apply:
+            server-scope targets take server-scope events; user-scope
+            targets take user-scope events, plus server-scope events
+            when the owner is an administrator.
+          items:
+            type: string
+
+    NotificationTargetUpdate:
+      type: object
+      description: >
+        Replaces a target's label, config, and enabled events; the
+        kind is fixed at creation.
+      required: [config, enabledEvents]
+      properties:
+        label:
+          type: string
+          description: Display label.
+          maxLength: 100
+        config:
+          type: object
+          additionalProperties: true
+          description: The kind's delivery configuration, replaced whole.
+        enabledEvents:
+          type: array
+          description: >
+            Catalog event names to deliver, under the same scope rules
+            as creation.
+          items:
+            type: string
+
+    NotificationTargetList:
+      type: object
+      description: A scope's notification targets.
+      required: [targets]
+      properties:
+        targets:
+          type: array
+          description: Targets, newest first.
+          items:
+            $ref: "#/components/schemas/NotificationTarget"
+
+    PushRegistration:
+      type: object
+      description: >
+        One UnifiedPush endpoint registration: a compatibility view
+        over a `unifiedpush` notification target.
+      required: [pid, endpoint, createdAt]
+      properties:
+        pid:
+          type: string
+          description: Type-prefixed ULID (a notification-target pid).
+          example: nt-01JZX5N8QW3F4V9T2B7KD3M9R6
         endpoint:
           type: string
           description: The distributor-issued push endpoint URL.

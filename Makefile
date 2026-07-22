@@ -47,9 +47,16 @@ drift-check: generate
 	git diff --exit-code -- $(SPEC) server/internal/api app/packages/waxdeck_api_gen
 
 # Breaking-change gate against the base ref (override BASE for CI).
+# api/oasdiff-allow.txt, when present, lists deliberately accepted
+# breaking changes (one oasdiff output line per entry); it is temporary
+# by construction and is deleted once the base ref contains the change.
 BASE ?= origin/main
+OASDIFF_ALLOW := api/oasdiff-allow.txt
 oasdiff:
-	go run github.com/oasdiff/oasdiff@v1.11.7 breaking "$(BASE):$(SPEC)" $(SPEC) --fail-on WARN
+	git show "$(BASE):$(SPEC)" > .oasdiff-base.yaml
+	go run github.com/oasdiff/oasdiff@v1.11.7 breaking .oasdiff-base.yaml $(SPEC) --fail-on WARN \
+		$(if $(wildcard $(OASDIFF_ALLOW)),--err-ignore $(OASDIFF_ALLOW) --warn-ignore $(OASDIFF_ALLOW)); \
+	status=$$?; rm -f .oasdiff-base.yaml; exit $$status
 
 ## --- build -------------------------------------------------------------------
 

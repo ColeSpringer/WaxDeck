@@ -81,6 +81,7 @@ func run() error {
 
 		allowPrivateRadio    = flag.Bool("allow-private-radio-hosts", envOr("WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS", "false") == "true", "allow radio stream URLs on private addresses (LAN icecast)")
 		allowPrivateScrobble = flag.Bool("allow-private-scrobble-hosts", envOr("WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS", "false") == "true", "allow ListenBrainz-compatible API bases on private addresses (LAN Maloja)")
+		allowPrivateNotify   = flag.Bool("allow-private-notify-hosts", envOr("WAXDECK_ALLOW_PRIVATE_NOTIFY_HOSTS", "false") == "true", "allow user-pointed notification destinations on private addresses (LAN ntfy or Gotify)")
 		radioDirBase         = flag.String("radio-directory-base", envOr("WAXDECK_RADIO_DIRECTORY_BASE", ""), "radio-browser directory API base URL (empty selects the public instance)")
 		lastfmKey            = flag.String("lastfm-api-key", envOr("WAXDECK_LASTFM_API_KEY", ""), "Last.fm API key for outbound scrobbling (empty leaves Last.fm unavailable)")
 		lastfmSecret         = flag.String("lastfm-secret", envOr("WAXDECK_LASTFM_SECRET", ""), "Last.fm API shared secret")
@@ -303,6 +304,7 @@ func run() error {
 		SourceProviders:           providers,
 		AllowPrivateRadioHosts:    *allowPrivateRadio,
 		AllowPrivateScrobbleHosts: *allowPrivateScrobble,
+		AllowPrivateNotifyHosts:   *allowPrivateNotify,
 		RadioDirectoryBase:        *radioDirBase,
 		LastfmAPIKey:              *lastfmKey,
 		LastfmSecret:              *lastfmSecret,
@@ -1133,6 +1135,29 @@ func keyProber(sealer *auth.Sealer) service.KeyProber {
 				var blob []byte
 				if r.Scan(&svcName, &username, &blob) == nil {
 					rows = append(rows, sealedRow{"scrobble-connection", username.String + "/" + svcName.String, blob})
+				}
+			}
+			r.Close()
+		}
+		// The err == nil idiom doubles as version tolerance: an archive
+		// from before notification targets simply lacks the table and
+		// contributes nothing.
+		if r, err := conn.QueryContext(ctx, `
+			SELECT nt.kind, nt.label, u.username, nt.sealed_config
+			FROM notification_targets nt LEFT JOIN users u ON u.id = nt.user_id`); err == nil {
+			for r.Next() {
+				var kind, label, username sql.NullString
+				var blob []byte
+				if r.Scan(&kind, &label, &username, &blob) == nil {
+					owner := username.String
+					if owner == "" {
+						owner = "server"
+					}
+					name := owner + "/" + kind.String
+					if label.String != "" {
+						name += "/" + label.String
+					}
+					rows = append(rows, sealedRow{"notification-target", name, blob})
 				}
 			}
 			r.Close()

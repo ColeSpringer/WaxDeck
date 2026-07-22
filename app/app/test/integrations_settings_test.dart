@@ -103,31 +103,251 @@ void main() {
     expect(find.text('Symfonium'), findsOneWidget);
   });
 
-  testWidgets('saves the notification configuration', (tester) async {
+  testWidgets('creates a personal notification target through the editor', (
+    tester,
+  ) async {
     final repo = FakeRepository();
-    await tester.pumpWidget(_host(repo, const NotificationsSection()));
+    await tester.pumpWidget(
+      _host(repo, const PersonalNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No notification targets yet'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('notify-target-add')));
     await tester.pumpAndSettle();
 
+    // The kind dropdown swaps the config field group: Pushover's
+    // token and key give way to Gotify's server URL and token.
+    expect(find.byKey(const ValueKey('notify-config-userKey')), findsOneWidget);
+    expect(find.byKey(const ValueKey('notify-config-serverUrl')), findsNothing);
+    await tester.tap(find.byKey(const Key('notify-target-kind')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gotify').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('notify-config-userKey')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('notify-config-serverUrl')),
+      findsOneWidget,
+    );
+
     await tester.enterText(
-      find.byKey(const Key('apprise-url-field')),
-      'http://apprise:8000/notify',
+      find.byKey(const Key('notify-target-label')),
+      'My phone',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-serverUrl')),
+      'https://gotify.example.net',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-token')),
+      'app-token',
     );
     await tester.tap(
       find.byKey(const ValueKey('notify-event-episode-downloaded')),
     );
     await tester.pump();
-    await tester.tap(find.byKey(const Key('notifications-save')));
+    await tester.tap(find.byKey(const Key('notify-target-save')));
     await tester.pumpAndSettle();
 
-    expect(repo.notificationConfig.appriseUrl, 'http://apprise:8000/notify');
-    expect(
-      repo.notificationConfig.enabledEvents,
-      contains('episode-downloaded'),
+    expect(repo.myNotificationTargets, hasLength(1));
+    final saved = repo.myNotificationTargets.single;
+    expect(saved.kind, 'gotify');
+    expect(saved.label, 'My phone');
+    expect(saved.config['serverUrl'], 'https://gotify.example.net');
+    expect(saved.config['token'], 'app-token');
+    expect(saved.enabledEvents, ['episode-downloaded']);
+    expect(find.text('My phone'), findsOneWidget);
+  });
+
+  testWidgets('the editor refuses a missing required config field', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    await tester.pumpWidget(
+      _host(repo, const PersonalNotificationTargetsSection()),
     );
-
-    await tester.tap(find.byKey(const Key('notifications-test')));
     await tester.pumpAndSettle();
-    expect(repo.notificationTests, 1);
+    await tester.tap(find.byKey(const Key('notify-target-add')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('notify-target-save')));
+    await tester.pump();
+    expect(find.text('Application token is required'), findsOneWidget);
+    expect(repo.myNotificationTargets, isEmpty);
+  });
+
+  testWidgets('a server rejection keeps the editor open with the message', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..notificationTargetError = const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'the destination resolves to a private address',
+      );
+    await tester.pumpWidget(
+      _host(repo, const PersonalNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('notify-target-add')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-token')),
+      't',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-userKey')),
+      'u',
+    );
+    await tester.tap(find.byKey(const Key('notify-target-save')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('the destination resolves to a private address'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('notify-target-save')), findsOneWidget);
+  });
+
+  testWidgets('the personal checklist offers server events to admins only', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    await tester.pumpWidget(
+      _host(repo, const PersonalNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('notify-target-add')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('notify-event-episode-downloaded')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('notify-event-signup-requested')),
+      findsNothing,
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    final adminRepo = _adminRepo();
+    await tester.pumpWidget(
+      _host(adminRepo, const PersonalNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('notify-target-add')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('notify-event-signup-requested')),
+      findsOneWidget,
+    );
+    expect(find.text('Server events'), findsOneWidget);
+    expect(find.text('My events'), findsOneWidget);
+  });
+
+  testWidgets('the server section edits server-scope targets only', (
+    tester,
+  ) async {
+    final repo = _adminRepo();
+    await tester.pumpWidget(
+      _host(repo, const ServerNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('notify-server-target-add')));
+    await tester.pumpAndSettle();
+
+    // Server-scope editors list server events only, flat.
+    expect(
+      find.byKey(const ValueKey('notify-event-signup-requested')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('notify-event-episode-downloaded')),
+      findsNothing,
+    );
+    expect(find.text('Server events'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('notify-target-kind')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Webhook').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-url')),
+      'https://hooks.example.net/ops',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('notify-event-signup-requested')),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('notify-target-save')));
+    await tester.pumpAndSettle();
+
+    expect(repo.serverNotificationTargets, hasLength(1));
+    expect(repo.serverNotificationTargets.single.scope, 'server');
+    expect(repo.serverNotificationTargets.single.kind, 'webhook');
+  });
+
+  testWidgets('tests a target and edits it back through the round trip', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..myNotificationTargets.add(
+        NotificationTarget(
+          pid: 'nt-SEED',
+          kind: 'ntfy',
+          scope: 'user',
+          label: 'Tablet',
+          config: const {'topic': 'waxdeck', 'accessToken': 'tk'},
+          enabledEvents: const ['episode-downloaded'],
+          createdAt: DateTime.utc(2026),
+        ),
+      );
+    await tester.pumpWidget(
+      _host(repo, const PersonalNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('notify-target-test-nt-SEED')));
+    await tester.pumpAndSettle();
+    expect(repo.notificationTargetTests['nt-SEED'], 1);
+
+    // Editing seeds the round-tripped config and replaces it whole.
+    await tester.tap(find.byKey(const ValueKey('notify-target-nt-SEED')));
+    await tester.pumpAndSettle();
+    final topicField = tester.widget<TextField>(
+      find.byKey(const ValueKey('notify-config-topic')),
+    );
+    expect(topicField.controller!.text, 'waxdeck');
+    await tester.enterText(
+      find.byKey(const ValueKey('notify-config-topic')),
+      'waxdeck-2',
+    );
+    await tester.tap(find.byKey(const Key('notify-target-save')));
+    await tester.pumpAndSettle();
+    expect(repo.myNotificationTargets.single.config['topic'], 'waxdeck-2');
+    expect(repo.myNotificationTargets.single.config['accessToken'], 'tk');
+  });
+
+  testWidgets('an unhealthy target shows its standing delivery error', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..myNotificationTargets.add(
+        NotificationTarget(
+          pid: 'nt-SICK',
+          kind: 'pushover',
+          scope: 'user',
+          config: const {'token': 't', 'userKey': 'u'},
+          enabledEvents: const [],
+          createdAt: DateTime.utc(2026),
+          lastError: 'delivery answered status 401',
+          lastErrorAt: DateTime.utc(2026, 7, 22),
+        ),
+      );
+    await tester.pumpWidget(
+      _host(repo, const PersonalNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('delivery answered status 401'), findsOneWidget);
   });
 
   testWidgets('shows scrobbler delivery health on the slot row', (

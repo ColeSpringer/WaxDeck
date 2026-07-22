@@ -259,22 +259,33 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 		return nil, errNotFound("no such share")
 	}
 	// Creation-time checks that must hold for the share's whole life
-	// re-run here: a feed that gained credentials after the link was
-	// minted must not keep leaking paid content, and downloads stop
-	// when the owner's own download permission is withdrawn.
+	// re-run here, and they fail closed: a feed that gained
+	// credentials after the link was minted must not keep leaking
+	// paid content, and a check that cannot be evaluated (a failed
+	// episode or show read) must not quietly wave the request
+	// through either.
 	if row.TargetKind == "episode" {
-		if det, err := l.getEpisode(ctx, row.TargetPID); err == nil {
-			show, err := l.getShow(ctx, apiPID(PrefixPodcast, det.Episode.PodcastPID))
-			if err == nil && l.showIsPrivate(ctx, show) {
-				return nil, errNotFound("no such share")
-			}
+		det, err := l.getEpisode(ctx, row.TargetPID)
+		if err != nil {
+			return nil, errNotFound("no such share")
+		}
+		show, err := l.getShow(ctx, apiPID(PrefixPodcast, det.Episode.PodcastPID))
+		if err != nil {
+			return nil, errNotFound("no such share")
+		}
+		if l.showIsPrivate(ctx, show) {
+			return nil, errNotFound("no such share")
 		}
 	}
+	// Downloads stop when the owner's own download permission is
+	// withdrawn; an unreadable owner degrades the same way (the
+	// stream still serves, the download link does not).
 	if pub.Share.AllowDownload {
-		if owner, err := l.db.UserByID(ctx, row.UserID); err == nil {
-			if ouc, err := l.UserCtx(ctx, owner); err == nil && !ouc.Download {
-				pub.Share.AllowDownload = false
-			}
+		owner, err := l.db.UserByID(ctx, row.UserID)
+		if err != nil {
+			pub.Share.AllowDownload = false
+		} else if ouc, err := l.UserCtx(ctx, owner); err != nil || !ouc.Download {
+			pub.Share.AllowDownload = false
 		}
 	}
 	switch row.TargetKind {

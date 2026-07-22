@@ -60,6 +60,35 @@ here waits on upstream.
   measured the virtualized grid without artwork; the suspected
   aggravator is per-card artwork fetches at grid scale, so the
   overhaul's measurement pass should use real content.
+- `[in-repo]` **Discord rich presence from the desktop builds.** The
+  Spotify-style "Listening to" status (track, artist, album art, a
+  progress bar) while WaxDeck plays. Distinct from the Discord
+  notification provider, which is a server-side webhook: presence is
+  set through the Discord desktop client's local IPC endpoint (a Unix
+  socket on Linux and macOS, a named pipe on Windows) with a
+  registered application id, no bot and no OAuth, and activity type 2
+  renders as "Listening to WaxDeck" with timestamps driving the
+  progress bar. That endpoint only exists where the Discord desktop
+  client runs, so this is a desktop-build feature, but the connect
+  surface already mirrors sessions on other devices, so the desktop
+  app can publish presence for playback happening anywhere (a phone
+  included) while it is open. Shape: a presence port behind the
+  plugin-wrapping rule, fed by player and connect state, implemented
+  either as a pinned community plugin or a small pure-Dart IPC client
+  (a handshake and SET_ACTIVITY as JSON frames; the Windows named
+  pipe is the fiddly half). Update on track and pause changes, not
+  position ticks; Discord displays at most roughly one activity
+  update per 15 seconds. Album art must be publicly fetchable by
+  Discord's media proxy, so a LAN-only instance's art URLs will not
+  render: Cover Art Archive URLs from matched MusicBrainz release ids
+  are the workable default (a small read-surface addition if the
+  playing track does not expose its id yet), a public instance needs
+  the same media-token art variant the cast-artwork entry wants, and
+  a static WaxDeck asset is the fallback. Navidrome ships this
+  server-side instead, over a gateway connection authenticated with
+  stored per-user Discord user tokens, which works from any client
+  but is self-botting against Discord's terms of service; recorded
+  so it is not re-derived as an option. Needs no sibling-repo work.
 
 ## Connect and casting
 
@@ -210,7 +239,7 @@ here waits on upstream.
   today; the "Upload a file" option only appears once a
   `FilePickerPort` is wired (`filePickerProvider` defaults to null).
   That pass adds the native file dialog per platform and web
-  drag-and-drop (a drop target over the library and uploads
+  drag-and-drop (a drop target over the library and uploads as
   surfaces), both behind the existing port so the flow above needs no
   change. URL acquisition and the API upload endpoints work without
   it.
@@ -317,6 +346,22 @@ here waits on upstream.
   account, queue-depth, and transcode-session gauges; an HTTP
   request counter/latency histogram by route class needs a mux
   middleware pass that has not been written.
+- `[in-repo]` **Notification provider niceties.** The provider
+  surface ships deliberately plain: no webhook custom headers or
+  HMAC request signing (receivers that must authenticate WaxDeck can
+  use a secret-bearing path), no Retry-After honoring (backoff is
+  the generic exponential ramp), no per-target mute flag (emptying
+  the event selection is the workaround), no Discord rich embeds
+  beyond title and description, no ntfy attachments or action
+  buttons, and no per-target rate limiting (a noisy event source
+  rides the outbox's global pacing). Each is an isolated extension
+  of one provider file when wanted.
+- `[in-repo]` **No import-completed notification event.** The
+  review-ready event deliberately skips entries that auto-apply, so
+  a fully automatic import is silent end to end. Probably right (the
+  uploader is usually watching the uploads screen, which updates
+  live), but it is a decision: an import-completed user event would
+  close the gap for fire-and-forget uploads.
 
 ## Decided, not deferred
 

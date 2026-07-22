@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
@@ -77,9 +79,12 @@ const embeddedAnalysisPace = 250 * time.Millisecond
 
 // DrainEmbeddedAnalysis leases queued tracks and analyzes them in
 // process, one at a time. It returns whether any work was attempted
-// (the worker loop paces on that). Tracks that fail to analyze
-// (undecodable, too short, silent) retire their queue rows: retrying
-// cannot fix them, and a rescan re-enqueues if the file changes.
+// (the worker loop paces on that). Filesystem failures keep their
+// leased rows and re-offer when the lease lapses (a transient read
+// failure heals on its own; the attempt cap is the backstop); a
+// decoder verdict about the bytes (undecodable, too short, silent)
+// retires the row, since retrying cannot fix it and a rescan
+// re-enqueues if the file changes.
 func (l *Library) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (bool, error) {
 	if an == nil || !l.SonicAnalysisEnabled() {
 		return false, nil
@@ -95,6 +100,8 @@ func (l *Library) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (
 		if err := ctx.Err(); err != nil {
 			return true, nil
 		}
+		// Catalog misses retire the row: the item left the library,
+		// and a return re-enqueues under a fresh data version.
 		it, err := l.lib.Get(ctx, model.PID(w.ItemPID))
 		if err != nil {
 			l.completeAnalysis(ctx, w.Essence)
@@ -107,6 +114,19 @@ func (l *Library) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (
 		}
 		vec, err := an.AnalyzeFile(ctx, string(f.Path))
 		if err != nil {
+			// A filesystem-level failure (a locked file, a NAS hiccup,
+			// a slow mount) keeps the row leased: it re-offers when
+			// the lease lapses and rests after the attempt cap, like a
+			// leased-but-silent external worker. Anything the decoder
+			// or embedder concluded about the bytes (undecodable, too
+			// short, silent) is a verdict retrying cannot change, so
+			// those retire their rows; a rescan re-enqueues if the
+			// file changes.
+			var pathErr *fs.PathError
+			if errors.As(err, &pathErr) {
+				l.log.Warn("embedded analysis could not read a track; it will retry", "pid", w.ItemPID, "err", err)
+				continue
+			}
 			l.log.Warn("embedded analysis skipped a track", "pid", w.ItemPID, "err", err)
 			l.completeAnalysis(ctx, w.Essence)
 			continue

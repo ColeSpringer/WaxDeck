@@ -1345,7 +1345,9 @@ class FakeRepository implements WaxDeckRepository {
     return scrobblingConfig;
   }
 
-  /// Push registrations served and mutated by the push endpoints.
+  /// Push registrations served and mutated by the legacy push
+  /// endpoints; rows mirror into [myNotificationTargets] as
+  /// unifiedpush targets, like the server.
   final List<PushRegistration> pushRegistrations = [];
 
   @override
@@ -1358,53 +1360,218 @@ class FakeRepository implements WaxDeckRepository {
     String? label,
   }) async {
     final reg = PushRegistration(
-      pid: 'pr-FAKE${pushRegistrations.length}',
+      pid: 'nt-FAKEUP${pushRegistrations.length}',
       endpoint: endpoint,
       label: label,
       createdAt: DateTime.utc(2026),
     );
     pushRegistrations.add(reg);
+    myNotificationTargets.add(
+      NotificationTarget(
+        pid: reg.pid,
+        kind: 'unifiedpush',
+        scope: 'user',
+        label: label,
+        config: {'endpoint': endpoint},
+        enabledEvents: const ['episode-downloaded', 'feed-disabled'],
+        createdAt: reg.createdAt,
+      ),
+    );
     return reg;
   }
 
   @override
   Future<void> deletePushRegistration(String pid) async {
     pushRegistrations.removeWhere((r) => r.pid == pid);
+    myNotificationTargets.removeWhere((t) => t.pid == pid);
   }
 
-  /// Notification configuration served and replaced by the admin
-  /// endpoints.
-  NotificationConfig notificationConfig = const NotificationConfig(
-    appriseUrl: '',
-    enabledEvents: [],
-    knownEvents: ['test', 'episode-downloaded', 'feed-disabled'],
-  );
+  /// The notification event catalog, server scope first.
+  List<NotifyEvent> notifyEvents = const [
+    NotifyEvent(
+      name: 'signup-requested',
+      scope: 'server',
+      description: 'A new account request is waiting for approval.',
+    ),
+    NotifyEvent(
+      name: 'backup-completed',
+      scope: 'server',
+      description: 'A backup archive finished building.',
+    ),
+    NotifyEvent(
+      name: 'episode-downloaded',
+      scope: 'user',
+      description: 'A new episode finished downloading.',
+    ),
+    NotifyEvent(
+      name: 'feed-disabled',
+      scope: 'user',
+      description: 'A subscribed feed kept failing and was disabled.',
+    ),
+  ];
 
-  /// Count of admin test notifications requested.
-  int notificationTests = 0;
+  /// Notification targets per scope, plus per-pid test counts.
+  final List<NotificationTarget> serverNotificationTargets = [];
+  final List<NotificationTarget> myNotificationTargets = [];
+  final Map<String, int> notificationTargetTests = {};
+  var _notificationTargetSeq = 0;
+
+  /// When set, target saves throw this (the server-rejection path).
+  WaxDeckApiException? notificationTargetError;
 
   @override
-  Future<NotificationConfig> getNotificationConfig() async =>
-      notificationConfig;
+  Future<List<NotifyEvent>> listNotificationEvents() async =>
+      List.of(notifyEvents);
+
+  NotificationTarget _storeTarget(
+    List<NotificationTarget> into, {
+    required String scope,
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  }) {
+    final target = NotificationTarget(
+      pid: 'nt-FAKE${_notificationTargetSeq++}',
+      kind: kind,
+      scope: scope,
+      label: label,
+      config: Map.of(config),
+      enabledEvents: List.of(enabledEvents),
+      createdAt: DateTime.utc(2026),
+    );
+    into.insert(0, target);
+    return target;
+  }
+
+  NotificationTarget _replaceTarget(
+    List<NotificationTarget> into,
+    String pid, {
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  }) {
+    final index = into.indexWhere((t) => t.pid == pid);
+    if (index < 0) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no notification target',
+        statusCode: 404,
+      );
+    }
+    final old = into[index];
+    final updated = NotificationTarget(
+      pid: old.pid,
+      kind: old.kind,
+      scope: old.scope,
+      label: label,
+      config: Map.of(config),
+      enabledEvents: List.of(enabledEvents),
+      createdAt: old.createdAt,
+      lastSuccessAt: old.lastSuccessAt,
+      lastError: old.lastError,
+      lastErrorAt: old.lastErrorAt,
+    );
+    into[index] = updated;
+    return updated;
+  }
 
   @override
-  Future<NotificationConfig> putNotificationConfig({
-    required String appriseUrl,
-    String? targets,
+  Future<List<NotificationTarget>> listServerNotificationTargets() async =>
+      List.of(serverNotificationTargets);
+
+  @override
+  Future<NotificationTarget> createServerNotificationTarget({
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
     required List<String> enabledEvents,
   }) async {
-    notificationConfig = NotificationConfig(
-      appriseUrl: appriseUrl,
-      targets: targets,
+    if (notificationTargetError != null) throw notificationTargetError!;
+    return _storeTarget(
+      serverNotificationTargets,
+      scope: 'server',
+      kind: kind,
+      label: label,
+      config: config,
       enabledEvents: enabledEvents,
-      knownEvents: notificationConfig.knownEvents,
     );
-    return notificationConfig;
   }
 
   @override
-  Future<void> testNotifications() async {
-    notificationTests++;
+  Future<NotificationTarget> updateServerNotificationTarget({
+    required String pid,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  }) async {
+    if (notificationTargetError != null) throw notificationTargetError!;
+    return _replaceTarget(
+      serverNotificationTargets,
+      pid,
+      label: label,
+      config: config,
+      enabledEvents: enabledEvents,
+    );
+  }
+
+  @override
+  Future<void> deleteServerNotificationTarget(String pid) async {
+    serverNotificationTargets.removeWhere((t) => t.pid == pid);
+  }
+
+  @override
+  Future<void> testServerNotificationTarget(String pid) async {
+    notificationTargetTests[pid] = (notificationTargetTests[pid] ?? 0) + 1;
+  }
+
+  @override
+  Future<List<NotificationTarget>> listMyNotificationTargets() async =>
+      List.of(myNotificationTargets);
+
+  @override
+  Future<NotificationTarget> createMyNotificationTarget({
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  }) async {
+    if (notificationTargetError != null) throw notificationTargetError!;
+    return _storeTarget(
+      myNotificationTargets,
+      scope: 'user',
+      kind: kind,
+      label: label,
+      config: config,
+      enabledEvents: enabledEvents,
+    );
+  }
+
+  @override
+  Future<NotificationTarget> updateMyNotificationTarget({
+    required String pid,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  }) async {
+    if (notificationTargetError != null) throw notificationTargetError!;
+    return _replaceTarget(
+      myNotificationTargets,
+      pid,
+      label: label,
+      config: config,
+      enabledEvents: enabledEvents,
+    );
+  }
+
+  @override
+  Future<void> deleteMyNotificationTarget(String pid) async {
+    myNotificationTargets.removeWhere((t) => t.pid == pid);
+  }
+
+  @override
+  Future<void> testMyNotificationTarget(String pid) async {
+    notificationTargetTests[pid] = (notificationTargetTests[pid] ?? 0) + 1;
   }
 
   /// Review entries served by the queue endpoints.

@@ -94,52 +94,140 @@ final appPasswordsProvider =
       AppPasswordsController.new,
     );
 
-/// The server's notification relay configuration (administrators).
-class NotificationConfigController extends AsyncNotifier<NotificationConfig> {
-  @override
-  Future<NotificationConfig> build() =>
-      ref.watch(repositoryProvider).getNotificationConfig();
+/// The notification event catalog, for the per-target checklist.
+final notifyEventCatalogProvider = FutureProvider<List<NotifyEvent>>(
+  (ref) => ref.watch(repositoryProvider).listNotificationEvents(),
+);
 
+/// The mutation surface a notification target list drives, shared by
+/// the server- and personal-scope controllers so the widgets keep
+/// static checking instead of duck-typing a dynamic controller.
+abstract interface class NotificationTargetActions {
   Future<void> save({
-    required String appriseUrl,
-    String? targets,
+    String? pid,
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
     required List<String> enabledEvents,
-  }) async {
-    final saved = await ref
-        .read(repositoryProvider)
-        .putNotificationConfig(
-          appriseUrl: appriseUrl,
-          targets: targets,
-          enabledEvents: enabledEvents,
-        );
-    state = AsyncData(saved);
-  }
-
-  Future<void> sendTest() => ref.read(repositoryProvider).testNotifications();
+  });
+  Future<void> remove(String pid);
+  Future<void> sendTest(String pid);
 }
 
-final notificationConfigProvider =
-    AsyncNotifierProvider<NotificationConfigController, NotificationConfig>(
-      NotificationConfigController.new,
-    );
-
-/// The caller's UnifiedPush registrations. Registering happens on the
-/// Android client through its distributor; this surface lists and
-/// revokes.
-class PushRegistrationsController
-    extends AsyncNotifier<List<PushRegistration>> {
+/// The server-scope notification targets (administrators). Save
+/// errors propagate so the editor dialog surfaces the server's
+/// message (bad config, private host, cap reached).
+class ServerNotificationTargetsController
+    extends AsyncNotifier<List<NotificationTarget>>
+    implements NotificationTargetActions {
   @override
-  Future<List<PushRegistration>> build() =>
-      ref.watch(repositoryProvider).listPushRegistrations();
+  Future<List<NotificationTarget>> build() =>
+      ref.watch(repositoryProvider).listServerNotificationTargets();
 
-  Future<void> remove(String pid) async {
-    await ref.read(repositoryProvider).deletePushRegistration(pid);
+  @override
+  Future<void> save({
+    String? pid,
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  }) async {
+    final repository = ref.read(repositoryProvider);
+    if (pid == null) {
+      await repository.createServerNotificationTarget(
+        kind: kind,
+        label: label,
+        config: config,
+        enabledEvents: enabledEvents,
+      );
+    } else {
+      await repository.updateServerNotificationTarget(
+        pid: pid,
+        label: label,
+        config: config,
+        enabledEvents: enabledEvents,
+      );
+    }
     ref.invalidateSelf();
     await future;
   }
+
+  @override
+  Future<void> remove(String pid) async {
+    await ref.read(repositoryProvider).deleteServerNotificationTarget(pid);
+    ref.invalidateSelf();
+    await future;
+  }
+
+  /// Queues one test delivery; the outcome lands on the target's
+  /// health fields, so the list refreshes to show it.
+  @override
+  Future<void> sendTest(String pid) async {
+    await ref.read(repositoryProvider).testServerNotificationTarget(pid);
+    ref.invalidateSelf();
+  }
 }
 
-final pushRegistrationsProvider =
-    AsyncNotifierProvider<PushRegistrationsController, List<PushRegistration>>(
-      PushRegistrationsController.new,
-    );
+final serverNotificationTargetsProvider =
+    AsyncNotifierProvider<
+      ServerNotificationTargetsController,
+      List<NotificationTarget>
+    >(ServerNotificationTargetsController.new);
+
+/// The caller's personal notification targets, UnifiedPush
+/// registrations included (they are unifiedpush rows of the same
+/// list).
+class MyNotificationTargetsController
+    extends AsyncNotifier<List<NotificationTarget>>
+    implements NotificationTargetActions {
+  @override
+  Future<List<NotificationTarget>> build() =>
+      ref.watch(repositoryProvider).listMyNotificationTargets();
+
+  @override
+  Future<void> save({
+    String? pid,
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  }) async {
+    final repository = ref.read(repositoryProvider);
+    if (pid == null) {
+      await repository.createMyNotificationTarget(
+        kind: kind,
+        label: label,
+        config: config,
+        enabledEvents: enabledEvents,
+      );
+    } else {
+      await repository.updateMyNotificationTarget(
+        pid: pid,
+        label: label,
+        config: config,
+        enabledEvents: enabledEvents,
+      );
+    }
+    ref.invalidateSelf();
+    await future;
+  }
+
+  @override
+  Future<void> remove(String pid) async {
+    await ref.read(repositoryProvider).deleteMyNotificationTarget(pid);
+    ref.invalidateSelf();
+    await future;
+  }
+
+  @override
+  Future<void> sendTest(String pid) async {
+    await ref.read(repositoryProvider).testMyNotificationTarget(pid);
+    ref.invalidateSelf();
+  }
+}
+
+final myNotificationTargetsProvider =
+    AsyncNotifierProvider<
+      MyNotificationTargetsController,
+      List<NotificationTarget>
+    >(MyNotificationTargetsController.new);

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -56,8 +57,52 @@ func TestMigrationVersionGuard(t *testing.T) {
 	if _, err := d.Writer().ExecContext(ctx, "PRAGMA user_version = 99"); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.migrate(ctx); err == nil {
-		t.Fatal("migrate accepted a future schema version")
+	// While the schema is one in-place-edited baseline, any higher
+	// version is a database from the old migration chain: the refusal
+	// must steer to delete-and-restart, not claim a newer build wrote
+	// it.
+	err := d.migrate(ctx)
+	if err == nil {
+		t.Fatal("migrate accepted an over-version database")
+	}
+	if !strings.Contains(err.Error(), "delete the waxdeck.db file") {
+		t.Fatalf("over-version refusal = %v, want the delete-and-recreate message", err)
+	}
+}
+
+func TestBaselineFingerprintGuard(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+
+	// A database stamped by the current baseline re-migrates cleanly.
+	if err := d.migrate(ctx); err != nil {
+		t.Fatalf("re-migrate on a current database: %v", err)
+	}
+
+	// A missing hash row is adopted, not refused, and the row is
+	// restored for the next boot.
+	if _, err := d.Writer().ExecContext(ctx,
+		"DELETE FROM sync_state WHERE key = ?", baselineFingerprintKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.migrate(ctx); err != nil {
+		t.Fatalf("re-migrate with a missing fingerprint: %v", err)
+	}
+	var stored string
+	if err := d.Writer().QueryRowContext(ctx,
+		"SELECT value FROM sync_state WHERE key = ?", baselineFingerprintKey).Scan(&stored); err != nil {
+		t.Fatalf("fingerprint not re-adopted: %v", err)
+	}
+
+	// A hash from a different baseline refuses with the delete-the-file
+	// message instead of no-opping into latent query failures.
+	if _, err := d.Writer().ExecContext(ctx,
+		"UPDATE sync_state SET value = 'stale' WHERE key = ?", baselineFingerprintKey); err != nil {
+		t.Fatal(err)
+	}
+	err := d.migrate(ctx)
+	if err == nil || !strings.Contains(err.Error(), "delete the waxdeck.db file") {
+		t.Fatalf("stale fingerprint = %v, want the delete-and-recreate refusal", err)
 	}
 }
 

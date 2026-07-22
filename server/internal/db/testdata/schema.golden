@@ -1,0 +1,506 @@
+table analysis_queue
+  column attempts|INTEGER|notnull=1|default=0|pk=0
+  column enqueued_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column essence_hash|TEXT|notnull=0|default=<none>|pk=1
+  column item_pid|TEXT|notnull=1|default=<none>|pk=0
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
+  autoindex pk|unique=1|(essence_hash)
+table app_passwords
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column label|TEXT|notnull=1|default=<none>|pk=0
+  column last_used_ns|INTEGER|notnull=1|default=0|pk=0
+  column secret_enc|BLOB|notnull=1|default=<none>|pk=0
+  column secret_hash|BLOB|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(id)
+  autoindex u|unique=1|(secret_hash)
+  index app_passwords_by_user|unique=0|partial=0|(user_id,created_at_ns)
+table audit_log
+  column action|TEXT|notnull=1|default=<none>|pk=0
+  column actor_id|TEXT|notnull=1|default=''|pk=0
+  column actor_name|TEXT|notnull=1|default=''|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column detail|TEXT|notnull=1|default='{}'|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column target_kind|TEXT|notnull=1|default=''|pk=0
+  column target_name|TEXT|notnull=1|default=''|pk=0
+  column target_pid|TEXT|notnull=1|default=''|pk=0
+  index audit_log_action|unique=0|partial=0|(action,id)
+  index audit_log_actor|unique=0|partial=0|(actor_id,id)
+  index audit_log_target|unique=0|partial=0|(target_pid,id)
+table backups
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column error|TEXT|notnull=1|default=''|pk=0
+  column file_name|TEXT|notnull=1|default=<none>|pk=0
+  column finished_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column origin|TEXT|notnull=1|default='manual'|pk=0
+  column size_bytes|INTEGER|notnull=1|default=0|pk=0
+  column state|TEXT|notnull=1|default='running'|pk=0
+  autoindex pk|unique=1|(id)
+table book_settings
+  column book_pid|TEXT|notnull=1|default=<none>|pk=2
+  column speed|REAL|notnull=0|default=<none>|pk=0
+  column trim_silence|INTEGER|notnull=0|default=<none>|pk=0
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  column voice_boost|INTEGER|notnull=0|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,book_pid)
+table embeddings
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column dims|INTEGER|notnull=1|default=<none>|pk=0
+  column essence|TEXT|notnull=0|default=<none>|pk=1
+  column item_pid|TEXT|notnull=1|default=<none>|pk=0
+  column model|TEXT|notnull=1|default=<none>|pk=0
+  column vector|BLOB|notnull=1|default=<none>|pk=0
+  autoindex pk|unique=1|(essence)
+  index embeddings_item|unique=0|partial=0|(item_pid)
+table event_log
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column item_pid|TEXT|notnull=1|default=''|pk=0
+  column kind|TEXT|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  index event_log_by_user|unique=0|partial=0|(user_id,id)
+table feed_state
+  column consecutive_failures|INTEGER|notnull=1|default=0|pk=0
+  column disabled|INTEGER|notnull=1|default=0|pk=0
+  column last_attempt_ns|INTEGER|notnull=1|default=0|pk=0
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column last_synced_ns|INTEGER|notnull=1|default=0|pk=0
+  column show_pid|TEXT|notnull=0|default=<none>|pk=1
+  autoindex pk|unique=1|(show_pid)
+table fetch_queue
+  column attempts|INTEGER|notnull=1|default=0|pk=0
+  column enqueued_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column episode_pid|TEXT|notnull=0|default=<none>|pk=1
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
+  column requested_by|TEXT|notnull=1|default=''|pk=0
+  autoindex pk|unique=1|(episode_pid)
+table fix_queue
+  column attempts|INTEGER|notnull=1|default=0|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column item_pid|TEXT|notnull=1|default=<none>|pk=0
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
+  column next_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column rule|TEXT|notnull=1|default=<none>|pk=0
+  autoindex u|unique=1|(item_pid,rule)
+table gpodder_actions
+  column action_ts|TEXT|notnull=1|default=''|pk=0
+  column action|TEXT|notnull=1|default=<none>|pk=0
+  column device_id|TEXT|notnull=1|default=''|pk=0
+  column episode_url|TEXT|notnull=1|default=<none>|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column podcast_url|TEXT|notnull=1|default=<none>|pk=0
+  column position_sec|INTEGER|notnull=0|default=<none>|pk=0
+  column started_sec|INTEGER|notnull=0|default=<none>|pk=0
+  column total_sec|INTEGER|notnull=0|default=<none>|pk=0
+  column uploaded_sec|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  index gpodder_actions_by_user|unique=0|partial=0|(user_id,id)
+table gpodder_devices
+  column caption|TEXT|notnull=1|default=''|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column device_id|TEXT|notnull=1|default=<none>|pk=2
+  column type|TEXT|notnull=1|default='other'|pk=0
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,device_id)
+table gpodder_sub_events
+  column action|TEXT|notnull=1|default=<none>|pk=0
+  column device_id|TEXT|notnull=1|default=''|pk=0
+  column feed_url|TEXT|notnull=1|default=<none>|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column ts_sec|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  index gpodder_sub_events_by_user|unique=0|partial=0|(user_id,id)
+table health_index
+  column artist|TEXT|notnull=1|default=''|pk=0
+  column item_pid|TEXT|notnull=0|default=<none>|pk=1
+  column media_type|TEXT|notnull=1|default=<none>|pk=0
+  column rule_count|INTEGER|notnull=1|default=0|pk=0
+  column rules|TEXT|notnull=1|default='[]'|pk=0
+  column swept_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column title|TEXT|notnull=1|default=''|pk=0
+  autoindex pk|unique=1|(item_pid)
+  index health_index_worst|unique=0|partial=0|(rule_count DESC,title,item_pid)
+table identities
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column email|TEXT|notnull=1|default=''|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column provider|TEXT|notnull=1|default=<none>|pk=0
+  column subject|TEXT|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex u|unique=1|(provider,subject)
+  index identities_by_user|unique=0|partial=0|(user_id)
+table invites
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column created_by|TEXT|notnull=1|default=''|pk=0
+  column expires_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column library_access|TEXT|notnull=1|default='all'|pk=0
+  column library_grants|TEXT|notnull=1|default='[]'|pk=0
+  column max_uses|INTEGER|notnull=1|default=1|pk=0
+  column note|TEXT|notnull=1|default=''|pk=0
+  column perms|TEXT|notnull=1|default=''|pk=0
+  column revoked|INTEGER|notnull=1|default=0|pk=0
+  column roles|TEXT|notnull=1|default='user'|pk=0
+  column token_hash|BLOB|notnull=1|default=<none>|pk=0
+  column upload_enabled|INTEGER|notnull=1|default=0|pk=0
+  column upload_quota_bytes|INTEGER|notnull=1|default=0|pk=0
+  column used_count|INTEGER|notnull=1|default=0|pk=0
+  autoindex pk|unique=1|(id)
+  autoindex u|unique=1|(token_hash)
+table library_grants
+  column library_pid|TEXT|notnull=1|default=<none>|pk=2
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,library_pid)
+table listen_sessions
+  column client|TEXT|notnull=1|default=''|pk=0
+  column finished|INTEGER|notnull=1|default=0|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column item_pid|TEXT|notnull=1|default=<none>|pk=0
+  column media_type|TEXT|notnull=1|default=<none>|pk=0
+  column ms_played|INTEGER|notnull=1|default=<none>|pk=0
+  column received_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column session_id|TEXT|notnull=1|default=<none>|pk=0
+  column skipped_ms|INTEGER|notnull=1|default=0|pk=0
+  column source|TEXT|notnull=1|default='live'|pk=0
+  column started_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  autoindex u|unique=1|(user_id,session_id)
+  index listen_sessions_by_item|unique=0|partial=0|(user_id,item_pid,started_at_ns)
+  index listen_sessions_by_time|unique=0|partial=0|(user_id,started_at_ns,id)
+table match_queue
+  column attempts|INTEGER|notnull=1|default=0|pk=0
+  column entry_id|TEXT|notnull=1|default=<none>|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
+  column next_at_ns|INTEGER|notnull=1|default=0|pk=0
+  autoindex u|unique=1|(entry_id)
+table notification_targets
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column dedupe_key|TEXT|notnull=0|default=<none>|pk=0
+  column enabled_events|TEXT|notnull=1|default='[]'|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column kind|TEXT|notnull=1|default=<none>|pk=0
+  column label|TEXT|notnull=1|default=''|pk=0
+  column last_error_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column last_success_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column scope|TEXT|notnull=1|default=<none>|pk=0
+  column sealed_config|BLOB|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=0|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(id)
+  index notification_targets_dedupe|unique=1|partial=1|(<expr>,kind,dedupe_key)
+  index notification_targets_owner|unique=0|partial=0|(user_id,created_at_ns DESC,id)
+table notify_outbox
+  column attempts|INTEGER|notnull=1|default=0|pk=0
+  column body|TEXT|notnull=1|default=''|pk=0
+  column enqueued_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column event|TEXT|notnull=1|default=<none>|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
+  column target_id|TEXT|notnull=1|default=<none>|pk=0
+  column title|TEXT|notnull=1|default=''|pk=0
+  fk target_id->notification_targets.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  index notify_outbox_ready|unique=0|partial=0|(lease_until_ns,enqueued_at_ns)
+table oauth_state
+  column challenge|TEXT|notnull=1|default=''|pk=0
+  column code_verifier|TEXT|notnull=1|default=<none>|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column expires_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column loopback_port|INTEGER|notnull=1|default=0|pk=0
+  column mode|TEXT|notnull=1|default=<none>|pk=0
+  column provider|TEXT|notnull=1|default=<none>|pk=0
+  column redirect_to|TEXT|notnull=1|default=''|pk=0
+  column redirect_uri|TEXT|notnull=1|default=<none>|pk=0
+  column state|TEXT|notnull=0|default=<none>|pk=1
+  autoindex pk|unique=1|(state)
+table oidc_codes
+  column challenge|TEXT|notnull=1|default=''|pk=0
+  column code_hash|BLOB|notnull=0|default=<none>|pk=1
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column expires_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(code_hash)
+table play_state_stamps
+  column item_pid|TEXT|notnull=1|default=<none>|pk=2
+  column position_ns|INTEGER|notnull=1|default=0|pk=0
+  column rating_ns|INTEGER|notnull=1|default=0|pk=0
+  column star_ns|INTEGER|notnull=1|default=0|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  autoindex pk|unique=1|(user_id,item_pid)
+table playback_sessions
+  column active|INTEGER|notnull=1|default=1|pk=0
+  column authority|TEXT|notnull=1|default=<none>|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column endpoint_id|TEXT|notnull=1|default=<none>|pk=0
+  column id|TEXT|notnull=1|default=<none>|pk=1
+  column state|TEXT|notnull=1|default=<none>|pk=0
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(id)
+  index playback_sessions_user|unique=0|partial=0|(user_id,active,updated_at_ns)
+table player_endpoints
+  column address|TEXT|notnull=1|default=''|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column details|TEXT|notnull=1|default=''|pk=0
+  column device_key|TEXT|notnull=1|default=<none>|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column kind|TEXT|notnull=1|default=<none>|pk=0
+  column last_seen_ns|INTEGER|notnull=1|default=0|pk=0
+  column name|TEXT|notnull=1|default=<none>|pk=0
+  column shared|INTEGER|notnull=1|default=1|pk=0
+  autoindex pk|unique=1|(id)
+  autoindex u|unique=1|(kind,device_key)
+table podcast_subscriptions
+  column auto_download|INTEGER|notnull=1|default=0|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column folder|TEXT|notnull=1|default=''|pk=0
+  column private|INTEGER|notnull=1|default=0|pk=0
+  column retention_keep|INTEGER|notnull=0|default=<none>|pk=0
+  column show_pid|TEXT|notnull=1|default=<none>|pk=2
+  column skip_intro_secs|INTEGER|notnull=0|default=<none>|pk=0
+  column skip_outro_secs|INTEGER|notnull=0|default=<none>|pk=0
+  column speed|REAL|notnull=0|default=<none>|pk=0
+  column trim_silence|INTEGER|notnull=0|default=<none>|pk=0
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  column voice_boost|INTEGER|notnull=0|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,show_pid)
+  index podcast_subscriptions_by_show|unique=0|partial=0|(show_pid)
+table prefs
+  column json|TEXT|notnull=1|default=<none>|pk=0
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=0|default=<none>|pk=1
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id)
+table radio_stations
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column created_by|TEXT|notnull=1|default=''|pk=0
+  column homepage_url|TEXT|notnull=1|default=''|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column logo_url|TEXT|notnull=1|default=''|pk=0
+  column name|TEXT|notnull=1|default=<none>|pk=0
+  column stream_url|TEXT|notnull=1|default=<none>|pk=0
+  autoindex pk|unique=1|(id)
+  autoindex u|unique=1|(stream_url)
+table retention_queue
+  column enqueued_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column show_pid|TEXT|notnull=0|default=<none>|pk=1
+  autoindex pk|unique=1|(show_pid)
+table review_entries
+  column applied_mbid|TEXT|notnull=1|default=''|pk=0
+  column artist|TEXT|notnull=1|default=''|pk=0
+  column auto|INTEGER|notnull=1|default=0|pk=0
+  column best_artist|TEXT|notnull=1|default=''|pk=0
+  column best_mbid|TEXT|notnull=1|default=''|pk=0
+  column best_similarity|REAL|notnull=1|default=0|pk=0
+  column best_title|TEXT|notnull=1|default=''|pk=0
+  column best_year|INTEGER|notnull=1|default=0|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column decided_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column decided_by|TEXT|notnull=1|default=''|pk=0
+  column identifying|INTEGER|notnull=1|default=1|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column kind|TEXT|notnull=1|default=<none>|pk=0
+  column library_pid|TEXT|notnull=1|default=''|pk=0
+  column media_type|TEXT|notnull=1|default=<none>|pk=0
+  column origin|TEXT|notnull=1|default=<none>|pk=0
+  column payload|TEXT|notnull=1|default='{}'|pk=0
+  column snapshot|TEXT|notnull=1|default=''|pk=0
+  column status|TEXT|notnull=1|default=<none>|pk=0
+  column title|TEXT|notnull=1|default=''|pk=0
+  column track_count|INTEGER|notnull=1|default=0|pk=0
+  column uploaded_by|TEXT|notnull=1|default=''|pk=0
+  autoindex pk|unique=1|(id)
+  index review_entries_status|unique=0|partial=0|(status,created_at_ns DESC,id)
+  index review_entries_uploader|unique=0|partial=0|(uploaded_by,created_at_ns DESC,id)
+table scrobble_connections
+  column api_url|TEXT|notnull=1|default=''|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column last_error_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column last_success_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column sealed_secret|BLOB|notnull=1|default=<none>|pk=0
+  column service|TEXT|notnull=1|default=<none>|pk=2
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  column username|TEXT|notnull=1|default=''|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,service)
+table scrobble_outbox
+  column album|TEXT|notnull=1|default=''|pk=0
+  column artist|TEXT|notnull=1|default=''|pk=0
+  column attempts|INTEGER|notnull=1|default=0|pk=0
+  column duration_ms|INTEGER|notnull=1|default=0|pk=0
+  column enqueued_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column item_pid|TEXT|notnull=1|default=<none>|pk=0
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
+  column listened_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column service|TEXT|notnull=1|default=<none>|pk=0
+  column title|TEXT|notnull=1|default=''|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  index scrobble_outbox_ready|unique=0|partial=0|(lease_until_ns,enqueued_at_ns)
+table sessions
+  column client|TEXT|notnull=1|default=''|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column csrf_token|TEXT|notnull=1|default=<none>|pk=0
+  column device_name|TEXT|notnull=1|default=''|pk=0
+  column expires_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column kind|TEXT|notnull=1|default=<none>|pk=0
+  column last_seen_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column prev_token_hash|BLOB|notnull=0|default=<none>|pk=0
+  column rotated_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column token_hash|BLOB|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(id)
+  autoindex u|unique=1|(token_hash)
+  index sessions_by_prev|unique=0|partial=1|(prev_token_hash)
+  index sessions_by_user|unique=0|partial=0|(user_id,created_at_ns)
+table settings
+  column key|TEXT|notnull=0|default=<none>|pk=1
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column value|TEXT|notnull=1|default=<none>|pk=0
+  autoindex pk|unique=1|(key)
+table shares
+  column allow_download|INTEGER|notnull=1|default=0|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column expires_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column plays|INTEGER|notnull=1|default=0|pk=0
+  column position_ms|INTEGER|notnull=1|default=0|pk=0
+  column revoked|INTEGER|notnull=1|default=0|pk=0
+  column target_kind|TEXT|notnull=1|default=<none>|pk=0
+  column target_pid|TEXT|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(id)
+  index shares_user|unique=0|partial=0|(user_id,created_at_ns DESC,id)
+table silence_maps
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column detector_version|TEXT|notnull=1|default=<none>|pk=0
+  column duration_ms|INTEGER|notnull=1|default=0|pk=0
+  column essence_hash|TEXT|notnull=0|default=<none>|pk=1
+  column integrated_lufs|REAL|notnull=0|default=<none>|pk=0
+  column min_seconds|REAL|notnull=1|default=<none>|pk=0
+  column spans|TEXT|notnull=1|default=<none>|pk=0
+  column threshold_db|REAL|notnull=1|default=<none>|pk=0
+  column true_peak_db|REAL|notnull=0|default=<none>|pk=0
+  autoindex pk|unique=1|(essence_hash)
+table similarity_backfill
+  column essence|TEXT|notnull=0|default=<none>|pk=1
+  autoindex pk|unique=1|(essence)
+table similarity_graph
+  column distance|REAL|notnull=1|default=<none>|pk=0
+  column essence|TEXT|notnull=1|default=<none>|pk=1
+  column neighbor|TEXT|notnull=1|default=<none>|pk=0
+  column rank|INTEGER|notnull=1|default=<none>|pk=2
+  autoindex pk|unique=1|(essence,rank)
+  index similarity_graph_neighbor|unique=0|partial=0|(neighbor)
+table similarity_queue
+  column attempts|INTEGER|notnull=1|default=0|pk=0
+  column enqueued_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column essence|TEXT|notnull=0|default=<none>|pk=1
+  column item_pid|TEXT|notnull=1|default=<none>|pk=0
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
+  autoindex pk|unique=1|(essence)
+  index similarity_queue_ready|unique=0|partial=0|(lease_until_ns,enqueued_at_ns)
+table sync_state
+  column key|TEXT|notnull=0|default=<none>|pk=1
+  column value|TEXT|notnull=1|default=<none>|pk=0
+  autoindex pk|unique=1|(key)
+table tool_tasks
+  column attempts|INTEGER|notnull=1|default=0|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column error|TEXT|notnull=1|default=''|pk=0
+  column finished_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column item_pid|TEXT|notnull=1|default=<none>|pk=0
+  column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
+  column params|TEXT|notnull=1|default='{}'|pk=0
+  column progress_pct|REAL|notnull=1|default=0|pk=0
+  column result_pids|TEXT|notnull=1|default='[]'|pk=0
+  column state|TEXT|notnull=1|default='queued'|pk=0
+  column summary|TEXT|notnull=1|default=''|pk=0
+  column type|TEXT|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=''|pk=0
+  autoindex pk|unique=1|(id)
+  index tool_tasks_state|unique=0|partial=0|(state,lease_until_ns)
+  index tool_tasks_user|unique=0|partial=0|(user_id,created_at_ns DESC,id)
+table transcript_cache
+  column cues|TEXT|notnull=1|default=''|pk=0
+  column episode_pid|TEXT|notnull=0|default=<none>|pk=1
+  column fetched_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column format|TEXT|notnull=1|default=''|pk=0
+  column negative|INTEGER|notnull=1|default=0|pk=0
+  autoindex pk|unique=1|(episode_pid)
+table uploads
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column duplicate_kind|TEXT|notnull=1|default=''|pk=0
+  column duplicate_pid|TEXT|notnull=1|default=''|pk=0
+  column expires_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column file_name|TEXT|notnull=1|default=<none>|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column item_pid|TEXT|notnull=1|default=''|pk=0
+  column library_pid|TEXT|notnull=1|default=''|pk=0
+  column media_type|TEXT|notnull=1|default=<none>|pk=0
+  column received_bytes|INTEGER|notnull=1|default=0|pk=0
+  column review_entry_id|TEXT|notnull=1|default=''|pk=0
+  column sha256|TEXT|notnull=1|default=''|pk=0
+  column size_bytes|INTEGER|notnull=1|default=<none>|pk=0
+  column staging_path|TEXT|notnull=1|default=''|pk=0
+  column state|TEXT|notnull=1|default='receiving'|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(id)
+  index uploads_item|unique=0|partial=0|(item_pid,user_id)
+  index uploads_user|unique=0|partial=0|(user_id,created_at_ns DESC,id)
+table users
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column disabled|INTEGER|notnull=1|default=0|pk=0
+  column display_name|TEXT|notnull=1|default=''|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column library_access|TEXT|notnull=1|default='all'|pk=0
+  column max_transcode_kbps|INTEGER|notnull=1|default=0|pk=0
+  column password_hash|TEXT|notnull=1|default=''|pk=0
+  column pending|INTEGER|notnull=1|default=0|pk=0
+  column perm_delete|INTEGER|notnull=1|default=0|pk=0
+  column perm_download|INTEGER|notnull=1|default=1|pk=0
+  column perm_explicit|INTEGER|notnull=1|default=1|pk=0
+  column perm_podcasts|INTEGER|notnull=1|default=1|pk=0
+  column perm_shared_outputs|INTEGER|notnull=1|default=1|pk=0
+  column roles|TEXT|notnull=1|default='user'|pk=0
+  column tag_rules|TEXT|notnull=1|default=''|pk=0
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column upload_enabled|INTEGER|notnull=1|default=0|pk=0
+  column upload_quota_bytes|INTEGER|notnull=1|default=0|pk=0
+  column username_ci|TEXT|notnull=1|default=<none>|pk=0
+  column username|TEXT|notnull=1|default=<none>|pk=0
+  column waxbin_user_pid|TEXT|notnull=1|default=<none>|pk=0
+  autoindex pk|unique=1|(id)
+  autoindex u|unique=1|(username_ci)

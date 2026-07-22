@@ -55,6 +55,8 @@ nav:
       - Direct playback: adr/0007-direct-playback-without-the-streaming-engine.md
       - Connect sessions and the command bus: adr/0008-connect-sessions-and-the-command-bus.md
       - The matching engine: adr/0009-the-matching-engine.md
+      - The waxdeck.db baseline and ownership audit: adr/0010-waxdeck-db-baseline-and-ownership-audit.md
+      - Notification providers and two-scope targets: adr/0011-notification-providers.md
 
 # Working notes for agents and maintainers; built but unlisted.
 not_in_nav: |

@@ -188,10 +188,13 @@ func (s *Server) ServeShareStream(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release()
 	// Mid-playback seeks are Range fetches from a nonzero offset;
-	// everything else is the start of a listen. Browsers send
-	// `Range: bytes=0-` on a media element's very first fetch, so
-	// counting only rangeless requests would miss most real plays.
-	if hdr := r.Header.Get("Range"); hdr == "" || strings.HasPrefix(hdr, "bytes=0-") {
+	// everything else that actually reads audio is the start of a
+	// listen. Browsers send `Range: bytes=0-` on a media element's
+	// very first fetch, so counting only rangeless requests would
+	// miss most real plays; Safari precedes its real (bounded) fetch
+	// with a tiny probe like `bytes=0-1`, which must not count a
+	// second play.
+	if countableShareFetch(r.Header.Get("Range")) {
 		s.svc.CountSharePlay(r.Context(), id)
 	}
 	if s.bridge != nil {
@@ -209,6 +212,35 @@ func (s *Server) ServeShareStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.serveShareFile(w, r, it.PID, false)
+}
+
+// countableProbeFloor separates a browser's start-of-file probe from a
+// fetch that actually plays: Safari asks for `bytes=0-1` before its
+// real request, while any genuine audio fetch spans far more than a
+// kilobyte (even a seconds-long low-bitrate clip does).
+const countableProbeFloor = 1024
+
+// countableShareFetch reports whether one stream request begins a
+// listen: no range at all, an open-ended start-of-file range, or a
+// bounded start-of-file range past the probe floor. Nonzero offsets
+// are mid-playback seeks, and unparsable range strings count nothing
+// (failing toward undercounting).
+func countableShareFetch(rangeHeader string) bool {
+	if rangeHeader == "" {
+		return true
+	}
+	rest, ok := strings.CutPrefix(rangeHeader, "bytes=0-")
+	if !ok {
+		return false
+	}
+	if rest == "" {
+		return true
+	}
+	end, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil {
+		return false
+	}
+	return end+1 >= countableProbeFloor
 }
 
 // ServeShareDownload serves the original file as an attachment.

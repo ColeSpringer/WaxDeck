@@ -79,7 +79,10 @@ keyfile safe separately.
 Back up on demand (Backups → Back up now) or on a schedule. Retention
 keeps the newest N archives and a total byte budget, both editable in
 settings; imported archives are exempt. Archives can be downloaded
-from the UI and uploaded to another server.
+from the UI and uploaded to another server. Outcomes raise the
+`backup-completed` and `backup-failed` server notification events, so
+a schedule that quietly stops producing archives is a notification,
+not a surprise during a restore.
 
 **Restore is staged, then applied at the next server start.** Staging
 validates the archive and answers with the plan: whether this server's
@@ -94,7 +97,7 @@ restart.
 Restoring onto a new host: upload the archive (Backups → import), stage
 it, restart. Without the old keyfile everything restores except sealed
 credentials (app passwords, scrobbling connections, private feed
-logins), which need re-entering.
+logins, notification target configurations), which need re-entering.
 
 ## Scheduled jobs
 

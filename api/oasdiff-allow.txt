@@ -1,0 +1,11 @@
+# Deliberately accepted breaking changes, matched by `make oasdiff`.
+# Temporary by construction: this file rides the change that makes the
+# break and is deleted once the base ref contains it.
+#
+# The /admin/notifications relay configuration is replaced by the
+# notification-target surfaces (/admin/notification-targets,
+# /users/me/notification-targets, /notifications/events); removal is a
+# deliberate pre-release break recorded in docs/adr/0011.
+GET /admin/notifications api path removed without deprecation
+PUT /admin/notifications api path removed without deprecation
+POST /admin/notifications api path removed without deprecation

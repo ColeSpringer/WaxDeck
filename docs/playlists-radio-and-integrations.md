@@ -112,16 +112,32 @@ the slate.
 
 ## Notifications
 
-Administrators configure delivery under Settings, Notifications.
-WaxDeck relays through an [Apprise](https://github.com/caronc/apprise)
-API server: one integration, most notification services. Point the
-Apprise URL at your instance's notify endpoint, optionally list target
-URLs, choose which events deliver (new episode downloaded, podcast
-feed disabled), and send a test.
+Every user picks where their events go under Settings, My
+notifications. A target is one destination: native Pushover, ntfy,
+or Gotify delivery, a Discord or generic webhook, an
+[Apprise](https://github.com/caronc/apprise) API server (one
+integration, most notification services), or the UnifiedPush endpoint
+the Android client registers so events push without any Google
+services. Each target selects its own events (new episode downloaded,
+podcast feed disabled, review queue ready) from the server's event
+catalog, has a per-target test button, and shows its delivery health:
+the last successful delivery, or the standing error while deliveries
+fail (a revoked token no longer fails silently). Configuration is
+sealed at rest and round-trips verbatim to its owner for editing.
 
-Android clients can additionally register a UnifiedPush endpoint, so
-per-user events push without any Google services; registrations are
-listed and revocable in Settings.
+Server operations events (account requests, backup outcomes) are a
+separate scope: administrators manage server-wide destinations under
+Settings, Server notifications, and can additionally subscribe their
+own personal targets to server events, so a signup request reaching
+an administrator's phone is a personal choice, not server
+configuration.
+
+User-pointed destination URLs (ntfy, Gotify, webhooks, Apprise)
+refuse private addresses unless the server opts in with
+`WAXDECK_ALLOW_PRIVATE_NOTIFY_HOSTS` (for LAN ntfy or Gotify
+instances). Pushover and Discord post to their services' own hosts,
+and UnifiedPush endpoints are deliberately exempt: self-hosted LAN
+distributors are legitimate.
 
 ## Third-party apps
 

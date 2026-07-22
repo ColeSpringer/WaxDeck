@@ -83,6 +83,10 @@ type Config struct {
 	// caller-supplied ListenBrainz API bases, for self-hosted LAN
 	// instances (Maloja and friends).
 	AllowPrivateScrobbleHosts bool
+	// AllowPrivateNotifyHosts disables the private-address guard on
+	// user-pointed notification destinations (ntfy, Gotify, webhooks,
+	// Apprise), for households running them on the LAN.
+	AllowPrivateNotifyHosts bool
 	// RadioDirectoryBase is the radio-browser directory API base;
 	// empty selects the public instance.
 	RadioDirectoryBase string
@@ -198,6 +202,12 @@ type Library struct {
 
 	listenbrainz              *scrobble.ListenBrainz
 	allowPrivateScrobbleHosts bool
+	// notifyGuardedHTTP is the dial-guarded client for user-pointed
+	// notification destinations, built on first use;
+	// allowPrivateNotifyHosts relaxes its SSRF guard.
+	notifyGuardedHTTP       *http.Client
+	notifyGuardedOnce       sync.Once
+	allowPrivateNotifyHosts bool
 	// engine is the release matching engine; nil when no candidate
 	// source is configured (review entries then hold no candidates).
 	engine *match.Engine
@@ -319,6 +329,8 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	// check gives the friendly error, this guard is the boundary.
 	l.allowPrivateScrobbleHosts = cfg.AllowPrivateScrobbleHosts
 	l.listenbrainz.HTTP = scrobbleHTTPClient(cfg.AllowPrivateScrobbleHosts)
+	l.allowPrivateNotifyHosts = cfg.AllowPrivateNotifyHosts
+	l.dropLegacyNotifySetting(ctx)
 	l.loadRuntimeToggles(ctx)
 	l.envLastfmKey, l.envLastfmSecret = cfg.LastfmAPIKey, cfg.LastfmSecret
 	l.loadLastfmClient(ctx)

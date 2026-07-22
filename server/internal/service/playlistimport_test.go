@@ -59,6 +59,39 @@ func TestParseDelimitedExportGoogleTakeout(t *testing.T) {
 	}
 }
 
+func TestParseDelimitedExportDurationPrecedence(t *testing.T) {
+	// A spreadsheet merge can carry both a clock-format Time column
+	// and an exact Duration (ms) column; the milliseconds column must
+	// win deterministically in either column order, and the clock
+	// column fills in when the exact one is empty for a row.
+	for _, payload := range []string{
+		strings.Join([]string{
+			`Track Name,Artist,Time,Duration (ms)`,
+			`Cobalt Sky,Test Ensemble,3:35,215123`,
+			`Delta Groove,Brass Nine,4:04,`,
+		}, "\n"),
+		strings.Join([]string{
+			`Track Name,Artist,Duration (ms),Time`,
+			`Cobalt Sky,Test Ensemble,215123,3:35`,
+			`Delta Groove,Brass Nine,,4:04`,
+		}, "\n"),
+	} {
+		refs, _, err := parseDelimitedExport(payload, ',')
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(refs) != 2 {
+			t.Fatalf("entries = %d, want 2", len(refs))
+		}
+		if refs[0].DurationMs != 215123 {
+			t.Fatalf("both-columns duration = %d, want the exact milliseconds", refs[0].DurationMs)
+		}
+		if refs[1].DurationMs != 244000 {
+			t.Fatalf("clock-fallback duration = %d, want 4:04 parsed", refs[1].DurationMs)
+		}
+	}
+}
+
 func TestParseDelimitedExportAppleMusicTSV(t *testing.T) {
 	payload := strings.Join([]string{
 		"Name\tArtist\tAlbum\tTime",

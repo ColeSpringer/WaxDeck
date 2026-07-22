@@ -91,8 +91,10 @@ sidecar injection seam) all landed and are not repeated here.
   carries one UpdatedAt (bumped by every checkpoint) and a StarredAt
   that zeroes on unstar, which makes offline-replay guards for stars
   and ratings unimplementable against it; WaxDeck mirrors its own
-  per-field stamps in a play_state_stamps table. Upstream stamps
-  would retire the mirror.
+  per-field stamps in a play_state_stamps table. Note the resume
+  surface (the recent-positions shelf) also reads the mirror, so
+  upstream stamps improve the replay guard but do not by themselves
+  retire the table.
 - **Scoped or per-item enrichment.** Enrich runs whole-catalog with a
   Force flag and a Limit; there is no way to re-enrich one item or one
   entity. WaxDeck's editor runs its own injected providers directly
@@ -124,6 +126,15 @@ sidecar injection seam) all landed and are not repeated here.
   and the health sweep's missing-art rule both read true for an item
   whose album carries the only cover. A read that reports which level
   supplied the bytes (or an item-only probe) would make both honest.
+- **Transcript capture at feed sync, or a facade transcript write.**
+  The catalog stores search-reduced transcript text only when an
+  episode is downloaded, and the facade exports no transcript write,
+  so episodes WaxDeck streams (and fetches time-coded cues for, into
+  its transcript_cache) never enter transcript search. Either
+  capturing transcripts at feed sync or exposing a write would let
+  transcript search cover what listeners actually played. WaxDeck's
+  cues cache is the wrong source to promote wholesale (cue JSON, not
+  search text), so today the gap simply stands.
 
 ## WaxFlow
 

@@ -7,7 +7,9 @@ package db
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	_ "modernc.org/sqlite"
@@ -21,9 +23,25 @@ type DB struct {
 }
 
 // migrations are applied in order; user_version tracks the last applied
-// index + 1. Migrations are append-only.
-var migrations = []string{
-	`CREATE TABLE listen_sessions (
+// index + 1.
+//
+// Pre-release policy: the schema ships as the single baseline script
+// below, and every schema change edits that script in place.
+// user_version stays 1, the change's PR notes "delete
+// data/waxdeck.db", and the fingerprint guard in migrate turns a stale
+// dev database into a clear boot-time refusal instead of a latent "no
+// such column" error. testdata/schema.golden mirrors the baseline as a
+// normalized dump so each edit shows up as a reviewable semantic diff
+// (regenerate with UPDATE_GOLDEN=1). At first release the baseline
+// freezes and append-only migrations resume from index 1.
+var migrations = []string{baselineSchema}
+
+const baselineSchema = `
+	-- Listen sessions: WaxDeck's listening record and the stats
+	-- source. skipped_ms carries the client-reported silence-trim and
+	-- speed-up savings behind the time-saved counter, and the time
+	-- index serves the stats range scans.
+	CREATE TABLE listen_sessions (
 		id            INTEGER PRIMARY KEY,
 		user_id       TEXT    NOT NULL,
 		session_id    TEXT    NOT NULL,
@@ -31,30 +49,46 @@ var migrations = []string{
 		media_type    TEXT    NOT NULL,
 		started_at_ns INTEGER NOT NULL,
 		ms_played     INTEGER NOT NULL,
+		skipped_ms    INTEGER NOT NULL DEFAULT 0,
 		finished      INTEGER NOT NULL DEFAULT 0,
 		client        TEXT    NOT NULL DEFAULT '',
 		source        TEXT    NOT NULL DEFAULT 'live',
 		received_at_ns INTEGER NOT NULL,
 		UNIQUE (user_id, session_id)
 	);
-	CREATE INDEX listen_sessions_by_item ON listen_sessions (user_id, item_pid, started_at_ns);`,
+	CREATE INDEX listen_sessions_by_item ON listen_sessions (user_id, item_pid, started_at_ns);
+	CREATE INDEX listen_sessions_by_time ON listen_sessions (user_id, started_at_ns, id);
 
-	// Accounts, sessions, and per-user server state. The catalog user
-	// (waxbin_user_pid) is created at provisioning; WaxDeck is the sole
-	// identity authority and WaxBin stores no credentials. username_ci
-	// carries the case-insensitive uniqueness the login path matches on.
-	`CREATE TABLE users (
-		id             TEXT    PRIMARY KEY,
-		username       TEXT    NOT NULL,
-		username_ci    TEXT    NOT NULL UNIQUE,
-		display_name   TEXT    NOT NULL DEFAULT '',
-		password_hash  TEXT    NOT NULL DEFAULT '',
-		roles          TEXT    NOT NULL DEFAULT 'user',
-		disabled       INTEGER NOT NULL DEFAULT 0,
-		library_access TEXT    NOT NULL DEFAULT 'all',
-		waxbin_user_pid TEXT   NOT NULL,
-		created_at_ns  INTEGER NOT NULL,
-		updated_at_ns  INTEGER NOT NULL
+	-- Accounts, sessions, and per-user server state. The catalog user
+	-- (waxbin_user_pid) is created at provisioning; WaxDeck is the sole
+	-- identity authority and WaxBin stores no credentials. username_ci
+	-- carries the case-insensitive uniqueness the login path matches
+	-- on. pending marks signup-awaiting-approval accounts; the perm_
+	-- block is the granular permission set; upload rights live on the
+	-- user row (quota use derives from live upload rows); tag_rules is
+	-- a JSON {allow, deny} document read whole, like prefs.
+	CREATE TABLE users (
+		id                 TEXT    PRIMARY KEY,
+		username           TEXT    NOT NULL,
+		username_ci        TEXT    NOT NULL UNIQUE,
+		display_name       TEXT    NOT NULL DEFAULT '',
+		password_hash      TEXT    NOT NULL DEFAULT '',
+		roles              TEXT    NOT NULL DEFAULT 'user',
+		disabled           INTEGER NOT NULL DEFAULT 0,
+		pending            INTEGER NOT NULL DEFAULT 0,
+		library_access     TEXT    NOT NULL DEFAULT 'all',
+		perm_download      INTEGER NOT NULL DEFAULT 1,
+		perm_delete        INTEGER NOT NULL DEFAULT 0,
+		perm_explicit      INTEGER NOT NULL DEFAULT 1,
+		perm_shared_outputs INTEGER NOT NULL DEFAULT 1,
+		perm_podcasts      INTEGER NOT NULL DEFAULT 1,
+		max_transcode_kbps INTEGER NOT NULL DEFAULT 0,
+		upload_enabled     INTEGER NOT NULL DEFAULT 0,
+		upload_quota_bytes INTEGER NOT NULL DEFAULT 0,
+		tag_rules          TEXT    NOT NULL DEFAULT '',
+		waxbin_user_pid    TEXT    NOT NULL,
+		created_at_ns      INTEGER NOT NULL,
+		updated_at_ns      INTEGER NOT NULL
 	);
 	CREATE TABLE identities (
 		id            INTEGER PRIMARY KEY,
@@ -110,19 +144,20 @@ var migrations = []string{
 		challenge     TEXT    NOT NULL DEFAULT '',
 		created_at_ns INTEGER NOT NULL,
 		expires_at_ns INTEGER NOT NULL
-	);`,
+	);
 
-	// Sync and compatibility-API state. event_log is the server change
-	// stream (the serverSeq cursor): one row per user-scoped state
-	// change, written by the sole writer (the service) at mutation time.
-	// play_state_stamps carry the per-field change times offline replay
-	// reconciliation compares against; WaxBin's play_state row has only
-	// one UpdatedAt, which position checkpoints bump constantly.
-	// sync_state is a small key-value table for stream generations,
-	// floors, cursors, and per-user grant epochs. app_passwords hold the
-	// recoverable per-client secrets the Subsonic scheme demands,
-	// sealed with the server key; secret_hash serves apiKey lookup.
-	`CREATE TABLE event_log (
+	-- Sync and compatibility-API state. event_log is the server change
+	-- stream (the serverSeq cursor): one row per user-scoped state
+	-- change, written by the sole writer (the service) at mutation
+	-- time. play_state_stamps carry the per-field change times offline
+	-- replay reconciliation compares against; WaxBin's play_state row
+	-- has only one UpdatedAt, which position checkpoints bump
+	-- constantly. sync_state is a small key-value table for stream
+	-- generations, floors, cursors, per-user grant epochs, and the
+	-- schema baseline fingerprint. app_passwords hold the recoverable
+	-- per-client secrets the Subsonic scheme demands, sealed with the
+	-- server key; secret_hash serves apiKey lookup.
+	CREATE TABLE event_log (
 		id            INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id       TEXT    NOT NULL,
 		kind          TEXT    NOT NULL,
@@ -151,22 +186,23 @@ var migrations = []string{
 		created_at_ns INTEGER NOT NULL,
 		last_used_ns  INTEGER NOT NULL DEFAULT 0
 	);
-	CREATE INDEX app_passwords_by_user ON app_passwords (user_id, created_at_ns);`,
+	CREATE INDEX app_passwords_by_user ON app_passwords (user_id, created_at_ns);
 
-	// Podcasts and audiobooks. Shows, episodes, and files are cataloged
-	// globally in waxbin.db; everything per user lives here. NULL in a
-	// settings column always means "server default", which is distinct
-	// from an explicit 0 or false. Retention resolves across a show's
-	// subscribers as the most generous union, so sweeps read
-	// podcast_subscriptions by show. feed_state carries the refresh
-	// scheduler's per-feed failure accounting (the catalog keeps none).
-	// silence_maps cache the streaming sidecar's silence analysis keyed
-	// by audio essence, so retags and moves never invalidate a map but a
-	// re-encode or a detector revision does. The three queue tables are
-	// durable work queues drained by supervised workers with row leases;
-	// the gpodder tables serve the compatibility adapter, whose protocol
-	// speaks feed URLs and epoch seconds.
-	`CREATE TABLE podcast_subscriptions (
+	-- Podcasts and audiobooks. Shows, episodes, and files are
+	-- cataloged globally in waxbin.db; everything per user lives here.
+	-- NULL in a settings column always means "server default", which
+	-- is distinct from an explicit 0 or false. Retention resolves
+	-- across a show's subscribers as the most generous union, so
+	-- sweeps read podcast_subscriptions by show. feed_state carries
+	-- the refresh scheduler's per-feed failure accounting (the catalog
+	-- keeps none). silence_maps cache the streaming sidecar's silence
+	-- analysis keyed by audio essence, so retags and moves never
+	-- invalidate a map but a re-encode or a detector revision does.
+	-- The three queue tables are durable work queues drained by
+	-- supervised workers with row leases; the gpodder tables serve the
+	-- compatibility adapter, whose protocol speaks feed URLs and epoch
+	-- seconds.
+	CREATE TABLE podcast_subscriptions (
 		user_id          TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		show_pid         TEXT    NOT NULL,
 		folder           TEXT    NOT NULL DEFAULT '',
@@ -269,12 +305,25 @@ var migrations = []string{
 		total_sec    INTEGER,
 		uploaded_sec INTEGER NOT NULL
 	);
-	CREATE INDEX gpodder_actions_by_user ON gpodder_actions (user_id, id);`,
+	CREATE INDEX gpodder_actions_by_user ON gpodder_actions (user_id, id);
 
-	// 5: internet radio stations, scrobbling connections and their durable
-	// delivery queue, the notification outbox, UnifiedPush registrations,
-	// and a small settings store for runtime-editable server configuration.
-	`CREATE TABLE radio_stations (
+	-- Internet radio stations, scrobbling connections and their
+	-- durable delivery queue, notification targets with their outbox,
+	-- and a small settings store for runtime-editable server
+	-- configuration. A notification target is one delivery
+	-- destination: scope server rows (user_id NULL) are
+	-- administrator-managed and receive server-operations events,
+	-- scope user rows belong to their creator; config is sealed with
+	-- the server key, enabled_events is a JSON name array, and the
+	-- health triple mirrors scrobble_connections. UnifiedPush
+	-- registrations are kind unifiedpush rows deduped per owner on
+	-- the endpoint via dedupe_key (NULL for every other kind, so the
+	-- partial unique index sees only them; user_id COALESCEs to ''
+	-- inside it because UNIQUE treats NULLs as always distinct, which
+	-- would exempt server-scope rows). Outbox rows reference
+	-- their target; config is read at delivery time so edits and
+	-- revocations win, and deleting a target cascades its queue away.
+	CREATE TABLE radio_stations (
 		id            TEXT    PRIMARY KEY,
 		name          TEXT    NOT NULL,
 		stream_url    TEXT    NOT NULL UNIQUE,
@@ -312,11 +361,26 @@ var migrations = []string{
 		last_error     TEXT    NOT NULL DEFAULT ''
 	);
 	CREATE INDEX scrobble_outbox_ready ON scrobble_outbox (lease_until_ns, enqueued_at_ns);
+	CREATE TABLE notification_targets (
+		id                 TEXT    PRIMARY KEY,
+		kind               TEXT    NOT NULL,
+		scope              TEXT    NOT NULL,
+		user_id            TEXT    REFERENCES users(id) ON DELETE CASCADE,
+		label              TEXT    NOT NULL DEFAULT '',
+		sealed_config      BLOB    NOT NULL,
+		enabled_events     TEXT    NOT NULL DEFAULT '[]',
+		dedupe_key         TEXT,
+		last_success_at_ns INTEGER NOT NULL DEFAULT 0,
+		last_error         TEXT    NOT NULL DEFAULT '',
+		last_error_at_ns   INTEGER NOT NULL DEFAULT 0,
+		created_at_ns      INTEGER NOT NULL
+	);
+	CREATE INDEX notification_targets_owner ON notification_targets (user_id, created_at_ns DESC, id);
+	CREATE UNIQUE INDEX notification_targets_dedupe ON notification_targets (COALESCE(user_id, ''), kind, dedupe_key) WHERE dedupe_key IS NOT NULL;
 	CREATE TABLE notify_outbox (
 		id             INTEGER PRIMARY KEY AUTOINCREMENT,
-		kind           TEXT    NOT NULL,
+		target_id      TEXT    NOT NULL REFERENCES notification_targets(id) ON DELETE CASCADE,
 		event          TEXT    NOT NULL,
-		target         TEXT    NOT NULL DEFAULT '',
 		title          TEXT    NOT NULL DEFAULT '',
 		body           TEXT    NOT NULL DEFAULT '',
 		enqueued_at_ns INTEGER NOT NULL,
@@ -325,29 +389,21 @@ var migrations = []string{
 		last_error     TEXT    NOT NULL DEFAULT ''
 	);
 	CREATE INDEX notify_outbox_ready ON notify_outbox (lease_until_ns, enqueued_at_ns);
-	CREATE TABLE push_registrations (
-		id            TEXT    PRIMARY KEY,
-		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		endpoint      TEXT    NOT NULL,
-		label         TEXT    NOT NULL DEFAULT '',
-		created_at_ns INTEGER NOT NULL,
-		UNIQUE (user_id, endpoint)
-	);
 	CREATE TABLE settings (
 		key        TEXT PRIMARY KEY,
 		value      TEXT NOT NULL,
 		updated_at_ns INTEGER NOT NULL
-	);`,
+	);
 
-	// Player endpoints and playback sessions. Device endpoints (cast,
-	// DLNA, jukebox) persist across discovery sweeps under a stable
-	// per-device key; client endpoints live only as long as their
-	// WebSocket and are never written here. Session rows are the crash
-	// and restore record of the in-memory session manager: the live
-	// truth is in memory, rows carry the last checkpointed state, and
-	// ended sessions keep their final row as queue-restore history
-	// until pruned.
-	`CREATE TABLE player_endpoints (
+	-- Player endpoints and playback sessions. Device endpoints (cast,
+	-- DLNA, jukebox) persist across discovery sweeps under a stable
+	-- per-device key; client endpoints live only as long as their
+	-- WebSocket and are never written here. Session rows are the crash
+	-- and restore record of the in-memory session manager: the live
+	-- truth is in memory, rows carry the last checkpointed state, and
+	-- ended sessions keep their final row as queue-restore history
+	-- until pruned.
+	CREATE TABLE player_endpoints (
 		id            TEXT    PRIMARY KEY,
 		kind          TEXT    NOT NULL,
 		device_key    TEXT    NOT NULL,
@@ -369,18 +425,15 @@ var migrations = []string{
 		created_at_ns INTEGER NOT NULL,
 		updated_at_ns INTEGER NOT NULL
 	);
-	CREATE INDEX playback_sessions_user ON playback_sessions (user_id, active, updated_at_ns);`,
+	CREATE INDEX playback_sessions_user ON playback_sessions (user_id, active, updated_at_ns);
 
-	// The curation surface: the matching review queue with its durable
-	// identify work queue, resumable uploads, tool tasks (book merge and
-	// split, cue splits), the health sweep index, and the fix dispatch
-	// queue. Review payloads (tracks, candidates, the pre-apply snapshot
-	// for revert) are JSON documents: they are read and written whole,
-	// never queried into, and their shape belongs to the service layer.
-	// Upload rights live on the user row; quota use derives from live
-	// upload rows.
-	`ALTER TABLE users ADD COLUMN upload_enabled INTEGER NOT NULL DEFAULT 0;
-	ALTER TABLE users ADD COLUMN upload_quota_bytes INTEGER NOT NULL DEFAULT 0;
+	-- The curation surface: the matching review queue with its durable
+	-- identify work queue, resumable uploads, tool tasks (book merge
+	-- and split, cue splits), the health sweep index, and the fix
+	-- dispatch queue. Review payloads (tracks, candidates, the
+	-- pre-apply snapshot for revert) are JSON documents: they are read
+	-- and written whole, never queried into, and their shape belongs
+	-- to the service layer.
 	CREATE TABLE review_entries (
 		id             TEXT    PRIMARY KEY,
 		kind           TEXT    NOT NULL,
@@ -444,6 +497,7 @@ var migrations = []string{
 		user_id        TEXT    NOT NULL DEFAULT '',
 		params         TEXT    NOT NULL DEFAULT '{}',
 		progress_pct   REAL    NOT NULL DEFAULT 0,
+		summary        TEXT    NOT NULL DEFAULT '',
 		error          TEXT    NOT NULL DEFAULT '',
 		result_pids    TEXT    NOT NULL DEFAULT '[]',
 		attempts       INTEGER NOT NULL DEFAULT 0,
@@ -472,28 +526,17 @@ var migrations = []string{
 		next_at_ns     INTEGER NOT NULL DEFAULT 0,
 		last_error     TEXT    NOT NULL DEFAULT '',
 		UNIQUE (item_pid, rule)
-	);`,
+	);
 
-	// The administration surface. Granular permissions and the pending
-	// (signup-awaiting-approval) flag live on the user row; tag_rules is
-	// a JSON {allow, deny} document read whole, like prefs. Invites
-	// store only a token hash (the token itself is shown once, at
-	// creation) plus the account shape they admit. audit_log is the
-	// admin-action record: actor and target names are denormalized at
-	// write time so entries outlive renames and deletions, and it is
-	// deliberately separate from event_log (which is the per-user sync
-	// stream; admin actions must never leak into client sync deltas).
-	// backups catalogs the archive files in the data directory's
-	// backups/ folder ("origin" because "trigger" is an SQL keyword).
-	`ALTER TABLE tool_tasks ADD COLUMN summary TEXT NOT NULL DEFAULT '';
-	ALTER TABLE users ADD COLUMN pending INTEGER NOT NULL DEFAULT 0;
-	ALTER TABLE users ADD COLUMN perm_download INTEGER NOT NULL DEFAULT 1;
-	ALTER TABLE users ADD COLUMN perm_delete INTEGER NOT NULL DEFAULT 0;
-	ALTER TABLE users ADD COLUMN perm_explicit INTEGER NOT NULL DEFAULT 1;
-	ALTER TABLE users ADD COLUMN perm_shared_outputs INTEGER NOT NULL DEFAULT 1;
-	ALTER TABLE users ADD COLUMN perm_podcasts INTEGER NOT NULL DEFAULT 1;
-	ALTER TABLE users ADD COLUMN max_transcode_kbps INTEGER NOT NULL DEFAULT 0;
-	ALTER TABLE users ADD COLUMN tag_rules TEXT NOT NULL DEFAULT '';
+	-- The administration surface. Invites store only a token hash (the
+	-- token itself is shown once, at creation) plus the account shape
+	-- they admit. audit_log is the admin-action record: actor and
+	-- target names are denormalized at write time so entries outlive
+	-- renames and deletions, and it is deliberately separate from
+	-- event_log (which is the per-user sync stream; admin actions must
+	-- never leak into client sync deltas). backups catalogs the archive
+	-- files in the data directory's backups/ folder ("origin" because
+	-- "trigger" is an SQL keyword).
 	CREATE TABLE invites (
 		id                 TEXT    PRIMARY KEY,
 		token_hash         BLOB    NOT NULL UNIQUE,
@@ -534,23 +577,20 @@ var migrations = []string{
 		error          TEXT    NOT NULL DEFAULT '',
 		created_at_ns  INTEGER NOT NULL,
 		finished_at_ns INTEGER NOT NULL DEFAULT 0
-	);`,
+	);
 
-	// Sonic similarity and public shares. Embeddings and the neighbor
-	// graph are keyed by audio essence (tag-stable, identical across
-	// re-rips of the same bytes), so a retag or a move never
-	// re-analyzes; item_pid is a convenience pointer for joins and
-	// display, refreshed at ingest. similarity_queue is the analysis
-	// work queue on the standard lease shape; similarity_backfill names
-	// graph nodes that lost neighbor edges to a deletion and await the
-	// lazy repair sweep. shares hold no secret at rest: the capability
-	// token is derived from the share id with the server key, so the
-	// owner's list can always show full URLs, revocation is row state,
-	// and a leaked database exposes no share URLs. skipped_ms extends
-	// listen sessions with the client-reported silence-trim and
-	// speed-up savings behind the time-saved counter, and the time
-	// index serves the stats range scans.
-	`CREATE TABLE embeddings (
+	-- Sonic similarity and public shares. Embeddings and the neighbor
+	-- graph are keyed by audio essence (tag-stable, identical across
+	-- re-rips of the same bytes), so a retag or a move never
+	-- re-analyzes; item_pid is a convenience pointer for joins and
+	-- display, refreshed at ingest. similarity_queue is the analysis
+	-- work queue on the standard lease shape; similarity_backfill
+	-- names graph nodes that lost neighbor edges to a deletion and
+	-- await the lazy repair sweep. shares hold no secret at rest: the
+	-- capability token is derived from the share id with the server
+	-- key, so the owner's list can always show full URLs, revocation
+	-- is row state, and a leaked database exposes no share URLs.
+	CREATE TABLE embeddings (
 		essence       TEXT    PRIMARY KEY,
 		item_pid      TEXT    NOT NULL,
 		model         TEXT    NOT NULL,
@@ -592,9 +632,7 @@ var migrations = []string{
 		revoked        INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX shares_user ON shares (user_id, created_at_ns DESC, id);
-	ALTER TABLE listen_sessions ADD COLUMN skipped_ms INTEGER NOT NULL DEFAULT 0;
-	CREATE INDEX listen_sessions_by_time ON listen_sessions (user_id, started_at_ns, id);`,
-}
+`
 
 // Open opens (creating if needed) the database at path and applies
 // pending migrations.
@@ -632,7 +670,23 @@ func (d *DB) migrate(ctx context.Context) error {
 		return fmt.Errorf("db: reading schema version: %w", err)
 	}
 	if version > len(migrations) {
+		// While the whole schema is one in-place-edited baseline, no
+		// build ever stamps a version above 1, so a higher version is
+		// a database from the old pre-squash migration chain, not a
+		// newer build's; steer it to the same delete-and-restart
+		// answer as a fingerprint mismatch. Once appended migrations
+		// resume (post-release, len > 1), the newer-build reading
+		// becomes the true one again.
+		if len(migrations) == 1 {
+			return errStaleBaseline
+		}
 		return fmt.Errorf("db: schema version %d is newer than this build understands (%d); refusing to open", version, len(migrations))
+	}
+	baselineHash := fmt.Sprintf("%x", sha256.Sum256([]byte(migrations[0])))
+	if version >= 1 {
+		if err := d.checkBaselineFingerprint(ctx, baselineHash); err != nil {
+			return err
+		}
 	}
 	for i := version; i < len(migrations); i++ {
 		tx, err := d.w.BeginTx(ctx, nil)
@@ -643,6 +697,16 @@ func (d *DB) migrate(ctx context.Context) error {
 			tx.Rollback()
 			return fmt.Errorf("db: migration %d: %w", i+1, err)
 		}
+		if i == 0 {
+			// The fingerprint commits with the baseline: there is no
+			// state where user_version is 1 but the hash is missing.
+			if _, err := tx.ExecContext(ctx,
+				"INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)",
+				baselineFingerprintKey, baselineHash); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("db: migration %d: %w", i+1, err)
+			}
+		}
 		// PRAGMA cannot be parameterized; the value is a trusted integer.
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", i+1)); err != nil {
 			tx.Rollback()
@@ -651,6 +715,52 @@ func (d *DB) migrate(ctx context.Context) error {
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("db: migration %d: %w", i+1, err)
 		}
+	}
+	return nil
+}
+
+// baselineFingerprintKey is the sync_state row holding the sha256 of
+// the baseline script that created this database. Pre-release the
+// baseline is edited in place with user_version pinned at 1, so the
+// version alone cannot tell a current schema from a stale one; the
+// hash can. The guard goes away at first release, when the baseline
+// freezes.
+const baselineFingerprintKey = "schema.baseline"
+
+// errStaleBaseline is the delete-and-restart refusal every stale
+// pre-release database lands on, whatever gave it away (a version
+// from the old migration chain, a missing sync_state table, or a
+// fingerprint from a different baseline script).
+var errStaleBaseline = errors.New("db: this database was created by a different pre-release schema baseline; delete the waxdeck.db file (with its -wal and -shm siblings) and restart to recreate it")
+
+// checkBaselineFingerprint refuses to run against a database created
+// by a different baseline script. A missing hash row on an otherwise
+// plausible database is adopted rather than refused, so the guard
+// cannot brick a database it has simply never seen before.
+func (d *DB) checkBaselineFingerprint(ctx context.Context, want string) error {
+	var n int
+	if err := d.w.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sync_state'").Scan(&n); err != nil {
+		return fmt.Errorf("db: checking baseline fingerprint: %w", err)
+	}
+	if n == 0 {
+		// Old enough that sync_state does not exist: certainly stale.
+		return errStaleBaseline
+	}
+	var stored string
+	err := d.w.QueryRowContext(ctx,
+		"SELECT value FROM sync_state WHERE key = ?", baselineFingerprintKey).Scan(&stored)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		_, err := d.w.ExecContext(ctx,
+			"INSERT INTO sync_state (key, value) VALUES (?, ?)", baselineFingerprintKey, want)
+		if err != nil {
+			return fmt.Errorf("db: storing baseline fingerprint: %w", err)
+		}
+	case err != nil:
+		return fmt.Errorf("db: checking baseline fingerprint: %w", err)
+	case stored != want:
+		return errStaleBaseline
 	}
 	return nil
 }

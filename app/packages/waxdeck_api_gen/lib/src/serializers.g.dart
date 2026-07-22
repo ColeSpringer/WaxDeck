@@ -143,8 +143,14 @@ Serializers _$serializers =
           ..add(MixBasis.serializer)
           ..add(ModelLibrary.serializer)
           ..add(MonthListening.serializer)
-          ..add(NotificationConfig.serializer)
-          ..add(NotificationConfigUpdate.serializer)
+          ..add(NotificationEvent.serializer)
+          ..add(NotificationEventList.serializer)
+          ..add(NotificationScope.serializer)
+          ..add(NotificationTarget.serializer)
+          ..add(NotificationTargetCreate.serializer)
+          ..add(NotificationTargetKind.serializer)
+          ..add(NotificationTargetList.serializer)
+          ..add(NotificationTargetUpdate.serializer)
           ..add(OidcExchangeRequest.serializer)
           ..add(OidcProvider.serializer)
           ..add(OidcProviders.serializer)
@@ -521,6 +527,18 @@ Serializers _$serializers =
             () => ListBuilder<TopEntry>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(NotificationEvent),
+            ]),
+            () => ListBuilder<NotificationEvent>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(NotificationTarget),
+            ]),
+            () => ListBuilder<NotificationTarget>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(OidcProvider)]),
             () => ListBuilder<OidcProvider>(),
           )
@@ -865,18 +883,6 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(String)]),
-            () => ListBuilder<String>(),
-          )
-          ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(String)]),
-            () => ListBuilder<String>(),
-          )
-          ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(String)]),
-            () => ListBuilder<String>(),
-          )
-          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
           )
@@ -1045,6 +1051,39 @@ Serializers _$serializers =
               const FullType.nullable(JsonObject),
             ]),
             () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           ))
         .build();
 

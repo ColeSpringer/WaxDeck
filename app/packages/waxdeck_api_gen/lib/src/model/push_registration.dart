@@ -8,16 +8,16 @@ import 'package:built_value/serializer.dart';
 
 part 'push_registration.g.dart';
 
-/// One UnifiedPush endpoint registration.
+/// One UnifiedPush endpoint registration: a compatibility view over a `unifiedpush` notification target. 
 ///
 /// Properties:
-/// * [pid] - Type-prefixed ULID.
+/// * [pid] - Type-prefixed ULID (a notification-target pid).
 /// * [endpoint] - The distributor-issued push endpoint URL.
 /// * [label] - Client-chosen label, usually the device name.
 /// * [createdAt] - When the endpoint was registered.
 @BuiltValue()
 abstract class PushRegistration implements Built<PushRegistration, PushRegistrationBuilder> {
-  /// Type-prefixed ULID.
+  /// Type-prefixed ULID (a notification-target pid).
   @BuiltValueField(wireName: r'pid')
   String get pid;
 

@@ -164,17 +164,13 @@ func (l *Library) Signup(ctx context.Context, username, password, displayName, i
 	return acct, SignupActive, nil
 }
 
-// notifyAdminsOfSignup announces a new pending registration.
+// notifyAdminsOfSignup announces a new pending registration on the
+// server scope: server targets plus admin personal targets that opted
+// into signup-requested.
 func (l *Library) notifyAdminsOfSignup(ctx context.Context, acct *Account) {
-	admins, err := l.db.EnabledAdminIDs(ctx)
-	if err != nil {
-		l.log.Warn("listing admins for signup notification", "err", err)
-		admins = nil
-	}
-	l.EmitNotification(ctx, "signup-requested",
+	l.EmitServerNotification(ctx, "signup-requested",
 		"New account request",
-		acct.User.Username+" requested an account and is waiting for approval.",
-		admins)
+		acct.User.Username+" requested an account and is waiting for approval.")
 	l.Audit(ctx, nil, "user.request", AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username}, nil)
 }
 

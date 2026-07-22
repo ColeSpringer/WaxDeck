@@ -372,8 +372,12 @@ func parseDelimitedExport(payload string, sep rune) ([]PortableRefDTO, string, e
 		}
 		var e PortableRefDTO
 		e.Kind = string(model.KindTrack)
-		for i, f := range fields {
-			if i >= len(rec) {
+		// Columns apply left to right (map iteration order must never
+		// decide a field), and the exact-milliseconds column beats a
+		// clock-format one when an export carries both.
+		for i := range rec {
+			f, ok := fields[i]
+			if !ok {
 				continue
 			}
 			v := strings.TrimSpace(rec[i])
@@ -393,7 +397,9 @@ func parseDelimitedExport(payload string, sep rune) ([]PortableRefDTO, string, e
 					e.DurationMs = n
 				}
 			case "duration":
-				e.DurationMs = parseClockDuration(v)
+				if e.DurationMs == 0 {
+					e.DurationMs = parseClockDuration(v)
+				}
 			case "isrc":
 				e.ISRC = v
 			case "playlistName":

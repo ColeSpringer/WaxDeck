@@ -569,190 +569,599 @@ class AppPasswordsSection extends ConsumerWidget {
   }
 }
 
-/// Push registrations from UnifiedPush distributors, listed with
-/// revocation. Registration itself happens on the Android client.
-class PushRegistrationsSection extends ConsumerWidget {
-  const PushRegistrationsSection({super.key});
+/// One kind's config field descriptor for the target editor.
+class _ConfigField {
+  const _ConfigField(
+    this.key,
+    this.label, {
+    this.optional = false,
+    this.integer = false,
+    this.secret = false,
+    this.helper,
+  });
+
+  final String key;
+  final String label;
+  final bool optional;
+  final bool integer;
+  final bool secret;
+  final String? helper;
+}
+
+/// The per-kind config surface. Mirrors the server's provider
+/// validation; the server's message is the authority when they drift.
+const _kindFields = <String, List<_ConfigField>>{
+  'pushover': [
+    _ConfigField('token', 'Application token', secret: true),
+    _ConfigField('userKey', 'User or group key', secret: true),
+    _ConfigField(
+      'priority',
+      'Priority',
+      optional: true,
+      integer: true,
+      helper: '-2 (quietest) to 2 (emergency)',
+    ),
+  ],
+  'ntfy': [
+    _ConfigField('topic', 'Topic'),
+    _ConfigField(
+      'serverUrl',
+      'Server URL',
+      optional: true,
+      helper: 'Empty uses ntfy.sh',
+    ),
+    _ConfigField('accessToken', 'Access token', optional: true, secret: true),
+  ],
+  'gotify': [
+    _ConfigField('serverUrl', 'Server URL'),
+    _ConfigField('token', 'Application token', secret: true),
+    _ConfigField(
+      'priority',
+      'Priority',
+      optional: true,
+      integer: true,
+      helper: '0 to 10',
+    ),
+  ],
+  'discord': [
+    _ConfigField(
+      'webhookUrl',
+      'Webhook URL',
+      secret: true,
+      helper: 'A discord.com webhook URL',
+    ),
+  ],
+  'webhook': [
+    _ConfigField(
+      'url',
+      'URL',
+      helper: 'Receives {event, title, body, timestamp} as JSON',
+    ),
+  ],
+  'apprise': [
+    _ConfigField('serverUrl', 'Apprise server URL'),
+    _ConfigField(
+      'targets',
+      'Targets',
+      optional: true,
+      helper: 'Apprise URLs; empty uses the server\'s own configuration',
+    ),
+  ],
+  'unifiedpush': [
+    _ConfigField(
+      'endpoint',
+      'Endpoint URL',
+      helper: 'Usually registered by the app through its distributor',
+    ),
+  ],
+};
+
+String _kindLabel(String kind) => switch (kind) {
+  'pushover' => 'Pushover',
+  'ntfy' => 'ntfy',
+  'gotify' => 'Gotify',
+  'discord' => 'Discord',
+  'webhook' => 'Webhook',
+  'apprise' => 'Apprise',
+  'unifiedpush' => 'UnifiedPush',
+  _ => kind,
+};
+
+IconData _kindIcon(String kind) => switch (kind) {
+  'unifiedpush' => Icons.smartphone_outlined,
+  'discord' => Icons.forum_outlined,
+  'webhook' => Icons.webhook_outlined,
+  _ => Icons.notifications_outlined,
+};
+
+/// The per-target event checklist, driven by the server's catalog and
+/// filtered to what this target's scope may select.
+class _EventChecklist extends ConsumerWidget {
+  const _EventChecklist({
+    required this.serverScope,
+    required this.ownerIsAdmin,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  /// Whether the target being edited is server-scope.
+  final bool serverScope;
+  final bool ownerIsAdmin;
+  final Set<String> selected;
+  final ValueChanged<Set<String>> onChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final registrations = ref.watch(pushRegistrationsProvider);
-    final rows = registrations.value ?? const <PushRegistration>[];
-    if (rows.isEmpty) return const SizedBox.shrink();
+    final catalog = ref.watch(notifyEventCatalogProvider);
     final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Push notifications', style: textTheme.titleMedium),
-        const SizedBox(height: 8),
-        for (final reg in rows)
-          ListTile(
-            key: ValueKey('push-${reg.pid}'),
-            leading: const Icon(Icons.notifications_outlined),
-            title: Text(reg.label ?? 'Unnamed device'),
-            trailing: IconButton(
-              tooltip: 'Remove',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () =>
-                  ref.read(pushRegistrationsProvider.notifier).remove(reg.pid),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// The Apprise relay configuration; administrators only.
-class NotificationsSection extends ConsumerStatefulWidget {
-  const NotificationsSection({super.key});
-
-  @override
-  ConsumerState<NotificationsSection> createState() =>
-      _NotificationsSectionState();
-}
-
-class _NotificationsSectionState extends ConsumerState<NotificationsSection> {
-  final _urlController = TextEditingController();
-  final _targetsController = TextEditingController();
-  Set<String>? _enabled;
-  var _seeded = false;
-  var _busy = false;
-
-  @override
-  void dispose() {
-    _urlController.dispose();
-    _targetsController.dispose();
-    super.dispose();
-  }
-
-  void _seed(NotificationConfig config) {
-    if (_seeded) return;
-    _seeded = true;
-    _urlController.text = config.appriseUrl;
-    _targetsController.text = config.targets ?? '';
-    _enabled = config.enabledEvents.toSet();
-  }
-
-  Future<void> _save() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final targets = _targetsController.text.trim();
-      await ref
-          .read(notificationConfigProvider.notifier)
-          .save(
-            appriseUrl: _urlController.text.trim(),
-            targets: targets.isEmpty ? null : targets,
-            enabledEvents: (_enabled ?? const {}).toList()..sort(),
-          );
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Notification settings saved')),
-      );
-    } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _test() async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref.read(notificationConfigProvider.notifier).sendTest();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Test notification queued')),
-      );
-    } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final config = ref.watch(notificationConfigProvider);
-    final textTheme = Theme.of(context).textTheme;
-    return switch (config) {
+    return switch (catalog) {
       AsyncData(:final value) => Builder(
         builder: (context) {
-          _seed(value);
-          final enabled = _enabled ?? const <String>{};
+          final events = value
+              .where(
+                (e) => serverScope
+                    ? e.scope == 'server'
+                    : e.scope == 'user' ||
+                          (e.scope == 'server' && ownerIsAdmin),
+              )
+              .toList(growable: false);
+          // A personal editor that offers both scopes (admins) gets
+          // scope group headers; everyone else sees a flat list.
+          final grouped = !serverScope && ownerIsAdmin;
+          final children = <Widget>[];
+          String? group;
+          for (final event in events) {
+            if (grouped && group != event.scope) {
+              group = event.scope;
+              children.add(
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    event.scope == 'server' ? 'Server events' : 'My events',
+                    style: textTheme.labelMedium,
+                  ),
+                ),
+              );
+            }
+            children.add(
+              CheckboxListTile(
+                key: ValueKey('notify-event-${event.name}'),
+                title: Text(event.name),
+                subtitle: Text(event.description),
+                value: selected.contains(event.name),
+                contentPadding: EdgeInsets.zero,
+                onChanged: (checked) {
+                  final next = {...selected};
+                  if (checked ?? false) {
+                    next.add(event.name);
+                  } else {
+                    next.remove(event.name);
+                  }
+                  onChanged(next);
+                },
+              ),
+            );
+          }
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Notifications', style: textTheme.titleMedium),
-              const SizedBox(height: 8),
-              TextField(
-                key: const Key('apprise-url-field'),
-                controller: _urlController,
-                decoration: const InputDecoration(
-                  labelText: 'Apprise server URL',
-                  helperText: 'Empty disables delivery through Apprise',
-                ),
-                keyboardType: TextInputType.url,
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const Key('apprise-targets-field'),
-                controller: _targetsController,
-                decoration: const InputDecoration(
-                  labelText: 'Targets (optional)',
-                  helperText:
-                      'Apprise URLs; empty uses the server\'s own configuration',
-                ),
-              ),
-              const SizedBox(height: 8),
-              for (final event in value.knownEvents)
-                if (event != 'test')
-                  CheckboxListTile(
-                    key: ValueKey('notify-event-$event'),
-                    title: Text(event),
-                    value: enabled.contains(event),
-                    contentPadding: EdgeInsets.zero,
-                    onChanged: (checked) => setState(() {
-                      final next = {...enabled};
-                      if (checked ?? false) {
-                        next.add(event);
-                      } else {
-                        next.remove(event);
-                      }
-                      _enabled = next;
-                    }),
-                  ),
-              Row(
-                children: [
-                  Semantics(
-                    identifier: 'notifications-save',
-                    button: true,
-                    child: FilledButton.tonal(
-                      key: const Key('notifications-save'),
-                      onPressed: _busy ? null : _save,
-                      child: const Text('Save'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Semantics(
-                    identifier: 'notifications-test',
-                    button: true,
-                    child: OutlinedButton(
-                      key: const Key('notifications-test'),
-                      onPressed: _busy ? null : _test,
-                      child: const Text('Send test'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            children: children,
           );
         },
       ),
-      // Non-admins get a typed forbidden error; the section simply
-      // stays absent for them.
-      AsyncError() => const SizedBox.shrink(),
+      AsyncError() => const Text('Could not load the event catalog'),
       _ => const Padding(
         padding: EdgeInsets.all(8),
         child: LinearProgressIndicator(),
       ),
     };
+  }
+}
+
+/// The create-or-edit dialog for one notification target. The save
+/// callback performs the write; server rejections surface inline.
+class _TargetEditorDialog extends ConsumerStatefulWidget {
+  const _TargetEditorDialog({
+    required this.serverScope,
+    required this.ownerIsAdmin,
+    required this.onSave,
+    this.existing,
+  });
+
+  final bool serverScope;
+  final bool ownerIsAdmin;
+  final NotificationTarget? existing;
+  final Future<void> Function({
+    String? pid,
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  })
+  onSave;
+
+  @override
+  ConsumerState<_TargetEditorDialog> createState() =>
+      _TargetEditorDialogState();
+}
+
+class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
+  late String _kind = widget.existing?.kind ?? 'pushover';
+  late final _labelController = TextEditingController(
+    text: widget.existing?.label ?? '',
+  );
+  final _fieldControllers = <String, TextEditingController>{};
+  late Set<String> _events = widget.existing?.enabledEvents.toSet() ?? {};
+  String? _error;
+  var _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _seedFields();
+  }
+
+  @override
+  void dispose() {
+    _labelController.dispose();
+    for (final controller in _fieldControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _seedFields() {
+    final config = widget.existing?.config ?? const <String, Object?>{};
+    for (final field in _kindFields[_kind] ?? const <_ConfigField>[]) {
+      _fieldControllers.putIfAbsent(
+        '$_kind.${field.key}',
+        () => TextEditingController(text: '${config[field.key] ?? ''}'),
+      );
+    }
+  }
+
+  TextEditingController _controllerFor(_ConfigField field) =>
+      _fieldControllers['$_kind.${field.key}']!;
+
+  Map<String, Object?>? _buildConfig() {
+    final config = <String, Object?>{};
+    for (final field in _kindFields[_kind] ?? const <_ConfigField>[]) {
+      final text = _controllerFor(field).text.trim();
+      if (text.isEmpty) {
+        if (!field.optional) {
+          setState(() => _error = '${field.label} is required');
+          return null;
+        }
+        continue;
+      }
+      if (field.integer) {
+        final parsed = int.tryParse(text);
+        if (parsed == null) {
+          setState(() => _error = '${field.label} must be a whole number');
+          return null;
+        }
+        config[field.key] = parsed;
+      } else {
+        config[field.key] = text;
+      }
+    }
+    return config;
+  }
+
+  Future<void> _save() async {
+    if (_busy) return;
+    final config = _buildConfig();
+    if (config == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final label = _labelController.text.trim();
+      await widget.onSave(
+        pid: widget.existing?.pid,
+        kind: _kind,
+        label: label.isEmpty ? null : label,
+        config: config,
+        enabledEvents: _events.toList()..sort(),
+      );
+      if (mounted) Navigator.of(context).pop();
+    } on WaxDeckApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = e.message;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final creating = widget.existing == null;
+    return AlertDialog(
+      title: Text(
+        creating
+            ? 'New notification target'
+            : 'Edit ${_kindLabel(_kind)} target',
+      ),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (creating)
+                DropdownButtonFormField<String>(
+                  key: const Key('notify-target-kind'),
+                  initialValue: _kind,
+                  decoration: const InputDecoration(labelText: 'Deliver via'),
+                  items: [
+                    for (final kind in _kindFields.keys)
+                      DropdownMenuItem(
+                        value: kind,
+                        child: Text(_kindLabel(kind)),
+                      ),
+                  ],
+                  onChanged: (kind) => setState(() {
+                    _kind = kind ?? _kind;
+                    _error = null;
+                    _seedFields();
+                  }),
+                ),
+              TextField(
+                key: const Key('notify-target-label'),
+                controller: _labelController,
+                decoration: const InputDecoration(
+                  labelText: 'Label (optional)',
+                ),
+              ),
+              for (final field in _kindFields[_kind] ?? const <_ConfigField>[])
+                TextField(
+                  key: ValueKey('notify-config-${field.key}'),
+                  controller: _controllerFor(field),
+                  obscureText: field.secret,
+                  decoration: InputDecoration(
+                    labelText: field.optional
+                        ? '${field.label} (optional)'
+                        : field.label,
+                    helperText: field.helper,
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Text(
+                'Notify me about',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              _EventChecklist(
+                serverScope: widget.serverScope,
+                ownerIsAdmin: widget.ownerIsAdmin,
+                selected: _events,
+                onChanged: (next) => setState(() => _events = next),
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _error!,
+                    key: const Key('notify-target-error'),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('notify-target-save'),
+          onPressed: _busy ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// One scope's target list with add, edit, test, and remove.
+class _TargetList extends ConsumerWidget {
+  const _TargetList({
+    required this.title,
+    required this.subtitle,
+    required this.serverScope,
+    required this.ownerIsAdmin,
+    required this.targets,
+    required this.controller,
+    required this.addKey,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool serverScope;
+  final bool ownerIsAdmin;
+  final AsyncValue<List<NotificationTarget>> targets;
+  final NotificationTargetActions controller;
+  final String addKey;
+
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref, {
+    NotificationTarget? existing,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _TargetEditorDialog(
+        serverScope: serverScope,
+        ownerIsAdmin: ownerIsAdmin,
+        existing: existing,
+        onSave: controller.save,
+      ),
+    );
+  }
+
+  Future<void> _test(BuildContext context, NotificationTarget target) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await controller.sendTest(target.pid);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Test queued; the outcome shows on the target shortly'),
+        ),
+      );
+    } on WaxDeckApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  String _healthLine(NotificationTarget t) {
+    if (t.lastError != null) return 'Last delivery failed: ${t.lastError}';
+    if (t.lastSuccessAt != null) return 'Last delivered ${t.lastSuccessAt}';
+    return '';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(title, style: textTheme.titleMedium)),
+            Semantics(
+              identifier: addKey,
+              label: 'Add notification target',
+              button: true,
+              child: IconButton(
+                key: Key(addKey),
+                tooltip: 'Add notification target',
+                icon: const Icon(Icons.add),
+                onPressed: () => _edit(context, ref),
+              ),
+            ),
+          ],
+        ),
+        Text(subtitle, style: textTheme.bodySmall),
+        const SizedBox(height: 8),
+        switch (targets) {
+          AsyncData(:final value) =>
+            value.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('No notification targets yet'),
+                  )
+                : Column(
+                    children: [
+                      for (final target in value)
+                        ListTile(
+                          key: ValueKey('notify-target-${target.pid}'),
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(_kindIcon(target.kind)),
+                          title: Text(
+                            target.label?.isNotEmpty ?? false
+                                ? target.label!
+                                : _kindLabel(target.kind),
+                          ),
+                          subtitle: Text(
+                            [
+                              _kindLabel(target.kind),
+                              if (_healthLine(target).isNotEmpty)
+                                _healthLine(target),
+                            ].join('\n'),
+                            style: target.lastError != null
+                                ? TextStyle(color: colorScheme.error)
+                                : null,
+                          ),
+                          onTap: () => _edit(context, ref, existing: target),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Semantics(
+                                identifier: 'notify-target-test-${target.pid}',
+                                button: true,
+                                child: IconButton(
+                                  key: ValueKey(
+                                    'notify-target-test-${target.pid}',
+                                  ),
+                                  tooltip: 'Send test',
+                                  icon: const Icon(
+                                    Icons.notification_add_outlined,
+                                  ),
+                                  onPressed: () => _test(context, target),
+                                ),
+                              ),
+                              IconButton(
+                                key: ValueKey(
+                                  'notify-target-remove-${target.pid}',
+                                ),
+                                tooltip: 'Remove',
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () => controller.remove(target.pid),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+          AsyncError() => const Text('Could not load notification targets'),
+          _ => const Padding(
+            padding: EdgeInsets.all(8),
+            child: LinearProgressIndicator(),
+          ),
+        },
+      ],
+    );
+  }
+}
+
+/// The caller's personal notification targets, UnifiedPush devices
+/// included.
+class PersonalNotificationTargetsSection extends ConsumerWidget {
+  const PersonalNotificationTargetsSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authControllerProvider).value?.user;
+    return _TargetList(
+      title: 'My notifications',
+      subtitle:
+          'Where your events (new episodes, review queue) get '
+          'delivered: Pushover, ntfy, Gotify, Discord, webhooks, or '
+          'this device\'s push registration.',
+      serverScope: false,
+      ownerIsAdmin: user?.roles.contains('admin') ?? false,
+      targets: ref.watch(myNotificationTargetsProvider),
+      controller: ref.read(myNotificationTargetsProvider.notifier),
+      addKey: 'notify-target-add',
+    );
+  }
+}
+
+/// The server-scope notification targets; administrators only.
+class ServerNotificationTargetsSection extends ConsumerWidget {
+  const ServerNotificationTargetsSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return _TargetList(
+      title: 'Server notifications',
+      subtitle:
+          'Operations events (account requests, backup outcomes) '
+          'delivered to server-wide destinations.',
+      serverScope: true,
+      // The section renders behind the admin gate; the flag only
+      // shapes the personal checklist, which server scope never shows.
+      ownerIsAdmin: true,
+      targets: ref.watch(serverNotificationTargetsProvider),
+      controller: ref.read(serverNotificationTargetsProvider.notifier),
+      addKey: 'notify-server-target-add',
+    );
   }
 }

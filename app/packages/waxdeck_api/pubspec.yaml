@@ -11,6 +11,7 @@ environment:
 
 dependencies:
   built_collection: ^5.1.1
+  built_value: '>=8.4.0 <9.0.0'
   dio: ^5.7.0
   waxdeck_api_gen:
     path: ../waxdeck_api_gen

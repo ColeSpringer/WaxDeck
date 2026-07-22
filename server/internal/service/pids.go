@@ -22,7 +22,7 @@ const (
 	PrefixAppPassword  = "ap"
 	PrefixPlaylist     = "pl"
 	PrefixRadioStation = "rs"
-	PrefixPushReg      = "pr"
+	PrefixNotifyTarget = "nt"
 	PrefixInvite       = "iv"
 	PrefixBackup       = "bu"
 	PrefixTrash        = "th"

@@ -45,7 +45,7 @@ func newTestBackups(t *testing.T) (*Backups, *wdb.DB, string) {
 		t.Fatal(err)
 	}
 	l := &Library{db: d, log: slog.New(slog.DiscardHandler)}
-	b := newBackups(d, testCatalog{}, l, l.log, dataDir, nil)
+	b := newBackups(d, testCatalog{}, l, l, l.log, dataDir, nil)
 	clk := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	b.now = func() time.Time {
 		clk = clk.Add(time.Minute)

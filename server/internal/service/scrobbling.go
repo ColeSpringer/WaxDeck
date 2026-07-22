@@ -349,10 +349,7 @@ func (l *Library) DrainScrobbleOutbox(ctx context.Context) bool {
 func (l *Library) markScrobbleHealth(ctx context.Context, row wdb.ScrobbleRow, deliveryErr error) {
 	msg := ""
 	if deliveryErr != nil {
-		msg = deliveryErr.Error()
-		if len(msg) > 300 {
-			msg = msg[:300]
-		}
+		msg = clipHealthMessage(deliveryErr.Error())
 	}
 	if err := l.db.MarkScrobbleDelivery(ctx, row.UserID, row.Service, deliveryErr == nil, msg, time.Now().UnixNano()); err != nil {
 		l.log.Warn("marking scrobble delivery", "err", err)

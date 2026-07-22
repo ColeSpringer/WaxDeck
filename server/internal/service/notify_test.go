@@ -1,34 +1,34 @@
 package service
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
-
-	wdb "github.com/colespringer/waxdeck/server/internal/db"
+	"unicode/utf8"
 )
 
-func TestPushBodyBudgetKeepsUTF8Clean(t *testing.T) {
-	// 2334 three-byte euros (7002 bytes) force the halving loop, and
-	// the first halving lands mid-rune; the payload must fit the
-	// budget with no replacement characters in the delivered text.
-	row := wdb.NotifyRow{
-		Event: "test",
-		Title: "Budget",
-		Body:  strings.Repeat("€", 2334),
+func TestClipHealthMessageKeepsRuneBoundaries(t *testing.T) {
+	// A short message passes through untouched.
+	if got := clipHealthMessage("boom"); got != "boom" {
+		t.Fatalf("short clip = %q", got)
 	}
-	raw := pushBody(row)
-	if len(raw) > pushBodyByteBudget {
-		t.Fatalf("payload = %d bytes, want <= %d", len(raw), pushBodyByteBudget)
+	// A long ASCII message clips at the byte budget exactly.
+	long := strings.Repeat("x", 400)
+	if got := clipHealthMessage(long); len(got) != 300 {
+		t.Fatalf("ascii clip = %d bytes, want 300", len(got))
 	}
-	var got map[string]string
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("payload does not parse: %v", err)
+	// A multi-byte message never clips mid-rune: byte 300 lands inside
+	// a euro sign (3 bytes each), and the stored string must stay
+	// valid UTF-8 instead of rendering a replacement character in the
+	// settings surface.
+	multi := strings.Repeat("€", 200)
+	got := clipHealthMessage(multi)
+	if len(got) > 300 {
+		t.Fatalf("multi-byte clip = %d bytes, want at most 300", len(got))
 	}
-	if got["body"] == "" {
-		t.Fatal("body was dropped entirely; halving should have fit it")
+	if !utf8.ValidString(got) {
+		t.Fatalf("multi-byte clip is not valid UTF-8: %q", got[len(got)-6:])
 	}
-	if strings.ContainsRune(got["body"], '�') {
-		t.Fatalf("delivered body carries a replacement character: %q...", got["body"][:12])
+	if !strings.HasSuffix(got, "€") {
+		t.Fatalf("multi-byte clip ends %q, want a whole rune", got[len(got)-3:])
 	}
 }

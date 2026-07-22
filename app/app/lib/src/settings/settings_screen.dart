@@ -150,10 +150,11 @@ class SettingsScreen extends ConsumerWidget {
           const ScrobblingSection(),
           const SizedBox(height: 16),
           const AppPasswordsSection(),
-          const PushRegistrationsSection(),
+          const SizedBox(height: 16),
+          const PersonalNotificationTargetsSection(),
           if (user?.roles.contains('admin') ?? false) ...[
             const SizedBox(height: 16),
-            const NotificationsSection(),
+            const ServerNotificationTargetsSection(),
             const SizedBox(height: 16),
             const SimilarityStatusSection(),
             const SizedBox(height: 16),

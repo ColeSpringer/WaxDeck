@@ -776,12 +776,26 @@ Scrobbler scrobblerFromGen(gen.Scrobbler s) {
   );
 }
 
-NotificationConfig notificationConfigFromGen(gen.NotificationConfig c) {
-  return NotificationConfig(
-    appriseUrl: c.appriseUrl,
-    targets: c.targets,
-    enabledEvents: c.enabledEvents.toList(),
-    knownEvents: c.knownEvents.toList(),
+NotifyEvent notifyEventFromGen(gen.NotificationEvent e) {
+  return NotifyEvent(
+    name: e.name,
+    scope: e.scope.name,
+    description: e.description,
+  );
+}
+
+NotificationTarget notificationTargetFromGen(gen.NotificationTarget t) {
+  return NotificationTarget(
+    pid: t.pid,
+    kind: t.kind.name,
+    scope: t.scope.name,
+    label: t.label,
+    config: {for (final e in t.config.entries) e.key: e.value?.value},
+    enabledEvents: t.enabledEvents.toList(),
+    createdAt: t.createdAt.toUtc(),
+    lastSuccessAt: t.lastSuccessAt?.toUtc(),
+    lastError: t.lastError,
+    lastErrorAt: t.lastErrorAt?.toUtc(),
   );
 }
 

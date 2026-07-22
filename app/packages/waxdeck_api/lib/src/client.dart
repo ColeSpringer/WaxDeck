@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
 import 'package:dio/dio.dart';
 import 'package:waxdeck_api_gen/waxdeck_api_gen.dart' as gen;
 
@@ -508,21 +509,68 @@ abstract interface class WaxDeckRepository {
   /// registration.
   Future<void> deletePushRegistration(String pid);
 
-  /// `GET /admin/notifications`: the relay configuration
-  /// (administrators).
-  Future<NotificationConfig> getNotificationConfig();
+  /// `GET /notifications/events`: the event catalog for the
+  /// per-target checklist.
+  Future<List<NotifyEvent>> listNotificationEvents();
 
-  /// `PUT /admin/notifications`: replaces the relay configuration
+  /// `GET /admin/notification-targets`: the server-scope targets
   /// (administrators).
-  Future<NotificationConfig> putNotificationConfig({
-    required String appriseUrl,
-    String? targets,
+  Future<List<NotificationTarget>> listServerNotificationTargets();
+
+  /// `POST /admin/notification-targets`: creates a server-scope
+  /// target (administrators).
+  Future<NotificationTarget> createServerNotificationTarget({
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
     required List<String> enabledEvents,
   });
 
-  /// `POST /admin/notifications/test`: queues a test notification
+  /// `PUT /admin/notification-targets/{id}`: replaces a server-scope
+  /// target's label, config, and events (administrators).
+  Future<NotificationTarget> updateServerNotificationTarget({
+    required String pid,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  });
+
+  /// `DELETE /admin/notification-targets/{id}` (administrators).
+  Future<void> deleteServerNotificationTarget(String pid);
+
+  /// `POST /admin/notification-targets/{id}/test`: queues one test
+  /// delivery; the outcome lands on the target's health fields
   /// (administrators).
-  Future<void> testNotifications();
+  Future<void> testServerNotificationTarget(String pid);
+
+  /// `GET /users/me/notification-targets`: the caller's personal
+  /// targets.
+  Future<List<NotificationTarget>> listMyNotificationTargets();
+
+  /// `POST /users/me/notification-targets`: creates a personal
+  /// target.
+  Future<NotificationTarget> createMyNotificationTarget({
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  });
+
+  /// `PUT /users/me/notification-targets/{id}`: replaces a personal
+  /// target's label, config, and events.
+  Future<NotificationTarget> updateMyNotificationTarget({
+    required String pid,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  });
+
+  /// `DELETE /users/me/notification-targets/{id}`.
+  Future<void> deleteMyNotificationTarget(String pid);
+
+  /// `POST /users/me/notification-targets/{id}/test`: queues one test
+  /// delivery; the outcome lands on the target's health fields.
+  Future<void> testMyNotificationTarget(String pid);
 
   /// `GET /review/queue`: keyset-paginated review entries, optionally
   /// filtered by lifecycle [status].
@@ -2137,31 +2185,137 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<NotificationConfig> getNotificationConfig() => _guard(() async {
-    final response = await _gen.getNotificationsApi().getNotificationConfig();
-    return notificationConfigFromGen(_require(response.data));
+  Future<List<NotifyEvent>> listNotificationEvents() => _guard(() async {
+    final response = await _gen.getNotificationsApi().listNotificationEvents();
+    return _require(
+      response.data,
+    ).events.map(notifyEventFromGen).toList(growable: false);
   });
 
   @override
-  Future<NotificationConfig> putNotificationConfig({
-    required String appriseUrl,
-    String? targets,
+  Future<List<NotificationTarget>> listServerNotificationTargets() =>
+      _guard(() async {
+        final response = await _gen
+            .getNotificationsApi()
+            .listServerNotificationTargets();
+        return _require(
+          response.data,
+        ).targets.map(notificationTargetFromGen).toList(growable: false);
+      });
+
+  @override
+  Future<NotificationTarget> createServerNotificationTarget({
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
     required List<String> enabledEvents,
   }) => _guard(() async {
-    final response = await _gen.getNotificationsApi().putNotificationConfig(
-      notificationConfigUpdate: gen.NotificationConfigUpdate(
-        (b) => b
-          ..appriseUrl = appriseUrl
-          ..targets = targets
-          ..enabledEvents = ListBuilder<String>(enabledEvents),
-      ),
-    );
-    return notificationConfigFromGen(_require(response.data));
+    final response = await _gen
+        .getNotificationsApi()
+        .createServerNotificationTarget(
+          notificationTargetCreate: _targetCreateToGen(
+            kind: kind,
+            label: label,
+            config: config,
+            enabledEvents: enabledEvents,
+          ),
+        );
+    return notificationTargetFromGen(_require(response.data));
   });
 
   @override
-  Future<void> testNotifications() => _guard(() async {
-    await _gen.getNotificationsApi().testNotifications();
+  Future<NotificationTarget> updateServerNotificationTarget({
+    required String pid,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  }) => _guard(() async {
+    final response = await _gen
+        .getNotificationsApi()
+        .updateServerNotificationTarget(
+          targetId: pid,
+          notificationTargetUpdate: _targetUpdateToGen(
+            label: label,
+            config: config,
+            enabledEvents: enabledEvents,
+          ),
+        );
+    return notificationTargetFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> deleteServerNotificationTarget(String pid) => _guard(() async {
+    await _gen.getNotificationsApi().deleteServerNotificationTarget(
+      targetId: pid,
+    );
+  });
+
+  @override
+  Future<void> testServerNotificationTarget(String pid) => _guard(() async {
+    await _gen.getNotificationsApi().testServerNotificationTarget(
+      targetId: pid,
+    );
+  });
+
+  @override
+  Future<List<NotificationTarget>> listMyNotificationTargets() =>
+      _guard(() async {
+        final response = await _gen
+            .getNotificationsApi()
+            .listMyNotificationTargets();
+        return _require(
+          response.data,
+        ).targets.map(notificationTargetFromGen).toList(growable: false);
+      });
+
+  @override
+  Future<NotificationTarget> createMyNotificationTarget({
+    required String kind,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  }) => _guard(() async {
+    final response = await _gen
+        .getNotificationsApi()
+        .createMyNotificationTarget(
+          notificationTargetCreate: _targetCreateToGen(
+            kind: kind,
+            label: label,
+            config: config,
+            enabledEvents: enabledEvents,
+          ),
+        );
+    return notificationTargetFromGen(_require(response.data));
+  });
+
+  @override
+  Future<NotificationTarget> updateMyNotificationTarget({
+    required String pid,
+    String? label,
+    required Map<String, Object?> config,
+    required List<String> enabledEvents,
+  }) => _guard(() async {
+    final response = await _gen
+        .getNotificationsApi()
+        .updateMyNotificationTarget(
+          targetId: pid,
+          notificationTargetUpdate: _targetUpdateToGen(
+            label: label,
+            config: config,
+            enabledEvents: enabledEvents,
+          ),
+        );
+    return notificationTargetFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> deleteMyNotificationTarget(String pid) => _guard(() async {
+    await _gen.getNotificationsApi().deleteMyNotificationTarget(targetId: pid);
+  });
+
+  @override
+  Future<void> testMyNotificationTarget(String pid) => _guard(() async {
+    await _gen.getNotificationsApi().testMyNotificationTarget(targetId: pid);
   });
 
   @override
@@ -3323,4 +3477,45 @@ WaxDeckApiException apiExceptionFromDio(DioException e) {
     message: e.message ?? 'network error',
     statusCode: e.response?.statusCode,
   );
+}
+
+/// Builds the generated create body for a notification target. Config
+/// values wrap as JsonObject; nulls are dropped (absent, not null, on
+/// the wire).
+gen.NotificationTargetCreate _targetCreateToGen({
+  required String kind,
+  String? label,
+  required Map<String, Object?> config,
+  required List<String> enabledEvents,
+}) {
+  return gen.NotificationTargetCreate(
+    (b) => b
+      ..kind = gen.NotificationTargetKind.valueOf(kind)
+      ..label = label
+      ..config = _configToGen(config)
+      ..enabledEvents = ListBuilder<String>(enabledEvents),
+  );
+}
+
+gen.NotificationTargetUpdate _targetUpdateToGen({
+  String? label,
+  required Map<String, Object?> config,
+  required List<String> enabledEvents,
+}) {
+  return gen.NotificationTargetUpdate(
+    (b) => b
+      ..label = label
+      ..config = _configToGen(config)
+      ..enabledEvents = ListBuilder<String>(enabledEvents),
+  );
+}
+
+MapBuilder<String, JsonObject?> _configToGen(Map<String, Object?> config) {
+  final builder = MapBuilder<String, JsonObject?>();
+  for (final entry in config.entries) {
+    final value = entry.value;
+    if (value == null) continue;
+    builder[entry.key] = JsonObject(value);
+  }
+  return builder;
 }
