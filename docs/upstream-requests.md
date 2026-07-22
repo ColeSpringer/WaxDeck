@@ -105,6 +105,12 @@ sidecar injection seam) all landed and are not repeated here.
   bytes move) can only answer from its own upload history. The
   completion-time essence check covers correctness; the ask is purely
   to make the early warning as good as the late one.
+- **Age-scoped trash purge.** The trash facade offers list, restore,
+  and EmptyTrash (everything at once); WaxDeck's admin surface wants a
+  retention policy (purge entries older than N days), which needs a
+  per-entry purge or an age-scoped empty. Until then the trash UI
+  ships without automatic retention; empty-everything is the manual
+  answer.
 - **A level-scoped artwork read.** ResolveArt walks the fallback chain
   (item, album, release group, artist), so a caller cannot tell
   item-own art from inherited art; the editor's has-artwork indicator

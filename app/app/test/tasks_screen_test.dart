@@ -104,6 +104,35 @@ void main() {
     expect(find.textContaining('Produced'), findsNothing);
   });
 
+  testWidgets('a finished import shows its summary and expands to detail', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-imp'] = ToolTask(
+      id: 'tt-imp',
+      type: 'import-navidrome',
+      state: 'done',
+      createdAt: DateTime.utc(2026, 7, 20),
+      finishedAt: DateTime.utc(2026, 7, 20, 1),
+      summary: const {'matched': 120, 'unmatched': 3, 'listens': 987},
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    final row = find.byKey(const ValueKey('task-row-tt-imp'));
+    expect(
+      find.descendant(of: row, matching: find.text('Import from Navidrome')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('task-summary-tt-imp')), findsOneWidget);
+    expect(find.text('matched 120, unmatched 3, listens 987'), findsOneWidget);
+
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('task-summary-dialog')), findsOneWidget);
+    expect(find.textContaining('"matched": 120'), findsOneWidget);
+  });
+
   testWidgets('an empty task list shows the empty state', (tester) async {
     await tester.pumpWidget(_host(FakeRepository()));
     await tester.pumpAndSettle();

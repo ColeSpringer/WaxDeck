@@ -88,9 +88,6 @@ here waits on upstream.
   in `playback_sessions` (pruned to the newest five per user), but no
   API or UI reads it back yet; the queue-restore history the sync
   design names is data-complete and surface-absent.
-- `[roadmap]` **Shared-outputs permission gate.** Device endpoints are visible
-  and controllable by every user; the "use shared outputs" toggle
-  rides the granular permission set when that lands.
 - `[in-repo]` **Timeline URLs do not survive a server restart.** The HLS proxy
   reconstructs signed upstream URLs from an in-memory stash; after a
   restart a live timeline fetch answers not-found and the client
@@ -156,18 +153,11 @@ here waits on upstream.
 
 ## Infrastructure
 
-- `[roadmap]` **Nothing empties the trash.** Deletes go to the catalog's
-  reversible trash (a same-volume .waxbin-trash the scanner skips),
-  and no WaxDeck surface or job ever purges it, so reclaimed space
-  only accumulates. Until the admin slice ships the trash UI, the
-  proxied CLI is the answer: waxbin trash list / restore / empty, and
-  waxbin rm with the permanent mode for trash-bypassing deletes; a
-  REST delete surface (dry-run plan, mode choice, trash list,
-  restore, empty) and an optional age-based purge job ride the
-  roadmap's admin-and-ops slice with the delete permission toggle.
-- `[roadmap]` **Scheduled event-log and stamp pruning**, slated for the roadmap's
-  scheduled-jobs slice; the manual prune call and the session janitor
-  cover it meanwhile.
+- `[upstream]` **Age-based trash retention.** The trash surface ships
+  list, restore, and empty-everything; a retention policy (purge
+  entries older than N days) needs a per-entry or age-scoped purge on
+  the facade, where EmptyTrash is all-or-nothing. The ask is filed in
+  upstream-requests.md.
 - `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists.
@@ -248,20 +238,48 @@ here waits on upstream.
   display nicety, not a correctness gap: manual editing and the surfaced
   candidate both cover it, and rewriting embedded tags from a guess is the
   riskier half.
-- `[roadmap]` **Explicit-content enforcement.** The display half
-  shipped (feed-declared explicit surfaces on shows and episodes,
-  with badges in the app); the enforcement half (a per-user
-  explicit-content permission toggle, and tag allow and deny lists
-  as the music-side control and the parental-controls mechanism)
-  rides the user-admin slice with the rest of the granular
-  permission set. Listed because the display work landed mid-slice
-  and the split would otherwise read as an oversight.
 - `[in-repo]` **OpenSubsonic explicitStatus is not emitted.** The
   Subsonic surface's song and album shapes accept an
   `explicitStatus` field ("explicit" or "clean") that clients
   render; mapping it from the episode flag and the ITUNESADVISORY
   custom tag is a small adapter change next time that surface is
   touched.
+
+## Admin and ops
+
+- `[in-repo]` **Subsonic album and artist stars are pulled but not
+  written.** The migration importer reads getStarred2's albums and
+  artists alongside songs, but WaxDeck's star surface is item-scoped,
+  so only song stars import. Album/artist stars would need either an
+  entity star surface or expansion to member items.
+- `[in-repo]` **Importers beyond Navidrome/Subsonic and
+  Audiobookshelf.** The migration framework (portable-ref matching,
+  backdated idempotent listen ingest, dry runs, task reports) is
+  built; Jellyfin, Last.fm and ListenBrainz history, and the Spotify
+  GDPR export ride it as fast-follows, as the roadmap allows.
+- `[in-repo]` **Backup archive downloads are not ranged.** The
+  download endpoint streams the whole zip; resuming an interrupted
+  multi-gigabyte download re-fetches it. Needs serving outside the
+  generated strict-handler shape (http.ServeContent), like the media
+  download endpoint.
+- `[in-repo]` **The transcode session limiter gates progressive
+  streams only.** HLS timeline segment fetches are too granular to
+  count as sessions; they ride the streaming engine's own liveSlots
+  admission control (the documented backstop). A per-timeline
+  session notion would close the gap.
+- `[in-repo]` **Backup archive upload has no UI.** The server accepts
+  POST /admin/backups/import (the new-host restore path); the web UI
+  exposes download, stage, and cancel but not the upload itself,
+  which needs the file-picker port that is itself still a stub.
+- `[in-repo]` **No radio-scrobbling off switch.** Radio plays scrobble
+  by default for users with scrobble connections, behind the
+  transition-and-parse guards; a per-user preference (and possibly a
+  per-station flag for talk stations) is the obvious follow-up for
+  anyone whose station's metadata is honest but unwanted.
+- `[in-repo]` **No request-level metrics.** /metrics serves runtime,
+  account, queue-depth, and transcode-session gauges; an HTTP
+  request counter/latency histogram by route class needs a mux
+  middleware pass that has not been written.
 
 ## Decided, not deferred
 

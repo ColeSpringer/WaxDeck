@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"sort"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -15,7 +16,10 @@ func (s *Server) GetBootstrapStatus(ctx context.Context, _ GetBootstrapStatusReq
 	if err != nil {
 		return nil, err
 	}
-	return GetBootstrapStatus200JSONResponse{Required: required}, nil
+	return GetBootstrapStatus200JSONResponse{
+		Required:      required,
+		SignupEnabled: ptr(s.svc.SignupEnabled(ctx)),
+	}, nil
 }
 
 func (s *Server) Bootstrap(ctx context.Context, req BootstrapRequestObject) (BootstrapResponseObject, error) {
@@ -206,6 +210,10 @@ func (s *Server) CreateUser(ctx context.Context, req CreateUserRequestObject) (C
 	if req.Body.UploadQuotaBytes != nil {
 		in.UploadQuotaBytes = *req.Body.UploadQuotaBytes
 	}
+	if req.Body.Permissions != nil {
+		perms := permissionsFromGen(*req.Body.Permissions)
+		in.Permissions = &perms
+	}
 	acct, err := s.svc.CreateAccount(ctx, in)
 	if err != nil {
 		switch service.KindOf(err) {
@@ -215,6 +223,11 @@ func (s *Server) CreateUser(ctx context.Context, req CreateUserRequestObject) (C
 			return CreateUser400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 		}
 		return nil, err
+	}
+	if uc, _, err := s.requireUserCtx(ctx); err == nil {
+		s.svc.Audit(ctx, uc, "user.create",
+			service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
+			map[string]any{"roles": acct.User.Roles})
 	}
 	return CreateUser201JSONResponse(userAccountJSON(*acct)), nil
 }
@@ -252,7 +265,7 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 	// Non-administrators may change only their own display name; any
 	// other supplied field is rejected loudly, never silently ignored.
 	if !admin && (req.Body.Roles != nil || req.Body.Disabled != nil || req.Body.LibraryAccess != nil ||
-		req.Body.UploadEnabled != nil || req.Body.UploadQuotaBytes != nil) {
+		req.Body.UploadEnabled != nil || req.Body.UploadQuotaBytes != nil || req.Body.Permissions != nil) {
 		return UpdateUser403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "only displayName may be changed on your own account"))}, nil
 	}
 	upd := service.AccountUpdate{
@@ -270,6 +283,10 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 		if req.Body.LibraryAccess.LibraryPids != nil {
 			upd.LibraryPIDs = *req.Body.LibraryAccess.LibraryPids
 		}
+	}
+	if req.Body.Permissions != nil {
+		perms := permissionsFromGen(*req.Body.Permissions)
+		upd.Permissions = &perms
 	}
 	acct, err := s.svc.UpdateAccount(ctx, req.UserId, upd)
 	if err != nil {
@@ -289,6 +306,29 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 			return nil, err
 		}
 	}
+	// Self displayName edits are routine, not audit-worthy; anything an
+	// administrator can change on another account is.
+	if admin && (req.UserId != p.User.ID || req.Body.Roles != nil || req.Body.Disabled != nil ||
+		req.Body.LibraryAccess != nil || req.Body.Permissions != nil ||
+		req.Body.UploadEnabled != nil || req.Body.UploadQuotaBytes != nil) {
+		changed := []string{}
+		for name, set := range map[string]bool{
+			"displayName": req.Body.DisplayName != nil, "roles": req.Body.Roles != nil,
+			"disabled": req.Body.Disabled != nil, "libraryAccess": req.Body.LibraryAccess != nil,
+			"permissions": req.Body.Permissions != nil, "uploadEnabled": req.Body.UploadEnabled != nil,
+			"uploadQuotaBytes": req.Body.UploadQuotaBytes != nil,
+		} {
+			if set {
+				changed = append(changed, name)
+			}
+		}
+		sort.Strings(changed)
+		if uc, _, err := s.requireUserCtx(ctx); err == nil {
+			s.svc.Audit(ctx, uc, "user.update",
+				service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
+				map[string]any{"fields": changed})
+		}
+	}
 	return UpdateUser200JSONResponse(userAccountJSON(*acct)), nil
 }
 
@@ -300,6 +340,7 @@ func (s *Server) DeleteUser(ctx context.Context, req DeleteUserRequestObject) (D
 	if req.UserId == p.User.ID {
 		return DeleteUser409JSONResponse{ConflictJSONResponse(errObj("conflict", "you cannot delete the account you are signed in as"))}, nil
 	}
+	victim, verr := s.svc.Account(ctx, req.UserId)
 	if err := s.svc.DeleteAccount(ctx, req.UserId); err != nil {
 		switch service.KindOf(err) {
 		case service.KindNotFound:
@@ -308,6 +349,10 @@ func (s *Server) DeleteUser(ctx context.Context, req DeleteUserRequestObject) (D
 			return DeleteUser409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
 		}
 		return nil, err
+	}
+	if uc, _, ucErr := s.requireUserCtx(ctx); ucErr == nil && verr == nil {
+		s.svc.Audit(ctx, uc, "user.delete",
+			service.AuditTarget{Kind: "user", PID: victim.User.ID, Name: victim.User.Username}, nil)
 	}
 	return DeleteUser204Response{}, nil
 }
@@ -485,8 +530,10 @@ func userAccountJSON(acct service.Account) UserAccount {
 		Username:      u.Username,
 		Roles:         u.Roles,
 		Disabled:      u.Disabled,
+		Pending:       u.Pending,
 		CreatedAt:     u.CreatedAt,
 		UploadEnabled: u.UploadEnabled,
+		Permissions:   permissionsJSON(service.PermissionsOf(u)),
 		LibraryAccess: LibraryAccess{
 			Mode: LibraryAccessMode(u.LibraryAccess),
 		},

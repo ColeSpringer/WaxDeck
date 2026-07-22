@@ -10,14 +10,20 @@ Serializers _$serializers =
     (Serializers().toBuilder()
           ..add($AppPassword.serializer)
           ..add($EpisodeSummary.serializer)
+          ..add($Invite.serializer)
           ..add($ItemSummary.serializer)
           ..add($ReviewEntry.serializer)
           ..add($User.serializer)
           ..add(AcquisitionFormat.serializer)
           ..add(AcquisitionRequest.serializer)
+          ..add(AdminSettings.serializer)
           ..add(AppPasswordCreate.serializer)
           ..add(AppPasswordCreated.serializer)
           ..add(AppPasswordList.serializer)
+          ..add(AuditEvent.serializer)
+          ..add(AuditEventPage.serializer)
+          ..add(Backup.serializer)
+          ..add(BackupList.serializer)
           ..add(BookDetail.serializer)
           ..add(BookMergeRequest.serializer)
           ..add(BookPart.serializer)
@@ -42,6 +48,10 @@ Serializers _$serializers =
           ..add(CreditsEdit.serializer)
           ..add(CueSplitRequest.serializer)
           ..add(CustomTag.serializer)
+          ..add(DeleteItemsRequest.serializer)
+          ..add(DeleteItemsRequestModeEnum.serializer)
+          ..add(DeleteItemsResult.serializer)
+          ..add(DeletePlanEntry.serializer)
           ..add(DeviceSession.serializer)
           ..add(DeviceSessionKindEnum.serializer)
           ..add(DiscoveryList.serializer)
@@ -75,10 +85,14 @@ Serializers _$serializers =
           ..add(HealthIssuePage.serializer)
           ..add(HealthRuleCount.serializer)
           ..add(HealthSummary.serializer)
+          ..add(InviteCreate.serializer)
+          ..add(InviteCreated.serializer)
+          ..add(InviteList.serializer)
           ..add(Item.serializer)
           ..add(ItemMetadata.serializer)
           ..add(ItemPage.serializer)
           ..add(Job.serializer)
+          ..add(JobList.serializer)
           ..add(KindFields.serializer)
           ..add(LastfmConnectStart.serializer)
           ..add(Libraries.serializer)
@@ -86,6 +100,7 @@ Serializers _$serializers =
           ..add(LibraryAccessModeEnum.serializer)
           ..add(LibraryMatching.serializer)
           ..add(LibraryMatchingModeEnum.serializer)
+          ..add(LibraryReadOnly.serializer)
           ..add(LinkedIdentity.serializer)
           ..add(ListenBrainzConnect.serializer)
           ..add(ListenIngestResult.serializer)
@@ -108,6 +123,8 @@ Serializers _$serializers =
           ..add(MetadataEdit.serializer)
           ..add(MetadataEditResult.serializer)
           ..add(MetadataFields.serializer)
+          ..add(MigrationCreate.serializer)
+          ..add(MigrationOptions.serializer)
           ..add(ModelLibrary.serializer)
           ..add(NotificationConfig.serializer)
           ..add(NotificationConfigUpdate.serializer)
@@ -125,6 +142,7 @@ Serializers _$serializers =
           ..add(OrganizeReport.serializer)
           ..add(OrganizeRequest.serializer)
           ..add(PasswordChange.serializer)
+          ..add(Permissions.serializer)
           ..add(PlayInfo.serializer)
           ..add(PlayState.serializer)
           ..add(PlayStateList.serializer)
@@ -163,6 +181,7 @@ Serializers _$serializers =
           ..add(RejectedListen.serializer)
           ..add(ReleaseStatusEdit.serializer)
           ..add(RematchResult.serializer)
+          ..add(RestorePlan.serializer)
           ..add(ReviewBulkDecision.serializer)
           ..add(ReviewBulkDecisionActionEnum.serializer)
           ..add(ReviewBulkOutcome.serializer)
@@ -181,14 +200,25 @@ Serializers _$serializers =
           ..add(RuleNode.serializer)
           ..add(RuleSort.serializer)
           ..add(RuleTagKey.serializer)
+          ..add(Schedule.serializer)
+          ..add(ScheduleKind.serializer)
+          ..add(ScheduleList.serializer)
+          ..add(SchedulePut.serializer)
           ..add(Scrobbler.serializer)
           ..add(ScrobblerList.serializer)
+          ..add(ScrobblingAdminConfig.serializer)
+          ..add(ScrobblingAdminConfigPut.serializer)
+          ..add(SealedCasualty.serializer)
           ..add(SearchHit.serializer)
           ..add(SearchResults.serializer)
           ..add(ServerSyncEvent.serializer)
           ..add(ServerSyncPage.serializer)
           ..add(SessionInfo.serializer)
           ..add(SessionList.serializer)
+          ..add(SignupApproval.serializer)
+          ..add(SignupRequest.serializer)
+          ..add(SignupResult.serializer)
+          ..add(SignupResultStateEnum.serializer)
           ..add(SkipMap.serializer)
           ..add(SkipSpan.serializer)
           ..add(SmartRule.serializer)
@@ -200,13 +230,18 @@ Serializers _$serializers =
           ..add(SyncedLine.serializer)
           ..add(TagEdit.serializer)
           ..add(TagEditResult.serializer)
+          ..add(TagRule.serializer)
           ..add(TimelineBoundary.serializer)
           ..add(TimelineCreate.serializer)
           ..add(TimelineInfo.serializer)
           ..add(ToolTask.serializer)
           ..add(ToolTaskPage.serializer)
+          ..add(TranscodingLimits.serializer)
           ..add(Transcript.serializer)
           ..add(TranscriptCue.serializer)
+          ..add(TrashEmptyResult.serializer)
+          ..add(TrashEntry.serializer)
+          ..add(TrashList.serializer)
           ..add(UpgradeGroup.serializer)
           ..add(UpgradeGroups.serializer)
           ..add(UpgradeMember.serializer)
@@ -237,6 +272,14 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(AppPassword)]),
             () => ListBuilder<AppPassword>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(AuditEvent)]),
+            () => ListBuilder<AuditEvent>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Backup)]),
+            () => ListBuilder<Backup>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [
@@ -273,6 +316,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(DeletePlanEntry)]),
+            () => ListBuilder<DeletePlanEntry>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(DeviceSession)]),
@@ -333,12 +380,20 @@ Serializers _$serializers =
             () => ListBuilder<HealthRuleCount>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Invite)]),
+            () => ListBuilder<Invite>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ItemSummary)]),
             () => ListBuilder<ItemSummary>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ItemSummary)]),
             () => ListBuilder<ItemSummary>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Job)]),
+            () => ListBuilder<Job>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(KindFields)]),
@@ -455,6 +510,22 @@ Serializers _$serializers =
             () => ListBuilder<Role>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Role)]),
+            () => ListBuilder<Role>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Role)]),
+            () => ListBuilder<Role>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Role)]),
+            () => ListBuilder<Role>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Role)]),
+            () => ListBuilder<Role>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(RuleField)]),
             () => ListBuilder<RuleField>(),
           )
@@ -475,8 +546,20 @@ Serializers _$serializers =
             () => ListBuilder<RuleSort>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Schedule)]),
+            () => ListBuilder<Schedule>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(Scrobbler)]),
             () => ListBuilder<Scrobbler>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(SealedCasualty)]),
+            () => ListBuilder<SealedCasualty>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(SearchHit)]),
@@ -690,12 +773,31 @@ Serializers _$serializers =
             () => MapBuilder<String, String>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(Subscription)]),
             () => ListBuilder<Subscription>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(SyncedLine)]),
             () => ListBuilder<SyncedLine>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TagRule)]),
+            () => ListBuilder<TagRule>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TagRule)]),
+            () => ListBuilder<TagRule>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(TimelineBoundary)]),
@@ -708,6 +810,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(TranscriptCue)]),
             () => ListBuilder<TranscriptCue>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TrashEntry)]),
+            () => ListBuilder<TrashEntry>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(UpgradeGroup)]),
@@ -777,6 +883,13 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(WriteBackIssue)]),
             () => ListBuilder<WriteBackIssue>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
           ))
         .build();
 

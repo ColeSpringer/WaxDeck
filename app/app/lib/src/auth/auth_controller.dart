@@ -7,13 +7,25 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../providers.dart';
 import 'credential_store.dart';
 
-/// Whether the server is waiting for its first administrator. Probed only
-/// while unauthenticated; [AuthController.bootstrap] invalidates it once
-/// setup completes so a later logout lands on the login screen.
-final bootstrapRequiredProvider = FutureProvider<bool>((ref) async {
-  final status = await ref.watch(repositoryProvider).bootstrapStatus();
-  return status.required;
-});
+/// The pre-auth server probe: first-run setup state and whether open
+/// signup is on. Probed only while unauthenticated;
+/// [AuthController.bootstrap] invalidates it once setup completes so a
+/// later logout lands on the login screen.
+final bootstrapStatusProvider = FutureProvider<BootstrapStatus>(
+  (ref) => ref.watch(repositoryProvider).bootstrapStatus(),
+);
+
+/// Whether the server is waiting for its first administrator.
+final bootstrapRequiredProvider = FutureProvider<bool>(
+  (ref) async => (await ref.watch(bootstrapStatusProvider.future)).required,
+);
+
+/// Whether open self-signup is on, for the login screen's affordance
+/// label. Invite-token signups work regardless.
+final signupEnabledProvider = FutureProvider<bool>(
+  (ref) async =>
+      (await ref.watch(bootstrapStatusProvider.future)).signupEnabled,
+);
 
 /// Session state for the whole app.
 ///
@@ -104,7 +116,7 @@ class AuthController extends AsyncNotifier<SessionState> {
           password: password,
           displayName: displayName,
         );
-    ref.invalidate(bootstrapRequiredProvider);
+    ref.invalidate(bootstrapStatusProvider);
     await _adopt(result);
   }
 

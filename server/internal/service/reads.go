@@ -76,6 +76,9 @@ func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page) Page {
 		if !subs.allowsItem(ctx, l, it) {
 			continue
 		}
+		if !l.allowedByContent(ctx, uc, it) {
+			continue
+		}
 		out.Items = append(out.Items, summary(it))
 	}
 	if p.HasMore {
@@ -118,6 +121,9 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 			// Episode hits (title and transcript matches alike) scope to
 			// the caller's subscriptions, like every list surface.
 			if prefix == PrefixEpisode && !subs.allowsEpisode(ctx, l, h.PID) {
+				continue
+			}
+			if !l.contentAllowsPID(ctx, uc, h.PID) {
 				continue
 			}
 			out = append(out, SearchHit{

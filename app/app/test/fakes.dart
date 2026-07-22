@@ -148,8 +148,10 @@ class FakeRepository implements WaxDeckRepository {
       const ServerHealth(status: 'ok', version: 'test', apiVersion: 1);
 
   @override
-  Future<BootstrapStatus> bootstrapStatus() async =>
-      BootstrapStatus(required: bootstrapNeeded);
+  Future<BootstrapStatus> bootstrapStatus() async => BootstrapStatus(
+    required: bootstrapNeeded,
+    signupEnabled: adminSettings.signupEnabled,
+  );
 
   @override
   Future<LoginResult> bootstrap({
@@ -1277,6 +1279,64 @@ class FakeRepository implements WaxDeckRepository {
     ];
   }
 
+  /// Server-level Last.fm credential state served and replaced by the
+  /// admin scrobbling endpoints.
+  ScrobblingAdminConfig scrobblingConfig = const ScrobblingAdminConfig(
+    lastfmConfigured: false,
+    lastfmSource: 'none',
+    lastfmSecretSet: false,
+  );
+
+  @override
+  Future<ScrobblingAdminConfig> getScrobblingConfig() async => scrobblingConfig;
+
+  @override
+  Future<ScrobblingAdminConfig> putScrobblingConfig({
+    required String apiKey,
+    required String secret,
+  }) async {
+    final error = adminError;
+    if (error != null) throw error;
+    // The server refuses a half-set pair, like it does.
+    if (apiKey.isEmpty != secret.isEmpty) {
+      throw const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'set both the API key and the secret, or neither',
+        statusCode: 400,
+      );
+    }
+    scrobblingConfig = apiKey.isEmpty
+        ? const ScrobblingAdminConfig(
+            lastfmConfigured: false,
+            lastfmSource: 'none',
+            lastfmSecretSet: false,
+          )
+        : ScrobblingAdminConfig(
+            lastfmConfigured: true,
+            lastfmSource: 'settings',
+            lastfmApiKey: apiKey,
+            lastfmSecretSet: true,
+          );
+    // The Last.fm slot's availability follows the credential state.
+    scrobblers = [
+      for (final s in scrobblers)
+        if (s.service == 'lastfm')
+          Scrobbler(
+            service: s.service,
+            available: scrobblingConfig.lastfmConfigured,
+            connected: s.connected,
+            username: s.username,
+            apiUrl: s.apiUrl,
+            lastSuccessAt: s.lastSuccessAt,
+            lastError: s.lastError,
+            lastErrorAt: s.lastErrorAt,
+          )
+        else
+          s,
+    ];
+    return scrobblingConfig;
+  }
+
   /// Push registrations served and mutated by the push endpoints.
   final List<PushRegistration> pushRegistrations = [];
 
@@ -1534,6 +1594,10 @@ class FakeRepository implements WaxDeckRepository {
   /// Thrown by the upload endpoints when set.
   WaxDeckApiException? uploadError;
 
+  /// Runs before each putUploadData, ahead of the [uploadError] check;
+  /// tests use it to trip failures at a chosen chunk.
+  void Function()? onPutUploadData;
+
   final List<({String uploadId, int offset, int byteCount})>
   putUploadDataCalls = [];
   int _uploadSeq = 0;
@@ -1618,6 +1682,7 @@ class FakeRepository implements WaxDeckRepository {
     required int offset,
     required Uint8List bytes,
   }) async {
+    onPutUploadData?.call();
     final error = uploadError;
     if (error != null) throw error;
     putUploadDataCalls.add((
@@ -2271,6 +2336,7 @@ class FakeRepository implements WaxDeckRepository {
     LibraryAccess? libraryAccess,
     bool? uploadEnabled,
     int? uploadQuotaBytes,
+    Permissions? permissions,
   }) async {
     final account = UserAccount(
       id: 'us-FAKE${_userSeq++}',
@@ -2281,6 +2347,7 @@ class FakeRepository implements WaxDeckRepository {
       libraryAccess: libraryAccess ?? const LibraryAccess(mode: 'all'),
       uploadEnabled: uploadEnabled ?? false,
       uploadQuotaBytes: uploadQuotaBytes,
+      permissions: permissions ?? const Permissions(),
     );
     usersById[account.id] = account;
     return account;
@@ -2295,6 +2362,7 @@ class FakeRepository implements WaxDeckRepository {
     LibraryAccess? libraryAccess,
     bool? uploadEnabled,
     int? uploadQuotaBytes,
+    Permissions? permissions,
   }) async {
     final current = usersById[userId];
     if (current == null) {
@@ -2316,9 +2384,579 @@ class FakeRepository implements WaxDeckRepository {
       uploadQuotaBytes: uploadQuotaBytes ?? current.uploadQuotaBytes,
       disabled: disabled ?? current.disabled,
       hasPassword: current.hasPassword,
+      pending: current.pending,
+      permissions: permissions ?? current.permissions,
     );
     usersById[userId] = updated;
     return updated;
+  }
+
+  @override
+  Future<UserAccount> getUser(String userId) async {
+    final account = usersById[userId];
+    if (account == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such user',
+        statusCode: 404,
+      );
+    }
+    return account;
+  }
+
+  /// Ids removed by [deleteUser], in order.
+  final List<String> deletedUserIds = [];
+
+  @override
+  Future<void> deleteUser(String userId) async {
+    deletedUserIds.add(userId);
+    usersById.remove(userId);
+  }
+
+  /// Administrator password resets, in order.
+  final List<({String userId, String newPassword})> setUserPasswordCalls = [];
+
+  @override
+  Future<void> setUserPassword(String userId, String newPassword) async {
+    setUserPasswordCalls.add((userId: userId, newPassword: newPassword));
+  }
+
+  /// Ids whose sessions were revoked wholesale, in order.
+  final List<String> revokeUserSessionsCalls = [];
+
+  @override
+  Future<void> revokeUserSessions(String userId) async {
+    revokeUserSessionsCalls.add(userId);
+  }
+
+  /// Thrown by [signup] when set.
+  WaxDeckApiException? signupError;
+
+  final List<
+    ({
+      String username,
+      String password,
+      String? displayName,
+      String? inviteToken,
+    })
+  >
+  signupCalls = [];
+
+  @override
+  Future<SignupResult> signup({
+    required String username,
+    required String password,
+    String? displayName,
+    String? inviteToken,
+  }) async {
+    signupCalls.add((
+      username: username,
+      password: password,
+      displayName: displayName,
+      inviteToken: inviteToken,
+    ));
+    final error = signupError;
+    if (error != null) throw error;
+    // An invite activates the account immediately; open signup queues it.
+    final active = inviteToken != null;
+    final account = UserAccount(
+      id: 'us-FAKE${_userSeq++}',
+      username: username,
+      displayName: displayName,
+      roles: const ['user'],
+      createdAt: DateTime.utc(2026, 7, 15),
+      libraryAccess: const LibraryAccess(mode: 'all'),
+      pending: !active,
+    );
+    usersById[account.id] = account;
+    return SignupResult(state: active ? 'active' : 'pending');
+  }
+
+  @override
+  Future<UserPage> listSignupRequests({String? cursor, int? limit}) async {
+    final error = listError;
+    if (error != null) throw error;
+    final pending = usersById.values.where((u) => u.pending).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return UserPage(users: pending);
+  }
+
+  final List<
+    ({
+      String userId,
+      List<String>? roles,
+      LibraryAccess? libraryAccess,
+      Permissions? permissions,
+      bool? uploadEnabled,
+    })
+  >
+  approveSignupCalls = [];
+
+  @override
+  Future<UserAccount> approveSignupRequest(
+    String userId, {
+    List<String>? roles,
+    LibraryAccess? libraryAccess,
+    Permissions? permissions,
+    bool? uploadEnabled,
+    int? uploadQuotaBytes,
+  }) async {
+    approveSignupCalls.add((
+      userId: userId,
+      roles: roles,
+      libraryAccess: libraryAccess,
+      permissions: permissions,
+      uploadEnabled: uploadEnabled,
+    ));
+    final current = usersById[userId];
+    if (current == null || !current.pending) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such signup request',
+        statusCode: 404,
+      );
+    }
+    final approved = UserAccount(
+      id: current.id,
+      username: current.username,
+      displayName: current.displayName,
+      roles: roles ?? current.roles,
+      createdAt: current.createdAt,
+      libraryAccess: libraryAccess ?? current.libraryAccess,
+      uploadEnabled: uploadEnabled ?? current.uploadEnabled,
+      uploadQuotaBytes: uploadQuotaBytes ?? current.uploadQuotaBytes,
+      permissions: permissions ?? current.permissions,
+    );
+    usersById[userId] = approved;
+    return approved;
+  }
+
+  /// Ids rejected, in order.
+  final List<String> rejectSignupCalls = [];
+
+  @override
+  Future<void> rejectSignupRequest(String userId) async {
+    rejectSignupCalls.add(userId);
+    usersById.remove(userId);
+  }
+
+  /// Invites by id.
+  final Map<String, Invite> invitesById = {};
+  int _inviteSeq = 0;
+
+  @override
+  Future<List<Invite>> listInvites() async {
+    final error = listError;
+    if (error != null) throw error;
+    return invitesById.values.toList();
+  }
+
+  @override
+  Future<InviteCreated> createInvite({
+    String? note,
+    List<String>? roles,
+    LibraryAccess? libraryAccess,
+    Permissions? permissions,
+    bool? uploadEnabled,
+    int? maxUses,
+    DateTime? expiresAt,
+  }) async {
+    final seq = _inviteSeq++;
+    final created = InviteCreated(
+      id: 'iv-FAKE$seq',
+      note: note,
+      roles: roles ?? const ['user'],
+      libraryAccess: libraryAccess,
+      permissions: permissions,
+      uploadEnabled: uploadEnabled ?? false,
+      maxUses: maxUses ?? 1,
+      createdAt: DateTime.utc(2026, 7, 15),
+      token: 'invite-token-$seq',
+    );
+    invitesById[created.id] = created;
+    return created;
+  }
+
+  /// Ids revoked, in order.
+  final List<String> revokeInviteCalls = [];
+
+  @override
+  Future<void> revokeInvite(String inviteId) async {
+    revokeInviteCalls.add(inviteId);
+    final current = invitesById[inviteId];
+    if (current == null) return;
+    invitesById[inviteId] = Invite(
+      id: current.id,
+      note: current.note,
+      roles: current.roles,
+      libraryAccess: current.libraryAccess,
+      permissions: current.permissions,
+      uploadEnabled: current.uploadEnabled,
+      maxUses: current.maxUses,
+      usedCount: current.usedCount,
+      revoked: true,
+      expiresAt: current.expiresAt,
+      createdAt: current.createdAt,
+      createdBy: current.createdBy,
+    );
+  }
+
+  /// Audit events, newest first, served by [listAuditEvents].
+  List<AuditEvent> auditEvents = [];
+
+  @override
+  Future<AuditEventPage> listAuditEvents({
+    String? cursor,
+    int? limit,
+    String? action,
+    String? actorId,
+    String? targetPid,
+  }) async {
+    final error = listError;
+    if (error != null) throw error;
+    final filtered = auditEvents
+        .where((e) => action == null || e.action.startsWith(action))
+        .where((e) => actorId == null || e.actorId == actorId)
+        .where((e) => targetPid == null || e.targetPid == targetPid)
+        .toList();
+    final start = cursor == null ? 0 : int.parse(cursor);
+    final pageSize = limit ?? 100;
+    final end = (start + pageSize).clamp(0, filtered.length);
+    return AuditEventPage(
+      events: filtered.sublist(start.clamp(0, filtered.length), end),
+      nextCursor: end < filtered.length ? '$end' : null,
+    );
+  }
+
+  /// Server-wide switches served and replaced by the settings endpoints.
+  AdminSettings adminSettings = const AdminSettings(
+    signupEnabled: false,
+    readOnly: false,
+    backupKeepCount: 5,
+    backupKeepBytes: 0,
+  );
+
+  /// Thrown by the admin mutation endpoints when set.
+  WaxDeckApiException? adminError;
+
+  @override
+  Future<AdminSettings> getAdminSettings() async => adminSettings;
+
+  @override
+  Future<AdminSettings> putAdminSettings(AdminSettings settings) async {
+    final error = adminError;
+    if (error != null) throw error;
+    adminSettings = settings;
+    return settings;
+  }
+
+  TranscodingLimits transcodingLimits = const TranscodingLimits(
+    maxConcurrent: 2,
+    maxConcurrentPerUser: 1,
+    defaultMaxBitrateKbps: 0,
+  );
+
+  @override
+  Future<TranscodingLimits> getTranscodingLimits() async => transcodingLimits;
+
+  @override
+  Future<TranscodingLimits> putTranscodingLimits(
+    TranscodingLimits limits,
+  ) async {
+    final error = adminError;
+    if (error != null) throw error;
+    transcodingLimits = limits;
+    return limits;
+  }
+
+  /// Maintenance schedules by kind.
+  final Map<String, Schedule> schedules = {
+    for (final kind in const ['scan', 'backup', 'prune'])
+      kind: Schedule(kind: kind, cron: '0 3 * * *', enabled: false),
+  };
+
+  final List<({String kind, String cron, bool enabled})> putScheduleCalls = [];
+
+  @override
+  Future<List<Schedule>> listSchedules() async => schedules.values.toList();
+
+  @override
+  Future<Schedule> putSchedule(
+    String kind, {
+    required String cron,
+    required bool enabled,
+  }) async {
+    putScheduleCalls.add((kind: kind, cron: cron, enabled: enabled));
+    final error = adminError;
+    if (error != null) throw error;
+    // The server validates the cron expression; five fields, like it does.
+    if (cron.trim().split(RegExp(r'\s+')).length != 5) {
+      throw const WaxDeckApiException(
+        code: 'validation',
+        message: 'invalid cron expression',
+        statusCode: 400,
+      );
+    }
+    final current = schedules[kind]!;
+    final stored = Schedule(
+      kind: kind,
+      cron: cron,
+      enabled: enabled,
+      lastRunAt: current.lastRunAt,
+      lastStatus: current.lastStatus,
+      lastError: current.lastError,
+      nextRunAt: enabled ? DateTime.utc(2026, 7, 22, 3) : null,
+    );
+    schedules[kind] = stored;
+    return stored;
+  }
+
+  /// Backup archives by id, newest last.
+  final Map<String, Backup> backupsById = {};
+  int _backupSeq = 0;
+  int createBackupCalls = 0;
+
+  @override
+  Future<List<Backup>> listBackups() async {
+    final error = listError;
+    if (error != null) throw error;
+    return backupsById.values.toList().reversed.toList();
+  }
+
+  @override
+  Future<Backup> createBackup() async {
+    final error = adminError;
+    if (error != null) throw error;
+    createBackupCalls++;
+    final backup = Backup(
+      id: 'ba-FAKE${_backupSeq++}',
+      state: 'running',
+      trigger: 'manual',
+      fileName: 'waxdeck-2026-07-20-$_backupSeq.tar.zst',
+      createdAt: DateTime.utc(2026, 7, 20, 12),
+    );
+    backupsById[backup.id] = backup;
+    return backup;
+  }
+
+  @override
+  Future<Backup> getBackup(String backupId) async {
+    final backup = backupsById[backupId];
+    if (backup == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such backup',
+        statusCode: 404,
+      );
+    }
+    return backup;
+  }
+
+  /// Ids deleted, in order.
+  final List<String> deleteBackupCalls = [];
+
+  @override
+  Future<void> deleteBackup(String backupId) async {
+    final error = adminError;
+    if (error != null) throw error;
+    deleteBackupCalls.add(backupId);
+    backupsById.remove(backupId);
+  }
+
+  @override
+  String backupArchiveUrl(String backupId) =>
+      '/api/v1/admin/backups/$backupId/archive';
+
+  /// Preset restore plans by backup id; [stageRestore] falls back to a
+  /// clean plan.
+  final Map<String, RestorePlan> restorePlans = {};
+
+  /// The staged restore served by [getStagedRestore].
+  RestorePlan? stagedRestore;
+
+  /// Ids staged, in order.
+  final List<String> stageRestoreCalls = [];
+  int cancelStagedRestoreCalls = 0;
+
+  @override
+  Future<RestorePlan> stageRestore(String backupId) async {
+    final error = adminError;
+    if (error != null) throw error;
+    stageRestoreCalls.add(backupId);
+    final plan =
+        restorePlans[backupId] ??
+        RestorePlan(
+          backupId: backupId,
+          stagedAt: DateTime.utc(2026, 7, 20, 13),
+          keyfilePresent: true,
+          keyfileMatches: true,
+        );
+    stagedRestore = plan;
+    return plan;
+  }
+
+  @override
+  Future<RestorePlan?> getStagedRestore() async => stagedRestore;
+
+  @override
+  Future<void> cancelStagedRestore() async {
+    cancelStagedRestoreCalls++;
+    stagedRestore = null;
+  }
+
+  final List<
+    ({
+      String source,
+      String serverUrl,
+      String? username,
+      String? password,
+      String? token,
+      MigrationOptions? options,
+      bool dryRun,
+    })
+  >
+  createMigrationCalls = [];
+
+  @override
+  Future<ToolTask> createMigration({
+    required String source,
+    required String serverUrl,
+    String? username,
+    String? password,
+    String? token,
+    MigrationOptions? options,
+    bool dryRun = false,
+  }) async {
+    final error = adminError;
+    if (error != null) throw error;
+    createMigrationCalls.add((
+      source: source,
+      serverUrl: serverUrl,
+      username: username,
+      password: password,
+      token: token,
+      options: options,
+      dryRun: dryRun,
+    ));
+    final task = ToolTask(
+      id: 'tt-FAKE${_toolTaskSeq++}',
+      type: 'import-$source',
+      state: 'queued',
+      createdAt: DateTime.utc(2026, 7, 20, 14),
+    );
+    toolTasksById[task.id] = task;
+    return task;
+  }
+
+  /// Trash entries served by [listTrash].
+  final List<TrashEntry> trashEntries = [];
+
+  @override
+  Future<TrashList> listTrash({
+    bool includeRestored = false,
+    int? limit,
+  }) async {
+    final error = listError;
+    if (error != null) throw error;
+    final entries = trashEntries
+        .where((e) => includeRestored || e.restoredAt == null)
+        .take(limit ?? 200)
+        .toList();
+    return TrashList(entries: entries);
+  }
+
+  /// Ids restored, in order.
+  final List<String> restoreTrashCalls = [];
+  int emptyTrashCalls = 0;
+
+  @override
+  Future<void> restoreTrashEntry(String trashId) async {
+    final error = adminError;
+    if (error != null) throw error;
+    restoreTrashCalls.add(trashId);
+    final index = trashEntries.indexWhere((e) => e.id == trashId);
+    if (index < 0) return;
+    final entry = trashEntries[index];
+    trashEntries[index] = TrashEntry(
+      id: entry.id,
+      itemPid: entry.itemPid,
+      name: entry.name,
+      reason: entry.reason,
+      sizeBytes: entry.sizeBytes,
+      trashedAt: entry.trashedAt,
+      restoredAt: DateTime.utc(2026, 7, 20, 15),
+    );
+  }
+
+  @override
+  Future<TrashEmptyResult> emptyTrash() async {
+    final error = adminError;
+    if (error != null) throw error;
+    emptyTrashCalls++;
+    final purgeable = trashEntries.where((e) => e.restoredAt == null).toList();
+    trashEntries.removeWhere((e) => e.restoredAt == null);
+    return TrashEmptyResult(
+      purged: purgeable.length,
+      errored: 0,
+      reclaimedBytes: purgeable.fold(0, (sum, e) => sum + e.sizeBytes),
+    );
+  }
+
+  /// Background jobs served by [listJobs].
+  List<Job> jobs = [];
+
+  @override
+  Future<List<Job>> listJobs() async => List.of(jobs);
+
+  /// Per-library read-only flags; absent means false.
+  final Map<String, bool> libraryReadOnlyByPid = {};
+
+  final List<({String libraryPid, bool readOnly})> setLibraryReadOnlyCalls = [];
+
+  @override
+  Future<bool> getLibraryReadOnly(String libraryPid) async =>
+      libraryReadOnlyByPid[libraryPid] ?? false;
+
+  @override
+  Future<bool> setLibraryReadOnly(String libraryPid, bool readOnly) async {
+    final error = adminError;
+    if (error != null) throw error;
+    setLibraryReadOnlyCalls.add((libraryPid: libraryPid, readOnly: readOnly));
+    libraryReadOnlyByPid[libraryPid] = readOnly;
+    return readOnly;
+  }
+
+  /// Preset delete plans by pid; absent pids get one file of 1 MiB.
+  final Map<String, DeletePlanEntry> deletePlansByPid = {};
+
+  /// Thrown by [deleteLibraryItems] when set.
+  WaxDeckApiException? deleteItemsError;
+
+  final List<({List<String> pids, String? mode, bool dryRun})>
+  deleteItemsCalls = [];
+
+  @override
+  Future<DeleteItemsResult> deleteLibraryItems({
+    required List<String> pids,
+    String? mode,
+    bool dryRun = false,
+  }) async {
+    final error = deleteItemsError;
+    if (error != null) throw error;
+    deleteItemsCalls.add((pids: pids, mode: mode, dryRun: dryRun));
+    final entries = [
+      for (final pid in pids)
+        deletePlansByPid[pid] ??
+            DeletePlanEntry(pid: pid, files: 1, bytes: 1048576),
+    ];
+    if (!dryRun) {
+      libraryItems.removeWhere((item) => pids.contains(item.pid));
+    }
+    return DeleteItemsResult(
+      applied: !dryRun,
+      mode: mode ?? 'trash',
+      entries: entries,
+    );
   }
 }
 

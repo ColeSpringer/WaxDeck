@@ -76,6 +76,26 @@ services:
       WAXDECK_SEAL_URL: ${WAXDECK_SEAL_URL:-}
       WAXDECK_SEAL_API_KEY: ${WAXDECK_SEAL_API_KEY:-}
       WAXDECK_YOUTUBE_SPONSORBLOCK: ${WAXDECK_YOUTUBE_SPONSORBLOCK:-}
+      # Last.fm scrobbling needs server API credentials (each install
+      # registers its own API account at last.fm/api/account/create);
+      # without them the Last.fm connect button stays disabled.
+      # ListenBrainz needs nothing here (users paste their own token).
+      WAXDECK_LASTFM_API_KEY: ${WAXDECK_LASTFM_API_KEY:-}
+      WAXDECK_LASTFM_SECRET: ${WAXDECK_LASTFM_SECRET:-}
+      # LAN opt-ins for self-hosted scrobble targets (Maloja and
+      # friends) and LAN icecast radio streams.
+      WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS: ${WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS:-false}
+      WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS: ${WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS:-false}
+      WAXDECK_RADIO_DIRECTORY_BASE: ${WAXDECK_RADIO_DIRECTORY_BASE:-}
+      # Matching and enrichment providers. AcoustID enables fingerprint
+      # evidence; fanart.tv enables that artwork provider; the
+      # MusicBrainz base override points at a local mirror.
+      WAXDECK_MATCHING: ${WAXDECK_MATCHING:-true}
+      WAXDECK_ACOUSTID_KEY: ${WAXDECK_ACOUSTID_KEY:-}
+      WAXDECK_FANARTTV_KEY: ${WAXDECK_FANARTTV_KEY:-}
+      WAXDECK_MUSICBRAINZ_BASE: ${WAXDECK_MUSICBRAINZ_BASE:-}
+      # Prometheus metrics: set a token to enable GET /metrics.
+      WAXDECK_METRICS_TOKEN: ${WAXDECK_METRICS_TOKEN:-}
     volumes:
       # Holds waxbin.db + waxdeck.db (and their -wal/-shm sidecars).
       - waxdeck-data:/data

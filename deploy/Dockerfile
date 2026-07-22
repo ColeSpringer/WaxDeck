@@ -11,6 +11,12 @@
 # yet). Bump when cirruslabs catches up so this matches CI's 3.44.6.
 FROM ghcr.io/cirruslabs/flutter:3.44.0 AS web
 
+# Flutter prints a "running as root" advisory here. Expected and
+# accepted: docker build steps run as root, this stage is discarded
+# after the web bundle is copied out, and silencing it would mean
+# chown-ing the multi-gigabyte SDK to a build user (a full extra layer
+# in the build cache) for zero runtime effect. The runtime stage below
+# already runs as the non-root waxdeck user.
 WORKDIR /src
 COPY app/ app/
 # Pub workspace: resolve at the workspace root, build in the application package.

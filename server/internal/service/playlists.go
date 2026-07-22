@@ -829,6 +829,9 @@ func (l *Library) DeletePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 		l.log.Warn("dropping reissue link", "err", err)
 	}
 	l.emitPlaylistEvent(ctx, uc, wasShared, string(pl.PID))
+	l.Audit(ctx, uc, "playlist.delete",
+		AuditTarget{Kind: "playlist", PID: apiPID(PrefixPlaylist, pl.PID), Name: pl.Name},
+		map[string]any{"shared": wasShared})
 	return nil
 }
 

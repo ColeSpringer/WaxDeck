@@ -63,13 +63,15 @@ var errToolPermanent = errors.New("permanent tool task failure")
 
 // ToolTaskDTO is one tool task for the API layer.
 type ToolTaskDTO struct {
-	ID           string
-	Type         string
-	State        string
-	ItemPID      string
-	ProgressPct  float64
-	Error        string
-	ResultPIDs   []string
+	ID          string
+	Type        string
+	State       string
+	ItemPID     string
+	ProgressPct float64
+	Error       string
+	ResultPIDs  []string
+	// Summary is the task-type-specific result document once finished.
+	Summary      map[string]any
 	CreatedAtNS  int64
 	FinishedAtNS int64
 }
@@ -124,6 +126,9 @@ func (l *Library) StartBookMerge(ctx context.Context, uc *UserCtx, apiBookPID st
 		paths[i] = string(file.Path)
 		durs[i] = f.DurationMS
 	}
+	if err := l.checkPathWritable(ctx, paths[0]); err != nil {
+		return ToolTaskDTO{}, err
+	}
 	return l.insertToolTask(ctx, uc, taskTypeBookMerge, apiPID(PrefixBook, bd.Item.PID), toolTaskParams{
 		KeepOriginals: keepOriginals, Titles: titles, PartPaths: paths, PartDurationsMS: durs,
 	})
@@ -151,6 +156,9 @@ func (l *Library) StartBookSplit(ctx context.Context, uc *UserCtx, apiBookPID st
 	loc, err := l.paths.Locate(ctx, bd.Item.PID)
 	if err != nil {
 		return ToolTaskDTO{}, classify(err)
+	}
+	if err := l.checkPathWritable(ctx, loc.Path); err != nil {
+		return ToolTaskDTO{}, err
 	}
 	rate := loc.SampleRate
 	if rate <= 0 {
@@ -209,6 +217,9 @@ func (l *Library) StartCueSplit(ctx context.Context, uc *UserCtx, apiTrackPID st
 	if err != nil {
 		return ToolTaskDTO{}, &Error{Kind: KindConflict, Msg: err.Error()}
 	}
+	if err := l.checkPathWritable(ctx, loc.Path); err != nil {
+		return ToolTaskDTO{}, err
+	}
 	return l.insertToolTask(ctx, uc, taskTypeCueSplit, apiPID(PrefixTrack, it.PID), toolTaskParams{
 		KeepOriginals: keepOriginals, SrcPath: loc.Path, CuePath: cue,
 		Format: toolSplitFormat(it.Codec),
@@ -265,6 +276,7 @@ func (l *Library) DrainToolTasks(ctx context.Context) bool {
 		l.log.Warn("retiring exhausted tool tasks", "err", err)
 	} else {
 		for _, id := range ids {
+			l.scrubTaskSecrets(ctx, id)
 			l.notifyToolTask(ctx, id)
 		}
 	}
@@ -317,15 +329,17 @@ func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 	}
 	var results []string
 	var err error
-	switch t.Type {
-	case taskTypeBookMerge:
+	switch {
+	case t.Type == taskTypeBookMerge:
 		results, err = l.runBookMerge(ctx, t, p)
-	case taskTypeBookSplit:
+	case t.Type == taskTypeBookSplit:
 		results, err = l.runBookSplit(ctx, t, p)
-	case taskTypeCueSplit:
+	case t.Type == taskTypeCueSplit:
 		results, err = l.runCueSplit(ctx, t, p)
-	case taskTypeAcquire:
+	case t.Type == taskTypeAcquire:
 		results, err = l.runAcquire(ctx, t, p)
+	case strings.HasPrefix(t.Type, taskTypeMigratePrefix):
+		err = l.runMigrationTask(ctx, t)
 	default:
 		err = fmt.Errorf("%w: unknown task type %q", errToolPermanent, t.Type)
 	}
@@ -340,6 +354,7 @@ func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 	if err := l.db.UpdateToolTask(ctx, *t); err != nil {
 		l.log.Warn("recording tool task completion", "task", t.ID, "err", err)
 	}
+	l.scrubTaskSecrets(ctx, t.ID)
 	l.notifyToolTask(ctx, t.ID)
 	return nil
 }
@@ -1008,7 +1023,35 @@ func (l *Library) failToolTask(ctx context.Context, t *wdb.ToolTask, cause error
 	if err := l.db.UpdateToolTask(ctx, *t); err != nil {
 		l.log.Warn("recording tool task failure", "task", t.ID, "err", err)
 	}
+	l.scrubTaskSecrets(ctx, t.ID)
 	l.notifyToolTask(ctx, t.ID)
+}
+
+// scrubTaskSecrets drops sealed credentials from a terminal task's
+// params: a finished import has no further use for them, and holding
+// them indefinitely widens what a database-plus-keyfile exposure leaks.
+// Sealed rows are unreadable without the key either way; this bounds
+// the lifetime to the task's own, which is what the API documents.
+func (l *Library) scrubTaskSecrets(ctx context.Context, taskID string) {
+	t, err := l.db.ToolTaskByID(ctx, taskID)
+	if err != nil || !strings.HasPrefix(t.Type, taskTypeMigratePrefix) {
+		return
+	}
+	var params map[string]any
+	if err := json.Unmarshal([]byte(t.Params), &params); err != nil {
+		return
+	}
+	if _, held := params["secretSealed"]; !held {
+		return
+	}
+	delete(params, "secretSealed")
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return
+	}
+	if err := l.db.UpdateToolTaskParams(ctx, t.ID, string(raw)); err != nil {
+		l.log.Warn("scrubbing task credentials", "task", t.ID, "err", err)
+	}
 }
 
 // notifyToolTask fans a task lifecycle change out to its owner and
@@ -1063,9 +1106,14 @@ func toolTaskDTO(t wdb.ToolTask) ToolTaskDTO {
 	if t.ResultPIDs != "" {
 		_ = json.Unmarshal([]byte(t.ResultPIDs), &results)
 	}
+	var summary map[string]any
+	if t.Summary != "" {
+		_ = json.Unmarshal([]byte(t.Summary), &summary)
+	}
 	return ToolTaskDTO{
 		ID: t.ID, Type: t.Type, State: t.State, ItemPID: t.ItemPID,
 		ProgressPct: t.ProgressPct, Error: t.Error, ResultPIDs: results,
+		Summary:     summary,
 		CreatedAtNS: t.CreatedAtNS, FinishedAtNS: t.FinishedAtNS,
 	}
 }

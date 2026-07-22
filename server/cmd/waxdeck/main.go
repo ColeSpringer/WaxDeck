@@ -7,6 +7,9 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -38,7 +41,9 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/connect"
 	"github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/events"
+	"github.com/colespringer/waxdeck/server/internal/metrics"
 	waxproviders "github.com/colespringer/waxdeck/server/internal/providers"
+	"github.com/colespringer/waxdeck/server/internal/restore"
 	"github.com/colespringer/waxdeck/server/internal/service"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 	"github.com/colespringer/waxdeck/server/internal/waxtapsource"
@@ -108,6 +113,8 @@ func run() error {
 		oidcGroups  = flag.String("oidc-groups-claim", envOr("WAXDECK_OIDC_GROUPS_CLAIM", ""), "ID-token claim holding groups (empty disables role mapping)")
 		oidcAdminGr = flag.String("oidc-admin-group", envOr("WAXDECK_OIDC_ADMIN_GROUP", ""), "group granting the admin role via the groups claim")
 
+		metricsToken = flag.String("metrics-token", envOr("WAXDECK_METRICS_TOKEN", ""), "bearer token protecting GET /metrics (empty leaves the endpoint disabled)")
+
 		showVer = flag.Bool("version", false, "print version and exit")
 	)
 	flag.Parse()
@@ -124,6 +131,18 @@ func run() error {
 	}
 	if err := os.MkdirAll(*dataDir, 0o755); err != nil {
 		return fmt.Errorf("creating data dir: %w", err)
+	}
+
+	// A staged restore applies before anything opens a database: the
+	// marker survives any failure here, so a crash retries at the next
+	// start and a refusing error leaves the operator in charge.
+	restoreCasualties := stagedCasualties(*dataDir)
+	restoreApplied, restoreReport, err := restore.Apply(*dataDir, log)
+	if err != nil {
+		return fmt.Errorf("applying staged restore: %w", err)
+	}
+	if restoreApplied {
+		log.Info("restore applied", "backup", restoreReport.BackupID, "archive", restoreReport.FileName)
 	}
 
 	// Root context: canceled on the first termination signal; workers and
@@ -143,6 +162,19 @@ func run() error {
 		return err
 	}
 	defer store.Close()
+	if restoreApplied {
+		// Fresh stream generations mint at open; every outstanding
+		// client cursor answers sync-reset instead of silently reading
+		// the restored history.
+		if err := store.ClearSyncState(ctx); err != nil {
+			return err
+		}
+	}
+	if n, err := store.FailStaleRunningBackups(ctx, time.Now().UnixNano()); err != nil {
+		log.Warn("sweeping stale backups", "err", err)
+	} else if n > 0 {
+		log.Info("marked interrupted backups failed", "count", n)
+	}
 
 	sealer, err := auth.NewSealer(secret, "waxdeck-app-password-v1")
 	if err != nil {
@@ -313,9 +345,93 @@ func run() error {
 			return err
 		}
 		svc.SetFlowJobs(bridge)
+		bridge.SetTranscodeGate(svc.TranscodeGate())
 	} else {
 		log.Warn("WAXDECK_FLOW_URL is not set; playing original files directly (no transcoding, gapless timelines, or voice boost)")
 	}
+
+	backups := service.NewBackups(svc, *dataDir, keyProber(sealer))
+	backups.SweepTempFiles()
+	if restoreApplied {
+		if err := backups.PostRestoreSweep(ctx, service.RestoreReportLike{
+			BackupID:   restoreReport.BackupID,
+			FileName:   restoreReport.FileName,
+			SetAside:   restoreReport.SetAside,
+			Casualties: restoreCasualties,
+		}); err != nil {
+			log.Warn("post-restore sweep", "err", err)
+		}
+	}
+	backupWake := make(chan string, 8)
+	group.Go(ctx, "backup-runner", func(ctx context.Context) error {
+		sweep := time.NewTicker(time.Minute)
+		defer sweep.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case id := <-backupWake:
+				if err := backups.Run(ctx, id); err != nil && ctx.Err() == nil {
+					log.Warn("backup run", "backup", id, "err", err)
+				}
+			case <-sweep.C:
+				// A wake dropped by a full channel leaves a claimed row
+				// running with nobody on it; the sweep picks it up.
+				rows, err := backups.List(ctx)
+				if err != nil {
+					continue
+				}
+				for _, row := range rows {
+					if row.State == "running" {
+						if err := backups.Run(ctx, row.ID); err != nil && ctx.Err() == nil {
+							log.Warn("backup run", "backup", row.ID, "err", err)
+						}
+					}
+				}
+			}
+		}
+	})
+	group.Go(ctx, "cron-scheduler", func(ctx context.Context) error {
+		tick := time.NewTicker(30 * time.Second)
+		defer tick.Stop()
+		lastCheck := time.Now()
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case now := <-tick.C:
+				// Order matters: prune and scan finish fast (a scan is
+				// an async catalog job), so the one long-running kind,
+				// backup, goes last and can only delay the next tick,
+				// never a sibling due in this one. Delayed firings are
+				// caught up, not lost: DueSchedule measures from the
+				// last run, not from the tick that should have fired.
+				if svc.DueSchedule(ctx, "prune", lastCheck, now) {
+					svc.MarkScheduleRun(ctx, "prune", svc.RunPrune(ctx))
+				}
+				if svc.DueSchedule(ctx, "scan", lastCheck, now) {
+					_, err := svc.Rescan(ctx)
+					svc.MarkScheduleRun(ctx, "scan", err)
+				}
+				if svc.DueSchedule(ctx, "backup", lastCheck, now) {
+					row, err := backups.Create(ctx, nil, "scheduled")
+					if service.KindOf(err) == service.KindConflict {
+						// A manual backup holds the slot. Marking the
+						// schedule as run would defer it to the NEXT
+						// cron firing (a week, on the default); leaving
+						// it unmarked retries on the next tick instead.
+						log.Info("scheduled backup waiting on a running backup")
+					} else {
+						if err == nil {
+							err = backups.Run(ctx, row.ID)
+						}
+						svc.MarkScheduleRun(ctx, "backup", err)
+					}
+				}
+				lastCheck = now
+			}
+		}
+	})
 
 	// Podcast background work: the feed refresh scheduler, the retention
 	// sweeper, and the queue drainers. All are supervised ticker loops on
@@ -569,13 +685,14 @@ func run() error {
 		Loopback: "http://127.0.0.1:" + port,
 	}
 	connectSvc, err := connect.New(ctx, connect.Config{
-		Store:            store,
-		Group:            group,
-		Resolver:         &api.ConnectResolver{Svc: svc, Bridge: bridge, Media: media},
-		Sink:             &api.ConnectSink{Svc: svc},
-		Bases:            bases,
-		InvalidatePlayer: hub.MarkPlayerAll,
-		Logger:           log,
+		Store:                store,
+		Group:                group,
+		Resolver:             &api.ConnectResolver{Svc: svc, Bridge: bridge, Media: media},
+		Sink:                 &api.ConnectSink{Svc: svc},
+		Bases:                bases,
+		InvalidatePlayer:     hub.MarkPlayerAll,
+		SharedOutputsAllowed: svc.UserSharedOutputsAllowed,
+		Logger:               log,
 	})
 	if err != nil {
 		return err
@@ -636,6 +753,8 @@ func run() error {
 		Logger:       log,
 		CookieSecure: *cookieSec,
 		PublicBase:   *publicBase,
+		Backups:      backups,
+		BackupWake:   backupWake,
 	})
 	apiHandler := api.HandlerWithOptions(
 		api.NewStrictHandlerWithOptions(srv, nil, api.StrictHTTPServerOptions{
@@ -681,6 +800,11 @@ func run() error {
 			w.WriteHeader(http.StatusNotImplemented)
 			fmt.Fprintln(w, `{"code":"internal","message":"streaming is not configured on this server"}`)
 		})
+	}
+	if *metricsToken != "" {
+		mux.Handle("GET /metrics", metricsHandler(*metricsToken, version, store, svc))
+	} else {
+		log.Info("metrics endpoint disabled; set WAXDECK_METRICS_TOKEN to enable GET /metrics")
 	}
 	mux.Handle("/", web.Handler(*webDir))
 
@@ -865,4 +989,121 @@ func parseDLNADevices(s string) []dlna.Device {
 		out = append(out, dlna.Device{Location: part})
 	}
 	return out
+}
+
+// stagedCasualties reads the sealed-credential casualty list out of the
+// restore marker before Apply consumes it, so the post-restore sweep
+// can record exactly what went pending re-auth.
+func stagedCasualties(dataDir string) []service.SealedCasualty {
+	raw, err := os.ReadFile(filepath.Join(dataDir, "restore-staged.json"))
+	if err != nil {
+		return nil
+	}
+	var doc struct {
+		SealedCasualties []service.SealedCasualty `json:"sealedCasualties"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil
+	}
+	return doc.SealedCasualties
+}
+
+// keyProber answers the restore preflight: whether this host's key
+// opens the archive's sealed credentials, and which credentials break
+// when it does not. It reads the archive's own waxdeck.db snapshot,
+// never the live one.
+func keyProber(sealer *auth.Sealer) service.KeyProber {
+	return func(ctx context.Context, waxdeckDBPath string) (bool, bool, []service.SealedCasualty) {
+		conn, err := sql.Open("sqlite", "file:"+waxdeckDBPath+"?mode=ro")
+		if err != nil {
+			return true, false, nil
+		}
+		defer conn.Close()
+		type sealedRow struct {
+			kind, name string
+			blob       []byte
+		}
+		var rows []sealedRow
+		if r, err := conn.QueryContext(ctx, `
+			SELECT ap.label, u.username, ap.secret_enc
+			FROM app_passwords ap LEFT JOIN users u ON u.id = ap.user_id`); err == nil {
+			for r.Next() {
+				var label, username sql.NullString
+				var blob []byte
+				if r.Scan(&label, &username, &blob) == nil {
+					rows = append(rows, sealedRow{"app-password", username.String + "/" + label.String, blob})
+				}
+			}
+			r.Close()
+		}
+		if r, err := conn.QueryContext(ctx, `
+			SELECT sc.service, u.username, sc.sealed_secret
+			FROM scrobble_connections sc LEFT JOIN users u ON u.id = sc.user_id`); err == nil {
+			for r.Next() {
+				var svcName, username sql.NullString
+				var blob []byte
+				if r.Scan(&svcName, &username, &blob) == nil {
+					rows = append(rows, sealedRow{"scrobble-connection", username.String + "/" + svcName.String, blob})
+				}
+			}
+			r.Close()
+		}
+		if len(rows) == 0 {
+			return true, true, nil
+		}
+		if _, err := sealer.Open(rows[0].blob); err == nil {
+			return true, true, nil
+		}
+		casualties := make([]service.SealedCasualty, 0, len(rows))
+		for _, row := range rows {
+			casualties = append(casualties, service.SealedCasualty{Kind: row.kind, Name: row.name})
+		}
+		return true, false, casualties
+	}
+}
+
+// metricsHandler serves the Prometheus endpoint behind its bearer
+// token. Gauges sample the database at scrape time; counts here are
+// small at self-host scale.
+func metricsHandler(token, version string, store *db.DB, svc *service.Library) http.Handler {
+	reg := metrics.NewRegistry()
+	reg.GoRuntime()
+	reg.GaugeVec("waxdeck_build_info", "Build metadata; value is always 1.", []string{"version"}).
+		With(version).Set(1)
+	count := func(query string) func() float64 {
+		return func() float64 {
+			var n float64
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := store.Reader().QueryRowContext(ctx, query).Scan(&n); err != nil {
+				return 0
+			}
+			return n
+		}
+	}
+	reg.GaugeFunc("waxdeck_users", "Accounts, pending registrations included.",
+		count(`SELECT COUNT(*) FROM users`))
+	reg.GaugeFunc("waxdeck_signup_requests_pending", "Registrations awaiting approval.",
+		count(`SELECT COUNT(*) FROM users WHERE pending = 1`))
+	reg.GaugeFunc("waxdeck_sessions", "Live login sessions.",
+		count(`SELECT COUNT(*) FROM sessions`))
+	reg.GaugeFunc("waxdeck_listen_sessions_total", "Recorded listen sessions.",
+		count(`SELECT COUNT(*) FROM listen_sessions`))
+	reg.GaugeFunc("waxdeck_tool_tasks_active", "Queued or running background tasks.",
+		count(`SELECT COUNT(*) FROM tool_tasks WHERE state IN ('queued','running')`))
+	reg.GaugeFunc("waxdeck_scrobble_outbox_depth", "Undelivered scrobbles.",
+		count(`SELECT COUNT(*) FROM scrobble_outbox`))
+	reg.GaugeFunc("waxdeck_notify_outbox_depth", "Undelivered notifications.",
+		count(`SELECT COUNT(*) FROM notify_outbox`))
+	reg.GaugeFunc("waxdeck_transcode_sessions_active", "Engine-backed streams in flight.",
+		func() float64 { return float64(svc.ActiveTranscodeSessions()) })
+	inner := reg.Handler()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if subtle.ConstantTimeCompare([]byte(auth), []byte("Bearer "+token)) != 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		inner.ServeHTTP(w, r)
+	})
 }

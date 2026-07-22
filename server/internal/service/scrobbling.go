@@ -94,7 +94,7 @@ func (l *Library) ListScrobblers(ctx context.Context, uc *UserCtx) ([]Scrobbler,
 		byService[c.Service] = c
 	}
 	out := []Scrobbler{
-		{Service: ScrobblerLastfm, Available: l.lastfm != nil},
+		{Service: ScrobblerLastfm, Available: l.lastfmClient() != nil},
 		{Service: ScrobblerListenBrainz, Available: true},
 	}
 	for i := range out {
@@ -162,7 +162,8 @@ func (l *Library) DisconnectScrobbler(ctx context.Context, uc *UserCtx, service 
 // endpoint, built by the API layer from the request origin; the state
 // rides it as a query parameter and Last.fm appends the token.
 func (l *Library) StartLastfmConnect(ctx context.Context, uc *UserCtx, callbackURL string) (string, error) {
-	if l.lastfm == nil {
+	lastfm := l.lastfmClient()
+	if lastfm == nil {
 		return "", &Error{Kind: KindUnsupported, Msg: "this server has no Last.fm API credentials configured"}
 	}
 	buf := make([]byte, 24)
@@ -185,21 +186,22 @@ func (l *Library) StartLastfmConnect(ctx context.Context, uc *UserCtx, callbackU
 	if strings.Contains(callbackURL, "?") {
 		sep = "&"
 	}
-	return l.lastfm.AuthURL(callbackURL + sep + "state=" + url.QueryEscape(state)), nil
+	return lastfm.AuthURL(callbackURL + sep + "state=" + url.QueryEscape(state)), nil
 }
 
 // CompleteLastfmConnect consumes the callback: the one-time state
 // names the user, and the token exchanges for a session key stored
 // sealed. Returns the linked username.
 func (l *Library) CompleteLastfmConnect(ctx context.Context, state, token string) (string, error) {
-	if l.lastfm == nil {
+	lastfm := l.lastfmClient()
+	if lastfm == nil {
 		return "", &Error{Kind: KindUnsupported, Msg: "this server has no Last.fm API credentials configured"}
 	}
 	st, err := l.db.TakeOAuthState(ctx, state)
 	if err != nil || st.Provider != ScrobblerLastfm || st.Mode != "scrobble" || st.RedirectTo == "" {
 		return "", errInvalid("unknown, expired, or already used authorization state")
 	}
-	sessionKey, username, err := l.lastfm.GetSession(ctx, token)
+	sessionKey, username, err := lastfm.GetSession(ctx, token)
 	if err != nil {
 		if scrobble.IsPermanent(err) {
 			return "", errInvalid("Last.fm did not accept the authorization")
@@ -291,10 +293,11 @@ func (l *Library) NowPlayingScrobble(ctx context.Context, uc *UserCtx, apiItemPI
 		}
 		switch c.Service {
 		case ScrobblerLastfm:
-			if l.lastfm == nil {
+			lastfm := l.lastfmClient()
+			if lastfm == nil {
 				continue
 			}
-			if err := l.lastfm.NowPlaying(callCtx, secret, track); err != nil {
+			if err := lastfm.NowPlaying(callCtx, secret, track); err != nil {
 				l.log.Debug("now-playing update failed", "service", c.Service, "err", err)
 			}
 		case ScrobblerListenBrainz:
@@ -381,10 +384,11 @@ func (l *Library) deliverScrobble(ctx context.Context, row wdb.ScrobbleRow) erro
 	defer cancel()
 	switch row.Service {
 	case ScrobblerLastfm:
-		if l.lastfm == nil {
+		lastfm := l.lastfmClient()
+		if lastfm == nil {
 			return errors.New("no Last.fm API credentials configured")
 		}
-		return l.lastfm.Scrobble(callCtx, secret, track)
+		return lastfm.Scrobble(callCtx, secret, track)
 	case ScrobblerListenBrainz:
 		return l.listenbrainz.Submit(callCtx, conn.APIURL, secret, track)
 	}

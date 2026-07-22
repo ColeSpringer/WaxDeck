@@ -53,6 +53,14 @@ const (
 	// server is not running, such as the streaming engine (501
 	// feature-unavailable at the API).
 	KindFeature ErrorKind = "feature-unavailable"
+	// KindReadOnly marks a file-writing operation refused because the
+	// target library, or the whole server, is in read-only mode (409
+	// read-only at the API).
+	KindReadOnly ErrorKind = "read-only"
+	// KindTranscodeLimit marks a stream refused because the server's or
+	// the caller's concurrent transcode session limit is reached (429
+	// transcode-limited at the API).
+	KindTranscodeLimit ErrorKind = "transcode-limited"
 )
 
 // Error is a classified service failure.

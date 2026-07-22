@@ -250,3 +250,24 @@ func (d *DB) SettingSet(ctx context.Context, key, value string, ns int64) error 
 	}
 	return nil
 }
+
+// SettingsWithPrefix reads every settings row whose key starts with the
+// prefix, keyed by full key.
+func (d *DB) SettingsWithPrefix(ctx context.Context, prefix string) (map[string]string, error) {
+	rows, err := d.r.QueryContext(ctx,
+		`SELECT key, value FROM settings WHERE key >= ? AND key < ?`,
+		prefix, prefix+"￿")
+	if err != nil {
+		return nil, fmt.Errorf("db: listing settings by prefix: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, fmt.Errorf("db: scanning setting: %w", err)
+		}
+		out[k] = v
+	}
+	return out, rows.Err()
+}

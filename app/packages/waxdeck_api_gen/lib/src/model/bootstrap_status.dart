@@ -12,11 +12,16 @@ part 'bootstrap_status.g.dart';
 ///
 /// Properties:
 /// * [required_] - True while the server has no enabled administrator.
+/// * [signupEnabled] - Whether open self-serve signup is enabled, so the login screen knows to offer \"request an account\". Invite links work regardless of this flag. 
 @BuiltValue()
 abstract class BootstrapStatus implements Built<BootstrapStatus, BootstrapStatusBuilder> {
   /// True while the server has no enabled administrator.
   @BuiltValueField(wireName: r'required')
   bool get required_;
+
+  /// Whether open self-serve signup is enabled, so the login screen knows to offer \"request an account\". Invite links work regardless of this flag. 
+  @BuiltValueField(wireName: r'signupEnabled')
+  bool? get signupEnabled;
 
   BootstrapStatus._();
 
@@ -46,6 +51,13 @@ class _$BootstrapStatusSerializer implements PrimitiveSerializer<BootstrapStatus
       object.required_,
       specifiedType: const FullType(bool),
     );
+    if (object.signupEnabled != null) {
+      yield r'signupEnabled';
+      yield serializers.serialize(
+        object.signupEnabled,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -75,6 +87,13 @@ class _$BootstrapStatusSerializer implements PrimitiveSerializer<BootstrapStatus
             specifiedType: const FullType(bool),
           ) as bool;
           result.required_ = valueDes;
+          break;
+        case r'signupEnabled':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.signupEnabled = valueDes;
           break;
         default:
           unhandled.add(key);

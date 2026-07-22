@@ -473,6 +473,68 @@ var migrations = []string{
 		last_error     TEXT    NOT NULL DEFAULT '',
 		UNIQUE (item_pid, rule)
 	);`,
+
+	// The administration surface. Granular permissions and the pending
+	// (signup-awaiting-approval) flag live on the user row; tag_rules is
+	// a JSON {allow, deny} document read whole, like prefs. Invites
+	// store only a token hash (the token itself is shown once, at
+	// creation) plus the account shape they admit. audit_log is the
+	// admin-action record: actor and target names are denormalized at
+	// write time so entries outlive renames and deletions, and it is
+	// deliberately separate from event_log (which is the per-user sync
+	// stream; admin actions must never leak into client sync deltas).
+	// backups catalogs the archive files in the data directory's
+	// backups/ folder ("origin" because "trigger" is an SQL keyword).
+	`ALTER TABLE tool_tasks ADD COLUMN summary TEXT NOT NULL DEFAULT '';
+	ALTER TABLE users ADD COLUMN pending INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE users ADD COLUMN perm_download INTEGER NOT NULL DEFAULT 1;
+	ALTER TABLE users ADD COLUMN perm_delete INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE users ADD COLUMN perm_explicit INTEGER NOT NULL DEFAULT 1;
+	ALTER TABLE users ADD COLUMN perm_shared_outputs INTEGER NOT NULL DEFAULT 1;
+	ALTER TABLE users ADD COLUMN perm_podcasts INTEGER NOT NULL DEFAULT 1;
+	ALTER TABLE users ADD COLUMN max_transcode_kbps INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE users ADD COLUMN tag_rules TEXT NOT NULL DEFAULT '';
+	CREATE TABLE invites (
+		id                 TEXT    PRIMARY KEY,
+		token_hash         BLOB    NOT NULL UNIQUE,
+		note               TEXT    NOT NULL DEFAULT '',
+		roles              TEXT    NOT NULL DEFAULT 'user',
+		library_access     TEXT    NOT NULL DEFAULT 'all',
+		library_grants     TEXT    NOT NULL DEFAULT '[]',
+		perms              TEXT    NOT NULL DEFAULT '',
+		upload_enabled     INTEGER NOT NULL DEFAULT 0,
+		upload_quota_bytes INTEGER NOT NULL DEFAULT 0,
+		max_uses           INTEGER NOT NULL DEFAULT 1,
+		used_count         INTEGER NOT NULL DEFAULT 0,
+		revoked            INTEGER NOT NULL DEFAULT 0,
+		expires_at_ns      INTEGER NOT NULL DEFAULT 0,
+		created_by         TEXT    NOT NULL DEFAULT '',
+		created_at_ns      INTEGER NOT NULL
+	);
+	CREATE TABLE audit_log (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		actor_id      TEXT    NOT NULL DEFAULT '',
+		actor_name    TEXT    NOT NULL DEFAULT '',
+		action        TEXT    NOT NULL,
+		target_kind   TEXT    NOT NULL DEFAULT '',
+		target_pid    TEXT    NOT NULL DEFAULT '',
+		target_name   TEXT    NOT NULL DEFAULT '',
+		detail        TEXT    NOT NULL DEFAULT '{}',
+		created_at_ns INTEGER NOT NULL
+	);
+	CREATE INDEX audit_log_actor ON audit_log (actor_id, id);
+	CREATE INDEX audit_log_action ON audit_log (action, id);
+	CREATE INDEX audit_log_target ON audit_log (target_pid, id);
+	CREATE TABLE backups (
+		id             TEXT    PRIMARY KEY,
+		state          TEXT    NOT NULL DEFAULT 'running',
+		origin         TEXT    NOT NULL DEFAULT 'manual',
+		file_name      TEXT    NOT NULL,
+		size_bytes     INTEGER NOT NULL DEFAULT 0,
+		error          TEXT    NOT NULL DEFAULT '',
+		created_at_ns  INTEGER NOT NULL,
+		finished_at_ns INTEGER NOT NULL DEFAULT 0
+	);`,
 }
 
 // Open opens (creating if needed) the database at path and applies

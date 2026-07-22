@@ -25,8 +25,24 @@ type User struct {
 	// account's live uploads (0 means no per-user cap).
 	UploadEnabled    bool
 	UploadQuotaBytes int64
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	// Pending marks a self-serve registration awaiting an administrator's
+	// decision; pending accounts cannot log in.
+	Pending bool
+	// Granular permission toggles. Administrators implicitly hold every
+	// permission; these govern everyone else.
+	PermDownload      bool
+	PermDelete        bool
+	PermExplicit      bool
+	PermSharedOutputs bool
+	PermPodcasts      bool
+	// MaxTranscodeKbps caps the account's transcode bitrate (0 means the
+	// server default applies).
+	MaxTranscodeKbps int64
+	// TagRules is the account's tag allow/deny document as raw JSON
+	// (empty means no rules); its shape belongs to the service layer.
+	TagRules  string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Identity is one linked OIDC identity.
@@ -45,7 +61,7 @@ var ErrNotFound = errors.New("db: not found")
 // insert).
 var ErrConflict = errors.New("db: conflict")
 
-const userCols = "id, username, display_name, password_hash, roles, disabled, library_access, waxbin_user_pid, upload_enabled, upload_quota_bytes, created_at_ns, updated_at_ns"
+const userCols = "id, username, display_name, password_hash, roles, disabled, library_access, waxbin_user_pid, upload_enabled, upload_quota_bytes, pending, perm_download, perm_delete, perm_explicit, perm_shared_outputs, perm_podcasts, max_transcode_kbps, tag_rules, created_at_ns, updated_at_ns"
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
@@ -53,7 +69,9 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var created, updated int64
 	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, &roles,
 		&u.Disabled, &u.LibraryAccess, &u.WaxbinUserPID, &u.UploadEnabled,
-		&u.UploadQuotaBytes, &created, &updated)
+		&u.UploadQuotaBytes, &u.Pending, &u.PermDownload, &u.PermDelete,
+		&u.PermExplicit, &u.PermSharedOutputs, &u.PermPodcasts,
+		&u.MaxTranscodeKbps, &u.TagRules, &created, &updated)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -85,15 +103,18 @@ func (d *DB) CreateUser(ctx context.Context, u *User, onlyIfNoAdmin bool) error 
 	now := time.Now().UnixNano()
 	stmt := `INSERT INTO users (id, username, username_ci, display_name, password_hash, roles,
 	                            disabled, library_access, waxbin_user_pid, upload_enabled,
-	                            upload_quota_bytes, created_at_ns, updated_at_ns)
-	         SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?`
+	                            upload_quota_bytes, pending, perm_download, perm_delete,
+	                            perm_explicit, perm_shared_outputs, perm_podcasts,
+	                            max_transcode_kbps, tag_rules, created_at_ns, updated_at_ns)
+	         SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?`
 	if onlyIfNoAdmin {
 		stmt += ` WHERE NOT EXISTS (SELECT 1 FROM users WHERE ` + enabledAdminPredicate + `)`
 	}
 	res, err := d.w.ExecContext(ctx, stmt,
 		u.ID, u.Username, strings.ToLower(u.Username), u.DisplayName, u.PasswordHash,
 		joinRoles(u.Roles), u.Disabled, u.LibraryAccess, u.WaxbinUserPID, u.UploadEnabled,
-		u.UploadQuotaBytes, now, now)
+		u.UploadQuotaBytes, u.Pending, u.PermDownload, u.PermDelete, u.PermExplicit,
+		u.PermSharedOutputs, u.PermPodcasts, u.MaxTranscodeKbps, u.TagRules, now, now)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrConflict
@@ -122,8 +143,10 @@ func (d *DB) UserByUsername(ctx context.Context, username string) (*User, error)
 }
 
 // enabledAdminPredicate matches enabled admin rows; the roles column is
-// comma-separated.
-const enabledAdminPredicate = `disabled = 0 AND (','||roles||',') LIKE '%,admin,%'`
+// comma-separated. Pending registrations never count, whatever their
+// roles claim: an account that cannot log in must not hold the
+// bootstrap door shut or satisfy a last-admin guard.
+const enabledAdminPredicate = `disabled = 0 AND pending = 0 AND (','||roles||',') LIKE '%,admin,%'`
 
 // CountEnabledAdmins counts enabled admin accounts.
 func (d *DB) CountEnabledAdmins(ctx context.Context) (int, error) {
@@ -163,14 +186,18 @@ func (d *DB) UpdateUser(ctx context.Context, u *User, requireOtherAdmin bool) er
 	guard := ""
 	if requireOtherAdmin {
 		guard = ` AND EXISTS (SELECT 1 FROM users other WHERE other.id != users.id AND other.` +
-			`disabled = 0 AND (','||other.roles||',') LIKE '%,admin,%')`
+			`disabled = 0 AND other.pending = 0 AND (','||other.roles||',') LIKE '%,admin,%')`
 	}
 	res, err := d.w.ExecContext(ctx,
 		`UPDATE users SET display_name = ?, password_hash = ?, roles = ?, disabled = ?,
-		        library_access = ?, upload_enabled = ?, upload_quota_bytes = ?, updated_at_ns = ?
+		        library_access = ?, upload_enabled = ?, upload_quota_bytes = ?, pending = ?,
+		        perm_download = ?, perm_delete = ?, perm_explicit = ?, perm_shared_outputs = ?,
+		        perm_podcasts = ?, max_transcode_kbps = ?, tag_rules = ?, updated_at_ns = ?
 		 WHERE id = ?`+guard,
 		u.DisplayName, u.PasswordHash, joinRoles(u.Roles), u.Disabled,
-		u.LibraryAccess, u.UploadEnabled, u.UploadQuotaBytes, time.Now().UnixNano(), u.ID)
+		u.LibraryAccess, u.UploadEnabled, u.UploadQuotaBytes, u.Pending,
+		u.PermDownload, u.PermDelete, u.PermExplicit, u.PermSharedOutputs,
+		u.PermPodcasts, u.MaxTranscodeKbps, u.TagRules, time.Now().UnixNano(), u.ID)
 	if err != nil {
 		return err
 	}
@@ -184,7 +211,7 @@ func (d *DB) DeleteUser(ctx context.Context, id string, requireOtherAdmin bool) 
 	guard := ""
 	if requireOtherAdmin {
 		guard = ` AND EXISTS (SELECT 1 FROM users other WHERE other.id != users.id AND other.` +
-			`disabled = 0 AND (','||other.roles||',') LIKE '%,admin,%')`
+			`disabled = 0 AND other.pending = 0 AND (','||other.roles||',') LIKE '%,admin,%')`
 	}
 	res, err := d.w.ExecContext(ctx, `DELETE FROM users WHERE id = ?`+guard, id)
 	if err != nil {
@@ -220,6 +247,30 @@ func (d *DB) ListUsers(ctx context.Context, afterUsernameCI string, limit int) (
 	rows, err := d.r.QueryContext(ctx,
 		`SELECT `+userCols+` FROM users WHERE username_ci > ? ORDER BY username_ci LIMIT ?`,
 		afterUsernameCI, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// ListPendingUsers pages pending registrations oldest first, so the
+// approval queue drains in arrival order. The cursor is the previous
+// page's last (created_at_ns, id); zero values start at the head.
+func (d *DB) ListPendingUsers(ctx context.Context, afterCreatedNS int64, afterID string, limit int) ([]*User, error) {
+	rows, err := d.r.QueryContext(ctx,
+		`SELECT `+userCols+` FROM users
+		 WHERE pending = 1 AND (created_at_ns, id) > (?, ?)
+		 ORDER BY created_at_ns, id LIMIT ?`,
+		afterCreatedNS, afterID, limit)
 	if err != nil {
 		return nil, err
 	}

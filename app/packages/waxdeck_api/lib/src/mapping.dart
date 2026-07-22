@@ -1249,6 +1249,9 @@ ToolTask toolTaskFromGen(gen.ToolTask task) {
     resultPids: task.resultPids?.toList() ?? const [],
     createdAt: task.createdAt.toUtc(),
     finishedAt: task.finishedAt?.toUtc(),
+    summary: task.summary?.toMap().map<String, Object?>(
+      (key, value) => MapEntry(key, value?.value),
+    ),
   );
 }
 
@@ -1318,6 +1321,8 @@ UserAccount userAccountFromGen(gen.UserAccount account) {
     uploadQuotaBytes: account.uploadQuotaBytes,
     disabled: account.disabled,
     hasPassword: account.hasPassword ?? true,
+    pending: account.pending,
+    permissions: permissionsFromGen(account.permissions),
   );
 }
 
@@ -1360,5 +1365,245 @@ PlaybackSessionInfo playbackSessionFromGen(gen.PlaybackSession s) {
         .toList(growable: false),
     ended: s.ended ?? false,
     updatedAt: s.updatedAt.toUtc(),
+  );
+}
+
+TagRule tagRuleFromGen(gen.TagRule rule) =>
+    TagRule(key: rule.key, value: rule.value);
+
+gen.TagRule tagRuleToGen(TagRule rule) => gen.TagRule(
+  (b) => b
+    ..key = rule.key
+    ..value = rule.value,
+);
+
+Permissions permissionsFromGen(gen.Permissions p) {
+  return Permissions(
+    download: p.download,
+    delete: p.delete,
+    explicitContent: p.explicitContent,
+    sharedOutputs: p.sharedOutputs,
+    managePodcasts: p.managePodcasts,
+    maxTranscodeKbps: p.maxTranscodeKbps,
+    tagAllow: p.tagAllow?.map(tagRuleFromGen).toList() ?? const [],
+    tagDeny: p.tagDeny?.map(tagRuleFromGen).toList() ?? const [],
+  );
+}
+
+gen.Permissions permissionsToGen(Permissions p) {
+  return gen.Permissions(
+    (b) => b
+      ..download = p.download
+      ..delete = p.delete
+      ..explicitContent = p.explicitContent
+      ..sharedOutputs = p.sharedOutputs
+      ..managePodcasts = p.managePodcasts
+      ..maxTranscodeKbps = p.maxTranscodeKbps
+      ..tagAllow = p.tagAllow.isEmpty
+          ? null
+          : ListBuilder<gen.TagRule>(p.tagAllow.map(tagRuleToGen))
+      ..tagDeny = p.tagDeny.isEmpty
+          ? null
+          : ListBuilder<gen.TagRule>(p.tagDeny.map(tagRuleToGen)),
+  );
+}
+
+Invite inviteFromGen(gen.Invite invite) {
+  return Invite(
+    id: invite.id,
+    note: invite.note,
+    roles: invite.roles.map((r) => r.name).toList(),
+    libraryAccess: invite.libraryAccess == null
+        ? null
+        : libraryAccessFromGen(invite.libraryAccess!),
+    permissions: invite.permissions == null
+        ? null
+        : permissionsFromGen(invite.permissions!),
+    uploadEnabled: invite.uploadEnabled,
+    maxUses: invite.maxUses,
+    usedCount: invite.usedCount,
+    revoked: invite.revoked,
+    expiresAt: invite.expiresAt?.toUtc(),
+    createdAt: invite.createdAt.toUtc(),
+    createdBy: invite.createdBy,
+  );
+}
+
+InviteCreated inviteCreatedFromGen(gen.InviteCreated created) {
+  final invite = inviteFromGen(created);
+  return InviteCreated(
+    id: invite.id,
+    note: invite.note,
+    roles: invite.roles,
+    libraryAccess: invite.libraryAccess,
+    permissions: invite.permissions,
+    uploadEnabled: invite.uploadEnabled,
+    maxUses: invite.maxUses,
+    usedCount: invite.usedCount,
+    revoked: invite.revoked,
+    expiresAt: invite.expiresAt,
+    createdAt: invite.createdAt,
+    createdBy: invite.createdBy,
+    token: created.token,
+  );
+}
+
+AdminSettings adminSettingsFromGen(gen.AdminSettings settings) {
+  return AdminSettings(
+    signupEnabled: settings.signupEnabled,
+    readOnly: settings.readOnly,
+    backupKeepCount: settings.backupKeepCount,
+    backupKeepBytes: settings.backupKeepBytes,
+  );
+}
+
+gen.AdminSettings adminSettingsToGen(AdminSettings settings) {
+  return gen.AdminSettings(
+    (b) => b
+      ..signupEnabled = settings.signupEnabled
+      ..readOnly = settings.readOnly
+      ..backupKeepCount = settings.backupKeepCount
+      ..backupKeepBytes = settings.backupKeepBytes,
+  );
+}
+
+TranscodingLimits transcodingLimitsFromGen(gen.TranscodingLimits limits) {
+  return TranscodingLimits(
+    maxConcurrent: limits.maxConcurrent,
+    maxConcurrentPerUser: limits.maxConcurrentPerUser,
+    defaultMaxBitrateKbps: limits.defaultMaxBitrateKbps,
+  );
+}
+
+gen.TranscodingLimits transcodingLimitsToGen(TranscodingLimits limits) {
+  return gen.TranscodingLimits(
+    (b) => b
+      ..maxConcurrent = limits.maxConcurrent
+      ..maxConcurrentPerUser = limits.maxConcurrentPerUser
+      ..defaultMaxBitrateKbps = limits.defaultMaxBitrateKbps,
+  );
+}
+
+ScrobblingAdminConfig scrobblingAdminConfigFromGen(
+  gen.ScrobblingAdminConfig config,
+) {
+  return ScrobblingAdminConfig(
+    lastfmConfigured: config.lastfmConfigured,
+    lastfmSource: config.lastfmSource,
+    lastfmApiKey: config.lastfmApiKey,
+    lastfmSecretSet: config.lastfmSecretSet,
+  );
+}
+
+Schedule scheduleFromGen(gen.Schedule schedule) {
+  return Schedule(
+    kind: schedule.kind.name,
+    cron: schedule.cron,
+    enabled: schedule.enabled,
+    lastRunAt: schedule.lastRunAt?.toUtc(),
+    lastStatus: schedule.lastStatus,
+    lastError: schedule.lastError,
+    nextRunAt: schedule.nextRunAt?.toUtc(),
+  );
+}
+
+Backup backupFromGen(gen.Backup backup) {
+  return Backup(
+    id: backup.id,
+    state: backup.state,
+    trigger: backup.trigger,
+    fileName: backup.fileName,
+    sizeBytes: backup.sizeBytes,
+    error: backup.error,
+    createdAt: backup.createdAt.toUtc(),
+    finishedAt: backup.finishedAt?.toUtc(),
+  );
+}
+
+RestorePlan restorePlanFromGen(gen.RestorePlan plan) {
+  return RestorePlan(
+    backupId: plan.backupId,
+    stagedAt: plan.stagedAt.toUtc(),
+    keyfilePresent: plan.keyfilePresent,
+    keyfileMatches: plan.keyfileMatches,
+    sealedCasualties: plan.sealedCasualties
+        .map((c) => SealedCasualty(kind: c.kind, name: c.name))
+        .toList(),
+    warnings: plan.warnings.toList(),
+  );
+}
+
+Job jobFromGen(gen.Job job) {
+  return Job(
+    pid: job.pid,
+    kind: job.kind,
+    state: job.state,
+    progress: job.progress,
+    message: job.message,
+    error: job.error,
+  );
+}
+
+AuditEvent auditEventFromGen(gen.AuditEvent event) {
+  return AuditEvent(
+    id: event.id,
+    actorId: event.actorId,
+    actorName: event.actorName,
+    action: event.action,
+    targetKind: event.targetKind,
+    targetPid: event.targetPid,
+    targetName: event.targetName,
+    detail:
+        event.detail?.toMap().map<String, Object?>(
+          (key, value) => MapEntry(key, value?.value),
+        ) ??
+        const {},
+    createdAt: event.createdAt.toUtc(),
+  );
+}
+
+AuditEventPage auditEventPageFromGen(gen.AuditEventPage page) {
+  return AuditEventPage(
+    events: page.events.map(auditEventFromGen).toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
+TrashEntry trashEntryFromGen(gen.TrashEntry entry) {
+  return TrashEntry(
+    id: entry.id,
+    itemPid: entry.itemPid,
+    name: entry.name,
+    reason: entry.reason,
+    sizeBytes: entry.sizeBytes,
+    trashedAt: entry.trashedAt.toUtc(),
+    restoredAt: entry.restoredAt?.toUtc(),
+  );
+}
+
+DeleteItemsResult deleteItemsResultFromGen(gen.DeleteItemsResult result) {
+  return DeleteItemsResult(
+    applied: result.applied,
+    mode: result.mode,
+    entries: result.entries
+        .map(
+          (e) => DeletePlanEntry(
+            pid: e.pid,
+            name: e.name,
+            files: e.files,
+            bytes: e.bytes,
+          ),
+        )
+        .toList(),
+  );
+}
+
+gen.MigrationOptions migrationOptionsToGen(MigrationOptions options) {
+  return gen.MigrationOptions(
+    (b) => b
+      ..stars = options.stars
+      ..ratings = options.ratings
+      ..history = options.history
+      ..progress = options.progress,
   );
 }

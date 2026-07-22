@@ -126,6 +126,9 @@ func (l *Library) Subscribe(ctx context.Context, uc *UserCtx, req SubscribeReque
 }
 
 func (l *Library) subscribe(ctx context.Context, uc *UserCtx, req SubscribeRequest, meta subChangeMeta) (Subscription, bool, error) {
+	if err := requirePodcastManagement(uc); err != nil {
+		return Subscription{}, false, err
+	}
 	rawURL := strings.TrimSpace(req.URL)
 	if rawURL == "" {
 		return Subscription{}, false, errInvalid("url is required")
@@ -148,6 +151,10 @@ func (l *Library) subscribe(ctx context.Context, uc *UserCtx, req SubscribeReque
 	pod, err := l.lib.Podcasts().AddSource(ctx, rawURL, sourceType, opts)
 	if err != nil {
 		return Subscription{}, false, l.classifyFeedErr(ctx, err, rawURL, req.Password != "" || req.Username != "")
+	}
+	if pod.Explicit && !uc.Explicit {
+		return Subscription{}, false, &Error{Kind: KindForbidden,
+			Msg: "this account cannot subscribe to explicit shows"}
 	}
 	show := string(pod.PID)
 
@@ -196,6 +203,9 @@ func (l *Library) subscribe(ctx context.Context, uc *UserCtx, req SubscribeReque
 // remain their retention owns the files and the flag is ignored.
 // Unsubscribing from an unfollowed show is a no-op.
 func (l *Library) Unsubscribe(ctx context.Context, uc *UserCtx, apiShowPID string, removeDownloads bool) error {
+	if err := requirePodcastManagement(uc); err != nil {
+		return err
+	}
 	return l.unsubscribe(ctx, uc, apiShowPID, removeDownloads, subChangeMeta{})
 }
 
@@ -378,6 +388,9 @@ func (l *Library) PodcastDetailFor(ctx context.Context, uc *UserCtx, apiShowPID 
 	if !l.podcastsVisible(ctx, uc) {
 		return PodcastDetail{}, errNotFound("no show with pid " + apiShowPID)
 	}
+	if pod.Explicit && !uc.Explicit {
+		return PodcastDetail{}, errNotFound("no show with pid " + apiShowPID)
+	}
 	show, err := l.showDTO(ctx, pod, true)
 	if err != nil {
 		return PodcastDetail{}, err
@@ -455,12 +468,18 @@ func (l *Library) Episodes(ctx context.Context, uc *UserCtx, apiShowPID, cursor 
 	if !l.podcastsVisible(ctx, uc) {
 		return nil, "", errNotFound("no show with pid " + apiShowPID)
 	}
+	if pod.Explicit && !uc.Explicit {
+		return nil, "", errNotFound("no show with pid " + apiShowPID)
+	}
 	eps, err := l.lib.Podcasts().Episodes(ctx, pod.PID, 0)
 	if err != nil {
 		return nil, "", classify(err)
 	}
 	rows := make([]EpisodeSummary, 0, len(eps))
 	for _, ep := range eps {
+		if ep.Explicit && !uc.Explicit {
+			continue
+		}
 		rows = append(rows, l.episodeSummary(ctx, ep))
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -503,6 +522,9 @@ func (l *Library) EpisodeDetailFor(ctx context.Context, uc *UserCtx, apiEpisodeP
 	if !l.podcastsVisible(ctx, uc) {
 		return EpisodeDetail{}, errNotFound("no episode with pid " + apiEpisodePID)
 	}
+	if det.Episode.Explicit && !uc.Explicit {
+		return EpisodeDetail{}, errNotFound("no episode with pid " + apiEpisodePID)
+	}
 	out := EpisodeDetail{
 		EpisodeSummary:  l.episodeSummary(ctx, det.Episode),
 		DescriptionHTML: sanitizeShowNotes(det.Episode.Description),
@@ -520,6 +542,9 @@ func (l *Library) EpisodeDetailFor(ctx context.Context, uc *UserCtx, apiEpisodeP
 // reports new episodes. Refreshes within a minute of the last sync
 // answer from it.
 func (l *Library) RefreshPodcast(ctx context.Context, uc *UserCtx, apiShowPID string) (int, error) {
+	if err := requirePodcastManagement(uc); err != nil {
+		return 0, err
+	}
 	pod, err := l.getShow(ctx, apiShowPID)
 	if err != nil {
 		return 0, err
@@ -544,6 +569,16 @@ func (l *Library) RefreshPodcast(ctx context.Context, uc *UserCtx, apiShowPID st
 // caller must be subscribed to the show; an already-present episode is
 // a no-op.
 func (l *Library) QueueEpisodeFetch(ctx context.Context, uc *UserCtx, apiEpisodePID string) error {
+	if err := requirePodcastManagement(uc); err != nil {
+		return err
+	}
+	if l.podcastDir != "" {
+		if pid, err := l.libraryForPath(ctx, l.podcastDir); err == nil {
+			if err := l.CheckWritable(ctx, pid); err != nil {
+				return err
+			}
+		}
+	}
 	det, err := l.getEpisode(ctx, apiEpisodePID)
 	if err != nil {
 		return err
@@ -577,6 +612,9 @@ func (l *Library) QueueEpisodeFetch(ctx context.Context, uc *UserCtx, apiEpisode
 // reads as actively played refuses with conflict rather than killing
 // the listener's stream.
 func (l *Library) RemoveEpisodeDownload(ctx context.Context, uc *UserCtx, apiEpisodePID string) error {
+	if err := requirePodcastManagement(uc); err != nil {
+		return err
+	}
 	det, err := l.getEpisode(ctx, apiEpisodePID)
 	if err != nil {
 		return err

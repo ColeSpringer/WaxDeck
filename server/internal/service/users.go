@@ -39,6 +39,11 @@ type AccountCreate struct {
 	// (0 means no per-user cap).
 	UploadEnabled    bool
 	UploadQuotaBytes int64
+	// Permissions is the granular toggle set; nil applies the defaults.
+	Permissions *Permissions
+	// Pending lands the account as a signup request awaiting approval
+	// (the self-serve path); admin-created accounts are never pending.
+	Pending bool
 }
 
 // AccountUpdate is a partial account update; nil fields are unchanged.
@@ -52,6 +57,8 @@ type AccountUpdate struct {
 	// the cap (0 removes it).
 	UploadEnabled    *bool
 	UploadQuotaBytes *int64
+	// Permissions replaces the whole granular toggle set.
+	Permissions *Permissions
 }
 
 // validRoles is the role vocabulary.
@@ -144,9 +151,20 @@ func (l *Library) createAccount(ctx context.Context, in AccountCreate, onlyIfNoA
 		LibraryAccess: mode,
 		WaxbinUserPID: string(catalogUser.PID),
 		UploadEnabled: in.UploadEnabled,
+		Pending:       in.Pending,
 	}
 	if in.UploadQuotaBytes > 0 {
 		u.UploadQuotaBytes = in.UploadQuotaBytes
+	}
+	perms := DefaultPermissions()
+	if in.Permissions != nil {
+		perms = *in.Permissions
+	}
+	if err := validatePermissions(perms); err != nil {
+		return nil, err
+	}
+	if err := applyPermissions(u, perms); err != nil {
+		return nil, err
 	}
 	if err := l.db.CreateUser(ctx, u, onlyIfNoAdmin); err != nil {
 		if errors.Is(err, wdb.ErrConflict) {
@@ -242,6 +260,21 @@ func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdat
 		}
 		u.UploadQuotaBytes = *upd.UploadQuotaBytes
 	}
+	if upd.Permissions != nil {
+		if err := validatePermissions(*upd.Permissions); err != nil {
+			return nil, err
+		}
+		prior := permissionsOf(u)
+		if err := applyPermissions(u, *upd.Permissions); err != nil {
+			return nil, err
+		}
+		// Content rules scope what a mirror may hold, exactly like
+		// library grants: retiring outstanding cursors makes the next
+		// delta answer sync-reset and the re-snapshot reflect the rules.
+		if contentRulesChanged(prior, *upd.Permissions) {
+			visibilityChanged = true
+		}
+	}
 	if upd.AccessMode != nil {
 		mode, grants, err := normalizeAccess(*upd.AccessMode, upd.LibraryPIDs)
 		if err != nil {
@@ -332,7 +365,7 @@ func (l *Library) VerifyLocalLogin(ctx context.Context, username, password strin
 		}
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
-	if u.PasswordHash == "" || u.Disabled {
+	if u.PasswordHash == "" || u.Disabled || u.Pending {
 		auth.VerifyPassword(dummyHash, password)
 		return nil, nil
 	}
@@ -381,6 +414,9 @@ func (l *Library) ResolveOidcAccount(ctx context.Context, ident OidcIdentity) (*
 		}
 		if u.Disabled {
 			return nil, &Error{Kind: KindConflict, Msg: "this account is disabled"}
+		}
+		if u.Pending {
+			return nil, &Error{Kind: KindConflict, Msg: "this account is waiting for approval"}
 		}
 		if ident.Roles != nil && !sameRoles(u.Roles, ident.Roles) {
 			// The IdP's mapping applies on every login, but never demotes

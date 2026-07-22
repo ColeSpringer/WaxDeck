@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../admin/audit_screen.dart';
+import '../admin/backups_screen.dart';
+import '../admin/migrate_screen.dart';
+import '../admin/trash_screen.dart';
+import '../admin/users_screen.dart';
 import '../auth/auth_controller.dart';
 import '../books/book_screen.dart';
 import '../health/health_screen.dart';
@@ -26,7 +31,12 @@ enum _CurationDestination {
   uploads('curation-uploads', 'Uploads', adminOnly: false),
   health('curation-health', 'Health', adminOnly: true),
   organize('curation-organize', 'Organize', adminOnly: true),
-  tasks('curation-tasks', 'Tasks', adminOnly: true);
+  tasks('curation-tasks', 'Tasks', adminOnly: true),
+  users('curation-users', 'Users', adminOnly: true),
+  audit('curation-audit', 'Audit log', adminOnly: true),
+  backups('curation-backups', 'Backups', adminOnly: true),
+  trash('curation-trash', 'Trash', adminOnly: true),
+  migrate('curation-migrate', 'Import from another server', adminOnly: true);
 
   const _CurationDestination(this.id, this.label, {required this.adminOnly});
 
@@ -40,6 +50,11 @@ enum _CurationDestination {
     health => const HealthScreen(),
     organize => const OrganizeScreen(),
     tasks => const TasksScreen(),
+    users => const UsersScreen(),
+    audit => const AuditScreen(),
+    backups => const BackupsScreen(),
+    trash => const TrashScreen(),
+    migrate => const MigrateScreen(),
   };
 }
 

@@ -760,6 +760,7 @@ abstract interface class WaxDeckRepository {
     LibraryAccess? libraryAccess,
     bool? uploadEnabled,
     int? uploadQuotaBytes,
+    Permissions? permissions,
   });
 
   /// `PATCH /users/{userId}`: partial account update (administrators).
@@ -772,6 +773,198 @@ abstract interface class WaxDeckRepository {
     LibraryAccess? libraryAccess,
     bool? uploadEnabled,
     int? uploadQuotaBytes,
+    Permissions? permissions,
+  });
+
+  /// `GET /users/{userId}`: one account (administrators).
+  Future<UserAccount> getUser(String userId);
+
+  /// `DELETE /users/{userId}`: deletes an account (administrators).
+  Future<void> deleteUser(String userId);
+
+  /// `PUT /users/{userId}/password`: administrator password reset;
+  /// no current password required.
+  Future<void> setUserPassword(String userId, String newPassword);
+
+  /// `DELETE /users/{userId}/sessions`: revokes every live session of
+  /// one account (administrators).
+  Future<void> revokeUserSessions(String userId);
+
+  /// `POST /auth/signup`: requests an account. Anonymous; the result
+  /// says whether the account is active now (invite or open signup
+  /// with auto-approval) or pending administrator approval.
+  Future<SignupResult> signup({
+    required String username,
+    required String password,
+    String? displayName,
+    String? inviteToken,
+  });
+
+  /// `GET /users/requests`: pending signup requests, oldest first
+  /// (administrators).
+  Future<UserPage> listSignupRequests({String? cursor, int? limit});
+
+  /// `POST /users/requests/{userId}/approve`: activates a pending
+  /// signup, optionally overriding roles, access, and permissions
+  /// (administrators).
+  Future<UserAccount> approveSignupRequest(
+    String userId, {
+    List<String>? roles,
+    LibraryAccess? libraryAccess,
+    Permissions? permissions,
+    bool? uploadEnabled,
+    int? uploadQuotaBytes,
+  });
+
+  /// `POST /users/requests/{userId}/reject`: rejects and removes a
+  /// pending signup (administrators).
+  Future<void> rejectSignupRequest(String userId);
+
+  /// `GET /invites`: every invite, revoked and expired included
+  /// (administrators).
+  Future<List<Invite>> listInvites();
+
+  /// `POST /invites`: mints an invite; the returned token is visible
+  /// exactly once (administrators).
+  Future<InviteCreated> createInvite({
+    String? note,
+    List<String>? roles,
+    LibraryAccess? libraryAccess,
+    Permissions? permissions,
+    bool? uploadEnabled,
+    int? maxUses,
+    DateTime? expiresAt,
+  });
+
+  /// `DELETE /invites/{inviteId}`: revokes an invite (administrators).
+  Future<void> revokeInvite(String inviteId);
+
+  /// `GET /admin/audit`: keyset-paginated audit events, newest first.
+  /// [action] filters by action prefix (administrators).
+  Future<AuditEventPage> listAuditEvents({
+    String? cursor,
+    int? limit,
+    String? action,
+    String? actorId,
+    String? targetPid,
+  });
+
+  /// `GET /admin/settings`: the server-wide switches (administrators).
+  Future<AdminSettings> getAdminSettings();
+
+  /// `PUT /admin/settings`: replaces the server-wide switches
+  /// (administrators).
+  Future<AdminSettings> putAdminSettings(AdminSettings settings);
+
+  /// `GET /admin/transcoding`: the transcoding limits (administrators).
+  Future<TranscodingLimits> getTranscodingLimits();
+
+  /// `PUT /admin/transcoding`: replaces the transcoding limits
+  /// (administrators).
+  Future<TranscodingLimits> putTranscodingLimits(TranscodingLimits limits);
+
+  /// `GET /admin/scrobbling`: whether the server holds Last.fm API
+  /// credentials and where they came from; the shared secret is never
+  /// read back (administrators).
+  Future<ScrobblingAdminConfig> getScrobblingConfig();
+
+  /// `PUT /admin/scrobbling`: stores a Last.fm API credential pair.
+  /// Both values empty clears the stored pair, falling back to
+  /// environment credentials when the server has them; a half-set pair
+  /// fails with `invalid-request` (administrators).
+  Future<ScrobblingAdminConfig> putScrobblingConfig({
+    required String apiKey,
+    required String secret,
+  });
+
+  /// `GET /admin/schedules`: the three maintenance schedules
+  /// (administrators).
+  Future<List<Schedule>> listSchedules();
+
+  /// `PUT /admin/schedules/{kind}`: replaces one schedule's cron and
+  /// enablement; [kind] is `scan`, `backup`, or `prune`
+  /// (administrators).
+  Future<Schedule> putSchedule(
+    String kind, {
+    required String cron,
+    required bool enabled,
+  });
+
+  /// `GET /admin/backups`: every backup archive, newest first
+  /// (administrators).
+  Future<List<Backup>> listBackups();
+
+  /// `POST /admin/backups`: starts a backup now (administrators).
+  Future<Backup> createBackup();
+
+  /// `GET /admin/backups/{backupId}`: one archive's state
+  /// (administrators).
+  Future<Backup> getBackup(String backupId);
+
+  /// `DELETE /admin/backups/{backupId}`: deletes an archive
+  /// (administrators).
+  Future<void> deleteBackup(String backupId);
+
+  /// URL of `GET /admin/backups/{backupId}/archive`, for opening in a
+  /// browser or handing to a download manager; the bytes are never
+  /// pulled through this client.
+  String backupArchiveUrl(String backupId);
+
+  /// `POST /admin/backups/{backupId}/restore`: stages the archive for
+  /// restore at the next server restart, returning the plan
+  /// (administrators).
+  Future<RestorePlan> stageRestore(String backupId);
+
+  /// `GET /admin/backups/restore`: the currently staged restore, or
+  /// null when none is staged (administrators).
+  Future<RestorePlan?> getStagedRestore();
+
+  /// `DELETE /admin/backups/restore`: unstages the pending restore
+  /// (administrators).
+  Future<void> cancelStagedRestore();
+
+  /// `POST /admin/migrations`: starts a server-side import from
+  /// another server as a background task; [source] is
+  /// `navidrome`, `subsonic`, or `audiobookshelf` (administrators).
+  Future<ToolTask> createMigration({
+    required String source,
+    required String serverUrl,
+    String? username,
+    String? password,
+    String? token,
+    MigrationOptions? options,
+    bool dryRun = false,
+  });
+
+  /// `GET /admin/trash`: the server-side trash (administrators).
+  Future<TrashList> listTrash({bool includeRestored = false, int? limit});
+
+  /// `POST /admin/trash/{trashId}/restore`: puts one trashed file back
+  /// (administrators).
+  Future<void> restoreTrashEntry(String trashId);
+
+  /// `POST /admin/trash/empty`: purges the trash for good
+  /// (administrators).
+  Future<TrashEmptyResult> emptyTrash();
+
+  /// `GET /jobs`: currently known background jobs (administrators).
+  Future<List<Job>> listJobs();
+
+  /// `GET /libraries/{pid}/read-only`: whether one library refuses
+  /// content mutations (administrators).
+  Future<bool> getLibraryReadOnly(String libraryPid);
+
+  /// `PUT /libraries/{pid}/read-only`: sets one library's read-only
+  /// flag, returning the stored value (administrators).
+  Future<bool> setLibraryReadOnly(String libraryPid, bool readOnly);
+
+  /// `POST /library/items/delete`: deletes library items' files to
+  /// the trash (or permanently). With [dryRun] nothing is touched and
+  /// the result is the plan.
+  Future<DeleteItemsResult> deleteLibraryItems({
+    required List<String> pids,
+    String? mode,
+    bool dryRun = false,
   });
 }
 
@@ -874,7 +1067,10 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<BootstrapStatus> bootstrapStatus() => _guard(() async {
     final body = _require((await _gen.getAuthApi().getBootstrapStatus()).data);
-    return BootstrapStatus(required: body.required_);
+    return BootstrapStatus(
+      required: body.required_,
+      signupEnabled: body.signupEnabled ?? false,
+    );
   });
 
   @override
@@ -2378,6 +2574,7 @@ class WaxDeckClient implements WaxDeckRepository {
     LibraryAccess? libraryAccess,
     bool? uploadEnabled,
     int? uploadQuotaBytes,
+    Permissions? permissions,
   }) => _guard(() async {
     final response = await _gen.getUsersApi().createUser(
       userCreate: gen.UserCreate(
@@ -2390,7 +2587,10 @@ class WaxDeckClient implements WaxDeckRepository {
               ? null
               : libraryAccessToGen(libraryAccess).toBuilder()
           ..uploadEnabled = uploadEnabled
-          ..uploadQuotaBytes = uploadQuotaBytes,
+          ..uploadQuotaBytes = uploadQuotaBytes
+          ..permissions = permissions == null
+              ? null
+              : permissionsToGen(permissions).toBuilder(),
       ),
     );
     return userAccountFromGen(_require(response.data));
@@ -2405,6 +2605,7 @@ class WaxDeckClient implements WaxDeckRepository {
     LibraryAccess? libraryAccess,
     bool? uploadEnabled,
     int? uploadQuotaBytes,
+    Permissions? permissions,
   }) => _guard(() async {
     final response = await _gen.getUsersApi().updateUser(
       userId: userId,
@@ -2417,10 +2618,387 @@ class WaxDeckClient implements WaxDeckRepository {
               ? null
               : libraryAccessToGen(libraryAccess).toBuilder()
           ..uploadEnabled = uploadEnabled
+          ..uploadQuotaBytes = uploadQuotaBytes
+          ..permissions = permissions == null
+              ? null
+              : permissionsToGen(permissions).toBuilder(),
+      ),
+    );
+    return userAccountFromGen(_require(response.data));
+  });
+
+  @override
+  Future<UserAccount> getUser(String userId) => _guard(() async {
+    final response = await _gen.getUsersApi().getUser(userId: userId);
+    return userAccountFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> deleteUser(String userId) => _guard(() async {
+    await _gen.getUsersApi().deleteUser(userId: userId);
+  });
+
+  @override
+  Future<void> setUserPassword(String userId, String newPassword) => _guard(
+    () async {
+      await _gen.getUsersApi().setPassword(
+        userId: userId,
+        passwordChange: gen.PasswordChange((b) => b..newPassword = newPassword),
+      );
+    },
+  );
+
+  @override
+  Future<void> revokeUserSessions(String userId) => _guard(() async {
+    await _gen.getUsersApi().revokeUserSessions(userId: userId);
+  });
+
+  @override
+  Future<SignupResult> signup({
+    required String username,
+    required String password,
+    String? displayName,
+    String? inviteToken,
+  }) => _guard(() async {
+    final response = await _gen.getAuthApi().signup(
+      signupRequest: gen.SignupRequest(
+        (b) => b
+          ..username = username
+          ..password = password
+          ..displayName = displayName
+          ..inviteToken = inviteToken,
+      ),
+    );
+    return SignupResult(state: _require(response.data).state.name);
+  });
+
+  @override
+  Future<UserPage> listSignupRequests({String? cursor, int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getUsersApi().listSignupRequests(
+          cursor: cursor,
+          limit: limit,
+        );
+        return userPageFromGen(_require(response.data));
+      });
+
+  @override
+  Future<UserAccount> approveSignupRequest(
+    String userId, {
+    List<String>? roles,
+    LibraryAccess? libraryAccess,
+    Permissions? permissions,
+    bool? uploadEnabled,
+    int? uploadQuotaBytes,
+  }) => _guard(() async {
+    final response = await _gen.getUsersApi().approveSignupRequest(
+      userId: userId,
+      signupApproval: gen.SignupApproval(
+        (b) => b
+          ..roles = rolesToGen(roles)
+          ..libraryAccess = libraryAccess == null
+              ? null
+              : libraryAccessToGen(libraryAccess).toBuilder()
+          ..permissions = permissions == null
+              ? null
+              : permissionsToGen(permissions).toBuilder()
+          ..uploadEnabled = uploadEnabled
           ..uploadQuotaBytes = uploadQuotaBytes,
       ),
     );
     return userAccountFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> rejectSignupRequest(String userId) => _guard(() async {
+    await _gen.getUsersApi().rejectSignupRequest(userId: userId);
+  });
+
+  @override
+  Future<List<Invite>> listInvites() => _guard(() async {
+    final response = await _gen.getUsersApi().listInvites();
+    return _require(
+      response.data,
+    ).invites.map(inviteFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<InviteCreated> createInvite({
+    String? note,
+    List<String>? roles,
+    LibraryAccess? libraryAccess,
+    Permissions? permissions,
+    bool? uploadEnabled,
+    int? maxUses,
+    DateTime? expiresAt,
+  }) => _guard(() async {
+    final response = await _gen.getUsersApi().createInvite(
+      inviteCreate: gen.InviteCreate(
+        (b) => b
+          ..note = note
+          ..roles = rolesToGen(roles)
+          ..libraryAccess = libraryAccess == null
+              ? null
+              : libraryAccessToGen(libraryAccess).toBuilder()
+          ..permissions = permissions == null
+              ? null
+              : permissionsToGen(permissions).toBuilder()
+          ..uploadEnabled = uploadEnabled
+          ..maxUses = maxUses
+          ..expiresAt = expiresAt?.toUtc(),
+      ),
+    );
+    return inviteCreatedFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> revokeInvite(String inviteId) => _guard(() async {
+    await _gen.getUsersApi().revokeInvite(inviteId: inviteId);
+  });
+
+  @override
+  Future<AuditEventPage> listAuditEvents({
+    String? cursor,
+    int? limit,
+    String? action,
+    String? actorId,
+    String? targetPid,
+  }) => _guard(() async {
+    final response = await _gen.getAdminApi().listAuditEvents(
+      cursor: cursor,
+      limit: limit,
+      action: action,
+      actorId: actorId,
+      targetPid: targetPid,
+    );
+    return auditEventPageFromGen(_require(response.data));
+  });
+
+  @override
+  Future<AdminSettings> getAdminSettings() => _guard(() async {
+    final response = await _gen.getAdminApi().getAdminSettings();
+    return adminSettingsFromGen(_require(response.data));
+  });
+
+  @override
+  Future<AdminSettings> putAdminSettings(AdminSettings settings) =>
+      _guard(() async {
+        final response = await _gen.getAdminApi().putAdminSettings(
+          adminSettings: adminSettingsToGen(settings),
+        );
+        return adminSettingsFromGen(_require(response.data));
+      });
+
+  @override
+  Future<TranscodingLimits> getTranscodingLimits() => _guard(() async {
+    final response = await _gen.getAdminApi().getTranscodingLimits();
+    return transcodingLimitsFromGen(_require(response.data));
+  });
+
+  @override
+  Future<TranscodingLimits> putTranscodingLimits(TranscodingLimits limits) =>
+      _guard(() async {
+        final response = await _gen.getAdminApi().putTranscodingLimits(
+          transcodingLimits: transcodingLimitsToGen(limits),
+        );
+        return transcodingLimitsFromGen(_require(response.data));
+      });
+
+  @override
+  Future<ScrobblingAdminConfig> getScrobblingConfig() => _guard(() async {
+    final response = await _gen.getAdminApi().getScrobblingConfig();
+    return scrobblingAdminConfigFromGen(_require(response.data));
+  });
+
+  @override
+  Future<ScrobblingAdminConfig> putScrobblingConfig({
+    required String apiKey,
+    required String secret,
+  }) => _guard(() async {
+    final response = await _gen.getAdminApi().putScrobblingConfig(
+      scrobblingAdminConfigPut: gen.ScrobblingAdminConfigPut(
+        (b) => b
+          ..lastfmApiKey = apiKey
+          ..lastfmSecret = secret,
+      ),
+    );
+    return scrobblingAdminConfigFromGen(_require(response.data));
+  });
+
+  @override
+  Future<List<Schedule>> listSchedules() => _guard(() async {
+    final response = await _gen.getAdminApi().listSchedules();
+    return _require(
+      response.data,
+    ).schedules.map(scheduleFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<Schedule> putSchedule(
+    String kind, {
+    required String cron,
+    required bool enabled,
+  }) => _guard(() async {
+    final response = await _gen.getAdminApi().putSchedule(
+      kind: gen.ScheduleKind.valueOf(kind),
+      schedulePut: gen.SchedulePut(
+        (b) => b
+          ..cron = cron
+          ..enabled = enabled,
+      ),
+    );
+    return scheduleFromGen(_require(response.data));
+  });
+
+  @override
+  Future<List<Backup>> listBackups() => _guard(() async {
+    final response = await _gen.getAdminApi().listBackups();
+    return _require(
+      response.data,
+    ).backups.map(backupFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<Backup> createBackup() => _guard(() async {
+    final response = await _gen.getAdminApi().createBackup();
+    return backupFromGen(_require(response.data));
+  });
+
+  @override
+  Future<Backup> getBackup(String backupId) => _guard(() async {
+    final response = await _gen.getAdminApi().getBackup(backupId: backupId);
+    return backupFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> deleteBackup(String backupId) => _guard(() async {
+    await _gen.getAdminApi().deleteBackup(backupId: backupId);
+  });
+
+  @override
+  String backupArchiveUrl(String backupId) =>
+      '$_baseUrl/api/v1/admin/backups/$backupId/archive';
+
+  @override
+  Future<RestorePlan> stageRestore(String backupId) => _guard(() async {
+    final response = await _gen.getAdminApi().stageRestore(backupId: backupId);
+    return restorePlanFromGen(_require(response.data));
+  });
+
+  @override
+  Future<RestorePlan?> getStagedRestore() => _guard(() async {
+    try {
+      final response = await _gen.getAdminApi().getStagedRestore();
+      return restorePlanFromGen(_require(response.data));
+    } on DioException catch (e) {
+      // No staged restore is a state, not an error, for callers.
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  });
+
+  @override
+  Future<void> cancelStagedRestore() => _guard(() async {
+    await _gen.getAdminApi().cancelStagedRestore();
+  });
+
+  @override
+  Future<ToolTask> createMigration({
+    required String source,
+    required String serverUrl,
+    String? username,
+    String? password,
+    String? token,
+    MigrationOptions? options,
+    bool dryRun = false,
+  }) => _guard(() async {
+    final response = await _gen.getAdminApi().createMigration(
+      migrationCreate: gen.MigrationCreate(
+        (b) => b
+          ..source_ = source
+          ..serverUrl = serverUrl
+          ..username = username
+          ..password = password
+          ..token = token
+          ..options = options == null
+              ? null
+              : migrationOptionsToGen(options).toBuilder()
+          ..dryRun = dryRun,
+      ),
+    );
+    return toolTaskFromGen(_require(response.data));
+  });
+
+  @override
+  Future<TrashList> listTrash({bool includeRestored = false, int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getAdminApi().listTrash(
+          includeRestored: includeRestored,
+          limit: limit,
+        );
+        return TrashList(
+          entries: _require(
+            response.data,
+          ).entries.map(trashEntryFromGen).toList(growable: false),
+        );
+      });
+
+  @override
+  Future<void> restoreTrashEntry(String trashId) => _guard(() async {
+    await _gen.getAdminApi().restoreTrashEntry(trashId: trashId);
+  });
+
+  @override
+  Future<TrashEmptyResult> emptyTrash() => _guard(() async {
+    final body = _require((await _gen.getAdminApi().emptyTrash()).data);
+    return TrashEmptyResult(
+      purged: body.purged,
+      errored: body.errored,
+      reclaimedBytes: body.reclaimedBytes,
+    );
+  });
+
+  @override
+  Future<List<Job>> listJobs() => _guard(() async {
+    final response = await _gen.getAdminApi().listJobs();
+    return _require(response.data).jobs.map(jobFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<bool> getLibraryReadOnly(String libraryPid) => _guard(() async {
+    final response = await _gen.getAdminApi().getLibraryReadOnly(
+      pid: libraryPid,
+    );
+    return _require(response.data).readOnly;
+  });
+
+  @override
+  Future<bool> setLibraryReadOnly(String libraryPid, bool readOnly) =>
+      _guard(() async {
+        final response = await _gen.getAdminApi().setLibraryReadOnly(
+          pid: libraryPid,
+          libraryReadOnly: gen.LibraryReadOnly((b) => b..readOnly = readOnly),
+        );
+        return _require(response.data).readOnly;
+      });
+
+  @override
+  Future<DeleteItemsResult> deleteLibraryItems({
+    required List<String> pids,
+    String? mode,
+    bool dryRun = false,
+  }) => _guard(() async {
+    final response = await _gen.getLibraryApi().deleteLibraryItems(
+      deleteItemsRequest: gen.DeleteItemsRequest(
+        (b) => b
+          ..pids = ListBuilder<String>(pids)
+          ..mode = mode == null
+              ? null
+              : gen.DeleteItemsRequestModeEnum.valueOf(mode)
+          ..dryRun = dryRun,
+      ),
+    );
+    return deleteItemsResultFromGen(_require(response.data));
   });
 
   /// Runs [body], mapping transport failures to the structured error model.

@@ -95,8 +95,12 @@ type Config struct {
 	// InvalidatePlayer fans a player-topic invalidation out to every
 	// connected client (lifecycle changes only).
 	InvalidatePlayer func()
-	Logger           logger
-	Now              func() time.Time
+	// SharedOutputsAllowed gates control of shared device endpoints
+	// (cast targets, DLNA renderers, the jukebox) per user; nil allows
+	// everyone. A caller's own client endpoints are never gated.
+	SharedOutputsAllowed func(userID string) bool
+	Logger               logger
+	Now                  func() time.Time
 }
 
 type logger interface {
@@ -241,6 +245,14 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
+// sharedAllowed consults the shared-outputs permission gate.
+func (s *Service) sharedAllowed(userID string) bool {
+	if s.cfg.SharedOutputsAllowed == nil {
+		return true
+	}
+	return s.cfg.SharedOutputsAllowed(userID)
+}
+
 func newSessionID() string {
 	return "ps-" + ulid.MustNew(ulid.Timestamp(time.Now()), rand.Reader).String()
 }
@@ -351,6 +363,9 @@ func (s *Service) CreateSession(ctx context.Context, userID, userName, endpointI
 	ep, ok := s.reg.Lookup(userID, endpointID)
 	if !ok {
 		return Session{}, ErrNotFound
+	}
+	if ep.Shared && !s.sharedAllowed(userID) {
+		return Session{}, ErrForbidden
 	}
 	entries, err := s.cfg.Resolver.Entries(ctx, userID, pids)
 	if err != nil {
@@ -678,6 +693,10 @@ func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpoin
 	if userID != sess.ownerID && !target.Shared {
 		// Moving someone else's queue onto a private endpoint would
 		// take it out of their sight.
+		s.mu.Unlock()
+		return Session{}, ErrForbidden
+	}
+	if target.Shared && !s.sharedAllowed(userID) {
 		s.mu.Unlock()
 		return Session{}, ErrForbidden
 	}

@@ -107,11 +107,15 @@ class SessionState {
 
 /// Whether the server is waiting for its first administrator account.
 class BootstrapStatus {
-  const BootstrapStatus({required this.required});
+  const BootstrapStatus({required this.required, this.signupEnabled = false});
 
   /// True while the server has no accounts; clients route to the setup
   /// screen instead of the login screen while this holds.
   final bool required;
+
+  /// Whether open self-signup is switched on; invite-token signups work
+  /// regardless.
+  final bool signupEnabled;
 }
 
 /// How a session authenticates: web sessions with the cookie, device
@@ -2263,6 +2267,7 @@ class ToolTask {
     this.resultPids = const [],
     required this.createdAt,
     this.finishedAt,
+    this.summary,
   });
 
   final String id;
@@ -2280,6 +2285,10 @@ class ToolTask {
   final List<String> resultPids;
   final DateTime createdAt;
   final DateTime? finishedAt;
+
+  /// Task-type-specific outcome counters (a migration's matched and
+  /// unmatched counts, for example), once finished.
+  final Map<String, Object?>? summary;
 }
 
 /// One keyset-paginated page of tool tasks.
@@ -2378,6 +2387,8 @@ class UserAccount extends WaxDeckUser {
     this.uploadQuotaBytes,
     this.disabled = false,
     this.hasPassword = true,
+    this.pending = false,
+    this.permissions = const Permissions(),
   });
 
   final DateTime createdAt;
@@ -2392,6 +2403,12 @@ class UserAccount extends WaxDeckUser {
   final int? uploadQuotaBytes;
   final bool disabled;
   final bool hasPassword;
+
+  /// True while the account is a signup request awaiting approval.
+  final bool pending;
+
+  /// What the account is allowed to do beyond its roles.
+  final Permissions permissions;
 }
 
 /// One keyset-paginated page of accounts.
@@ -2402,4 +2419,450 @@ class UserPage {
   final String? nextCursor;
 
   bool get hasMore => nextCursor != null;
+}
+
+/// One content tag pattern in a permission's allow or deny list. A null
+/// [value] matches any value under the key.
+class TagRule {
+  const TagRule({required this.key, this.value});
+
+  final String key;
+  final String? value;
+}
+
+/// Per-account capability switches beyond the role split. The
+/// constructor defaults mirror the server's new-account defaults
+/// (everything on except delete), so a Permissions built without
+/// explicit values encodes the documented contract.
+class Permissions {
+  const Permissions({
+    this.download = true,
+    this.delete = false,
+    this.explicitContent = true,
+    this.sharedOutputs = true,
+    this.managePodcasts = true,
+    this.maxTranscodeKbps,
+    this.tagAllow = const [],
+    this.tagDeny = const [],
+  });
+
+  final bool download;
+  final bool delete;
+  final bool explicitContent;
+  final bool sharedOutputs;
+  final bool managePodcasts;
+
+  /// Transcode bitrate ceiling for this account; null means the server
+  /// default applies.
+  final int? maxTranscodeKbps;
+
+  /// Content visible only when it matches one of these rules; empty
+  /// means no allow filtering.
+  final List<TagRule> tagAllow;
+
+  /// Content hidden when it matches one of these rules.
+  final List<TagRule> tagDeny;
+
+  Permissions copyWith({
+    bool? download,
+    bool? delete,
+    bool? explicitContent,
+    bool? sharedOutputs,
+    bool? managePodcasts,
+    int? Function()? maxTranscodeKbps,
+    List<TagRule>? tagAllow,
+    List<TagRule>? tagDeny,
+  }) => Permissions(
+    download: download ?? this.download,
+    delete: delete ?? this.delete,
+    explicitContent: explicitContent ?? this.explicitContent,
+    sharedOutputs: sharedOutputs ?? this.sharedOutputs,
+    managePodcasts: managePodcasts ?? this.managePodcasts,
+    maxTranscodeKbps: maxTranscodeKbps == null
+        ? this.maxTranscodeKbps
+        : maxTranscodeKbps(),
+    tagAllow: tagAllow ?? this.tagAllow,
+    tagDeny: tagDeny ?? this.tagDeny,
+  );
+}
+
+/// Outcome of a signup request: `pending` awaits approval, `active`
+/// means the account can log in now.
+class SignupResult {
+  const SignupResult({required this.state});
+
+  final String state;
+
+  bool get pending => state == 'pending';
+}
+
+/// One invite, as listed to administrators. The token itself is only
+/// ever visible on [InviteCreated].
+class Invite {
+  const Invite({
+    required this.id,
+    this.note,
+    this.roles = const [],
+    this.libraryAccess,
+    this.permissions,
+    this.uploadEnabled = false,
+    required this.maxUses,
+    this.usedCount = 0,
+    this.revoked = false,
+    this.expiresAt,
+    required this.createdAt,
+    this.createdBy,
+  });
+
+  final String id;
+  final String? note;
+  final List<String> roles;
+  final LibraryAccess? libraryAccess;
+  final Permissions? permissions;
+  final bool uploadEnabled;
+  final int maxUses;
+  final int usedCount;
+  final bool revoked;
+  final DateTime? expiresAt;
+  final DateTime createdAt;
+  final String? createdBy;
+
+  bool get expired =>
+      expiresAt != null && expiresAt!.isBefore(DateTime.now().toUtc());
+}
+
+/// A freshly created invite; [token] is visible exactly once.
+class InviteCreated extends Invite {
+  const InviteCreated({
+    required super.id,
+    super.note,
+    super.roles,
+    super.libraryAccess,
+    super.permissions,
+    super.uploadEnabled,
+    required super.maxUses,
+    super.usedCount,
+    super.revoked,
+    super.expiresAt,
+    required super.createdAt,
+    super.createdBy,
+    required this.token,
+  });
+
+  final String token;
+}
+
+/// Server-wide switches administrators can flip at runtime.
+class AdminSettings {
+  const AdminSettings({
+    required this.signupEnabled,
+    required this.readOnly,
+    required this.backupKeepCount,
+    required this.backupKeepBytes,
+  });
+
+  final bool signupEnabled;
+
+  /// Server-wide read-only mode: every mutation of library content is
+  /// refused while set.
+  final bool readOnly;
+
+  /// Backup retention: how many archives to keep (0 keeps all).
+  final int backupKeepCount;
+
+  /// Backup retention: total archive bytes to keep (0 keeps all).
+  final int backupKeepBytes;
+
+  AdminSettings copyWith({
+    bool? signupEnabled,
+    bool? readOnly,
+    int? backupKeepCount,
+    int? backupKeepBytes,
+  }) => AdminSettings(
+    signupEnabled: signupEnabled ?? this.signupEnabled,
+    readOnly: readOnly ?? this.readOnly,
+    backupKeepCount: backupKeepCount ?? this.backupKeepCount,
+    backupKeepBytes: backupKeepBytes ?? this.backupKeepBytes,
+  );
+}
+
+/// Server-wide transcoding concurrency and bitrate ceilings.
+class TranscodingLimits {
+  const TranscodingLimits({
+    required this.maxConcurrent,
+    required this.maxConcurrentPerUser,
+    required this.defaultMaxBitrateKbps,
+  });
+
+  final int maxConcurrent;
+  final int maxConcurrentPerUser;
+
+  /// Default bitrate ceiling for accounts without a per-user override;
+  /// 0 means unlimited.
+  final int defaultMaxBitrateKbps;
+}
+
+/// The server-level Last.fm API credential state (administrators).
+class ScrobblingAdminConfig {
+  const ScrobblingAdminConfig({
+    required this.lastfmConfigured,
+    required this.lastfmSource,
+    this.lastfmApiKey,
+    required this.lastfmSecretSet,
+  });
+
+  /// Whether a usable Last.fm API credential pair is in effect (users
+  /// can link accounts and the connect button enables).
+  final bool lastfmConfigured;
+
+  /// Where the effective pair came from: `settings`, `environment`, or
+  /// `none`. Open vocabulary.
+  final String lastfmSource;
+
+  /// The effective API key, for display in the admin form. Present only
+  /// when configured; the shared secret is never read back.
+  final String? lastfmApiKey;
+
+  /// Whether a shared secret is stored.
+  final bool lastfmSecretSet;
+}
+
+/// One recurring maintenance schedule (`scan`, `backup`, or `prune`).
+class Schedule {
+  const Schedule({
+    required this.kind,
+    required this.cron,
+    required this.enabled,
+    this.lastRunAt,
+    this.lastStatus,
+    this.lastError,
+    this.nextRunAt,
+  });
+
+  final String kind;
+  final String cron;
+  final bool enabled;
+  final DateTime? lastRunAt;
+
+  /// `ok` or `failed`, once the schedule has run.
+  final String? lastStatus;
+  final String? lastError;
+  final DateTime? nextRunAt;
+}
+
+/// One backup archive.
+class Backup {
+  const Backup({
+    required this.id,
+    required this.state,
+    required this.trigger,
+    required this.fileName,
+    this.sizeBytes,
+    this.error,
+    required this.createdAt,
+    this.finishedAt,
+  });
+
+  final String id;
+
+  /// `running`, `done`, or `failed`. Open vocabulary.
+  final String state;
+
+  /// `manual` or `scheduled`. Open vocabulary.
+  final String trigger;
+  final String fileName;
+  final int? sizeBytes;
+  final String? error;
+  final DateTime createdAt;
+  final DateTime? finishedAt;
+}
+
+/// Sealed (credential-encrypted) state a restore would lose.
+class SealedCasualty {
+  const SealedCasualty({required this.kind, required this.name});
+
+  final String kind;
+  final String name;
+}
+
+/// A staged restore, applied at the next server restart.
+class RestorePlan {
+  const RestorePlan({
+    required this.backupId,
+    required this.stagedAt,
+    required this.keyfilePresent,
+    required this.keyfileMatches,
+    this.sealedCasualties = const [],
+    this.warnings = const [],
+  });
+
+  final String backupId;
+  final DateTime stagedAt;
+
+  /// Whether the archive carries the sealed-secrets keyfile at all.
+  final bool keyfilePresent;
+
+  /// Whether that keyfile matches this server's; when false, sealed
+  /// secrets in the backup become [sealedCasualties].
+  final bool keyfileMatches;
+  final List<SealedCasualty> sealedCasualties;
+  final List<String> warnings;
+}
+
+/// One background job (scan, enrichment, and friends).
+class Job {
+  const Job({
+    required this.pid,
+    required this.kind,
+    required this.state,
+    this.progress,
+    this.message,
+    this.error,
+  });
+
+  final String pid;
+  final String kind;
+  final String state;
+
+  /// 0 to 1 when the job can estimate progress.
+  final double? progress;
+  final String? message;
+  final String? error;
+}
+
+/// One audit-log event, newest first in listings.
+class AuditEvent {
+  const AuditEvent({
+    required this.id,
+    this.actorId,
+    this.actorName,
+    required this.action,
+    this.targetKind,
+    this.targetPid,
+    this.targetName,
+    this.detail = const {},
+    required this.createdAt,
+  });
+
+  final String id;
+
+  /// Null for system-initiated actions.
+  final String? actorId;
+  final String? actorName;
+
+  /// Dotted action name (`user.create`, `backup.restore-staged`, …).
+  final String action;
+  final String? targetKind;
+  final String? targetPid;
+  final String? targetName;
+
+  /// Action-specific structured payload.
+  final Map<String, Object?> detail;
+  final DateTime createdAt;
+}
+
+/// One keyset-paginated page of audit events.
+class AuditEventPage {
+  const AuditEventPage({required this.events, this.nextCursor});
+
+  final List<AuditEvent> events;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// One file parked in the server-side trash.
+class TrashEntry {
+  const TrashEntry({
+    required this.id,
+    this.itemPid,
+    required this.name,
+    required this.reason,
+    required this.sizeBytes,
+    required this.trashedAt,
+    this.restoredAt,
+  });
+
+  final String id;
+  final String? itemPid;
+
+  /// The original library-relative path.
+  final String name;
+
+  /// Why the file was trashed (`delete`, `upgrade`, …). Open vocabulary.
+  final String reason;
+  final int sizeBytes;
+  final DateTime trashedAt;
+
+  /// Set once the entry was restored back into the library.
+  final DateTime? restoredAt;
+}
+
+/// The server-side trash listing.
+class TrashList {
+  const TrashList({required this.entries});
+
+  final List<TrashEntry> entries;
+}
+
+/// Outcome of emptying the trash.
+class TrashEmptyResult {
+  const TrashEmptyResult({
+    required this.purged,
+    required this.errored,
+    required this.reclaimedBytes,
+  });
+
+  final int purged;
+  final int errored;
+  final int reclaimedBytes;
+}
+
+/// What one server-side migration import should carry over.
+class MigrationOptions {
+  const MigrationOptions({
+    this.stars = true,
+    this.ratings = true,
+    this.history = true,
+    this.progress = true,
+  });
+
+  final bool stars;
+  final bool ratings;
+  final bool history;
+  final bool progress;
+}
+
+/// One entry in a delete plan: what deleting a pid removes.
+class DeletePlanEntry {
+  const DeletePlanEntry({
+    required this.pid,
+    this.name,
+    required this.files,
+    required this.bytes,
+  });
+
+  final String pid;
+  final String? name;
+  final int files;
+  final int bytes;
+}
+
+/// Outcome (or dry-run plan) of a library item deletion.
+class DeleteItemsResult {
+  const DeleteItemsResult({
+    required this.applied,
+    required this.mode,
+    this.entries = const [],
+  });
+
+  /// False for a dry run: [entries] is the plan, nothing was touched.
+  final bool applied;
+
+  /// `trash` or `permanent`.
+  final String mode;
+  final List<DeletePlanEntry> entries;
+
+  int get totalFiles => entries.fold(0, (sum, e) => sum + e.files);
+  int get totalBytes => entries.fold(0, (sum, e) => sum + e.bytes);
 }

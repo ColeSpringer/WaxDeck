@@ -123,6 +123,9 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 	if err := l.requireUploader(uc); err != nil {
 		return UploadDTO{}, err
 	}
+	if err := l.CheckWritable(ctx, ""); err != nil {
+		return UploadDTO{}, err
+	}
 	name := filepath.Base(strings.TrimSpace(p.FileName))
 	if name == "" || name == "." || name != p.FileName {
 		return UploadDTO{}, errInvalid("fileName must be a bare file name")
@@ -147,6 +150,9 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 		}
 		if !uc.AllLibraries && !uc.Libraries[string(pid)] {
 			return UploadDTO{}, errNotFound("no such library")
+		}
+		if err := l.CheckWritable(ctx, string(pid)); err != nil {
+			return UploadDTO{}, err
 		}
 	}
 	if uc.UploadQuotaBytes > 0 {

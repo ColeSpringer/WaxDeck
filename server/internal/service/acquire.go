@@ -55,6 +55,9 @@ type acquireItem struct {
 // is the caller's preferred output format ("" or "best" copies the
 // source's highest-quality audio; "opus"/"mp3"/"m4a"/"flac" transcode).
 func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, mediaType, libraryPID, format string) (ToolTaskDTO, error) {
+	if err := l.CheckWritable(ctx, ""); err != nil {
+		return ToolTaskDTO{}, err
+	}
 	if err := l.requireUploader(uc); err != nil {
 		return ToolTaskDTO{}, err
 	}

@@ -56,6 +56,9 @@ var downloadMimes = map[string]string{
 // offline download: one per backing file in playback order, plus the
 // playback window for items carved out of a larger file.
 func (l *Library) DownloadInfo(ctx context.Context, uc *UserCtx, apiItemPID string) (DownloadResolution, error) {
+	if !uc.Admin && !uc.Download {
+		return DownloadResolution{}, &Error{Kind: KindForbidden, Msg: "this account cannot download originals"}
+	}
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return DownloadResolution{}, err

@@ -12,6 +12,10 @@ class _$UserAccount extends UserAccount {
   @override
   final BuiltList<LinkedIdentity>? identities;
   @override
+  final Permissions permissions;
+  @override
+  final bool pending;
+  @override
   final LibraryAccess libraryAccess;
   @override
   final bool uploadEnabled;
@@ -36,6 +40,8 @@ class _$UserAccount extends UserAccount {
   _$UserAccount._({
     required this.createdAt,
     this.identities,
+    required this.permissions,
+    required this.pending,
     required this.libraryAccess,
     required this.uploadEnabled,
     required this.disabled,
@@ -59,6 +65,8 @@ class _$UserAccount extends UserAccount {
     return other is UserAccount &&
         createdAt == other.createdAt &&
         identities == other.identities &&
+        permissions == other.permissions &&
+        pending == other.pending &&
         libraryAccess == other.libraryAccess &&
         uploadEnabled == other.uploadEnabled &&
         disabled == other.disabled &&
@@ -75,6 +83,8 @@ class _$UserAccount extends UserAccount {
     var _$hash = 0;
     _$hash = $jc(_$hash, createdAt.hashCode);
     _$hash = $jc(_$hash, identities.hashCode);
+    _$hash = $jc(_$hash, permissions.hashCode);
+    _$hash = $jc(_$hash, pending.hashCode);
     _$hash = $jc(_$hash, libraryAccess.hashCode);
     _$hash = $jc(_$hash, uploadEnabled.hashCode);
     _$hash = $jc(_$hash, disabled.hashCode);
@@ -93,6 +103,8 @@ class _$UserAccount extends UserAccount {
     return (newBuiltValueToStringHelper(r'UserAccount')
           ..add('createdAt', createdAt)
           ..add('identities', identities)
+          ..add('permissions', permissions)
+          ..add('pending', pending)
           ..add('libraryAccess', libraryAccess)
           ..add('uploadEnabled', uploadEnabled)
           ..add('disabled', disabled)
@@ -119,6 +131,16 @@ class UserAccountBuilder
       _$this._identities ??= ListBuilder<LinkedIdentity>();
   set identities(covariant ListBuilder<LinkedIdentity>? identities) =>
       _$this._identities = identities;
+
+  PermissionsBuilder? _permissions;
+  PermissionsBuilder get permissions =>
+      _$this._permissions ??= PermissionsBuilder();
+  set permissions(covariant PermissionsBuilder? permissions) =>
+      _$this._permissions = permissions;
+
+  bool? _pending;
+  bool? get pending => _$this._pending;
+  set pending(covariant bool? pending) => _$this._pending = pending;
 
   LibraryAccessBuilder? _libraryAccess;
   LibraryAccessBuilder get libraryAccess =>
@@ -171,6 +193,8 @@ class UserAccountBuilder
     if ($v != null) {
       _createdAt = $v.createdAt;
       _identities = $v.identities?.toBuilder();
+      _permissions = $v.permissions.toBuilder();
+      _pending = $v.pending;
       _libraryAccess = $v.libraryAccess.toBuilder();
       _uploadEnabled = $v.uploadEnabled;
       _disabled = $v.disabled;
@@ -210,6 +234,12 @@ class UserAccountBuilder
               'createdAt',
             ),
             identities: _identities?.build(),
+            permissions: permissions.build(),
+            pending: BuiltValueNullFieldError.checkNotNull(
+              pending,
+              r'UserAccount',
+              'pending',
+            ),
             libraryAccess: libraryAccess.build(),
             uploadEnabled: BuiltValueNullFieldError.checkNotNull(
               uploadEnabled,
@@ -237,6 +267,9 @@ class UserAccountBuilder
       try {
         _$failedField = 'identities';
         _identities?.build();
+        _$failedField = 'permissions';
+        permissions.build();
+
         _$failedField = 'libraryAccess';
         libraryAccess.build();
 

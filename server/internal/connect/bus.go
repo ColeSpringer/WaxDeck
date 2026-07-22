@@ -65,6 +65,9 @@ func (s *Service) HandleCommand(ctx context.Context, link *ClientLink, sessionID
 		return nil, err
 	}
 	if ep, ok := s.reg.Lookup(owner, endpointID); ok {
+		if ep.Shared && !s.sharedAllowed(link.UserID) {
+			return nil, ErrForbidden
+		}
 		if verb == "set-volume" && !ep.VolumeControl {
 			return nil, InvalidError{Msg: "this endpoint has no volume control"}
 		}

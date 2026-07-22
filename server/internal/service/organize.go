@@ -183,6 +183,9 @@ func (l *Library) ApplyOrganize(ctx context.Context, uc *UserCtx, profile string
 	if !uc.Admin {
 		return OrganizeReportDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
+	if err := l.CheckWritable(ctx, ""); err != nil {
+		return OrganizeReportDTO{}, err
+	}
 	plan, err := l.organizePlanFor(ctx, profile, apiItemPids)
 	if err != nil {
 		return OrganizeReportDTO{}, err

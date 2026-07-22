@@ -41,6 +41,33 @@ final scrobblersProvider =
       ScrobblersController.new,
     );
 
+/// The server-level Last.fm API credential state (administrators).
+class ScrobblingAdminConfigController
+    extends AsyncNotifier<ScrobblingAdminConfig> {
+  @override
+  Future<ScrobblingAdminConfig> build() =>
+      ref.watch(repositoryProvider).getScrobblingConfig();
+
+  /// Stores a credential pair, or clears the stored pair when both
+  /// values are empty. Errors propagate so the dialog surfaces the
+  /// server's message (half-set pair, unusable credentials).
+  Future<void> save({required String apiKey, required String secret}) async {
+    final saved = await ref
+        .read(repositoryProvider)
+        .putScrobblingConfig(apiKey: apiKey, secret: secret);
+    state = AsyncData(saved);
+    // Availability may have flipped; reload the connection slots so
+    // the section updates without a revisit.
+    ref.invalidate(scrobblersProvider);
+  }
+}
+
+final scrobblingAdminConfigProvider =
+    AsyncNotifierProvider<
+      ScrobblingAdminConfigController,
+      ScrobblingAdminConfig
+    >(ScrobblingAdminConfigController.new);
+
 /// The caller's app passwords for the compatibility APIs.
 class AppPasswordsController extends AsyncNotifier<List<AppPassword>> {
   @override

@@ -18,6 +18,8 @@ import 'package:waxdeck_api_gen/src/model/oidc_exchange_request.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_providers.dart';
 import 'package:waxdeck_api_gen/src/model/session_info.dart';
 import 'package:waxdeck_api_gen/src/model/session_list.dart';
+import 'package:waxdeck_api_gen/src/model/signup_request.dart';
+import 'package:waxdeck_api_gen/src/model/signup_result.dart';
 
 class AuthApi {
 
@@ -886,6 +888,101 @@ class AuthApi {
     );
 
     return _response;
+  }
+
+  /// Request an account
+  /// Self-serve registration. Without an invite token it requires the administrator to have enabled open signup, and the account lands pending: it cannot log in until an administrator approves it (&#x60;state&#x60; is &#x60;pending&#x60;). With a valid invite token the account is pre-approved and can log in immediately with the role, library access, and permissions the invite carries (&#x60;state&#x60; is &#x60;active&#x60;); invites work whether or not open signup is enabled. A taken username answers &#x60;conflict&#x60; (an unavoidable existence probe; the rate limit bounds it). Signup disabled and no invite, or an invalid, expired, exhausted, or revoked invite token, answer &#x60;forbidden&#x60;. Rate limited per address. 
+  ///
+  /// Parameters:
+  /// * [signupRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [SignupResult] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<SignupResult>> signup({ 
+    required SignupRequest signupRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/auth/signup';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(SignupRequest);
+      _bodyData = _serializers.serialize(signupRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    SignupResult? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(SignupResult),
+      ) as SignupResult;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<SignupResult>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// Start an OIDC login

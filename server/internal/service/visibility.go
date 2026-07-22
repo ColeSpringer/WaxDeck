@@ -30,6 +30,25 @@ type UserCtx struct {
 	// have it); UploadQuotaBytes caps live uploads, 0 meaning no cap.
 	UploadEnabled    bool
 	UploadQuotaBytes int64
+	// Granular permission toggles; administrators hold all of them.
+	Download       bool
+	Delete         bool
+	Explicit       bool
+	SharedOutputs  bool
+	ManagePodcasts bool
+	// MaxTranscodeKbps caps the caller's transcode bitrate; 0 means the
+	// server default applies. Administrators are uncapped.
+	MaxTranscodeKbps int64
+	// TagAllow and TagDeny are the caller's content rules; empty for
+	// administrators and unrestricted accounts.
+	TagAllow []TagRule
+	TagDeny  []TagRule
+}
+
+// ContentUnrestricted reports whether content filtering can be skipped
+// entirely for this caller: explicit content allowed and no tag rules.
+func (uc *UserCtx) ContentUnrestricted() bool {
+	return uc.Explicit && len(uc.TagAllow) == 0 && len(uc.TagDeny) == 0
 }
 
 // UserCtx assembles the per-request user context from an account row.
@@ -42,6 +61,18 @@ func (l *Library) UserCtx(ctx context.Context, u *wdb.User) (*UserCtx, error) {
 		UploadQuotaBytes: u.UploadQuotaBytes,
 	}
 	uc.UploadEnabled = uc.UploadEnabled || uc.Admin
+	perms := permissionsOf(u)
+	if uc.Admin {
+		perms = Permissions{Download: true, Delete: true, Explicit: true,
+			SharedOutputs: true, ManagePodcasts: true}
+	}
+	uc.Download = perms.Download
+	uc.Delete = perms.Delete
+	uc.Explicit = perms.Explicit
+	uc.SharedOutputs = perms.SharedOutputs
+	uc.ManagePodcasts = perms.ManagePodcasts
+	uc.MaxTranscodeKbps = perms.MaxTranscodeKbps
+	uc.TagAllow, uc.TagDeny = perms.TagAllow, perms.TagDeny
 	uc.AllLibraries = uc.Admin || u.LibraryAccess != "granted"
 	if !uc.AllLibraries {
 		pids, err := l.db.LibraryGrants(ctx, u.ID)
@@ -192,6 +223,9 @@ func (l *Library) getVisibleItem(ctx context.Context, uc *UserCtx, apiItemPID st
 		return nil, err
 	}
 	if !l.itemVisible(ctx, uc, it.PID) {
+		return nil, errNotFound("no item with pid " + apiItemPID)
+	}
+	if !l.allowedByContent(ctx, uc, it) {
 		return nil, errNotFound("no item with pid " + apiItemPID)
 	}
 	return it, nil

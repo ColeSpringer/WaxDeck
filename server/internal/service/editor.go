@@ -394,6 +394,11 @@ func (l *Library) EditItemMetadata(ctx context.Context, uc *UserCtx, apiPID stri
 	if err := validateFieldEdits(it, fields, p.WriteBack); err != nil {
 		return EditOutcomeDTO{}, err
 	}
+	if p.WriteBack {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return EditOutcomeDTO{}, err
+		}
+	}
 	err = l.lib.EditFields(ctx, it.PID, fields, waxbin.EditOptions{
 		WriteBack: p.WriteBack, Lock: p.Lock, Force: p.Force,
 	})
@@ -423,6 +428,11 @@ func (l *Library) BulkEditMetadata(ctx context.Context, uc *UserCtx, apiPIDs []s
 		}
 		if err := validateFieldEdits(it, fields, writeBack); err != nil {
 			return BulkEditOutcomeDTO{}, err
+		}
+		if writeBack {
+			if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+				return BulkEditOutcomeDTO{}, err
+			}
 		}
 		if _, seen := apiByBare[it.PID]; seen {
 			continue
@@ -475,6 +485,11 @@ func (l *Library) SetItemCredits(ctx context.Context, uc *UserCtx, apiPID, role 
 		writeBack = false
 		warnings = append(warnings, "role "+string(r)+" has no on-disk tag form; the credit is database-only")
 	}
+	if writeBack {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return EditOutcomeDTO{}, err
+		}
+	}
 	_, err = l.lib.SetCredits(ctx, it.PID, r, names, waxbin.CreditEditOptions{
 		WriteBack: writeBack, Lock: p.Lock, Force: p.Force,
 	})
@@ -521,6 +536,11 @@ func (l *Library) SetItemLyrics(ctx context.Context, uc *UserCtx, apiPID, lrc, p
 	ly := &model.Lyrics{Source: "user", Synced: synced, Unsynced: plain}
 	if !ly.HasContent() {
 		return EditOutcomeDTO{}, errInvalid("lyrics must carry timed lines or plain text")
+	}
+	if p.WriteBack {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return EditOutcomeDTO{}, err
+		}
 	}
 	if err := l.lib.SetLyrics(ctx, it.PID, ly, p.Lock, p.Force); err != nil {
 		return EditOutcomeDTO{}, classify(err)
@@ -721,6 +741,11 @@ func (l *Library) SetItemArtwork(ctx context.Context, uc *UserCtx, apiPID string
 	if err := validateArtworkBytes(raw); err != nil {
 		return EditOutcomeDTO{}, err
 	}
+	if writeBack {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return EditOutcomeDTO{}, err
+		}
+	}
 	err = l.lib.SetItemArt(ctx, it.PID, raw, lock, true, writeBack)
 	return editOutcomeFromWriteBack(err)
 }
@@ -808,6 +833,14 @@ func (l *Library) SetEntityArtwork(ctx context.Context, entityType, apiEntityPID
 	}
 	if err := validateArtworkBytes(raw); err != nil {
 		return EditOutcomeDTO{}, err
+	}
+	// Entity write-back fans into member files across libraries; the
+	// server-wide flag gates it (per-library precision would need the
+	// member enumeration the facade does internally).
+	if writeBack {
+		if err := l.CheckWritable(ctx, ""); err != nil {
+			return EditOutcomeDTO{}, err
+		}
 	}
 	err = l.lib.SetEntityArt(ctx, ent, pid, "front", raw, writeBack)
 	return editOutcomeFromWriteBack(err)
@@ -936,6 +969,11 @@ func (l *Library) EditEntity(ctx context.Context, entityType, apiEntityPID strin
 		}
 		if name == "type" && value != "" && !model.ValidReleaseGroupType(value) {
 			return EditOutcomeDTO{}, errInvalid("type is not a recognized release-group type: " + value)
+		}
+	}
+	if p.WriteBack {
+		if err := l.CheckWritable(ctx, ""); err != nil {
+			return EditOutcomeDTO{}, err
 		}
 	}
 	err = l.lib.EditEntity(ctx, et, pid, edits, waxbin.EntityEditOptions{

@@ -7,6 +7,7 @@ import 'auth/credential_store.dart';
 import 'auth/loopback/loopback.dart';
 import 'auth/oidc_flow.dart';
 import 'auth/oidc_ports.dart';
+import 'uploads/share_intake.dart';
 
 /// Server origin: on web the SPA is served by the WaxDeck server itself, so
 /// relative URLs hit the same origin. Native/desktop dev builds default to
@@ -37,6 +38,12 @@ final urlOpenerProvider = Provider<UrlOpenerPort>(
 
 /// Incoming deep links, wrapped so widget code never touches app_links.
 final deepLinkProvider = Provider<DeepLinkPort>((ref) => AppLinksDeepLinks());
+
+/// Share-sheet payloads, wrapped so widget code never touches the
+/// platform channel. Inert everywhere but Android.
+final shareIntakeProvider = Provider<ShareIntakePort>(
+  (ref) => createShareIntakePort(),
+);
 
 /// The OIDC client flow with its platform ports plugged in.
 final oidcFlowProvider = Provider<OidcLoginFlow>(

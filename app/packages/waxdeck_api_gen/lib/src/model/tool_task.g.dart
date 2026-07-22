@@ -25,6 +25,8 @@ class _$ToolTask extends ToolTask {
   final DateTime createdAt;
   @override
   final DateTime? finishedAt;
+  @override
+  final BuiltMap<String, JsonObject?>? summary;
 
   factory _$ToolTask([void Function(ToolTaskBuilder)? updates]) =>
       (ToolTaskBuilder()..update(updates))._build();
@@ -39,6 +41,7 @@ class _$ToolTask extends ToolTask {
     this.resultPids,
     required this.createdAt,
     this.finishedAt,
+    this.summary,
   }) : super._();
   @override
   ToolTask rebuild(void Function(ToolTaskBuilder) updates) =>
@@ -59,7 +62,8 @@ class _$ToolTask extends ToolTask {
         error == other.error &&
         resultPids == other.resultPids &&
         createdAt == other.createdAt &&
-        finishedAt == other.finishedAt;
+        finishedAt == other.finishedAt &&
+        summary == other.summary;
   }
 
   @override
@@ -74,6 +78,7 @@ class _$ToolTask extends ToolTask {
     _$hash = $jc(_$hash, resultPids.hashCode);
     _$hash = $jc(_$hash, createdAt.hashCode);
     _$hash = $jc(_$hash, finishedAt.hashCode);
+    _$hash = $jc(_$hash, summary.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -89,7 +94,8 @@ class _$ToolTask extends ToolTask {
           ..add('error', error)
           ..add('resultPids', resultPids)
           ..add('createdAt', createdAt)
-          ..add('finishedAt', finishedAt))
+          ..add('finishedAt', finishedAt)
+          ..add('summary', summary))
         .toString();
   }
 }
@@ -135,6 +141,12 @@ class ToolTaskBuilder implements Builder<ToolTask, ToolTaskBuilder> {
   DateTime? get finishedAt => _$this._finishedAt;
   set finishedAt(DateTime? finishedAt) => _$this._finishedAt = finishedAt;
 
+  MapBuilder<String, JsonObject?>? _summary;
+  MapBuilder<String, JsonObject?> get summary =>
+      _$this._summary ??= MapBuilder<String, JsonObject?>();
+  set summary(MapBuilder<String, JsonObject?>? summary) =>
+      _$this._summary = summary;
+
   ToolTaskBuilder() {
     ToolTask._defaults(this);
   }
@@ -151,6 +163,7 @@ class ToolTaskBuilder implements Builder<ToolTask, ToolTaskBuilder> {
       _resultPids = $v.resultPids?.toBuilder();
       _createdAt = $v.createdAt;
       _finishedAt = $v.finishedAt;
+      _summary = $v.summary?.toBuilder();
       _$v = null;
     }
     return this;
@@ -196,12 +209,16 @@ class ToolTaskBuilder implements Builder<ToolTask, ToolTaskBuilder> {
               'createdAt',
             ),
             finishedAt: finishedAt,
+            summary: _summary?.build(),
           );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'resultPids';
         _resultPids?.build();
+
+        _$failedField = 'summary';
+        _summary?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'ToolTask',

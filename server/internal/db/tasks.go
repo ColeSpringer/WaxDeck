@@ -11,27 +11,30 @@ import (
 // split, cue split). Params and ResultPIDs are JSON documents owned by
 // the service layer.
 type ToolTask struct {
-	ID           string
-	Type         string
-	State        string
-	ItemPID      string
-	UserID       string
-	Params       string
-	ProgressPct  float64
-	Error        string
-	ResultPIDs   string
+	ID          string
+	Type        string
+	State       string
+	ItemPID     string
+	UserID      string
+	Params      string
+	ProgressPct float64
+	Error       string
+	ResultPIDs  string
+	// Summary is a task-type-specific result document (JSON object) once
+	// the task finishes; empty until then.
+	Summary      string
 	Attempts     int
 	CreatedAtNS  int64
 	FinishedAtNS int64
 }
 
 const taskCols = `id, type, state, item_pid, user_id, params, progress_pct,
-	error, result_pids, attempts, created_at_ns, finished_at_ns`
+	error, result_pids, summary, attempts, created_at_ns, finished_at_ns`
 
 func scanTask(row interface{ Scan(...any) error }) (ToolTask, error) {
 	var t ToolTask
 	err := row.Scan(&t.ID, &t.Type, &t.State, &t.ItemPID, &t.UserID, &t.Params,
-		&t.ProgressPct, &t.Error, &t.ResultPIDs, &t.Attempts, &t.CreatedAtNS, &t.FinishedAtNS)
+		&t.ProgressPct, &t.Error, &t.ResultPIDs, &t.Summary, &t.Attempts, &t.CreatedAtNS, &t.FinishedAtNS)
 	return t, err
 }
 
@@ -39,9 +42,9 @@ func scanTask(row interface{ Scan(...any) error }) (ToolTask, error) {
 func (d *DB) InsertToolTask(ctx context.Context, t ToolTask) error {
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO tool_tasks (`+taskCols+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.ID, t.Type, t.State, t.ItemPID, t.UserID, t.Params, t.ProgressPct,
-		t.Error, t.ResultPIDs, t.Attempts, t.CreatedAtNS, t.FinishedAtNS)
+		t.Error, t.ResultPIDs, t.Summary, t.Attempts, t.CreatedAtNS, t.FinishedAtNS)
 	if err != nil {
 		return fmt.Errorf("db: inserting tool task: %w", err)
 	}
@@ -65,9 +68,9 @@ func (d *DB) ToolTaskByID(ctx context.Context, id string) (ToolTask, error) {
 func (d *DB) UpdateToolTask(ctx context.Context, t ToolTask) error {
 	res, err := d.w.ExecContext(ctx, `
 		UPDATE tool_tasks SET state = ?, progress_pct = ?, error = ?, result_pids = ?,
-			finished_at_ns = ?
+			summary = ?, finished_at_ns = ?
 		WHERE id = ?`,
-		t.State, t.ProgressPct, t.Error, t.ResultPIDs, t.FinishedAtNS, t.ID)
+		t.State, t.ProgressPct, t.Error, t.ResultPIDs, t.Summary, t.FinishedAtNS, t.ID)
 	if err != nil {
 		return fmt.Errorf("db: updating tool task: %w", err)
 	}
@@ -162,4 +165,14 @@ func (d *DB) FailExhaustedToolTasks(ctx context.Context, nowNS int64, maxAttempt
 		out = append(out, id)
 	}
 	return out, rows.Err()
+}
+
+// UpdateToolTaskParams rewrites a task's params document (credential
+// scrubbing after a terminal state).
+func (d *DB) UpdateToolTaskParams(ctx context.Context, id, params string) error {
+	_, err := d.w.ExecContext(ctx, `UPDATE tool_tasks SET params = ? WHERE id = ?`, params, id)
+	if err != nil {
+		return fmt.Errorf("db: updating tool task params: %w", err)
+	}
+	return nil
 }

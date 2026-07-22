@@ -9,11 +9,14 @@ part of 'bootstrap_status.dart';
 class _$BootstrapStatus extends BootstrapStatus {
   @override
   final bool required_;
+  @override
+  final bool? signupEnabled;
 
   factory _$BootstrapStatus([void Function(BootstrapStatusBuilder)? updates]) =>
       (BootstrapStatusBuilder()..update(updates))._build();
 
-  _$BootstrapStatus._({required this.required_}) : super._();
+  _$BootstrapStatus._({required this.required_, this.signupEnabled})
+    : super._();
   @override
   BootstrapStatus rebuild(void Function(BootstrapStatusBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -24,22 +27,26 @@ class _$BootstrapStatus extends BootstrapStatus {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is BootstrapStatus && required_ == other.required_;
+    return other is BootstrapStatus &&
+        required_ == other.required_ &&
+        signupEnabled == other.signupEnabled;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, required_.hashCode);
+    _$hash = $jc(_$hash, signupEnabled.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'BootstrapStatus',
-    )..add('required_', required_)).toString();
+    return (newBuiltValueToStringHelper(r'BootstrapStatus')
+          ..add('required_', required_)
+          ..add('signupEnabled', signupEnabled))
+        .toString();
   }
 }
 
@@ -51,6 +58,11 @@ class BootstrapStatusBuilder
   bool? get required_ => _$this._required_;
   set required_(bool? required_) => _$this._required_ = required_;
 
+  bool? _signupEnabled;
+  bool? get signupEnabled => _$this._signupEnabled;
+  set signupEnabled(bool? signupEnabled) =>
+      _$this._signupEnabled = signupEnabled;
+
   BootstrapStatusBuilder() {
     BootstrapStatus._defaults(this);
   }
@@ -59,6 +71,7 @@ class BootstrapStatusBuilder
     final $v = _$v;
     if ($v != null) {
       _required_ = $v.required_;
+      _signupEnabled = $v.signupEnabled;
       _$v = null;
     }
     return this;
@@ -86,6 +99,7 @@ class BootstrapStatusBuilder
             r'BootstrapStatus',
             'required_',
           ),
+          signupEnabled: signupEnabled,
         );
     replace(_$result);
     return _$result;

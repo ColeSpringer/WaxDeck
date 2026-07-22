@@ -1,0 +1,172 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/colespringer/waxbin/model"
+
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
+)
+
+// The Audiobookshelf import. The /api/me profile carries every book's
+// mediaProgress; each referenced item is fetched for its identity
+// (title, author, ASIN/ISBN, duration) and matched through the resolve
+// ladder, and the position lands through the same checkpoint path the
+// API's resume writes use. A finished book checkpoints at its end,
+// which is exactly how the catalog's position-derived completion rules
+// mark a book played and finished.
+
+// absClient is a minimal Audiobookshelf API client: bearer token,
+// JSON answers.
+type absClient struct {
+	base  string
+	token string
+	hc    *http.Client
+}
+
+func newABSClient(base, token string) *absClient {
+	return &absClient{base: strings.TrimRight(base, "/"), token: token, hc: migrateHTTPClient()}
+}
+
+func (c *absClient) get(ctx context.Context, path string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return &migrateHTTPError{Status: resp.StatusCode, URL: c.base + path}
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("audiobookshelf %s: unparseable answer: %w", path, err)
+	}
+	return nil
+}
+
+// absMediaProgress is one row of the profile's mediaProgress: times in
+// seconds, lastUpdate in epoch milliseconds. EpisodeID marks podcast
+// progress, which the gpodder surface owns, not this importer.
+type absMediaProgress struct {
+	LibraryItemID string  `json:"libraryItemId"`
+	EpisodeID     string  `json:"episodeId"`
+	CurrentTime   float64 `json:"currentTime"`
+	IsFinished    bool    `json:"isFinished"`
+	LastUpdate    int64   `json:"lastUpdate"`
+}
+
+// absItem is the expanded library item, trimmed to the identity fields
+// the matcher needs. Duration is seconds.
+type absItem struct {
+	Media struct {
+		Metadata struct {
+			Title      string `json:"title"`
+			AuthorName string `json:"authorName"`
+			Authors    []struct {
+				Name string `json:"name"`
+			} `json:"authors"`
+			ASIN string `json:"asin"`
+			ISBN string `json:"isbn"`
+		} `json:"metadata"`
+		Duration float64 `json:"duration"`
+	} `json:"media"`
+}
+
+// runABSImport pulls book positions and finished flags from an
+// Audiobookshelf server and replays them for the task's user. Books
+// resolve by ASIN/ISBN first and author/title descriptively after;
+// multi-file books need no special handling because a catalog book's
+// position is a book-timeline millisecond by contract.
+func (l *Library) runABSImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
+	sum := migrationSummary{Source: p.Source, DryRun: p.DryRun, Samples: migrationSamples{Unmatched: []string{}}}
+	client := newABSClient(p.ServerURL, secret)
+	prog := newMigrateProgress(l, t)
+	var me struct {
+		MediaProgress []absMediaProgress `json:"mediaProgress"`
+	}
+	if err := client.get(ctx, "/api/me", &me); err != nil {
+		return sum, migrateClientErr(err)
+	}
+	for i, mp := range me.MediaProgress {
+		if ctx.Err() != nil {
+			return sum, ctx.Err()
+		}
+		prog.report(ctx, float64(i+1)/float64(len(me.MediaProgress))*90)
+		if mp.EpisodeID != "" || mp.LibraryItemID == "" {
+			continue
+		}
+		if mp.CurrentTime <= 0 && !mp.IsFinished {
+			continue
+		}
+		var item absItem
+		if err := client.get(ctx, "/api/items/"+url.PathEscape(mp.LibraryItemID)+"?expanded=1", &item); err != nil {
+			var hs *migrateHTTPError
+			if errors.As(err, &hs) && hs.Status == http.StatusNotFound {
+				// The progress row outlived its book on the source; one
+				// stale row must not fail the whole import.
+				sum.noteUnmatched("", mp.LibraryItemID)
+				continue
+			}
+			return sum, migrateClientErr(err)
+		}
+		meta := item.Media.Metadata
+		author := meta.AuthorName
+		if author == "" && len(meta.Authors) > 0 {
+			author = meta.Authors[0].Name
+		}
+		ref := model.PortableRef{
+			Kind:       model.KindBook,
+			ASIN:       meta.ASIN,
+			ISBN:       meta.ISBN,
+			Artist:     author,
+			Title:      meta.Title,
+			DurationMS: int64(item.Media.Duration * 1000),
+		}
+		it, rung, err := l.resolveMigrationRef(ctx, ref)
+		if err != nil {
+			return sum, classify(err)
+		}
+		if it == nil || rung == model.MatchNone {
+			sum.noteUnmatched(author, meta.Title)
+			continue
+		}
+		sum.Matched++
+		if !p.Progress {
+			continue
+		}
+		posMS := int64(mp.CurrentTime * 1000)
+		if mp.IsFinished && it.DurationMS > 0 {
+			// The catalog derives played and finished from the position
+			// reached, so a finished book checkpoints at its end rather
+			// than carrying a separate flag.
+			posMS = it.DurationMS
+		}
+		if !p.DryRun {
+			if err := l.Checkpoint(ctx, uc, apiPID(PrefixBook, it.PID), posMS, nil); err != nil {
+				if !migrateWriteSkippable(err) {
+					return sum, err
+				}
+				l.log.Warn("migration progress skipped", "task", t.ID, "item", string(it.PID), "err", err)
+				continue
+			}
+		}
+		sum.Progress++
+	}
+	prog.report(ctx, 95)
+	return sum, nil
+}

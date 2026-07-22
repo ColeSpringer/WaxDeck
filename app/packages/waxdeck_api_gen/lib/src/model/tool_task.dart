@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -21,6 +22,7 @@ part 'tool_task.g.dart';
 /// * [resultPids] - What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition opened (entry pids). 
 /// * [createdAt] - When the task was queued.
 /// * [finishedAt] - When it reached a terminal state.
+/// * [summary] - Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. 
 @BuiltValue()
 abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   /// Task pid.
@@ -58,6 +60,10 @@ abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   /// When it reached a terminal state.
   @BuiltValueField(wireName: r'finishedAt')
   DateTime? get finishedAt;
+
+  /// Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. 
+  @BuiltValueField(wireName: r'summary')
+  BuiltMap<String, JsonObject?>? get summary;
 
   ToolTask._();
 
@@ -135,6 +141,13 @@ class _$ToolTaskSerializer implements PrimitiveSerializer<ToolTask> {
       yield serializers.serialize(
         object.finishedAt,
         specifiedType: const FullType(DateTime),
+      );
+    }
+    if (object.summary != null) {
+      yield r'summary';
+      yield serializers.serialize(
+        object.summary,
+        specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
       );
     }
   }
@@ -222,6 +235,13 @@ class _$ToolTaskSerializer implements PrimitiveSerializer<ToolTask> {
             specifiedType: const FullType(DateTime),
           ) as DateTime;
           result.finishedAt = valueDes;
+          break;
+        case r'summary':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+          ) as BuiltMap<String, JsonObject?>;
+          result.summary.replace(valueDes);
           break;
         default:
           unhandled.add(key);

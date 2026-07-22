@@ -369,7 +369,24 @@ void main() {
             ).toBuilder()
             ..uploadEnabled = true
             ..uploadQuotaBytes = 1073741824
-            ..disabled = false,
+            ..disabled = false
+            ..pending = false
+            ..permissions = gen.Permissions(
+              (p) => p
+                ..download = true
+                ..delete = false
+                ..explicitContent = false
+                ..sharedOutputs = true
+                ..managePodcasts = false
+                ..maxTranscodeKbps = 192
+                ..tagDeny.add(
+                  gen.TagRule(
+                    (t) => t
+                      ..key = 'genre'
+                      ..value = 'grindcore',
+                  ),
+                ),
+            ).toBuilder(),
         ),
       );
 
@@ -382,6 +399,14 @@ void main() {
       ]);
       expect(account.disabled, isFalse);
       expect(account.hasPassword, isTrue);
+      expect(account.pending, isFalse);
+      expect(account.permissions.download, isTrue);
+      expect(account.permissions.explicitContent, isFalse);
+      expect(account.permissions.sharedOutputs, isTrue);
+      expect(account.permissions.maxTranscodeKbps, 192);
+      expect(account.permissions.tagAllow, isEmpty);
+      expect(account.permissions.tagDeny.single.key, 'genre');
+      expect(account.permissions.tagDeny.single.value, 'grindcore');
     });
   });
 }

@@ -167,6 +167,18 @@ func (l *Library) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action
 		return ReviewEntryDTO{}, nil, &Error{Kind: KindInternal, Err: err}
 	}
 
+	// Skips and discards touch no files; every other decision can write
+	// into the entry's target library.
+	if action != "skip" && action != "discard" {
+		bareLib := ""
+		if prefix, pid, ok := parseAPIPID(e.LibraryPID); ok && prefix == PrefixLibrary {
+			bareLib = string(pid)
+		}
+		if err := l.CheckWritable(ctx, bareLib); err != nil {
+			return ReviewEntryDTO{}, nil, err
+		}
+	}
+
 	var warnings []string
 	switch action {
 	case "approve":

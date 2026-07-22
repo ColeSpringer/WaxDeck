@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
 import 'auth_controller.dart';
+import 'signup_screen.dart';
 
 /// Configured single-sign-on providers, for rendering login buttons. An
 /// unreachable server hides the buttons rather than erroring the form.
@@ -81,12 +82,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _openSignup() async {
+    final username = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const SignupScreen()));
+    if (username == null || !mounted) return;
+    // The account is active already; prefill so signing in is one step.
+    setState(() => _username.text = username);
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
     final oidcProviders =
         ref.watch(oidcProvidersProvider).value ?? const <OidcProvider>[];
+    final signupEnabled = ref.watch(signupEnabledProvider).value ?? false;
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -172,6 +183,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Text('Log in'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Open signup gets the louder wording; without it the
+                  // link still serves people holding an invite token.
+                  Semantics(
+                    identifier: 'signup-open',
+                    child: TextButton(
+                      key: const Key('signup-open'),
+                      onPressed: _submitting ? null : _openSignup,
+                      child: Text(
+                        signupEnabled
+                            ? 'Request an account'
+                            : 'Have an invite?',
+                      ),
                     ),
                   ),
                   if (oidcProviders.isNotEmpty) ...[

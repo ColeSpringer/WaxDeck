@@ -849,6 +849,9 @@ func (l *Library) MergeDuplicates(ctx context.Context, uc *UserCtx, entityType, 
 	for _, r := range reports {
 		res.ChildrenMoved += r.Children
 	}
+	l.Audit(ctx, uc, "entity.merge",
+		AuditTarget{Kind: entityType, PID: survivorPid},
+		map[string]any{"losers": loserPids, "childrenMoved": res.ChildrenMoved})
 	return res, nil
 }
 
@@ -933,5 +936,8 @@ func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, keepPid strin
 	if err != nil {
 		return 0, classify(err)
 	}
+	l.Audit(ctx, uc, "items.delete",
+		AuditTarget{Kind: "item", PID: keepPid},
+		map[string]any{"reason": "quality-upgrade", "removed": removePids, "trashed": rep.Trashed})
 	return rep.Trashed, nil
 }

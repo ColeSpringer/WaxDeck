@@ -13,11 +13,11 @@ part 'user_page.g.dart';
 /// One keyset-paginated page of accounts.
 ///
 /// Properties:
-/// * [users] - Accounts ordered by username.
+/// * [users] - Accounts, in the endpoint's documented order (the account list orders by username; the signup request queue oldest first). 
 /// * [nextCursor] - Opaque cursor for the next page. Absent on the last page.
 @BuiltValue()
 abstract class UserPage implements Built<UserPage, UserPageBuilder> {
-  /// Accounts ordered by username.
+  /// Accounts, in the endpoint's documented order (the account list orders by username; the signup request queue oldest first). 
   @BuiltValueField(wireName: r'users')
   BuiltList<UserAccount> get users;
 

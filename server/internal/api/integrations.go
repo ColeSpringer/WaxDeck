@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -144,7 +145,8 @@ func (s *Server) SearchRadioDirectory(ctx context.Context, req SearchRadioDirect
 // records the current title for play-info to report.
 func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 	pid := r.PathValue("pid")
-	if _, err := s.media.Verify(r.URL.Query().Get("mt"), pid); err != nil {
+	user, err := s.media.Verify(r.URL.Query().Get("mt"), pid)
+	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "missing or invalid media token")
 		return
 	}
@@ -211,10 +213,25 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		}
 		_, writeErr = w.Write(p)
 	}
+	// Scrobbling rides the title transitions this listener actually
+	// heard: a segment scrobbles only when its ENDING transition is
+	// observed, so a never-changing pseudo-title scrobbles nothing and
+	// the unfinished tail at disconnect stays off the record.
+	var segTitle string
+	var segSince time.Time
 	onBlock := func(block []byte) {
-		if title, ok := icyStreamTitle(block); ok {
-			s.svc.NoteRadioTitle(pid, title)
+		title, ok := icyStreamTitle(block)
+		if !ok {
+			return
 		}
+		s.svc.NoteRadioTitle(pid, title)
+		if title == segTitle {
+			return
+		}
+		if segTitle != "" && time.Since(segSince) >= service.RadioScrobbleMinListen {
+			s.svc.ScrobbleRadioPlay(r.Context(), user, pid, segTitle, segSince)
+		}
+		segTitle, segSince = title, time.Now()
 	}
 	for {
 		n, readErr := resp.Body.Read(buf)

@@ -69,6 +69,8 @@ type Bridge struct {
 	client   *client.Client
 	proxy    *httputil.ReverseProxy
 	log      *slog.Logger
+	// gate admits engine-backed stream sessions; nil admits everything.
+	gate TranscodeGate
 
 	// Timeline bookkeeping, built lazily on first use.
 	tlOnce sync.Once
@@ -247,7 +249,8 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// An absent token is the same failure as a bad one: no credential.
-	if _, err := b.tokens.Verify(q.Get("mt"), pid); err != nil {
+	user, err := b.tokens.Verify(q.Get("mt"), pid)
+	if err != nil {
 		writeJSONError(w, http.StatusUnauthorized, "unauthenticated", "invalid or expired media token")
 		return
 	}
@@ -272,7 +275,17 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	if f := q.Get("fmt"); f != "" {
 		if _, ok := forceFormats[f]; ok && hasOutput(b.caps, f) {
 			shape.Format = f
+			shape.Seekable = false
 		}
+	}
+	// Session limits apply only when the stream engages the engine;
+	// a seekable shape is a passthrough of the original bytes.
+	if !shape.Seekable {
+		release, admitted := b.admit(r.Context(), w, user)
+		if !admitted {
+			return
+		}
+		defer release()
 	}
 
 	params := url.Values{}
@@ -291,6 +304,13 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	// tokenized URL and the bridge forwards it.
 	if t := q.Get("t"); t != "" {
 		params.Set("t", t)
+	}
+	// The per-user bitrate ceiling applies to lossy encodes only; it is
+	// server-derived, never client-controlled.
+	if b.gate != nil && lossyBitrateFormats[shape.Format] {
+		if cap := b.gate.MaxBitrateKbps(r.Context(), user); cap > 0 {
+			params.Set("bitrate", strconv.Itoa(cap))
+		}
 	}
 
 	// Stash the upstream query for the Rewrite hook.

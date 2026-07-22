@@ -9,6 +9,7 @@ import 'metadata/metadata_screen.dart';
 import 'prototype/editing_prototype_screen.dart';
 import 'settings/prefs_controller.dart';
 import 'sync/sync_providers.dart';
+import 'uploads/share_intake_gate.dart';
 
 class WaxDeckApp extends ConsumerWidget {
   const WaxDeckApp({super.key});
@@ -68,9 +69,10 @@ class RootGate extends ConsumerWidget {
     if (authenticated) {
       // Bind the sync machinery to the signed-in lifetime: the engine
       // (or the web invalidation listener) starts here and stops when
-      // this subtree goes away on sign-out.
+      // this subtree goes away on sign-out. Share-sheet payloads route
+      // here too, so they only land while signed in.
       ref.watch(syncBinderProvider);
-      return const LibraryScreen();
+      return const ShareIntakeGate(child: LibraryScreen());
     }
     return switch (auth) {
       AsyncLoading() => const Scaffold(

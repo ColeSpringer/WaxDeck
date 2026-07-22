@@ -49,6 +49,13 @@ type Server struct {
 	// publicBase is the externally reachable base URL; the OIDC
 	// callback redirect URI derives from it.
 	publicBase string
+	// backups is the backup and staged-restore manager; nil in tests
+	// that exercise other surfaces.
+	backups *service.Backups
+	// backupWake hands a claimed backup id to the supervised runner
+	// loop in main; lossy sends never block a handler (the runner also
+	// sweeps for claimed-but-unrun rows).
+	backupWake chan string
 }
 
 // logger is the slice of slog the API layer uses (a seam tests can
@@ -72,6 +79,8 @@ type Options struct {
 	Logger       logger
 	CookieSecure bool
 	PublicBase   string
+	Backups      *service.Backups
+	BackupWake   chan string
 }
 
 // NewServer builds the API server. Bridge may be nil when streaming is
@@ -102,6 +111,8 @@ func NewServer(version string, opts Options) *Server {
 		log:          opts.Logger,
 		cookieSecure: opts.CookieSecure,
 		publicBase:   opts.PublicBase,
+		backups:      opts.Backups,
+		backupWake:   opts.BackupWake,
 	}
 }
 
@@ -789,6 +800,7 @@ var publicPaths = map[string]bool{
 	"/api/v1/auth/session":        true,
 	"/api/v1/auth/logout":         true,
 	"/api/v1/auth/bootstrap":      true,
+	"/api/v1/auth/signup":         true,
 	"/api/v1/auth/oidc/providers": true,
 	"/api/v1/auth/oidc/start":     true,
 	"/api/v1/auth/oidc/callback":  true,
@@ -979,6 +991,10 @@ func ResponseErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 		writeError(w, http.StatusUnsupportedMediaType, "unsupported-format", kindMessage(err, "the file's format is not accepted"))
 	case service.KindFeature:
 		writeError(w, http.StatusNotImplemented, "feature-unavailable", kindMessage(err, "this server is not running the needed capability"))
+	case service.KindReadOnly:
+		writeError(w, http.StatusConflict, "read-only", kindMessage(err, "the target library is read-only"))
+	case service.KindTranscodeLimit:
+		writeError(w, http.StatusTooManyRequests, "transcode-limited", kindMessage(err, "the transcode session limit is reached"))
 	default:
 		var se *service.Error
 		if errors.As(err, &se) && se.Msg != "" && se.Kind == service.KindInternal {

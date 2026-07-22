@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../library/item_delete.dart';
 import '../media_icons.dart';
 import '../playlists/add_to_playlist_dialog.dart';
 import '../providers.dart';
@@ -142,6 +143,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             ),
           ),
           _DownloadButton(pid: item.pid),
+          ItemDeleteAction(
+            pid: item.pid,
+            onDeleted: () => Navigator.of(context).pop(),
+          ),
         ],
       ),
       body: FutureBuilder<void>(

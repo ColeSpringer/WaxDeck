@@ -5,6 +5,7 @@
 // ignore_for_file: unused_element
 import 'package:waxdeck_api_gen/src/model/library_access.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/permissions.dart';
 import 'package:waxdeck_api_gen/src/model/role.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -20,6 +21,7 @@ part 'user_update.g.dart';
 /// * [libraryAccess] 
 /// * [uploadEnabled] - Grant or revoke upload rights.
 /// * [uploadQuotaBytes] - New per-user upload cap in bytes; 0 removes the cap. 
+/// * [permissions] 
 @BuiltValue()
 abstract class UserUpdate implements Built<UserUpdate, UserUpdateBuilder> {
   /// New display name; empty clears it.
@@ -44,6 +46,9 @@ abstract class UserUpdate implements Built<UserUpdate, UserUpdateBuilder> {
   /// New per-user upload cap in bytes; 0 removes the cap. 
   @BuiltValueField(wireName: r'uploadQuotaBytes')
   int? get uploadQuotaBytes;
+
+  @BuiltValueField(wireName: r'permissions')
+  Permissions? get permissions;
 
   UserUpdate._();
 
@@ -110,6 +115,13 @@ class _$UserUpdateSerializer implements PrimitiveSerializer<UserUpdate> {
         specifiedType: const FullType(int),
       );
     }
+    if (object.permissions != null) {
+      yield r'permissions';
+      yield serializers.serialize(
+        object.permissions,
+        specifiedType: const FullType(Permissions),
+      );
+    }
   }
 
   @override
@@ -174,6 +186,13 @@ class _$UserUpdateSerializer implements PrimitiveSerializer<UserUpdate> {
             specifiedType: const FullType(int),
           ) as int;
           result.uploadQuotaBytes = valueDes;
+          break;
+        case r'permissions':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(Permissions),
+          ) as Permissions;
+          result.permissions.replace(valueDes);
           break;
         default:
           unhandled.add(key);

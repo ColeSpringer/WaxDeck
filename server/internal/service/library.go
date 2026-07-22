@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/colespringer/waxbin"
@@ -169,9 +170,14 @@ type Library struct {
 	// process is proxying the stream).
 	radioTitles   map[string]radioTitle
 	radioTitlesMu sync.Mutex
-	// lastfm and listenbrainz are the outbound scrobbling clients;
-	// lastfm is nil without server API credentials.
-	lastfm                    *scrobble.Lastfm
+	// lastfmPtr holds the swappable outbound Last.fm client (admin
+	// credential changes rebuild it at runtime); envLastfmKey/Secret
+	// keep the environment pair as the fallback when no runtime pair is
+	// stored. listenbrainz needs no server credentials.
+	lastfmPtr       atomic.Value
+	envLastfmKey    string
+	envLastfmSecret string
+
 	listenbrainz              *scrobble.ListenBrainz
 	allowPrivateScrobbleHosts bool
 	// engine is the release matching engine; nil when no candidate
@@ -190,6 +196,12 @@ type Library struct {
 	enrichProviders []enrich.Provider
 	// matchWake nudges the identify worker; lossy, ticker-backstopped.
 	matchWake chan struct{}
+	// toggles is the hot-path settings cache (read-only flags, transcode
+	// limits), swapped whole on every settings write.
+	toggles atomic.Value
+	// gate is the single transcode session gate, built on first use.
+	gate     *transcodeGate
+	gateOnce sync.Once
 	// sourceProviders are the injected acquisition providers, kept for
 	// the acquire-from-URL surface (the catalog holds its own copy for
 	// show dispatch).
@@ -268,9 +280,9 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	// check gives the friendly error, this guard is the boundary.
 	l.allowPrivateScrobbleHosts = cfg.AllowPrivateScrobbleHosts
 	l.listenbrainz.HTTP = scrobbleHTTPClient(cfg.AllowPrivateScrobbleHosts)
-	if cfg.LastfmAPIKey != "" && cfg.LastfmSecret != "" {
-		l.lastfm = scrobble.NewLastfm(cfg.LastfmAPIKey, cfg.LastfmSecret)
-	}
+	l.loadRuntimeToggles(ctx)
+	l.envLastfmKey, l.envLastfmSecret = cfg.LastfmAPIKey, cfg.LastfmSecret
+	l.loadLastfmClient(ctx)
 	if l.retentionInUseWindow == 0 {
 		l.retentionInUseWindow = 2 * time.Minute
 	}
@@ -372,6 +384,29 @@ func (l *Library) JobStatus(ctx context.Context, apiJobPID string) (Job, error) 
 		Message:  job.Message,
 		Error:    job.Error,
 	}, nil
+}
+
+// Jobs lists recent catalog jobs, newest first. Administrators only.
+func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, error) {
+	if !uc.Admin {
+		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	jobs, err := l.lib.Jobs(ctx, limit)
+	if err != nil {
+		return nil, classify(err)
+	}
+	out := make([]Job, 0, len(jobs))
+	for _, job := range jobs {
+		out = append(out, Job{
+			PID:      apiPID(PrefixJob, job.PID),
+			Kind:     job.Kind,
+			State:    string(job.State),
+			Progress: job.Progress,
+			Message:  job.Message,
+			Error:    job.Error,
+		})
+	}
+	return out, nil
 }
 
 // summary converts an item view to the list-row DTO.

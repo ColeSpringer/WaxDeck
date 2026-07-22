@@ -17,6 +17,10 @@ func toolTaskJSON(d service.ToolTaskDTO) ToolTask {
 		State:     d.State,
 		CreatedAt: time.Unix(0, d.CreatedAtNS).UTC(),
 	}
+	if len(d.Summary) > 0 {
+		summary := d.Summary
+		out.Summary = &summary
+	}
 	if d.ItemPID != "" {
 		out.ItemPid = ptr(d.ItemPID)
 	}

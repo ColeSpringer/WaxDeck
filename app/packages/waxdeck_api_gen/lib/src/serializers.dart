@@ -16,10 +16,15 @@ import 'package:waxdeck_api_gen/src/model/date.dart';
 
 import 'package:waxdeck_api_gen/src/model/acquisition_format.dart';
 import 'package:waxdeck_api_gen/src/model/acquisition_request.dart';
+import 'package:waxdeck_api_gen/src/model/admin_settings.dart';
 import 'package:waxdeck_api_gen/src/model/app_password.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_create.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_created.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_list.dart';
+import 'package:waxdeck_api_gen/src/model/audit_event.dart';
+import 'package:waxdeck_api_gen/src/model/audit_event_page.dart';
+import 'package:waxdeck_api_gen/src/model/backup.dart';
+import 'package:waxdeck_api_gen/src/model/backup_list.dart';
 import 'package:waxdeck_api_gen/src/model/book_detail.dart';
 import 'package:waxdeck_api_gen/src/model/book_merge_request.dart';
 import 'package:waxdeck_api_gen/src/model/book_part.dart';
@@ -44,6 +49,9 @@ import 'package:waxdeck_api_gen/src/model/credit.dart';
 import 'package:waxdeck_api_gen/src/model/credits_edit.dart';
 import 'package:waxdeck_api_gen/src/model/cue_split_request.dart';
 import 'package:waxdeck_api_gen/src/model/custom_tag.dart';
+import 'package:waxdeck_api_gen/src/model/delete_items_request.dart';
+import 'package:waxdeck_api_gen/src/model/delete_items_result.dart';
+import 'package:waxdeck_api_gen/src/model/delete_plan_entry.dart';
 import 'package:waxdeck_api_gen/src/model/device_session.dart';
 import 'package:waxdeck_api_gen/src/model/discovery_list.dart';
 import 'package:waxdeck_api_gen/src/model/download_file.dart';
@@ -76,16 +84,22 @@ import 'package:waxdeck_api_gen/src/model/health_issue.dart';
 import 'package:waxdeck_api_gen/src/model/health_issue_page.dart';
 import 'package:waxdeck_api_gen/src/model/health_rule_count.dart';
 import 'package:waxdeck_api_gen/src/model/health_summary.dart';
+import 'package:waxdeck_api_gen/src/model/invite.dart';
+import 'package:waxdeck_api_gen/src/model/invite_create.dart';
+import 'package:waxdeck_api_gen/src/model/invite_created.dart';
+import 'package:waxdeck_api_gen/src/model/invite_list.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
 import 'package:waxdeck_api_gen/src/model/item_metadata.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
 import 'package:waxdeck_api_gen/src/model/item_summary.dart';
 import 'package:waxdeck_api_gen/src/model/job.dart';
+import 'package:waxdeck_api_gen/src/model/job_list.dart';
 import 'package:waxdeck_api_gen/src/model/kind_fields.dart';
 import 'package:waxdeck_api_gen/src/model/lastfm_connect_start.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
 import 'package:waxdeck_api_gen/src/model/library_access.dart';
 import 'package:waxdeck_api_gen/src/model/library_matching.dart';
+import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/linked_identity.dart';
 import 'package:waxdeck_api_gen/src/model/listen_brainz_connect.dart';
 import 'package:waxdeck_api_gen/src/model/listen_ingest_result.dart';
@@ -106,6 +120,8 @@ import 'package:waxdeck_api_gen/src/model/merge_result.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_edit.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_fields.dart';
+import 'package:waxdeck_api_gen/src/model/migration_create.dart';
+import 'package:waxdeck_api_gen/src/model/migration_options.dart';
 import 'package:waxdeck_api_gen/src/model/model_library.dart';
 import 'package:waxdeck_api_gen/src/model/notification_config.dart';
 import 'package:waxdeck_api_gen/src/model/notification_config_update.dart';
@@ -123,6 +139,7 @@ import 'package:waxdeck_api_gen/src/model/organize_profiles.dart';
 import 'package:waxdeck_api_gen/src/model/organize_report.dart';
 import 'package:waxdeck_api_gen/src/model/organize_request.dart';
 import 'package:waxdeck_api_gen/src/model/password_change.dart';
+import 'package:waxdeck_api_gen/src/model/permissions.dart';
 import 'package:waxdeck_api_gen/src/model/play_info.dart';
 import 'package:waxdeck_api_gen/src/model/play_state.dart';
 import 'package:waxdeck_api_gen/src/model/play_state_list.dart';
@@ -160,6 +177,7 @@ import 'package:waxdeck_api_gen/src/model/refresh_result.dart';
 import 'package:waxdeck_api_gen/src/model/rejected_listen.dart';
 import 'package:waxdeck_api_gen/src/model/release_status_edit.dart';
 import 'package:waxdeck_api_gen/src/model/rematch_result.dart';
+import 'package:waxdeck_api_gen/src/model/restore_plan.dart';
 import 'package:waxdeck_api_gen/src/model/review_bulk_decision.dart';
 import 'package:waxdeck_api_gen/src/model/review_bulk_outcome.dart';
 import 'package:waxdeck_api_gen/src/model/review_bulk_result.dart';
@@ -177,14 +195,24 @@ import 'package:waxdeck_api_gen/src/model/rule_fields.dart';
 import 'package:waxdeck_api_gen/src/model/rule_node.dart';
 import 'package:waxdeck_api_gen/src/model/rule_sort.dart';
 import 'package:waxdeck_api_gen/src/model/rule_tag_key.dart';
+import 'package:waxdeck_api_gen/src/model/schedule.dart';
+import 'package:waxdeck_api_gen/src/model/schedule_kind.dart';
+import 'package:waxdeck_api_gen/src/model/schedule_list.dart';
+import 'package:waxdeck_api_gen/src/model/schedule_put.dart';
 import 'package:waxdeck_api_gen/src/model/scrobbler.dart';
 import 'package:waxdeck_api_gen/src/model/scrobbler_list.dart';
+import 'package:waxdeck_api_gen/src/model/scrobbling_admin_config.dart';
+import 'package:waxdeck_api_gen/src/model/scrobbling_admin_config_put.dart';
+import 'package:waxdeck_api_gen/src/model/sealed_casualty.dart';
 import 'package:waxdeck_api_gen/src/model/search_hit.dart';
 import 'package:waxdeck_api_gen/src/model/search_results.dart';
 import 'package:waxdeck_api_gen/src/model/server_sync_event.dart';
 import 'package:waxdeck_api_gen/src/model/server_sync_page.dart';
 import 'package:waxdeck_api_gen/src/model/session_info.dart';
 import 'package:waxdeck_api_gen/src/model/session_list.dart';
+import 'package:waxdeck_api_gen/src/model/signup_approval.dart';
+import 'package:waxdeck_api_gen/src/model/signup_request.dart';
+import 'package:waxdeck_api_gen/src/model/signup_result.dart';
 import 'package:waxdeck_api_gen/src/model/skip_map.dart';
 import 'package:waxdeck_api_gen/src/model/skip_span.dart';
 import 'package:waxdeck_api_gen/src/model/smart_rule.dart';
@@ -196,13 +224,18 @@ import 'package:waxdeck_api_gen/src/model/subscription_settings.dart';
 import 'package:waxdeck_api_gen/src/model/synced_line.dart';
 import 'package:waxdeck_api_gen/src/model/tag_edit.dart';
 import 'package:waxdeck_api_gen/src/model/tag_edit_result.dart';
+import 'package:waxdeck_api_gen/src/model/tag_rule.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_boundary.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_create.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_info.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task_page.dart';
+import 'package:waxdeck_api_gen/src/model/transcoding_limits.dart';
 import 'package:waxdeck_api_gen/src/model/transcript.dart';
 import 'package:waxdeck_api_gen/src/model/transcript_cue.dart';
+import 'package:waxdeck_api_gen/src/model/trash_empty_result.dart';
+import 'package:waxdeck_api_gen/src/model/trash_entry.dart';
+import 'package:waxdeck_api_gen/src/model/trash_list.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_group.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_groups.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_member.dart';
@@ -237,10 +270,15 @@ part 'serializers.g.dart';
 @SerializersFor([
   AcquisitionFormat,
   AcquisitionRequest,
+  AdminSettings,
   AppPassword,$AppPassword,
   AppPasswordCreate,
   AppPasswordCreated,
   AppPasswordList,
+  AuditEvent,
+  AuditEventPage,
+  Backup,
+  BackupList,
   BookDetail,
   BookMergeRequest,
   BookPart,
@@ -265,6 +303,9 @@ part 'serializers.g.dart';
   CreditsEdit,
   CueSplitRequest,
   CustomTag,
+  DeleteItemsRequest,
+  DeleteItemsResult,
+  DeletePlanEntry,
   DeviceSession,
   DiscoveryList,
   DownloadFile,
@@ -297,16 +338,22 @@ part 'serializers.g.dart';
   HealthIssuePage,
   HealthRuleCount,
   HealthSummary,
+  Invite,$Invite,
+  InviteCreate,
+  InviteCreated,
+  InviteList,
   Item,
   ItemMetadata,
   ItemPage,
   ItemSummary,$ItemSummary,
   Job,
+  JobList,
   KindFields,
   LastfmConnectStart,
   Libraries,
   LibraryAccess,
   LibraryMatching,
+  LibraryReadOnly,
   LinkedIdentity,
   ListenBrainzConnect,
   ListenIngestResult,
@@ -327,6 +374,8 @@ part 'serializers.g.dart';
   MetadataEdit,
   MetadataEditResult,
   MetadataFields,
+  MigrationCreate,
+  MigrationOptions,
   ModelLibrary,
   NotificationConfig,
   NotificationConfigUpdate,
@@ -344,6 +393,7 @@ part 'serializers.g.dart';
   OrganizeReport,
   OrganizeRequest,
   PasswordChange,
+  Permissions,
   PlayInfo,
   PlayState,
   PlayStateList,
@@ -381,6 +431,7 @@ part 'serializers.g.dart';
   RejectedListen,
   ReleaseStatusEdit,
   RematchResult,
+  RestorePlan,
   ReviewBulkDecision,
   ReviewBulkOutcome,
   ReviewBulkResult,
@@ -398,14 +449,24 @@ part 'serializers.g.dart';
   RuleNode,
   RuleSort,
   RuleTagKey,
+  Schedule,
+  ScheduleKind,
+  ScheduleList,
+  SchedulePut,
   Scrobbler,
   ScrobblerList,
+  ScrobblingAdminConfig,
+  ScrobblingAdminConfigPut,
+  SealedCasualty,
   SearchHit,
   SearchResults,
   ServerSyncEvent,
   ServerSyncPage,
   SessionInfo,
   SessionList,
+  SignupApproval,
+  SignupRequest,
+  SignupResult,
   SkipMap,
   SkipSpan,
   SmartRule,
@@ -417,13 +478,18 @@ part 'serializers.g.dart';
   SyncedLine,
   TagEdit,
   TagEditResult,
+  TagRule,
   TimelineBoundary,
   TimelineCreate,
   TimelineInfo,
   ToolTask,
   ToolTaskPage,
+  TranscodingLimits,
   Transcript,
   TranscriptCue,
+  TrashEmptyResult,
+  TrashEntry,
+  TrashList,
   UpgradeGroup,
   UpgradeGroups,
   UpgradeMember,
@@ -456,6 +522,7 @@ part 'serializers.g.dart';
 Serializers serializers = (_$serializers.toBuilder()
       ..add(AppPassword.serializer)
       ..add(EpisodeSummary.serializer)
+      ..add(Invite.serializer)
       ..add(ItemSummary.serializer)
       ..add(ReviewEntry.serializer)
       ..add(User.serializer)

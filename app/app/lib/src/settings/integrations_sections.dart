@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 import 'integrations_controller.dart';
 
@@ -61,6 +62,74 @@ class ScrobblingSection extends ConsumerWidget {
     }
   }
 
+  Future<void> _openLastfmSetup(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (_) => const _LastfmCredentialsDialog(),
+  );
+
+  /// The row's trailing action. Administrators additionally get the
+  /// server-credential setup on the Last.fm row: it replaces the dead
+  /// disabled Connect while credentials are missing, and sits beside
+  /// Connect/Disconnect once they exist.
+  Widget _trailing(
+    BuildContext context,
+    WidgetRef ref,
+    Scrobbler slot, {
+    required bool isAdmin,
+  }) {
+    final adminSetup = isAdmin && slot.service == 'lastfm';
+    if (adminSetup && !slot.connected && !slot.available) {
+      return Semantics(
+        identifier: 'scrobbler-setup-lastfm',
+        button: true,
+        child: TextButton(
+          key: const ValueKey('scrobbler-setup-lastfm'),
+          onPressed: () => _openLastfmSetup(context),
+          child: const Text('Set up…'),
+        ),
+      );
+    }
+    final action = slot.connected
+        ? Semantics(
+            identifier: 'scrobbler-disconnect-${slot.service}',
+            button: true,
+            child: TextButton(
+              key: ValueKey('scrobbler-disconnect-${slot.service}'),
+              onPressed: () => _disconnect(context, ref, slot),
+              child: const Text('Disconnect'),
+            ),
+          )
+        : Semantics(
+            identifier: 'scrobbler-connect-${slot.service}',
+            button: true,
+            child: TextButton(
+              key: ValueKey('scrobbler-connect-${slot.service}'),
+              onPressed: slot.available
+                  ? () => _connect(context, ref, slot)
+                  : null,
+              child: const Text('Connect'),
+            ),
+          );
+    if (!adminSetup) return action;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        action,
+        Semantics(
+          identifier: 'scrobbler-setup-lastfm',
+          button: true,
+          child: IconButton(
+            key: const ValueKey('scrobbler-setup-lastfm'),
+            tooltip: 'Server API credentials',
+            icon: const Icon(Icons.settings_outlined),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _openLastfmSetup(context),
+          ),
+        ),
+      ],
+    );
+  }
+
   /// The row's one-line status: connection state first, then delivery
   /// health. A standing error outranks the connected pleasantry; the
   /// user opening this screen wants to know why scrobbles stopped.
@@ -81,6 +150,8 @@ class ScrobblingSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scrobblers = ref.watch(scrobblersProvider);
+    final user = ref.watch(authControllerProvider).value?.user;
+    final isAdmin = user?.roles.contains('admin') ?? false;
     final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,31 +176,7 @@ class ScrobblingSection extends ConsumerWidget {
                               color: Theme.of(context).colorScheme.error,
                             ),
                     ),
-                    trailing: slot.connected
-                        ? Semantics(
-                            identifier: 'scrobbler-disconnect-${slot.service}',
-                            button: true,
-                            child: TextButton(
-                              key: ValueKey(
-                                'scrobbler-disconnect-${slot.service}',
-                              ),
-                              onPressed: () => _disconnect(context, ref, slot),
-                              child: const Text('Disconnect'),
-                            ),
-                          )
-                        : Semantics(
-                            identifier: 'scrobbler-connect-${slot.service}',
-                            button: true,
-                            child: TextButton(
-                              key: ValueKey(
-                                'scrobbler-connect-${slot.service}',
-                              ),
-                              onPressed: slot.available
-                                  ? () => _connect(context, ref, slot)
-                                  : null,
-                              child: const Text('Connect'),
-                            ),
-                          ),
+                    trailing: _trailing(context, ref, slot, isAdmin: isAdmin),
                   ),
                 ),
             ],
@@ -229,6 +276,139 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
             key: const Key('listenbrainz-connect-confirm'),
             onPressed: _busy ? null : _connect,
             child: const Text('Connect'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The server-level Last.fm API credentials (administrators). The API
+/// key reads back for display; the secret is write-only, stored sealed.
+/// Clearing falls back to the server environment's credentials when it
+/// has them.
+class _LastfmCredentialsDialog extends ConsumerStatefulWidget {
+  const _LastfmCredentialsDialog();
+
+  @override
+  ConsumerState<_LastfmCredentialsDialog> createState() =>
+      _LastfmCredentialsDialogState();
+}
+
+class _LastfmCredentialsDialogState
+    extends ConsumerState<_LastfmCredentialsDialog> {
+  final _apiKeyController = TextEditingController();
+  final _secretController = TextEditingController();
+  var _seeded = false;
+  var _busy = false;
+
+  @override
+  void dispose() {
+    _apiKeyController.dispose();
+    _secretController.dispose();
+    super.dispose();
+  }
+
+  void _seed(ScrobblingAdminConfig config) {
+    if (_seeded) return;
+    _seeded = true;
+    _apiKeyController.text = config.lastfmApiKey ?? '';
+  }
+
+  Future<void> _save({required bool clear}) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(scrobblingAdminConfigProvider.notifier)
+          .save(
+            apiKey: clear ? '' : _apiKeyController.text.trim(),
+            secret: clear ? '' : _secretController.text.trim(),
+          );
+      navigator.pop();
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final config = ref.watch(scrobblingAdminConfigProvider);
+    return AlertDialog(
+      title: const Text('Last.fm API credentials'),
+      content: switch (config) {
+        AsyncData(:final value) => Builder(
+          builder: (context) {
+            _seed(value);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // No Semantics identifier wrappers, for the same web
+                // duplicate-node reason as the ListenBrainz dialog.
+                TextField(
+                  key: const Key('lastfm-api-key-field'),
+                  controller: _apiKeyController,
+                  decoration: const InputDecoration(
+                    labelText: 'API key',
+                    helperText: 'Register at last.fm/api/account/create',
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  key: const Key('lastfm-secret-field'),
+                  controller: _secretController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'Shared secret',
+                    helperText: value.lastfmSecretSet
+                        ? 'Stored sealed; never shown again'
+                        : null,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        AsyncError() => const Text('Could not load the credential state'),
+        _ => const Padding(
+          padding: EdgeInsets.all(8),
+          child: LinearProgressIndicator(),
+        ),
+      },
+      actions: [
+        // Only stored credentials can be cleared; the environment pair
+        // is the fallback, not something this surface removes.
+        if (config.value?.lastfmSource == 'settings')
+          Semantics(
+            identifier: 'lastfm-credentials-clear',
+            button: true,
+            child: TextButton(
+              key: const Key('lastfm-credentials-clear'),
+              onPressed: _busy ? null : () => _save(clear: true),
+              child: const Text('Clear'),
+            ),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        Semantics(
+          identifier: 'lastfm-credentials-save',
+          label: 'Save',
+          button: true,
+          child: FilledButton(
+            key: const Key('lastfm-credentials-save'),
+            onPressed: _busy || config is! AsyncData
+                ? null
+                : () => _save(clear: false),
+            child: const Text('Save'),
           ),
         ),
       ],

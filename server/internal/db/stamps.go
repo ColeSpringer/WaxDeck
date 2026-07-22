@@ -62,6 +62,20 @@ func (d *DB) StampPlayState(ctx context.Context, userID, itemPID, field string, 
 	return nil
 }
 
+// PruneStamps drops stamp rows whose every field last changed before
+// the cutoff. The stamps exist to guard offline replays and to serve
+// the in-progress surface; a pair untouched for the retention window
+// serves neither.
+func (d *DB) PruneStamps(ctx context.Context, olderThanNS int64) (int64, error) {
+	res, err := d.w.ExecContext(ctx, `
+		DELETE FROM play_state_stamps
+		WHERE MAX(position_ns, star_ns, rating_ns) < ?`, olderThanNS)
+	if err != nil {
+		return 0, fmt.Errorf("db: pruning play stamps: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // RecentPositionStamps lists item pids the user holds position stamps
 // for, most recently stamped first. This is the in-progress surface:
 // the catalog's recently-played list requires a completed play, while

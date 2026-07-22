@@ -6,6 +6,7 @@
 import 'package:waxdeck_api_gen/src/model/library_access.dart';
 import 'package:waxdeck_api_gen/src/model/linked_identity.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/permissions.dart';
 import 'package:waxdeck_api_gen/src/model/user.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -20,7 +21,9 @@ part 'user_account.g.dart';
 /// * [displayName] - Optional display name; falls back to `username`.
 /// * [roles] - Assigned roles (`admin`, `user`).
 /// * [disabled] - Disabled accounts cannot log in and their live sessions are revoked on disable. 
+/// * [pending] - True for a self-serve registration still awaiting an administrator's decision. Pending accounts cannot log in; approve or reject them through the signup request endpoints. 
 /// * [libraryAccess] 
+/// * [permissions] 
 /// * [uploadEnabled] - Whether the account may upload audio. Administrators can always upload. 
 /// * [uploadQuotaBytes] - Total bytes of uploads the account may hold at once; absent means no per-user cap. 
 /// * [createdAt] - When the account was created.
@@ -35,6 +38,13 @@ abstract class UserAccount implements User, Built<UserAccount, UserAccountBuilde
   /// Linked single sign-on identities.
   @BuiltValueField(wireName: r'identities')
   BuiltList<LinkedIdentity>? get identities;
+
+  @BuiltValueField(wireName: r'permissions')
+  Permissions get permissions;
+
+  /// True for a self-serve registration still awaiting an administrator's decision. Pending accounts cannot log in; approve or reject them through the signup request endpoints. 
+  @BuiltValueField(wireName: r'pending')
+  bool get pending;
 
   @BuiltValueField(wireName: r'libraryAccess')
   LibraryAccess get libraryAccess;
@@ -78,6 +88,35 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
     UserAccount object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
+    if (object.displayName != null) {
+      yield r'displayName';
+      yield serializers.serialize(
+        object.displayName,
+        specifiedType: const FullType(String),
+      );
+    }
+    yield r'pending';
+    yield serializers.serialize(
+      object.pending,
+      specifiedType: const FullType(bool),
+    );
+    yield r'roles';
+    yield serializers.serialize(
+      object.roles,
+      specifiedType: const FullType(BuiltList, [FullType(String)]),
+    );
+    yield r'libraryAccess';
+    yield serializers.serialize(
+      object.libraryAccess,
+      specifiedType: const FullType(LibraryAccess),
+    );
+    if (object.hasPassword != null) {
+      yield r'hasPassword';
+      yield serializers.serialize(
+        object.hasPassword,
+        specifiedType: const FullType(bool),
+      );
+    }
     yield r'createdAt';
     yield serializers.serialize(
       object.createdAt,
@@ -90,22 +129,10 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
         specifiedType: const FullType(BuiltList, [FullType(LinkedIdentity)]),
       );
     }
-    if (object.displayName != null) {
-      yield r'displayName';
-      yield serializers.serialize(
-        object.displayName,
-        specifiedType: const FullType(String),
-      );
-    }
-    yield r'roles';
+    yield r'permissions';
     yield serializers.serialize(
-      object.roles,
-      specifiedType: const FullType(BuiltList, [FullType(String)]),
-    );
-    yield r'libraryAccess';
-    yield serializers.serialize(
-      object.libraryAccess,
-      specifiedType: const FullType(LibraryAccess),
+      object.permissions,
+      specifiedType: const FullType(Permissions),
     );
     yield r'uploadEnabled';
     yield serializers.serialize(
@@ -117,13 +144,6 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
       object.disabled,
       specifiedType: const FullType(bool),
     );
-    if (object.hasPassword != null) {
-      yield r'hasPassword';
-      yield serializers.serialize(
-        object.hasPassword,
-        specifiedType: const FullType(bool),
-      );
-    }
     yield r'id';
     yield serializers.serialize(
       object.id,
@@ -164,26 +184,19 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
       final key = serializedList[i] as String;
       final value = serializedList[i + 1];
       switch (key) {
-        case r'createdAt':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
-          result.createdAt = valueDes;
-          break;
-        case r'identities':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(BuiltList, [FullType(LinkedIdentity)]),
-          ) as BuiltList<LinkedIdentity>;
-          result.identities.replace(valueDes);
-          break;
         case r'displayName':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(String),
           ) as String;
           result.displayName = valueDes;
+          break;
+        case r'pending':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.pending = valueDes;
           break;
         case r'roles':
           final valueDes = serializers.deserialize(
@@ -199,6 +212,34 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
           ) as LibraryAccess;
           result.libraryAccess.replace(valueDes);
           break;
+        case r'hasPassword':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.hasPassword = valueDes;
+          break;
+        case r'createdAt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(DateTime),
+          ) as DateTime;
+          result.createdAt = valueDes;
+          break;
+        case r'identities':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(LinkedIdentity)]),
+          ) as BuiltList<LinkedIdentity>;
+          result.identities.replace(valueDes);
+          break;
+        case r'permissions':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(Permissions),
+          ) as Permissions;
+          result.permissions.replace(valueDes);
+          break;
         case r'uploadEnabled':
           final valueDes = serializers.deserialize(
             value,
@@ -212,13 +253,6 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.disabled = valueDes;
-          break;
-        case r'hasPassword':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(bool),
-          ) as bool;
-          result.hasPassword = valueDes;
           break;
         case r'id':
           final valueDes = serializers.deserialize(

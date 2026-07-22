@@ -19,6 +19,8 @@ class _$UserUpdate extends UserUpdate {
   final bool? uploadEnabled;
   @override
   final int? uploadQuotaBytes;
+  @override
+  final Permissions? permissions;
 
   factory _$UserUpdate([void Function(UserUpdateBuilder)? updates]) =>
       (UserUpdateBuilder()..update(updates))._build();
@@ -30,6 +32,7 @@ class _$UserUpdate extends UserUpdate {
     this.libraryAccess,
     this.uploadEnabled,
     this.uploadQuotaBytes,
+    this.permissions,
   }) : super._();
   @override
   UserUpdate rebuild(void Function(UserUpdateBuilder) updates) =>
@@ -47,7 +50,8 @@ class _$UserUpdate extends UserUpdate {
         disabled == other.disabled &&
         libraryAccess == other.libraryAccess &&
         uploadEnabled == other.uploadEnabled &&
-        uploadQuotaBytes == other.uploadQuotaBytes;
+        uploadQuotaBytes == other.uploadQuotaBytes &&
+        permissions == other.permissions;
   }
 
   @override
@@ -59,6 +63,7 @@ class _$UserUpdate extends UserUpdate {
     _$hash = $jc(_$hash, libraryAccess.hashCode);
     _$hash = $jc(_$hash, uploadEnabled.hashCode);
     _$hash = $jc(_$hash, uploadQuotaBytes.hashCode);
+    _$hash = $jc(_$hash, permissions.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -71,7 +76,8 @@ class _$UserUpdate extends UserUpdate {
           ..add('disabled', disabled)
           ..add('libraryAccess', libraryAccess)
           ..add('uploadEnabled', uploadEnabled)
-          ..add('uploadQuotaBytes', uploadQuotaBytes))
+          ..add('uploadQuotaBytes', uploadQuotaBytes)
+          ..add('permissions', permissions))
         .toString();
   }
 }
@@ -107,6 +113,12 @@ class UserUpdateBuilder implements Builder<UserUpdate, UserUpdateBuilder> {
   set uploadQuotaBytes(int? uploadQuotaBytes) =>
       _$this._uploadQuotaBytes = uploadQuotaBytes;
 
+  PermissionsBuilder? _permissions;
+  PermissionsBuilder get permissions =>
+      _$this._permissions ??= PermissionsBuilder();
+  set permissions(PermissionsBuilder? permissions) =>
+      _$this._permissions = permissions;
+
   UserUpdateBuilder() {
     UserUpdate._defaults(this);
   }
@@ -120,6 +132,7 @@ class UserUpdateBuilder implements Builder<UserUpdate, UserUpdateBuilder> {
       _libraryAccess = $v.libraryAccess?.toBuilder();
       _uploadEnabled = $v.uploadEnabled;
       _uploadQuotaBytes = $v.uploadQuotaBytes;
+      _permissions = $v.permissions?.toBuilder();
       _$v = null;
     }
     return this;
@@ -150,6 +163,7 @@ class UserUpdateBuilder implements Builder<UserUpdate, UserUpdateBuilder> {
             libraryAccess: _libraryAccess?.build(),
             uploadEnabled: uploadEnabled,
             uploadQuotaBytes: uploadQuotaBytes,
+            permissions: _permissions?.build(),
           );
     } catch (_) {
       late String _$failedField;
@@ -159,6 +173,9 @@ class UserUpdateBuilder implements Builder<UserUpdate, UserUpdateBuilder> {
 
         _$failedField = 'libraryAccess';
         _libraryAccess?.build();
+
+        _$failedField = 'permissions';
+        _permissions?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'UserUpdate',

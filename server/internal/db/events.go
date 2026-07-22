@@ -144,3 +144,14 @@ func (d *DB) SyncStateSet(ctx context.Context, key, value string) error {
 	}
 	return nil
 }
+
+// ClearSyncState drops every sync_state row. The restore path calls it
+// after swapping databases so the reopened server mints fresh stream
+// generations and every outstanding client cursor answers sync-reset
+// instead of silently reading a different history.
+func (d *DB) ClearSyncState(ctx context.Context) error {
+	if _, err := d.w.ExecContext(ctx, `DELETE FROM sync_state`); err != nil {
+		return fmt.Errorf("db: clearing sync state: %w", err)
+	}
+	return nil
+}

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../admin/server_settings_section.dart';
 import '../auth/auth_controller.dart';
 import 'integrations_sections.dart';
 import 'prefs_controller.dart';
@@ -150,6 +151,8 @@ class SettingsScreen extends ConsumerWidget {
           if (user?.roles.contains('admin') ?? false) ...[
             const SizedBox(height: 16),
             const NotificationsSection(),
+            const SizedBox(height: 16),
+            const ServerSettingsSection(),
           ],
           const SizedBox(height: 24),
           Semantics(

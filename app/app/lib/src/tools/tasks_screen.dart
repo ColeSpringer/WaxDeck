@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -143,8 +145,47 @@ class _TaskRow extends StatelessWidget {
     'book-split' => 'Book split',
     'cue-split' => 'CUE split',
     'acquire' => 'URL download',
+    'import-navidrome' => 'Import from Navidrome',
+    'import-subsonic' => 'Import from Subsonic',
+    'import-audiobookshelf' => 'Import from Audiobookshelf',
     _ => type,
   };
+
+  /// One line of the summary's headline counters, when present.
+  static String? summaryLine(Map<String, Object?> summary) {
+    final parts = [
+      for (final key in const ['matched', 'unmatched', 'listens'])
+        if (summary[key] != null) '$key ${summary[key]}',
+    ];
+    if (parts.isEmpty) {
+      return summary.isEmpty ? null : 'Finished; tap for detail';
+    }
+    return parts.join(', ');
+  }
+
+  void _showSummary(BuildContext context, Map<String, Object?> summary) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('task-summary-dialog'),
+        title: Text(_typeLabel(task.type)),
+        content: SingleChildScrollView(
+          child: Text(
+            const JsonEncoder.withIndent('  ').convert(summary),
+            style: Theme.of(
+              dialogContext,
+            ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -153,70 +194,84 @@ class _TaskRow extends StatelessWidget {
     final progress = task.progressPct;
     final error = task.error;
     final running = task.state == 'running' || task.state == 'queued';
+    final summary = task.finishedAt == null ? null : task.summary;
     return Semantics(
       identifier: 'task-row-${task.id}',
       label: _typeLabel(task.type),
       child: Card(
         key: ValueKey('task-row-${task.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      task.itemPid == null
-                          ? _typeLabel(task.type)
-                          : '${_typeLabel(task.type)}: ${task.itemPid}',
-                      style: textTheme.titleSmall,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+        child: InkWell(
+          onTap: summary == null ? null : () => _showSummary(context, summary),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        task.itemPid == null
+                            ? _typeLabel(task.type)
+                            : '${_typeLabel(task.type)}: ${task.itemPid}',
+                        style: textTheme.titleSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  Chip(
-                    label: Text(task.state),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    backgroundColor: task.state == 'failed'
-                        ? colorScheme.errorContainer
-                        : null,
-                    labelStyle: task.state == 'failed'
-                        ? TextStyle(color: colorScheme.onErrorContainer)
-                        : null,
+                    Chip(
+                      label: Text(task.state),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      backgroundColor: task.state == 'failed'
+                          ? colorScheme.errorContainer
+                          : null,
+                      labelStyle: task.state == 'failed'
+                          ? TextStyle(color: colorScheme.onErrorContainer)
+                          : null,
+                    ),
+                  ],
+                ),
+                if (running) ...[
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: progress == null ? null : progress / 100,
                   ),
                 ],
-              ),
-              if (running) ...[
-                const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: progress == null ? null : progress / 100,
-                ),
-              ],
-              if (error != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  error,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.error,
+                if (error != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    error,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.error,
+                    ),
                   ),
-                ),
-              ],
-              if (task.resultPids.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  // Acquire tasks produce review-queue entries, not library
-                  // items, so their result ids are not navigable items to list.
-                  task.type == 'acquire'
-                      ? '${task.resultPids.length} ready for review'
-                      : 'Produced: ${task.resultPids.join(', ')}',
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+                ],
+                if (task.resultPids.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    // Acquire tasks produce review-queue entries, not library
+                    // items, so their result ids are not navigable items to list.
+                    task.type == 'acquire'
+                        ? '${task.resultPids.length} ready for review'
+                        : 'Produced: ${task.resultPids.join(', ')}',
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
+                ],
+                if (summary != null && summaryLine(summary) != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    summaryLine(summary)!,
+                    key: Key('task-summary-${task.id}'),
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

@@ -70,18 +70,20 @@ Future<void> showAddToLibrarySheet(
 }
 
 /// Queues a server-side download of a source URL; the result flows
-/// through uploads and the review queue.
+/// through uploads and the review queue. [initialUrl] prefills the
+/// dialog (a share-sheet handoff).
 Future<void> acquireFromUrl(
   BuildContext context,
   WidgetRef ref, {
   MediaType initial = MediaType.music,
+  String? initialUrl,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   final navigator = Navigator.of(context);
   final request =
       await showDialog<({String url, MediaType mediaType, String format})>(
         context: context,
-        builder: (_) => AcquireDialog(initial: initial),
+        builder: (_) => AcquireDialog(initial: initial, initialUrl: initialUrl),
       );
   if (request == null) return;
   try {
@@ -151,16 +153,25 @@ Future<void> pickAndUpload(
 
 /// The URL entry dialog, returning the URL and media type or null.
 class AcquireDialog extends StatefulWidget {
-  const AcquireDialog({super.key, this.initial = MediaType.music});
+  const AcquireDialog({
+    super.key,
+    this.initial = MediaType.music,
+    this.initialUrl,
+  });
 
   final MediaType initial;
+
+  /// Prefills the URL field (a share-sheet handoff).
+  final String? initialUrl;
 
   @override
   State<AcquireDialog> createState() => _AcquireDialogState();
 }
 
 class _AcquireDialogState extends State<AcquireDialog> {
-  final _urlController = TextEditingController();
+  late final _urlController = TextEditingController(
+    text: widget.initialUrl ?? '',
+  );
   late var _mediaType = widget.initial;
   var _format = 'best';
 
