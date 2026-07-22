@@ -74,6 +74,8 @@ class _$ListenSession extends ListenSession {
   @override
   final int msPlayed;
   @override
+  final int? skippedMs;
+  @override
   final bool? finished;
   @override
   final String? client;
@@ -88,6 +90,7 @@ class _$ListenSession extends ListenSession {
     required this.pid,
     required this.startedAt,
     required this.msPlayed,
+    this.skippedMs,
     this.finished,
     this.client,
     this.source_,
@@ -107,6 +110,7 @@ class _$ListenSession extends ListenSession {
         pid == other.pid &&
         startedAt == other.startedAt &&
         msPlayed == other.msPlayed &&
+        skippedMs == other.skippedMs &&
         finished == other.finished &&
         client == other.client &&
         source_ == other.source_;
@@ -119,6 +123,7 @@ class _$ListenSession extends ListenSession {
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, startedAt.hashCode);
     _$hash = $jc(_$hash, msPlayed.hashCode);
+    _$hash = $jc(_$hash, skippedMs.hashCode);
     _$hash = $jc(_$hash, finished.hashCode);
     _$hash = $jc(_$hash, client.hashCode);
     _$hash = $jc(_$hash, source_.hashCode);
@@ -133,6 +138,7 @@ class _$ListenSession extends ListenSession {
           ..add('pid', pid)
           ..add('startedAt', startedAt)
           ..add('msPlayed', msPlayed)
+          ..add('skippedMs', skippedMs)
           ..add('finished', finished)
           ..add('client', client)
           ..add('source_', source_))
@@ -160,6 +166,10 @@ class ListenSessionBuilder
   int? get msPlayed => _$this._msPlayed;
   set msPlayed(int? msPlayed) => _$this._msPlayed = msPlayed;
 
+  int? _skippedMs;
+  int? get skippedMs => _$this._skippedMs;
+  set skippedMs(int? skippedMs) => _$this._skippedMs = skippedMs;
+
   bool? _finished;
   bool? get finished => _$this._finished;
   set finished(bool? finished) => _$this._finished = finished;
@@ -183,6 +193,7 @@ class ListenSessionBuilder
       _pid = $v.pid;
       _startedAt = $v.startedAt;
       _msPlayed = $v.msPlayed;
+      _skippedMs = $v.skippedMs;
       _finished = $v.finished;
       _client = $v.client;
       _source_ = $v.source_;
@@ -228,6 +239,7 @@ class ListenSessionBuilder
             r'ListenSession',
             'msPlayed',
           ),
+          skippedMs: skippedMs,
           finished: finished,
           client: client,
           source_: source_,

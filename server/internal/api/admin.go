@@ -98,9 +98,16 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 	if req.Body == nil {
 		return PutAdminSettings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
+	// Absent keeps the current value: a settings writer predating the
+	// field must never flip analysis off by omission.
+	sonic := s.svc.SonicAnalysisEnabled()
+	if req.Body.SonicAnalysis != nil {
+		sonic = *req.Body.SonicAnalysis
+	}
 	st, err := s.svc.AdminSettingsPut(ctx, uc, service.AdminSettings{
 		SignupEnabled:   req.Body.SignupEnabled,
 		ReadOnly:        req.Body.ReadOnly,
+		SonicAnalysis:   sonic,
 		BackupKeepCount: req.Body.BackupKeepCount,
 		BackupKeepBytes: req.Body.BackupKeepBytes,
 	})
@@ -117,6 +124,7 @@ func adminSettingsJSON(st service.AdminSettings) AdminSettings {
 	return AdminSettings{
 		SignupEnabled:   st.SignupEnabled,
 		ReadOnly:        st.ReadOnly,
+		SonicAnalysis:   ptr(st.SonicAnalysis),
 		BackupKeepCount: st.BackupKeepCount,
 		BackupKeepBytes: st.BackupKeepBytes,
 	}

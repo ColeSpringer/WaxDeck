@@ -164,6 +164,11 @@ func TestSubsonicGolden(t *testing.T) {
 		{"getArtistInfo2", "getArtistInfo2", "&id=" + url.QueryEscape(artistID)},
 		{"getTopSongs", "getTopSongs", "&artist=" + url.QueryEscape("Fixture Artist")},
 		{"getSongsByGenre", "getSongsByGenre", "&genre=Ambient"},
+		// The sonicSimilarity extension's honest empty shape on an
+		// embedding-free library. The classic getSimilarSongs pair
+		// shuffles by design, so its coverage lives in the adapter's
+		// unit tests, not goldens.
+		{"getSonicSimilarTracks", "getSonicSimilarTracks", "&id=" + alpha.Pid},
 	}
 
 	update := os.Getenv("UPDATE_GOLDEN") != ""

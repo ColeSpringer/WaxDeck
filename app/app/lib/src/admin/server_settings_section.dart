@@ -72,6 +72,23 @@ class ServerSettingsSection extends ConsumerWidget {
                 ),
               ),
             ),
+            Semantics(
+              identifier: 'setting-sonic-analysis',
+              child: SwitchListTile(
+                key: const Key('setting-sonic-analysis'),
+                title: const Text('Sonic analysis'),
+                subtitle: const Text(
+                  'Analyze the library in the background for instant '
+                  'mixes, similar tracks, and sonic paths',
+                ),
+                value: settings.sonicAnalysis,
+                onChanged: (value) => _saveSettings(
+                  context,
+                  ref,
+                  settings.copyWith(sonicAnalysis: value),
+                ),
+              ),
+            ),
           ],
           const SizedBox(height: 8),
           const _TranscodingFields(),

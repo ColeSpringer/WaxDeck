@@ -62,6 +62,9 @@ Serializers _$serializers =
           ..add(DuplicateGroups.serializer)
           ..add(DuplicateWarning.serializer)
           ..add(EditableField.serializer)
+          ..add(EmbeddingIngestResult.serializer)
+          ..add(EmbeddingReport.serializer)
+          ..add(EmbeddingUpload.serializer)
           ..add(EnrichItemRequest.serializer)
           ..add(EnrichItemRequestWantEnum.serializer)
           ..add(EnrichItemResult.serializer)
@@ -85,6 +88,9 @@ Serializers _$serializers =
           ..add(HealthIssuePage.serializer)
           ..add(HealthRuleCount.serializer)
           ..add(HealthSummary.serializer)
+          ..add(HeatmapDay.serializer)
+          ..add(InstantMix.serializer)
+          ..add(InstantMixRequest.serializer)
           ..add(InviteCreate.serializer)
           ..add(InviteCreated.serializer)
           ..add(InviteList.serializer)
@@ -104,9 +110,17 @@ Serializers _$serializers =
           ..add(LinkedIdentity.serializer)
           ..add(ListenBrainzConnect.serializer)
           ..add(ListenIngestResult.serializer)
+          ..add(ListenLogEntry.serializer)
+          ..add(ListenLogEntrySource_Enum.serializer)
+          ..add(ListenLogPage.serializer)
           ..add(ListenReport.serializer)
           ..add(ListenSession.serializer)
           ..add(ListenSessionSource_Enum.serializer)
+          ..add(ListeningBucket.serializer)
+          ..add(ListeningHeatmap.serializer)
+          ..add(ListeningStats.serializer)
+          ..add(ListeningStatsBucketEnum.serializer)
+          ..add(ListeningStatsRangeEnum.serializer)
           ..add(LocksEdit.serializer)
           ..add(LocksResult.serializer)
           ..add(LoginRequest.serializer)
@@ -117,6 +131,7 @@ Serializers _$serializers =
           ..add(M3uImport.serializer)
           ..add(M3uImportResult.serializer)
           ..add(MediaType.serializer)
+          ..add(MediaTypeListening.serializer)
           ..add(MergeRequest.serializer)
           ..add(MergeRequestEntityTypeEnum.serializer)
           ..add(MergeResult.serializer)
@@ -125,7 +140,9 @@ Serializers _$serializers =
           ..add(MetadataFields.serializer)
           ..add(MigrationCreate.serializer)
           ..add(MigrationOptions.serializer)
+          ..add(MixBasis.serializer)
           ..add(ModelLibrary.serializer)
+          ..add(MonthListening.serializer)
           ..add(NotificationConfig.serializer)
           ..add(NotificationConfigUpdate.serializer)
           ..add(OidcExchangeRequest.serializer)
@@ -158,6 +175,10 @@ Serializers _$serializers =
           ..add(Playlist.serializer)
           ..add(PlaylistCreate.serializer)
           ..add(PlaylistEntry.serializer)
+          ..add(PlaylistImportMiss.serializer)
+          ..add(PlaylistImportRequest.serializer)
+          ..add(PlaylistImportRequestSource_Enum.serializer)
+          ..add(PlaylistImportResult.serializer)
           ..add(PlaylistItemsPage.serializer)
           ..add(PlaylistItemsUpdate.serializer)
           ..add(PlaylistPage.serializer)
@@ -165,6 +186,9 @@ Serializers _$serializers =
           ..add(PlaylistUpdate.serializer)
           ..add(PodcastDetail.serializer)
           ..add(PodcastShow.serializer)
+          ..add(PortablePlaylist.serializer)
+          ..add(PortableRef.serializer)
+          ..add(PortableRefKindEnum.serializer)
           ..add(Prefs.serializer)
           ..add(PrefsThemeEnum.serializer)
           ..add(PushRegistration.serializer)
@@ -178,9 +202,11 @@ Serializers _$serializers =
           ..add(RadioStationList.serializer)
           ..add(RatingUpdate.serializer)
           ..add(RefreshResult.serializer)
+          ..add(RejectedEmbedding.serializer)
           ..add(RejectedListen.serializer)
           ..add(ReleaseStatusEdit.serializer)
           ..add(RematchResult.serializer)
+          ..add(ResolveRungCounts.serializer)
           ..add(RestorePlan.serializer)
           ..add(ReviewBulkDecision.serializer)
           ..add(ReviewBulkDecisionActionEnum.serializer)
@@ -213,15 +239,25 @@ Serializers _$serializers =
           ..add(SearchResults.serializer)
           ..add(ServerSyncEvent.serializer)
           ..add(ServerSyncPage.serializer)
+          ..add(ServerYearInReview.serializer)
           ..add(SessionInfo.serializer)
           ..add(SessionList.serializer)
+          ..add(Share.serializer)
+          ..add(ShareCreate.serializer)
+          ..add(SharePage.serializer)
+          ..add(ShareTargetKindEnum.serializer)
           ..add(SignupApproval.serializer)
           ..add(SignupRequest.serializer)
           ..add(SignupResult.serializer)
           ..add(SignupResultStateEnum.serializer)
+          ..add(SimilarTracks.serializer)
+          ..add(SimilarityStatus.serializer)
+          ..add(SimilarityWorkItem.serializer)
+          ..add(SimilarityWorkPage.serializer)
           ..add(SkipMap.serializer)
           ..add(SkipSpan.serializer)
           ..add(SmartRule.serializer)
+          ..add(SonicPath.serializer)
           ..add(StarUpdate.serializer)
           ..add(SubscribeRequest.serializer)
           ..add(Subscription.serializer)
@@ -236,6 +272,10 @@ Serializers _$serializers =
           ..add(TimelineInfo.serializer)
           ..add(ToolTask.serializer)
           ..add(ToolTaskPage.serializer)
+          ..add(TopEntry.serializer)
+          ..add(TopList.serializer)
+          ..add(TopListKindEnum.serializer)
+          ..add(TopListRangeEnum.serializer)
           ..add(TranscodingLimits.serializer)
           ..add(Transcript.serializer)
           ..add(TranscriptCue.serializer)
@@ -269,6 +309,7 @@ Serializers _$serializers =
           ..add(WsSessionReportFrame.serializer)
           ..add(WsSubscribeFrame.serializer)
           ..add(WsWatchFrame.serializer)
+          ..add(YearInReview.serializer)
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(AppPassword)]),
             () => ListBuilder<AppPassword>(),
@@ -350,6 +391,10 @@ Serializers _$serializers =
             () => ListBuilder<EditableField>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(EmbeddingUpload)]),
+            () => ListBuilder<EmbeddingUpload>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [
               const FullType(EnrichItemRequestWantEnum),
             ]),
@@ -380,8 +425,24 @@ Serializers _$serializers =
             () => ListBuilder<HealthRuleCount>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(HeatmapDay)]),
+            () => ListBuilder<HeatmapDay>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(Invite)]),
             () => ListBuilder<Invite>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ItemSummary)]),
+            () => ListBuilder<ItemSummary>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ItemSummary)]),
+            () => ListBuilder<ItemSummary>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ItemSummary)]),
+            () => ListBuilder<ItemSummary>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ItemSummary)]),
@@ -412,12 +473,52 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ListenLogEntry)]),
+            () => ListBuilder<ListenLogEntry>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ListenSession)]),
             () => ListBuilder<ListenSession>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ListeningBucket)]),
+            () => ListBuilder<ListeningBucket>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(MediaTypeListening),
+            ]),
+            () => ListBuilder<MediaTypeListening>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ModelLibrary)]),
             () => ListBuilder<ModelLibrary>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(MonthListening)]),
+            () => ListBuilder<MonthListening>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(MediaTypeListening),
+            ]),
+            () => ListBuilder<MediaTypeListening>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TopEntry)]),
+            () => ListBuilder<TopEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TopEntry)]),
+            () => ListBuilder<TopEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TopEntry)]),
+            () => ListBuilder<TopEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TopEntry)]),
+            () => ListBuilder<TopEntry>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(OidcProvider)]),
@@ -466,6 +567,20 @@ Serializers _$serializers =
             () => ListBuilder<PlaylistEntry>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(PlaylistImportMiss),
+            ]),
+            () => ListBuilder<PlaylistImportMiss>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(PortableRef)]),
+            () => ListBuilder<PortableRef>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(PortableRef)]),
+            () => ListBuilder<PortableRef>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(PushRegistration)]),
             () => ListBuilder<PushRegistration>(),
           )
@@ -478,6 +593,12 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(RadioStation)]),
             () => ListBuilder<RadioStation>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(RejectedEmbedding),
+            ]),
+            () => ListBuilder<RejectedEmbedding>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(RejectedListen)]),
@@ -586,8 +707,22 @@ Serializers _$serializers =
             () => ListBuilder<ServerSyncEvent>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Share)]),
+            () => ListBuilder<Share>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(SimilarityWorkItem),
+            ]),
+            () => ListBuilder<SimilarityWorkItem>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(SkipSpan)]),
             () => ListBuilder<SkipSpan>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),
@@ -808,6 +943,22 @@ Serializers _$serializers =
             () => ListBuilder<ToolTask>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TopEntry)]),
+            () => ListBuilder<TopEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TopEntry)]),
+            () => ListBuilder<TopEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TopEntry)]),
+            () => ListBuilder<TopEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(TopEntry)]),
+            () => ListBuilder<TopEntry>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(TranscriptCue)]),
             () => ListBuilder<TranscriptCue>(),
           )
@@ -838,6 +989,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),
             () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(num)]),
+            () => ListBuilder<num>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltMap, const [

@@ -81,11 +81,14 @@ class _$Prefs extends Prefs {
   final String? locale;
   @override
   final PrefsThemeEnum? theme;
+  @override
+  final bool? sharedStatsOptOut;
 
   factory _$Prefs([void Function(PrefsBuilder)? updates]) =>
       (PrefsBuilder()..update(updates))._build();
 
-  _$Prefs._({this.timezone, this.locale, this.theme}) : super._();
+  _$Prefs._({this.timezone, this.locale, this.theme, this.sharedStatsOptOut})
+    : super._();
   @override
   Prefs rebuild(void Function(PrefsBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -99,7 +102,8 @@ class _$Prefs extends Prefs {
     return other is Prefs &&
         timezone == other.timezone &&
         locale == other.locale &&
-        theme == other.theme;
+        theme == other.theme &&
+        sharedStatsOptOut == other.sharedStatsOptOut;
   }
 
   @override
@@ -108,6 +112,7 @@ class _$Prefs extends Prefs {
     _$hash = $jc(_$hash, timezone.hashCode);
     _$hash = $jc(_$hash, locale.hashCode);
     _$hash = $jc(_$hash, theme.hashCode);
+    _$hash = $jc(_$hash, sharedStatsOptOut.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -117,7 +122,8 @@ class _$Prefs extends Prefs {
     return (newBuiltValueToStringHelper(r'Prefs')
           ..add('timezone', timezone)
           ..add('locale', locale)
-          ..add('theme', theme))
+          ..add('theme', theme)
+          ..add('sharedStatsOptOut', sharedStatsOptOut))
         .toString();
   }
 }
@@ -137,6 +143,11 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
   PrefsThemeEnum? get theme => _$this._theme;
   set theme(PrefsThemeEnum? theme) => _$this._theme = theme;
 
+  bool? _sharedStatsOptOut;
+  bool? get sharedStatsOptOut => _$this._sharedStatsOptOut;
+  set sharedStatsOptOut(bool? sharedStatsOptOut) =>
+      _$this._sharedStatsOptOut = sharedStatsOptOut;
+
   PrefsBuilder() {
     Prefs._defaults(this);
   }
@@ -147,6 +158,7 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       _timezone = $v.timezone;
       _locale = $v.locale;
       _theme = $v.theme;
+      _sharedStatsOptOut = $v.sharedStatsOptOut;
       _$v = null;
     }
     return this;
@@ -167,7 +179,13 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
 
   _$Prefs _build() {
     final _$result =
-        _$v ?? _$Prefs._(timezone: timezone, locale: locale, theme: theme);
+        _$v ??
+        _$Prefs._(
+          timezone: timezone,
+          locale: locale,
+          theme: theme,
+          sharedStatsOptOut: sharedStatsOptOut,
+        );
     replace(_$result);
     return _$result;
   }

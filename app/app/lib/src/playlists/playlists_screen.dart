@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -19,15 +21,15 @@ class PlaylistsScreen extends ConsumerWidget {
         actions: [
           Semantics(
             identifier: 'playlist-import',
-            label: 'Import M3U',
+            label: 'Import playlist',
             button: true,
             child: IconButton(
               key: const Key('playlist-import'),
-              tooltip: 'Import M3U',
+              tooltip: 'Import playlist',
               icon: const Icon(Icons.playlist_add_circle_outlined),
               onPressed: () => showDialog<void>(
                 context: context,
-                builder: (_) => const _ImportM3uDialog(),
+                builder: (_) => const _ImportPlaylistDialog(),
               ),
             ),
           ),
@@ -127,18 +129,81 @@ class _PlaylistRow extends StatelessWidget {
   }
 }
 
-/// Paste-an-M3U import: the server matches entries against the
-/// library by path and title and reports what it could not place.
-class _ImportM3uDialog extends ConsumerStatefulWidget {
-  const _ImportM3uDialog();
+/// Where a pasted playlist comes from. M3U rides its own endpoint; the
+/// others go through the export-import endpoint and its resolve ladder.
+enum _ImportSource {
+  m3u('m3u', 'M3U'),
+  spotify('spotify', 'Spotify CSV'),
+  applemusic('applemusic', 'Apple Music'),
+  ytmusic('ytmusic', 'YouTube Music CSV'),
+  csv('csv', 'Generic CSV'),
+  text('text', 'Text list'),
+  portable('portable', 'Portable JSON');
 
-  @override
-  ConsumerState<_ImportM3uDialog> createState() => _ImportM3uDialogState();
+  const _ImportSource(this.wire, this.label);
+
+  final String wire;
+  final String label;
 }
 
-class _ImportM3uDialogState extends ConsumerState<_ImportM3uDialog> {
+/// Parses the JSON that "Export portable" copied on another server
+/// back into refs. The shape mirrors the exporter exactly; anything
+/// else throws [FormatException] for the dialog to show.
+(String?, List<PortableRef>) parsePortablePlaylistJson(String text) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(text);
+  } on FormatException {
+    throw const FormatException('This is not the copied portable JSON');
+  }
+  if (decoded is! Map<String, Object?> || decoded['refs'] is! List) {
+    throw const FormatException(
+      'This is not a portable playlist (expected a name and a refs list)',
+    );
+  }
+  final refs = <PortableRef>[];
+  for (final entry in decoded['refs'] as List) {
+    if (entry is! Map<String, Object?>) continue;
+    final title = entry['title'];
+    if (title is! String || title.isEmpty) continue;
+    refs.add(
+      PortableRef(
+        kind: entry['kind'] as String? ?? 'track',
+        essence: entry['essence'] as String?,
+        fingerprint: entry['fingerprint'] as String?,
+        fingerprintAlgo: (entry['fingerprintAlgo'] as num?)?.toInt(),
+        mbid: entry['mbid'] as String?,
+        asin: entry['asin'] as String?,
+        isbn: entry['isbn'] as String?,
+        isrc: entry['isrc'] as String?,
+        artist: entry['artist'] as String?,
+        title: title,
+        album: entry['album'] as String?,
+        durationMs: (entry['durationMs'] as num?)?.toInt(),
+      ),
+    );
+  }
+  if (refs.isEmpty) {
+    throw const FormatException('The portable playlist carries no entries');
+  }
+  return (decoded['name'] as String?, refs);
+}
+
+/// Paste-a-playlist import: a source choice plus the pasted export.
+/// M3U matches by path and title as before; the other sources resolve
+/// entries against the library and report what they could not place.
+class _ImportPlaylistDialog extends ConsumerStatefulWidget {
+  const _ImportPlaylistDialog();
+
+  @override
+  ConsumerState<_ImportPlaylistDialog> createState() =>
+      _ImportPlaylistDialogState();
+}
+
+class _ImportPlaylistDialogState extends ConsumerState<_ImportPlaylistDialog> {
   final _nameController = TextEditingController();
   final _contentController = TextEditingController();
+  var _source = _ImportSource.m3u;
   var _busy = false;
 
   @override
@@ -148,7 +213,7 @@ class _ImportM3uDialogState extends ConsumerState<_ImportM3uDialog> {
     super.dispose();
   }
 
-  Future<void> _import() async {
+  Future<void> _importM3u() async {
     final name = _nameController.text.trim();
     final content = _contentController.text;
     if (name.isEmpty || content.trim().isEmpty || _busy) return;
@@ -176,30 +241,104 @@ class _ImportM3uDialogState extends ConsumerState<_ImportM3uDialog> {
     }
   }
 
+  Future<void> _importExport() async {
+    final payload = _contentController.text;
+    if (payload.trim().isEmpty || _busy) return;
+    setState(() => _busy = true);
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final name = _nameController.text.trim();
+    try {
+      // The portable source carries structured refs, not export text:
+      // the pasted JSON is what "Export portable" copied elsewhere.
+      String? exportedName;
+      List<PortableRef>? refs;
+      if (_source == _ImportSource.portable) {
+        try {
+          (exportedName, refs) = parsePortablePlaylistJson(payload);
+        } on FormatException catch (e) {
+          messenger
+            ..hideCurrentSnackBar()
+            ..showSnackBar(SnackBar(content: Text(e.message)));
+          return;
+        }
+      }
+      final result = await ref
+          .read(playlistsProvider.notifier)
+          .importExport(
+            source: _source.wire,
+            name: name.isEmpty ? exportedName : name,
+            payload: refs == null ? payload : null,
+            refs: refs,
+          );
+      navigator.pop();
+      // This dialog's own context died with the pop; the navigator's
+      // context hosts the report.
+      if (!navigator.mounted) return;
+      await showDialog<void>(
+        context: navigator.context,
+        builder: (_) => _ImportReportDialog(result: result),
+      );
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isM3u = _source == _ImportSource.m3u;
     return AlertDialog(
-      title: const Text('Import M3U'),
+      title: const Text('Import playlist'),
       content: SizedBox(
         width: 480,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Source'),
+              trailing: Semantics(
+                identifier: 'playlist-import-source',
+                child: DropdownButton<_ImportSource>(
+                  key: const Key('playlist-import-source'),
+                  value: _source,
+                  onChanged: (source) {
+                    if (source != null) setState(() => _source = source);
+                  },
+                  items: [
+                    for (final source in _ImportSource.values)
+                      DropdownMenuItem(
+                        value: source,
+                        child: Text(source.label),
+                      ),
+                  ],
+                ),
+              ),
+            ),
             TextField(
-              key: const Key('m3u-name-field'),
+              key: Key(isM3u ? 'm3u-name-field' : 'playlist-import-name'),
               controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Playlist name'),
-              autofocus: true,
+              decoration: InputDecoration(
+                labelText: isM3u ? 'Playlist name' : 'Playlist name (optional)',
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
-              key: const Key('m3u-content-field'),
+              key: Key(isM3u ? 'm3u-content-field' : 'playlist-import-payload'),
               controller: _contentController,
-              decoration: const InputDecoration(
-                labelText: 'M3U contents',
-                helperText: 'Paste the playlist file here',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isM3u ? 'M3U contents' : '${_source.label} export',
+                helperText: isM3u
+                    ? 'Paste the playlist file here'
+                    : _source == _ImportSource.portable
+                    ? 'Paste the JSON that Export portable copied'
+                    : 'Paste the exported playlist here',
+                border: const OutlineInputBorder(),
               ),
               maxLines: 8,
               style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
@@ -212,15 +351,95 @@ class _ImportM3uDialogState extends ConsumerState<_ImportM3uDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        Semantics(
-          identifier: 'm3u-import-confirm',
-          label: 'Import',
-          button: true,
-          child: FilledButton(
-            key: const Key('m3u-import-confirm'),
-            onPressed: _busy ? null : _import,
-            child: const Text('Import'),
+        if (isM3u)
+          Semantics(
+            identifier: 'm3u-import-confirm',
+            label: 'Import',
+            button: true,
+            child: FilledButton(
+              key: const Key('m3u-import-confirm'),
+              onPressed: _busy ? null : _importM3u,
+              child: const Text('Import'),
+            ),
+          )
+        else
+          Semantics(
+            identifier: 'playlist-import-run',
+            label: 'Import',
+            button: true,
+            child: FilledButton(
+              key: const Key('playlist-import-run'),
+              onPressed: _busy ? null : _importExport,
+              child: const Text('Import'),
+            ),
           ),
+      ],
+    );
+  }
+}
+
+/// The import report: what was created, how much resolved, and the
+/// entries with no library match.
+class _ImportReportDialog extends StatelessWidget {
+  const _ImportReportDialog({required this.result});
+
+  final PlaylistImportResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return AlertDialog(
+      key: const Key('playlist-import-report'),
+      title: Text(
+        result.playlistPid == null ? 'Nothing imported' : 'Import complete',
+      ),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              result.playlistPid == null
+                  ? 'No entries matched the library, so no playlist '
+                        'was created.'
+                  : 'Created "${result.name}" with ${result.resolved} of '
+                        '${result.requested} entries.',
+              key: const Key('playlist-import-summary'),
+            ),
+            if (result.missing.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('Not in the library:', style: textTheme.titleSmall),
+              const SizedBox(height: 4),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 240),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final miss in result.missing)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            miss.artist == null
+                                ? miss.title
+                                : '${miss.artist} - ${miss.title}',
+                            style: textTheme.bodySmall,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        FilledButton(
+          key: const Key('playlist-import-report-close'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
         ),
       ],
     );

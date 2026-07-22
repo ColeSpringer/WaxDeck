@@ -87,3 +87,127 @@ func TestDeleteListenReopensTheIdempotencySlot(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestInsertListenStoresSkippedMs(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	s := ListenSession{
+		UserID:    "us-1",
+		SessionID: "sess-skip",
+		ItemPID:   "01JZX5N8QW3F4V9T2B7KDEXAMPLE",
+		MediaType: "podcast",
+		StartedAt: time.Now(),
+		MsPlayed:  900,
+		SkippedMs: 1234,
+		Finished:  true,
+		Client:    "phone",
+		Source:    "live",
+	}
+	if ins, err := d.InsertListen(ctx, s); err != nil || !ins {
+		t.Fatalf("insert = (%v, %v), want (true, nil)", ins, err)
+	}
+	var got []ListenRow
+	err := d.ListensInRange(ctx, "us-1", time.Time{}, time.Now().Add(time.Hour), func(r ListenRow) {
+		got = append(got, r)
+	})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("range read = (%d rows, %v), want 1", len(got), err)
+	}
+	r := got[0]
+	if r.SkippedMs != 1234 || !r.Finished || r.Client != "phone" || r.MediaType != "podcast" {
+		t.Fatalf("row = %+v", r)
+	}
+}
+
+// insertListenAt records one session at a fixed instant. The range and
+// log readers do not select session_id (the log keys on the row id), so
+// the item pid doubles as the row marker assertions match on.
+func insertListenAt(t *testing.T, d *DB, user, item, client string, at time.Time) {
+	t.Helper()
+	ins, err := d.InsertListen(context.Background(), ListenSession{
+		UserID:    user,
+		SessionID: "sess-" + item,
+		ItemPID:   item,
+		MediaType: "music",
+		StartedAt: at,
+		MsPlayed:  1000,
+		Client:    client,
+	})
+	if err != nil || !ins {
+		t.Fatalf("insert %s = (%v, %v), want (true, nil)", item, ins, err)
+	}
+}
+
+func TestListensInRangeBoundsAndOrder(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	base := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	insertListenAt(t, d, "us-1", "it-early", "", base.Add(-time.Hour))
+	insertListenAt(t, d, "us-1", "it-mid", "", base)
+	insertListenAt(t, d, "us-1", "it-late", "", base.Add(time.Hour))
+	insertListenAt(t, d, "us-2", "it-other", "", base)
+
+	// [from, to): the from instant is included, the to instant is not.
+	var got []string
+	err := d.ListensInRange(ctx, "us-1", base, base.Add(time.Hour), func(r ListenRow) {
+		got = append(got, r.ItemPID)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "it-mid" {
+		t.Fatalf("half-open window = %v, want just it-mid", got)
+	}
+	// The full window streams oldest first, one user only.
+	got = nil
+	err = d.ListensInRange(ctx, "us-1", base.Add(-2*time.Hour), base.Add(2*time.Hour), func(r ListenRow) {
+		got = append(got, r.ItemPID)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0] != "it-early" || got[1] != "it-mid" || got[2] != "it-late" {
+		t.Fatalf("ordered window = %v, want oldest first", got)
+	}
+	// The empty user id streams everyone (the server-wide recap).
+	n := 0
+	err = d.ListensInRange(ctx, "", base.Add(-2*time.Hour), base.Add(2*time.Hour), func(ListenRow) { n++ })
+	if err != nil || n != 4 {
+		t.Fatalf("all-users window = (%d, %v), want 4", n, err)
+	}
+}
+
+func TestListenLogPagesNewestFirstAndFiltersClient(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	base := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	insertListenAt(t, d, "us-1", "it-1", "phone", base)
+	insertListenAt(t, d, "us-1", "it-2", "desk", base.Add(time.Minute))
+	insertListenAt(t, d, "us-1", "it-3", "phone", base.Add(2*time.Minute))
+	insertListenAt(t, d, "us-2", "it-foreign", "phone", base.Add(3*time.Minute))
+
+	page, err := d.ListenLog(ctx, "us-1", "", 0, 0, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page) != 2 || page[0].ItemPID != "it-3" || page[1].ItemPID != "it-2" {
+		t.Fatalf("first page = %+v, want it-3 then it-2", page)
+	}
+	// The (started_at_ns, id) cursor resumes exactly after the last row.
+	last := page[len(page)-1]
+	page, err = d.ListenLog(ctx, "us-1", "", last.StartedAt.UnixNano(), last.RowID, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page) != 1 || page[0].ItemPID != "it-1" {
+		t.Fatalf("second page = %+v, want just it-1", page)
+	}
+	// The client filter narrows to one device's sessions.
+	page, err = d.ListenLog(ctx, "us-1", "phone", 0, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page) != 2 || page[0].ItemPID != "it-3" || page[1].ItemPID != "it-1" {
+		t.Fatalf("phone page = %+v, want it-3 then it-1", page)
+	}
+}

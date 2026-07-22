@@ -95,6 +95,32 @@ abstract interface class WaxDeckRepository {
   /// `GET /library/search`: grouped full-text search.
   Future<SearchResults> search(String q, {int? limit});
 
+  /// `GET /items/{pid}/similar`: tracks similar to a seed track, most
+  /// similar first. The result names which engine answered (`sonic`
+  /// embeddings or the `metadata` fallback).
+  Future<SimilarTracks> getSimilarTracks(String pid, {int? limit});
+
+  /// `POST /mixes/instant`: computes an instant mix from a seed track
+  /// or artist ([seedPid]) or a [genre]; exactly one must be set.
+  /// [adventurousness] (0 to 1) sets how far the mix wanders from the
+  /// seed; [excludePids] leaves out already-played tracks.
+  Future<InstantMix> createInstantMix({
+    String? seedPid,
+    String? genre,
+    double? adventurousness,
+    int? size,
+    List<String> excludePids,
+  });
+
+  /// `GET /mixes/path`: a sonic path [from] one track [to] another,
+  /// starting track first. An incomplete path still drifts toward the
+  /// target.
+  Future<SonicPath> getSonicPath({
+    required String from,
+    required String to,
+    int? length,
+  });
+
   /// `GET /items/{pid}`: full detail for one item.
   Future<ItemDetail> getItem(String pid);
 
@@ -129,6 +155,38 @@ abstract interface class WaxDeckRepository {
   /// `POST /listens`: reports listen sessions. Idempotent per session ID, so
   /// retrying a failed batch is always safe.
   Future<ListenOutcome> reportListens(List<ListenSession> sessions);
+
+  /// `GET /stats/listening`: the caller's aggregated listening time.
+  /// [range] is `7d`, `30d`, `90d`, `365d`, or `all`; [bucket] is
+  /// `day`, `week`, or `month`. Absent values ride the server
+  /// defaults (`30d`, `day`).
+  Future<ListeningStats> getListeningStats({String? range, String? bucket});
+
+  /// `GET /stats/heatmap`: the caller's per-day listening for one
+  /// calendar [year] (default: the current year), plus streaks.
+  Future<ListeningHeatmap> getListeningHeatmap({int? year});
+
+  /// `GET /stats/top`: one ranked top list. [kind] is `artists`,
+  /// `albums`, `genres`, or `shows`; [range] as in
+  /// [getListeningStats].
+  Future<TopList> getTopList({required String kind, String? range, int? limit});
+
+  /// `GET /stats/sessions`: the caller's keyset-paginated listen log,
+  /// newest first, optionally filtered to one reporting [client].
+  Future<ListenLogPage> listListenLog({
+    String? client,
+    String? cursor,
+    int? limit,
+  });
+
+  /// `GET /stats/year-in-review`: the caller's listening recap for one
+  /// calendar [year] (default: the current year).
+  Future<YearInReview> getYearInReview({int? year});
+
+  /// `GET /stats/server-year-in-review`: the whole server's recap for
+  /// one calendar [year], aggregated across users who have not opted
+  /// out of shared stats.
+  Future<ServerYearInReview> getServerYearInReview({int? year});
 
   /// `GET /sync/catalog`: snapshot (no [since]) or changed-since delta
   /// of the catalog, feeding the client mirror. A `sync-reset` error
@@ -318,6 +376,43 @@ abstract interface class WaxDeckRepository {
     required String content,
     String? visibility,
   });
+
+  /// `POST /playlists/import`: imports a playlist export as a static
+  /// playlist. [source] is `spotify`, `applemusic`, `ytmusic`, `csv`,
+  /// `text`, or `portable`; [payload] carries the export text for the
+  /// text sources, [refs] the portable refs for `portable`. The result
+  /// reports unmatched entries and per-rung match confidence.
+  Future<PlaylistImportResult> importPlaylist({
+    required String source,
+    String? name,
+    String? payload,
+    List<PortableRef>? refs,
+  });
+
+  /// `GET /playlists/{pid}/portable`: the playlist as portable refs,
+  /// for re-importing on another WaxDeck server.
+  Future<PortablePlaylist> exportPlaylistPortable(String pid);
+
+  /// `GET /shares`: the caller's share links, newest first.
+  Future<SharePage> listShares({String? cursor, int? limit});
+
+  /// `POST /shares`: mints a public share link for a track, playlist,
+  /// book, or episode [pid]. [expiresInHours] bounds its lifetime
+  /// (absent: never expires); [positionMs] is the episode
+  /// copy-link-at-timestamp start.
+  Future<Share> createShare({
+    required String pid,
+    int? expiresInHours,
+    bool allowDownload,
+    int? positionMs,
+  });
+
+  /// `DELETE /shares/{shareId}`: revokes a share link.
+  Future<void> revokeShare(String shareId);
+
+  /// `GET /similarity/status`: coverage of the sonic-similarity
+  /// surface, for deciding whether to show sonic affordances.
+  Future<SimilarityStatus> getSimilarityStatus();
 
   /// `GET /radio/stations`: the shared station library.
   Future<List<RadioStation>> listRadioStations();
@@ -1202,6 +1297,50 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<SimilarTracks> getSimilarTracks(String pid, {int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getDiscoveryApi().getSimilarTracks(
+          pid: pid,
+          limit: limit,
+        );
+        return similarTracksFromGen(_require(response.data), baseUrl: _baseUrl);
+      });
+
+  @override
+  Future<InstantMix> createInstantMix({
+    String? seedPid,
+    String? genre,
+    double? adventurousness,
+    int? size,
+    List<String> excludePids = const [],
+  }) => _guard(() async {
+    final response = await _gen.getDiscoveryApi().createInstantMix(
+      instantMixRequest: instantMixRequestToGen(
+        seedPid: seedPid,
+        genre: genre,
+        adventurousness: adventurousness,
+        size: size,
+        excludePids: excludePids,
+      ),
+    );
+    return instantMixFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<SonicPath> getSonicPath({
+    required String from,
+    required String to,
+    int? length,
+  }) => _guard(() async {
+    final response = await _gen.getDiscoveryApi().getSonicPath(
+      from: from,
+      to: to,
+      length: length,
+    );
+    return sonicPathFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
   Future<ItemDetail> getItem(String pid) => _guard(() async {
     final response = await _gen.getLibraryApi().getItem(pid: pid);
     return itemDetailFromGen(_require(response.data), baseUrl: _baseUrl);
@@ -1348,6 +1487,68 @@ class WaxDeckClient implements WaxDeckRepository {
           ),
         );
         return listenOutcomeFromGen(_require(response.data));
+      });
+
+  @override
+  Future<ListeningStats> getListeningStats({String? range, String? bucket}) =>
+      _guard(() async {
+        final response = await _gen.getStatsApi().getListeningStats(
+          range: range,
+          bucket: bucket,
+        );
+        return listeningStatsFromGen(_require(response.data));
+      });
+
+  @override
+  Future<ListeningHeatmap> getListeningHeatmap({int? year}) => _guard(() async {
+    final response = await _gen.getStatsApi().getListeningHeatmap(year: year);
+    return listeningHeatmapFromGen(_require(response.data));
+  });
+
+  @override
+  Future<TopList> getTopList({
+    required String kind,
+    String? range,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getStatsApi().getTopList(
+      kind: kind,
+      range: range,
+      limit: limit,
+    );
+    return topListFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<ListenLogPage> listListenLog({
+    String? client,
+    String? cursor,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getStatsApi().listListenLog(
+      client: client,
+      cursor: cursor,
+      limit: limit,
+    );
+    return listenLogPageFromGen(_require(response.data));
+  });
+
+  @override
+  Future<YearInReview> getYearInReview({int? year}) => _guard(() async {
+    final response = await _gen.getStatsApi().getYearInReview(year: year);
+    return yearInReviewFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<ServerYearInReview> getServerYearInReview({int? year}) =>
+      _guard(() async {
+        final response = await _gen.getStatsApi().getServerYearInReview(
+          year: year,
+        );
+        return serverYearInReviewFromGen(
+          _require(response.data),
+          baseUrl: _baseUrl,
+        );
       });
 
   @override
@@ -1656,6 +1857,76 @@ class WaxDeckClient implements WaxDeckRepository {
       ),
     );
     return m3uImportResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<PlaylistImportResult> importPlaylist({
+    required String source,
+    String? name,
+    String? payload,
+    List<PortableRef>? refs,
+  }) => _guard(() async {
+    final response = await _gen.getPlaylistsApi().importPlaylist(
+      playlistImportRequest: gen.PlaylistImportRequest(
+        (b) => b
+          ..source_ = gen.PlaylistImportRequestSource_Enum.valueOf(source)
+          ..name = name
+          ..payload = payload
+          ..refs = refs == null
+              ? null
+              : ListBuilder<gen.PortableRef>(refs.map(portableRefToGen)),
+      ),
+    );
+    return playlistImportResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<PortablePlaylist> exportPlaylistPortable(String pid) =>
+      _guard(() async {
+        final response = await _gen.getPlaylistsApi().exportPlaylistPortable(
+          pid: pid,
+        );
+        return portablePlaylistFromGen(_require(response.data));
+      });
+
+  @override
+  Future<SharePage> listShares({String? cursor, int? limit}) =>
+      _guard(() async {
+        final response = await _gen.getSharesApi().listShares(
+          cursor: cursor,
+          limit: limit,
+        );
+        return sharePageFromGen(_require(response.data), baseUrl: _baseUrl);
+      });
+
+  @override
+  Future<Share> createShare({
+    required String pid,
+    int? expiresInHours,
+    bool allowDownload = false,
+    int? positionMs,
+  }) => _guard(() async {
+    final response = await _gen.getSharesApi().createShare(
+      shareCreate: gen.ShareCreate(
+        (b) => b
+          ..pid = pid
+          ..expiresInHours = expiresInHours
+          ..allowDownload = allowDownload
+          ..positionMs = positionMs,
+      ),
+    );
+    return shareFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<void> revokeShare(String shareId) => _guard(() async {
+    await _gen.getSharesApi().revokeShare(shareId: shareId);
+  });
+
+  @override
+  Future<SimilarityStatus> getSimilarityStatus() => _guard(() async {
+    final response = await _gen.getSimilarityApi().getSimilarityStatus();
+    return similarityStatusFromGen(_require(response.data));
   });
 
   @override

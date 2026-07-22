@@ -204,7 +204,7 @@ enum ThemePref {
 /// and clients apply their own defaults. The PUT endpoint replaces the
 /// whole document, so senders start from the stored value.
 class Prefs {
-  const Prefs({this.timezone, this.locale, this.theme});
+  const Prefs({this.timezone, this.locale, this.theme, this.sharedStatsOptOut});
 
   /// IANA timezone name, for example Europe/Amsterdam.
   final String? timezone;
@@ -214,13 +214,23 @@ class Prefs {
 
   final ThemePref? theme;
 
+  /// Leave the server-wide aggregate stats (the server year in review).
+  /// Absent means enrolled, the default.
+  final bool? sharedStatsOptOut;
+
   /// Copy with individual fields replaced. Passing null keeps the current
   /// value; clearing a stored field is not something the UI needs yet.
-  Prefs copyWith({String? timezone, String? locale, ThemePref? theme}) {
+  Prefs copyWith({
+    String? timezone,
+    String? locale,
+    ThemePref? theme,
+    bool? sharedStatsOptOut,
+  }) {
     return Prefs(
       timezone: timezone ?? this.timezone,
       locale: locale ?? this.locale,
       theme: theme ?? this.theme,
+      sharedStatsOptOut: sharedStatsOptOut ?? this.sharedStatsOptOut,
     );
   }
 }
@@ -398,6 +408,7 @@ class ListenSession {
     required this.pid,
     required this.startedAt,
     required this.msPlayed,
+    this.skippedMs,
     this.finished = false,
     this.client,
   });
@@ -410,6 +421,14 @@ class ListenSession {
 
   /// Milliseconds actually heard, excluding pauses and seeks.
   final int msPlayed;
+
+  /// Milliseconds of content the listener did not sit through, for the
+  /// server's time-saved counter. The wire field covers both silence
+  /// trimming and playback speed above 1x; this client reports trim
+  /// savings only (speed accounting needs seek-aware wall-clock
+  /// tracking the player does not do yet). Null when nothing was
+  /// saved.
+  final int? skippedMs;
 
   /// Whether playback reached the end of the item.
   final bool finished;
@@ -2557,6 +2576,7 @@ class AdminSettings {
   const AdminSettings({
     required this.signupEnabled,
     required this.readOnly,
+    required this.sonicAnalysis,
     required this.backupKeepCount,
     required this.backupKeepBytes,
   });
@@ -2567,6 +2587,10 @@ class AdminSettings {
   /// refused while set.
   final bool readOnly;
 
+  /// Whether the server analyzes its own library for sonic similarity
+  /// in the background (the embedded analyzer).
+  final bool sonicAnalysis;
+
   /// Backup retention: how many archives to keep (0 keeps all).
   final int backupKeepCount;
 
@@ -2576,11 +2600,13 @@ class AdminSettings {
   AdminSettings copyWith({
     bool? signupEnabled,
     bool? readOnly,
+    bool? sonicAnalysis,
     int? backupKeepCount,
     int? backupKeepBytes,
   }) => AdminSettings(
     signupEnabled: signupEnabled ?? this.signupEnabled,
     readOnly: readOnly ?? this.readOnly,
+    sonicAnalysis: sonicAnalysis ?? this.sonicAnalysis,
     backupKeepCount: backupKeepCount ?? this.backupKeepCount,
     backupKeepBytes: backupKeepBytes ?? this.backupKeepBytes,
   );
@@ -2865,4 +2891,577 @@ class DeleteItemsResult {
 
   int get totalFiles => entries.fold(0, (sum, e) => sum + e.files);
   int get totalBytes => entries.fold(0, (sum, e) => sum + e.bytes);
+}
+
+/// Which engine answered a discovery request: [sonic] used stored audio
+/// embeddings, [metadata] used genre and artist heuristics (the
+/// zero-setup fallback).
+enum MixBasis {
+  sonic('sonic'),
+  metadata('metadata');
+
+  const MixBasis(this.wireName);
+
+  /// Value as it appears on the wire.
+  final String wireName;
+}
+
+/// Tracks similar to a seed, most similar first.
+class SimilarTracks {
+  const SimilarTracks({required this.basis, this.items = const []});
+
+  final MixBasis basis;
+  final List<ItemSummary> items;
+}
+
+/// A computed instant mix. Not persisted; order is play order.
+class InstantMix {
+  const InstantMix({required this.basis, this.items = const []});
+
+  final MixBasis basis;
+  final List<ItemSummary> items;
+}
+
+/// A sonic path between two tracks, starting track first, destination
+/// last when [complete].
+class SonicPath {
+  const SonicPath({required this.complete, this.items = const []});
+
+  /// Whether the path reaches the destination. False when the neighbor
+  /// graph connects the endpoints only partially; the returned prefix
+  /// still drifts toward the target.
+  final bool complete;
+
+  final List<ItemSummary> items;
+}
+
+/// One chart bucket of listening time.
+class ListeningBucket {
+  const ListeningBucket({
+    required this.start,
+    required this.ms,
+    required this.sessions,
+  });
+
+  /// First calendar day of the bucket in the caller's timezone, as a
+  /// UTC-midnight instant.
+  final DateTime start;
+
+  /// Milliseconds listened in the bucket.
+  final int ms;
+
+  /// Listen sessions in the bucket.
+  final int sessions;
+}
+
+/// Listening total for one media type.
+class MediaTypeListening {
+  const MediaTypeListening({
+    required this.mediaType,
+    required this.ms,
+    required this.sessions,
+  });
+
+  final MediaType mediaType;
+  final int ms;
+  final int sessions;
+}
+
+/// Aggregated listening time for one user.
+class ListeningStats {
+  const ListeningStats({
+    required this.range,
+    required this.bucket,
+    required this.timezone,
+    required this.totalMs,
+    required this.sessions,
+    required this.timeSavedMs,
+    this.buckets = const [],
+    this.byMediaType = const [],
+  });
+
+  /// The range that was aggregated: 7d, 30d, 90d, 365d, or all.
+  final String range;
+
+  /// The bucket size used: day, week, or month.
+  final String bucket;
+
+  /// IANA timezone the calendar bucketing used.
+  final String timezone;
+
+  final int totalMs;
+  final int sessions;
+
+  /// Milliseconds saved by silence trimming and speed-up in the range.
+  final int timeSavedMs;
+
+  /// Chart buckets, oldest first. Empty buckets are omitted.
+  final List<ListeningBucket> buckets;
+
+  /// Listening split by media type, most-listened first.
+  final List<MediaTypeListening> byMediaType;
+}
+
+/// One day's listening on the heatmap.
+class HeatmapDay {
+  const HeatmapDay({
+    required this.date,
+    required this.ms,
+    required this.sessions,
+  });
+
+  /// The calendar day in the caller's timezone, as a UTC-midnight
+  /// instant.
+  final DateTime date;
+
+  final int ms;
+  final int sessions;
+}
+
+/// Per-day listening for one calendar year, plus streaks.
+class ListeningHeatmap {
+  const ListeningHeatmap({
+    required this.year,
+    required this.timezone,
+    this.days = const [],
+    required this.currentStreakDays,
+    required this.longestStreakDays,
+  });
+
+  final int year;
+  final String timezone;
+
+  /// Days with listening, chronological.
+  final List<HeatmapDay> days;
+
+  /// Consecutive listening days ending today or yesterday; 0 when the
+  /// streak is broken.
+  final int currentStreakDays;
+
+  /// The longest run of consecutive listening days that touches the
+  /// requested year.
+  final int longestStreakDays;
+}
+
+/// One top-list entry.
+class TopEntry {
+  const TopEntry({
+    required this.name,
+    this.pid,
+    this.artUrl,
+    required this.plays,
+    required this.ms,
+  });
+
+  /// Display name (artist, album, genre, or show).
+  final String name;
+
+  /// The entry's pid when the entry is a catalog entity; null for
+  /// genres and for names that no longer resolve.
+  final String? pid;
+
+  /// Artwork URL, already resolved against the client base URL, when
+  /// the entry has one.
+  final String? artUrl;
+
+  /// Listen sessions attributed to the entry in the range.
+  final int plays;
+
+  /// Milliseconds listened in the range.
+  final int ms;
+}
+
+/// One ranked top list.
+class TopList {
+  const TopList({
+    required this.kind,
+    required this.range,
+    this.entries = const [],
+  });
+
+  /// Which top list this is: artists, albums, genres, or shows.
+  final String kind;
+
+  /// The range that was aggregated: 7d, 30d, 90d, 365d, or all.
+  final String range;
+
+  /// Ranked entries, most listening time first.
+  final List<TopEntry> entries;
+}
+
+/// One recorded listen session in the log.
+class ListenLogEntry {
+  const ListenLogEntry({
+    required this.pid,
+    this.title,
+    this.artist,
+    required this.mediaType,
+    required this.startedAt,
+    required this.msPlayed,
+    this.skippedMs,
+    required this.finished,
+    required this.client,
+    required this.source,
+  });
+
+  final String pid;
+
+  /// The item's display title at read time; null when the item has
+  /// left the catalog entirely.
+  final String? title;
+
+  /// The item's display artist, author, or show.
+  final String? artist;
+
+  final MediaType mediaType;
+  final DateTime startedAt;
+
+  /// Milliseconds actually heard.
+  final int msPlayed;
+
+  /// Milliseconds saved by silence trimming and speed-up, when the
+  /// client reported them.
+  final int? skippedMs;
+
+  final bool finished;
+
+  /// The reporting client label.
+  final String client;
+
+  /// `live` playback or a backdated `import`.
+  final String source;
+}
+
+/// One page of the caller's listen session log, newest first.
+class ListenLogPage {
+  const ListenLogPage({required this.sessions, this.nextCursor});
+
+  final List<ListenLogEntry> sessions;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// One month's listening.
+class MonthListening {
+  const MonthListening({
+    required this.month,
+    required this.ms,
+    required this.sessions,
+  });
+
+  /// Calendar month, 1 is January.
+  final int month;
+
+  final int ms;
+  final int sessions;
+}
+
+/// One user's listening recap for one calendar year.
+class YearInReview {
+  const YearInReview({
+    required this.year,
+    required this.timezone,
+    required this.totalMs,
+    required this.sessions,
+    required this.distinctItems,
+    required this.newInLibrary,
+    required this.timeSavedMs,
+    required this.longestStreakDays,
+    this.byMonth = const [],
+    this.byMediaType = const [],
+    this.topArtists = const [],
+    this.topTracks = const [],
+    this.topGenres = const [],
+    this.topShows = const [],
+  });
+
+  final int year;
+
+  /// IANA timezone the recap was computed in.
+  final String timezone;
+
+  final int totalMs;
+  final int sessions;
+
+  /// Distinct tracks, episodes, and books played that year.
+  final int distinctItems;
+
+  /// Items that joined the library that year.
+  final int newInLibrary;
+
+  /// Milliseconds saved by silence trimming and speed-up that year.
+  final int timeSavedMs;
+
+  /// The year's longest run of consecutive listening days.
+  final int longestStreakDays;
+
+  /// Month-by-month listening, January first, all twelve months
+  /// present with zeros included.
+  final List<MonthListening> byMonth;
+
+  /// Listening split by media type, most-listened first.
+  final List<MediaTypeListening> byMediaType;
+
+  final List<TopEntry> topArtists;
+  final List<TopEntry> topTracks;
+  final List<TopEntry> topGenres;
+  final List<TopEntry> topShows;
+}
+
+/// The whole server's listening recap for one calendar year, aggregated
+/// across users who have not opted out of shared stats.
+class ServerYearInReview {
+  const ServerYearInReview({
+    required this.year,
+    required this.participants,
+    required this.totalMs,
+    required this.sessions,
+    this.topArtists = const [],
+    this.topTracks = const [],
+    this.topGenres = const [],
+  });
+
+  final int year;
+
+  /// Users whose listening is included (those who have not opted out
+  /// and listened that year).
+  final int participants;
+
+  final int totalMs;
+  final int sessions;
+
+  final List<TopEntry> topArtists;
+  final List<TopEntry> topTracks;
+  final List<TopEntry> topGenres;
+}
+
+/// One public share link.
+class Share {
+  const Share({
+    required this.pid,
+    required this.url,
+    required this.targetPid,
+    required this.targetKind,
+    required this.targetTitle,
+    required this.allowDownload,
+    this.positionMs,
+    required this.createdAt,
+    this.expiresAt,
+    required this.plays,
+  });
+
+  /// Share PID.
+  final String pid;
+
+  /// Capability URL of the landing page, already resolved against the
+  /// client base URL. Anyone holding the full URL can open it; treat
+  /// it as the secret it is.
+  final String url;
+
+  /// The shared track, playlist, book, or episode.
+  final String targetPid;
+
+  /// What kind of thing the share opens: track, playlist, book, or
+  /// episode.
+  final String targetKind;
+
+  /// The target's display title at read time.
+  final String targetTitle;
+
+  /// Whether the landing page offers the original file.
+  final bool allowDownload;
+
+  /// Start position for copy-link-at-timestamp shares (episodes);
+  /// null otherwise.
+  final int? positionMs;
+
+  final DateTime createdAt;
+
+  /// When the link stops resolving; null for links without expiry.
+  final DateTime? expiresAt;
+
+  /// Anonymous plays through the link so far.
+  final int plays;
+}
+
+/// One page of share links, newest first.
+class SharePage {
+  const SharePage({required this.shares, this.nextCursor});
+
+  final List<Share> shares;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// One unmatched playlist import entry.
+class PlaylistImportMiss {
+  const PlaylistImportMiss({
+    this.artist,
+    required this.title,
+    this.album,
+    this.durationMs,
+  });
+
+  final String? artist;
+  final String title;
+  final String? album;
+
+  /// The entry's duration, when the export carried one.
+  final int? durationMs;
+}
+
+/// How many entries each resolve-ladder rung matched, most confident
+/// rung first. A high [descriptive] share means fuzzy matches worth
+/// spot-checking.
+class ResolveRungCounts {
+  const ResolveRungCounts({
+    required this.essence,
+    required this.strongId,
+    required this.fingerprint,
+    required this.descriptive,
+  });
+
+  /// Identical audio bytes.
+  final int essence;
+
+  /// Exact external identifier (recording MBID, ASIN, ISBN).
+  final int strongId;
+
+  /// Same recording, different encoding.
+  final int fingerprint;
+
+  /// Fuzzy artist, title, album, and duration match.
+  final int descriptive;
+}
+
+/// The playlist import report.
+class PlaylistImportResult {
+  const PlaylistImportResult({
+    this.playlistPid,
+    required this.name,
+    required this.requested,
+    required this.resolved,
+    this.missing = const [],
+    required this.rungs,
+  });
+
+  /// The created playlist; null when nothing resolved (no playlist is
+  /// created).
+  final String? playlistPid;
+
+  /// The playlist name used.
+  final String name;
+
+  /// Entries found in the export.
+  final int requested;
+
+  /// Entries matched to library items.
+  final int resolved;
+
+  /// Entries with no library match, in export order: the
+  /// missing-tracks report.
+  final List<PlaylistImportMiss> missing;
+
+  final ResolveRungCounts rungs;
+}
+
+/// A catalog-independent identity descriptor for one playable item,
+/// carrying the progressively fuzzier anchors the resolve ladder
+/// walks. Produced by the portable export; consumed by the portable
+/// import source.
+class PortableRef {
+  const PortableRef({
+    required this.kind,
+    this.essence,
+    this.fingerprint,
+    this.fingerprintAlgo,
+    this.mbid,
+    this.asin,
+    this.isbn,
+    this.isrc,
+    this.artist,
+    required this.title,
+    this.album,
+    this.durationMs,
+  });
+
+  /// What the ref describes: track, book, or episode.
+  final String kind;
+
+  /// Exact-rip audio-essence hash.
+  final String? essence;
+
+  /// Packed acoustic fingerprint, base64.
+  final String? fingerprint;
+
+  /// Fingerprint algorithm: 1 pure-Go, 100 Chromaprint.
+  final int? fingerprintAlgo;
+
+  /// Recording MBID (track) or release MBID (book).
+  final String? mbid;
+
+  final String? asin;
+  final String? isbn;
+  final String? isrc;
+
+  /// Track artist, or book author.
+  final String? artist;
+
+  final String title;
+
+  /// Track album, or book series.
+  final String? album;
+
+  final int? durationMs;
+}
+
+/// A playlist exported as portable refs, in playlist order.
+class PortablePlaylist {
+  const PortablePlaylist({required this.name, this.refs = const []});
+
+  final String name;
+  final List<PortableRef> refs;
+}
+
+/// Coverage of the sonic-similarity surface.
+class SimilarityStatus {
+  const SimilarityStatus({
+    required this.enabled,
+    this.model,
+    this.dims,
+    required this.embeddedTracks,
+    required this.totalTracks,
+    required this.coveragePct,
+    required this.queueDepth,
+    this.lastIngestAt,
+  });
+
+  /// Whether a worker token is configured (a worker may connect).
+  final bool enabled;
+
+  /// The embedding model the stored vectors carry; null before the
+  /// first ingest.
+  final String? model;
+
+  /// Stored vector dimensionality; null before the first ingest.
+  final int? dims;
+
+  /// Tracks with a stored embedding.
+  final int embeddedTracks;
+
+  /// Tracks eligible for analysis.
+  final int totalTracks;
+
+  /// [embeddedTracks] over [totalTracks], 0 to 100. Clients show
+  /// sonic affordances when coverage is meaningful.
+  final double coveragePct;
+
+  /// Tracks awaiting analysis.
+  final int queueDepth;
+
+  /// When a worker last posted embeddings; null before the first
+  /// ingest.
+  final DateTime? lastIngestAt;
 }

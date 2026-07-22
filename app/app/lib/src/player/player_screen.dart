@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../discovery/discovery_actions.dart';
 import '../library/item_delete.dart';
 import '../media_icons.dart';
 import '../playlists/add_to_playlist_dialog.dart';
 import '../providers.dart';
+import '../sharing/share_dialog.dart';
 import '../radio/radio_controller.dart';
 import '../sync/sync_providers.dart';
 import 'play_state_controller.dart';
@@ -142,6 +144,60 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               ),
             ),
           ),
+          Semantics(
+            identifier: 'share-link',
+            label: 'Share link',
+            button: true,
+            child: IconButton(
+              key: const Key('share-link'),
+              tooltip: 'Share link',
+              icon: const Icon(Icons.share_outlined),
+              // Episodes offer the current position as the share's
+              // start point; other media share from the top.
+              onPressed: () => showShareLinkDialog(
+                context,
+                pid: item.pid,
+                positionMs: item.mediaType == MediaType.podcast
+                    ? _session.displayPosition.inMilliseconds
+                    : null,
+              ),
+            ),
+          ),
+          if (item.mediaType == MediaType.music)
+            Semantics(
+              identifier: 'player-discover',
+              label: 'Discover',
+              button: true,
+              child: PopupMenuButton<String>(
+                key: const Key('player-discover'),
+                tooltip: 'Discover',
+                icon: const Icon(Icons.auto_awesome_outlined),
+                onSelected: (choice) => switch (choice) {
+                  'mix' => showInstantMixSheet(context, item),
+                  'similar' => openSimilarTracks(context, ref, item),
+                  _ => Future<void>.value(),
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'mix',
+                    child: Semantics(
+                      identifier: 'instant-mix',
+                      child: const Text('Instant mix', key: Key('instant-mix')),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'similar',
+                    child: Semantics(
+                      identifier: 'similar-tracks',
+                      child: const Text(
+                        'Similar tracks',
+                        key: Key('similar-tracks'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           _DownloadButton(pid: item.pid),
           ItemDeleteAction(
             pid: item.pid,

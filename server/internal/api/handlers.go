@@ -56,6 +56,16 @@ type Server struct {
 	// loop in main; lossy sends never block a handler (the runner also
 	// sweeps for claimed-but-unrun rows).
 	backupWake chan string
+	// shares mints and verifies the public share capability tokens; the
+	// database stores no share secrets.
+	shares *auth.ShareTokens
+	// workerTokens authenticate external similarity workers on the
+	// worker endpoints and the analysis audio route. Empty disables the
+	// worker API.
+	workerTokens []string
+	// shareStreams caps concurrent anonymous streams per share so a
+	// public link never becomes a bandwidth faucet.
+	shareStreams shareStreamGate
 }
 
 // logger is the slice of slog the API layer uses (a seam tests can
@@ -81,6 +91,8 @@ type Options struct {
 	PublicBase   string
 	Backups      *service.Backups
 	BackupWake   chan string
+	Shares       *auth.ShareTokens
+	WorkerTokens []string
 }
 
 // NewServer builds the API server. Bridge may be nil when streaming is
@@ -113,6 +125,8 @@ func NewServer(version string, opts Options) *Server {
 		publicBase:   opts.PublicBase,
 		backups:      opts.Backups,
 		backupWake:   opts.BackupWake,
+		shares:       opts.Shares,
+		workerTokens: opts.WorkerTokens,
 	}
 }
 
@@ -632,6 +646,7 @@ func (s *Server) ReportListens(ctx context.Context, req ReportListensRequestObje
 			PID:       in.Pid,
 			StartedAt: in.StartedAt,
 			MsPlayed:  in.MsPlayed,
+			SkippedMs: derefInt64(in.SkippedMs),
 			Finished:  derefBool(in.Finished),
 			Client:    deref(in.Client),
 		}
@@ -819,6 +834,19 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), ctxRemoteIP, remoteIP(r))
 		ctx = context.WithValue(ctx, ctxClient, clientHint(r))
+
+		// Worker endpoints take the worker token and nothing else: they
+		// ignore library visibility, so a user session must never open
+		// them, and the worker token opens nothing else.
+		if workerPaths[r.URL.Path] {
+			if !s.workerAuthorized(r) {
+				writeError(w, http.StatusUnauthorized, "unauthenticated", "a worker token is required")
+				return
+			}
+			ctx = context.WithValue(ctx, ctxWorkerKey{}, true)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
 
 		// Try each presented credential in precedence order; a stale or
 		// invalid bearer must not shadow a valid session cookie.

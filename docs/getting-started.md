@@ -165,6 +165,18 @@ chunk, `POST /uploads/{id}/complete`; acquisitions are one call,
 `POST /acquisitions` with a `url` and `mediaType` (and an optional
 `format`).
 
+## Sonic discovery
+
+Nothing to set up: the server analyzes its own library in the
+background (paced gently, so it never competes with playback) and
+instant mixes, similar tracks, and sonic paths upgrade from metadata
+to real audio similarity as coverage grows. Watch progress in the
+app's settings or at `GET /api/v1/similarity/status`; administrators
+turn analysis on and off with the Sonic analysis switch in the
+server settings. Installs that want the analysis CPU on another
+machine can offload it through the worker API instead, described in
+[sonic analysis](similarity-worker.md).
+
 ## Useful endpoints
 
 Everything lives under `/api/v1` (see `api/openapi.yaml` for the full

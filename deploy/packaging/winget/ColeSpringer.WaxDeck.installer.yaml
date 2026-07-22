@@ -1,0 +1,37 @@
+# winget-pkgs installer manifest (template).
+#
+# Points at the Velopack Setup.exe the release workflow attaches to the
+# GitHub Release (waxdeck-windows-setup-<version>.exe). Velopack setups
+# accept --silent, which is what the switches below rely on.
+#
+# PLACEHOLDERS per release:
+#   - PackageVersion: release tag without the v (e.g. 0.2.0)
+#   - InstallerUrl: substitute the same version into the asset URL
+#   - InstallerSha256: `sha256sum waxdeck-windows-setup-<version>.exe`
+#
+# Blocked on signing: winget moderation rejects unsigned installers, so
+# this manifest cannot be submitted until the Windows artifacts are
+# signed. The MSIX would need signing too and additionally requires the
+# publisher in the package to match the certificate subject.
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: ColeSpringer.WaxDeck
+PackageVersion: 0.0.0
+InstallerLocale: en-US
+Platform:
+  - Windows.Desktop
+MinimumOSVersion: 10.0.17763.0
+InstallerType: exe
+Scope: user
+InstallModes:
+  - interactive
+  - silent
+InstallerSwitches:
+  Silent: --silent
+  SilentWithProgress: --silent
+UpgradeBehavior: install
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/ColeSpringer/WaxDeck/releases/download/v0.0.0/waxdeck-windows-setup-0.0.0.exe
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+ManifestType: installer
+ManifestVersion: 1.6.0

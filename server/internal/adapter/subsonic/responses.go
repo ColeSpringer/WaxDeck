@@ -50,6 +50,10 @@ type envelope struct {
 	ArtistInfo2            *artistInfo             `xml:"artistInfo2,omitempty" json:"artistInfo2,omitempty"`
 	Podcasts               *podcastsShape          `xml:"podcasts,omitempty" json:"podcasts,omitempty"`
 	NewestPodcasts         *newestPodcasts         `xml:"newestPodcasts,omitempty" json:"newestPodcasts,omitempty"`
+	SimilarSongs           *songList               `xml:"similarSongs,omitempty" json:"similarSongs,omitempty"`
+	SimilarSongs2          *songList               `xml:"similarSongs2,omitempty" json:"similarSongs2,omitempty"`
+	SonicSimilarTracks     *songList               `xml:"sonicSimilarTracks,omitempty" json:"sonicSimilarTracks,omitempty"`
+	SonicPath              *songList               `xml:"sonicPath,omitempty" json:"sonicPath,omitempty"`
 }
 
 // openSubsonicExtension is one advertised OpenSubsonic extension.

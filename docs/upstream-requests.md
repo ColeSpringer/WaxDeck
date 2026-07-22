@@ -73,7 +73,14 @@ sidecar injection seam) all landed and are not repeated here.
 - **Entity facets in the item query grammar.** Items cannot be
   filtered by artist or album entity pid, only by display string,
   which is why the Subsonic surface mints its artist and album ids
-  from strings. A real entity facet would retire the minted ids.
+  from strings. A real entity facet would retire the minted ids. The
+  discovery and sharing surfaces added two more consumers: instant
+  mixes cannot take an album pid as a seed (clients seed with a
+  member track instead), and share links cannot target an album
+  (users share a playlist of its tracks instead). Artist seeds work
+  today only through a full artist facet scan that maps pid to
+  display name; an entity lookup or entity-pid filter retires that
+  scan too.
 - **Runtime library-root addition.** Roots are fixed at Open
   (RelocateRoot exists for moving one, nothing adds one), so creating
   a new library today means editing the server's root flags and

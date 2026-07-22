@@ -12,6 +12,7 @@ import 'package:waxdeck_api_gen/src/auth/oauth.dart';
 import 'package:waxdeck_api_gen/src/api/admin_api.dart';
 import 'package:waxdeck_api_gen/src/api/auth_api.dart';
 import 'package:waxdeck_api_gen/src/api/books_api.dart';
+import 'package:waxdeck_api_gen/src/api/discovery_api.dart';
 import 'package:waxdeck_api_gen/src/api/enrichment_api.dart';
 import 'package:waxdeck_api_gen/src/api/health_api.dart';
 import 'package:waxdeck_api_gen/src/api/library_api.dart';
@@ -25,6 +26,9 @@ import 'package:waxdeck_api_gen/src/api/podcasts_api.dart';
 import 'package:waxdeck_api_gen/src/api/radio_api.dart';
 import 'package:waxdeck_api_gen/src/api/review_api.dart';
 import 'package:waxdeck_api_gen/src/api/scrobbling_api.dart';
+import 'package:waxdeck_api_gen/src/api/shares_api.dart';
+import 'package:waxdeck_api_gen/src/api/similarity_api.dart';
+import 'package:waxdeck_api_gen/src/api/stats_api.dart';
 import 'package:waxdeck_api_gen/src/api/sync_api.dart';
 import 'package:waxdeck_api_gen/src/api/system_api.dart';
 import 'package:waxdeck_api_gen/src/api/tools_api.dart';
@@ -103,6 +107,12 @@ class WaxdeckApiGen {
     return BooksApi(dio, serializers);
   }
 
+  /// Get DiscoveryApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  DiscoveryApi getDiscoveryApi() {
+    return DiscoveryApi(dio, serializers);
+  }
+
   /// Get EnrichmentApi instance, base route and serializer can be overridden by a given but be careful,
   /// by doing that all interceptors will not be executed
   EnrichmentApi getEnrichmentApi() {
@@ -179,6 +189,24 @@ class WaxdeckApiGen {
   /// by doing that all interceptors will not be executed
   ScrobblingApi getScrobblingApi() {
     return ScrobblingApi(dio, serializers);
+  }
+
+  /// Get SharesApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  SharesApi getSharesApi() {
+    return SharesApi(dio, serializers);
+  }
+
+  /// Get SimilarityApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  SimilarityApi getSimilarityApi() {
+    return SimilarityApi(dio, serializers);
+  }
+
+  /// Get StatsApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  StatsApi getStatsApi() {
+    return StatsApi(dio, serializers);
   }
 
   /// Get SyncApi instance, base route and serializer can be overridden by a given but be careful,

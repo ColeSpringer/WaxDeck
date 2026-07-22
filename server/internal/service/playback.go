@@ -355,6 +355,7 @@ func (l *Library) IngestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 			MediaType: mediaTypeForKind(it.Kind),
 			StartedAt: s.StartedAt,
 			MsPlayed:  s.MsPlayed,
+			SkippedMs: s.SkippedMs,
 			Finished:  s.Finished,
 			Client:    s.Client,
 			Source:    source,
@@ -455,6 +456,8 @@ func invalidSession(s ListenSession) string {
 		return "pid is required"
 	case s.MsPlayed < 0:
 		return "msPlayed must not be negative"
+	case s.SkippedMs < 0:
+		return "skippedMs must not be negative"
 	case len(s.Client) > 128:
 		return "client must be at most 128 characters"
 	case s.Source != "" && s.Source != "live" && s.Source != "import":

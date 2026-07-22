@@ -14,11 +14,14 @@ import 'package:waxdeck_api_gen/src/model/m3u_import.dart';
 import 'package:waxdeck_api_gen/src/model/m3u_import_result.dart';
 import 'package:waxdeck_api_gen/src/model/playlist.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_create.dart';
+import 'package:waxdeck_api_gen/src/model/playlist_import_request.dart';
+import 'package:waxdeck_api_gen/src/model/playlist_import_result.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_items_page.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_items_update.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_page.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_preview.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_update.dart';
+import 'package:waxdeck_api_gen/src/model/portable_playlist.dart';
 import 'package:waxdeck_api_gen/src/model/rule_fields.dart';
 import 'package:waxdeck_api_gen/src/model/smart_rule.dart';
 
@@ -357,6 +360,92 @@ class PlaylistsApi {
     );
   }
 
+  /// Export a playlist as portable refs
+  /// Exports a playlist as portable refs: catalog-independent identity descriptors (audio essence, external identifiers, acoustic fingerprint, descriptive fields) that resolve on any other WaxDeck through the playlist import endpoint&#39;s &#x60;portable&#x60; source. Smart playlists export their current evaluation. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [PortablePlaylist] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<PortablePlaylist>> exportPlaylistPortable({ 
+    required String pid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/playlists/{pid}/portable'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    PortablePlaylist? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(PortablePlaylist),
+      ) as PortablePlaylist;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<PortablePlaylist>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Get one playlist
   /// Playlist detail. For a smart playlist this includes the rule and a freshly computed &#x60;itemCount&#x60; (evaluated as the owner for shared lists, as the caller for the caller&#39;s own). 
   ///
@@ -516,6 +605,112 @@ class PlaylistsApi {
     }
 
     return Response<RuleFields>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Import a streaming-service playlist
+  /// Imports a playlist exported from a streaming service, matching each entry against the library through the portable-ref resolve ladder (exact identifiers first, then fingerprints, then descriptive artist, title, album, and duration matching). Sources: &#x60;spotify&#x60; (Exportify CSV), &#x60;applemusic&#x60; (the tab-separated export), &#x60;ytmusic&#x60; (Google Takeout CSV), &#x60;csv&#x60; (generic with artist, title, album, duration columns), &#x60;text&#x60; (one &#x60;Artist - Title&#x60; per line), and &#x60;portable&#x60; (the &#x60;refs&#x60; array from another WaxDeck&#39;s portable export). When any entry resolves, a manual playlist is created with the resolved tracks in order and &#x60;missing&#x60; reports the rest; when nothing resolves, no playlist is created and &#x60;playlistPid&#x60; is absent. Unresolved entries carrying an ISRC are upgraded to a recording identifier through MusicBrainz when the server has internet, within a bounded lookup budget; without it the import still runs on the descriptive rung. 
+  ///
+  /// Parameters:
+  /// * [playlistImportRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [PlaylistImportResult] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<PlaylistImportResult>> importPlaylist({ 
+    required PlaylistImportRequest playlistImportRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/playlists/import';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(PlaylistImportRequest);
+      _bodyData = _serializers.serialize(playlistImportRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    PlaylistImportResult? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(PlaylistImportResult),
+      ) as PlaylistImportResult;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<PlaylistImportResult>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

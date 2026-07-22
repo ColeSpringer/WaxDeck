@@ -18,6 +18,7 @@ import '../podcasts/podcasts_screen.dart';
 import '../radio/radio_screen.dart';
 import '../review/review_screen.dart';
 import '../settings/settings_screen.dart';
+import '../stats/stats_screen.dart';
 import '../sync/sync_providers.dart';
 import '../tools/tasks_screen.dart';
 import '../uploads/add_to_library.dart';
@@ -142,6 +143,17 @@ class LibraryScreen extends ConsumerWidget {
                       ),
                 ];
               },
+            ),
+          ),
+          Semantics(
+            identifier: 'open-stats',
+            child: IconButton(
+              key: const Key('open-stats'),
+              tooltip: 'Listening stats',
+              icon: const Icon(Icons.insights),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const StatsScreen()),
+              ),
             ),
           ),
           Semantics(

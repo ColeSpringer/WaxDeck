@@ -1,0 +1,25 @@
+# winget-pkgs default locale manifest (template).
+# PLACEHOLDER: PackageVersion tracks the release tag without the v; the
+# rest is stable across releases (update ReleaseNotesUrl per tag).
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: ColeSpringer.WaxDeck
+PackageVersion: 0.0.0
+PackageLocale: en-US
+Publisher: Cole Springer
+PublisherUrl: https://github.com/ColeSpringer
+PublisherSupportUrl: https://github.com/ColeSpringer/WaxDeck/issues
+PackageName: WaxDeck
+PackageUrl: https://github.com/ColeSpringer/WaxDeck
+License: MIT
+LicenseUrl: https://github.com/ColeSpringer/WaxDeck/blob/main/LICENSE
+ShortDescription: Self-hosted player and library manager for music, podcasts, and audiobooks
+Moniker: waxdeck
+Tags:
+  - music
+  - podcasts
+  - audiobooks
+  - self-hosted
+  - media-server
+ReleaseNotesUrl: https://github.com/ColeSpringer/WaxDeck/releases/tag/v0.0.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

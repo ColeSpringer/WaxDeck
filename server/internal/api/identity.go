@@ -427,8 +427,9 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 		return PutPrefs400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
 	in := service.Prefs{
-		Timezone: deref(req.Body.Timezone),
-		Locale:   deref(req.Body.Locale),
+		Timezone:          deref(req.Body.Timezone),
+		Locale:            deref(req.Body.Locale),
+		SharedStatsOptOut: derefBool(req.Body.SharedStatsOptOut),
 	}
 	if req.Body.Theme != nil {
 		in.Theme = string(*req.Body.Theme)
@@ -454,6 +455,9 @@ func prefsJSON(p service.Prefs) Prefs {
 	if p.Theme != "" {
 		theme := PrefsTheme(p.Theme)
 		out.Theme = &theme
+	}
+	if p.SharedStatsOptOut {
+		out.SharedStatsOptOut = ptr(true)
 	}
 	return out
 }

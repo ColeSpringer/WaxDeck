@@ -61,6 +61,9 @@ import 'package:waxdeck_api_gen/src/model/duplicate_group.dart';
 import 'package:waxdeck_api_gen/src/model/duplicate_groups.dart';
 import 'package:waxdeck_api_gen/src/model/duplicate_warning.dart';
 import 'package:waxdeck_api_gen/src/model/editable_field.dart';
+import 'package:waxdeck_api_gen/src/model/embedding_ingest_result.dart';
+import 'package:waxdeck_api_gen/src/model/embedding_report.dart';
+import 'package:waxdeck_api_gen/src/model/embedding_upload.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_result.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_coverage.dart';
@@ -84,6 +87,9 @@ import 'package:waxdeck_api_gen/src/model/health_issue.dart';
 import 'package:waxdeck_api_gen/src/model/health_issue_page.dart';
 import 'package:waxdeck_api_gen/src/model/health_rule_count.dart';
 import 'package:waxdeck_api_gen/src/model/health_summary.dart';
+import 'package:waxdeck_api_gen/src/model/heatmap_day.dart';
+import 'package:waxdeck_api_gen/src/model/instant_mix.dart';
+import 'package:waxdeck_api_gen/src/model/instant_mix_request.dart';
 import 'package:waxdeck_api_gen/src/model/invite.dart';
 import 'package:waxdeck_api_gen/src/model/invite_create.dart';
 import 'package:waxdeck_api_gen/src/model/invite_created.dart';
@@ -103,8 +109,13 @@ import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/linked_identity.dart';
 import 'package:waxdeck_api_gen/src/model/listen_brainz_connect.dart';
 import 'package:waxdeck_api_gen/src/model/listen_ingest_result.dart';
+import 'package:waxdeck_api_gen/src/model/listen_log_entry.dart';
+import 'package:waxdeck_api_gen/src/model/listen_log_page.dart';
 import 'package:waxdeck_api_gen/src/model/listen_report.dart';
 import 'package:waxdeck_api_gen/src/model/listen_session.dart';
+import 'package:waxdeck_api_gen/src/model/listening_bucket.dart';
+import 'package:waxdeck_api_gen/src/model/listening_heatmap.dart';
+import 'package:waxdeck_api_gen/src/model/listening_stats.dart';
 import 'package:waxdeck_api_gen/src/model/locks_edit.dart';
 import 'package:waxdeck_api_gen/src/model/locks_result.dart';
 import 'package:waxdeck_api_gen/src/model/login_request.dart';
@@ -115,6 +126,7 @@ import 'package:waxdeck_api_gen/src/model/lyrics_state.dart';
 import 'package:waxdeck_api_gen/src/model/m3u_import.dart';
 import 'package:waxdeck_api_gen/src/model/m3u_import_result.dart';
 import 'package:waxdeck_api_gen/src/model/media_type.dart';
+import 'package:waxdeck_api_gen/src/model/media_type_listening.dart';
 import 'package:waxdeck_api_gen/src/model/merge_request.dart';
 import 'package:waxdeck_api_gen/src/model/merge_result.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_edit.dart';
@@ -122,7 +134,9 @@ import 'package:waxdeck_api_gen/src/model/metadata_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_fields.dart';
 import 'package:waxdeck_api_gen/src/model/migration_create.dart';
 import 'package:waxdeck_api_gen/src/model/migration_options.dart';
+import 'package:waxdeck_api_gen/src/model/mix_basis.dart';
 import 'package:waxdeck_api_gen/src/model/model_library.dart';
+import 'package:waxdeck_api_gen/src/model/month_listening.dart';
 import 'package:waxdeck_api_gen/src/model/notification_config.dart';
 import 'package:waxdeck_api_gen/src/model/notification_config_update.dart';
 import 'package:waxdeck_api_gen/src/model/oidc_exchange_request.dart';
@@ -155,6 +169,9 @@ import 'package:waxdeck_api_gen/src/model/player_endpoint_list.dart';
 import 'package:waxdeck_api_gen/src/model/playlist.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_create.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_entry.dart';
+import 'package:waxdeck_api_gen/src/model/playlist_import_miss.dart';
+import 'package:waxdeck_api_gen/src/model/playlist_import_request.dart';
+import 'package:waxdeck_api_gen/src/model/playlist_import_result.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_items_page.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_items_update.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_page.dart';
@@ -162,6 +179,8 @@ import 'package:waxdeck_api_gen/src/model/playlist_preview.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_update.dart';
 import 'package:waxdeck_api_gen/src/model/podcast_detail.dart';
 import 'package:waxdeck_api_gen/src/model/podcast_show.dart';
+import 'package:waxdeck_api_gen/src/model/portable_playlist.dart';
+import 'package:waxdeck_api_gen/src/model/portable_ref.dart';
 import 'package:waxdeck_api_gen/src/model/prefs.dart';
 import 'package:waxdeck_api_gen/src/model/push_registration.dart';
 import 'package:waxdeck_api_gen/src/model/push_registration_create.dart';
@@ -174,9 +193,11 @@ import 'package:waxdeck_api_gen/src/model/radio_station_edit.dart';
 import 'package:waxdeck_api_gen/src/model/radio_station_list.dart';
 import 'package:waxdeck_api_gen/src/model/rating_update.dart';
 import 'package:waxdeck_api_gen/src/model/refresh_result.dart';
+import 'package:waxdeck_api_gen/src/model/rejected_embedding.dart';
 import 'package:waxdeck_api_gen/src/model/rejected_listen.dart';
 import 'package:waxdeck_api_gen/src/model/release_status_edit.dart';
 import 'package:waxdeck_api_gen/src/model/rematch_result.dart';
+import 'package:waxdeck_api_gen/src/model/resolve_rung_counts.dart';
 import 'package:waxdeck_api_gen/src/model/restore_plan.dart';
 import 'package:waxdeck_api_gen/src/model/review_bulk_decision.dart';
 import 'package:waxdeck_api_gen/src/model/review_bulk_outcome.dart';
@@ -208,14 +229,23 @@ import 'package:waxdeck_api_gen/src/model/search_hit.dart';
 import 'package:waxdeck_api_gen/src/model/search_results.dart';
 import 'package:waxdeck_api_gen/src/model/server_sync_event.dart';
 import 'package:waxdeck_api_gen/src/model/server_sync_page.dart';
+import 'package:waxdeck_api_gen/src/model/server_year_in_review.dart';
 import 'package:waxdeck_api_gen/src/model/session_info.dart';
 import 'package:waxdeck_api_gen/src/model/session_list.dart';
+import 'package:waxdeck_api_gen/src/model/share.dart';
+import 'package:waxdeck_api_gen/src/model/share_create.dart';
+import 'package:waxdeck_api_gen/src/model/share_page.dart';
 import 'package:waxdeck_api_gen/src/model/signup_approval.dart';
 import 'package:waxdeck_api_gen/src/model/signup_request.dart';
 import 'package:waxdeck_api_gen/src/model/signup_result.dart';
+import 'package:waxdeck_api_gen/src/model/similar_tracks.dart';
+import 'package:waxdeck_api_gen/src/model/similarity_status.dart';
+import 'package:waxdeck_api_gen/src/model/similarity_work_item.dart';
+import 'package:waxdeck_api_gen/src/model/similarity_work_page.dart';
 import 'package:waxdeck_api_gen/src/model/skip_map.dart';
 import 'package:waxdeck_api_gen/src/model/skip_span.dart';
 import 'package:waxdeck_api_gen/src/model/smart_rule.dart';
+import 'package:waxdeck_api_gen/src/model/sonic_path.dart';
 import 'package:waxdeck_api_gen/src/model/star_update.dart';
 import 'package:waxdeck_api_gen/src/model/subscribe_request.dart';
 import 'package:waxdeck_api_gen/src/model/subscription.dart';
@@ -230,6 +260,8 @@ import 'package:waxdeck_api_gen/src/model/timeline_create.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_info.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task_page.dart';
+import 'package:waxdeck_api_gen/src/model/top_entry.dart';
+import 'package:waxdeck_api_gen/src/model/top_list.dart';
 import 'package:waxdeck_api_gen/src/model/transcoding_limits.dart';
 import 'package:waxdeck_api_gen/src/model/transcript.dart';
 import 'package:waxdeck_api_gen/src/model/transcript_cue.dart';
@@ -264,6 +296,7 @@ import 'package:waxdeck_api_gen/src/model/ws_session_frame.dart';
 import 'package:waxdeck_api_gen/src/model/ws_session_report_frame.dart';
 import 'package:waxdeck_api_gen/src/model/ws_subscribe_frame.dart';
 import 'package:waxdeck_api_gen/src/model/ws_watch_frame.dart';
+import 'package:waxdeck_api_gen/src/model/year_in_review.dart';
 
 part 'serializers.g.dart';
 
@@ -315,6 +348,9 @@ part 'serializers.g.dart';
   DuplicateGroups,
   DuplicateWarning,
   EditableField,
+  EmbeddingIngestResult,
+  EmbeddingReport,
+  EmbeddingUpload,
   EnrichItemRequest,
   EnrichItemResult,
   EnrichmentCoverage,
@@ -338,6 +374,9 @@ part 'serializers.g.dart';
   HealthIssuePage,
   HealthRuleCount,
   HealthSummary,
+  HeatmapDay,
+  InstantMix,
+  InstantMixRequest,
   Invite,$Invite,
   InviteCreate,
   InviteCreated,
@@ -357,8 +396,13 @@ part 'serializers.g.dart';
   LinkedIdentity,
   ListenBrainzConnect,
   ListenIngestResult,
+  ListenLogEntry,
+  ListenLogPage,
   ListenReport,
   ListenSession,
+  ListeningBucket,
+  ListeningHeatmap,
+  ListeningStats,
   LocksEdit,
   LocksResult,
   LoginRequest,
@@ -369,6 +413,7 @@ part 'serializers.g.dart';
   M3uImport,
   M3uImportResult,
   MediaType,
+  MediaTypeListening,
   MergeRequest,
   MergeResult,
   MetadataEdit,
@@ -376,7 +421,9 @@ part 'serializers.g.dart';
   MetadataFields,
   MigrationCreate,
   MigrationOptions,
+  MixBasis,
   ModelLibrary,
+  MonthListening,
   NotificationConfig,
   NotificationConfigUpdate,
   OidcExchangeRequest,
@@ -409,6 +456,9 @@ part 'serializers.g.dart';
   Playlist,
   PlaylistCreate,
   PlaylistEntry,
+  PlaylistImportMiss,
+  PlaylistImportRequest,
+  PlaylistImportResult,
   PlaylistItemsPage,
   PlaylistItemsUpdate,
   PlaylistPage,
@@ -416,6 +466,8 @@ part 'serializers.g.dart';
   PlaylistUpdate,
   PodcastDetail,
   PodcastShow,
+  PortablePlaylist,
+  PortableRef,
   Prefs,
   PushRegistration,
   PushRegistrationCreate,
@@ -428,9 +480,11 @@ part 'serializers.g.dart';
   RadioStationList,
   RatingUpdate,
   RefreshResult,
+  RejectedEmbedding,
   RejectedListen,
   ReleaseStatusEdit,
   RematchResult,
+  ResolveRungCounts,
   RestorePlan,
   ReviewBulkDecision,
   ReviewBulkOutcome,
@@ -462,14 +516,23 @@ part 'serializers.g.dart';
   SearchResults,
   ServerSyncEvent,
   ServerSyncPage,
+  ServerYearInReview,
   SessionInfo,
   SessionList,
+  Share,
+  ShareCreate,
+  SharePage,
   SignupApproval,
   SignupRequest,
   SignupResult,
+  SimilarTracks,
+  SimilarityStatus,
+  SimilarityWorkItem,
+  SimilarityWorkPage,
   SkipMap,
   SkipSpan,
   SmartRule,
+  SonicPath,
   StarUpdate,
   SubscribeRequest,
   Subscription,
@@ -484,6 +547,8 @@ part 'serializers.g.dart';
   TimelineInfo,
   ToolTask,
   ToolTaskPage,
+  TopEntry,
+  TopList,
   TranscodingLimits,
   Transcript,
   TranscriptCue,
@@ -518,6 +583,7 @@ part 'serializers.g.dart';
   WsSessionReportFrame,
   WsSubscribeFrame,
   WsWatchFrame,
+  YearInReview,
 ])
 Serializers serializers = (_$serializers.toBuilder()
       ..add(AppPassword.serializer)

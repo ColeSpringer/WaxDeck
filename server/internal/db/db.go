@@ -535,6 +535,65 @@ var migrations = []string{
 		created_at_ns  INTEGER NOT NULL,
 		finished_at_ns INTEGER NOT NULL DEFAULT 0
 	);`,
+
+	// Sonic similarity and public shares. Embeddings and the neighbor
+	// graph are keyed by audio essence (tag-stable, identical across
+	// re-rips of the same bytes), so a retag or a move never
+	// re-analyzes; item_pid is a convenience pointer for joins and
+	// display, refreshed at ingest. similarity_queue is the analysis
+	// work queue on the standard lease shape; similarity_backfill names
+	// graph nodes that lost neighbor edges to a deletion and await the
+	// lazy repair sweep. shares hold no secret at rest: the capability
+	// token is derived from the share id with the server key, so the
+	// owner's list can always show full URLs, revocation is row state,
+	// and a leaked database exposes no share URLs. skipped_ms extends
+	// listen sessions with the client-reported silence-trim and
+	// speed-up savings behind the time-saved counter, and the time
+	// index serves the stats range scans.
+	`CREATE TABLE embeddings (
+		essence       TEXT    PRIMARY KEY,
+		item_pid      TEXT    NOT NULL,
+		model         TEXT    NOT NULL,
+		dims          INTEGER NOT NULL,
+		vector        BLOB    NOT NULL,
+		created_at_ns INTEGER NOT NULL
+	);
+	CREATE INDEX embeddings_item ON embeddings (item_pid);
+	CREATE TABLE similarity_graph (
+		essence  TEXT    NOT NULL,
+		rank     INTEGER NOT NULL,
+		neighbor TEXT    NOT NULL,
+		distance REAL    NOT NULL,
+		PRIMARY KEY (essence, rank)
+	);
+	CREATE INDEX similarity_graph_neighbor ON similarity_graph (neighbor);
+	CREATE TABLE similarity_queue (
+		essence        TEXT    PRIMARY KEY,
+		item_pid       TEXT    NOT NULL,
+		enqueued_at_ns INTEGER NOT NULL,
+		attempts       INTEGER NOT NULL DEFAULT 0,
+		lease_until_ns INTEGER NOT NULL DEFAULT 0,
+		last_error     TEXT    NOT NULL DEFAULT ''
+	);
+	CREATE INDEX similarity_queue_ready ON similarity_queue (lease_until_ns, enqueued_at_ns);
+	CREATE TABLE similarity_backfill (
+		essence TEXT PRIMARY KEY
+	);
+	CREATE TABLE shares (
+		id             TEXT    PRIMARY KEY,
+		user_id        TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		target_pid     TEXT    NOT NULL,
+		target_kind    TEXT    NOT NULL,
+		allow_download INTEGER NOT NULL DEFAULT 0,
+		position_ms    INTEGER NOT NULL DEFAULT 0,
+		plays          INTEGER NOT NULL DEFAULT 0,
+		created_at_ns  INTEGER NOT NULL,
+		expires_at_ns  INTEGER NOT NULL DEFAULT 0,
+		revoked        INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE INDEX shares_user ON shares (user_id, created_at_ns DESC, id);
+	ALTER TABLE listen_sessions ADD COLUMN skipped_ms INTEGER NOT NULL DEFAULT 0;
+	CREATE INDEX listen_sessions_by_time ON listen_sessions (user_id, started_at_ns, id);`,
 }
 
 // Open opens (creating if needed) the database at path and applies

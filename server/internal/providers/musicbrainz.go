@@ -139,6 +139,38 @@ func (m *MusicBrainz) ReleaseByMBID(ctx context.Context, mbid string) (*match.Re
 	return mapMBRelease(&rel, ""), nil
 }
 
+// RecordingMBIDByISRC resolves an ISRC to its recording MBID, for the
+// playlist importer's strong-identifier upgrade. An ISRC mapping to
+// several recordings takes the first (they are the same performance by
+// definition; MusicBrainz splits them only for edit-history reasons).
+// A 404 is a clean miss: ("", nil).
+func (m *MusicBrainz) RecordingMBIDByISRC(ctx context.Context, isrc string) (string, error) {
+	q := url.Values{}
+	q.Set("fmt", "json")
+	u := m.base + "/isrc/" + url.PathEscape(isrc) + "?" + q.Encode()
+	body, status, err := m.core.get(ctx, u, m.ttl)
+	if err != nil {
+		return "", err
+	}
+	switch status {
+	case http.StatusOK:
+	case http.StatusNotFound, http.StatusBadRequest:
+		return "", nil
+	default:
+		return "", fmt.Errorf("providers: musicbrainz isrc %s: status %d", isrc, status)
+	}
+	var parsed struct {
+		Recordings []mbRecording `json:"recordings"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", fmt.Errorf("providers: decode musicbrainz isrc %s: %w", isrc, err)
+	}
+	if len(parsed.Recordings) == 0 {
+		return "", nil
+	}
+	return parsed.Recordings[0].ID, nil
+}
+
 // ReleasesByGroup fetches the releases in a release group, tracklists
 // included (the browse endpoint honors inc=recordings per release).
 func (m *MusicBrainz) ReleasesByGroup(ctx context.Context, rgMBID string) ([]*match.Release, error) {

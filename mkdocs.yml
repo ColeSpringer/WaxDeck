@@ -1,0 +1,62 @@
+# The documentation site. Build locally with:
+#   pip install mkdocs-material==9.5.34 && mkdocs serve
+# CI builds and publishes it from .github/workflows/docs.yaml.
+site_name: WaxDeck
+site_description: >
+  Self-hosted player, library manager, and metadata completer for
+  music, podcasts, and audiobooks.
+repo_url: https://github.com/ColeSpringer/WaxDeck
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+  features:
+    - navigation.sections
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Guides:
+      - Getting started: getting-started.md
+      - Curation and metadata: curation-and-metadata.md
+      - Podcasts and audiobooks: podcasts-and-audiobooks.md
+      - Playlists, radio, and integrations: playlists-radio-and-integrations.md
+      - Discovery and listening stats: discovery-and-stats.md
+      - Public share links: sharing.md
+      - The similarity worker: similarity-worker.md
+      - Connect and casting: connect-and-casting.md
+      - Admin and ops: admin-and-ops.md
+      - Reverse proxy guide: reverse-proxy.md
+      - Releasing: releasing.md
+  - Design records:
+      - Contract-first codegen: adr/0001-contract-first-codegen.md
+      - Dart client generator: adr/0002-dart-client-generator.md
+      - Two databases, never attached: adr/0003-two-databases-never-attached.md
+      - Identity, sessions, OIDC: adr/0004-identity-sessions-oidc.md
+      - Per-user podcasts: adr/0005-per-user-podcasts-over-a-global-catalog.md
+      - Playlists on the catalog engine: adr/0006-playlists-on-the-catalog-engine.md
+      - Direct playback: adr/0007-direct-playback-without-the-streaming-engine.md
+      - Connect sessions and the command bus: adr/0008-connect-sessions-and-the-command-bus.md
+      - The matching engine: adr/0009-the-matching-engine.md
+
+# Working notes for agents and maintainers; built but unlisted.
+not_in_nav: |
+  deferred-work.md
+  upstream-requests.md

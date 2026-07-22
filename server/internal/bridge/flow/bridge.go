@@ -318,6 +318,101 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	b.proxy.ServeHTTP(w, r)
 }
 
+// ServeShareStream streams one item for an anonymous share listener.
+// The API layer resolved the share token and enforces per-share
+// concurrency; this shapes exactly like ServeStream (direct play for
+// whole files, a named format for virtual windows) and bills any
+// engine session against the share owner, so a public link never
+// becomes someone else's CPU.
+func (b *Bridge) ServeShareStream(w http.ResponseWriter, r *http.Request, apiItemPID, ownerUserID string) {
+	src, err := b.resolver.StreamSource(r.Context(), apiItemPID, r.URL.Query().Get("f"))
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "not-found", "no streamable item with pid "+apiItemPID)
+		return
+	}
+	ref, err := b.srcRef(src.Path)
+	if err != nil {
+		b.log.Error("share stream resolution", "pid", apiItemPID, "err", err)
+		writeJSONError(w, http.StatusInternalServerError, "internal", "item is not under a streamable root")
+		return
+	}
+	shape := ShapeFor(src, b.caps, false)
+	if !shape.Seekable {
+		release, admitted := b.admit(r.Context(), w, ownerUserID)
+		if !admitted {
+			return
+		}
+		defer release()
+	}
+	params := url.Values{}
+	params.Set("src", ref)
+	params.Set("format", shape.Format)
+	params.Set("id", fmt.Sprintf("%d-%d", src.Size, src.MTimeNS))
+	if src.Virtual {
+		params.Set("from", strconv.FormatInt(src.FromSample, 10))
+		params.Set("to", strconv.FormatInt(src.ToSample, 10))
+	}
+	if b.gate != nil && lossyBitrateFormats[shape.Format] {
+		if cap := b.gate.MaxBitrateKbps(r.Context(), ownerUserID); cap > 0 {
+			params.Set("bitrate", strconv.Itoa(cap))
+		}
+	}
+	r = r.WithContext(context.WithValue(r.Context(), upstreamQueryKey{}, params.Encode()))
+	b.proxy.ServeHTTP(w, r)
+}
+
+// analysisFormats are the transports the worker audio pull serves:
+// WAV for loopback workers, FLAC for remote ones (losslessly identical
+// input at roughly half the bytes).
+var analysisFormats = map[string]bool{"wav": true, "flac": true}
+
+// ServeAnalysisAudio proxies decode-ready audio for the similarity
+// worker: 16 kHz mono, gain untouched. The caller (the API layer)
+// authenticates the worker token; this only shapes and proxies. No
+// session gate applies: analysis is a server-level integration paced
+// by the worker's own concurrency, and the sidecar's live-slot
+// admission keeps bulk analysis from starving playback.
+func (b *Bridge) ServeAnalysisAudio(w http.ResponseWriter, r *http.Request, apiItemPID string) {
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "wav"
+	}
+	if !analysisFormats[format] {
+		writeJSONError(w, http.StatusBadRequest, "invalid-request", "format must be wav or flac")
+		return
+	}
+	if !hasOutput(b.caps, format) {
+		writeJSONError(w, http.StatusServiceUnavailable, "feature-unavailable",
+			"the streaming engine does not offer the "+format+" output")
+		return
+	}
+	src, err := b.resolver.StreamSource(r.Context(), apiItemPID, "")
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "not-found", "no streamable item with pid "+apiItemPID)
+		return
+	}
+	if src.Virtual {
+		// Virtual tracks share their backing file's essence and are not
+		// analyzed per window; work items never name them.
+		writeJSONError(w, http.StatusBadRequest, "invalid-request", "virtual tracks are not analyzed")
+		return
+	}
+	ref, err := b.srcRef(src.Path)
+	if err != nil {
+		b.log.Error("analysis stream resolution", "pid", apiItemPID, "err", err)
+		writeJSONError(w, http.StatusInternalServerError, "internal", "item is not under a streamable root")
+		return
+	}
+	params := url.Values{}
+	params.Set("src", ref)
+	params.Set("format", format)
+	params.Set("rate", "16000")
+	params.Set("ch", "1")
+	params.Set("id", fmt.Sprintf("%d-%d", src.Size, src.MTimeNS))
+	r = r.WithContext(context.WithValue(r.Context(), upstreamQueryKey{}, params.Encode()))
+	b.proxy.ServeHTTP(w, r)
+}
+
 type upstreamQueryKey struct{}
 
 // rewrite points the proxied request at the sidecar's /stream with the

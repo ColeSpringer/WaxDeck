@@ -1,0 +1,202 @@
+# Tagged releases. Push a tag matching v* (e.g. v0.2.0) and this workflow:
+#   - pushes multi-arch container images (linux/amd64 + linux/arm64) to GHCR,
+#     tagged with the git tag and latest;
+#   - cross-compiles the server binary for linux/darwin/windows x amd64/arm64
+#     (web UI embedded) and attaches the archives to a GitHub Release;
+#   - runs the desktop packaging matrix (package.yaml via workflow_call) and
+#     attaches the installers to the same release.
+# Nothing here signs or notarizes; see docs/releasing.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.x"
+  FLUTTER_VERSION: "3.44.6"
+
+jobs:
+  # The bare version ("0.2.0" for tag v0.2.0), computed once. GitHub
+  # expressions cannot strip a prefix inline, hence a tiny job.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.strip.outputs.version }}
+    steps:
+      - id: strip
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+  # Production images, multi-arch, pushed to GHCR. Image names match
+  # deploy/compose.yaml. Both Dockerfiles cross-compile from the build host
+  # (--platform=$BUILDPLATFORM stages), so QEMU only backs the waxdeck
+  # runtime stage's apt layer, never the Flutter or Go toolchains.
+  images:
+    runs-on: ubuntu-latest
+    needs: [version]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push waxdeck
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+          tags: |
+            ghcr.io/colespringer/waxdeck:${{ github.ref_name }}
+            ghcr.io/colespringer/waxdeck:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build and push waxdeck-waxflow (streaming sidecar)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: deploy/Dockerfile.waxflow
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+          tags: |
+            ghcr.io/colespringer/waxdeck-waxflow:${{ github.ref_name }}
+            ghcr.io/colespringer/waxdeck-waxflow:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build and push waxdeck-analyzer (external analysis worker)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: deploy/Dockerfile.analyzer
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+          tags: |
+            ghcr.io/colespringer/waxdeck-analyzer:${{ github.ref_name }}
+            ghcr.io/colespringer/waxdeck-analyzer:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Standalone server binaries with the web UI embedded. The Flutter web
+  # bundle is built once and reused across all six targets; the version is
+  # stamped the way cmd/waxdeck documents (-ldflags -X main.version=...).
+  # This job also creates the GitHub Release the desktop job appends to.
+  server-binaries:
+    runs-on: ubuntu-latest
+    needs: [version]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Pub get (workspace root)
+        run: cd app && flutter pub get
+      - name: Build web bundle (once, embedded into every binary)
+        run: cd app/app && flutter build web --wasm
+      - name: Stage web bundle into the embed dir
+        run: |
+          rm -rf server/internal/web/dist
+          mkdir -p server/internal/web/dist
+          cp -r app/app/build/web/. server/internal/web/dist/
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: server/go.sum
+      - name: Cross-compile and archive
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            goos=${target%/*}
+            goarch=${target#*/}
+            bin=waxdeck
+            [ "$goos" = windows ] && bin=waxdeck.exe
+            echo "building $goos/$goarch"
+            (cd server && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+              go build -tags withweb -trimpath \
+                -ldflags "-X main.version=${VERSION}" \
+                -o "../dist/$bin" ./cmd/waxdeck)
+            name="waxdeck-server_${VERSION}_${goos}_${goarch}"
+            if [ "$goos" = windows ]; then
+              (cd dist && zip -q "${name}.zip" "$bin" && rm "$bin")
+            else
+              tar -czf "dist/${name}.tar.gz" -C dist "$bin"
+              rm "dist/$bin"
+            fi
+          done
+          ls -l dist
+      - name: Create release and attach server binaries
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+  # The desktop packaging matrix, versioned with the tag. Artifact names
+  # inside the run stay stable; desktop-assets renames on attach.
+  desktop:
+    needs: [version]
+    uses: ./.github/workflows/package.yaml
+    with:
+      pack_version: ${{ needs.version.outputs.version }}
+
+  # Attach the desktop installers to the release created above. Runs after
+  # server-binaries so the release exists before files are appended.
+  desktop-assets:
+    runs-on: ubuntu-latest
+    needs: [version, server-binaries, desktop]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Assemble versioned release assets
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          cp artifacts/waxdeck-macos-dmg/waxdeck-macos.dmg \
+            "assets/waxdeck-macos-${VERSION}.dmg"
+          cp artifacts/waxdeck-linux-tar/waxdeck-linux-x64.tar.gz \
+            "assets/waxdeck-linux-x64-${VERSION}.tar.gz"
+          cp artifacts/waxdeck-windows-zip/waxdeck-windows-x64.zip \
+            "assets/waxdeck-windows-x64-${VERSION}.zip"
+          cp artifacts/waxdeck-windows-msix/*.msix \
+            "assets/waxdeck-windows-${VERSION}.msix"
+          # Velopack Setup.exe on its own (winget points at it), plus the
+          # full Velopack output (portable package, releases feed) as one zip.
+          setup=$(find artifacts/waxdeck-windows-velopack -name '*Setup*.exe' | head -n 1)
+          if [ -n "$setup" ]; then
+            cp "$setup" "assets/waxdeck-windows-setup-${VERSION}.exe"
+          else
+            echo "::warning::no Velopack Setup.exe found in the velopack artifact"
+          fi
+          (cd artifacts/waxdeck-windows-velopack && \
+            zip -qr "${GITHUB_WORKSPACE}/assets/waxdeck-windows-velopack-${VERSION}.zip" .)
+          ls -l assets
+      - name: Attach desktop installers to the release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: assets/*

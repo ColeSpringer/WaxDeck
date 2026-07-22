@@ -25,6 +25,7 @@ import (
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/match"
 	"github.com/colespringer/waxdeck/server/internal/scrobble"
+	"github.com/colespringer/waxdeck/server/internal/similarity"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
 
@@ -112,7 +113,24 @@ type Config struct {
 	// FpcalcPath locates the fingerprint binary; empty looks it up on
 	// PATH, and a missing binary just disables fingerprint evidence.
 	FpcalcPath string
-	Logger     *slog.Logger
+	// WorkerLocalPaths adds library-relative source paths to similarity
+	// work items, for same-host workers that mount the library read-only
+	// and decode locally instead of pulling audio over HTTP. Only
+	// meaningful for single-root libraries; multi-root setups use the
+	// HTTP pull regardless.
+	WorkerLocalPaths bool
+	// ISRCResolver upgrades playlist-import ISRCs to recording MBIDs;
+	// nil disables the upgrade (imports still match descriptively).
+	ISRCResolver ISRCResolver
+	// SonicAnalysisDefault is the embedded analyzer's boot default
+	// (WAXDECK_SONIC_ANALYSIS); the runtime admin setting overrides it
+	// once saved.
+	SonicAnalysisDefault bool
+	// WorkerAPIConfigured reports whether external worker tokens are
+	// set; with the runtime analysis toggle it gates the sweep and the
+	// similarity status.
+	WorkerAPIConfigured bool
+	Logger              *slog.Logger
 }
 
 // Library is the catalog service over an embedded WaxBin library. It
@@ -206,6 +224,22 @@ type Library struct {
 	// the acquire-from-URL surface (the catalog holds its own copy for
 	// show dispatch).
 	sourceProviders []source.Provider
+	// sim is the in-memory sonic-similarity engine, warmed lazily from
+	// waxdeck.db on first use (it only holds data when a worker has
+	// posted embeddings). simSweepVersion remembers the catalog data
+	// version the last analysis sweep covered, so an unchanged catalog
+	// never re-walks. workerLocalPaths mirrors Config.WorkerLocalPaths.
+	sim              *similarity.Engine
+	simWarm          sync.Once
+	simWarmErr       error
+	simSweepVersion  atomic.Int64
+	workerLocalPaths bool
+	// isrcResolver mirrors Config.ISRCResolver.
+	isrcResolver ISRCResolver
+	// sonicAnalysisDefault and workerAPIConfigured mirror their Config
+	// fields.
+	sonicAnalysisDefault bool
+	workerAPIConfigured  bool
 }
 
 // SocketFileName is the IPC socket beside the catalog DB. It is a local
@@ -273,6 +307,11 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		radioDirectoryBase:     cfg.RadioDirectoryBase,
 		radioTitles:            map[string]radioTitle{},
 		listenbrainz:           scrobble.NewListenBrainz(),
+		sim:                    similarity.New(),
+		workerLocalPaths:       cfg.WorkerLocalPaths,
+		isrcResolver:           cfg.ISRCResolver,
+		sonicAnalysisDefault:   cfg.SonicAnalysisDefault,
+		workerAPIConfigured:    cfg.WorkerAPIConfigured,
 	}
 	// The ListenBrainz API base is caller-supplied, so its deliveries
 	// ride a dial-guarded client like every other user-pointed fetch;
@@ -418,6 +457,7 @@ func summary(it *model.ItemView) ItemSummary {
 		Artist:     it.Artist,
 		Album:      it.Album,
 		DurationMS: it.DurationMS,
+		Virtual:    it.Virtual,
 	}
 }
 

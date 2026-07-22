@@ -27,6 +27,45 @@ class PrefsController extends AsyncNotifier<Prefs> {
         .putPrefs(current.copyWith(theme: theme));
     state = AsyncData(stored);
   }
+
+  /// Stores the shared-stats opt-out. Same replace semantics as
+  /// [setTheme].
+  Future<void> setSharedStatsOptOut(bool optOut) async {
+    final current = state.value ?? await future;
+    final stored = await ref
+        .read(repositoryProvider)
+        .putPrefs(current.copyWith(sharedStatsOptOut: optOut));
+    state = AsyncData(stored);
+  }
+
+  /// Stores the IANA timezone the calendar stats bucket in. Errors
+  /// propagate so the editor can show the server's validation message
+  /// (the server is the authority on what names exist).
+  Future<void> setTimezone(String timezone) async {
+    final current = state.value ?? await future;
+    final stored = await ref
+        .read(repositoryProvider)
+        .putPrefs(current.copyWith(timezone: timezone));
+    state = AsyncData(stored);
+  }
+
+  /// Clears the stored timezone so stats fall back to the server
+  /// default (UTC). PUT replaces the whole preference document and
+  /// copyWith cannot null a field, so the document is rebuilt without
+  /// it.
+  Future<void> clearTimezone() async {
+    final current = state.value ?? await future;
+    final stored = await ref
+        .read(repositoryProvider)
+        .putPrefs(
+          Prefs(
+            locale: current.locale,
+            theme: current.theme,
+            sharedStatsOptOut: current.sharedStatsOptOut,
+          ),
+        );
+    state = AsyncData(stored);
+  }
 }
 
 final prefsControllerProvider = AsyncNotifierProvider<PrefsController, Prefs>(

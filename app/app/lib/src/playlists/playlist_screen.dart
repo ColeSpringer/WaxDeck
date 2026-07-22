@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../books/book_screen.dart';
 import '../player/player_screen.dart';
 import '../providers.dart';
+import '../sharing/share_dialog.dart';
 import 'name_dialog.dart';
 import 'playlists_controller.dart';
 import 'rule_editor_screen.dart';
@@ -121,6 +124,48 @@ class PlaylistScreen extends ConsumerWidget {
     );
   }
 
+  /// Exports the playlist as portable refs and copies the JSON, for
+  /// re-importing on another WaxDeck server through the portable
+  /// import source.
+  Future<void> _exportPortable(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final PortablePlaylist portable;
+    try {
+      portable = await ref.read(repositoryProvider).exportPlaylistPortable(pid);
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: _portableJson(portable)));
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('Portable playlist copied')));
+  }
+
+  static String _portableJson(PortablePlaylist portable) => jsonEncode({
+    'name': portable.name,
+    'refs': [
+      for (final ref in portable.refs)
+        {
+          'kind': ref.kind,
+          if (ref.essence != null) 'essence': ref.essence,
+          if (ref.fingerprint != null) 'fingerprint': ref.fingerprint,
+          if (ref.fingerprintAlgo != null)
+            'fingerprintAlgo': ref.fingerprintAlgo,
+          if (ref.mbid != null) 'mbid': ref.mbid,
+          if (ref.asin != null) 'asin': ref.asin,
+          if (ref.isbn != null) 'isbn': ref.isbn,
+          if (ref.isrc != null) 'isrc': ref.isrc,
+          if (ref.artist != null) 'artist': ref.artist,
+          'title': ref.title,
+          if (ref.album != null) 'album': ref.album,
+          if (ref.durationMs != null) 'durationMs': ref.durationMs,
+        },
+    ],
+  });
+
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final navigator = Navigator.of(context);
     final confirmed = await showDialog<bool>(
@@ -185,7 +230,9 @@ class PlaylistScreen extends ConsumerWidget {
                             ? 'private'
                             : 'shared',
                       ),
+                'share-link' => showShareLinkDialog(context, pid: pid),
                 'export' => _exportM3u(context, ref),
+                'portable' => _exportPortable(context, ref),
                 'delete' => _delete(context, ref),
                 _ => Future<void>.value(),
               },
@@ -199,7 +246,27 @@ class PlaylistScreen extends ConsumerWidget {
                       view.playlist.isShared ? 'Make private' : 'Share',
                     ),
                   ),
+                PopupMenuItem(
+                  value: 'share-link',
+                  child: Semantics(
+                    identifier: 'playlist-share-link',
+                    child: const Text(
+                      'Share link',
+                      key: Key('playlist-share-link'),
+                    ),
+                  ),
+                ),
                 const PopupMenuItem(value: 'export', child: Text('Export M3U')),
+                PopupMenuItem(
+                  value: 'portable',
+                  child: Semantics(
+                    identifier: 'playlist-export-portable',
+                    child: const Text(
+                      'Export portable',
+                      key: Key('playlist-export-portable'),
+                    ),
+                  ),
+                ),
                 if (isOwner)
                   const PopupMenuItem(value: 'delete', child: Text('Delete')),
               ],

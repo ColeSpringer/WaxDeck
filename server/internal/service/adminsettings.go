@@ -11,6 +11,7 @@ import (
 type AdminSettings struct {
 	SignupEnabled   bool
 	ReadOnly        bool
+	SonicAnalysis   bool
 	BackupKeepCount int
 	BackupKeepBytes int64
 }
@@ -25,6 +26,7 @@ type TranscodingLimits struct {
 
 const (
 	settingReadOnly        = "server:read-only"
+	settingSonicAnalysis   = "similarity:analysis"
 	settingBackupKeep      = "backup:keep-count"
 	settingBackupKeepBytes = "backup:keep-bytes"
 	settingTranscodeLimits = "transcode:limits"
@@ -38,6 +40,9 @@ type runtimeToggles struct {
 	readOnly     bool
 	readOnlyLibs map[string]bool // bare library pid -> read-only
 	limits       TranscodingLimits
+	// sonicAnalysis is nil until an administrator has saved the
+	// setting; the boot default (WAXDECK_SONIC_ANALYSIS) applies then.
+	sonicAnalysis *bool
 }
 
 // loadRuntimeToggles primes the settings cache; called at Open and
@@ -46,6 +51,10 @@ func (l *Library) loadRuntimeToggles(ctx context.Context) {
 	t := &runtimeToggles{readOnlyLibs: map[string]bool{}}
 	if v, err := l.db.SettingGet(ctx, settingReadOnly); err == nil {
 		t.readOnly = v == "true"
+	}
+	if v, err := l.db.SettingGet(ctx, settingSonicAnalysis); err == nil {
+		on := v == "true"
+		t.sonicAnalysis = &on
 	}
 	if raw, err := l.db.SettingGet(ctx, settingTranscodeLimits); err == nil {
 		var lim TranscodingLimits
@@ -74,7 +83,11 @@ func (l *Library) currentToggles() *runtimeToggles {
 
 // AdminSettingsGet reads the runtime settings.
 func (l *Library) AdminSettingsGet(ctx context.Context) (AdminSettings, error) {
-	out := AdminSettings{SignupEnabled: l.SignupEnabled(ctx), ReadOnly: l.currentToggles().readOnly}
+	out := AdminSettings{
+		SignupEnabled: l.SignupEnabled(ctx),
+		ReadOnly:      l.currentToggles().readOnly,
+		SonicAnalysis: l.SonicAnalysisEnabled(),
+	}
 	if v, err := l.db.SettingGet(ctx, settingBackupKeep); err == nil {
 		out.BackupKeepCount, _ = strconv.Atoi(v)
 	}
@@ -94,6 +107,7 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 	writes := map[string]string{
 		settingSignupEnabled:   strconv.FormatBool(s.SignupEnabled),
 		settingReadOnly:        strconv.FormatBool(s.ReadOnly),
+		settingSonicAnalysis:   strconv.FormatBool(s.SonicAnalysis),
 		settingBackupKeep:      strconv.Itoa(s.BackupKeepCount),
 		settingBackupKeepBytes: strconv.FormatInt(s.BackupKeepBytes, 10),
 	}
@@ -105,8 +119,19 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 	l.loadRuntimeToggles(ctx)
 	l.Audit(ctx, actor, "settings.update", AuditTarget{Kind: "settings"},
 		map[string]any{"signupEnabled": s.SignupEnabled, "readOnly": s.ReadOnly,
+			"sonicAnalysis":   s.SonicAnalysis,
 			"backupKeepCount": s.BackupKeepCount, "backupKeepBytes": s.BackupKeepBytes})
 	return l.AdminSettingsGet(ctx)
+}
+
+// SonicAnalysisEnabled reports whether the embedded analyzer should
+// run: the saved runtime setting when an administrator has touched it,
+// the boot default otherwise.
+func (l *Library) SonicAnalysisEnabled() bool {
+	if v := l.currentToggles().sonicAnalysis; v != nil {
+		return *v
+	}
+	return l.sonicAnalysisDefault
 }
 
 // TranscodingLimitsGet reads the transcode limits.

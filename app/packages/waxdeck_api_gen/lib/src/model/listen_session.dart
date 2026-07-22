@@ -16,6 +16,7 @@ part 'listen_session.g.dart';
 /// * [pid] - The item that was played.
 /// * [startedAt] - When playback started. Historical for backdated imports; the server preserves it as reported. 
 /// * [msPlayed] - Milliseconds actually heard (excludes pauses and seeks).
+/// * [skippedMs] - Milliseconds of content the listener did not sit through thanks to silence trimming and playback speed above 1x, for the time-saved counter. Omit when neither applies. 
 /// * [finished] - Whether playback reached the end of the item.
 /// * [client] - Client identifier (app name and platform).
 /// * [source_] - Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. 
@@ -36,6 +37,10 @@ abstract class ListenSession implements Built<ListenSession, ListenSessionBuilde
   /// Milliseconds actually heard (excludes pauses and seeks).
   @BuiltValueField(wireName: r'msPlayed')
   int get msPlayed;
+
+  /// Milliseconds of content the listener did not sit through thanks to silence trimming and playback speed above 1x, for the time-saved counter. Omit when neither applies. 
+  @BuiltValueField(wireName: r'skippedMs')
+  int? get skippedMs;
 
   /// Whether playback reached the end of the item.
   @BuiltValueField(wireName: r'finished')
@@ -94,6 +99,13 @@ class _$ListenSessionSerializer implements PrimitiveSerializer<ListenSession> {
       object.msPlayed,
       specifiedType: const FullType(int),
     );
+    if (object.skippedMs != null) {
+      yield r'skippedMs';
+      yield serializers.serialize(
+        object.skippedMs,
+        specifiedType: const FullType(int),
+      );
+    }
     if (object.finished != null) {
       yield r'finished';
       yield serializers.serialize(
@@ -165,6 +177,13 @@ class _$ListenSessionSerializer implements PrimitiveSerializer<ListenSession> {
             specifiedType: const FullType(int),
           ) as int;
           result.msPlayed = valueDes;
+          break;
+        case r'skippedMs':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.skippedMs = valueDes;
           break;
         case r'finished':
           final valueDes = serializers.deserialize(

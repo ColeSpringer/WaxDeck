@@ -1,0 +1,48 @@
+# Maintainer: Cole Springer <colefspringer@gmail.com>
+#
+# AUR template for the WaxDeck desktop client, packaging the release
+# tar.gz bundle (a binary package, hence -bin). The tarball is the
+# Flutter linux bundle: the waxdeck runner binary, lib/*.so, and data/.
+#
+# PLACEHOLDERS per release:
+#   - pkgver: release tag without the v
+#   - sha256sums: `sha256sum waxdeck-linux-x64-<pkgver>.tar.gz`
+#
+# The AUR package itself lives in its own AUR git repo with a generated
+# .SRCINFO (`makepkg --printsrcinfo > .SRCINFO`); this file is the
+# template it is updated from.
+pkgname=waxdeck-bin
+pkgver=0.0.0
+pkgrel=1
+pkgdesc="Self-hosted player and library manager for music, podcasts, and audiobooks (desktop client)"
+arch=('x86_64')
+url="https://github.com/ColeSpringer/WaxDeck"
+license=('MIT')
+depends=('gtk3' 'libsecret')
+provides=('waxdeck')
+conflicts=('waxdeck')
+options=('!strip')
+source=("waxdeck-linux-x64-$pkgver.tar.gz::$url/releases/download/v$pkgver/waxdeck-linux-x64-$pkgver.tar.gz")
+sha256sums=('0000000000000000000000000000000000000000000000000000000000000000')
+
+package() {
+  # The tarball extracts the bundle contents at the top level.
+  install -dm755 "$pkgdir/opt/waxdeck" "$pkgdir/usr/bin"
+  cp -a "$srcdir/data" "$srcdir/lib" "$pkgdir/opt/waxdeck/"
+  install -Dm755 "$srcdir/waxdeck" "$pkgdir/opt/waxdeck/waxdeck"
+  ln -s /opt/waxdeck/waxdeck "$pkgdir/usr/bin/waxdeck"
+
+  install -dm755 "$pkgdir/usr/share/applications"
+  cat > "$pkgdir/usr/share/applications/waxdeck.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=WaxDeck
+Comment=Self-hosted player and library manager for music, podcasts, and audiobooks
+Exec=waxdeck
+Categories=AudioVideo;Audio;Player;
+EOF
+
+  # License: MIT, from the repo (not shipped inside the bundle).
+  # Add an install of LICENSE here once the release attaches it, or
+  # fetch it as a second source entry.
+}

@@ -13,6 +13,7 @@ part 'admin_settings.g.dart';
 /// Properties:
 /// * [signupEnabled] - Whether open self-serve signup is accepted (registrations land pending). Invite links work regardless. 
 /// * [readOnly] - Server-wide read-only mode: every library behaves read-only (uploads, organizing, write-back, deletion, and the file tools are refused with code `read-only`). 
+/// * [sonicAnalysis] - Whether the server analyzes its own library for sonic similarity in the background (the embedded analyzer). Applies immediately; turning it off mid-library keeps the embeddings already computed. The boot default comes from `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it once saved. External workers are unaffected (their access is the worker-token configuration). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
 /// * [backupKeepCount] - How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. 
 /// * [backupKeepBytes] - Total archive bytes to keep, oldest deleted first when exceeded. 0 is unlimited. Imported archives are exempt. 
 @BuiltValue()
@@ -24,6 +25,10 @@ abstract class AdminSettings implements Built<AdminSettings, AdminSettingsBuilde
   /// Server-wide read-only mode: every library behaves read-only (uploads, organizing, write-back, deletion, and the file tools are refused with code `read-only`). 
   @BuiltValueField(wireName: r'readOnly')
   bool get readOnly;
+
+  /// Whether the server analyzes its own library for sonic similarity in the background (the embedded analyzer). Applies immediately; turning it off mid-library keeps the embeddings already computed. The boot default comes from `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it once saved. External workers are unaffected (their access is the worker-token configuration). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
+  @BuiltValueField(wireName: r'sonicAnalysis')
+  bool? get sonicAnalysis;
 
   /// How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. 
   @BuiltValueField(wireName: r'backupKeepCount')
@@ -66,6 +71,13 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
       object.readOnly,
       specifiedType: const FullType(bool),
     );
+    if (object.sonicAnalysis != null) {
+      yield r'sonicAnalysis';
+      yield serializers.serialize(
+        object.sonicAnalysis,
+        specifiedType: const FullType(bool),
+      );
+    }
     yield r'backupKeepCount';
     yield serializers.serialize(
       object.backupKeepCount,
@@ -112,6 +124,13 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.readOnly = valueDes;
+          break;
+        case r'sonicAnalysis':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.sonicAnalysis = valueDes;
           break;
         case r'backupKeepCount':
           final valueDes = serializers.deserialize(

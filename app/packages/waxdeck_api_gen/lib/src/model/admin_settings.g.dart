@@ -12,6 +12,8 @@ class _$AdminSettings extends AdminSettings {
   @override
   final bool readOnly;
   @override
+  final bool? sonicAnalysis;
+  @override
   final int backupKeepCount;
   @override
   final int backupKeepBytes;
@@ -22,6 +24,7 @@ class _$AdminSettings extends AdminSettings {
   _$AdminSettings._({
     required this.signupEnabled,
     required this.readOnly,
+    this.sonicAnalysis,
     required this.backupKeepCount,
     required this.backupKeepBytes,
   }) : super._();
@@ -38,6 +41,7 @@ class _$AdminSettings extends AdminSettings {
     return other is AdminSettings &&
         signupEnabled == other.signupEnabled &&
         readOnly == other.readOnly &&
+        sonicAnalysis == other.sonicAnalysis &&
         backupKeepCount == other.backupKeepCount &&
         backupKeepBytes == other.backupKeepBytes;
   }
@@ -47,6 +51,7 @@ class _$AdminSettings extends AdminSettings {
     var _$hash = 0;
     _$hash = $jc(_$hash, signupEnabled.hashCode);
     _$hash = $jc(_$hash, readOnly.hashCode);
+    _$hash = $jc(_$hash, sonicAnalysis.hashCode);
     _$hash = $jc(_$hash, backupKeepCount.hashCode);
     _$hash = $jc(_$hash, backupKeepBytes.hashCode);
     _$hash = $jf(_$hash);
@@ -58,6 +63,7 @@ class _$AdminSettings extends AdminSettings {
     return (newBuiltValueToStringHelper(r'AdminSettings')
           ..add('signupEnabled', signupEnabled)
           ..add('readOnly', readOnly)
+          ..add('sonicAnalysis', sonicAnalysis)
           ..add('backupKeepCount', backupKeepCount)
           ..add('backupKeepBytes', backupKeepBytes))
         .toString();
@@ -76,6 +82,11 @@ class AdminSettingsBuilder
   bool? _readOnly;
   bool? get readOnly => _$this._readOnly;
   set readOnly(bool? readOnly) => _$this._readOnly = readOnly;
+
+  bool? _sonicAnalysis;
+  bool? get sonicAnalysis => _$this._sonicAnalysis;
+  set sonicAnalysis(bool? sonicAnalysis) =>
+      _$this._sonicAnalysis = sonicAnalysis;
 
   int? _backupKeepCount;
   int? get backupKeepCount => _$this._backupKeepCount;
@@ -96,6 +107,7 @@ class AdminSettingsBuilder
     if ($v != null) {
       _signupEnabled = $v.signupEnabled;
       _readOnly = $v.readOnly;
+      _sonicAnalysis = $v.sonicAnalysis;
       _backupKeepCount = $v.backupKeepCount;
       _backupKeepBytes = $v.backupKeepBytes;
       _$v = null;
@@ -130,6 +142,7 @@ class AdminSettingsBuilder
             r'AdminSettings',
             'readOnly',
           ),
+          sonicAnalysis: sonicAnalysis,
           backupKeepCount: BuiltValueNullFieldError.checkNotNull(
             backupKeepCount,
             r'AdminSettings',

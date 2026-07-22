@@ -111,6 +111,7 @@ Prefs prefsFromGen(gen.Prefs prefs) {
     timezone: prefs.timezone,
     locale: prefs.locale,
     theme: theme == null ? null : themePrefFromGen(theme),
+    sharedStatsOptOut: prefs.sharedStatsOptOut,
   );
 }
 
@@ -120,7 +121,8 @@ gen.Prefs prefsToGen(Prefs prefs) {
     (b) => b
       ..timezone = prefs.timezone
       ..locale = prefs.locale
-      ..theme = theme == null ? null : themePrefToGen(theme),
+      ..theme = theme == null ? null : themePrefToGen(theme)
+      ..sharedStatsOptOut = prefs.sharedStatsOptOut,
   );
 }
 
@@ -206,6 +208,7 @@ gen.ListenSession listenSessionToGen(ListenSession session) {
       ..pid = session.pid
       ..startedAt = session.startedAt.toUtc()
       ..msPlayed = session.msPlayed
+      ..skippedMs = session.skippedMs
       ..finished = session.finished
       ..client = session.client
       ..source_ = gen.ListenSessionSource_Enum.live,
@@ -1452,6 +1455,9 @@ AdminSettings adminSettingsFromGen(gen.AdminSettings settings) {
   return AdminSettings(
     signupEnabled: settings.signupEnabled,
     readOnly: settings.readOnly,
+    // Optional on the wire only so PUT writers can omit it (absent
+    // keeps the current value); responses always carry it.
+    sonicAnalysis: settings.sonicAnalysis ?? true,
     backupKeepCount: settings.backupKeepCount,
     backupKeepBytes: settings.backupKeepBytes,
   );
@@ -1462,6 +1468,7 @@ gen.AdminSettings adminSettingsToGen(AdminSettings settings) {
     (b) => b
       ..signupEnabled = settings.signupEnabled
       ..readOnly = settings.readOnly
+      ..sonicAnalysis = settings.sonicAnalysis
       ..backupKeepCount = settings.backupKeepCount
       ..backupKeepBytes = settings.backupKeepBytes,
   );
@@ -1605,5 +1612,321 @@ gen.MigrationOptions migrationOptionsToGen(MigrationOptions options) {
       ..ratings = options.ratings
       ..history = options.history
       ..progress = options.progress,
+  );
+}
+
+MixBasis mixBasisFromGen(gen.MixBasis basis) {
+  return MixBasis.values.firstWhere(
+    (b) => b.wireName == basis.name,
+    orElse: () => MixBasis.metadata,
+  );
+}
+
+SimilarTracks similarTracksFromGen(
+  gen.SimilarTracks tracks, {
+  String baseUrl = '',
+}) {
+  return SimilarTracks(
+    basis: mixBasisFromGen(tracks.basis),
+    items: tracks.items
+        .map((i) => itemSummaryFromGen(i, baseUrl: baseUrl))
+        .toList(growable: false),
+  );
+}
+
+gen.InstantMixRequest instantMixRequestToGen({
+  String? seedPid,
+  String? genre,
+  double? adventurousness,
+  int? size,
+  List<String> excludePids = const [],
+}) {
+  return gen.InstantMixRequest(
+    (b) => b
+      ..seedPid = seedPid
+      ..genre = genre
+      ..adventurousness = adventurousness
+      ..size = size
+      ..excludePids = excludePids.isEmpty
+          ? null
+          : ListBuilder<String>(excludePids),
+  );
+}
+
+InstantMix instantMixFromGen(gen.InstantMix mix, {String baseUrl = ''}) {
+  return InstantMix(
+    basis: mixBasisFromGen(mix.basis),
+    items: mix.items
+        .map((i) => itemSummaryFromGen(i, baseUrl: baseUrl))
+        .toList(growable: false),
+  );
+}
+
+SonicPath sonicPathFromGen(gen.SonicPath path, {String baseUrl = ''}) {
+  return SonicPath(
+    complete: path.complete,
+    items: path.items
+        .map((i) => itemSummaryFromGen(i, baseUrl: baseUrl))
+        .toList(growable: false),
+  );
+}
+
+/// Bridges a generated range or bucket enum's Dart name back to its wire
+/// form: the generator prefixes names that start with a digit with `n`
+/// (`7d` becomes `n7d`).
+String _rangeWireName(String name) => switch (name) {
+  'n7d' => '7d',
+  'n30d' => '30d',
+  'n90d' => '90d',
+  'n365d' => '365d',
+  _ => name,
+};
+
+ListeningBucket listeningBucketFromGen(gen.ListeningBucket bucket) {
+  return ListeningBucket(
+    start: bucket.start.toDateTime(utc: true),
+    ms: bucket.ms,
+    sessions: bucket.sessions,
+  );
+}
+
+MediaTypeListening mediaTypeListeningFromGen(gen.MediaTypeListening m) {
+  return MediaTypeListening(
+    mediaType: mediaTypeFromGen(m.mediaType),
+    ms: m.ms,
+    sessions: m.sessions,
+  );
+}
+
+ListeningStats listeningStatsFromGen(gen.ListeningStats stats) {
+  return ListeningStats(
+    range: _rangeWireName(stats.range.name),
+    bucket: stats.bucket.name,
+    timezone: stats.timezone,
+    totalMs: stats.totalMs,
+    sessions: stats.sessions,
+    timeSavedMs: stats.timeSavedMs,
+    buckets: stats.buckets.map(listeningBucketFromGen).toList(growable: false),
+    byMediaType: stats.byMediaType
+        .map(mediaTypeListeningFromGen)
+        .toList(growable: false),
+  );
+}
+
+ListeningHeatmap listeningHeatmapFromGen(gen.ListeningHeatmap heatmap) {
+  return ListeningHeatmap(
+    year: heatmap.year,
+    timezone: heatmap.timezone,
+    days: heatmap.days
+        .map(
+          (d) => HeatmapDay(
+            date: d.date.toDateTime(utc: true),
+            ms: d.ms,
+            sessions: d.sessions,
+          ),
+        )
+        .toList(growable: false),
+    currentStreakDays: heatmap.currentStreakDays,
+    longestStreakDays: heatmap.longestStreakDays,
+  );
+}
+
+TopEntry topEntryFromGen(gen.TopEntry entry, {String baseUrl = ''}) {
+  final artUrl = entry.artUrl;
+  return TopEntry(
+    name: entry.name,
+    pid: entry.pid,
+    artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
+    plays: entry.plays,
+    ms: entry.ms,
+  );
+}
+
+TopList topListFromGen(gen.TopList list, {String baseUrl = ''}) {
+  return TopList(
+    kind: list.kind.name,
+    range: _rangeWireName(list.range.name),
+    entries: list.entries
+        .map((e) => topEntryFromGen(e, baseUrl: baseUrl))
+        .toList(growable: false),
+  );
+}
+
+ListenLogEntry listenLogEntryFromGen(gen.ListenLogEntry entry) {
+  return ListenLogEntry(
+    pid: entry.pid,
+    title: entry.title,
+    artist: entry.artist,
+    mediaType: mediaTypeFromGen(entry.mediaType),
+    startedAt: entry.startedAt.toUtc(),
+    msPlayed: entry.msPlayed,
+    skippedMs: entry.skippedMs,
+    finished: entry.finished,
+    client: entry.client,
+    // The generated Dart name for the wire value `import` is `import_`
+    // (a keyword escape); bridge back to the wire form.
+    source: entry.source_ == gen.ListenLogEntrySource_Enum.import_
+        ? 'import'
+        : entry.source_.name,
+  );
+}
+
+ListenLogPage listenLogPageFromGen(gen.ListenLogPage page) {
+  return ListenLogPage(
+    sessions: page.sessions.map(listenLogEntryFromGen).toList(growable: false),
+    nextCursor: page.nextCursor,
+  );
+}
+
+YearInReview yearInReviewFromGen(
+  gen.YearInReview review, {
+  String baseUrl = '',
+}) {
+  List<TopEntry> top(Iterable<gen.TopEntry> entries) => entries
+      .map((e) => topEntryFromGen(e, baseUrl: baseUrl))
+      .toList(growable: false);
+  return YearInReview(
+    year: review.year,
+    timezone: review.timezone,
+    totalMs: review.totalMs,
+    sessions: review.sessions,
+    distinctItems: review.distinctItems,
+    newInLibrary: review.newInLibrary,
+    timeSavedMs: review.timeSavedMs,
+    longestStreakDays: review.longestStreakDays,
+    byMonth: review.byMonth
+        .map(
+          (m) => MonthListening(month: m.month, ms: m.ms, sessions: m.sessions),
+        )
+        .toList(growable: false),
+    byMediaType: review.byMediaType
+        .map(mediaTypeListeningFromGen)
+        .toList(growable: false),
+    topArtists: top(review.topArtists),
+    topTracks: top(review.topTracks),
+    topGenres: top(review.topGenres),
+    topShows: top(review.topShows),
+  );
+}
+
+ServerYearInReview serverYearInReviewFromGen(
+  gen.ServerYearInReview review, {
+  String baseUrl = '',
+}) {
+  List<TopEntry> top(Iterable<gen.TopEntry> entries) => entries
+      .map((e) => topEntryFromGen(e, baseUrl: baseUrl))
+      .toList(growable: false);
+  return ServerYearInReview(
+    year: review.year,
+    participants: review.participants,
+    totalMs: review.totalMs,
+    sessions: review.sessions,
+    topArtists: top(review.topArtists),
+    topTracks: top(review.topTracks),
+    topGenres: top(review.topGenres),
+  );
+}
+
+Share shareFromGen(gen.Share share, {String baseUrl = ''}) {
+  return Share(
+    pid: share.pid,
+    url: resolveMediaUrl(baseUrl, share.url),
+    targetPid: share.targetPid,
+    targetKind: share.targetKind.name,
+    targetTitle: share.targetTitle,
+    allowDownload: share.allowDownload,
+    positionMs: share.positionMs,
+    createdAt: share.createdAt.toUtc(),
+    expiresAt: share.expiresAt?.toUtc(),
+    plays: share.plays,
+  );
+}
+
+SharePage sharePageFromGen(gen.SharePage page, {String baseUrl = ''}) {
+  return SharePage(
+    shares: page.shares
+        .map((s) => shareFromGen(s, baseUrl: baseUrl))
+        .toList(growable: false),
+    nextCursor: page.nextCursor,
+  );
+}
+
+PlaylistImportResult playlistImportResultFromGen(gen.PlaylistImportResult res) {
+  return PlaylistImportResult(
+    playlistPid: res.playlistPid,
+    name: res.name,
+    requested: res.requested,
+    resolved: res.resolved,
+    missing: res.missing
+        .map(
+          (m) => PlaylistImportMiss(
+            artist: m.artist,
+            title: m.title,
+            album: m.album,
+            durationMs: m.durationMs,
+          ),
+        )
+        .toList(growable: false),
+    rungs: ResolveRungCounts(
+      essence: res.rungs.essence,
+      strongId: res.rungs.strongId,
+      fingerprint: res.rungs.fingerprint,
+      descriptive: res.rungs.descriptive,
+    ),
+  );
+}
+
+PortableRef portableRefFromGen(gen.PortableRef ref) {
+  return PortableRef(
+    kind: ref.kind.name,
+    essence: ref.essence,
+    fingerprint: ref.fingerprint,
+    fingerprintAlgo: ref.fingerprintAlgo,
+    mbid: ref.mbid,
+    asin: ref.asin,
+    isbn: ref.isbn,
+    isrc: ref.isrc,
+    artist: ref.artist,
+    title: ref.title,
+    album: ref.album,
+    durationMs: ref.durationMs,
+  );
+}
+
+gen.PortableRef portableRefToGen(PortableRef ref) {
+  return gen.PortableRef(
+    (b) => b
+      ..kind = gen.PortableRefKindEnum.valueOf(ref.kind)
+      ..essence = ref.essence
+      ..fingerprint = ref.fingerprint
+      ..fingerprintAlgo = ref.fingerprintAlgo
+      ..mbid = ref.mbid
+      ..asin = ref.asin
+      ..isbn = ref.isbn
+      ..isrc = ref.isrc
+      ..artist = ref.artist
+      ..title = ref.title
+      ..album = ref.album
+      ..durationMs = ref.durationMs,
+  );
+}
+
+PortablePlaylist portablePlaylistFromGen(gen.PortablePlaylist playlist) {
+  return PortablePlaylist(
+    name: playlist.name,
+    refs: playlist.refs.map(portableRefFromGen).toList(growable: false),
+  );
+}
+
+SimilarityStatus similarityStatusFromGen(gen.SimilarityStatus status) {
+  return SimilarityStatus(
+    enabled: status.enabled,
+    model: status.model,
+    dims: status.dims,
+    embeddedTracks: status.embeddedTracks,
+    totalTracks: status.totalTracks,
+    coveragePct: status.coveragePct.toDouble(),
+    queueDepth: status.queueDepth,
+    lastIngestAt: status.lastIngestAt?.toUtc(),
   );
 }

@@ -15,6 +15,7 @@ part 'prefs.g.dart';
 /// * [timezone] - IANA timezone name (for example `Europe/Amsterdam`). Drives streaks, heatmaps, and other calendar-bucketed statistics. 
 /// * [locale] - Preferred BCP 47 locale tag (for example `en-US`).
 /// * [theme] - Preferred app theme.
+/// * [sharedStatsOptOut] - Leave the server-wide aggregate stats (the server year in review). Household members are enrolled by default; opting out removes this user's listening from every server-wide figure. Personal stats are unaffected. 
 @BuiltValue()
 abstract class Prefs implements Built<Prefs, PrefsBuilder> {
   /// IANA timezone name (for example `Europe/Amsterdam`). Drives streaks, heatmaps, and other calendar-bucketed statistics. 
@@ -29,6 +30,10 @@ abstract class Prefs implements Built<Prefs, PrefsBuilder> {
   @BuiltValueField(wireName: r'theme')
   PrefsThemeEnum? get theme;
   // enum themeEnum {  system,  dark,  light,  oled,  };
+
+  /// Leave the server-wide aggregate stats (the server year in review). Household members are enrolled by default; opting out removes this user's listening from every server-wide figure. Personal stats are unaffected. 
+  @BuiltValueField(wireName: r'sharedStatsOptOut')
+  bool? get sharedStatsOptOut;
 
   Prefs._();
 
@@ -74,6 +79,13 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
         specifiedType: const FullType(PrefsThemeEnum),
       );
     }
+    if (object.sharedStatsOptOut != null) {
+      yield r'sharedStatsOptOut';
+      yield serializers.serialize(
+        object.sharedStatsOptOut,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -117,6 +129,13 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
             specifiedType: const FullType(PrefsThemeEnum),
           ) as PrefsThemeEnum;
           result.theme = valueDes;
+          break;
+        case r'sharedStatsOptOut':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.sharedStatsOptOut = valueDes;
           break;
         default:
           unhandled.add(key);

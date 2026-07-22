@@ -1,0 +1,10 @@
+# winget-pkgs version manifest (template).
+# Submission target: github.com/microsoft/winget-pkgs under
+# manifests/c/ColeSpringer/WaxDeck/<version>/.
+# PLACEHOLDER: PackageVersion is the release tag without the v.
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+PackageIdentifier: ColeSpringer.WaxDeck
+PackageVersion: 0.0.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

@@ -26,6 +26,7 @@ func (h *Handler) getOpenSubsonicExtensions(w http.ResponseWriter, r *http.Reque
 	h.ok(w, r, envelope{OpenSubsonicExtensions: []openSubsonicExtension{
 		{Name: "apiKeyAuthentication", Versions: []int{1}},
 		{Name: "formPost", Versions: []int{1}},
+		{Name: "sonicSimilarity", Versions: []int{1}},
 	}})
 }
 

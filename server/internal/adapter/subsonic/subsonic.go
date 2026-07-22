@@ -126,6 +126,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.getArtistInfo2(w, r)
 	case "getTopSongs":
 		h.getTopSongs(w, r)
+	case "getSimilarSongs":
+		h.getSimilarSongs(w, r, uc, "similarSongs")
+	case "getSimilarSongs2":
+		h.getSimilarSongs(w, r, uc, "similarSongs2")
+	case "getSonicSimilarTracks":
+		h.getSonicSimilarTracks(w, r, uc)
+	case "findSonicPath":
+		h.findSonicPath(w, r, uc)
 	case "getScanStatus":
 		h.getScanStatus(w, r, uc)
 	case "search3":

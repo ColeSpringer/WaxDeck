@@ -26,6 +26,7 @@ const (
 	PrefixInvite       = "iv"
 	PrefixBackup       = "bu"
 	PrefixTrash        = "th"
+	PrefixShare        = "sh"
 )
 
 // prefixForKind maps an item kind to its API prefix.

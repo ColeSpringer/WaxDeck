@@ -1,18 +1,31 @@
 # Desktop packaging matrix (unsigned artifacts). Built now so packaging
 # never becomes a late surprise; signing/notarization land later.
+#
+# Also callable as a reusable workflow: the release workflow invokes it
+# with the tag's version so the same matrix produces the release
+# installers (artifact names stay stable; the caller renames on attach).
 name: Package
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      pack_version:
+        description: "Version stamped into the desktop artifacts (release tag without the v). Empty means the CI pre-release default."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
 env:
   FLUTTER_VERSION: "3.44.6"
-  PACK_VERSION: 0.1.0-ci.${{ github.run_number }}
+  # inputs.pack_version is empty outside workflow_call, so pushes and
+  # manual runs keep the run-numbered CI pre-release version.
+  PACK_VERSION: ${{ inputs.pack_version || format('0.1.0-ci.{0}', github.run_number) }}
 
 jobs:
   windows:

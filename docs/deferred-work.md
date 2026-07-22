@@ -49,6 +49,12 @@ here waits on upstream.
   loop away.
 - `[in-repo]` **Offline artwork caching.** The offline grid shows placeholders;
   artwork is only fetched live.
+- `[in-repo]` **Queued listen sessions drop skippedMs.** Live listen
+  reports carry the trimmed-time counter, but the offline outbox
+  table (waxdeck_data OutboxListens) has no column for it, so a
+  session that fails to report and replays from the queue loses its
+  time-saved contribution. Fixing it needs a drift schema bump with a
+  migration and a regenerated database.g.dart.
 - `[roadmap]` **Web loading and scrolling performance.** Parked for the larger UI
   and UX overhaul rather than spot-fixed. The recorded perf gate
   measured the virtualized grid without artwork; the suspected
@@ -244,6 +250,37 @@ here waits on upstream.
   render; mapping it from the episode flag and the ITUNESADVISORY
   custom tag is a small adapter change next time that surface is
   touched.
+
+## Discovery and stats
+
+- `[in-repo]` **Virtual tracks are not sonically analyzed.** A track
+  carved out of a shared single-file rip by a cue sheet shares its
+  backing file's audio essence, and embeddings are keyed by essence,
+  so per-window analysis would collide with itself. The analysis
+  sweep skips virtual tracks; they still appear in metadata-based
+  mixes and inherit nothing sonic. Fixing it means keying embeddings
+  by essence plus sample window and teaching the worker audio pull to
+  serve the window (the stream surface already can).
+- `[upstream]` **Album seeds and album shares.** Instant mixes cannot
+  seed from an album pid and share links cannot target one, because
+  the item query addresses entities by display string only; clients
+  seed mixes with a member track and share a playlist instead. Rides
+  the entity-lookup ask in upstream-requests.md.
+- `[in-repo]` **Time and mood mixes.** Daylist-style rotating mixes
+  with scheduled auto-names are a scheduler and a naming table over
+  the instant-mix engine that shipped; nothing else blocks them.
+- `[in-repo]` **Share-card image export.** The year-in-review surface
+  answers data; rendering shareable image cards from it (and clip
+  cards for episode shares) is client work on top of the existing
+  responses.
+- `[in-repo]` **Speed-up time saved is not reported by the first-party
+  client.** The wire field (`ListenSession.skippedMs`) covers both
+  silence trimming and playback speed above 1x, but the player only
+  accounts trim jumps; counting speed savings needs seek-aware
+  wall-clock-versus-content tracking in the playback session (a trim
+  jump and a user seek look identical as position moves, so naive
+  content-minus-wall math double counts). The stats labels say
+  "silence trimming" until this lands.
 
 ## Admin and ops
 

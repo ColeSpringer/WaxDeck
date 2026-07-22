@@ -7,7 +7,10 @@ import "time"
 // is enforced by depguard-style linting, and these types are what cross
 // it.
 
-// ItemSummary is the compact list-row shape.
+// ItemSummary is the compact list-row shape. Virtual marks a track
+// carved out of a shared source file by a cue sheet: it plays a
+// window, and its original bytes are the whole backing rip, which
+// surfaces that serve originals must account for.
 type ItemSummary struct {
 	PID        string
 	MediaType  string
@@ -15,6 +18,7 @@ type ItemSummary struct {
 	Artist     string
 	Album      string
 	DurationMS int64
+	Virtual    bool
 }
 
 // ItemDetail is the full single-item shape.
@@ -108,6 +112,7 @@ type ListenSession struct {
 	PID       string
 	StartedAt time.Time
 	MsPlayed  int64
+	SkippedMs int64
 	Finished  bool
 	Client    string
 	Source    string

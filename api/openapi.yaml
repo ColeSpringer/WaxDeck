@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: WaxDeck API
-  version: 0.9.0
+  version: 0.10.0
   description: |
     First-party REST API for WaxDeck: the self-hosted player, library manager,
     and metadata completer for music, podcasts, and audiobooks.
@@ -51,7 +51,18 @@ info:
     archives with staged restore, the deletion surface and the trash
     (list, restore, empty), read-only library mode, transcoding
     limits, and the migration assistant that imports listening state
-    from other servers. The shapes (keyset pagination, typed PIDs,
+    from other servers, and the discovery and stats surface: sonic
+    similarity over per-track audio embeddings (computed by an
+    optional external analysis worker speaking the worker API in
+    this document), similar tracks, instant mixes from any seed
+    with an adventurousness knob, sonic paths between two tracks,
+    listening statistics (time by period, calendar heatmaps with
+    streaks, top lists, the per-device session log, a time-saved
+    counter), a per-user and server-wide year in review, public
+    share links whose landing pages are server-rendered plain HTML,
+    and streaming-service playlist import with a missing-tracks
+    report plus portable playlist export for exchange between
+    catalogs. The shapes (keyset pagination, typed PIDs,
     the structured error model, relative media URLs) are load-bearing
     from day one.
 
@@ -63,7 +74,7 @@ info:
       `pl-` playlist, `rs-` radio station, `pr-` push registration,
       `pe-` player endpoint, `ps-` playback session, `rv-` review
       entry, `up-` upload, `tk-` tool task, `iv-` invite, `bu-` backup
-      archive, `th-` trash entry).
+      archive, `th-` trash entry, `sh-` share link).
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
@@ -103,6 +114,25 @@ info:
       New codes may appear; clients must treat unknown codes as opaque.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
+    - Public share links live at `/s/{token}` on the server origin, outside
+      `/api/v1`. The landing page is server-rendered plain HTML (an audio
+      element, artwork, OpenGraph and Twitter card tags) so link previews
+      and app-less phones work; it never loads the SPA. `/s/{token}/stream`,
+      `/s/{token}/art`, and `/s/{token}/download` serve the media. The token
+      is a signed capability: possession grants access until the share
+      expires or is revoked, no account needed. Share pages send
+      `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex`, and
+      anonymous listeners' transcodes and bandwidth are billed against the
+      share owner's limits with per-share concurrency caps.
+    - The similarity worker API (`/similarity/work`,
+      `/similarity/embeddings`, and the audio pull at
+      `/media/analysis/{pid}`) authenticates with a server-configured
+      worker token (`workerAuth`), not a user credential. Workers are a
+      server-level integration: they see every item regardless of library
+      visibility grants. The audio pull is a raw media route like
+      `/media/stream`: it accepts `format=wav` (loopback workers) or
+      `format=flac` (remote workers; losslessly identical input at roughly
+      half the bytes), always decoded to 16 kHz mono with gain untouched.
     - Cross-site request forgery: state-changing requests (POST, PUT, PATCH,
       DELETE) authenticated by the session cookie must carry an
       `X-CSRF-Token` header matching the session's CSRF token, which login
@@ -284,6 +314,33 @@ tags:
     description: >
       Library enrichment: provider status, coverage, and whole-library
       dispatch.
+  - name: discovery
+    description: >
+      Sonic discovery: similar tracks, instant mixes from any seed
+      with an adventurousness knob, and sonic paths between two
+      tracks. Sonic results need embedding coverage from the
+      similarity worker; every surface degrades to metadata-based
+      heuristics so discovery works with zero setup.
+  - name: stats
+    description: >
+      Listening statistics: time by period, calendar heatmaps with
+      streaks, top lists, the per-device session log, and the
+      per-user and server-wide year in review. Calendar bucketing
+      uses the caller's preferred timezone.
+  - name: shares
+    description: >
+      Public share links for tracks, playlists, books, and episodes:
+      expiring capability URLs whose landing pages are server-rendered
+      plain HTML at `/s/{token}`.
+  - name: similarity
+    description: >
+      Sonic-analysis status and the external worker API. The server
+      analyzes its own library by default (the embedded analyzer);
+      the worker API lets an external process take that job over:
+      workers pull decode-ready audio, compute per-track embeddings,
+      and post them back, and the server maintains the neighbor
+      graph that powers sonic discovery either way. Worker endpoints
+      authenticate with a server-configured worker token.
 
 security:
   - cookieAuth: []
@@ -6491,6 +6548,645 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /items/{pid}/similar:
+    get:
+      operationId: getSimilarTracks
+      summary: Similar tracks
+      description: >
+        Tracks similar to this one. With embedding coverage the list is
+        sonic (a live nearest-neighbor scan over the seed's embedding);
+        without it the list falls back to metadata heuristics (same
+        genre and artist neighborhoods). `basis` reports which one
+        answered. The seed itself is never in the list. Results honor
+        the caller's library visibility.
+      tags: [discovery]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: limit
+          in: query
+          description: Maximum tracks returned.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Similar tracks, most similar first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarTracks"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /mixes/instant:
+    post:
+      operationId: createInstantMix
+      summary: Instant mix
+      description: >
+        Builds a mix from a seed: a track or artist pid, or a genre
+        name. Exactly one seed field must be set. With embedding
+        coverage the mix is sonic and `adventurousness` widens it: 0
+        hugs the seed's closest neighbors, 1 wanders far into the
+        neighbor graph. Without coverage the mix falls back to metadata
+        heuristics (seed genre and artist neighborhoods, weighted
+        toward starred and most-played), where `adventurousness`
+        loosens the genre bound. The mix is computed fresh per call
+        and not persisted; clients wanting endless radio request
+        another mix excluding what already played. Results honor the
+        caller's library visibility.
+      tags: [discovery]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstantMixRequest"
+      responses:
+        "200":
+          description: The mix.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstantMix"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /mixes/path:
+    get:
+      operationId: getSonicPath
+      summary: Sonic path between two tracks
+      description: >
+        A listening path from one track to another through sonically
+        adjacent tracks: each hop moves along precomputed
+        nearest-neighbor edges, so the path drifts gradually from the
+        first track's sound to the second's. Needs embedding coverage
+        for both endpoints; answers `feature-unavailable` when the
+        similarity surface is not running or either endpoint has no
+        embedding yet (there is no metadata fallback for paths).
+        `complete` is false when the graph connects the endpoints only
+        partially; the returned prefix still drifts toward the target.
+        Results honor the caller's library visibility.
+      tags: [discovery]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Starting track pid.
+          schema:
+            type: string
+            pattern: "^tr-[0-9A-HJKMNP-TV-Z]{26}$"
+        - name: to
+          in: query
+          required: true
+          description: Destination track pid.
+          schema:
+            type: string
+            pattern: "^tr-[0-9A-HJKMNP-TV-Z]{26}$"
+        - name: length
+          in: query
+          description: >
+            Requested number of tracks including both endpoints. The
+            path may be shorter when the graph distance is small.
+          schema:
+            type: integer
+            minimum: 3
+            maximum: 50
+            default: 12
+      responses:
+        "200":
+          description: The path, starting track first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SonicPath"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
+
+  /stats/listening:
+    get:
+      operationId: getListeningStats
+      summary: Listening time statistics
+      description: >
+        The caller's listening time over a range, bucketed for charts.
+        Calendar bucketing uses the caller's preferred timezone (UTC
+        when unset). `timeSavedMs` sums the silence-trim and speed-up
+        savings clients report on their listen sessions.
+      tags: [stats]
+      parameters:
+        - name: range
+          in: query
+          description: How far back to aggregate, ending now.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, 365d, all]
+            default: 30d
+        - name: bucket
+          in: query
+          description: Chart bucket size.
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: day
+      responses:
+        "200":
+          description: Aggregated listening time.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListeningStats"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /stats/heatmap:
+    get:
+      operationId: getListeningHeatmap
+      summary: Calendar heatmap and streaks
+      description: >
+        Per-day listening for one calendar year in the caller's
+        preferred timezone, plus listening streaks. Days without
+        listening are omitted. The current streak counts consecutive
+        days ending today or yesterday (an unfinished today does not
+        break it).
+      tags: [stats]
+      parameters:
+        - name: year
+          in: query
+          description: >
+            Calendar year in the caller's timezone. Defaults to the
+            current year.
+          schema:
+            type: integer
+            minimum: 1970
+            maximum: 2200
+      responses:
+        "200":
+          description: The heatmap.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListeningHeatmap"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /stats/top:
+    get:
+      operationId: getTopList
+      summary: Top artists, albums, genres, or shows
+      description: >
+        The caller's most-listened entries of one kind over a range,
+        ranked by listening time. `shows` covers podcasts; spoken-word
+        listening dominates by raw time, so music kinds only count
+        music sessions and `shows` only counts podcast sessions.
+      tags: [stats]
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          description: Which top list.
+          schema:
+            type: string
+            enum: [artists, albums, genres, shows]
+        - name: range
+          in: query
+          description: How far back to aggregate, ending now.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, 365d, all]
+            default: 30d
+        - name: limit
+          in: query
+          description: Maximum entries returned.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        "200":
+          description: The ranked list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /stats/sessions:
+    get:
+      operationId: listListenLog
+      summary: Listen session log
+      description: >
+        The caller's recorded listen sessions, newest first, with the
+        reporting client, so "what played on which device when" is
+        answerable. Optionally filtered to one client label.
+      tags: [stats]
+      parameters:
+        - name: client
+          in: query
+          description: Only sessions reported by this client label.
+          schema:
+            type: string
+            maxLength: 128
+        - name: cursor
+          in: query
+          description: Opaque keyset cursor from a previous page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Page size.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of the session log.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenLogPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /stats/year-in-review:
+    get:
+      operationId: getYearInReview
+      summary: Year in review
+      description: >
+        The caller's listening recap for one calendar year in the
+        caller's preferred timezone: totals, month-by-month shape, top
+        lists across music, podcasts, and audiobooks, the longest
+        streak, and what joined the library. Always available for any
+        year with data (rolling stats, not December-only).
+      tags: [stats]
+      parameters:
+        - name: year
+          in: query
+          description: >
+            Calendar year in the caller's timezone. Defaults to the
+            current year.
+          schema:
+            type: integer
+            minimum: 1970
+            maximum: 2200
+      responses:
+        "200":
+          description: The recap.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/YearInReview"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /stats/server-year-in-review:
+    get:
+      operationId: getServerYearInReview
+      summary: Server-wide year in review
+      description: >
+        The whole server's listening recap for one calendar year,
+        aggregated across every user who has not opted out of shared
+        stats (the `sharedStatsOptOut` preference; opted-out users'
+        listening is absent from every figure, and `participants`
+        counts only the enrolled). Visible to every signed-in user.
+        Bucketing uses each participant's own timezone.
+      tags: [stats]
+      parameters:
+        - name: year
+          in: query
+          description: Calendar year. Defaults to the current year.
+          schema:
+            type: integer
+            minimum: 1970
+            maximum: 2200
+      responses:
+        "200":
+          description: The server-wide recap.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerYearInReview"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /shares:
+    get:
+      operationId: listShares
+      summary: List share links
+      description: >
+        The caller's share links, newest first, including expired ones
+        (marked by `expiresAt` in the past) so they can be renewed or
+        cleaned up. Administrators may pass `all=true` to list every
+        user's shares.
+      tags: [shares]
+      parameters:
+        - name: all
+          in: query
+          description: >
+            List every user's shares (administrators only; `forbidden`
+            otherwise).
+          schema:
+            type: boolean
+            default: false
+        - name: cursor
+          in: query
+          description: Opaque keyset cursor from a previous page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Page size.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: One page of share links.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharePage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createShare
+      summary: Create a share link
+      description: >
+        Creates a public share link for a track, book, or episode the
+        caller can see, or a playlist the caller owns. Playlists
+        require ownership because the public page serves the owner's
+        member view for the link's whole life: another user's shared
+        playlist is theirs to publish, not the viewer's, and their
+        later edits or a flip back to private must not leak through a
+        link they cannot revoke. (Albums share through a playlist of
+        their tracks for now: an album pid alone does not resolve to
+        members server-side.) The link is a capability
+        URL: anyone holding it can open the landing page and listen
+        until it expires or is revoked. Episodes accept `positionMs`
+        for copy-link-at-timestamp. `allowDownload` additionally
+        offers the original file and requires the caller's own
+        download permission. Episodes of private feeds (feeds with
+        credentials) refuse with `forbidden`: a capability URL must
+        not leak paid content. Anonymous playback through the link is
+        billed against the caller's transcode and bandwidth limits.
+      tags: [shares]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShareCreate"
+      responses:
+        "201":
+          description: The share link.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Share"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /shares/{shareId}:
+    delete:
+      operationId: revokeShare
+      summary: Revoke a share link
+      description: >
+        Revokes a share link immediately: the landing page and its
+        media URLs stop resolving. The owner or an administrator may
+        revoke.
+      tags: [shares]
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+      responses:
+        "204":
+          description: Revoked.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /playlists/import:
+    post:
+      operationId: importPlaylist
+      summary: Import a streaming-service playlist
+      description: >
+        Imports a playlist exported from a streaming service, matching
+        each entry against the library through the portable-ref
+        resolve ladder (exact identifiers first, then fingerprints,
+        then descriptive artist, title, album, and duration matching).
+        Sources: `spotify` (Exportify CSV), `applemusic` (the
+        tab-separated export), `ytmusic` (Google Takeout CSV), `csv`
+        (generic with artist, title, album, duration columns), `text`
+        (one `Artist - Title` per line), and `portable` (the `refs`
+        array from another WaxDeck's portable export). When any entry
+        resolves, a manual playlist is created with the resolved
+        tracks in order and `missing` reports the rest; when nothing
+        resolves, no playlist is created and `playlistPid` is absent.
+        Unresolved entries carrying an ISRC are upgraded to a
+        recording identifier through MusicBrainz when the server has
+        internet, within a bounded lookup budget; without it the
+        import still runs on the descriptive rung.
+      tags: [playlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistImportRequest"
+      responses:
+        "200":
+          description: The import report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistImportResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /playlists/{pid}/portable:
+    get:
+      operationId: exportPlaylistPortable
+      summary: Export a playlist as portable refs
+      description: >
+        Exports a playlist as portable refs: catalog-independent
+        identity descriptors (audio essence, external identifiers,
+        acoustic fingerprint, descriptive fields) that resolve on any
+        other WaxDeck through the playlist import endpoint's
+        `portable` source. Smart playlists export their current
+        evaluation.
+      tags: [playlists]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The portable playlist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortablePlaylist"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /similarity/status:
+    get:
+      operationId: getSimilarityStatus
+      summary: Similarity analysis status
+      description: >
+        Coverage of the sonic-similarity surface: whether a worker
+        token is configured, which embedding model the stored vectors
+        carry, how much of the library is embedded, and the analysis
+        backlog. Clients use `coveragePct` to decide whether to show
+        sonic affordances (the adventurousness knob, sonic paths).
+      tags: [similarity]
+      responses:
+        "200":
+          description: The status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarityStatus"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /similarity/work:
+    get:
+      operationId: pullSimilarityWork
+      summary: Pull analysis work (worker)
+      description: >
+        Leases a batch of tracks awaiting embedding. Each work item
+        names the track and where to pull decode-ready audio; the
+        worker computes an embedding per item and posts the batch
+        back. Leases expire on their own, so a crashed worker's items
+        return to the queue without cleanup. An empty batch means the
+        library is fully embedded; workers should sleep
+        `retryAfterSeconds` before polling again. Requires the worker
+        token.
+      tags: [similarity]
+      security:
+        - workerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum work items leased.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: Leased work items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarityWorkPage"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /similarity/embeddings:
+    post:
+      operationId: reportEmbeddings
+      summary: Post computed embeddings (worker)
+      description: >
+        Records a batch of computed embeddings. Vectors are keyed by
+        the track's audio essence, so an identical rip re-imported
+        later never needs re-analysis. All vectors in one batch carry
+        the batch's `model` and `dims`; a vector whose length differs
+        from `dims` is rejected per item. Posting a different `model`
+        than the stored vectors replaces coverage model-wide: mixed
+        models never compare, so the server drops stored vectors of
+        other models as new ones arrive. Ingest also maintains the
+        nearest-neighbor graph that powers sonic paths. Requires the
+        worker token.
+      tags: [similarity]
+      security:
+        - workerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmbeddingReport"
+      responses:
+        "200":
+          description: The ingest outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmbeddingIngestResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -6502,6 +7198,14 @@ components:
       type: http
       scheme: bearer
       description: Per-device rotating bearer token (native clients).
+    workerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Server-configured worker token (the `WAXDECK_WORKER_TOKENS`
+        setting) for external analysis workers. A server-level
+        integration credential, not a user: worker endpoints ignore
+        library visibility. Never accepted on user endpoints.
 
   parameters:
     Pid:
@@ -6592,6 +7296,14 @@ components:
       schema:
         type: string
         pattern: "^th-[0-9A-HJKMNP-TV-Z]{26}$"
+    ShareId:
+      name: shareId
+      in: path
+      required: true
+      description: Share PID (e.g. `sh-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^sh-[0-9A-HJKMNP-TV-Z]{26}$"
     ScheduleKind:
       name: kind
       in: path
@@ -7218,6 +7930,13 @@ components:
           type: string
           enum: [system, dark, light, oled]
           description: Preferred app theme.
+        sharedStatsOptOut:
+          type: boolean
+          description: >
+            Leave the server-wide aggregate stats (the server year in
+            review). Household members are enrolled by default; opting
+            out removes this user's listening from every server-wide
+            figure. Personal stats are unaffected.
 
     AppPassword:
       type: object
@@ -7628,6 +8347,14 @@ components:
           format: int64
           minimum: 0
           description: Milliseconds actually heard (excludes pauses and seeks).
+        skippedMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Milliseconds of content the listener did not sit through
+            thanks to silence trimming and playback speed above 1x,
+            for the time-saved counter. Omit when neither applies.
         finished:
           type: boolean
           description: Whether playback reached the end of the item.
@@ -7685,6 +8412,908 @@ components:
         code:
           type: string
           description: Stable machine-readable reason (`not-found`, `invalid-request`).
+        message:
+          type: string
+          description: Human-readable explanation.
+
+    MixBasis:
+      type: string
+      description: >
+        Which engine answered a discovery request: `sonic` used stored
+        audio embeddings, `metadata` used genre and artist heuristics
+        (the zero-setup fallback).
+      enum: [sonic, metadata]
+
+    SimilarTracks:
+      type: object
+      description: Tracks similar to a seed, most similar first.
+      required: [basis, items]
+      properties:
+        basis:
+          $ref: "#/components/schemas/MixBasis"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+
+    InstantMixRequest:
+      type: object
+      description: >
+        A mix seed. Exactly one of `seedPid` and `genre` must be set.
+      properties:
+        seedPid:
+          type: string
+          description: >
+            Seed track (`tr-`) or artist (`ar-`) pid. To mix from an
+            album, seed with one of its tracks (the catalog's item
+            query addresses entities by display string, so an album
+            pid alone does not resolve to members yet).
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        genre:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Seed genre name, matched case-insensitively.
+          example: blues
+        adventurousness:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.4
+          description: >
+            How far the mix wanders from the seed. 0 hugs the seed's
+            closest sonic neighbors; 1 wanders far. On the metadata
+            fallback this loosens the genre bound instead.
+        size:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+          description: Requested mix length in tracks.
+        excludePids:
+          type: array
+          maxItems: 500
+          description: >
+            Tracks to leave out (already played in this radio
+            session). The seed is always excluded.
+          items:
+            type: string
+
+    InstantMix:
+      type: object
+      description: A computed mix. Not persisted; order is play order.
+      required: [basis, items]
+      properties:
+        basis:
+          $ref: "#/components/schemas/MixBasis"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+
+    SonicPath:
+      type: object
+      description: >
+        A sonic path between two tracks, starting track first,
+        destination last when `complete`.
+      required: [complete, items]
+      properties:
+        complete:
+          type: boolean
+          description: >
+            Whether the path reaches the destination. False when the
+            neighbor graph connects the endpoints only partially; the
+            returned prefix still drifts toward the target.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSummary"
+
+    ListeningStats:
+      type: object
+      description: Aggregated listening time for one user.
+      required: [range, bucket, timezone, totalMs, sessions, timeSavedMs, buckets, byMediaType]
+      properties:
+        range:
+          type: string
+          description: The range that was aggregated.
+          enum: [7d, 30d, 90d, 365d, all]
+        bucket:
+          type: string
+          description: The bucket size used.
+          enum: [day, week, month]
+        timezone:
+          type: string
+          description: >
+            IANA timezone the calendar bucketing used (the caller's
+            preference, `UTC` when unset).
+          example: America/Denver
+        totalMs:
+          type: integer
+          format: int64
+          description: Total milliseconds listened in the range.
+        sessions:
+          type: integer
+          description: Listen sessions in the range.
+        timeSavedMs:
+          type: integer
+          format: int64
+          description: >
+            Milliseconds saved by silence trimming and speed-up in the
+            range, as reported by clients.
+        buckets:
+          type: array
+          description: Chart buckets, oldest first. Empty buckets are omitted.
+          items:
+            $ref: "#/components/schemas/ListeningBucket"
+        byMediaType:
+          type: array
+          description: Listening split by media type, most-listened first.
+          items:
+            $ref: "#/components/schemas/MediaTypeListening"
+
+    ListeningBucket:
+      type: object
+      description: One chart bucket.
+      required: [start, ms, sessions]
+      properties:
+        start:
+          type: string
+          format: date
+          description: >
+            First calendar day of the bucket in the caller's timezone.
+        ms:
+          type: integer
+          format: int64
+          description: Milliseconds listened in the bucket.
+        sessions:
+          type: integer
+          description: Listen sessions in the bucket.
+
+    MediaTypeListening:
+      type: object
+      description: Listening total for one media type.
+      required: [mediaType, ms, sessions]
+      properties:
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        ms:
+          type: integer
+          format: int64
+          description: Milliseconds listened.
+        sessions:
+          type: integer
+          description: Listen sessions.
+
+    ListeningHeatmap:
+      type: object
+      description: Per-day listening for one calendar year, plus streaks.
+      required: [year, timezone, days, currentStreakDays, longestStreakDays]
+      properties:
+        year:
+          type: integer
+          description: The calendar year.
+          example: 2026
+        timezone:
+          type: string
+          description: IANA timezone the days were bucketed in.
+          example: America/Denver
+        days:
+          type: array
+          description: Days with listening, chronological.
+          items:
+            $ref: "#/components/schemas/HeatmapDay"
+        currentStreakDays:
+          type: integer
+          description: >
+            Consecutive listening days ending today or yesterday, in
+            the caller's timezone. Crosses year boundaries. 0 when the
+            streak is broken.
+        longestStreakDays:
+          type: integer
+          description: >
+            The longest run of consecutive listening days that touches
+            the requested year. Crosses year boundaries.
+
+    HeatmapDay:
+      type: object
+      description: One day's listening.
+      required: [date, ms, sessions]
+      properties:
+        date:
+          type: string
+          format: date
+          description: The calendar day in the caller's timezone.
+        ms:
+          type: integer
+          format: int64
+          description: Milliseconds listened that day.
+        sessions:
+          type: integer
+          description: Listen sessions that day.
+
+    TopList:
+      type: object
+      description: One ranked top list.
+      required: [kind, range, entries]
+      properties:
+        kind:
+          type: string
+          description: Which top list this is.
+          enum: [artists, albums, genres, shows]
+        range:
+          type: string
+          description: The range that was aggregated.
+          enum: [7d, 30d, 90d, 365d, all]
+        entries:
+          type: array
+          description: Ranked entries, most listening time first.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+
+    TopEntry:
+      type: object
+      description: One top-list entry.
+      required: [name, plays, ms]
+      properties:
+        name:
+          type: string
+          description: Display name (artist, album, genre, or show).
+          example: Muddy Waters
+        pid:
+          type: string
+          description: >
+            The entry's pid when the entry is a catalog entity (absent
+            for genres, and for names that no longer resolve).
+          example: ar-01JZX5N8QW3F4V9T2B7KD3M9R6
+        artUrl:
+          type: string
+          description: >
+            Origin-relative artwork URL, when the entry has one.
+          example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/art
+        plays:
+          type: integer
+          description: Listen sessions attributed to the entry in the range.
+        ms:
+          type: integer
+          format: int64
+          description: Milliseconds listened in the range.
+
+    ListenLogPage:
+      type: object
+      description: One page of the caller's listen session log, newest first.
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListenLogEntry"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page; absent on the last page.
+
+    ListenLogEntry:
+      type: object
+      description: One recorded listen session.
+      required: [pid, mediaType, startedAt, msPlayed, finished, client, source]
+      properties:
+        pid:
+          type: string
+          description: The item that was played.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        title:
+          type: string
+          description: >
+            The item's display title at read time. Absent when the
+            item has left the catalog entirely.
+        artist:
+          type: string
+          description: The item's display artist, author, or show.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+        startedAt:
+          type: string
+          format: date-time
+          description: When playback started.
+        msPlayed:
+          type: integer
+          format: int64
+          description: Milliseconds actually heard.
+        skippedMs:
+          type: integer
+          format: int64
+          description: >
+            Milliseconds saved by silence trimming and speed-up, when
+            the client reported them.
+        finished:
+          type: boolean
+          description: Whether playback reached the end of the item.
+        client:
+          type: string
+          description: The reporting client label.
+          example: waxdeck-web
+        source:
+          type: string
+          description: "`live` playback or a backdated `import`."
+          enum: [live, import]
+
+    YearInReview:
+      type: object
+      description: >
+        One user's listening recap for one calendar year, computed in
+        the caller's preferred timezone.
+      required:
+        [year, timezone, totalMs, sessions, distinctItems, newInLibrary,
+         timeSavedMs, longestStreakDays, byMonth, byMediaType, topArtists,
+         topTracks, topGenres, topShows]
+      properties:
+        year:
+          type: integer
+          description: The calendar year.
+          example: 2026
+        timezone:
+          type: string
+          description: IANA timezone the recap was computed in.
+          example: America/Denver
+        totalMs:
+          type: integer
+          format: int64
+          description: Total milliseconds listened that year.
+        sessions:
+          type: integer
+          description: Listen sessions that year.
+        distinctItems:
+          type: integer
+          description: Distinct tracks, episodes, and books played that year.
+        newInLibrary:
+          type: integer
+          description: Items that joined the library that year.
+        timeSavedMs:
+          type: integer
+          format: int64
+          description: >
+            Milliseconds saved by silence trimming and speed-up that
+            year, as reported by clients.
+        longestStreakDays:
+          type: integer
+          description: The year's longest run of consecutive listening days.
+        byMonth:
+          type: array
+          description: >
+            Month-by-month listening, January first. All twelve months
+            are present, zeros included, so clients chart the year's
+            shape directly.
+          items:
+            $ref: "#/components/schemas/MonthListening"
+        byMediaType:
+          type: array
+          description: Listening split by media type, most-listened first.
+          items:
+            $ref: "#/components/schemas/MediaTypeListening"
+        topArtists:
+          type: array
+          description: Most-listened music artists that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topTracks:
+          type: array
+          description: Most-listened tracks that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topGenres:
+          type: array
+          description: Most-listened music genres that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topShows:
+          type: array
+          description: Most-listened podcast shows that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+
+    MonthListening:
+      type: object
+      description: One month's listening.
+      required: [month, ms, sessions]
+      properties:
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: Calendar month, 1 is January.
+        ms:
+          type: integer
+          format: int64
+          description: Milliseconds listened that month.
+        sessions:
+          type: integer
+          description: Listen sessions that month.
+
+    ServerYearInReview:
+      type: object
+      description: >
+        The whole server's listening recap for one calendar year,
+        aggregated across users who have not opted out of shared
+        stats. Each participant's listening is bucketed in their own
+        timezone.
+      required: [year, participants, totalMs, sessions, topArtists, topTracks, topGenres]
+      properties:
+        year:
+          type: integer
+          description: The calendar year.
+          example: 2026
+        participants:
+          type: integer
+          description: >
+            Users whose listening is included (those who have not
+            opted out and listened that year).
+        totalMs:
+          type: integer
+          format: int64
+          description: Total milliseconds listened across participants.
+        sessions:
+          type: integer
+          description: Listen sessions across participants.
+        topArtists:
+          type: array
+          description: The server's most-listened music artists that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topTracks:
+          type: array
+          description: The server's most-listened tracks that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+        topGenres:
+          type: array
+          description: The server's most-listened music genres that year.
+          items:
+            $ref: "#/components/schemas/TopEntry"
+
+    Share:
+      type: object
+      description: One public share link.
+      required:
+        [pid, url, targetPid, targetKind, targetTitle, allowDownload,
+         createdAt, plays]
+      properties:
+        pid:
+          type: string
+          description: Share PID.
+          example: sh-01JZX5N8QW3F4V9T2B7KD3M9R6
+        url:
+          type: string
+          description: >
+            Origin-relative capability URL of the landing page.
+            Anyone holding the full URL can open it; treat it as the
+            secret it is.
+          example: /s/01JZX5N8QW3F4V9T2B7KD3M9R6.aBcDeFgHiJkLmNoPqRsTuV
+        targetPid:
+          type: string
+          description: The shared track, playlist, book, or episode.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        targetKind:
+          type: string
+          description: What kind of thing the share opens.
+          enum: [track, playlist, book, episode]
+        targetTitle:
+          type: string
+          description: The target's display title at read time.
+          example: Prancing Pony Blues
+        allowDownload:
+          type: boolean
+          description: Whether the landing page offers the original file.
+        positionMs:
+          type: integer
+          format: int64
+          description: >
+            Start position for copy-link-at-timestamp shares
+            (episodes). Absent otherwise.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the share was created.
+        expiresAt:
+          type: string
+          format: date-time
+          description: >
+            When the link stops resolving. Absent for links without
+            expiry.
+        plays:
+          type: integer
+          description: Anonymous plays through the link so far.
+
+    SharePage:
+      type: object
+      description: One page of share links, newest first.
+      required: [shares]
+      properties:
+        shares:
+          type: array
+          items:
+            $ref: "#/components/schemas/Share"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page; absent on the last page.
+
+    ShareCreate:
+      type: object
+      description: A new share link.
+      required: [pid]
+      properties:
+        pid:
+          type: string
+          description: >
+            The track (`tr-`), playlist (`pl-`), book (`bk-`), or
+            episode (`ep-`) to share. Must be visible to the caller.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        expiresInHours:
+          type: integer
+          minimum: 1
+          maximum: 8760
+          description: >
+            Lifetime in hours from creation. Omitted means the link
+            never expires (it can still be revoked).
+        allowDownload:
+          type: boolean
+          default: false
+          description: >
+            Offer the original file on the landing page. Requires the
+            caller's own download permission.
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Start position for copy-link-at-timestamp (episodes only;
+            `invalid-request` on other kinds).
+
+    PlaylistImportRequest:
+      type: object
+      description: >
+        A playlist to import. `payload` carries the export text for
+        the text sources; `refs` carries portable refs for the
+        `portable` source. Exactly the field matching `source` must
+        be set.
+      required: [source]
+      properties:
+        source:
+          type: string
+          description: >
+            The export format: `spotify` (Exportify CSV), `applemusic`
+            (tab-separated export), `ytmusic` (Google Takeout CSV),
+            `csv` (generic with artist, title, album, duration
+            columns), `text` (one `Artist - Title` per line), or
+            `portable` (another WaxDeck's portable export).
+          enum: [spotify, applemusic, ytmusic, csv, text, portable]
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: >
+            Name for the created playlist. Defaults to a name found in
+            the export, or `Imported playlist`.
+        payload:
+          type: string
+          maxLength: 4000000
+          description: The export file's text content (text sources).
+        refs:
+          type: array
+          maxItems: 10000
+          description: Portable refs (the `portable` source).
+          items:
+            $ref: "#/components/schemas/PortableRef"
+
+    PlaylistImportResult:
+      type: object
+      description: The import report.
+      required: [name, requested, resolved, missing, rungs]
+      properties:
+        playlistPid:
+          type: string
+          description: >
+            The created playlist. Absent when nothing resolved (no
+            playlist is created).
+          example: pl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: The playlist name used.
+        requested:
+          type: integer
+          description: Entries found in the export.
+        resolved:
+          type: integer
+          description: Entries matched to library items.
+        missing:
+          type: array
+          description: >
+            Entries with no library match, in export order: the
+            missing-tracks report.
+          items:
+            $ref: "#/components/schemas/PlaylistImportMiss"
+        rungs:
+          $ref: "#/components/schemas/ResolveRungCounts"
+
+    PlaylistImportMiss:
+      type: object
+      description: One unmatched import entry.
+      required: [title]
+      properties:
+        artist:
+          type: string
+          description: The entry's artist, as exported.
+        title:
+          type: string
+          description: The entry's title, as exported.
+        album:
+          type: string
+          description: The entry's album, as exported.
+        durationMs:
+          type: integer
+          format: int64
+          description: The entry's duration, when the export carried one.
+
+    ResolveRungCounts:
+      type: object
+      description: >
+        How many entries each resolve-ladder rung matched, most
+        confident rung first. A high `descriptive` share means fuzzy
+        matches worth spot-checking.
+      required: [essence, strongId, fingerprint, descriptive]
+      properties:
+        essence:
+          type: integer
+          description: Identical audio bytes.
+        strongId:
+          type: integer
+          description: Exact external identifier (recording MBID, ASIN, ISBN).
+        fingerprint:
+          type: integer
+          description: Same recording, different encoding.
+        descriptive:
+          type: integer
+          description: Fuzzy artist, title, album, and duration match.
+
+    PortableRef:
+      type: object
+      description: >
+        A catalog-independent identity descriptor for one playable
+        item, carrying the progressively fuzzier anchors the resolve
+        ladder walks. Produced by the portable export; consumed by the
+        `portable` import source.
+      required: [kind, title]
+      properties:
+        kind:
+          type: string
+          description: What the ref describes.
+          enum: [track, book, episode]
+        essence:
+          type: string
+          description: Exact-rip audio-essence hash.
+        fingerprint:
+          type: string
+          format: byte
+          description: Packed acoustic fingerprint, base64.
+        fingerprintAlgo:
+          type: integer
+          description: "Fingerprint algorithm: 1 pure-Go, 100 Chromaprint."
+        mbid:
+          type: string
+          description: Recording MBID (track) or release MBID (book).
+        asin:
+          type: string
+          description: Audiobook ASIN.
+        isbn:
+          type: string
+          description: Audiobook ISBN.
+        isrc:
+          type: string
+          description: >
+            Recording ISRC. Import upgrades it to a recording MBID
+            through MusicBrainz when the server has internet.
+        artist:
+          type: string
+          description: Track artist, or book author.
+        title:
+          type: string
+          description: Display title.
+        album:
+          type: string
+          description: Track album, or book series.
+        durationMs:
+          type: integer
+          format: int64
+          description: Duration in milliseconds.
+
+    PortablePlaylist:
+      type: object
+      description: A playlist exported as portable refs, in playlist order.
+      required: [name, refs]
+      properties:
+        name:
+          type: string
+          description: The playlist's name.
+        refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortableRef"
+
+    SimilarityStatus:
+      type: object
+      description: Coverage of the sonic-similarity surface.
+      required: [enabled, embeddedTracks, totalTracks, coveragePct, queueDepth]
+      properties:
+        enabled:
+          type: boolean
+          description: >
+            Whether an analyzer can feed this surface: the server's
+            embedded analyzer is running, or an external worker token
+            is configured.
+        model:
+          type: string
+          description: >
+            The embedding model the stored vectors carry. Absent before
+            the first ingest.
+          example: waxdeck-melstat-v1
+        dims:
+          type: integer
+          description: Stored vector dimensionality. Absent before the first ingest.
+          example: 192
+        embeddedTracks:
+          type: integer
+          description: Tracks with a stored embedding.
+        totalTracks:
+          type: integer
+          description: Tracks eligible for analysis.
+        coveragePct:
+          type: number
+          description: >
+            `embeddedTracks` over `totalTracks`, 0 to 100. Clients
+            show sonic affordances when coverage is meaningful.
+        queueDepth:
+          type: integer
+          description: Tracks awaiting analysis.
+        lastIngestAt:
+          type: string
+          format: date-time
+          description: >
+            When a worker last posted embeddings. Absent before the
+            first ingest.
+
+    SimilarityWorkPage:
+      type: object
+      description: A leased batch of analysis work.
+      required: [items, retryAfterSeconds]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimilarityWorkItem"
+        retryAfterSeconds:
+          type: integer
+          description: >
+            How long an idle worker should sleep before polling again.
+            Meaningful when `items` is empty.
+
+    SimilarityWorkItem:
+      type: object
+      description: One track awaiting embedding.
+      required: [pid, essence, audioUrl, durationMs, mediaType]
+      properties:
+        pid:
+          type: string
+          description: The track to analyze.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        essence:
+          type: string
+          description: >
+            The track's audio-essence hash. Echo it back with the
+            vector; embeddings are keyed by essence so identical audio
+            never re-analyzes.
+        audioUrl:
+          type: string
+          description: >
+            Origin-relative URL serving decode-ready audio (16 kHz
+            mono, gain untouched). Append `format=flac` for lossless
+            at roughly half the bytes (remote workers); the default is
+            WAV. Authenticate with the same worker token.
+          example: /media/analysis/tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        localPath:
+          type: string
+          description: >
+            Library-relative path of the source file, present only
+            when the server is configured to expose paths to same-host
+            workers (`WAXDECK_WORKER_LOCAL_PATHS`); such workers mount
+            the library read-only and decode locally instead of
+            pulling audio over HTTP.
+        durationMs:
+          type: integer
+          format: int64
+          description: Track duration in milliseconds.
+        mediaType:
+          $ref: "#/components/schemas/MediaType"
+
+    EmbeddingReport:
+      type: object
+      description: A batch of computed embeddings.
+      required: [model, dims, embeddings]
+      properties:
+        model:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: >
+            Model and version tag the vectors were computed with.
+            Vectors of different models never compare; changing the
+            tag restarts coverage.
+          example: waxdeck-melstat-v1
+        dims:
+          type: integer
+          minimum: 8
+          maximum: 4096
+          description: Vector dimensionality; every vector's length must match.
+        embeddings:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/EmbeddingUpload"
+
+    EmbeddingUpload:
+      type: object
+      description: One track's embedding.
+      required: [pid, essence, vector]
+      properties:
+        pid:
+          type: string
+          description: The analyzed track (from the work item).
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        essence:
+          type: string
+          description: The audio-essence hash (from the work item).
+        vector:
+          type: array
+          minItems: 8
+          maxItems: 4096
+          description: >
+            The embedding. The server L2-normalizes vectors at ingest,
+            so any consistent scale works.
+          items:
+            type: number
+
+    EmbeddingIngestResult:
+      type: object
+      description: Outcome of an embedding ingest batch.
+      required: [accepted, replaced]
+      properties:
+        accepted:
+          type: integer
+          description: Vectors stored for the first time.
+        replaced:
+          type: integer
+          description: Vectors that overwrote a stored one (re-analysis).
+        rejected:
+          type: array
+          description: Vectors the server refused, and why.
+          items:
+            $ref: "#/components/schemas/RejectedEmbedding"
+
+    RejectedEmbedding:
+      type: object
+      description: One refused embedding.
+      required: [code, message]
+      properties:
+        pid:
+          type: string
+          description: The refused item's pid, when it was parseable.
+        essence:
+          type: string
+          description: The refused item's essence hash, when it was parseable.
+        code:
+          type: string
+          description: >
+            Stable machine-readable reason (`not-found`,
+            `invalid-request`).
         message:
           type: string
           description: Human-readable explanation.
@@ -12297,6 +13926,19 @@ components:
             Server-wide read-only mode: every library behaves
             read-only (uploads, organizing, write-back, deletion,
             and the file tools are refused with code `read-only`).
+        sonicAnalysis:
+          type: boolean
+          description: >
+            Whether the server analyzes its own library for sonic
+            similarity in the background (the embedded analyzer).
+            Applies immediately; turning it off mid-library keeps the
+            embeddings already computed. The boot default comes from
+            `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it
+            once saved. External workers are unaffected (their access
+            is the worker-token configuration). Optional on PUT so
+            settings writers predating this field never change it:
+            absent keeps the current value. Always present in
+            responses.
         backupKeepCount:
           type: integer
           minimum: 0

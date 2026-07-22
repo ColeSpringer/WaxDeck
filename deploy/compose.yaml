@@ -96,6 +96,16 @@ services:
       WAXDECK_MUSICBRAINZ_BASE: ${WAXDECK_MUSICBRAINZ_BASE:-}
       # Prometheus metrics: set a token to enable GET /metrics.
       WAXDECK_METRICS_TOKEN: ${WAXDECK_METRICS_TOKEN:-}
+      # Similarity worker tokens, comma separated; empty disables the
+      # worker API. The similarity profile's analyzer presents this
+      # value as its token.
+      WAXDECK_SONIC_ANALYSIS: ${WAXDECK_SONIC_ANALYSIS:-true}
+      WAXDECK_WORKER_TOKENS: ${WAXDECK_WORKER_TOKENS:-}
+      # Set to "true" to expose library-relative source paths in work
+      # items, so a same-host worker (the similarity profile mounts
+      # /library read-only) decodes locally instead of pulling audio
+      # over HTTP.
+      WAXDECK_WORKER_LOCAL_PATHS: ${WAXDECK_WORKER_LOCAL_PATHS:-false}
     volumes:
       # Holds waxbin.db + waxdeck.db (and their -wal/-shm sidecars).
       - waxdeck-data:/data
@@ -207,10 +217,49 @@ services:
       - waxdeck-podcasts:/podcasts
     restart: unless-stopped
 
-  # --- future profiles (documented topology; services come later) ---
-  #
-  # similarity (profile: similarity) - sonic-similarity analysis worker.
-  #   Reads /library:ro, writes embeddings to its own named volume.
+  # Similarity profile: the reference sonic-similarity analyzer.
+  # `docker compose --profile similarity up` runs it against the
+  # stack's waxdeck over the internal network: it pulls decode-ready
+  # audio from the worker API, computes embeddings, and posts them
+  # back. The server stores the vectors, so the worker keeps no state
+  # and needs no volume of its own. Requires WAXDECK_WORKER_TOKENS in
+  # .env (`make up` seeds one). The analyzer presents that value
+  # verbatim as its token, so with several comma-separated tokens on
+  # the server, point WAXDECK_ANALYZER_TOKEN below at a single one.
+  waxdeck-analyzer:
+    image: ghcr.io/colespringer/waxdeck-analyzer:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.analyzer
+    profiles: ["similarity"]
+    environment:
+      WAXDECK_ANALYZER_URL: http://waxdeck:4420
+      WAXDECK_ANALYZER_TOKEN: ${WAXDECK_WORKER_TOKENS:-}
+      # wav needs no worker-side decode; flac halves the bytes on the
+      # wire. Same-network transfers default to wav.
+      WAXDECK_ANALYZER_FORMAT: ${WAXDECK_ANALYZER_FORMAT:-wav}
+      # With WAXDECK_WORKER_LOCAL_PATHS=true on waxdeck above, work
+      # items carry library-relative paths and the analyzer decodes
+      # straight from the read-only mount below instead of pulling
+      # audio over HTTP.
+      WAXDECK_ANALYZER_LIBRARY: /library
+    volumes:
+      - ${WAXDECK_LIBRARY:-./library}:/library:ro
+    depends_on: [waxdeck]
+    networks: [internal]
+    # No `ports:`: the analyzer only dials out, nothing dials in.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- notes ---------------------------------------------------------
   #
   # jukebox: not a separate service; set WAXDECK_JUKEBOX=true on the
   #   waxdeck service and mount the sound device:

@@ -489,8 +489,16 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<Prefs> getPrefs() async => prefs;
 
+  /// Thrown by [putPrefs] when set, to exercise validation feedback
+  /// (a rejected timezone, for instance).
+  WaxDeckApiException? putPrefsError;
+
   @override
-  Future<Prefs> putPrefs(Prefs next) async => prefs = next;
+  Future<Prefs> putPrefs(Prefs next) async {
+    final error = putPrefsError;
+    if (error != null) throw error;
+    return prefs = next;
+  }
 
   /// Registers a show and subscribes the test user to it.
   void addSubscription(
@@ -2632,6 +2640,7 @@ class FakeRepository implements WaxDeckRepository {
   AdminSettings adminSettings = const AdminSettings(
     signupEnabled: false,
     readOnly: false,
+    sonicAnalysis: true,
     backupKeepCount: 5,
     backupKeepBytes: 0,
   );
@@ -2958,6 +2967,327 @@ class FakeRepository implements WaxDeckRepository {
       entries: entries,
     );
   }
+
+  /// Thrown by the discovery endpoints (similar tracks, instant mix,
+  /// sonic path) when set.
+  WaxDeckApiException? discoveryError;
+
+  /// Canned results served by the discovery endpoints.
+  SimilarTracks similarTracksResult = const SimilarTracks(
+    basis: MixBasis.metadata,
+  );
+  InstantMix instantMixResult = const InstantMix(basis: MixBasis.metadata);
+  SonicPath sonicPathResult = const SonicPath(complete: false);
+
+  final List<({String pid, int? limit})> similarTracksCalls = [];
+  final List<
+    ({
+      String? seedPid,
+      String? genre,
+      double? adventurousness,
+      int? size,
+      List<String> excludePids,
+    })
+  >
+  instantMixCalls = [];
+  final List<({String from, String to, int? length})> sonicPathCalls = [];
+
+  @override
+  Future<SimilarTracks> getSimilarTracks(String pid, {int? limit}) async {
+    similarTracksCalls.add((pid: pid, limit: limit));
+    final error = discoveryError;
+    if (error != null) throw error;
+    return similarTracksResult;
+  }
+
+  @override
+  Future<InstantMix> createInstantMix({
+    String? seedPid,
+    String? genre,
+    double? adventurousness,
+    int? size,
+    List<String> excludePids = const [],
+  }) async {
+    instantMixCalls.add((
+      seedPid: seedPid,
+      genre: genre,
+      adventurousness: adventurousness,
+      size: size,
+      excludePids: List.of(excludePids),
+    ));
+    final error = discoveryError;
+    if (error != null) throw error;
+    return instantMixResult;
+  }
+
+  @override
+  Future<SonicPath> getSonicPath({
+    required String from,
+    required String to,
+    int? length,
+  }) async {
+    sonicPathCalls.add((from: from, to: to, length: length));
+    final error = discoveryError;
+    if (error != null) throw error;
+    return sonicPathResult;
+  }
+
+  /// Thrown by the stats endpoints when set.
+  WaxDeckApiException? statsError;
+
+  /// Canned aggregates served by the stats endpoints.
+  ListeningStats listeningStats = const ListeningStats(
+    range: '30d',
+    bucket: 'day',
+    timezone: 'UTC',
+    totalMs: 0,
+    sessions: 0,
+    timeSavedMs: 0,
+  );
+  ListeningHeatmap heatmap = const ListeningHeatmap(
+    year: 2026,
+    timezone: 'UTC',
+    currentStreakDays: 0,
+    longestStreakDays: 0,
+  );
+
+  /// Top lists by kind; unset kinds answer an empty list.
+  final Map<String, TopList> topLists = {};
+
+  /// Listen log entries, newest first, paged like the other lists.
+  List<ListenLogEntry> listenLog = [];
+
+  /// Year-in-review recaps; null answers an all-zero recap for the
+  /// requested year.
+  YearInReview? yearInReview;
+  ServerYearInReview? serverYearInReview;
+
+  final List<({String? range, String? bucket})> listeningStatsCalls = [];
+  final List<int?> heatmapCalls = [];
+  final List<({String kind, String? range, int? limit})> topListCalls = [];
+  final List<({String? client, String? cursor, int? limit})> listenLogCalls =
+      [];
+  final List<int?> yearInReviewCalls = [];
+  final List<int?> serverYearInReviewCalls = [];
+
+  @override
+  Future<ListeningStats> getListeningStats({
+    String? range,
+    String? bucket,
+  }) async {
+    listeningStatsCalls.add((range: range, bucket: bucket));
+    final error = statsError;
+    if (error != null) throw error;
+    return listeningStats;
+  }
+
+  @override
+  Future<ListeningHeatmap> getListeningHeatmap({int? year}) async {
+    heatmapCalls.add(year);
+    final error = statsError;
+    if (error != null) throw error;
+    return heatmap;
+  }
+
+  @override
+  Future<TopList> getTopList({
+    required String kind,
+    String? range,
+    int? limit,
+  }) async {
+    topListCalls.add((kind: kind, range: range, limit: limit));
+    final error = statsError;
+    if (error != null) throw error;
+    return topLists[kind] ?? TopList(kind: kind, range: range ?? '30d');
+  }
+
+  @override
+  Future<ListenLogPage> listListenLog({
+    String? client,
+    String? cursor,
+    int? limit,
+  }) async {
+    listenLogCalls.add((client: client, cursor: cursor, limit: limit));
+    final error = statsError;
+    if (error != null) throw error;
+    final filtered = client == null
+        ? listenLog
+        : listenLog.where((e) => e.client == client).toList();
+    final start = cursor == null ? 0 : int.parse(cursor);
+    final pageSize = limit ?? 50;
+    final end = (start + pageSize).clamp(0, filtered.length);
+    return ListenLogPage(
+      sessions: filtered.sublist(start.clamp(0, filtered.length), end),
+      nextCursor: end < filtered.length ? '$end' : null,
+    );
+  }
+
+  @override
+  Future<YearInReview> getYearInReview({int? year}) async {
+    yearInReviewCalls.add(year);
+    final error = statsError;
+    if (error != null) throw error;
+    return yearInReview ??
+        YearInReview(
+          year: year ?? 2026,
+          timezone: 'UTC',
+          totalMs: 0,
+          sessions: 0,
+          distinctItems: 0,
+          newInLibrary: 0,
+          timeSavedMs: 0,
+          longestStreakDays: 0,
+          byMonth: [
+            for (var month = 1; month <= 12; month++)
+              MonthListening(month: month, ms: 0, sessions: 0),
+          ],
+        );
+  }
+
+  @override
+  Future<ServerYearInReview> getServerYearInReview({int? year}) async {
+    serverYearInReviewCalls.add(year);
+    final error = statsError;
+    if (error != null) throw error;
+    return serverYearInReview ??
+        ServerYearInReview(
+          year: year ?? 2026,
+          participants: 0,
+          totalMs: 0,
+          sessions: 0,
+        );
+  }
+
+  /// Thrown by the share endpoints when set.
+  WaxDeckApiException? shareError;
+
+  /// Share links, newest first; create and revoke mutate it.
+  final List<Share> shares = [];
+  int _shareSeq = 0;
+
+  final List<
+    ({String pid, int? expiresInHours, bool allowDownload, int? positionMs})
+  >
+  createShareCalls = [];
+  final List<String> revokeShareCalls = [];
+
+  @override
+  Future<SharePage> listShares({String? cursor, int? limit}) async {
+    final error = shareError;
+    if (error != null) throw error;
+    return SharePage(shares: List.of(shares));
+  }
+
+  @override
+  Future<Share> createShare({
+    required String pid,
+    int? expiresInHours,
+    bool allowDownload = false,
+    int? positionMs,
+  }) async {
+    createShareCalls.add((
+      pid: pid,
+      expiresInHours: expiresInHours,
+      allowDownload: allowDownload,
+      positionMs: positionMs,
+    ));
+    final error = shareError;
+    if (error != null) throw error;
+    final seq = _shareSeq++;
+    final createdAt = DateTime.utc(2026, 7, 20, 12);
+    final target = libraryItems.where((i) => i.pid == pid).firstOrNull;
+    final share = Share(
+      pid: 'sh-FAKE$seq',
+      url: '/s/FAKESECRET$seq',
+      targetPid: pid,
+      targetKind: pid.startsWith('pl-')
+          ? 'playlist'
+          : pid.startsWith('bk-')
+          ? 'book'
+          : pid.startsWith('ep-')
+          ? 'episode'
+          : 'track',
+      targetTitle: target?.title ?? 'Shared item',
+      allowDownload: allowDownload,
+      positionMs: positionMs,
+      createdAt: createdAt,
+      expiresAt: expiresInHours == null
+          ? null
+          : createdAt.add(Duration(hours: expiresInHours)),
+      plays: 0,
+    );
+    shares.insert(0, share);
+    return share;
+  }
+
+  @override
+  Future<void> revokeShare(String shareId) async {
+    final error = shareError;
+    if (error != null) throw error;
+    revokeShareCalls.add(shareId);
+    shares.removeWhere((s) => s.pid == shareId);
+  }
+
+  /// The canned import report; null derives an empty one from the
+  /// request.
+  PlaylistImportResult? playlistImportResult;
+
+  final List<
+    ({String source, String? name, String? payload, List<PortableRef>? refs})
+  >
+  importPlaylistCalls = [];
+
+  @override
+  Future<PlaylistImportResult> importPlaylist({
+    required String source,
+    String? name,
+    String? payload,
+    List<PortableRef>? refs,
+  }) async {
+    importPlaylistCalls.add((
+      source: source,
+      name: name,
+      payload: payload,
+      refs: refs == null ? null : List.of(refs),
+    ));
+    return playlistImportResult ??
+        PlaylistImportResult(
+          name: name ?? 'Imported playlist',
+          requested: 0,
+          resolved: 0,
+          rungs: const ResolveRungCounts(
+            essence: 0,
+            strongId: 0,
+            fingerprint: 0,
+            descriptive: 0,
+          ),
+        );
+  }
+
+  /// The portable export served by [exportPlaylistPortable], and the
+  /// pids it was asked for.
+  PortablePlaylist portableExport = const PortablePlaylist(
+    name: 'Portable playlist',
+  );
+  final List<String> exportedPortablePids = [];
+
+  @override
+  Future<PortablePlaylist> exportPlaylistPortable(String pid) async {
+    exportedPortablePids.add(pid);
+    return portableExport;
+  }
+
+  /// Similarity coverage served by [getSimilarityStatus].
+  SimilarityStatus similarityStatus = const SimilarityStatus(
+    enabled: false,
+    embeddedTracks: 0,
+    totalTracks: 0,
+    coveragePct: 0,
+    queueDepth: 0,
+  );
+
+  @override
+  Future<SimilarityStatus> getSimilarityStatus() async => similarityStatus;
 }
 
 /// Handy device-session factory for tests.

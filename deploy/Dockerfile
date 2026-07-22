@@ -9,7 +9,11 @@
 # Pin note: 3.44.0 is the newest 3.44.x tag published at ghcr.io/cirruslabs/flutter
 # as of 2026-07 (3.44.6 exists as a Flutter stable release but has no image tag
 # yet). Bump when cirruslabs catches up so this matches CI's 3.44.6.
-FROM ghcr.io/cirruslabs/flutter:3.44.0 AS web
+#
+# --platform=$BUILDPLATFORM: the web bundle is architecture-independent, so
+# multi-arch builds (release workflow) run this stage once on the build host
+# instead of re-running Flutter under emulation per target platform.
+FROM --platform=$BUILDPLATFORM ghcr.io/cirruslabs/flutter:3.44.0 AS web
 
 # Flutter prints a "running as root" advisory here. Expected and
 # accepted: docker build steps run as root, this stage is discarded
@@ -24,7 +28,9 @@ RUN cd app && flutter pub get
 RUN cd app/app && flutter build web --wasm
 
 ## --- stage 2: Go server build -------------------------------------------------
-FROM golang:1.26 AS build
+# Cross-compiles from the build host (Go needs no emulation), so multi-arch
+# builds stay fast: only the runtime stage below differs per target platform.
+FROM --platform=$BUILDPLATFORM golang:1.26 AS build
 
 ENV CGO_ENABLED=0
 WORKDIR /src
@@ -35,10 +41,17 @@ COPY fixtures/ fixtures/
 WORKDIR /src/server
 # The web build is embedded via go:embed when built with -tags withweb.
 COPY --from=web /src/app/app/build/web/ internal/web/dist/
+# VERSION stamps `waxdeck --version` (and /metrics build info); the release
+# workflow passes the tag, local builds keep the in-source dev default.
+ARG VERSION=0.1.0-dev
+ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go mod download && \
-    go build -tags withweb -trimpath -o /out/waxdeck ./cmd/waxdeck
+    GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -tags withweb -trimpath \
+      -ldflags "-X main.version=${VERSION}" \
+      -o /out/waxdeck ./cmd/waxdeck
 
 ## --- stage 3: runtime ----------------------------------------------------------
 FROM debian:bookworm-slim

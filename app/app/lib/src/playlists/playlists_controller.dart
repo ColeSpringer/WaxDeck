@@ -60,6 +60,26 @@ class PlaylistsController extends AsyncNotifier<List<Playlist>> {
     ref.invalidateSelf();
     return result;
   }
+
+  /// Imports a pasted playlist export (Spotify, Apple Music, YouTube
+  /// Music, generic CSV, or a plain text list) as a static playlist.
+  Future<PlaylistImportResult> importExport({
+    required String source,
+    String? name,
+    String? payload,
+    List<PortableRef>? refs,
+  }) async {
+    final result = await ref
+        .read(repositoryProvider)
+        .importPlaylist(
+          source: source,
+          name: name,
+          payload: payload,
+          refs: refs,
+        );
+    ref.invalidateSelf();
+    return result;
+  }
 }
 
 final playlistsProvider =

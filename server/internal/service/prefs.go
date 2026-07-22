@@ -16,6 +16,9 @@ type Prefs struct {
 	Timezone string `json:"timezone,omitempty"`
 	Locale   string `json:"locale,omitempty"`
 	Theme    string `json:"theme,omitempty"`
+	// SharedStatsOptOut removes this user's listening from the
+	// server-wide aggregate stats. Personal stats are unaffected.
+	SharedStatsOptOut bool `json:"sharedStatsOptOut,omitempty"`
 }
 
 var validThemes = map[string]bool{"system": true, "dark": true, "light": true, "oled": true}

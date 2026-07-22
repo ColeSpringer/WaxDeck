@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1
+# The reference sonic-similarity analyzer worker: pulls analysis work
+# from a WaxDeck server, computes waxdeck-melstat-v1 embeddings, and
+# posts the vectors back. Stateless by design (everything lives on the
+# server), so the container needs no volumes of its own; the compose
+# similarity profile mounts the library read-only for the optional
+# local-path decode.
+#
+# Build context is the REPO ROOT:
+#   docker build -f deploy/Dockerfile.analyzer .
+#
+# The layout mirrors deploy/Dockerfile.waxflow (distroless static,
+# non-root UID 10001).
+
+## --- stage 1: build -------------------------------------------------------------
+# Cross-compiles from the build host so multi-arch release builds never
+# emulate the Go toolchain; the distroless runtime stage is pull-only.
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
+
+WORKDIR /src
+COPY server/ server/
+COPY fixtures/ fixtures/
+ARG VERSION=dev
+ARG TARGETOS TARGETARCH
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd server && go mod download && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
+      -ldflags "-s -w -X main.version=${VERSION}" \
+      -o /out/waxdeck-analyzer ./cmd/waxdeck-analyzer
+
+## --- stage 2: runtime -----------------------------------------------------------
+FROM gcr.io/distroless/static-debian12
+
+COPY --from=build /out/waxdeck-analyzer /usr/local/bin/waxdeck-analyzer
+
+USER 10001:10001
+
+ENTRYPOINT ["/usr/local/bin/waxdeck-analyzer"]

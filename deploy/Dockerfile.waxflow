@@ -11,16 +11,19 @@
 # static, UID 10001, /data + /cache state dirs, ping healthcheck).
 
 ## --- stage 1: build -------------------------------------------------------------
-FROM golang:1.26-bookworm AS build
+# Cross-compiles from the build host so multi-arch release builds never
+# emulate the Go toolchain; the distroless runtime stage is pull-only.
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 
 WORKDIR /src
 COPY server/ server/
 COPY fixtures/ fixtures/
 ARG VERSION=dev
+ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     cd server && go mod download && \
-    CGO_ENABLED=0 go build -trimpath \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
       -ldflags "-s -w -X main.version=${VERSION}" \
       -o /out/waxflow ./cmd/waxflow-catalog
 # World-writable so the sidecar accepts whatever UID the compose stack runs it

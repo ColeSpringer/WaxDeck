@@ -31,6 +31,11 @@ void main() {
     expect(repo.adminSettings.readOnly, isTrue);
     // The first toggle survived the second save.
     expect(repo.adminSettings.signupEnabled, isTrue);
+
+    await tester.tap(find.byKey(const Key('setting-sonic-analysis')));
+    await tester.pumpAndSettle();
+    expect(repo.adminSettings.sonicAnalysis, isFalse);
+    expect(repo.adminSettings.readOnly, isTrue);
   });
 
   testWidgets('saves transcoding limits and per-library read-only', (
@@ -57,7 +62,12 @@ void main() {
     expect(repo.transcodingLimits.defaultMaxBitrateKbps, 256);
     expect(find.text('Transcoding limits saved'), findsOneWidget);
 
+    // Let the save snackbar expire; it overlaps the bottom rows and
+    // would swallow the tap.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('library-read-only-li-1')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('library-read-only-li-1')));
     await tester.pumpAndSettle();
     expect(repo.libraryReadOnlyByPid['li-1'], isTrue);

@@ -32,6 +32,7 @@ import (
 
 	"github.com/colespringer/waxdeck/server/internal/adapter/gpodder"
 	"github.com/colespringer/waxdeck/server/internal/adapter/subsonic"
+	"github.com/colespringer/waxdeck/server/internal/analyzer"
 	"github.com/colespringer/waxdeck/server/internal/api"
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
@@ -114,6 +115,10 @@ func run() error {
 		oidcAdminGr = flag.String("oidc-admin-group", envOr("WAXDECK_OIDC_ADMIN_GROUP", ""), "group granting the admin role via the groups claim")
 
 		metricsToken = flag.String("metrics-token", envOr("WAXDECK_METRICS_TOKEN", ""), "bearer token protecting GET /metrics (empty leaves the endpoint disabled)")
+
+		sonicAnalysis    = flag.Bool("sonic-analysis", envOr("WAXDECK_SONIC_ANALYSIS", "true") == "true", "boot default for background sonic-similarity analysis (embedded analyzer; powers instant mixes, similar tracks, and sonic paths). On by default; administrators toggle it at runtime in the server settings")
+		workerTokens     = flag.String("worker-tokens", envOr("WAXDECK_WORKER_TOKENS", ""), "external similarity worker tokens, comma separated (optional; offloads analysis to another machine through the worker API)")
+		workerLocalPaths = flag.Bool("worker-local-paths", envOr("WAXDECK_WORKER_LOCAL_PATHS", "false") == "true", "expose library-relative source paths to similarity workers that mount the library read-only (single-root libraries)")
 
 		showVer = flag.Bool("version", false, "print version and exit")
 	)
@@ -281,8 +286,12 @@ func run() error {
 		}, enrichProviders...)
 	}
 
+	workerTokenList := splitNonEmpty(*workerTokens, ",")
 	svcCfg := service.Config{
 		DataDir:                   *dataDir,
+		WorkerLocalPaths:          *workerLocalPaths,
+		SonicAnalysisDefault:      *sonicAnalysis,
+		WorkerAPIConfigured:       len(workerTokenList) > 0,
 		Roots:                     svcRoots,
 		ScanOnStart:               *scanStart && len(roots) > 0,
 		Sealer:                    sealer,
@@ -302,6 +311,9 @@ func run() error {
 	}
 	if matchSource != nil {
 		svcCfg.MatchSource = matchSource
+		// The playlist importer's ISRC upgrade rides the same paced,
+		// cached MusicBrainz client as matching.
+		svcCfg.ISRCResolver = matchSource.MB
 	}
 	svc, err := service.Open(ctx, svcCfg, store, group)
 	if err != nil {
@@ -316,6 +328,62 @@ func run() error {
 
 	// One media-token instance signs both streaming and download URLs.
 	media := auth.NewMediaTokens(secret, 0)
+
+	// Share capability tokens derive from the same server secret;
+	// nothing share-secret is stored at rest.
+	shareTokens := auth.NewShareTokens(secret)
+
+	// The similarity sweep keeps the analysis queue reconciled with the
+	// catalog (new tracks enqueue, deleted audio prunes and backfills),
+	// and the embedded analyzer drains that queue in process: sonic
+	// similarity with zero setup, no second container (the server
+	// already links the decoders through the catalog). Both loops
+	// self-gate on the runtime admin setting, so administrators flip
+	// analysis on and off without a restart; external workers remain
+	// the offload path for installs that want analysis off this
+	// machine.
+	group.Go(ctx, "similarity-sweep", func(ctx context.Context) error {
+		first := time.NewTimer(30 * time.Second)
+		defer first.Stop()
+		tick := time.NewTicker(10 * time.Minute)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-first.C:
+			case <-tick.C:
+			}
+			if _, err := svc.SimilaritySweep(ctx); err != nil {
+				log.Warn("similarity sweep", "err", err)
+			}
+		}
+	})
+	group.Go(ctx, "embedded-analysis", func(ctx context.Context) error {
+		an := analyzer.New()
+		first := time.NewTimer(45 * time.Second)
+		defer first.Stop()
+		tick := time.NewTicker(30 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-first.C:
+			case <-tick.C:
+			}
+			for {
+				worked, err := svc.DrainEmbeddedAnalysis(ctx, an)
+				if err != nil {
+					log.Warn("embedded analysis", "err", err)
+					break
+				}
+				if !worked {
+					break
+				}
+			}
+		}
+	})
 
 	// The WaxFlow bridge is optional in development: without it every
 	// catalog surface works and play-info reports streaming unavailable.
@@ -755,6 +823,8 @@ func run() error {
 		PublicBase:   *publicBase,
 		Backups:      backups,
 		BackupWake:   backupWake,
+		Shares:       shareTokens,
+		WorkerTokens: workerTokenList,
 	})
 	apiHandler := api.HandlerWithOptions(
 		api.NewStrictHandlerWithOptions(srv, nil, api.StrictHTTPServerOptions{
@@ -782,6 +852,14 @@ func run() error {
 	// Radio streams proxy through this origin under a media token,
 	// like /media/stream; the guarded client owns the URL policy.
 	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)
+	// Public share pages: server-rendered plain HTML plus their media,
+	// authenticated by the capability token in the path.
+	mux.HandleFunc("GET /s/{token}", srv.ServeSharePage)
+	mux.HandleFunc("GET /s/{token}/stream", srv.ServeShareStream)
+	mux.HandleFunc("GET /s/{token}/art", srv.ServeShareArt)
+	mux.HandleFunc("GET /s/{token}/download", srv.ServeShareDownload)
+	// The similarity worker's audio pull; worker-token authenticated.
+	mux.HandleFunc("GET /media/analysis/{pid}", srv.ServeAnalysisAudio)
 	// The read-only OpenSubsonic compatibility surface. App-password
 	// authenticated; third-party clients browse and stream while the
 	// first-party clients mature.
@@ -880,6 +958,17 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// splitNonEmpty splits on sep, trims each part, and drops empties.
+func splitNonEmpty(s, sep string) []string {
+	var out []string
+	for _, part := range strings.Split(s, sep) {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // flagWasSet reports whether the named flag appeared on the command

@@ -74,6 +74,10 @@ class PlaybackSession {
   String? _sessionId;
   DateTime? _startedAt;
   int _msPlayed = 0;
+
+  // The hours-saved counter's value when the open listen session began,
+  // so each session reports only its own trimmed milliseconds.
+  int _skippedAtSessionStart = 0;
   bool _finished = false;
   ListenSession? _pendingRetry;
   bool _disposed = false;
@@ -497,6 +501,7 @@ class PlaybackSession {
     _sessionId = newListenSessionId();
     _startedAt = DateTime.now().toUtc();
     _msPlayed = 0;
+    _skippedAtSessionStart = hoursSavedMs.value;
   }
 
   /// Checkpoints [at] (engine timeline; defaults to the live position),
@@ -526,11 +531,15 @@ class PlaybackSession {
     _sessionId = null;
     _startedAt = null;
     if (sessionId == null || startedAt == null || _msPlayed <= 0) return;
+    // Silence trimmed during this session, for the server's time-saved
+    // counter; absent when nothing was trimmed.
+    final skipped = hoursSavedMs.value - _skippedAtSessionStart;
     final session = ListenSession(
       sessionId: sessionId,
       pid: item.pid,
       startedAt: startedAt,
       msPlayed: _msPlayed,
+      skippedMs: skipped > 0 ? skipped : null,
       finished: finished,
       client: clientId,
     );
