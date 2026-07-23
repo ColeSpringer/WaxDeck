@@ -331,6 +331,19 @@ here waits on upstream.
   count as sessions; they ride the streaming engine's own liveSlots
   admission control (the documented backstop). A per-timeline
   session notion would close the gap.
+- `[in-repo]` **Forcing the source's own format still spends an
+  admission slot.** A client that pins `fmt=X` on a whole file already
+  in format X (some Subsonic clients always pin a format) is routed
+  through the engine and charged a concurrent-session slot, though the
+  auto ladder would direct-play the same bytes as a seekable passthrough.
+  `ServeStream` clears `Seekable` for any forced format unconditionally,
+  and passthrough is signaled by `format=auto`, not by the source's own
+  format name, so the guard is not a one-liner: it must match the forced
+  format against the source container and still exclude voice boost and
+  virtual tracks (and reconcile container-versus-format naming for
+  mp4/adts/aac) so a real encode never escapes admission. Conservative
+  today (it over-counts sessions, never under-counts); worth doing only
+  if concurrent-session limits get tight.
 - `[in-repo]` **No radio-scrobbling off switch.** Radio plays scrobble
   by default for users with scrobble connections, behind the
   transition-and-parse guards; a per-user preference (and possibly a

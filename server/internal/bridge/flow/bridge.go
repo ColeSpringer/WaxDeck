@@ -89,6 +89,12 @@ func New(ctx context.Context, cfg Config) (*Bridge, error) {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
+	// No client options: the only calls made through c are JSON (Caps here,
+	// Sign and CreateTimeline on the stream path), and the client self-bounds
+	// each at its 30s per-call default when ctx carries no deadline. That
+	// preserves the effective bound the removed client-wide 30s timeout gave
+	// these calls, so nothing here depended on it. Streaming rides b.proxy, not
+	// these methods, so unbounded stream bodies never reach c.
 	c, err := client.New(cfg.BaseURL, cfg.APIKey)
 	if err != nil {
 		return nil, fmt.Errorf("flow: %w", err)
@@ -201,7 +207,9 @@ func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts 
 	_, boost := VoiceBoostParams(src, b.caps, opts.VoiceBoost)
 	shape := ShapeFor(src, b.caps, boost)
 	if mime, ok := forceFormats[opts.ForceFormat]; ok && hasOutput(b.caps, opts.ForceFormat) {
-		shape.Format = opts.ForceFormat
+		// Proxy mode carries the forced format on the URL (&fmt= below), so the
+		// shape's Format is never read here; only the client-facing MimeType and
+		// Seekable come off the shape.
 		shape.MimeType = mime
 		shape.Seekable = true
 	}
@@ -275,6 +283,12 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	if f := q.Get("fmt"); f != "" {
 		if _, ok := forceFormats[f]; ok && hasOutput(b.caps, f) {
 			shape.Format = f
+			// Clear Seekable so this stream routes through the admission control
+			// below: a forced format engages the engine (a transcode), not a
+			// passthrough of the original bytes. PlayInfoFor advertises this same
+			// format to the client as Seekable:true — the encoded endpoint is
+			// client-seekable — so here the flag doubles as "no engine session",
+			// which a forced format is not.
 			shape.Seekable = false
 		}
 	}

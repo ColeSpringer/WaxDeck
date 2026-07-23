@@ -341,7 +341,7 @@ func (l *Library) PublicArt(ctx context.Context, apiItemPID string, size int) (A
 	if it.Kind == model.KindEpisode {
 		entity = model.ArtEpisode
 	}
-	blob, err := l.lib.ResolveArt(ctx, model.EntityRef{Type: entity, PID: it.PID}, size)
+	blob, err := l.lib.ResolveArt(ctx, model.EntityRef{Type: entity, PID: it.PID}, model.ArtRoleFront, size)
 	if err != nil {
 		return ArtBlob{}, classify(err)
 	}

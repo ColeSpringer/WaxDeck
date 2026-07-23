@@ -389,7 +389,9 @@ func rewritePlaylist(body []byte, token string) []byte {
 				out.WriteString(line)
 			} else {
 				uri := line[start : start+end]
-				out.WriteString(line[:start] + appendToken(uri, token) + line[start+end:])
+				out.WriteString(line[:start])
+				out.WriteString(appendToken(uri, token))
+				out.WriteString(line[start+end:])
 			}
 		case line == "" || strings.HasPrefix(line, "#"):
 			out.WriteString(line)

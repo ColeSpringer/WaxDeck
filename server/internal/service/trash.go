@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
 )
 
@@ -82,7 +83,7 @@ func (l *Library) EmptyTrash(ctx context.Context, uc *UserCtx) (TrashEmptyDTO, e
 	if !uc.Admin {
 		return TrashEmptyDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	rep, err := l.lib.EmptyTrash(ctx)
+	rep, err := l.lib.EmptyTrash(ctx, waxbin.EmptyTrashOptions{})
 	if err != nil {
 		return TrashEmptyDTO{}, classify(err)
 	}

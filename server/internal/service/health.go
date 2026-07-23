@@ -313,7 +313,7 @@ func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exemp
 	// Art: the item resolver serves tracks and books alike, walking the
 	// fallback chain to album and artist art. Size 0 returns the source
 	// blob, whose dimensions also answer small-art.
-	blob, err := l.lib.ResolveArt(ctx, model.EntityRef{Type: model.ArtTrack, PID: it.PID}, 0)
+	blob, err := l.lib.ResolveArt(ctx, model.EntityRef{Type: model.ArtTrack, PID: it.PID}, model.ArtRoleFront, 0)
 	switch {
 	case err == nil:
 		if blob.Width > 0 && blob.Height > 0 && (blob.Width < smallArtMinSide || blob.Height < smallArtMinSide) {

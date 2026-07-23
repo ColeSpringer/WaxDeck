@@ -734,7 +734,7 @@ func (l *Library) tagToolTrackFile(ctx context.Context, path string, seed *model
 
 // addToolCover attaches the item's resolved cover art, best effort.
 func (l *Library) addToolCover(ctx context.Context, ed *waxlabel.Editor, pid model.PID) {
-	blob, err := l.lib.ResolveArt(ctx, model.EntityRef{Type: model.ArtTrack, PID: pid}, 0)
+	blob, err := l.lib.ResolveArt(ctx, model.EntityRef{Type: model.ArtTrack, PID: pid}, model.ArtRoleFront, 0)
 	if err != nil || blob == nil || len(blob.Bytes) == 0 {
 		return
 	}
@@ -1116,22 +1116,6 @@ func toolTaskDTO(t wdb.ToolTask) ToolTaskDTO {
 		Summary:     summary,
 		CreatedAtNS: t.CreatedAtNS, FinishedAtNS: t.FinishedAtNS,
 	}
-}
-
-// dedupAPIBookPIDs collapses per-piece item pids (every part of one
-// book resolves to the same item, and non-primary parts resolve to
-// nothing) into unique API book pids in order.
-func dedupAPIBookPIDs(pids []model.PID) []string {
-	seen := map[model.PID]bool{}
-	var out []string
-	for _, pid := range pids {
-		if pid == "" || seen[pid] {
-			continue
-		}
-		seen[pid] = true
-		out = append(out, apiPID(PrefixBook, pid))
-	}
-	return out
 }
 
 // chapterTitle falls back to a generated name for an unnamed chapter.

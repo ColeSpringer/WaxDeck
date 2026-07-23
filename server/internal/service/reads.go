@@ -213,7 +213,7 @@ func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID string, size int)
 	default:
 		return ArtBlob{}, errNotFound("no artwork for pid " + apiPID)
 	}
-	blob, err := l.lib.ResolveArt(ctx, ref, size)
+	blob, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, size)
 	if err != nil {
 		return ArtBlob{}, classify(err)
 	}

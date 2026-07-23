@@ -310,6 +310,17 @@ func validISBN(s string) bool {
 	}
 }
 
+// validYear reports whether s is the non-negative integer WaxBin's year field
+// accepts; any other value fails the whole edit, so an enrich pass drops it.
+func validYear(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	n, err := strconv.Atoi(s)
+	return err == nil && n >= 0
+}
+
 // validateIdentifierField rejects a malformed identifier value; the
 // empty string always passes (it clears the field).
 func validateIdentifierField(name, value string) error {
@@ -746,7 +757,7 @@ func (l *Library) SetItemArtwork(ctx context.Context, uc *UserCtx, apiPID string
 			return EditOutcomeDTO{}, err
 		}
 	}
-	err = l.lib.SetItemArt(ctx, it.PID, raw, lock, true, writeBack)
+	err = l.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, raw, lock, true, writeBack)
 	return editOutcomeFromWriteBack(err)
 }
 
@@ -757,7 +768,7 @@ func (l *Library) ClearItemArtwork(ctx context.Context, uc *UserCtx, apiPID stri
 	if err != nil {
 		return err
 	}
-	if err := l.lib.SetItemArt(ctx, it.PID, nil, false, true, false); err != nil {
+	if err := l.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, nil, false, true, false); err != nil {
 		return classify(err)
 	}
 	return nil
@@ -842,7 +853,7 @@ func (l *Library) SetEntityArtwork(ctx context.Context, entityType, apiEntityPID
 			return EditOutcomeDTO{}, err
 		}
 	}
-	err = l.lib.SetEntityArt(ctx, ent, pid, "front", raw, writeBack)
+	err = l.lib.SetEntityArt(ctx, ent, pid, model.ArtRoleFront, raw, writeBack)
 	return editOutcomeFromWriteBack(err)
 }
 
@@ -1110,7 +1121,7 @@ func (l *Library) ItemMetadataFor(ctx context.Context, uc *UserCtx, apiPID strin
 	if it.Kind == model.KindEpisode {
 		ref.Type = model.ArtEpisode
 	}
-	if blob, err := l.lib.ResolveArt(ctx, ref, 64); err == nil && blob != nil {
+	if blob, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, 64); err == nil && blob != nil {
 		out.HasArtwork = true
 	}
 	return out, nil

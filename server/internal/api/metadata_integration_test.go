@@ -234,7 +234,9 @@ func TestMetadataEditorLifecycle(t *testing.T) {
 		t.Fatalf("forced title = %q", got)
 	}
 
-	// Identifier validation: a bad ISRC is rejected, a good one lands.
+	// Identifier validation and normalization: a bad ISRC is rejected; a
+	// loose (lowercase) one is accepted and comes back in the canonical
+	// uppercase form the facade now normalizes to before storing.
 	resp = h.patchJSON(t, "/api/v1/items/"+alpha+"/metadata", map[string]any{
 		"fields": map[string]string{"isrc": "NOPE"},
 	})
@@ -243,8 +245,8 @@ func TestMetadataEditorLifecycle(t *testing.T) {
 		"fields": map[string]string{"isrc": "usrc17607839"},
 	})
 	wantStatus(t, resp, 200, "good isrc")
-	if got := h.itemMeta(t, alpha).Fields["isrc"]; got == "" {
-		t.Fatal("curated isrc did not surface in the fields map")
+	if got := h.itemMeta(t, alpha).Fields["isrc"]; got != "USRC17607839" {
+		t.Fatalf("curated isrc = %q, want normalized USRC17607839", got)
 	}
 
 	// A field outside the kind's vocabulary is rejected.
@@ -582,8 +584,18 @@ func TestMetadataBookChapters(t *testing.T) {
 	})
 	wantStatus(t, resp, 200, "chapters set")
 	md = h.itemMeta(t, single)
-	if md.Chapters == nil || len(*md.Chapters) != 2 || deref((*md.Chapters)[0].Title) != "One" {
+	if md.Chapters == nil || len(*md.Chapters) != 2 {
 		t.Fatalf("user chapters = %+v", md.Chapters)
+	}
+	// The book-timeline offsets survive the new flat-timeline SetChapters: a
+	// single-file book sends file-relative offsets and upstream's legacy-shape
+	// sniff maps them onto the timeline, so both starts round-trip exactly.
+	gotCh := *md.Chapters
+	if deref(gotCh[0].Title) != "One" || gotCh[0].StartMs != 0 {
+		t.Fatalf("chapter 0 = %+v, want title One start 0", gotCh[0])
+	}
+	if deref(gotCh[1].Title) != "Two" || gotCh[1].StartMs != 3000 {
+		t.Fatalf("chapter 1 = %+v, want title Two start 3000", gotCh[1])
 	}
 	if !containsString(md.LockedFields, "chapters") {
 		t.Fatalf("lockedFields = %v, want chapters", md.LockedFields)

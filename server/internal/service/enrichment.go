@@ -269,7 +269,7 @@ func (l *Library) enrichCover(ctx context.Context, it *model.ItemView, locked ma
 	if it.Kind == model.KindEpisode {
 		ref.Type = model.ArtEpisode
 	}
-	if _, err := l.lib.ResolveArt(ctx, ref, 0); err == nil {
+	if _, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, 0); err == nil {
 		return "", "cover: already present"
 	}
 	providers := l.enrichProvidersWith(enrich.CapCover)
@@ -290,7 +290,7 @@ func (l *Library) enrichCover(ctx context.Context, it *model.ItemView, locked ma
 		if cand == nil || cand.Cover == nil || len(cand.Cover.Data) == 0 {
 			continue
 		}
-		if err := l.lib.SetItemArt(ctx, it.PID, cand.Cover.Data, false, false, false); err != nil {
+		if err := l.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, cand.Cover.Data, false, false, false); err != nil {
 			l.log.Warn("enrich: applying cover", "provider", p.Name(), "item", it.PID, "err", err)
 			continue
 		}
@@ -418,35 +418,17 @@ func (l *Library) enrichBook(ctx context.Context, it *model.ItemView, locked map
 		if cand == nil {
 			continue
 		}
-		edits := map[string]string{}
-		if cand.Publisher != "" && detail.Publisher == "" && !locked["publisher"] {
-			edits["publisher"] = cand.Publisher
-		}
-		if cand.ISBN != "" && detail.ISBN == "" && !locked["isbn"] {
-			edits["isbn"] = cand.ISBN
-		}
-		// Generic curated fields ride Candidate.Fields; only the book
-		// scalars this path can honestly fill-when-empty are accepted.
-		for k, v := range cand.Fields {
-			if v == "" || locked[k] {
-				continue
-			}
-			switch k {
-			case "narrator":
-				if it.Narrator == "" {
-					edits[k] = v
-				}
-			case "description":
-				if detail.Description == "" {
-					edits[k] = v
-				}
-			case "year":
-				if it.Year == 0 {
-					edits[k] = v
-				}
-			}
+		edits, skipped := bookEnrichEdits(cand, detail, it, locked)
+		for field, val := range skipped {
+			l.log.Debug("enrich: skipping malformed provider value", "provider", p.Name(), "item", it.PID, "field", field, "value", val)
 		}
 		if len(edits) == 0 {
+			if len(skipped) > 0 {
+				// This provider offered only values WaxBin would reject, so the
+				// item is unchanged; try the next provider instead of ending the
+				// pass here (the pre-skip code fell through via the edit error).
+				continue
+			}
 			return "", "book: nothing new to fill"
 		}
 		if err := l.lib.EditFields(ctx, it.PID, edits, waxbin.EditOptions{}); err != nil {
@@ -456,4 +438,52 @@ func (l *Library) enrichBook(ctx context.Context, it *model.ItemView, locked map
 		return "book: " + p.Name(), ""
 	}
 	return "", "book: no provider hit"
+}
+
+// bookEnrichEdits maps a book provider candidate to the fill-when-empty edits it
+// can honestly supply: only fields the item currently lacks and has not locked.
+// A provider value that WaxBin would reject on write — a malformed ISBN or a
+// non-numeric year — is dropped rather than added, because one bad value fails
+// the whole edit and costs the provider's other fields. Dropped values are
+// returned keyed by field so the caller can log them.
+func bookEnrichEdits(cand *enrich.Candidate, detail *model.BookDetail, it *model.ItemView, locked map[string]bool) (edits, skipped map[string]string) {
+	edits = map[string]string{}
+	skipped = map[string]string{}
+	if cand.Publisher != "" && detail.Publisher == "" && !locked["publisher"] {
+		edits["publisher"] = cand.Publisher
+	}
+	if cand.ISBN != "" && detail.ISBN == "" && !locked["isbn"] {
+		if validISBN(cand.ISBN) {
+			edits["isbn"] = cand.ISBN
+		} else {
+			skipped["isbn"] = cand.ISBN
+		}
+	}
+	// Generic curated fields ride Candidate.Fields; only the book
+	// scalars this path can honestly fill-when-empty are accepted.
+	for k, v := range cand.Fields {
+		if v == "" || locked[k] {
+			continue
+		}
+		switch k {
+		case "narrator":
+			if it.Narrator == "" {
+				edits[k] = v
+			}
+		case "description":
+			if detail.Description == "" {
+				edits[k] = v
+			}
+		case "year":
+			if it.Year != 0 {
+				continue
+			}
+			if validYear(v) {
+				edits[k] = v
+			} else {
+				skipped[k] = v
+			}
+		}
+	}
+	return edits, skipped
 }
