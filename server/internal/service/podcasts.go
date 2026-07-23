@@ -246,29 +246,33 @@ func (l *Library) removeShowDownloads(ctx context.Context, showPID model.PID) {
 		l.log.Warn("listing episodes for cleanup", "show", string(showPID), "err", err)
 		return
 	}
-	users, err := l.db.ListUsers(ctx, "", 10000)
-	if err != nil {
-		l.log.Warn("listing users for cleanup", "err", err)
-		return
-	}
 	var remove []model.PID
 	skipped := 0
+	var downloaded []model.PID
 	for _, ep := range eps {
 		// A queued fetch would re-land its file after this cleanup, so
 		// cancel it whether or not the episode has a file yet.
 		if err := l.db.CompleteFetch(ctx, string(ep.PID)); err != nil {
 			l.log.Warn("canceling queued fetch", "episode", string(ep.PID), "err", err)
 		}
-		if !ep.Downloaded {
-			continue
+		if ep.Downloaded {
+			downloaded = append(downloaded, ep.PID)
 		}
+	}
+	if len(downloaded) == 0 {
+		return
+	}
+	// One batch read of every user's state across the downloaded episodes,
+	// instead of a Playback().State call per (episode, user) pair.
+	states, err := l.lib.PlayStatesForItems(ctx, downloaded)
+	if err != nil {
+		l.log.Warn("reading playback state for cleanup", "show", string(showPID), "err", err)
+		return
+	}
+	for _, ep := range downloaded {
 		inUse := false
-		for _, u := range users {
-			st, err := l.lib.Playback().State(ctx, model.PID(u.WaxbinUserPID), ep.PID)
-			if err != nil {
-				continue
-			}
-			if l.stateReadsInUse(st) {
+		for i := range states[ep] {
+			if l.stateReadsInUse(&states[ep][i]) {
 				inUse = true
 				break
 			}
@@ -277,7 +281,7 @@ func (l *Library) removeShowDownloads(ctx context.Context, showPID model.PID) {
 			skipped++
 			continue
 		}
-		remove = append(remove, ep.PID)
+		remove = append(remove, ep)
 	}
 	if skipped > 0 {
 		l.log.Info("cleanup skipped in-use episodes", "show", string(showPID), "skipped", skipped)
@@ -636,20 +640,16 @@ func (l *Library) RemoveEpisodeDownload(ctx context.Context, uc *UserCtx, apiEpi
 		return nil
 	}
 
-	subs, err := l.db.SubscribersByShow(ctx, string(ep.PodcastPID))
+	// One batch read of every user's state for this episode, instead of a
+	// Playback().State call per subscriber. The file is shared, so it must
+	// be idle for anyone playing it, not only current subscribers, before
+	// it is removed.
+	states, err := l.lib.PlayStatesForItems(ctx, []model.PID{ep.PID})
 	if err != nil {
-		return &Error{Kind: KindInternal, Err: err}
+		return classify(err)
 	}
-	for _, s := range subs {
-		u, err := l.userCatalogPID(ctx, s.UserID)
-		if err != nil || u == "" {
-			continue
-		}
-		st, err := l.lib.Playback().State(ctx, u, ep.PID)
-		if err != nil {
-			continue
-		}
-		if l.stateReadsInUse(st) {
+	for i := range states[ep.PID] {
+		if l.stateReadsInUse(&states[ep.PID][i]) {
 			return &Error{Kind: KindConflict,
 				Msg: "someone is listening to this episode right now; try again when playback stops"}
 		}

@@ -225,17 +225,22 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 	return l.hydrateUploadDuplicate(ctx, u), nil
 }
 
-// findContentDuplicate scans cataloged files for a byte-identical
-// content hash.
+// findContentDuplicate resolves a byte-identical content hash to an
+// existing item.
 func (l *Library) findContentDuplicate(ctx context.Context, sha string) (string, bool) {
-	// The facade exposes per-file content hashes, not a hash index;
-	// resolving through the portable-ref ladder needs an essence hash,
-	// which is not the plain file hash. This pre-check is therefore
-	// best-effort: it answers only when the identical file was uploaded
-	// through this server before (session history), and the essence
-	// check at completion is the real net. The hash lookup goes straight
-	// to the row, so a match older than any recent-session window still
-	// counts.
+	// The catalog's content-hash index answers "do I already hold these
+	// exact bytes" across the whole library, the strongest pre-transfer
+	// signal. The store tags the hash with its algorithm ("sha256:" plus
+	// hex), so the bare upload digest is prefixed to match. A single-file
+	// CUE album returns one item per virtual track sharing the file; any
+	// of them is a fair warning, so the first wins.
+	if items, err := l.lib.ItemsByContentHash(ctx, "sha256:"+sha); err == nil && len(items) > 0 {
+		return string(items[0].PID), true
+	}
+	// A byte-identical upload still in flight (received, not yet
+	// cataloged) is caught by this server's own upload history. The
+	// completion-time essence check remains the real net: it survives a
+	// retag the content hash does not.
 	pid, ok, err := l.db.ContentDuplicateByHash(ctx, sha, uploadImported)
 	if err != nil {
 		return "", false

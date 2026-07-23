@@ -153,6 +153,103 @@ func TestTimelineForMintsProxiedURL(t *testing.T) {
 	}
 }
 
+// TestTimelineForVirtualMemberWindows pins that a CUE-carved virtual
+// track mints into a gapless timeline as a sample window when the sidecar
+// advertises member windows, instead of being refused.
+func TestTimelineForVirtualMemberWindows(t *testing.T) {
+	var gotSrcs []struct {
+		Src  string `json:"src"`
+		From int64  `json:"from"`
+		To   int64  `json:"to"`
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/caps", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"schemaVersion": 1,
+			"delivery": map[string]any{
+				"progressive": true, "hls": true, "timelines": true,
+				"hlsFormats": []string{"aac", "flac"}, "jobs": true,
+				"timelineMemberWindows": true,
+			},
+			"outputs": []map[string]any{{"name": "aac", "live": true}},
+		})
+	})
+	mux.HandleFunc("/hls/timeline", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Srcs []struct {
+				Src  string `json:"src"`
+				From int64  `json:"from"`
+				To   int64  `json:"to"`
+			} `json:"srcs"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		gotSrcs = req.Srcs
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]any{
+			"schemaVersion": 1, "tl": "digestwin", "members": len(req.Srcs),
+			"durationSeconds": 60.0, "envelopeRate": 44100,
+			"boundaries": []map[string]int64{{"offsetSamples": 0, "durationSamples": 2646000}},
+		})
+	})
+	mux.HandleFunc("/sign", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Path   string            `json:"path"`
+			Params map[string]string `json:"params"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		q := url.Values{}
+		for k, v := range req.Params {
+			q.Set(k, v)
+		}
+		q.Set("sig", "upstreamsig")
+		json.NewEncoder(w).Encode(map[string]any{
+			"schemaVersion": 1,
+			"url":           req.Path + "?" + q.Encode(),
+			"exp":           time.Now().Add(time.Hour).Unix(),
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "album.flac")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := New(context.Background(), Config{
+		BaseURL: srv.URL,
+		APIKey:  "key",
+		Roots:   []Root{{Name: "lib", Path: dir}},
+		Tokens:  auth.NewMediaTokens([]byte("test-secret"), 0),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.TimelineMemberWindowsSupported() {
+		t.Fatal("member windows not reported supported")
+	}
+	res, err := b.TimelineFor(context.Background(), "us-alice", []TimelineMember{
+		{PID: "tr-whole", Src: Source{Path: path, DurationMS: 60000}},
+		{PID: "tr-carved", Src: Source{Path: path, DurationMS: 30000, Virtual: true, FromSample: 100, ToSample: 200}},
+	}, 0)
+	if err != nil {
+		t.Fatalf("windowed virtual member refused: %v", err)
+	}
+	if res.JobPID != "" {
+		t.Fatal("unexpected job")
+	}
+	if len(gotSrcs) != 2 {
+		t.Fatalf("mint saw %d srcs, want 2", len(gotSrcs))
+	}
+	// The whole file carries no window; the carved track carries [100, 200).
+	if gotSrcs[0].From != 0 || gotSrcs[0].To != 0 {
+		t.Fatalf("whole-file member windowed: %+v", gotSrcs[0])
+	}
+	if gotSrcs[1].From != 100 || gotSrcs[1].To != 200 {
+		t.Fatalf("carved member window = [%d,%d), want [100,200)", gotSrcs[1].From, gotSrcs[1].To)
+	}
+}
+
 func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 	b, path := newTimelineBridge(t)
 	res, err := b.TimelineFor(context.Background(), "us-alice",

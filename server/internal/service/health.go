@@ -221,6 +221,14 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	lyricsPresent, err := l.lyricsPresence(ctx)
+	if err != nil {
+		// A bulk-lyrics-query failure skips the missing-lyrics rule this sweep
+		// (nil map = "unknown" to itemHealthRules) rather than aborting every
+		// other rule for every item; the periodic sweep re-runs and catches up.
+		l.log.Warn("health: bulk lyrics presence unavailable; skipping missing-lyrics this sweep", "err", err)
+		lyricsPresent = nil
+	}
 	moves := l.plannedMoves(ctx)
 
 	var evaluated int
@@ -235,7 +243,7 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 			return classify(err)
 		}
 		for _, it := range page.Items {
-			rules := l.itemHealthRules(ctx, it, unofficial[it.PID], fileRules[it.DisplayPath], moves[it.PID])
+			rules := l.itemHealthRules(ctx, it, unofficial[it.PID], fileRules[it.DisplayPath], moves[it.PID], lyricsPresent)
 			evaluated++
 			if len(rules) == 0 {
 				continue
@@ -298,7 +306,7 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 // itemHealthRules grades one item. Unofficial-marked items (and podcast
 // episodes, which are not canonical-release content either) answer only
 // for corrupt audio and unsynced tag writes.
-func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exempt bool, fileRules []string, planned bool) []string {
+func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exempt bool, fileRules []string, planned bool, lyricsPresent map[model.PID]bool) []string {
 	var rules []string
 	for _, r := range fileRules {
 		if (exempt || it.Kind == model.KindEpisode) && r == ruleLegacyTags {
@@ -335,15 +343,11 @@ func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exemp
 		if it.Year == 0 {
 			rules = append(rules, ruleMissingYear)
 		}
-		// Lyrics presence has no query field, so the sweep does one
-		// point read per music item.
-		if ly, lerr := l.lib.Lyrics(ctx, it.PID); lerr != nil {
-			if KindOf(classify(lerr)) == KindNotFound {
-				rules = append(rules, ruleMissingLyrics)
-			} else {
-				l.log.Warn("health: reading lyrics", "item", it.PID, "err", lerr)
-			}
-		} else if !ly.HasContent() {
+		// Lyrics presence comes from the bulk has_lyrics pass, so the sweep
+		// reads no lyrics per music item. A nil map means that pass failed
+		// this sweep: skip the rule rather than flag every track (an empty
+		// non-nil map is a real "no track has lyrics" and flags them all).
+		if lyricsPresent != nil && !lyricsPresent[it.PID] {
 			rules = append(rules, ruleMissingLyrics)
 		}
 	case model.KindBook:
@@ -358,6 +362,34 @@ func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exemp
 		rules = append(rules, rulePathMismatch)
 	}
 	return rules
+}
+
+// lyricsPresence builds the set of music items carrying their own lyrics
+// in one paginated pass over the query engine's has_lyrics field, so the
+// sweep grades missing-lyrics from a set lookup instead of a Lyrics point
+// read per item. (has_lyrics is item-own, matching the point read it
+// replaces; the art rules stay on ResolveArt, which walks the fallback
+// chain that the own-only has_art field cannot express.)
+func (l *Library) lyricsPresence(ctx context.Context) (map[model.PID]bool, error) {
+	present := make(map[model.PID]bool)
+	q := query.New(query.EntityItems).
+		Where("kind", query.OpIs, string(model.KindTrack)).
+		Where("has_lyrics", query.OpIs, 1).Build()
+	cursor := read.Cursor("")
+	for {
+		page, err := l.lib.QueryPage(ctx, q, cursor, 500, false, "")
+		if err != nil {
+			return nil, classify(err)
+		}
+		for _, it := range page.Items {
+			present[it.PID] = true
+		}
+		if !page.HasMore {
+			break
+		}
+		cursor = page.Next
+	}
+	return present, nil
 }
 
 // unofficialItems collects the pids carrying the RELEASESTATUS

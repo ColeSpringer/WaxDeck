@@ -1,38 +1,50 @@
 package flow
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
+
+	"github.com/colespringer/waxflow/client"
+	"github.com/colespringer/waxflow/waxerr"
 )
 
-// The sidecar's async jobs surface, spoken directly over HTTP: the
-// upstream client package deliberately ships no jobs client. WaxDeck
-// runs the silence and loudness analysis behind skip maps and
-// voice-boost leveling here, plus the file-tooling jobs (audiobook
-// merge, chapter split, CUE rip split).
+// The sidecar's async jobs surface, spoken through the published
+// client's typed jobs methods. WaxDeck runs the silence and loudness
+// analysis behind skip maps and voice-boost leveling here, plus the
+// file-tooling jobs (audiobook merge, chapter split, CUE rip split).
 
-// StatusError is a non-2xx answer from the sidecar's jobs surface. It
-// lets callers separate a request the sidecar refused (4xx: retrying
-// the same input fails the same way) from transport trouble.
-type StatusError struct {
-	Code int
-	Body string
-}
-
-func (e *StatusError) Error() string {
-	return fmt.Sprintf("status %d: %s", e.Code, e.Body)
+// PermanentJobErr reports whether a jobs-surface failure is one the same
+// input will always reproduce (the engine refused the request) rather
+// than transport trouble or an overloaded daemon worth a retry. It keeps
+// the retry decision keyed on the engine's own error taxonomy now that
+// the surface is spoken through the typed client, which decodes the
+// response envelope into a waxerr code. An unclassified error (transport
+// trouble, a context cancel) reads as internal and is not permanent.
+func PermanentJobErr(err error) bool {
+	switch waxerr.CodeOf(err) {
+	case waxerr.CodeInvalidRequest, waxerr.CodePayloadTooLarge,
+		waxerr.CodeNotFound, waxerr.CodeUnsupportedFormat,
+		waxerr.CodeUnsupportedSource, waxerr.CodeUnauthorized,
+		waxerr.CodeSignatureInvalid, waxerr.CodeSignatureExpired,
+		waxerr.CodeSourceChanged:
+		return true
+	}
+	return false
 }
 
 // JobsSupported reports whether the sidecar runs the jobs surface.
 func (b *Bridge) JobsSupported() bool { return b.caps.Delivery.Jobs }
+
+// SilenceDetectorVersion is the sidecar's silence-detector revision, the
+// same value a cached silence map stamps in its version field. An empty
+// string means a sidecar too old to advertise it: callers treat that as
+// "unknown" and never as every cached map being stale.
+func (b *Bridge) SilenceDetectorVersion() string { return b.caps.DSP.SilenceDetector }
 
 // SilenceAnalysis is the finished analysis for one file: the loudness
 // numbers from the job document and the span map from its result file.
@@ -57,29 +69,9 @@ type SilenceSpan struct {
 	ToSample   int64
 }
 
-// jobDoc mirrors the fields of the sidecar's job document this bridge
-// reads (the document carries more).
-type jobDoc struct {
-	ID       string `json:"id"`
-	State    string `json:"state"`
-	Progress *struct {
-		Percent float64 `json:"percent"`
-	} `json:"progress"`
-	Outputs []struct {
-		File string `json:"file"`
-	} `json:"outputs"`
-	Analysis *struct {
-		IntegratedLufs *float64 `json:"integratedLufs"`
-		TruePeakDb     *float64 `json:"truePeakDb"`
-		Rate           int      `json:"rate"`
-	} `json:"analysis"`
-	Error *struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
-// silenceDoc mirrors the silence.json result file.
+// silenceDoc mirrors the silence.json result file an analyze job writes.
+// The typed client's SilenceSummary carries the headline inline on the
+// job but not the spans, so the full map is decoded from the result body.
 type silenceDoc struct {
 	Version         string  `json:"version"`
 	ThresholdDb     float64 `json:"thresholdDb"`
@@ -103,38 +95,40 @@ func (b *Bridge) AnalyzeSilence(ctx context.Context, path string) (SilenceAnalys
 	if err != nil {
 		return SilenceAnalysis{}, err
 	}
-	body, _ := json.Marshal(map[string]any{
-		"type":    "analyze",
-		"src":     ref,
-		"silence": true,
-	})
-	var created jobDoc
-	if err := b.jobsCall(ctx, http.MethodPost, "/jobs", bytes.NewReader(body), &created); err != nil {
-		return SilenceAnalysis{}, err
+	job, err := b.client.CreateJob(ctx, client.JobRequest{Type: "analyze", Src: ref, Silence: true})
+	if err != nil {
+		return SilenceAnalysis{}, fmt.Errorf("flow: creating analyze job: %w", err)
 	}
 
-	doc := created
-	for doc.State == "queued" || doc.State == "running" {
+	for job.State == "queued" || job.State == "running" {
 		select {
 		case <-ctx.Done():
 			return SilenceAnalysis{}, ctx.Err()
 		case <-time.After(2 * time.Second):
 		}
-		if err := b.jobsCall(ctx, http.MethodGet, "/jobs/"+doc.ID, nil, &doc); err != nil {
-			return SilenceAnalysis{}, err
+		job, err = b.client.Job(ctx, job.ID)
+		if err != nil {
+			return SilenceAnalysis{}, fmt.Errorf("flow: polling analyze job: %w", err)
 		}
 	}
-	if doc.State != "done" {
-		msg := doc.State
-		if doc.Error != nil {
-			msg = doc.Error.Code + ": " + doc.Error.Message
+	if job.State != "done" {
+		msg := job.State
+		if job.Error != nil {
+			msg = job.Error.Code + ": " + job.Error.Message
 		}
-		return SilenceAnalysis{}, fmt.Errorf("flow: analyze job %s failed: %s", doc.ID, msg)
+		return SilenceAnalysis{}, fmt.Errorf("flow: analyze job %s failed: %s", job.ID, msg)
 	}
 
-	var sil silenceDoc
-	if err := b.jobsCall(ctx, http.MethodGet, "/jobs/"+doc.ID+"/result", nil, &sil); err != nil {
+	// The bare result form (-1) answers an analyze job's one output, the
+	// silence map document, whose spans SilenceSummary does not carry.
+	resp, err := b.client.JobResult(ctx, job.ID, -1)
+	if err != nil {
 		return SilenceAnalysis{}, fmt.Errorf("flow: fetching silence map: %w", err)
+	}
+	defer resp.Body.Close()
+	var sil silenceDoc
+	if err := json.NewDecoder(resp.Body).Decode(&sil); err != nil {
+		return SilenceAnalysis{}, fmt.Errorf("flow: decoding silence map: %w", err)
 	}
 	out := SilenceAnalysis{
 		Version:         sil.Version,
@@ -146,11 +140,11 @@ func (b *Bridge) AnalyzeSilence(ctx context.Context, path string) (SilenceAnalys
 	for _, s := range sil.Spans {
 		out.Spans = append(out.Spans, SilenceSpan{FromSample: s.FromSample, ToSample: s.ToSample})
 	}
-	if doc.Analysis != nil {
-		out.IntegratedLUFS = doc.Analysis.IntegratedLufs
-		out.TruePeakDB = doc.Analysis.TruePeakDb
+	if job.Analysis != nil {
+		out.IntegratedLUFS = job.Analysis.IntegratedLUFS
+		out.TruePeakDB = job.Analysis.TruePeakDB
 		if out.Rate == 0 {
-			out.Rate = doc.Analysis.Rate
+			out.Rate = job.Analysis.Rate
 		}
 	}
 	return out, nil
@@ -177,19 +171,18 @@ func (b *Bridge) CreateMergeJob(ctx context.Context, srcs []string, titles []str
 		}
 		refs[i] = ref
 	}
-	payload := map[string]any{"type": "merge", "srcs": refs}
+	req := client.JobRequest{Type: "merge", Srcs: refs}
 	if len(titles) > 0 {
-		payload["titles"] = titles
+		req.Titles = titles
 	}
 	if format != "" {
-		payload["format"] = format
+		req.Format = format
 	}
-	body, _ := json.Marshal(payload)
-	var created jobDoc
-	if err := b.jobsCall(ctx, http.MethodPost, "/jobs", bytes.NewReader(body), &created); err != nil {
-		return "", err
+	job, err := b.client.CreateJob(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("flow: creating merge job: %w", err)
 	}
-	return created.ID, nil
+	return job.ID, nil
 }
 
 // CreateSplitJob posts a split job for one absolute library path. Cut
@@ -209,9 +202,9 @@ func (b *Bridge) CreateSplitJob(ctx context.Context, src string, cuts []int64, c
 	if err != nil {
 		return "", err
 	}
-	payload := map[string]any{"type": "split", "src": ref, "format": format}
+	req := client.JobRequest{Type: "split", Src: ref, Format: format}
 	if format == "aac" || format == "alac" {
-		payload["container"] = "progressive"
+		req.Container = "progressive"
 	}
 	switch {
 	case cue != "":
@@ -219,55 +212,44 @@ func (b *Bridge) CreateSplitJob(ctx context.Context, src string, cuts []int64, c
 		if err != nil {
 			return "", err
 		}
-		payload["cue"] = cueRef
+		req.Cue = cueRef
 	default:
-		payload["cuts"] = cuts
+		req.Cuts = cuts
 	}
-	body, _ := json.Marshal(payload)
-	var created jobDoc
-	if err := b.jobsCall(ctx, http.MethodPost, "/jobs", bytes.NewReader(body), &created); err != nil {
-		return "", err
+	job, err := b.client.CreateJob(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("flow: creating split job: %w", err)
 	}
-	return created.ID, nil
+	return job.ID, nil
 }
 
 // JobStatus reads one job's state, progress percent, output count, and
 // terminal error message (empty unless failed or canceled).
 func (b *Bridge) JobStatus(ctx context.Context, jobID string) (state string, progress float64, outputs int, errMsg string, err error) {
-	var doc jobDoc
-	if err := b.jobsCall(ctx, http.MethodGet, "/jobs/"+jobID, nil, &doc); err != nil {
-		return "", 0, 0, "", err
+	job, err := b.client.Job(ctx, jobID)
+	if err != nil {
+		return "", 0, 0, "", fmt.Errorf("flow: reading job %s: %w", jobID, err)
 	}
-	if doc.Progress != nil {
-		progress = doc.Progress.Percent
+	if job.Progress != nil {
+		progress = job.Progress.Percent
 	}
-	if doc.Error != nil {
-		errMsg = doc.Error.Code + ": " + doc.Error.Message
+	if job.Error != nil {
+		errMsg = job.Error.Code + ": " + job.Error.Message
 	}
-	return doc.State, progress, len(doc.Outputs), errMsg, nil
+	return job.State, progress, len(job.Outputs), errMsg, nil
 }
 
 // DownloadJobResult streams one job output to dst with the repo's
 // crash-safe write discipline: temp name in the target directory, size
 // check against Content-Length when the sidecar declares one, fsync,
-// atomic rename, directory fsync.
+// atomic rename, directory fsync. The typed client verifies the status
+// and attaches the API key; this owns the durable placement.
 func (b *Bridge) DownloadJobResult(ctx context.Context, jobID string, index int, dst string) error {
-	u := b.base.JoinPath("/jobs", jobID, "result", strconv.Itoa(index))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return fmt.Errorf("flow: %w", err)
-	}
-	req.Header.Set("X-API-Key", b.apiKey)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := b.client.JobResult(ctx, jobID, index)
 	if err != nil {
 		return fmt.Errorf("flow: fetching job %s result %d: %w", jobID, index, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("flow: fetching job %s result %d: %w", jobID, index,
-			&StatusError{Code: resp.StatusCode, Body: string(detail)})
-	}
 
 	tmp, err := os.CreateTemp(filepath.Dir(dst), ".waxdeck-result-*")
 	if err != nil {
@@ -302,35 +284,6 @@ func (b *Bridge) DownloadJobResult(ctx context.Context, jobID string, index int,
 	if dir, err := os.Open(filepath.Dir(dst)); err == nil {
 		_ = dir.Sync()
 		dir.Close()
-	}
-	return nil
-}
-
-// jobsCall is one authenticated JSON round trip to the sidecar.
-func (b *Bridge) jobsCall(ctx context.Context, method, path string, body io.Reader, out any) error {
-	req, err := http.NewRequestWithContext(ctx, method, b.base.JoinPath(path).String(), body)
-	if err != nil {
-		return fmt.Errorf("flow: %w", err)
-	}
-	req.Header.Set("X-API-Key", b.apiKey)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("flow: %s %s: %w", method, path, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("flow: %s %s: %w", method, path,
-			&StatusError{Code: resp.StatusCode, Body: string(detail)})
-	}
-	if out == nil {
-		return nil
-	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("flow: decoding %s response: %w", path, err)
 	}
 	return nil
 }

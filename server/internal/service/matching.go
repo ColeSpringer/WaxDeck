@@ -656,6 +656,11 @@ func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payloa
 	}
 
 	snapshot := reviewSnapshot{Items: map[string]map[string]string{}}
+	// One edit per item, first-seen order. EditItemsFields rejects a duplicate
+	// pid, so if two pairings resolve to the same file the last one wins, the
+	// same outcome the old per-item last-write-wins loop produced.
+	editByPID := make(map[model.PID]map[string]string, len(cand.Pairings))
+	var order []model.PID
 	for _, p := range cand.Pairings {
 		doc := payload.Tracks[p.TrackIndex]
 		if doc.PID == "" {
@@ -708,15 +713,24 @@ func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payloa
 			// reach, and scans and enrichment then refuse to change it.
 			prior["compilation"] = strconv.FormatBool(it.Compilation)
 		}
-		if err := l.lib.EditFields(ctx, pid, edits, waxbin.EditOptions{Lock: true, Force: true}); err != nil {
-			var wbe *waxbin.WriteBackError
-			if errors.As(err, &wbe) {
-				warnings = append(warnings, fmt.Sprintf("%s: tags on disk lag the catalog", filepath.Base(doc.Path)))
-			} else {
-				return warnings, classify(err)
-			}
+		if _, seen := editByPID[pid]; !seen {
+			order = append(order, pid)
 		}
+		editByPID[pid] = edits
 		snapshot.Items[doc.PID] = prior
+	}
+
+	// Apply the whole unit in one atomic catalog batch, so a mid-unit failure
+	// rolls the lot back instead of leaving earlier tracks edited under a
+	// returned error. Catalog-only (no WriteBack), so no on-disk tag sync runs.
+	if len(order) > 0 {
+		batch := make([]model.ItemFieldEdit, 0, len(order))
+		for _, pid := range order {
+			batch = append(batch, model.ItemFieldEdit{ItemPID: pid, Fields: editByPID[pid]})
+		}
+		if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{Lock: true, Force: true}); err != nil {
+			return warnings, classify(err)
+		}
 	}
 
 	rawSnap, err := json.Marshal(snapshot)
@@ -758,13 +772,18 @@ func (l *Library) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decid
 	if entry.Snapshot == "" || json.Unmarshal([]byte(entry.Snapshot), &snap) != nil || len(snap.Items) == 0 {
 		return &Error{Kind: KindConflict, Msg: "the entry carries no snapshot to restore"}
 	}
+	batch := make([]model.ItemFieldEdit, 0, len(snap.Items))
 	for pid, fields := range snap.Items {
-		if err := l.lib.EditFields(ctx, model.PID(pid), fields, waxbin.EditOptions{Lock: false, Force: true}); err != nil {
-			var wbe *waxbin.WriteBackError
-			if !errors.As(err, &wbe) {
-				return classify(err)
-			}
-		}
+		batch = append(batch, model.ItemFieldEdit{ItemPID: model.PID(pid), Fields: fields})
+	}
+	// Restore the whole unit atomically, mirroring the apply. Catalog-only
+	// (no WriteBack, like the apply), so the batch does no on-disk tag sync
+	// and reports no per-item write-back failures; revert surfaces only a
+	// hard error, not the warnings the apply collects.
+	if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{Lock: false, Force: true}); err != nil {
+		return classify(err)
+	}
+	for pid, fields := range snap.Items {
 		names := make([]string, 0, len(fields))
 		for f := range fields {
 			names = append(names, f)

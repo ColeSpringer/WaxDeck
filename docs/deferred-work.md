@@ -146,12 +146,6 @@ here waits on upstream.
   display.** Next and previous step the active queue from Auto and
   the notification; publishing the queue itself as media items (so
   the head unit renders an up-next list) is the remaining half.
-- `[upstream]` **Virtual tracks cannot join gapless timelines.**
-  Timeline members are whole files upstream; a CUE-carved track in a
-  cast queue falls back to per-item URLs, and the timeline endpoint
-  answers conflict for it. The ask (sample windows on timeline
-  members) is filed in upstream-requests.md; until it lands this is
-  not buildable here.
 - `[hardware]` **The real-device cast checklist has not run.** The
   protocol suites drive wire-honest fakes (a TLS CASTV2 receiver, a
   SOAP renderer), but a real Chromecast, a speaker group, and a real
@@ -171,9 +165,6 @@ here waits on upstream.
   exists.
 - `[in-repo]` **PodPing update notifications.** Polling is the only feed refresh
   trigger.
-- `[upstream]` **Skip-map refresh on detector upgrades.** Maps
-  refresh only when a file's essence changes; the caps-level detector
-  version this needs is in upstream-requests.md.
 
 ## Compatibility
 
@@ -225,11 +216,6 @@ here waits on upstream.
   documented OpenAPI contract that would let community regional
   providers plug in (the Audiobookshelf pattern) still needs writing;
   the in-process provider port it would bridge to is live.
-- `[in-repo]` **Bulk edit applies one value set per call.** Per-item
-  value maps in one atomic batch need an upstream primitive (filed in
-  upstream-requests); until then the apply path edits per item, atomic
-  per item, and a mid-batch failure leaves earlier items edited (the
-  review queue's apply reports exactly which).
 - `[in-repo]` **Small artwork is not yet a health rule.** The art
   resolution path does not expose dimensions cheaply; the rule needs
   either a size probe during the sweep or an upstream dimensions
@@ -241,11 +227,6 @@ here waits on upstream.
   `FilePickerPort` deliberately does not speak; the "Upload a folder"
   tile hides there (`canPickFolders`). Multi-select plus auto
   grouping covers the album case on Android meanwhile.
-- `[in-repo]` **Upload dedupe's up-front hash check only sees prior
-  uploads.** The pre-transfer warning (client sends the SHA-256 before
-  bytes move) answers from upload history, not the whole catalog; the
-  full essence and fingerprint checks still run at completion, so the
-  only cost is bandwidth on a duplicate the up-front check missed.
 - `[in-repo]` **Upload quota does not reclaim on library deletion.** The
   quota charges every non-discarded session's declared size, imported
   ones included, so it reads as a total-storage-contribution cap. But a

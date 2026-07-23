@@ -89,36 +89,66 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 	}
 
 	m, err := l.db.SilenceMapFor(ctx, f.EssenceHash)
-	if err == nil {
-		spans, decodeErr := decodeSkipSpans(m.Spans)
-		if decodeErr != nil {
-			return SkipMapResult{}, &Error{Kind: KindInternal, Err: decodeErr}
+	if err != nil && !errors.Is(err, wdb.ErrNotFound) {
+		return SkipMapResult{}, &Error{Kind: KindInternal, Err: err}
+	}
+	haveMap := err == nil
+	stale := haveMap && l.silenceMapStale(m)
+
+	// A miss, or a map a detector upgrade left stale: (re)queue analysis on the
+	// lazy on-access path, so an upgrade re-analyzes one item at a time as it
+	// is played rather than sweeping the library at once.
+	if !haveMap || stale {
+		if l.flowJobs == nil || !l.flowJobs.JobsSupported() {
+			// No jobs surface to rebuild with; silenceMapStale already reports
+			// false without one, so only a true miss reaches here.
+			return SkipMapResult{State: skipStateUnavailable}, nil
 		}
-		return SkipMapResult{
-			State:       skipStateReady,
-			EssenceHash: m.EssenceHash,
-			PartIndex:   partOut,
-			Version:     m.DetectorVersion,
-			ThresholdDB: m.ThresholdDB,
-			MinSeconds:  m.MinSeconds,
-			Spans:       spans,
-			CreatedAtNS: m.CreatedAtNS,
-		}, nil
+		key := string(it.PID)
+		if filePID != "" {
+			key = key + "|" + filePID
+		}
+		if err := l.db.EnqueueAnalysis(ctx, f.EssenceHash, key, time.Now().UnixNano()); err != nil {
+			return SkipMapResult{}, &Error{Kind: KindInternal, Err: err}
+		}
+		if !stale {
+			// A true miss has no spans to serve yet.
+			return SkipMapResult{State: skipStatePending, EssenceHash: f.EssenceHash, PartIndex: partOut}, nil
+		}
+		// Stale: fall through to serve the still-usable spans while re-analysis
+		// runs, so a detector upgrade never drops skip data library-wide on
+		// first access.
 	}
-	if !errors.Is(err, wdb.ErrNotFound) {
-		return SkipMapResult{}, &Error{Kind: KindInternal, Err: err}
+
+	spans, decodeErr := decodeSkipSpans(m.Spans)
+	if decodeErr != nil {
+		return SkipMapResult{}, &Error{Kind: KindInternal, Err: decodeErr}
 	}
+	return SkipMapResult{
+		State:       skipStateReady,
+		EssenceHash: m.EssenceHash,
+		PartIndex:   partOut,
+		Version:     m.DetectorVersion,
+		ThresholdDB: m.ThresholdDB,
+		MinSeconds:  m.MinSeconds,
+		Spans:       spans,
+		CreatedAtNS: m.CreatedAtNS,
+	}, nil
+}
+
+// silenceMapStale reports whether a cached silence map was measured by a
+// detector version the sidecar has since moved past. It is stale only
+// when a jobs surface can re-measure it and the live detector version is
+// both known and different: an unknown live version (a sidecar too old
+// to advertise dsp.silenceDetector) or an absent jobs surface keeps the
+// stored map in service, so a detector upgrade re-analyzes lazily on
+// access rather than dropping usable maps it cannot yet rebuild.
+func (l *Library) silenceMapStale(m wdb.SilenceMap) bool {
 	if l.flowJobs == nil || !l.flowJobs.JobsSupported() {
-		return SkipMapResult{State: skipStateUnavailable}, nil
+		return false
 	}
-	key := string(it.PID)
-	if filePID != "" {
-		key = key + "|" + filePID
-	}
-	if err := l.db.EnqueueAnalysis(ctx, f.EssenceHash, key, time.Now().UnixNano()); err != nil {
-		return SkipMapResult{}, &Error{Kind: KindInternal, Err: err}
-	}
-	return SkipMapResult{State: skipStatePending, EssenceHash: f.EssenceHash, PartIndex: partOut}, nil
+	live := l.flowJobs.SilenceDetectorVersion()
+	return live != "" && m.DetectorVersion != live
 }
 
 // streamFile resolves the file a skip map describes: the named part,
@@ -159,6 +189,7 @@ func (l *Library) enqueueAnalysisForItem(ctx context.Context, pid model.PID) {
 // are absolute; the bridge maps them onto engine root refs itself.
 type FlowJobs interface {
 	JobsSupported() bool
+	SilenceDetectorVersion() string
 	AnalyzeSilence(ctx context.Context, path string) (flow.SilenceAnalysis, error)
 	CreateMergeJob(ctx context.Context, srcs []string, titles []string, format string) (string, error)
 	CreateSplitJob(ctx context.Context, src string, cuts []int64, cue string, format string) (string, error)

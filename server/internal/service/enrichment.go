@@ -172,7 +172,110 @@ func (l *Library) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID str
 	if err != nil {
 		return nil, nil, err
 	}
-	return l.EnrichItemNow(ctx, it.PID, wants)
+	applied, skipped, err = l.EnrichItemNow(ctx, it.PID, wants)
+	if err != nil {
+		return applied, skipped, err
+	}
+	// The interactive button also runs the catalog's key-free built-ins
+	// per item, which the injected-provider port cannot reach; the health
+	// fixer calls EnrichItemNow one want at a time, so it stays on the
+	// injected path rather than re-running the whole item-scoped pass.
+	l.enrichItemBuiltins(ctx, it, wants, &applied, &skipped)
+	return applied, skipped, nil
+}
+
+// builtinProviderFor names the catalog built-in that backfills each
+// per-item want. The built-ins (Cover Art Archive, ListenBrainz, LRCLIB)
+// are not on the injected-provider port; the engine reaches them, and an
+// item-scoped synchronous Enrich runs them per item.
+var builtinProviderFor = map[string]string{
+	enrichWantCover:  "coverartarchive",
+	enrichWantLyrics: "lrclib",
+	enrichWantGenres: "listenbrainz",
+}
+
+// enrichItemBuiltins backfills the interactive fetch with the catalog's
+// key-free built-ins for the wanted artifacts the injected providers left
+// empty. Injected providers keep priority: they ran first, so a built-in
+// only claims an artifact that was still absent beforehand and is present
+// after the item-scoped Enrich. Best-effort — a built-in failure leaves
+// the injected result untouched.
+func (l *Library) enrichItemBuiltins(ctx context.Context, it *model.ItemView, wants []string, applied, skipped *[]string) {
+	var builtinWants []string
+	for _, w := range wants {
+		if _, ok := builtinProviderFor[w]; ok {
+			builtinWants = append(builtinWants, w)
+		}
+	}
+	if len(builtinWants) == 0 {
+		return
+	}
+	before := make(map[string]bool, len(builtinWants))
+	for _, w := range builtinWants {
+		before[w] = l.artifactPresent(ctx, it, w)
+	}
+	// Item-scoped, fill-when-empty: the engine enriches this item's own
+	// entities and never overwrites, so a built-in only fills real gaps. It
+	// runs synchronously under the engine's shared enrich lease.
+	if _, err := l.lib.Enrich(ctx, waxbin.EnrichOptions{ItemPID: it.PID}); err != nil {
+		if KindOf(classify(err)) == KindConflict {
+			// A concurrent enrich (a whole-catalog pass, or another fetch)
+			// holds the lease. Report the still-missing built-in artifacts as
+			// deferred rather than let the caller read a false success, so the
+			// user knows to retry for those.
+			for _, w := range builtinWants {
+				if !before[w] {
+					*skipped = append(*skipped, w+": enrichment is busy; try again")
+				}
+			}
+			return
+		}
+		l.log.Warn("enrich: item built-ins", "item", it.PID, "err", err)
+		return
+	}
+	for _, w := range builtinWants {
+		if before[w] || !l.artifactPresent(ctx, it, w) {
+			continue
+		}
+		*applied = append(*applied, w+": "+builtinProviderFor[w])
+		*skipped = dropEntriesWithPrefix(*skipped, w+":")
+	}
+}
+
+// artifactPresent reports whether the item already carries the wanted
+// artifact, using the same presence tests the injected fetch uses: the
+// art resolution chain for cover, stored lyrics for lyrics, the genre
+// scalar for genres.
+func (l *Library) artifactPresent(ctx context.Context, it *model.ItemView, want string) bool {
+	switch want {
+	case enrichWantCover:
+		ref := model.EntityRef{Type: model.ArtTrack, PID: it.PID}
+		if it.Kind == model.KindEpisode {
+			ref.Type = model.ArtEpisode
+		}
+		_, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, 0)
+		return err == nil
+	case enrichWantLyrics:
+		ly, err := l.lib.Lyrics(ctx, it.PID)
+		return err == nil && ly.HasContent()
+	case enrichWantGenres:
+		cur, err := l.lib.Get(ctx, it.PID)
+		return err == nil && cur.Genre != ""
+	}
+	return false
+}
+
+// dropEntriesWithPrefix returns entries without those starting with
+// prefix, so a built-in that fills an artifact retires the injected
+// path's "no provider hit" note for the same want.
+func dropEntriesWithPrefix(entries []string, prefix string) []string {
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !strings.HasPrefix(e, prefix) {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // EnrichItemNow runs the server-registered providers for the wanted

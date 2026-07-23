@@ -31,30 +31,6 @@ sidecar injection seam) all landed and are not repeated here.
   attributed to library roots, so users restricted to a subset of
   roots lose entity search entirely (docs/adr/0004). WaxDeck filters
   at the item level and hides entity surfaces from restricted users.
-- **Search match cap or rank pruning.** Worst-case common-term FTS on
-  a 100k corpus costs hundreds of milliseconds because BM25 ranks
-  every match; rare terms are single-digit. WaxDeck absorbs it with
-  debounced search-as-you-type today.
-- **Identifier format validation.** ISRC, ISBN, ASIN, and barcode
-  values are accepted unvalidated; WaxDeck validates client-side, so
-  other facade consumers get no protection.
-- **Batch path lookup in pidpath.** Locate is per-pid; hydrating a
-  large delta page does N lookups. Inside budget today, so this is an
-  efficiency ask, not a correctness one.
-- **Bulk art and lyrics presence.** The metadata-health sweep grades
-  every present item and has no query field for "has front cover" or
-  "has lyrics", so it does one `ResolveArt` and one `Lyrics` point read
-  per music item; a 100k library is a few hundred thousand reads per
-  sweep. A batch presence lookup (or presence flags on the item view /
-  query engine) collapses that to one pass. The sweep is a paced,
-  warming-up-gated background job today, so it is an efficiency ask, not
-  a correctness one.
-- **Bulk active-playback lookup.** Unsubscribing a podcast with
-  download removal checks whether each downloaded episode is currently
-  playing for any user, one `Playback().State(userPID, epPID)` per
-  (episode, user) pair. Fine at self-host scale (few users), but an
-  `ActiveStatesForEpisodes([]epPID)` (or a users-crossed variant) makes
-  it one query. Efficiency ask; the action is rare and user-triggered.
 - **Podcasting 2.0 funding, soundbites, medium, and person tags.**
   The feed parser skips them, so WaxDeck cannot surface them.
 - **Chapter marks on multi-file books.** Chapters exist only for
@@ -87,33 +63,6 @@ sidecar injection seam) all landed and are not repeated here.
   restarting; the admin-and-ops slice wants an admin creating a
   library at runtime. The streaming sidecar's matching root config
   has the same shape, so this ask spans both repos if it lands.
-- **Per-field mutation stamps on play state.** The playback record
-  carries one UpdatedAt (bumped by every checkpoint) and a StarredAt
-  that zeroes on unstar, which makes offline-replay guards for stars
-  and ratings unimplementable against it; WaxDeck mirrors its own
-  per-field stamps in a play_state_stamps table. Note the resume
-  surface (the recent-positions shelf) also reads the mirror, so
-  upstream stamps improve the replay guard but do not by themselves
-  retire the table.
-- **Scoped or per-item enrichment.** Enrich runs whole-catalog with a
-  Force flag and a Limit; there is no way to re-enrich one item or one
-  entity. WaxDeck's editor runs its own injected providers directly
-  for the per-item fetch button, which works but bypasses the engine's
-  provenance bookkeeping for the built-ins (CAA, ListenBrainz, LRCLIB
-  cannot be invoked per item at all).
-- **A multi-item edit batch with per-item field maps.** EditManyFields
-  applies one value set to every item, which fits bulk retags but not
-  a matching engine applying a different title and track number to
-  each member of an album unit. The apply path loops per-item edits
-  (atomic per item) and locks as it goes; an atomic per-unit batch
-  would make "a unit never half applies" a transaction instead of a
-  convention.
-- **An exact-content-hash lookup on the facade.** Files carry content
-  and essence hashes, but nothing resolves a hash to an item, so the
-  upload surface's pre-transfer duplicate warning (hash sent before
-  bytes move) can only answer from its own upload history. The
-  completion-time essence check covers correctness; the ask is purely
-  to make the early warning as good as the late one.
 - **Age-scoped trash purge.** The trash facade offers list, restore,
   and EmptyTrash (everything at once); WaxDeck's admin surface wants a
   retention policy (purge entries older than N days), which needs a
@@ -135,24 +84,21 @@ sidecar injection seam) all landed and are not repeated here.
   transcript search cover what listeners actually played. WaxDeck's
   cues cache is the wrong source to promote wholesale (cue JSON, not
   search text), so today the gap simply stands.
-
-## WaxFlow
-
-- **Detector version in caps.** Skip-map caches can only refresh on
-  essence change because learning the current silence-detector
-  version requires running a job. A caps-level version report lets
-  the cache invalidate on detector upgrades.
-- **A jobs surface in the client package.** The published client
-  deliberately ships no jobs API, so WaxDeck's bridge carries a
-  raw-HTTP jobs client. Listed so the decision stays recorded: if the
-  omission is permanent policy, this entry can be closed as
-  wont-do and the bridge client becomes the documented answer.
-- **Sample windows on timeline members.** Timeline srcs take whole
-  files only, so a CUE-carved virtual track cannot join a gapless
-  timeline (a queue holding one falls back to per-item URLs, and the
-  timeline mint endpoint answers conflict for it). A per-member
-  `from`/`to`, mirroring what `/stream` already accepts, would let
-  carved rips ride gapless queue playback like everything else.
+- **As-of timestamp on play-state mutations.** The per-field
+  `StarredChangedAt`/`RatingChangedAt` stamps landed (retiring the
+  earlier `UpdatedAt`/`StarredAt` request), but `SetStar`/`SetRating`
+  stamp them at server-apply time, while an offline-replay guard must
+  order a replayed toggle by the client-recorded time it happened. So
+  the stamps, added for exactly this, cannot order a WaxDeck replay
+  against an out-of-band change (a Subsonic star, a migration import) to
+  the same item. An as-of/recorded-time parameter on the mutation would
+  land the stamp in recorded time, make cross-surface ordering correct
+  for every consumer, and let WaxDeck retire the star/rating half of its
+  `play_state_stamps` mirror (the resume shelf keeps the position half).
+  Today WaxDeck mirrors its own recorded-time stamps and firms the guard
+  with the catalog stamp only where the mirror is silent: conservative-
+  safe (it never resurrects an undone state) but it skips a legitimately
+  newer replay when an out-of-band change intervened.
 
 ## Recorded upstream non-goals
 

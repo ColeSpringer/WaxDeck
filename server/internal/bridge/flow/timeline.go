@@ -89,6 +89,16 @@ func (b *Bridge) TimelinesSupported() bool {
 	return b.caps.Delivery.HLS && b.caps.Delivery.Timelines
 }
 
+// TimelineMemberWindowsSupported reports whether the sidecar accepts
+// per-member sample windows on a timeline. When it does, a CUE-carved
+// virtual track rides a gapless timeline as a window into its backing
+// file instead of falling back to per-item URLs; an older sidecar 400s
+// a windowed member, so callers route by this and refuse virtual
+// members otherwise.
+func (b *Bridge) TimelineMemberWindowsSupported() bool {
+	return b.caps.Delivery.TimelineMemberWindows
+}
+
 // timelineFormat picks the HLS rendering format: AAC casts everywhere
 // (the default receiver's safest codec), lossless FLAC when AAC is
 // absent, then whatever the build offers.
@@ -108,9 +118,10 @@ func (b *Bridge) timelineFormat() string {
 }
 
 // TimelineFor mints a timeline over the members and signs its master
-// playlist. Members must be whole files: a virtual track window has no
-// timeline-member form upstream, and the caller treats that pid as
-// timeline-ineligible.
+// playlist. A virtual track rides the timeline as a sample window into
+// its backing file when the sidecar advertises member windows; without
+// that support a virtual member has no timeline-member form, so the
+// mint is refused and the caller treats the pid as timeline-ineligible.
 func (b *Bridge) TimelineFor(ctx context.Context, user string, members []TimelineMember, crossfadeSeconds float64) (*TimelineResult, error) {
 	if !b.TimelinesSupported() {
 		return nil, fmt.Errorf("flow: sidecar mints no timelines")
@@ -118,14 +129,21 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	req := client.TimelineRequest{CrossfadeSeconds: crossfadeSeconds}
 	var totalMS int64
 	for _, m := range members {
-		if m.Src.Virtual {
+		if m.Src.Virtual && !b.TimelineMemberWindowsSupported() {
 			return nil, fmt.Errorf("flow: %s is a virtual track and cannot join a timeline", m.PID)
 		}
 		ref, err := b.srcRef(m.Src.Path)
 		if err != nil {
 			return nil, err
 		}
-		req.Srcs = append(req.Srcs, client.TimelineSrc{Src: ref})
+		src := client.TimelineSrc{Src: ref}
+		if m.Src.Virtual {
+			// A carved track is the half-open sample window [from, to) of
+			// its backing file, the same span semantics /stream honors.
+			src.From = m.Src.FromSample
+			src.To = m.Src.ToSample
+		}
+		req.Srcs = append(req.Srcs, src)
 		totalMS += m.Src.DurationMS
 	}
 
@@ -221,28 +239,29 @@ func (b *Bridge) mintTimeline(ctx context.Context, req client.TimelineRequest) (
 			return nil, "", ctx.Err()
 		case <-time.After(time.Second):
 		}
-		var doc struct {
-			State    string                   `json:"state"`
-			Timeline *client.TimelineResponse `json:"timeline"`
-			Error    *struct {
-				Code    string `json:"code"`
-				Message string `json:"message"`
-			} `json:"error"`
+		job, err := b.client.Job(ctx, jobID)
+		if err != nil {
+			return nil, "", fmt.Errorf("flow: polling timeline job: %w", err)
 		}
-		if err := b.jobsCall(ctx, http.MethodGet, "/jobs/"+jobID, nil, &doc); err != nil {
-			return nil, "", err
-		}
-		switch doc.State {
+		switch job.State {
 		case "done":
-			if doc.Timeline == nil {
+			if job.Timeline == nil {
 				return nil, "", fmt.Errorf("flow: timeline job %s finished without a timeline", jobID)
 			}
-			return doc.Timeline, "", nil
+			// A finished timeline job carries the same digest and boundaries
+			// CreateTimeline's inline answer does, under the job-document type.
+			return &client.TimelineResponse{
+				Tl:              job.Timeline.Tl,
+				Members:         job.Timeline.Members,
+				DurationSeconds: job.Timeline.DurationSeconds,
+				EnvelopeRate:    job.Timeline.EnvelopeRate,
+				Boundaries:      job.Timeline.Boundaries,
+			}, "", nil
 		case "queued", "running":
 		default:
-			msg := doc.State
-			if doc.Error != nil {
-				msg = doc.Error.Code + ": " + doc.Error.Message
+			msg := job.State
+			if job.Error != nil {
+				msg = job.Error.Code + ": " + job.Error.Message
 			}
 			return nil, "", fmt.Errorf("flow: timeline job %s failed: %s", jobID, msg)
 		}
@@ -260,15 +279,13 @@ func (b *Bridge) TimelineJob(ctx context.Context, jobPID string) (state string, 
 	if !found {
 		return "", false
 	}
-	var doc struct {
-		State string `json:"state"`
-	}
-	if err := b.jobsCall(ctx, http.MethodGet, "/jobs/"+upstream, nil, &doc); err != nil {
+	job, err := b.client.Job(ctx, upstream)
+	if err != nil {
 		return "failed", true
 	}
-	switch doc.State {
+	switch job.State {
 	case "queued", "running", "done":
-		return doc.State, true
+		return job.State, true
 	default:
 		return "failed", true
 	}

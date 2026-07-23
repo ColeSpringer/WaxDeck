@@ -754,6 +754,24 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 	}
 	out := ServerDelta{NextSince: encodeServerCursor(l.serverGen, next), More: more}
 
+	// Resolve every play-state event's state in one batch up front rather
+	// than one Playback().State read per event as the loop hydrates.
+	var statePIDs []model.PID
+	statePre := make(map[string]bool)
+	for _, e := range events {
+		if e.Kind == eventPlayState && !statePre[e.ItemPID] {
+			statePre[e.ItemPID] = true
+			statePIDs = append(statePIDs, model.PID(e.ItemPID))
+		}
+	}
+	var stateBatch map[model.PID][]model.PlayState
+	if len(statePIDs) > 0 {
+		stateBatch, err = l.lib.PlayStatesForItems(ctx, statePIDs)
+		if err != nil {
+			return ServerDelta{}, classify(err)
+		}
+	}
+
 	seenState := make(map[string]bool)
 	seenSub := make(map[string]bool)
 	seenBook := make(map[string]bool)
@@ -776,7 +794,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 				continue
 			}
 			seenState[e.ItemPID] = true
-			apiItem, st, err := l.hydratePlayState(ctx, uc, e.ItemPID)
+			apiItem, st, err := l.hydratePlayState(ctx, uc, e.ItemPID, stateBatch)
 			if err != nil {
 				return ServerDelta{}, err
 			}
@@ -848,8 +866,10 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 
 // hydratePlayState reads the user's current state for a bare catalog
 // pid, returning the API pid ("" when the item vanished or is not
-// visible to the caller; the event is then dropped).
-func (l *Library) hydratePlayState(ctx context.Context, uc *UserCtx, barePID string) (string, PlayState, error) {
+// visible to the caller; the event is then dropped). The state comes
+// from the delta's pre-read batch, so hydration adds no per-event
+// Playback().State round trip.
+func (l *Library) hydratePlayState(ctx context.Context, uc *UserCtx, barePID string, stateBatch map[model.PID][]model.PlayState) (string, PlayState, error) {
 	it, err := l.lib.Get(ctx, model.PID(barePID))
 	if err != nil {
 		if KindOf(classify(err)) == KindNotFound {
@@ -861,17 +881,20 @@ func (l *Library) hydratePlayState(ctx context.Context, uc *UserCtx, barePID str
 		return "", PlayState{}, nil
 	}
 	apiItem := itemAPIPID(it)
-	st, err := l.playStateFor(ctx, uc, apiItem, it.PID)
-	if err != nil {
-		return "", PlayState{}, err
-	}
+	st := playStateDTO(apiItem, userPlayState(stateBatch[it.PID], model.PID(uc.CatalogPID)))
 	return apiItem, st, nil
 }
 
 // PlayStates reads the caller's state for a batch of items, skipping
-// invisible and unknown pids and zero states.
+// invisible and unknown pids and zero states. Visibility is resolved per
+// item, but every state is read in one PlayStatesForItems pass rather
+// than a Playback().State call each.
 func (l *Library) PlayStates(ctx context.Context, uc *UserCtx, apiPIDs []string) ([]PlayState, error) {
-	out := make([]PlayState, 0, len(apiPIDs))
+	type visibleItem struct {
+		apiItem string
+		pid     model.PID
+	}
+	items := make([]visibleItem, 0, len(apiPIDs))
 	for _, apiItem := range apiPIDs {
 		it, err := l.getVisibleItem(ctx, uc, apiItem)
 		if err != nil {
@@ -880,10 +903,23 @@ func (l *Library) PlayStates(ctx context.Context, uc *UserCtx, apiPIDs []string)
 			}
 			return nil, err
 		}
-		st, err := l.playStateFor(ctx, uc, apiItem, it.PID)
-		if err != nil {
-			return nil, err
-		}
+		items = append(items, visibleItem{apiItem: apiItem, pid: it.PID})
+	}
+	if len(items) == 0 {
+		return []PlayState{}, nil
+	}
+	pids := make([]model.PID, len(items))
+	for i, v := range items {
+		pids[i] = v.pid
+	}
+	stateBatch, err := l.lib.PlayStatesForItems(ctx, pids)
+	if err != nil {
+		return nil, classify(err)
+	}
+	userPID := model.PID(uc.CatalogPID)
+	out := make([]PlayState, 0, len(items))
+	for _, v := range items {
+		st := playStateDTO(v.apiItem, userPlayState(stateBatch[v.pid], userPID))
 		if st.PositionMS == 0 && !st.Played && !st.Finished && st.PlayCount == 0 &&
 			!st.Starred && st.Rating == nil {
 			continue

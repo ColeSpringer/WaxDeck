@@ -1090,8 +1090,7 @@ func permanentToolErr(err error) bool {
 	if errors.Is(err, errToolPermanent) {
 		return true
 	}
-	var se *flow.StatusError
-	if errors.As(err, &se) && se.Code >= 400 && se.Code < 500 {
+	if flow.PermanentJobErr(err) {
 		return true
 	}
 	switch KindOf(err) {

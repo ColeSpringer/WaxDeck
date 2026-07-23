@@ -87,12 +87,39 @@ func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page) Page {
 	return out
 }
 
+// searchMaxCandidates bounds how many full-text matches are ranked
+// before the per-group limit is applied. A common term on a large corpus
+// can match most of it, and ranking every match is the hundreds-of-
+// milliseconds worst case the cap exists to avoid; the newest matches win
+// the pool and SearchResults.Truncated reports when it filled.
+const searchMaxCandidates = 5000
+
 // Search runs grouped full-text search. Restricted callers get item
 // hits filtered by library visibility; artist and album groups are
 // omitted for them, since entities have no cheap library attribution
 // yet, and hiding beats leaking another library's catalog.
 func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) (SearchResults, error) {
-	res, err := l.lib.Search(ctx, q, read.SearchOptions{Limit: limit})
+	// A restricted caller with no granted libraries can see nothing: every
+	// item hit fails the visibility check below and entity groups are
+	// omitted, so skip the FTS ranking entirely rather than rank a whole
+	// corpus and then discard all of it.
+	if !uc.AllLibraries && len(uc.Libraries) == 0 {
+		return SearchResults{Query: q}, nil
+	}
+	opts := read.SearchOptions{Limit: limit, MaxCandidates: searchMaxCandidates}
+	// A restricted caller's item hits are filtered by library visibility
+	// below; scoping the FTS pool to the same libraries up front shrinks
+	// the worst-case ranking set and drops fileless items, which fail
+	// closed for these callers anyway. Full-visibility callers scan
+	// unscoped. An empty grant leaves the scope open and the post-filter
+	// drops everything, the same empty answer a scoped scan would give.
+	if !uc.AllLibraries && len(uc.Libraries) > 0 {
+		opts.Libraries = make([]model.PID, 0, len(uc.Libraries))
+		for lib := range uc.Libraries {
+			opts.Libraries = append(opts.Libraries, model.PID(lib))
+		}
+	}
+	res, err := l.lib.Search(ctx, q, opts)
 	if err != nil {
 		return SearchResults{}, classify(err)
 	}

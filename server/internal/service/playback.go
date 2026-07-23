@@ -81,6 +81,13 @@ func (l *Library) playStateFor(ctx context.Context, uc *UserCtx, apiItemPID stri
 	if err != nil {
 		return PlayState{}, classify(err)
 	}
+	return playStateDTO(apiItemPID, st), nil
+}
+
+// playStateDTO projects a catalog play state onto the API DTO. A nil
+// state (the user has not touched the item) yields the zero positions,
+// so batch readers can pass the missing entry straight through.
+func playStateDTO(apiItemPID string, st *model.PlayState) PlayState {
 	out := PlayState{PID: apiItemPID}
 	if st != nil {
 		out.PositionMS = st.PositionMS
@@ -96,7 +103,19 @@ func (l *Library) playStateFor(ctx context.Context, uc *UserCtx, apiItemPID stri
 			out.UpdatedAt = time.Unix(0, st.UpdatedAt).UTC()
 		}
 	}
-	return out, nil
+	return out
+}
+
+// userPlayState picks one user's state out of the per-item batch that
+// PlayStatesForItems returns (every user's state, keyed by item), or nil
+// when the user has not touched the item.
+func userPlayState(states []model.PlayState, userPID model.PID) *model.PlayState {
+	for i := range states {
+		if states[i].UserPID == userPID {
+			return &states[i]
+		}
+	}
+	return nil
 }
 
 // recencyGuard bounds how much older a replayed further position may be
@@ -263,7 +282,20 @@ func (l *Library) SetStar(ctx context.Context, uc *UserCtx, apiItemPID string, s
 		if err != nil {
 			return PlayState{}, &Error{Kind: KindInternal, Err: err}
 		}
-		if stamp.StarNS > recNS {
+		lastStar := stamp.StarNS
+		if lastStar == 0 {
+			// No WaxDeck star history to order against: fall back to the
+			// catalog's own per-field stamp, which catches a star set through
+			// another surface (or before this mirror existed) that a stale
+			// replay must not override. The catalog stamps in server-apply
+			// time, not the client's recorded time, so it is consulted only
+			// here, where the mirror holds nothing of its own; once WaxDeck
+			// owns a stamp, that recorded-time frame governs the ordering.
+			if cur, err := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), it.PID); err == nil && cur != nil {
+				lastStar = cur.StarredChangedAt
+			}
+		}
+		if lastStar > recNS {
 			return l.playStateFor(ctx, uc, apiItemPID, it.PID)
 		}
 		stampNS = recNS
@@ -296,7 +328,18 @@ func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string,
 		if err != nil {
 			return PlayState{}, &Error{Kind: KindInternal, Err: err}
 		}
-		if stamp.RatingNS > recNS {
+		lastRating := stamp.RatingNS
+		if lastRating == 0 {
+			// No WaxDeck rating history to order against: fall back to the
+			// catalog's own per-field stamp, catching a rating set through
+			// another surface that a stale replay must not override. Server-
+			// apply time, so consulted only where the mirror is silent (see
+			// SetStar).
+			if cur, err := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), it.PID); err == nil && cur != nil {
+				lastRating = cur.RatingChangedAt
+			}
+		}
+		if lastRating > recNS {
 			return l.playStateFor(ctx, uc, apiItemPID, it.PID)
 		}
 		stampNS = recNS

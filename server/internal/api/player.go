@@ -115,7 +115,12 @@ func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries [
 	members := make([]flow.TimelineMember, 0, len(entries))
 	for _, e := range entries {
 		src, err := r.Svc.StreamSource(ctx, e.PID, "")
-		if err != nil || src.Virtual {
+		if err != nil {
+			return nil, nil
+		}
+		if src.Virtual && !r.Bridge.TimelineMemberWindowsSupported() {
+			// A carved track can join a gapless timeline only where the
+			// sidecar takes member windows; otherwise fall back per item.
 			return nil, nil
 		}
 		members = append(members, flow.TimelineMember{PID: e.PID, Src: src})
@@ -415,7 +420,7 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 		if err != nil {
 			return CreateQueueTimeline409JSONResponse{ConflictJSONResponse(errObj("conflict", "this item cannot join a timeline: "+pid))}, nil
 		}
-		if src.Virtual {
+		if src.Virtual && !s.bridge.TimelineMemberWindowsSupported() {
 			return CreateQueueTimeline409JSONResponse{ConflictJSONResponse(errObj("conflict", "virtual tracks cannot join a timeline: "+pid))}, nil
 		}
 		members = append(members, flow.TimelineMember{PID: pid, Src: src})
