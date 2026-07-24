@@ -30,6 +30,64 @@ class PodcastsApi {
 
   const PodcastsApi(this._dio, this._serializers);
 
+  /// Capture an episode&#39;s transcript for search
+  /// Fetches the episode&#39;s announced transcript and indexes its text so the episode turns up in transcript search, without downloading the audio. This covers an episode a listener streams but never downloads; a downloaded episode already indexes its transcript, and an already-indexed one is a no-op success. 404 when the episode announces no transcript; a pointer that exists but cannot be fetched or parsed answers &#x60;feed-unreachable&#x60;, so clients retry later instead of recording a false absence. Distinct from the time-coded cue transcript the read endpoint serves for display: this indexes search text only. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future]
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<void>> captureEpisodeTranscript({ 
+    required String pid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/episodes/{pid}/transcript'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    return _response;
+  }
+
   /// Export the caller&#39;s subscriptions as OPML
   /// OPML 2.0 document of the calling user&#39;s subscriptions, with folder assignments rendered as nested outlines. Private shows (see the show schema&#39;s sticky privacy rule) are omitted entirely, for every exporting user: private feed URLs are secrets and never leave the server in an export. 
   ///

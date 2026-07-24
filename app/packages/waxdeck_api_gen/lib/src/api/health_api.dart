@@ -9,8 +9,10 @@ import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
 import 'package:waxdeck_api_gen/src/api_util.dart';
+import 'package:waxdeck_api_gen/src/model/diagnostic_summary.dart';
 import 'package:waxdeck_api_gen/src/model/duplicate_groups.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
+import 'package:waxdeck_api_gen/src/model/file_diagnostic_page.dart';
 import 'package:waxdeck_api_gen/src/model/health_fix_request.dart';
 import 'package:waxdeck_api_gen/src/model/health_fix_result.dart';
 import 'package:waxdeck_api_gen/src/model/health_issue_page.dart';
@@ -124,6 +126,106 @@ class HealthApi {
     }
 
     return Response<HealthFixResult>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Summarize per-file diagnostics
+  /// Diagnostic counts grouped by writer, code, and severity, most severe first, over the whole match. The same origin, code, severity, and library filters as the listing apply; paging does not. A dashboard reads this for its at-a-glance counts without walking the files. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [origin] - Restrict to one writer.
+  /// * [code] - Restrict to one diagnostic code.
+  /// * [severity] - Restrict to one severity.
+  /// * [library_] - Restrict to files under one library root.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [DiagnosticSummary] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<DiagnosticSummary>> getDiagnosticSummary({ 
+    String? origin,
+    String? code,
+    String? severity,
+    String? library_,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/library/diagnostics/summary';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (origin != null) r'origin': encodeQueryParameter(_serializers, origin, const FullType(String)),
+      if (code != null) r'code': encodeQueryParameter(_serializers, code, const FullType(String)),
+      if (severity != null) r'severity': encodeQueryParameter(_serializers, severity, const FullType(String)),
+      if (library_ != null) r'library': encodeQueryParameter(_serializers, library_, const FullType(String)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    DiagnosticSummary? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(DiagnosticSummary),
+      ) as DiagnosticSummary;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<DiagnosticSummary>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -292,6 +394,112 @@ class HealthApi {
     }
 
     return Response<DuplicateGroups>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Query per-file diagnostics
+  /// Persisted per-file diagnostics (what scan, organize, replaygain, and tag write-back recorded about individual files) across the library in a stable path order, optionally narrowed by origin, code, severity, or library. This is the query surface a diagnostics dashboard reads instead of auditing item by item. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [origin] - Restrict to one writer.
+  /// * [code] - Restrict to one diagnostic code.
+  /// * [severity] - Restrict to one severity.
+  /// * [library_] - Restrict to files under one library root.
+  /// * [cursor] - Opaque cursor from a previous page's `nextCursor`. Omit for the first page. 
+  /// * [limit] - Maximum diagnostics per page.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [FileDiagnosticPage] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<FileDiagnosticPage>> listFileDiagnostics({ 
+    String? origin,
+    String? code,
+    String? severity,
+    String? library_,
+    String? cursor,
+    int? limit = 100,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/library/diagnostics';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (origin != null) r'origin': encodeQueryParameter(_serializers, origin, const FullType(String)),
+      if (code != null) r'code': encodeQueryParameter(_serializers, code, const FullType(String)),
+      if (severity != null) r'severity': encodeQueryParameter(_serializers, severity, const FullType(String)),
+      if (library_ != null) r'library': encodeQueryParameter(_serializers, library_, const FullType(String)),
+      if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    FileDiagnosticPage? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(FileDiagnosticPage),
+      ) as FileDiagnosticPage;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<FileDiagnosticPage>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

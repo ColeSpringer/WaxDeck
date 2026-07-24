@@ -270,6 +270,11 @@ abstract interface class WaxDeckRepository {
   /// fetches and caches it.
   Future<Transcript> getEpisodeTranscript(String pid);
 
+  /// `POST /episodes/{pid}/transcript`: indexes the episode's transcript
+  /// text for search without downloading the audio, so a streamed episode
+  /// turns up in transcript search. A no-op success when already indexed.
+  Future<void> captureEpisodeTranscript(String pid);
+
   /// `POST /episodes/{pid}/fetch`: queues a server-side download of the
   /// episode's audio. A no-op success when already downloaded or queued.
   Future<void> fetchEpisode(String pid);
@@ -611,6 +616,15 @@ abstract interface class WaxDeckRepository {
   /// `GET /libraries`: every catalog library.
   Future<List<LibraryInfo>> listLibraries();
 
+  /// `POST /libraries`: registers a new library root at runtime,
+  /// returning the created library. Administrators only.
+  Future<LibraryInfo> createLibrary({
+    required String name,
+    required String path,
+    String? media,
+    bool? managed,
+  });
+
   /// `GET /libraries/{pid}/matching`: the library's matching mode
   /// (`auto`, `review`, or `off`).
   Future<String> getLibraryMatching(String libraryPid);
@@ -745,24 +759,33 @@ abstract interface class WaxDeckRepository {
     bool force = false,
   });
 
-  /// `PUT /items/{pid}/artwork`: replaces an item's artwork with the
-  /// uploaded image [bytes].
+  /// `GET /items/{pid}/art-roles`: the artwork slots an item, album, or
+  /// artist holds at its own level (not inherited from the chain), each
+  /// with its stored format and pixel dimensions.
+  Future<List<ArtRoleInfo>> getItemArtRoles(String pid);
+
+  /// `PUT /items/{pid}/artwork`: replaces an item's artwork in one slot
+  /// ([role], default `front`) with the uploaded image [bytes].
   Future<MetadataEditResult> setItemArtwork(
     String pid, {
     required Uint8List bytes,
+    String role = 'front',
     bool writeBack = false,
     bool lock = true,
   });
 
-  /// `DELETE /items/{pid}/artwork`: removes the curated artwork.
-  Future<void> clearItemArtwork(String pid);
+  /// `DELETE /items/{pid}/artwork`: removes the curated artwork in one
+  /// slot ([role], default `front`).
+  Future<void> clearItemArtwork(String pid, {String role = 'front'});
 
   /// `PUT /entities/{entityType}/{entityPid}/artwork`: replaces a
-  /// browse entity's artwork with the uploaded image [bytes].
+  /// browse entity's artwork in one slot ([role], default `front`) with
+  /// the uploaded image [bytes].
   Future<MetadataEditResult> setEntityArtwork(
     String entityType,
     String entityPid, {
     required Uint8List bytes,
+    String role = 'front',
     bool writeBack = false,
   });
 
@@ -828,6 +851,27 @@ abstract interface class WaxDeckRepository {
     String? rule,
     String? cursor,
     int? limit,
+  });
+
+  /// `GET /library/diagnostics`: per-file diagnostics across the library,
+  /// optionally narrowed by [origin], [code], [severity], or [library], and
+  /// keyset-paginated. Administrators only.
+  Future<FileDiagnosticPage> listFileDiagnostics({
+    String? origin,
+    String? code,
+    String? severity,
+    String? library,
+    String? cursor,
+    int? limit,
+  });
+
+  /// `GET /library/diagnostics/summary`: diagnostic counts grouped by
+  /// writer, code, and severity, most severe first. Administrators only.
+  Future<List<DiagnosticCount>> getDiagnosticSummary({
+    String? origin,
+    String? code,
+    String? severity,
+    String? library,
   });
 
   /// `POST /library/health/sweep`: queues a full health re-evaluation.
@@ -1728,6 +1772,11 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<void> captureEpisodeTranscript(String pid) => _guard(() async {
+    await _gen.getPodcastsApi().captureEpisodeTranscript(pid: pid);
+  });
+
+  @override
   Future<void> removeEpisodeDownload(String pid) => _guard(() async {
     await _gen.getPodcastsApi().removeEpisodeDownload(pid: pid);
   });
@@ -2430,6 +2479,25 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<LibraryInfo> createLibrary({
+    required String name,
+    required String path,
+    String? media,
+    bool? managed,
+  }) => _guard(() async {
+    final response = await _gen.getAdminApi().createLibrary(
+      libraryCreate: gen.LibraryCreate(
+        (b) => b
+          ..name = name
+          ..path = path
+          ..media = gen.LibraryCreateMediaEnum.valueOf(media ?? 'mixed')
+          ..managed = managed ?? false,
+      ),
+    );
+    return libraryInfoFromGen(_require(response.data));
+  });
+
+  @override
   Future<String> getLibraryMatching(String libraryPid) => _guard(() async {
     final response = await _gen.getReviewApi().getLibraryMatching(
       pid: libraryPid,
@@ -2690,15 +2758,25 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<List<ArtRoleInfo>> getItemArtRoles(String pid) => _guard(() async {
+    final response = await _gen.getLibraryApi().getItemArtRoles(pid: pid);
+    return _require(
+      response.data,
+    ).roles.map(artRoleInfoFromGen).toList(growable: false);
+  });
+
+  @override
   Future<MetadataEditResult> setItemArtwork(
     String pid, {
     required Uint8List bytes,
+    String role = 'front',
     bool writeBack = false,
     bool lock = true,
   }) => _guard(() async {
     final response = await _gen.getMetadataApi().setItemArtwork(
       pid: pid,
       body: MultipartFile.fromBytes(bytes),
+      role: gen.ArtRole.valueOf(role),
       writeBack: writeBack,
       lock: lock,
     );
@@ -2706,21 +2784,27 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<void> clearItemArtwork(String pid) => _guard(() async {
-    await _gen.getMetadataApi().clearItemArtwork(pid: pid);
-  });
+  Future<void> clearItemArtwork(String pid, {String role = 'front'}) =>
+      _guard(() async {
+        await _gen.getMetadataApi().clearItemArtwork(
+          pid: pid,
+          role: gen.ArtRole.valueOf(role),
+        );
+      });
 
   @override
   Future<MetadataEditResult> setEntityArtwork(
     String entityType,
     String entityPid, {
     required Uint8List bytes,
+    String role = 'front',
     bool writeBack = false,
   }) => _guard(() async {
     final response = await _gen.getMetadataApi().setEntityArtwork(
       entityType: entityType,
       entityPid: entityPid,
       body: MultipartFile.fromBytes(bytes),
+      role: gen.ArtRole.valueOf(role),
       writeBack: writeBack,
     );
     return metadataEditResultFromGen(_require(response.data));
@@ -2861,6 +2945,44 @@ class WaxDeckClient implements WaxDeckRepository {
       limit: limit,
     );
     return healthIssuePageFromGen(_require(response.data));
+  });
+
+  @override
+  Future<FileDiagnosticPage> listFileDiagnostics({
+    String? origin,
+    String? code,
+    String? severity,
+    String? library,
+    String? cursor,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getHealthApi().listFileDiagnostics(
+      origin: origin,
+      code: code,
+      severity: severity,
+      library_: library,
+      cursor: cursor,
+      limit: limit,
+    );
+    return fileDiagnosticPageFromGen(_require(response.data));
+  });
+
+  @override
+  Future<List<DiagnosticCount>> getDiagnosticSummary({
+    String? origin,
+    String? code,
+    String? severity,
+    String? library,
+  }) => _guard(() async {
+    final response = await _gen.getHealthApi().getDiagnosticSummary(
+      origin: origin,
+      code: code,
+      severity: severity,
+      library_: library,
+    );
+    return _require(
+      response.data,
+    ).counts.map(diagnosticCountFromGen).toList(growable: false);
   });
 
   @override

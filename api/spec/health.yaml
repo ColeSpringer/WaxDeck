@@ -130,6 +130,90 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /library/diagnostics:
+    get:
+      operationId: listFileDiagnostics
+      summary: Query per-file diagnostics
+      description: >
+        Persisted per-file diagnostics (what scan, organize, replaygain, and
+        tag write-back recorded about individual files) across the library
+        in a stable path order, optionally narrowed by origin, code,
+        severity, or library. This is the query surface a diagnostics
+        dashboard reads instead of auditing item by item. Administrators
+        only.
+      tags: [health]
+      parameters:
+        - $ref: "#/components/parameters/DiagnosticOriginFilter"
+        - $ref: "#/components/parameters/DiagnosticCodeFilter"
+        - $ref: "#/components/parameters/DiagnosticSeverityFilter"
+        - $ref: "#/components/parameters/DiagnosticLibraryFilter"
+        - name: cursor
+          in: query
+          description: >
+            Opaque cursor from a previous page's `nextCursor`. Omit for the
+            first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum diagnostics per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of file diagnostics.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileDiagnosticPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/diagnostics/summary:
+    get:
+      operationId: getDiagnosticSummary
+      summary: Summarize per-file diagnostics
+      description: >
+        Diagnostic counts grouped by writer, code, and severity, most severe
+        first, over the whole match. The same origin, code, severity, and
+        library filters as the listing apply; paging does not. A dashboard
+        reads this for its at-a-glance counts without walking the files.
+        Administrators only.
+      tags: [health]
+      parameters:
+        - $ref: "#/components/parameters/DiagnosticOriginFilter"
+        - $ref: "#/components/parameters/DiagnosticCodeFilter"
+        - $ref: "#/components/parameters/DiagnosticSeverityFilter"
+        - $ref: "#/components/parameters/DiagnosticLibraryFilter"
+      responses:
+        "200":
+          description: Grouped diagnostic counts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiagnosticSummary"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /library/duplicates:
     get:
       operationId: listDuplicates
@@ -252,6 +336,43 @@ paths:
           $ref: "#/components/responses/CatalogMaintenance"
 
 components:
+  parameters:
+    DiagnosticOriginFilter:
+      name: origin
+      in: query
+      description: Restrict to one writer.
+      schema:
+        type: string
+        enum: [scan, organize, replaygain, edit]
+    DiagnosticCodeFilter:
+      name: code
+      in: query
+      description: Restrict to one diagnostic code.
+      schema:
+        type: string
+        enum:
+          - unsupported_format
+          - legacy_only_tags
+          - lyrics_partial
+          - sidecar_skipped
+          - cue_track_dropped
+          - tag_write_lost
+          - tag_write_unsynced
+          - corrupt_audio
+    DiagnosticSeverityFilter:
+      name: severity
+      in: query
+      description: Restrict to one severity.
+      schema:
+        type: string
+        enum: [info, warn, error]
+    DiagnosticLibraryFilter:
+      name: library
+      in: query
+      description: Restrict to files under one library root.
+      schema:
+        type: string
+        pattern: "^lb-[0-9A-HJKMNP-TV-Z]{26}$"
   schemas:
     HealthSummary:
       type: object
@@ -526,3 +647,82 @@ components:
         trashed:
           type: integer
           description: Items moved to the trash.
+
+    FileDiagnostic:
+      type: object
+      description: >
+        One persisted observation about a library file, keyed for display by
+        its path (files are not a first-class API resource, so no file id is
+        surfaced).
+      required: [path, origin, code, severity, seenAt]
+      properties:
+        path:
+          type: string
+          description: The file's display path.
+        origin:
+          type: string
+          description: >
+            The writer that recorded it (`scan`, `organize`, `replaygain`,
+            or `edit`); new writers may appear.
+        code:
+          type: string
+          description: >
+            What was observed (`unsupported_format`, `legacy_only_tags`,
+            `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`,
+            `tag_write_lost`, `tag_write_unsynced`, or `corrupt_audio`); new
+            codes may appear, so treat an unknown value as a generic finding.
+        severity:
+          type: string
+          description: "`info`, `warn`, or `error`."
+        tagKey:
+          type: string
+          description: The tag key a key-specific diagnostic concerns, when any.
+        detail:
+          type: string
+          description: The writer's own note, when it carries one.
+        seenAt:
+          type: string
+          format: date-time
+          description: When the diagnostic was last recorded.
+
+    FileDiagnosticPage:
+      type: object
+      description: One page of per-file diagnostics.
+      required: [diagnostics]
+      properties:
+        diagnostics:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileDiagnostic"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; omitted on the last.
+
+    DiagnosticCount:
+      type: object
+      description: One grouped bucket of the diagnostic summary.
+      required: [origin, code, severity, count]
+      properties:
+        origin:
+          type: string
+          description: The writer that recorded the diagnostics in this bucket.
+        code:
+          type: string
+          description: The diagnostic code this bucket counts.
+        severity:
+          type: string
+          description: "`info`, `warn`, or `error`."
+        count:
+          type: integer
+          description: How many diagnostics fell in this bucket.
+
+    DiagnosticSummary:
+      type: object
+      description: Diagnostic counts grouped by writer, code, and severity.
+      required: [counts]
+      properties:
+        counts:
+          type: array
+          description: Buckets, most severe first.
+          items:
+            $ref: "#/components/schemas/DiagnosticCount"

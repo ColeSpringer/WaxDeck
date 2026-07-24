@@ -1143,6 +1143,7 @@ ItemMetadata itemMetadataFromGen(gen.ItemMetadata meta) {
     unofficial: meta.unofficial,
     virtualTrack: meta.virtualTrack,
     hasArtwork: meta.hasArtwork,
+    hasOwnArtwork: meta.hasOwnArtwork,
     albumPid: meta.albumPid,
     artistPid: meta.artistPid,
     releaseGroupPid: meta.releaseGroupPid,
@@ -1248,6 +1249,37 @@ HealthIssuePage healthIssuePageFromGen(gen.HealthIssuePage page) {
     nextCursor: page.nextCursor,
   );
 }
+
+FileDiagnostic fileDiagnosticFromGen(gen.FileDiagnostic d) => FileDiagnostic(
+  path: d.path,
+  origin: d.origin,
+  code: d.code,
+  severity: d.severity,
+  seenAt: d.seenAt,
+  tagKey: d.tagKey,
+  detail: d.detail,
+);
+
+FileDiagnosticPage fileDiagnosticPageFromGen(gen.FileDiagnosticPage page) =>
+    FileDiagnosticPage(
+      diagnostics: page.diagnostics.map(fileDiagnosticFromGen).toList(),
+      nextCursor: page.nextCursor,
+    );
+
+DiagnosticCount diagnosticCountFromGen(gen.DiagnosticCount c) =>
+    DiagnosticCount(
+      origin: c.origin,
+      code: c.code,
+      severity: c.severity,
+      count: c.count,
+    );
+
+ArtRoleInfo artRoleInfoFromGen(gen.ArtRoleInfo r) => ArtRoleInfo(
+  role: r.role.name,
+  format: r.format,
+  width: r.width,
+  height: r.height,
+);
 
 DuplicateEntity duplicateEntityFromGen(gen.DuplicateEntity e) =>
     DuplicateEntity(pid: e.pid, name: e.name, itemCount: e.itemCount);

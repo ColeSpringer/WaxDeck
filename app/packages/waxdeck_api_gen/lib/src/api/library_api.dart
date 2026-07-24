@@ -10,6 +10,8 @@ import 'package:dio/dio.dart';
 
 import 'dart:typed_data';
 import 'package:waxdeck_api_gen/src/api_util.dart';
+import 'package:waxdeck_api_gen/src/model/art_role.dart';
+import 'package:waxdeck_api_gen/src/model/art_roles.dart';
 import 'package:waxdeck_api_gen/src/model/delete_items_request.dart';
 import 'package:waxdeck_api_gen/src/model/delete_items_result.dart';
 import 'package:waxdeck_api_gen/src/model/discovery_list.dart';
@@ -325,6 +327,7 @@ class LibraryApi {
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [role] - Which artwork slot to read. Only `front` (the default) walks the album/artist fallback chain; `back`, `disc`, `booklet`, and `background` resolve at the requested entity's own level and 404 when that entity holds no image in the slot. 
   /// * [size] - Longest-edge bound in pixels for a thumbnail. Omit for the original image. 
   /// * [ifNoneMatch] - Previously returned `ETag`; a match answers 304 with no body.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -338,6 +341,7 @@ class LibraryApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<Uint8List>> getItemArt({ 
     required String pid,
+    ArtRole? role,
     int? size,
     String? ifNoneMatch,
     CancelToken? cancelToken,
@@ -374,6 +378,7 @@ class LibraryApi {
     );
 
     final _queryParameters = <String, dynamic>{
+      if (role != null) r'role': encodeQueryParameter(_serializers, role, const FullType(ArtRole)),
       if (size != null) r'size': encodeQueryParameter(_serializers, size, const FullType(int)),
     };
 
@@ -403,6 +408,92 @@ class LibraryApi {
     }
 
     return Response<Uint8List>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// List the artwork slots an entity holds
+  /// The artwork slots present at the entity&#39;s own level, not inherited from the album or artist chain, each with its stored format and pixel dimensions (0 when the image was not decodable). Besides item PIDs this accepts album (&#x60;al-&#x60;), artist (&#x60;ar-&#x60;), and podcast show (&#x60;pc-&#x60;) PIDs. It answers the own-versus-inherited question a front-cover read cannot: an item that lists a &#x60;front&#x60; slot here holds its own cover, while one that resolves art only through &#x60;/items/{pid}/art&#x60; inherits it from the chain. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ArtRoles] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ArtRoles>> getItemArtRoles({ 
+    required String pid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/art-roles'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ArtRoles? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ArtRoles),
+      ) as ArtRoles;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ArtRoles>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

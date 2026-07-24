@@ -246,6 +246,10 @@ func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int) ([]Similar
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
+	// Snapshot the root count once: the single-root local-path optimization
+	// only holds when exactly one root exists, and a runtime-added root must
+	// disable it for the rest of this batch consistently.
+	singleRoot := len(l.libraryRoots()) == 1
 	out := make([]SimilarityWorkItem, 0, len(work))
 	for _, w := range work {
 		item := SimilarityWorkItem{
@@ -255,7 +259,7 @@ func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int) ([]Similar
 		}
 		if it, err := l.lib.Get(ctx, model.PID(w.ItemPID)); err == nil {
 			item.DurationMs = it.DurationMS
-			if l.workerLocalPaths && len(l.roots) == 1 {
+			if l.workerLocalPaths && singleRoot {
 				if f, err := l.lib.File(ctx, it.FilePID); err == nil {
 					item.LocalPath = string(f.RelPath)
 				}

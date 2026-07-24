@@ -30,7 +30,8 @@ part 'item_metadata.g.dart';
 /// * [customTags] - Custom tags.
 /// * [unofficial] - Whether the item is marked as having no canonical release.
 /// * [virtualTrack] - True for tracks carved from a shared file (CUE rips): their edits are always database-only and they export no fingerprint, by upstream design. 
-/// * [hasArtwork] - Whether item-level art is stored.
+/// * [hasArtwork] - Whether the item resolves any front cover, including one inherited from its album, release group, or artist. 
+/// * [hasOwnArtwork] - Whether the item holds its own front cover, as opposed to inheriting one from the entity chain. Lets the editor tell an item-level cover from an inherited one. 
 /// * [albumPid] - The item's album entity, when any.
 /// * [artistPid] - The item's artist entity, when any.
 /// * [releaseGroupPid] - The item's release group entity, when any.
@@ -80,9 +81,13 @@ abstract class ItemMetadata implements Built<ItemMetadata, ItemMetadataBuilder> 
   @BuiltValueField(wireName: r'virtualTrack')
   bool get virtualTrack;
 
-  /// Whether item-level art is stored.
+  /// Whether the item resolves any front cover, including one inherited from its album, release group, or artist. 
   @BuiltValueField(wireName: r'hasArtwork')
   bool get hasArtwork;
+
+  /// Whether the item holds its own front cover, as opposed to inheriting one from the entity chain. Lets the editor tell an item-level cover from an inherited one. 
+  @BuiltValueField(wireName: r'hasOwnArtwork')
+  bool get hasOwnArtwork;
 
   /// The item's album entity, when any.
   @BuiltValueField(wireName: r'albumPid')
@@ -185,6 +190,11 @@ class _$ItemMetadataSerializer implements PrimitiveSerializer<ItemMetadata> {
     yield r'hasArtwork';
     yield serializers.serialize(
       object.hasArtwork,
+      specifiedType: const FullType(bool),
+    );
+    yield r'hasOwnArtwork';
+    yield serializers.serialize(
+      object.hasOwnArtwork,
       specifiedType: const FullType(bool),
     );
     if (object.albumPid != null) {
@@ -319,6 +329,13 @@ class _$ItemMetadataSerializer implements PrimitiveSerializer<ItemMetadata> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.hasArtwork = valueDes;
+          break;
+        case r'hasOwnArtwork':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.hasOwnArtwork = valueDes;
           break;
         case r'albumPid':
           final valueDes = serializers.deserialize(

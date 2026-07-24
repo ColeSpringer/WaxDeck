@@ -306,18 +306,23 @@ paths:
       operationId: setItemArtwork
       summary: Set item artwork
       description: >
-        Stores the raw image bytes as the item's front cover (the one
-        artwork slot upstream models), locking the artifact by
-        default. The body is the image itself, up to 16 MiB; the
-        server sniffs the format. `writeBack=true` embeds the cover
-        into every backing file. Existing art is replaced; the
-        request never downgrades silently because the caller chose
-        the image.
+        Stores the raw image bytes in one of the item's artwork slots
+        (`role`, default `front`), locking the artifact by default. The
+        body is the image itself, up to 16 MiB; the server sniffs the
+        format. `writeBack=true` embeds a front cover into every backing
+        file (write-back applies to the front slot only). Existing art in
+        the slot is replaced; the request never downgrades silently because
+        the caller chose the image.
       tags: [metadata]
       parameters:
+        - name: role
+          in: query
+          description: Which artwork slot to set. Defaults to `front`.
+          schema:
+            $ref: "#/components/schemas/ArtRole"
         - name: writeBack
           in: query
-          description: Also embed the cover into the backing files.
+          description: Also embed a front cover into the backing files.
           schema:
             type: boolean
             default: false
@@ -359,12 +364,22 @@ paths:
       operationId: clearItemArtwork
       summary: Clear item artwork
       description: >
-        Removes the stored item art; resolution falls back to the
-        entity chain (album, release group, artist).
+        Removes the stored item art in one slot (`role`, default `front`).
+        A cleared front cover falls back to the entity chain (album, release
+        group, artist); the other slots have no fallback and simply become
+        absent.
       tags: [metadata]
+      parameters:
+        - name: role
+          in: query
+          description: Which artwork slot to clear. Defaults to `front`.
+          schema:
+            $ref: "#/components/schemas/ArtRole"
       responses:
         "204":
           description: Cleared.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -382,16 +397,24 @@ paths:
       operationId: setEntityArtwork
       summary: Set entity artwork
       description: >
-        Stores the raw image bytes as durable front-cover art for an
-        album, artist, release group, or genre entity. Album art may
-        additionally embed into member files with `writeBack=true`;
-        other entity types are catalog-only.
+        Stores the raw image bytes in one artwork slot (`role`, default
+        `front`) of an album, artist, release group, or genre entity. Album
+        front covers may additionally embed into member files with
+        `writeBack=true`; other slots and entity types are catalog-only. An
+        artist portrait lands under `background`, which has no separate
+        portrait role.
       tags: [metadata]
       parameters:
+        - name: role
+          in: query
+          description: Which artwork slot to set. Defaults to `front`.
+          schema:
+            $ref: "#/components/schemas/ArtRole"
         - name: writeBack
           in: query
           description: >
-            Embed into member files (albums only; ignored elsewhere).
+            Embed a front cover into member files (albums only; ignored
+            elsewhere).
           schema:
             type: boolean
             default: false
@@ -838,7 +861,7 @@ components:
     ItemMetadata:
       type: object
       description: Everything the editor shows for one item.
-      required: [pid, mediaType, fields, lockedFields, provenance, credits, customTags, unofficial, virtualTrack, hasArtwork, writeBackIssues]
+      required: [pid, mediaType, fields, lockedFields, provenance, credits, customTags, unofficial, virtualTrack, hasArtwork, hasOwnArtwork, writeBackIssues]
       properties:
         pid:
           type: string
@@ -892,7 +915,15 @@ components:
             fingerprint, by upstream design.
         hasArtwork:
           type: boolean
-          description: Whether item-level art is stored.
+          description: >
+            Whether the item resolves any front cover, including one
+            inherited from its album, release group, or artist.
+        hasOwnArtwork:
+          type: boolean
+          description: >
+            Whether the item holds its own front cover, as opposed to
+            inheriting one from the entity chain. Lets the editor tell an
+            item-level cover from an inherited one.
         albumPid:
           type: string
           description: The item's album entity, when any.

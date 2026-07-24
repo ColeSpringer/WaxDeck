@@ -241,8 +241,9 @@ func (l *Library) guardAcquireHost(ctx context.Context, host string) error {
 // only into managed roots). Podcast episodes ingest into the internal
 // podcast library and are not checked here.
 func (l *Library) hasManagedDestination(ctx context.Context, uc *UserCtx, kind model.Kind) (bool, error) {
-	managed := make(map[string]bool, len(l.roots))
-	for _, r := range l.roots {
+	roots := l.libraryRoots()
+	managed := make(map[string]bool, len(roots))
+	for _, r := range roots {
 		if r.Managed {
 			managed[cleanRootPath(r.Path)] = true
 		}

@@ -20,6 +20,9 @@ Serializers _$serializers =
           ..add(AppPasswordCreate.serializer)
           ..add(AppPasswordCreated.serializer)
           ..add(AppPasswordList.serializer)
+          ..add(ArtRole.serializer)
+          ..add(ArtRoleInfo.serializer)
+          ..add(ArtRoles.serializer)
           ..add(AuditEvent.serializer)
           ..add(AuditEventPage.serializer)
           ..add(Backup.serializer)
@@ -54,6 +57,8 @@ Serializers _$serializers =
           ..add(DeletePlanEntry.serializer)
           ..add(DeviceSession.serializer)
           ..add(DeviceSessionKindEnum.serializer)
+          ..add(DiagnosticCount.serializer)
+          ..add(DiagnosticSummary.serializer)
           ..add(DiscoveryList.serializer)
           ..add(DownloadFile.serializer)
           ..add(DownloadInfo.serializer)
@@ -82,6 +87,8 @@ Serializers _$serializers =
           ..add(Error.serializer)
           ..add(FeedPerson.serializer)
           ..add(FieldProvenance.serializer)
+          ..add(FileDiagnostic.serializer)
+          ..add(FileDiagnosticPage.serializer)
           ..add(Health.serializer)
           ..add(HealthFixRequest.serializer)
           ..add(HealthFixResult.serializer)
@@ -105,6 +112,8 @@ Serializers _$serializers =
           ..add(Libraries.serializer)
           ..add(LibraryAccess.serializer)
           ..add(LibraryAccessModeEnum.serializer)
+          ..add(LibraryCreate.serializer)
+          ..add(LibraryCreateMediaEnum.serializer)
           ..add(LibraryMatching.serializer)
           ..add(LibraryMatchingModeEnum.serializer)
           ..add(LibraryReadOnly.serializer)
@@ -329,6 +338,10 @@ Serializers _$serializers =
             () => ListBuilder<AppPassword>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ArtRoleInfo)]),
+            () => ListBuilder<ArtRoleInfo>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(AuditEvent)]),
             () => ListBuilder<AuditEvent>(),
           )
@@ -375,6 +388,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(DeviceSession)]),
             () => ListBuilder<DeviceSession>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(DiagnosticCount)]),
+            () => ListBuilder<DiagnosticCount>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(DownloadFile)]),
@@ -429,6 +446,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(FeedPerson)]),
             () => ListBuilder<FeedPerson>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(FileDiagnostic)]),
+            () => ListBuilder<FileDiagnostic>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(HealthIssue)]),

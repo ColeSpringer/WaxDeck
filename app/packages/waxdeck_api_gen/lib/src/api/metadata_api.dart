@@ -9,6 +9,7 @@ import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
 import 'package:waxdeck_api_gen/src/api_util.dart';
+import 'package:waxdeck_api_gen/src/model/art_role.dart';
 import 'package:waxdeck_api_gen/src/model/bulk_edit.dart';
 import 'package:waxdeck_api_gen/src/model/bulk_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/chapters_edit.dart';
@@ -145,10 +146,11 @@ class MetadataApi {
   }
 
   /// Clear item artwork
-  /// Removes the stored item art; resolution falls back to the entity chain (album, release group, artist). 
+  /// Removes the stored item art in one slot (&#x60;role&#x60;, default &#x60;front&#x60;). A cleared front cover falls back to the entity chain (album, release group, artist); the other slots have no fallback and simply become absent. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [role] - Which artwork slot to clear. Defaults to `front`.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -160,6 +162,7 @@ class MetadataApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<void>> clearItemArtwork({ 
     required String pid,
+    ArtRole? role,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -191,9 +194,14 @@ class MetadataApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (role != null) r'role': encodeQueryParameter(_serializers, role, const FullType(ArtRole)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
@@ -1099,13 +1107,14 @@ class MetadataApi {
   }
 
   /// Set entity artwork
-  /// Stores the raw image bytes as durable front-cover art for an album, artist, release group, or genre entity. Album art may additionally embed into member files with &#x60;writeBack&#x3D;true&#x60;; other entity types are catalog-only. 
+  /// Stores the raw image bytes in one artwork slot (&#x60;role&#x60;, default &#x60;front&#x60;) of an album, artist, release group, or genre entity. Album front covers may additionally embed into member files with &#x60;writeBack&#x3D;true&#x60;; other slots and entity types are catalog-only. An artist portrait lands under &#x60;background&#x60;, which has no separate portrait role. 
   ///
   /// Parameters:
   /// * [entityType] - The entity kind an entity operation targets.
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [body] 
-  /// * [writeBack] - Embed into member files (albums only; ignored elsewhere). 
+  /// * [role] - Which artwork slot to set. Defaults to `front`.
+  /// * [writeBack] - Embed a front cover into member files (albums only; ignored elsewhere). 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1119,6 +1128,7 @@ class MetadataApi {
     required String entityType,
     required String entityPid,
     required MultipartFile body,
+    ArtRole? role,
     bool? writeBack = false,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -1153,6 +1163,7 @@ class MetadataApi {
     );
 
     final _queryParameters = <String, dynamic>{
+      if (role != null) r'role': encodeQueryParameter(_serializers, role, const FullType(ArtRole)),
       if (writeBack != null) r'writeBack': encodeQueryParameter(_serializers, writeBack, const FullType(bool)),
     };
 
@@ -1216,12 +1227,13 @@ class MetadataApi {
   }
 
   /// Set item artwork
-  /// Stores the raw image bytes as the item&#39;s front cover (the one artwork slot upstream models), locking the artifact by default. The body is the image itself, up to 16 MiB; the server sniffs the format. &#x60;writeBack&#x3D;true&#x60; embeds the cover into every backing file. Existing art is replaced; the request never downgrades silently because the caller chose the image. 
+  /// Stores the raw image bytes in one of the item&#39;s artwork slots (&#x60;role&#x60;, default &#x60;front&#x60;), locking the artifact by default. The body is the image itself, up to 16 MiB; the server sniffs the format. &#x60;writeBack&#x3D;true&#x60; embeds a front cover into every backing file (write-back applies to the front slot only). Existing art in the slot is replaced; the request never downgrades silently because the caller chose the image. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [body] 
-  /// * [writeBack] - Also embed the cover into the backing files.
+  /// * [role] - Which artwork slot to set. Defaults to `front`.
+  /// * [writeBack] - Also embed a front cover into the backing files.
   /// * [lock] - Lock the artwork against scans and enrichment.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
@@ -1235,6 +1247,7 @@ class MetadataApi {
   Future<Response<MetadataEditResult>> setItemArtwork({ 
     required String pid,
     required MultipartFile body,
+    ArtRole? role,
     bool? writeBack = false,
     bool? lock = true,
     CancelToken? cancelToken,
@@ -1270,6 +1283,7 @@ class MetadataApi {
     );
 
     final _queryParameters = <String, dynamic>{
+      if (role != null) r'role': encodeQueryParameter(_serializers, role, const FullType(ArtRole)),
       if (writeBack != null) r'writeBack': encodeQueryParameter(_serializers, writeBack, const FullType(bool)),
       if (lock != null) r'lock': encodeQueryParameter(_serializers, lock, const FullType(bool)),
     };

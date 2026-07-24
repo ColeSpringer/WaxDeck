@@ -9,6 +9,7 @@ import '../admin/trash_screen.dart';
 import '../admin/users_screen.dart';
 import '../auth/auth_controller.dart';
 import '../books/book_screen.dart';
+import '../health/diagnostics_screen.dart';
 import '../health/health_screen.dart';
 import '../media_icons.dart';
 import '../organize/organize_screen.dart';
@@ -34,6 +35,7 @@ enum _CurationDestination {
   review('curation-review', 'Review queue', adminOnly: true),
   uploads('curation-uploads', 'Uploads', adminOnly: false, needsUpload: true),
   health('curation-health', 'Health', adminOnly: true),
+  diagnostics('curation-diagnostics', 'Diagnostics', adminOnly: true),
   organize('curation-organize', 'Organize', adminOnly: true),
   tasks('curation-tasks', 'Tasks', adminOnly: true),
   users('curation-users', 'Users', adminOnly: true),
@@ -61,6 +63,7 @@ enum _CurationDestination {
     review => const ReviewScreen(),
     uploads => const UploadsScreen(),
     health => const HealthScreen(),
+    diagnostics => const DiagnosticsScreen(),
     organize => const OrganizeScreen(),
     tasks => const TasksScreen(),
     users => const UsersScreen(),

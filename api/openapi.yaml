@@ -376,6 +376,44 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
+    post:
+      operationId: createLibrary
+      summary: Create a library at runtime
+      description: >
+        Registers a new library root without a server restart. The path is
+        validated (absolute, and non-overlapping with existing roots, the
+        inbox folders, and the podcast download dir), cataloged, and scanned
+        in the background; browsing and downloading its files work as soon as
+        the scan indexes them. Streaming through the WaxFlow sidecar also
+        needs the sidecar to mount the same-named root, so a runtime-added
+        root streams once the sidecar learns it, while downloads and direct
+        playback do not wait on that. `name` is the display name and the
+        WaxFlow root name the same directory is served under. Administrators
+        only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryCreate"
+      responses:
+        "201":
+          description: The created library.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Library"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
 
   /library/rescan:
     post:
@@ -2042,6 +2080,90 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /library/diagnostics:
+    get:
+      operationId: listFileDiagnostics
+      summary: Query per-file diagnostics
+      description: >
+        Persisted per-file diagnostics (what scan, organize, replaygain, and
+        tag write-back recorded about individual files) across the library
+        in a stable path order, optionally narrowed by origin, code,
+        severity, or library. This is the query surface a diagnostics
+        dashboard reads instead of auditing item by item. Administrators
+        only.
+      tags: [health]
+      parameters:
+        - $ref: "#/components/parameters/DiagnosticOriginFilter"
+        - $ref: "#/components/parameters/DiagnosticCodeFilter"
+        - $ref: "#/components/parameters/DiagnosticSeverityFilter"
+        - $ref: "#/components/parameters/DiagnosticLibraryFilter"
+        - name: cursor
+          in: query
+          description: >
+            Opaque cursor from a previous page's `nextCursor`. Omit for the
+            first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum diagnostics per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of file diagnostics.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileDiagnosticPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/diagnostics/summary:
+    get:
+      operationId: getDiagnosticSummary
+      summary: Summarize per-file diagnostics
+      description: >
+        Diagnostic counts grouped by writer, code, and severity, most severe
+        first, over the whole match. The same origin, code, severity, and
+        library filters as the listing apply; paging does not. A dashboard
+        reads this for its at-a-glance counts without walking the files.
+        Administrators only.
+      tags: [health]
+      parameters:
+        - $ref: "#/components/parameters/DiagnosticOriginFilter"
+        - $ref: "#/components/parameters/DiagnosticCodeFilter"
+        - $ref: "#/components/parameters/DiagnosticSeverityFilter"
+        - $ref: "#/components/parameters/DiagnosticLibraryFilter"
+      responses:
+        "200":
+          description: Grouped diagnostic counts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiagnosticSummary"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /library/duplicates:
     get:
       operationId: listDuplicates
@@ -2341,6 +2463,15 @@ paths:
       tags: [library]
       parameters:
         - $ref: "#/components/parameters/Pid"
+        - name: role
+          in: query
+          description: >
+            Which artwork slot to read. Only `front` (the default) walks the
+            album/artist fallback chain; `back`, `disc`, `booklet`, and
+            `background` resolve at the requested entity's own level and 404
+            when that entity holds no image in the slot.
+          schema:
+            $ref: "#/components/schemas/ArtRole"
         - name: size
           in: query
           description: >
@@ -2384,6 +2515,36 @@ paths:
           description: The cached copy is still current.
         "400":
           $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/art-roles:
+    get:
+      operationId: getItemArtRoles
+      summary: List the artwork slots an entity holds
+      description: >
+        The artwork slots present at the entity's own level, not inherited
+        from the album or artist chain, each with its stored format and pixel
+        dimensions (0 when the image was not decodable). Besides item PIDs
+        this accepts album (`al-`), artist (`ar-`), and podcast show (`pc-`)
+        PIDs. It answers the own-versus-inherited question a front-cover read
+        cannot: an item that lists a `front` slot here holds its own cover,
+        while one that resolves art only through `/items/{pid}/art` inherits
+        it from the chain.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The slots the entity holds at its own level.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtRoles"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -2739,18 +2900,23 @@ paths:
       operationId: setItemArtwork
       summary: Set item artwork
       description: >
-        Stores the raw image bytes as the item's front cover (the one
-        artwork slot upstream models), locking the artifact by
-        default. The body is the image itself, up to 16 MiB; the
-        server sniffs the format. `writeBack=true` embeds the cover
-        into every backing file. Existing art is replaced; the
-        request never downgrades silently because the caller chose
-        the image.
+        Stores the raw image bytes in one of the item's artwork slots
+        (`role`, default `front`), locking the artifact by default. The
+        body is the image itself, up to 16 MiB; the server sniffs the
+        format. `writeBack=true` embeds a front cover into every backing
+        file (write-back applies to the front slot only). Existing art in
+        the slot is replaced; the request never downgrades silently because
+        the caller chose the image.
       tags: [metadata]
       parameters:
+        - name: role
+          in: query
+          description: Which artwork slot to set. Defaults to `front`.
+          schema:
+            $ref: "#/components/schemas/ArtRole"
         - name: writeBack
           in: query
-          description: Also embed the cover into the backing files.
+          description: Also embed a front cover into the backing files.
           schema:
             type: boolean
             default: false
@@ -2792,12 +2958,22 @@ paths:
       operationId: clearItemArtwork
       summary: Clear item artwork
       description: >
-        Removes the stored item art; resolution falls back to the
-        entity chain (album, release group, artist).
+        Removes the stored item art in one slot (`role`, default `front`).
+        A cleared front cover falls back to the entity chain (album, release
+        group, artist); the other slots have no fallback and simply become
+        absent.
       tags: [metadata]
+      parameters:
+        - name: role
+          in: query
+          description: Which artwork slot to clear. Defaults to `front`.
+          schema:
+            $ref: "#/components/schemas/ArtRole"
       responses:
         "204":
           description: Cleared.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -2815,16 +2991,24 @@ paths:
       operationId: setEntityArtwork
       summary: Set entity artwork
       description: >
-        Stores the raw image bytes as durable front-cover art for an
-        album, artist, release group, or genre entity. Album art may
-        additionally embed into member files with `writeBack=true`;
-        other entity types are catalog-only.
+        Stores the raw image bytes in one artwork slot (`role`, default
+        `front`) of an album, artist, release group, or genre entity. Album
+        front covers may additionally embed into member files with
+        `writeBack=true`; other slots and entity types are catalog-only. An
+        artist portrait lands under `background`, which has no separate
+        portrait role.
       tags: [metadata]
       parameters:
+        - name: role
+          in: query
+          description: Which artwork slot to set. Defaults to `front`.
+          schema:
+            $ref: "#/components/schemas/ArtRole"
         - name: writeBack
           in: query
           description: >
-            Embed into member files (albums only; ignored elsewhere).
+            Embed a front cover into member files (albums only; ignored
+            elsewhere).
           schema:
             type: boolean
             default: false
@@ -5154,6 +5338,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Transcript"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/FeedUnreachable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    post:
+      operationId: captureEpisodeTranscript
+      summary: Capture an episode's transcript for search
+      description: >
+        Fetches the episode's announced transcript and indexes its text so
+        the episode turns up in transcript search, without downloading the
+        audio. This covers an episode a listener streams but never
+        downloads; a downloaded episode already indexes its transcript, and
+        an already-indexed one is a no-op success. 404 when the episode
+        announces no transcript; a pointer that exists but cannot be fetched
+        or parsed answers `feed-unreachable`, so clients retry later instead
+        of recording a false absence. Distinct from the time-coded cue
+        transcript the read endpoint serves for display: this indexes
+        search text only.
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "204":
+          description: The transcript is indexed for search.
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -7590,6 +7802,43 @@ components:
         type: string
         pattern: "^se-[0-9A-HJKMNP-TV-Z]{26}$"
 
+    DiagnosticOriginFilter:
+      name: origin
+      in: query
+      description: Restrict to one writer.
+      schema:
+        type: string
+        enum: [scan, organize, replaygain, edit]
+    DiagnosticCodeFilter:
+      name: code
+      in: query
+      description: Restrict to one diagnostic code.
+      schema:
+        type: string
+        enum:
+          - unsupported_format
+          - legacy_only_tags
+          - lyrics_partial
+          - sidecar_skipped
+          - cue_track_dropped
+          - tag_write_lost
+          - tag_write_unsynced
+          - corrupt_audio
+    DiagnosticSeverityFilter:
+      name: severity
+      in: query
+      description: Restrict to one severity.
+      schema:
+        type: string
+        enum: [info, warn, error]
+    DiagnosticLibraryFilter:
+      name: library
+      in: query
+      description: Restrict to files under one library root.
+      schema:
+        type: string
+        pattern: "^lb-[0-9A-HJKMNP-TV-Z]{26}$"
+
     EntityType:
       name: entityType
       in: path
@@ -7868,6 +8117,16 @@ components:
       description: The three first-class media types.
       enum: [music, podcast, audiobook]
 
+    ArtRole:
+      type: string
+      description: >
+        One artwork slot on an item or entity. Only `front` walks the
+        album/artist fallback chain and is filled by scans and enrichment;
+        `back`, `disc`, `booklet`, and `background` are set explicitly and
+        resolve at the entity's own level. Defaults to `front`.
+      enum: [front, back, disc, booklet, background]
+      default: front
+
     ItemSummary:
       type: object
       description: >
@@ -7962,6 +8221,38 @@ components:
           items:
             $ref: "#/components/schemas/Library"
 
+    LibraryCreate:
+      type: object
+      description: A new library root to register at runtime.
+      required: [name, path]
+      properties:
+        name:
+          type: string
+          description: >
+            Display name, and the WaxFlow root name the same directory is
+            served under for streaming.
+          example: audiobooks
+        path:
+          type: string
+          description: >
+            Absolute filesystem path on the server. It must not overlap an
+            existing root, the inbox folders, or the podcast download dir.
+          example: /srv/media/audiobooks
+        media:
+          type: string
+          enum: [music, audiobook, mixed]
+          default: mixed
+          description: >
+            Content class the root holds. `mixed` (the default) admits both
+            tracks and books.
+        managed:
+          type: boolean
+          default: false
+          description: >
+            Whether the catalog may place and organize files under this root:
+            uploads land here and the organizer may move files within it. The
+            default keeps files strictly in place.
+
     Job:
       type: object
       description: A server-run catalog job.
@@ -8023,9 +8314,9 @@ components:
             `playlist.delete`, `items.delete`, `entity.merge`,
             `trash.restore`, `trash.empty`, `backup.create`,
             `backup.delete`, `restore.stage`, `restore.apply`,
-            `settings.update`, `schedule.update`, `library.read-only`,
-            `transcoding.update`, `migration.run`, and more as
-            surfaces grow. Open vocabulary; filter by prefix.
+            `settings.update`, `schedule.update`, `library.create`,
+            `library.read-only`, `transcoding.update`, `migration.run`,
+            and more as surfaces grow. Open vocabulary; filter by prefix.
         targetKind:
           type: string
           description: What kind of thing was acted on (`user`, `playlist`, ...).
@@ -9762,6 +10053,85 @@ components:
           type: integer
           description: Items moved to the trash.
 
+    FileDiagnostic:
+      type: object
+      description: >
+        One persisted observation about a library file, keyed for display by
+        its path (files are not a first-class API resource, so no file id is
+        surfaced).
+      required: [path, origin, code, severity, seenAt]
+      properties:
+        path:
+          type: string
+          description: The file's display path.
+        origin:
+          type: string
+          description: >
+            The writer that recorded it (`scan`, `organize`, `replaygain`,
+            or `edit`); new writers may appear.
+        code:
+          type: string
+          description: >
+            What was observed (`unsupported_format`, `legacy_only_tags`,
+            `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`,
+            `tag_write_lost`, `tag_write_unsynced`, or `corrupt_audio`); new
+            codes may appear, so treat an unknown value as a generic finding.
+        severity:
+          type: string
+          description: "`info`, `warn`, or `error`."
+        tagKey:
+          type: string
+          description: The tag key a key-specific diagnostic concerns, when any.
+        detail:
+          type: string
+          description: The writer's own note, when it carries one.
+        seenAt:
+          type: string
+          format: date-time
+          description: When the diagnostic was last recorded.
+
+    FileDiagnosticPage:
+      type: object
+      description: One page of per-file diagnostics.
+      required: [diagnostics]
+      properties:
+        diagnostics:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileDiagnostic"
+        nextCursor:
+          type: string
+          description: Cursor for the next page; omitted on the last.
+
+    DiagnosticCount:
+      type: object
+      description: One grouped bucket of the diagnostic summary.
+      required: [origin, code, severity, count]
+      properties:
+        origin:
+          type: string
+          description: The writer that recorded the diagnostics in this bucket.
+        code:
+          type: string
+          description: The diagnostic code this bucket counts.
+        severity:
+          type: string
+          description: "`info`, `warn`, or `error`."
+        count:
+          type: integer
+          description: How many diagnostics fell in this bucket.
+
+    DiagnosticSummary:
+      type: object
+      description: Diagnostic counts grouped by writer, code, and severity.
+      required: [counts]
+      properties:
+        counts:
+          type: array
+          description: Buckets, most severe first.
+          items:
+            $ref: "#/components/schemas/DiagnosticCount"
+
     DiscoveryList:
       type: string
       description: >
@@ -9953,6 +10323,33 @@ components:
           format: int64
           description: Bytes reclaimed (or to reclaim).
 
+    ArtRoleInfo:
+      type: object
+      description: One artwork slot an entity holds at its own level.
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/ArtRole"
+        format:
+          type: string
+          description: The stored image format (`jpeg`, `png`, `webp`, `gif`).
+        width:
+          type: integer
+          description: Pixel width, 0 when the image was not decodable.
+        height:
+          type: integer
+          description: Pixel height, 0 when the image was not decodable.
+
+    ArtRoles:
+      type: object
+      description: The artwork slots an entity holds at its own level.
+      required: [roles]
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArtRoleInfo"
+
     Lyrics:
       type: object
       description: >
@@ -10057,7 +10454,7 @@ components:
     ItemMetadata:
       type: object
       description: Everything the editor shows for one item.
-      required: [pid, mediaType, fields, lockedFields, provenance, credits, customTags, unofficial, virtualTrack, hasArtwork, writeBackIssues]
+      required: [pid, mediaType, fields, lockedFields, provenance, credits, customTags, unofficial, virtualTrack, hasArtwork, hasOwnArtwork, writeBackIssues]
       properties:
         pid:
           type: string
@@ -10111,7 +10508,15 @@ components:
             fingerprint, by upstream design.
         hasArtwork:
           type: boolean
-          description: Whether item-level art is stored.
+          description: >
+            Whether the item resolves any front cover, including one
+            inherited from its album, release group, or artist.
+        hasOwnArtwork:
+          type: boolean
+          description: >
+            Whether the item holds its own front cover, as opposed to
+            inheriting one from the entity chain. Lets the editor tell an
+            item-level cover from an inherited one.
         albumPid:
           type: string
           description: The item's album entity, when any.

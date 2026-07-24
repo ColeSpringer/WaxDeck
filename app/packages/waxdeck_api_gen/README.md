@@ -282,6 +282,7 @@ Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
 [*AdminApi*](doc/AdminApi.md) | [**cancelStagedRestore**](doc/AdminApi.md#cancelstagedrestore) | **DELETE** /admin/backups/restore | Cancel the staged restore
 [*AdminApi*](doc/AdminApi.md) | [**createBackup**](doc/AdminApi.md#createbackup) | **POST** /admin/backups | Create a backup now
+[*AdminApi*](doc/AdminApi.md) | [**createLibrary**](doc/AdminApi.md#createlibrary) | **POST** /libraries | Create a library at runtime
 [*AdminApi*](doc/AdminApi.md) | [**createMigration**](doc/AdminApi.md#createmigration) | **POST** /admin/migrations | Import listening state from another server
 [*AdminApi*](doc/AdminApi.md) | [**deleteBackup**](doc/AdminApi.md#deletebackup) | **DELETE** /admin/backups/{backupId} | Delete a backup archive
 [*AdminApi*](doc/AdminApi.md) | [**downloadBackup**](doc/AdminApi.md#downloadbackup) | **GET** /admin/backups/{backupId}/archive | Download a backup archive
@@ -331,8 +332,10 @@ Class | Method | HTTP request | Description
 [*EnrichmentApi*](doc/EnrichmentApi.md) | [**getEnrichmentStatus**](doc/EnrichmentApi.md#getenrichmentstatus) | **GET** /library/enrichment | Enrichment status and coverage
 [*EnrichmentApi*](doc/EnrichmentApi.md) | [**runEnrichment**](doc/EnrichmentApi.md#runenrichment) | **POST** /library/enrichment/run | Run a whole-library enrichment pass
 [*HealthApi*](doc/HealthApi.md) | [**fixHealthIssues**](doc/HealthApi.md#fixhealthissues) | **POST** /library/health/fix | Bulk-fix a health rule
+[*HealthApi*](doc/HealthApi.md) | [**getDiagnosticSummary**](doc/HealthApi.md#getdiagnosticsummary) | **GET** /library/diagnostics/summary | Summarize per-file diagnostics
 [*HealthApi*](doc/HealthApi.md) | [**getLibraryHealth**](doc/HealthApi.md#getlibraryhealth) | **GET** /library/health | Metadata health summary
 [*HealthApi*](doc/HealthApi.md) | [**listDuplicates**](doc/HealthApi.md#listduplicates) | **GET** /library/duplicates | List duplicate entities
+[*HealthApi*](doc/HealthApi.md) | [**listFileDiagnostics**](doc/HealthApi.md#listfilediagnostics) | **GET** /library/diagnostics | Query per-file diagnostics
 [*HealthApi*](doc/HealthApi.md) | [**listHealthIssues**](doc/HealthApi.md#listhealthissues) | **GET** /library/health/issues | List items failing health rules
 [*HealthApi*](doc/HealthApi.md) | [**listUpgrades**](doc/HealthApi.md#listupgrades) | **GET** /library/upgrades | List quality upgrade groups
 [*HealthApi*](doc/HealthApi.md) | [**mergeDuplicates**](doc/HealthApi.md#mergeduplicates) | **POST** /library/duplicates/merge | Merge duplicate entities
@@ -342,6 +345,7 @@ Class | Method | HTTP request | Description
 [*LibraryApi*](doc/LibraryApi.md) | [**deleteLibraryItems**](doc/LibraryApi.md#deletelibraryitems) | **POST** /library/items/delete | Delete library items
 [*LibraryApi*](doc/LibraryApi.md) | [**getItem**](doc/LibraryApi.md#getitem) | **GET** /items/{pid} | Get one item&#39;s detail
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemArt**](doc/LibraryApi.md#getitemart) | **GET** /items/{pid}/art | Get artwork
+[*LibraryApi*](doc/LibraryApi.md) | [**getItemArtRoles**](doc/LibraryApi.md#getitemartroles) | **GET** /items/{pid}/art-roles | List the artwork slots an entity holds
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemLyrics**](doc/LibraryApi.md#getitemlyrics) | **GET** /items/{pid}/lyrics | Get an item&#39;s lyrics
 [*LibraryApi*](doc/LibraryApi.md) | [**listItems**](doc/LibraryApi.md#listitems) | **GET** /library/items | Browse library items
 [*LibraryApi*](doc/LibraryApi.md) | [**search**](doc/LibraryApi.md#search) | **GET** /library/search | Search the library
@@ -414,6 +418,7 @@ Class | Method | HTTP request | Description
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**removePlaylistItemAt**](doc/PlaylistsApi.md#removeplaylistitemat) | **DELETE** /playlists/{pid}/items/{position} | Remove one member by position
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**replacePlaylistItems**](doc/PlaylistsApi.md#replaceplaylistitems) | **PUT** /playlists/{pid}/items | Replace a static playlist&#39;s members
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**updatePlaylist**](doc/PlaylistsApi.md#updateplaylist) | **PATCH** /playlists/{pid} | Update a playlist
+[*PodcastsApi*](doc/PodcastsApi.md) | [**captureEpisodeTranscript**](doc/PodcastsApi.md#captureepisodetranscript) | **POST** /episodes/{pid}/transcript | Capture an episode&#39;s transcript for search
 [*PodcastsApi*](doc/PodcastsApi.md) | [**exportOpml**](doc/PodcastsApi.md#exportopml) | **GET** /podcasts/opml | Export the caller&#39;s subscriptions as OPML
 [*PodcastsApi*](doc/PodcastsApi.md) | [**fetchEpisode**](doc/PodcastsApi.md#fetchepisode) | **POST** /episodes/{pid}/fetch | Fetch an episode&#39;s audio to the server
 [*PodcastsApi*](doc/PodcastsApi.md) | [**getEpisode**](doc/PodcastsApi.md#getepisode) | **GET** /episodes/{pid} | Get one episode&#39;s detail
@@ -507,6 +512,9 @@ Class | Method | HTTP request | Description
  - [AppPasswordCreate](doc/AppPasswordCreate.md)
  - [AppPasswordCreated](doc/AppPasswordCreated.md)
  - [AppPasswordList](doc/AppPasswordList.md)
+ - [ArtRole](doc/ArtRole.md)
+ - [ArtRoleInfo](doc/ArtRoleInfo.md)
+ - [ArtRoles](doc/ArtRoles.md)
  - [AuditEvent](doc/AuditEvent.md)
  - [AuditEventPage](doc/AuditEventPage.md)
  - [Backup](doc/Backup.md)
@@ -539,6 +547,8 @@ Class | Method | HTTP request | Description
  - [DeleteItemsResult](doc/DeleteItemsResult.md)
  - [DeletePlanEntry](doc/DeletePlanEntry.md)
  - [DeviceSession](doc/DeviceSession.md)
+ - [DiagnosticCount](doc/DiagnosticCount.md)
+ - [DiagnosticSummary](doc/DiagnosticSummary.md)
  - [DiscoveryList](doc/DiscoveryList.md)
  - [DownloadFile](doc/DownloadFile.md)
  - [DownloadInfo](doc/DownloadInfo.md)
@@ -567,6 +577,8 @@ Class | Method | HTTP request | Description
  - [Error](doc/Error.md)
  - [FeedPerson](doc/FeedPerson.md)
  - [FieldProvenance](doc/FieldProvenance.md)
+ - [FileDiagnostic](doc/FileDiagnostic.md)
+ - [FileDiagnosticPage](doc/FileDiagnosticPage.md)
  - [Health](doc/Health.md)
  - [HealthFixRequest](doc/HealthFixRequest.md)
  - [HealthFixResult](doc/HealthFixResult.md)
@@ -591,6 +603,7 @@ Class | Method | HTTP request | Description
  - [LastfmConnectStart](doc/LastfmConnectStart.md)
  - [Libraries](doc/Libraries.md)
  - [LibraryAccess](doc/LibraryAccess.md)
+ - [LibraryCreate](doc/LibraryCreate.md)
  - [LibraryMatching](doc/LibraryMatching.md)
  - [LibraryReadOnly](doc/LibraryReadOnly.md)
  - [LinkedIdentity](doc/LinkedIdentity.md)

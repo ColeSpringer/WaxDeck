@@ -485,7 +485,8 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 		pid = a.albums[0].tracks[0].PID
 	}
 	size := formInt(r, "size", 0)
-	blob, err := h.svc.Art(r.Context(), uc, pid, size)
+	// Subsonic has no artwork-slot concept; it always serves the front cover.
+	blob, err := h.svc.Art(r.Context(), uc, pid, "", size)
 	if err != nil {
 		h.fail(w, r, 70, "no such cover")
 		return

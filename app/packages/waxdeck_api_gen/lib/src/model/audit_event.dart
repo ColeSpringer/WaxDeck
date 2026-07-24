@@ -16,7 +16,7 @@ part 'audit_event.g.dart';
 /// * [id] - Opaque event id, unique and time-ordered.
 /// * [actorId] - The acting user's PID; absent for server-initiated actions (scheduled jobs, startup restore). 
 /// * [actorName] - The acting username at the time of the action (kept verbatim if the account is later renamed or deleted). 
-/// * [action] - Dotted action name, resource first: `user.create`, `user.update`, `user.delete`, `user.approve`, `user.reject`, `invite.create`, `invite.revoke`, `playlist.delete`, `items.delete`, `entity.merge`, `trash.restore`, `trash.empty`, `backup.create`, `backup.delete`, `restore.stage`, `restore.apply`, `settings.update`, `schedule.update`, `library.read-only`, `transcoding.update`, `migration.run`, and more as surfaces grow. Open vocabulary; filter by prefix. 
+/// * [action] - Dotted action name, resource first: `user.create`, `user.update`, `user.delete`, `user.approve`, `user.reject`, `invite.create`, `invite.revoke`, `playlist.delete`, `items.delete`, `entity.merge`, `trash.restore`, `trash.empty`, `backup.create`, `backup.delete`, `restore.stage`, `restore.apply`, `settings.update`, `schedule.update`, `library.create`, `library.read-only`, `transcoding.update`, `migration.run`, and more as surfaces grow. Open vocabulary; filter by prefix. 
 /// * [targetKind] - What kind of thing was acted on (`user`, `playlist`, ...).
 /// * [targetPid] - The acted-on resource's PID, when it has one.
 /// * [targetName] - The target's display name at the time of the action (survives the target's deletion). 
@@ -36,7 +36,7 @@ abstract class AuditEvent implements Built<AuditEvent, AuditEventBuilder> {
   @BuiltValueField(wireName: r'actorName')
   String? get actorName;
 
-  /// Dotted action name, resource first: `user.create`, `user.update`, `user.delete`, `user.approve`, `user.reject`, `invite.create`, `invite.revoke`, `playlist.delete`, `items.delete`, `entity.merge`, `trash.restore`, `trash.empty`, `backup.create`, `backup.delete`, `restore.stage`, `restore.apply`, `settings.update`, `schedule.update`, `library.read-only`, `transcoding.update`, `migration.run`, and more as surfaces grow. Open vocabulary; filter by prefix. 
+  /// Dotted action name, resource first: `user.create`, `user.update`, `user.delete`, `user.approve`, `user.reject`, `invite.create`, `invite.revoke`, `playlist.delete`, `items.delete`, `entity.merge`, `trash.restore`, `trash.empty`, `backup.create`, `backup.delete`, `restore.stage`, `restore.apply`, `settings.update`, `schedule.update`, `library.create`, `library.read-only`, `transcoding.update`, `migration.run`, and more as surfaces grow. Open vocabulary; filter by prefix. 
   @BuiltValueField(wireName: r'action')
   String get action;
 

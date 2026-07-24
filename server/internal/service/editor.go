@@ -139,6 +139,7 @@ type ItemMetadataDTO struct {
 	Unofficial      bool
 	VirtualTrack    bool
 	HasArtwork      bool
+	HasOwnArtwork   bool
 	WriteBackIssues []WriteBackIssueDTO
 }
 
@@ -739,7 +740,11 @@ func validateArtworkBytes(raw []byte) error {
 // Force is implied on the catalog write: the caller chose the image, so
 // an existing lock (set by an earlier artwork edit) never blocks the
 // replacement, per the spec's no-silent-downgrade wording.
-func (l *Library) SetItemArtwork(ctx context.Context, uc *UserCtx, apiPID string, raw []byte, writeBack, lock bool) (EditOutcomeDTO, error) {
+func (l *Library) SetItemArtwork(ctx context.Context, uc *UserCtx, apiPID, role string, raw []byte, writeBack, lock bool) (EditOutcomeDTO, error) {
+	art, ok := model.ParseArtRole(role)
+	if !ok {
+		return EditOutcomeDTO{}, errInvalid("unknown art role " + role)
+	}
 	it, err := l.getVisibleItem(ctx, uc, apiPID)
 	if err != nil {
 		return EditOutcomeDTO{}, err
@@ -747,23 +752,31 @@ func (l *Library) SetItemArtwork(ctx context.Context, uc *UserCtx, apiPID string
 	if err := validateArtworkBytes(raw); err != nil {
 		return EditOutcomeDTO{}, err
 	}
+	// Write-back embeds a front cover into the backing files; the auxiliary
+	// slots are catalog-only, so a write-back request on one is ignored.
+	writeBack = writeBack && art == model.ArtRoleFront
 	if writeBack {
 		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
 			return EditOutcomeDTO{}, err
 		}
 	}
-	err = l.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, raw, lock, true, writeBack)
+	err = l.lib.SetItemArt(ctx, it.PID, art, raw, lock, true, writeBack)
 	return editOutcomeFromWriteBack(err)
 }
 
-// ClearItemArtwork removes the stored item art; resolution falls back
-// to the entity chain. Files are untouched.
-func (l *Library) ClearItemArtwork(ctx context.Context, uc *UserCtx, apiPID string) error {
+// ClearItemArtwork removes the stored item art in one slot. A cleared front
+// cover falls back to the entity chain; the other slots have no fallback.
+// Files are untouched.
+func (l *Library) ClearItemArtwork(ctx context.Context, uc *UserCtx, apiPID, role string) error {
+	art, ok := model.ParseArtRole(role)
+	if !ok {
+		return errInvalid("unknown art role " + role)
+	}
 	it, err := l.getVisibleItem(ctx, uc, apiPID)
 	if err != nil {
 		return err
 	}
-	if err := l.lib.SetItemArt(ctx, it.PID, model.ArtRoleFront, nil, false, true, false); err != nil {
+	if err := l.lib.SetItemArt(ctx, it.PID, art, nil, false, true, false); err != nil {
 		return classify(err)
 	}
 	return nil
@@ -828,7 +841,11 @@ func editorEntityPID(entityType, apiEntityPID string) (model.PID, error) {
 // may fan the cover into member files with writeBack; other entity
 // types are catalog-only (the facade treats their write-back as a
 // no-op).
-func (l *Library) SetEntityArtwork(ctx context.Context, entityType, apiEntityPID string, raw []byte, writeBack bool) (EditOutcomeDTO, error) {
+func (l *Library) SetEntityArtwork(ctx context.Context, entityType, apiEntityPID, role string, raw []byte, writeBack bool) (EditOutcomeDTO, error) {
+	art, ok := model.ParseArtRole(role)
+	if !ok {
+		return EditOutcomeDTO{}, errInvalid("unknown art role " + role)
+	}
 	ent, ok := artEntityForType(entityType)
 	if !ok {
 		return EditOutcomeDTO{}, errInvalid("unknown entity type " + entityType)
@@ -840,15 +857,17 @@ func (l *Library) SetEntityArtwork(ctx context.Context, entityType, apiEntityPID
 	if err := validateArtworkBytes(raw); err != nil {
 		return EditOutcomeDTO{}, err
 	}
-	// Entity write-back fans into member files across libraries; the
-	// server-wide flag gates it (per-library precision would need the
-	// member enumeration the facade does internally).
+	// Only a front cover fans into member files; the auxiliary slots are
+	// catalog-only. Entity write-back crosses libraries, so the server-wide
+	// flag gates it (per-library precision would need the member enumeration
+	// the facade does internally).
+	writeBack = writeBack && art == model.ArtRoleFront
 	if writeBack {
 		if err := l.CheckWritable(ctx, ""); err != nil {
 			return EditOutcomeDTO{}, err
 		}
 	}
-	err = l.lib.SetEntityArt(ctx, ent, pid, model.ArtRoleFront, raw, writeBack)
+	err = l.lib.SetEntityArt(ctx, ent, pid, art, raw, writeBack)
 	return editOutcomeFromWriteBack(err)
 }
 
@@ -1109,15 +1128,17 @@ func (l *Library) ItemMetadataFor(ctx context.Context, uc *UserCtx, apiPID strin
 		return ItemMetadataDTO{}, classify(err)
 	}
 
-	// The facade resolves art through the entity fallback chain, so an
-	// item with only inherited album art also reads true; a level-scoped
-	// art read does not exist upstream.
+	// The facade resolves art through the entity fallback chain, so an item
+	// with only inherited album art reads HasArtwork true. Level names which
+	// chain level answered, so HasOwnArtwork isolates the item's own cover
+	// from an inherited one for the editor's has-artwork indicator.
 	ref := model.EntityRef{Type: model.ArtTrack, PID: it.PID}
 	if it.Kind == model.KindEpisode {
 		ref.Type = model.ArtEpisode
 	}
 	if blob, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, 64); err == nil && blob != nil {
 		out.HasArtwork = true
+		out.HasOwnArtwork = blob.Level == ref.Type && !blob.Derived
 	}
 	return out, nil
 }

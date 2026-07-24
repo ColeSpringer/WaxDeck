@@ -32,6 +32,8 @@ class _$ItemMetadata extends ItemMetadata {
   @override
   final bool hasArtwork;
   @override
+  final bool hasOwnArtwork;
+  @override
   final String? albumPid;
   @override
   final String? artistPid;
@@ -56,6 +58,7 @@ class _$ItemMetadata extends ItemMetadata {
     required this.unofficial,
     required this.virtualTrack,
     required this.hasArtwork,
+    required this.hasOwnArtwork,
     this.albumPid,
     this.artistPid,
     this.releaseGroupPid,
@@ -84,6 +87,7 @@ class _$ItemMetadata extends ItemMetadata {
         unofficial == other.unofficial &&
         virtualTrack == other.virtualTrack &&
         hasArtwork == other.hasArtwork &&
+        hasOwnArtwork == other.hasOwnArtwork &&
         albumPid == other.albumPid &&
         artistPid == other.artistPid &&
         releaseGroupPid == other.releaseGroupPid &&
@@ -105,6 +109,7 @@ class _$ItemMetadata extends ItemMetadata {
     _$hash = $jc(_$hash, unofficial.hashCode);
     _$hash = $jc(_$hash, virtualTrack.hashCode);
     _$hash = $jc(_$hash, hasArtwork.hashCode);
+    _$hash = $jc(_$hash, hasOwnArtwork.hashCode);
     _$hash = $jc(_$hash, albumPid.hashCode);
     _$hash = $jc(_$hash, artistPid.hashCode);
     _$hash = $jc(_$hash, releaseGroupPid.hashCode);
@@ -128,6 +133,7 @@ class _$ItemMetadata extends ItemMetadata {
           ..add('unofficial', unofficial)
           ..add('virtualTrack', virtualTrack)
           ..add('hasArtwork', hasArtwork)
+          ..add('hasOwnArtwork', hasOwnArtwork)
           ..add('albumPid', albumPid)
           ..add('artistPid', artistPid)
           ..add('releaseGroupPid', releaseGroupPid)
@@ -197,6 +203,11 @@ class ItemMetadataBuilder
   bool? get hasArtwork => _$this._hasArtwork;
   set hasArtwork(bool? hasArtwork) => _$this._hasArtwork = hasArtwork;
 
+  bool? _hasOwnArtwork;
+  bool? get hasOwnArtwork => _$this._hasOwnArtwork;
+  set hasOwnArtwork(bool? hasOwnArtwork) =>
+      _$this._hasOwnArtwork = hasOwnArtwork;
+
   String? _albumPid;
   String? get albumPid => _$this._albumPid;
   set albumPid(String? albumPid) => _$this._albumPid = albumPid;
@@ -235,6 +246,7 @@ class ItemMetadataBuilder
       _unofficial = $v.unofficial;
       _virtualTrack = $v.virtualTrack;
       _hasArtwork = $v.hasArtwork;
+      _hasOwnArtwork = $v.hasOwnArtwork;
       _albumPid = $v.albumPid;
       _artistPid = $v.artistPid;
       _releaseGroupPid = $v.releaseGroupPid;
@@ -294,6 +306,11 @@ class ItemMetadataBuilder
               hasArtwork,
               r'ItemMetadata',
               'hasArtwork',
+            ),
+            hasOwnArtwork: BuiltValueNullFieldError.checkNotNull(
+              hasOwnArtwork,
+              r'ItemMetadata',
+              'hasOwnArtwork',
             ),
             albumPid: albumPid,
             artistPid: artistPid,

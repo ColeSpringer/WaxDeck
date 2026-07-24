@@ -260,6 +260,23 @@ func (s *Server) GetEpisodeTranscript(ctx context.Context, req GetEpisodeTranscr
 	return GetEpisodeTranscript200JSONResponse(out), nil
 }
 
+func (s *Server) CaptureEpisodeTranscript(ctx context.Context, req CaptureEpisodeTranscriptRequestObject) (CaptureEpisodeTranscriptResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.CaptureEpisodeTranscript(ctx, uc, req.Pid); err != nil {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
+			return CaptureEpisodeTranscript404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+		case service.KindUpstream:
+			return CaptureEpisodeTranscript502JSONResponse{FeedUnreachableJSONResponse(errObj("feed-unreachable", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return CaptureEpisodeTranscript204Response{}, nil
+}
+
 func (s *Server) RefreshPodcast(ctx context.Context, req RefreshPodcastRequestObject) (RefreshPodcastResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {

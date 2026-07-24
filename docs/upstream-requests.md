@@ -31,14 +31,6 @@ sidecar injection seam) all landed and are not repeated here.
   attributed to library roots, so users restricted to a subset of
   roots lose entity search entirely (docs/adr/0004). WaxDeck filters
   at the item level and hides entity surfaces from restricted users.
-- **More than one artwork slot.** Item and entity art hold a single
-  front cover; back covers, disc art, booklets, and artist
-  backgrounds have nowhere canonical to land, so WaxDeck's provider
-  chain can only fill the one slot.
-- **A query surface for per-file diagnostics.** Persisted diagnostics
-  are readable only through per-item Audit checks; the health
-  dashboard wants to query and facet them across the library instead
-  of sweeping item by item.
 - **Entity facets in the item query grammar.** Items cannot be
   filtered by artist or album entity pid, only by display string,
   which is why the Subsonic surface mints its artist and album ids
@@ -50,27 +42,6 @@ sidecar injection seam) all landed and are not repeated here.
   today only through a full artist facet scan that maps pid to
   display name; an entity lookup or entity-pid filter retires that
   scan too.
-- **Runtime library-root addition.** Roots are fixed at Open
-  (RelocateRoot exists for moving one, nothing adds one), so creating
-  a new library today means editing the server's root flags and
-  restarting; the admin-and-ops slice wants an admin creating a
-  library at runtime. The streaming sidecar's matching root config
-  has the same shape, so this ask spans both repos if it lands.
-- **A level-scoped artwork read.** ResolveArt walks the fallback chain
-  (item, album, release group, artist), so a caller cannot tell
-  item-own art from inherited art; the editor's has-artwork indicator
-  and the health sweep's missing-art rule both read true for an item
-  whose album carries the only cover. A read that reports which level
-  supplied the bytes (or an item-only probe) would make both honest.
-- **Transcript capture at feed sync, or a facade transcript write.**
-  The catalog stores search-reduced transcript text only when an
-  episode is downloaded, and the facade exports no transcript write,
-  so episodes WaxDeck streams (and fetches time-coded cues for, into
-  its transcript_cache) never enter transcript search. Either
-  capturing transcripts at feed sync or exposing a write would let
-  transcript search cover what listeners actually played. WaxDeck's
-  cues cache is the wrong source to promote wholesale (cue JSON, not
-  search text), so today the gap simply stands.
 - **As-of timestamp on play-state mutations.** The per-field
   `StarredChangedAt`/`RatingChangedAt` stamps landed (retiring the
   earlier `UpdatedAt`/`StarredAt` request), but `SetStar`/`SetRating`
@@ -86,6 +57,19 @@ sidecar injection seam) all landed and are not repeated here.
   with the catalog stamp only where the mirror is silent: conservative-
   safe (it never resurrects an undone state) but it skips a legitimately
   newer replay when an out-of-band change intervened.
+
+## WaxFlow
+
+- **Runtime root configuration in the streaming sidecar.** WaxDeck now
+  adds a library root at runtime through WaxBin `AddRoot`, and the
+  catalog scans it so browsing and downloading its files work at once.
+  But the streaming sidecar (`waxflow-catalog`) mounts its roots from
+  startup configuration and re-reads them only on restart, so a stream
+  request for a file under a runtime-added root fails until the sidecar
+  restarts. A reload endpoint or a config watch on the sidecar would let
+  a runtime-added root stream without downtime. Until then WaxDeck serves
+  the new root's files by direct download and documents the restart the
+  streaming path needs.
 
 ## Recorded upstream non-goals
 

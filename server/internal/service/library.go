@@ -144,8 +144,13 @@ type Library struct {
 	lib   *waxbin.Library
 	paths *pidpath.Cache
 	db    *wdb.DB
-	roots []Root
-	log   *slog.Logger
+	// roots is the service's own root table (name, path, managed policy),
+	// seeded from config and grown at runtime by AddLibrary. rootsMu guards
+	// it; AddLibrary replaces the slice copy-on-write so a reader holding an
+	// old snapshot stays consistent. Read it through libraryRoots().
+	roots   []Root
+	rootsMu sync.RWMutex
+	log     *slog.Logger
 	// libDirs caches path-to-library attribution for visibility checks.
 	libDirs libraryDirs
 	// procCtx outlives any one request: async catalog jobs launch on it

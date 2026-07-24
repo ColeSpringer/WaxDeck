@@ -216,31 +216,16 @@ var artMimes = map[string]string{
 // served without an attribution check (entities span libraries and
 // PIDs are unguessable ULIDs; restricted users never discover them
 // through listings, which are filtered).
-func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID string, size int) (ArtBlob, error) {
-	prefix, pid, ok := parseAPIPID(apiPID)
+func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID, role string, size int) (ArtBlob, error) {
+	art, ok := model.ParseArtRole(role)
 	if !ok {
-		return ArtBlob{}, errNotFound("no artwork for pid " + apiPID)
+		return ArtBlob{}, errInvalid("unknown art role " + role)
 	}
-	var ref model.EntityRef
-	switch {
-	case prefix == PrefixAlbum:
-		ref = model.EntityRef{Type: model.ArtAlbum, PID: pid}
-	case prefix == PrefixArtist:
-		ref = model.EntityRef{Type: model.ArtArtist, PID: pid}
-	case itemPrefix(prefix):
-		it, err := l.getVisibleItem(ctx, uc, apiPID)
-		if err != nil {
-			return ArtBlob{}, err
-		}
-		entity := model.ArtTrack
-		if it.Kind == model.KindEpisode {
-			entity = model.ArtEpisode
-		}
-		ref = model.EntityRef{Type: entity, PID: it.PID}
-	default:
-		return ArtBlob{}, errNotFound("no artwork for pid " + apiPID)
+	ref, err := l.artRef(ctx, uc, apiPID)
+	if err != nil {
+		return ArtBlob{}, err
 	}
-	blob, err := l.lib.ResolveArt(ctx, ref, model.ArtRoleFront, size)
+	blob, err := l.lib.ResolveArt(ctx, ref, art, size)
 	if err != nil {
 		return ArtBlob{}, classify(err)
 	}
@@ -249,6 +234,72 @@ func (l *Library) Art(ctx context.Context, uc *UserCtx, apiPID string, size int)
 		mime = "image/jpeg"
 	}
 	return ArtBlob{Bytes: blob.Bytes, MimeType: mime, SourceHash: blob.SourceHash}, nil
+}
+
+// artRef resolves an art read/roles pid to its entity ref. Item PIDs honor
+// library visibility; album, artist, and podcast-show PIDs resolve without an
+// attribution check (entities span libraries, their PIDs are unguessable
+// ULIDs, and restricted users never surface them through filtered listings).
+func (l *Library) artRef(ctx context.Context, uc *UserCtx, apiPID string) (model.EntityRef, error) {
+	prefix, pid, ok := parseAPIPID(apiPID)
+	if !ok {
+		return model.EntityRef{}, errNotFound("no artwork for pid " + apiPID)
+	}
+	switch {
+	case prefix == PrefixAlbum:
+		return model.EntityRef{Type: model.ArtAlbum, PID: pid}, nil
+	case prefix == PrefixArtist:
+		return model.EntityRef{Type: model.ArtArtist, PID: pid}, nil
+	case prefix == PrefixPodcast:
+		// A podcast show is not a catalog item, so it resolves to its own art
+		// level directly (its feed image), like album and artist entities.
+		return model.EntityRef{Type: model.ArtPodcast, PID: pid}, nil
+	case itemPrefix(prefix):
+		it, err := l.getVisibleItem(ctx, uc, apiPID)
+		if err != nil {
+			return model.EntityRef{}, err
+		}
+		entity := model.ArtTrack
+		if it.Kind == model.KindEpisode {
+			entity = model.ArtEpisode
+		}
+		return model.EntityRef{Type: entity, PID: it.PID}, nil
+	default:
+		return model.EntityRef{}, errNotFound("no artwork for pid " + apiPID)
+	}
+}
+
+// ArtRoleInfoDTO is one artwork slot an entity holds at its own level.
+type ArtRoleInfoDTO struct {
+	Role   string
+	Format string
+	Width  int
+	Height int
+}
+
+// ItemArtRoles lists the artwork slots an entity holds at its own level
+// (not inherited from the album/artist chain), the own-versus-inherited
+// signal the front-cover read cannot give. Accepts item, album, and artist
+// PIDs like Art.
+func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) ([]ArtRoleInfoDTO, error) {
+	ref, err := l.artRef(ctx, uc, apiPID)
+	if err != nil {
+		return nil, err
+	}
+	infos, err := l.lib.ArtRoles(ctx, ref)
+	if err != nil {
+		return nil, classify(err)
+	}
+	out := make([]ArtRoleInfoDTO, 0, len(infos))
+	for _, i := range infos {
+		out = append(out, ArtRoleInfoDTO{
+			Role:   string(i.Role),
+			Format: i.Format,
+			Width:  i.Width,
+			Height: i.Height,
+		})
+	}
+	return out, nil
 }
 
 // ItemLyrics returns the item's lyrics; not-found when it has none.

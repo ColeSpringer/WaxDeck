@@ -382,10 +382,13 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 	if err != nil {
 		return nil, err
 	}
-	blob, err := s.svc.Art(ctx, uc, req.Pid, size)
+	blob, err := s.svc.Art(ctx, uc, req.Pid, enumStr(req.Params.Role), size)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
 			return GetItemArt404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artwork for pid "+req.Pid))}, nil
+		case service.KindInvalid:
+			return GetItemArt400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 		}
 		return nil, err
 	}
@@ -408,6 +411,29 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 	default:
 		return GetItemArt200ImagejpegResponse{Body: body, ContentLength: length, Headers: headers}, nil
 	}
+}
+
+func (s *Server) GetItemArtRoles(ctx context.Context, req GetItemArtRolesRequestObject) (GetItemArtRolesResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	infos, err := s.svc.ItemArtRoles(ctx, uc, req.Pid)
+	if err != nil {
+		if service.KindOf(err) == service.KindNotFound {
+			return GetItemArtRoles404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artwork for pid "+req.Pid))}, nil
+		}
+		return nil, err
+	}
+	out := ArtRoles{Roles: make([]ArtRoleInfo, 0, len(infos))}
+	for _, i := range infos {
+		info := ArtRoleInfo{Role: ArtRole(i.Role), Width: ptr(i.Width), Height: ptr(i.Height)}
+		if i.Format != "" {
+			info.Format = ptr(i.Format)
+		}
+		out.Roles = append(out.Roles, info)
+	}
+	return GetItemArtRoles200JSONResponse(out), nil
 }
 
 func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObject) (GetItemLyricsResponseObject, error) {

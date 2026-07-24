@@ -2089,6 +2089,23 @@ class WriteBackIssue {
   final String? detail;
 }
 
+/// One artwork slot an item, album, or artist holds at its own level.
+class ArtRoleInfo {
+  const ArtRoleInfo({required this.role, this.format, this.width, this.height});
+
+  /// The slot: `front`, `back`, `disc`, `booklet`, or `background`.
+  final String role;
+
+  /// The stored image format (`jpeg`, `png`, `webp`, `gif`), when known.
+  final String? format;
+
+  /// Pixel width, when the image decoded.
+  final int? width;
+
+  /// Pixel height, when the image decoded.
+  final int? height;
+}
+
 /// Everything the metadata editor shows for one item.
 class ItemMetadata {
   const ItemMetadata({
@@ -2104,6 +2121,7 @@ class ItemMetadata {
     this.unofficial = false,
     this.virtualTrack = false,
     this.hasArtwork = false,
+    this.hasOwnArtwork = false,
     this.albumPid,
     this.artistPid,
     this.releaseGroupPid,
@@ -2124,7 +2142,14 @@ class ItemMetadata {
   /// True for tracks carved out of a larger file (CUE-backed), which
   /// never write back.
   final bool virtualTrack;
+
+  /// Whether the item resolves any front cover, including one inherited
+  /// from its album, release group, or artist.
   final bool hasArtwork;
+
+  /// Whether the item holds its own front cover rather than inheriting one
+  /// from the entity chain.
+  final bool hasOwnArtwork;
   final String? albumPid;
   final String? artistPid;
   final String? releaseGroupPid;
@@ -2292,6 +2317,67 @@ class HealthIssuePage {
   final String? nextCursor;
 
   bool get hasMore => nextCursor != null;
+}
+
+/// One persisted per-file diagnostic (what scan, organize, replaygain, or
+/// tag write-back recorded about a file), keyed for display by its path.
+class FileDiagnostic {
+  const FileDiagnostic({
+    required this.path,
+    required this.origin,
+    required this.code,
+    required this.severity,
+    required this.seenAt,
+    this.tagKey,
+    this.detail,
+  });
+
+  /// The file's display path.
+  final String path;
+
+  /// The writer that recorded it (`scan`, `organize`, `replaygain`, `edit`).
+  final String origin;
+
+  /// What was observed (`unsupported_format`, `corrupt_audio`, ...).
+  final String code;
+
+  /// `info`, `warn`, or `error`.
+  final String severity;
+
+  /// When the diagnostic was last recorded.
+  final DateTime seenAt;
+
+  /// The tag key a key-specific diagnostic concerns, when any.
+  final String? tagKey;
+
+  /// The writer's own note, when it carries one.
+  final String? detail;
+}
+
+/// One page of per-file diagnostics.
+class FileDiagnosticPage {
+  const FileDiagnosticPage({required this.diagnostics, this.nextCursor});
+
+  final List<FileDiagnostic> diagnostics;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
+/// One grouped bucket of the diagnostic summary: how many diagnostics one
+/// writer recorded under one code and severity.
+class DiagnosticCount {
+  const DiagnosticCount({
+    required this.origin,
+    required this.code,
+    required this.severity,
+    required this.count,
+  });
+
+  final String origin;
+  final String code;
+  final String severity;
+  final int count;
 }
 
 /// One entity in a duplicate group.

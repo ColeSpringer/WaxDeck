@@ -379,6 +379,34 @@ paths:
           $ref: "#/components/responses/FeedUnreachable"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
+    post:
+      operationId: captureEpisodeTranscript
+      summary: Capture an episode's transcript for search
+      description: >
+        Fetches the episode's announced transcript and indexes its text so
+        the episode turns up in transcript search, without downloading the
+        audio. This covers an episode a listener streams but never
+        downloads; a downloaded episode already indexes its transcript, and
+        an already-indexed one is a no-op success. 404 when the episode
+        announces no transcript; a pointer that exists but cannot be fetched
+        or parsed answers `feed-unreachable`, so clients retry later instead
+        of recording a false absence. Distinct from the time-coded cue
+        transcript the read endpoint serves for display: this indexes
+        search text only.
+      tags: [podcasts]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "204":
+          description: The transcript is indexed for search.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/FeedUnreachable"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
 
   /episodes/{pid}/fetch:
     post:

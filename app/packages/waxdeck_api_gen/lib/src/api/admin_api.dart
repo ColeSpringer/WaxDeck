@@ -18,8 +18,10 @@ import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/job.dart';
 import 'package:waxdeck_api_gen/src/model/job_list.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
+import 'package:waxdeck_api_gen/src/model/library_create.dart';
 import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/migration_create.dart';
+import 'package:waxdeck_api_gen/src/model/model_library.dart';
 import 'package:waxdeck_api_gen/src/model/restore_plan.dart';
 import 'package:waxdeck_api_gen/src/model/schedule.dart';
 import 'package:waxdeck_api_gen/src/model/schedule_kind.dart';
@@ -170,6 +172,112 @@ class AdminApi {
     }
 
     return Response<Backup>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Create a library at runtime
+  /// Registers a new library root without a server restart. The path is validated (absolute, and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that. &#x60;name&#x60; is the display name and the WaxFlow root name the same directory is served under. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [libraryCreate] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ModelLibrary] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ModelLibrary>> createLibrary({ 
+    required LibraryCreate libraryCreate,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/libraries';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(LibraryCreate);
+      _bodyData = _serializers.serialize(libraryCreate, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ModelLibrary? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ModelLibrary),
+      ) as ModelLibrary;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ModelLibrary>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

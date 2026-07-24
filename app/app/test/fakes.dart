@@ -115,6 +115,7 @@ class FakeRepository implements WaxDeckRepository {
   final List<({String pid, SubscriptionSettings settings})>
   putSubscriptionSettingsCalls = [];
   final List<String> fetchEpisodeCalls = [];
+  final List<String> captureTranscriptCalls = [];
   final List<
     ({String endpointId, List<String> itemPids, int index, int positionMs})
   >
@@ -699,6 +700,11 @@ class FakeRepository implements WaxDeckRepository {
       );
     }
     return transcript;
+  }
+
+  @override
+  Future<void> captureEpisodeTranscript(String pid) async {
+    captureTranscriptCalls.add(pid);
   }
 
   @override
@@ -1756,6 +1762,22 @@ class FakeRepository implements WaxDeckRepository {
       List.unmodifiable(libraries);
 
   @override
+  Future<LibraryInfo> createLibrary({
+    required String name,
+    required String path,
+    String? media,
+    bool? managed,
+  }) async {
+    final info = LibraryInfo(
+      pid: 'lb-${libraries.length + 1}',
+      name: name,
+      media: media ?? 'mixed',
+    );
+    libraries.add(info);
+    return info;
+  }
+
+  @override
   Future<String> getLibraryMatching(String libraryPid) async =>
       matchingModes[libraryPid] ?? 'auto';
 
@@ -2007,6 +2029,7 @@ class FakeRepository implements WaxDeckRepository {
   final Map<String, Map<String, List<String>>> tagsByPid = {};
   final Map<String, List<ChapterEdit>> chapterEditsByPid = {};
   final Set<String> artworkPids = {};
+  final Set<String> ownArtworkPids = {};
   final Set<String> unofficialPids = {};
 
   /// Entity curation by `entityType/entityPid`.
@@ -2078,7 +2101,8 @@ class FakeRepository implements WaxDeckRepository {
           CustomTag(key: entry.key, values: entry.value),
       ],
       unofficial: unofficialPids.contains(pid),
-      hasArtwork: artworkPids.contains(pid),
+      hasArtwork: artworkPids.contains(pid) || ownArtworkPids.contains(pid),
+      hasOwnArtwork: ownArtworkPids.contains(pid),
     );
   }
 
@@ -2185,10 +2209,17 @@ class FakeRepository implements WaxDeckRepository {
     return const MetadataEditResult(applied: true);
   }
 
+  final List<ArtRoleInfo> artRoles = [];
+
+  @override
+  Future<List<ArtRoleInfo>> getItemArtRoles(String pid) async =>
+      List.unmodifiable(artRoles);
+
   @override
   Future<MetadataEditResult> setItemArtwork(
     String pid, {
     required Uint8List bytes,
+    String role = 'front',
     bool writeBack = false,
     bool lock = true,
   }) async {
@@ -2199,7 +2230,7 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<void> clearItemArtwork(String pid) async {
+  Future<void> clearItemArtwork(String pid, {String role = 'front'}) async {
     artworkPids.remove(pid);
   }
 
@@ -2208,6 +2239,7 @@ class FakeRepository implements WaxDeckRepository {
     String entityType,
     String entityPid, {
     required Uint8List bytes,
+    String role = 'front',
     bool writeBack = false,
   }) async {
     final error = metadataError;
@@ -2346,6 +2378,8 @@ class FakeRepository implements WaxDeckRepository {
   List<UpgradeGroup> upgradeGroups = const [];
   final List<({String keepItemPid, List<String> removeItemPids})>
   resolveUpgradeCalls = [];
+  final List<FileDiagnostic> fileDiagnostics = [];
+  final List<DiagnosticCount> diagnosticCounts = [];
 
   @override
   Future<HealthSummary> getLibraryHealth() async {
@@ -2373,6 +2407,31 @@ class FakeRepository implements WaxDeckRepository {
       nextCursor: end < filtered.length ? '$end' : null,
     );
   }
+
+  @override
+  Future<FileDiagnosticPage> listFileDiagnostics({
+    String? origin,
+    String? code,
+    String? severity,
+    String? library,
+    String? cursor,
+    int? limit,
+  }) async {
+    final filtered = fileDiagnostics
+        .where((d) => origin == null || d.origin == origin)
+        .where((d) => code == null || d.code == code)
+        .where((d) => severity == null || d.severity == severity)
+        .toList();
+    return FileDiagnosticPage(diagnostics: filtered);
+  }
+
+  @override
+  Future<List<DiagnosticCount>> getDiagnosticSummary({
+    String? origin,
+    String? code,
+    String? severity,
+    String? library,
+  }) async => List.unmodifiable(diagnosticCounts);
 
   @override
   Future<void> sweepLibraryHealth() async {

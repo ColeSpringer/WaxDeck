@@ -21,6 +21,9 @@ import 'package:waxdeck_api_gen/src/model/app_password.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_create.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_created.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_list.dart';
+import 'package:waxdeck_api_gen/src/model/art_role.dart';
+import 'package:waxdeck_api_gen/src/model/art_role_info.dart';
+import 'package:waxdeck_api_gen/src/model/art_roles.dart';
 import 'package:waxdeck_api_gen/src/model/audit_event.dart';
 import 'package:waxdeck_api_gen/src/model/audit_event_page.dart';
 import 'package:waxdeck_api_gen/src/model/backup.dart';
@@ -53,6 +56,8 @@ import 'package:waxdeck_api_gen/src/model/delete_items_request.dart';
 import 'package:waxdeck_api_gen/src/model/delete_items_result.dart';
 import 'package:waxdeck_api_gen/src/model/delete_plan_entry.dart';
 import 'package:waxdeck_api_gen/src/model/device_session.dart';
+import 'package:waxdeck_api_gen/src/model/diagnostic_count.dart';
+import 'package:waxdeck_api_gen/src/model/diagnostic_summary.dart';
 import 'package:waxdeck_api_gen/src/model/discovery_list.dart';
 import 'package:waxdeck_api_gen/src/model/download_file.dart';
 import 'package:waxdeck_api_gen/src/model/download_info.dart';
@@ -81,6 +86,8 @@ import 'package:waxdeck_api_gen/src/model/episode_summary.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/feed_person.dart';
 import 'package:waxdeck_api_gen/src/model/field_provenance.dart';
+import 'package:waxdeck_api_gen/src/model/file_diagnostic.dart';
+import 'package:waxdeck_api_gen/src/model/file_diagnostic_page.dart';
 import 'package:waxdeck_api_gen/src/model/health.dart';
 import 'package:waxdeck_api_gen/src/model/health_fix_request.dart';
 import 'package:waxdeck_api_gen/src/model/health_fix_result.dart';
@@ -105,6 +112,7 @@ import 'package:waxdeck_api_gen/src/model/kind_fields.dart';
 import 'package:waxdeck_api_gen/src/model/lastfm_connect_start.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
 import 'package:waxdeck_api_gen/src/model/library_access.dart';
+import 'package:waxdeck_api_gen/src/model/library_create.dart';
 import 'package:waxdeck_api_gen/src/model/library_matching.dart';
 import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/linked_identity.dart';
@@ -322,6 +330,9 @@ part 'serializers.g.dart';
   AppPasswordCreate,
   AppPasswordCreated,
   AppPasswordList,
+  ArtRole,
+  ArtRoleInfo,
+  ArtRoles,
   AuditEvent,
   AuditEventPage,
   Backup,
@@ -354,6 +365,8 @@ part 'serializers.g.dart';
   DeleteItemsResult,
   DeletePlanEntry,
   DeviceSession,
+  DiagnosticCount,
+  DiagnosticSummary,
   DiscoveryList,
   DownloadFile,
   DownloadInfo,
@@ -382,6 +395,8 @@ part 'serializers.g.dart';
   Error,
   FeedPerson,
   FieldProvenance,
+  FileDiagnostic,
+  FileDiagnosticPage,
   Health,
   HealthFixRequest,
   HealthFixResult,
@@ -406,6 +421,7 @@ part 'serializers.g.dart';
   LastfmConnectStart,
   Libraries,
   LibraryAccess,
+  LibraryCreate,
   LibraryMatching,
   LibraryReadOnly,
   LinkedIdentity,

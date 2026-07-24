@@ -46,6 +46,10 @@ void main() {
 
     expect(find.text('0:30'), findsOneWidget);
     expect(find.text('Welcome back to the inn'), findsOneWidget);
+
+    // Opening the transcript also indexes it for search (streamed episodes
+    // become findable by their words), fired once.
+    expect(repo.captureTranscriptCalls, [episodePid]);
   });
 
   testWidgets('a cue tap without a matching player shows the timestamp', (

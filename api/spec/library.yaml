@@ -178,6 +178,15 @@ paths:
       tags: [library]
       parameters:
         - $ref: "#/components/parameters/Pid"
+        - name: role
+          in: query
+          description: >
+            Which artwork slot to read. Only `front` (the default) walks the
+            album/artist fallback chain; `back`, `disc`, `booklet`, and
+            `background` resolve at the requested entity's own level and 404
+            when that entity holds no image in the slot.
+          schema:
+            $ref: "#/components/schemas/ArtRole"
         - name: size
           in: query
           description: >
@@ -221,6 +230,36 @@ paths:
           description: The cached copy is still current.
         "400":
           $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/art-roles:
+    get:
+      operationId: getItemArtRoles
+      summary: List the artwork slots an entity holds
+      description: >
+        The artwork slots present at the entity's own level, not inherited
+        from the album or artist chain, each with its stored format and pixel
+        dimensions (0 when the image was not decodable). Besides item PIDs
+        this accepts album (`al-`), artist (`ar-`), and podcast show (`pc-`)
+        PIDs. It answers the own-versus-inherited question a front-cover read
+        cannot: an item that lists a `front` slot here holds its own cover,
+        while one that resolves art only through `/items/{pid}/art` inherits
+        it from the chain.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The slots the entity holds at its own level.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtRoles"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -462,3 +501,30 @@ components:
           type: integer
           format: int64
           description: Bytes reclaimed (or to reclaim).
+
+    ArtRoleInfo:
+      type: object
+      description: One artwork slot an entity holds at its own level.
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/ArtRole"
+        format:
+          type: string
+          description: The stored image format (`jpeg`, `png`, `webp`, `gif`).
+        width:
+          type: integer
+          description: Pixel width, 0 when the image was not decodable.
+        height:
+          type: integer
+          description: Pixel height, 0 when the image was not decodable.
+
+    ArtRoles:
+      type: object
+      description: The artwork slots an entity holds at its own level.
+      required: [roles]
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArtRoleInfo"

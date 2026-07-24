@@ -23,6 +23,30 @@ FakeRepository _repo() {
 }
 
 void main() {
+  testWidgets('the artwork card distinguishes own from inherited cover', (
+    tester,
+  ) async {
+    // No cover.
+    await tester.pumpWidget(_host(_repo()));
+    await tester.pumpAndSettle();
+    expect(find.text('No cover'), findsOneWidget);
+
+    // Inherited cover (resolves art, but not its own).
+    final inherited = _repo()..artworkPids.add('tr-1');
+    await tester.pumpWidget(_host(inherited));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Inherits a cover from its album or artist'),
+      findsOneWidget,
+    );
+
+    // Its own cover.
+    final own = _repo()..ownArtworkPids.add('tr-1');
+    await tester.pumpWidget(_host(own));
+    await tester.pumpAndSettle();
+    expect(find.text('Has its own cover'), findsOneWidget);
+  });
+
   testWidgets('builds the field form from the kind vocabulary', (tester) async {
     await tester.pumpWidget(_host(_repo()));
     await tester.pumpAndSettle();

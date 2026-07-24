@@ -270,6 +270,7 @@ void main() {
             ..unofficial = false
             ..virtualTrack = true
             ..hasArtwork = true
+            ..hasOwnArtwork = true
             ..albumPid = 'al-01JZX5N8QW3F4V9T2B7KDALBUM'
             ..artistPid = 'ar-01JZX5N8QW3F4V9T2B7KDARTIST'
             ..writeBackIssues.add(
@@ -315,7 +316,8 @@ void main() {
             ..mediaType = gen.MediaType.music
             ..unofficial = false
             ..virtualTrack = false
-            ..hasArtwork = false,
+            ..hasArtwork = false
+            ..hasOwnArtwork = false,
         ),
       );
       expect(meta.fields, isEmpty);

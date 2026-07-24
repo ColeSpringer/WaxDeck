@@ -92,6 +92,7 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 		Unofficial:      d.Unofficial,
 		VirtualTrack:    d.VirtualTrack,
 		HasArtwork:      d.HasArtwork,
+		HasOwnArtwork:   d.HasOwnArtwork,
 		WriteBackIssues: make([]WriteBackIssue, 0, len(d.WriteBackIssues)),
 	}
 	for _, p := range d.Provenance {
@@ -369,11 +370,15 @@ func (s *Server) SetItemArtwork(ctx context.Context, req SetItemArtworkRequestOb
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return SetItemArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
 	}
+	// Reject a bad role before buffering up to 16 MiB of image body.
+	if req.Params.Role != nil && !req.Params.Role.Valid() {
+		return SetItemArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown art role"))}, nil
+	}
 	raw, err := readArtworkBody(req.Body)
 	if err != nil {
 		return SetItemArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "reading the image body failed"))}, nil
 	}
-	out, err := s.svc.SetItemArtwork(ctx, uc, req.Pid, raw,
+	out, err := s.svc.SetItemArtwork(ctx, uc, req.Pid, enumStr(req.Params.Role), raw,
 		derefBool(req.Params.WriteBack), boolOr(req.Params.Lock, true))
 	if err != nil {
 		switch service.KindOf(err) {
@@ -399,9 +404,12 @@ func (s *Server) ClearItemArtwork(ctx context.Context, req ClearItemArtworkReque
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return ClearItemArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
 	}
-	if err := s.svc.ClearItemArtwork(ctx, uc, req.Pid); err != nil {
-		if service.KindOf(err) == service.KindNotFound {
+	if err := s.svc.ClearItemArtwork(ctx, uc, req.Pid, enumStr(req.Params.Role)); err != nil {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
 			return ClearItemArtwork404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		case service.KindInvalid:
+			return ClearItemArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 		}
 		return nil, err
 	}
@@ -416,11 +424,15 @@ func (s *Server) SetEntityArtwork(ctx context.Context, req SetEntityArtworkReque
 	if !uc.Admin {
 		return SetEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
+	// Reject a bad role before buffering up to 16 MiB of image body.
+	if req.Params.Role != nil && !req.Params.Role.Valid() {
+		return SetEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown art role"))}, nil
+	}
 	raw, err := readArtworkBody(req.Body)
 	if err != nil {
 		return SetEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "reading the image body failed"))}, nil
 	}
-	out, err := s.svc.SetEntityArtwork(ctx, string(req.EntityType), req.EntityPid, raw,
+	out, err := s.svc.SetEntityArtwork(ctx, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), raw,
 		derefBool(req.Params.WriteBack))
 	if err != nil {
 		switch service.KindOf(err) {

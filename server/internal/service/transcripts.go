@@ -102,6 +102,45 @@ func (l *Library) Transcript(ctx context.Context, uc *UserCtx, apiEpisodePID str
 	return tx, nil
 }
 
+// CaptureEpisodeTranscript indexes a streamed episode's transcript for
+// search. A downloaded episode already indexes its transcript on fetch, and
+// an already-indexed one is a no-op; otherwise the announced transcript is
+// pulled through the engine (no audio download) and its text indexed. This
+// is the search-side companion to the display cue transcript above: the two
+// keep separate stores, and this promotes reduced search text, never the
+// cue JSON the display cache holds.
+func (l *Library) CaptureEpisodeTranscript(ctx context.Context, uc *UserCtx, apiEpisodePID string) error {
+	det, err := l.getEpisode(ctx, apiEpisodePID)
+	if err != nil {
+		return err
+	}
+	if !l.podcastsVisible(ctx, uc) {
+		return errNotFound("no episode with pid " + apiEpisodePID)
+	}
+	ep := det.Episode
+	// Already indexed (downloaded, or a prior capture): nothing to fetch.
+	// Two callers racing on the same episode both see not-found here and both
+	// fetch; that is a rare redundant fetch of a small text document, not a
+	// hazard: the store upserts the transcript idempotently (the display cue
+	// path is unlocked the same way), so no lock guards this window.
+	if _, err := l.lib.Podcasts().Transcript(ctx, ep.PID); err == nil {
+		return nil
+	} else if KindOf(err) != KindNotFound {
+		return classify(err)
+	}
+	if strings.TrimSpace(ep.TranscriptURL) == "" {
+		return errNotFound("the episode announces no transcript")
+	}
+	if err := l.lib.Podcasts().FetchTranscript(ctx, ep.PID); err != nil {
+		// The pointer exists but could not be fetched, parsed, or reduced to
+		// searchable text; surface it as a retriable upstream failure so the
+		// client tries again rather than recording a false absence.
+		l.log.Debug("capturing episode transcript", "episode", apiEpisodePID, "err", err)
+		return &Error{Kind: KindUpstream, Msg: "the transcript could not be captured; retry later"}
+	}
+	return nil
+}
+
 // fetchTranscript pulls and parses one transcript document, applying
 // the show's stored credentials (the pointer lives in the same trust
 // domain as the feed) and the private-address guard.

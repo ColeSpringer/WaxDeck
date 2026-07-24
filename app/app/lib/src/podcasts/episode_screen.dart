@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -171,12 +173,25 @@ class _TranscriptSection extends ConsumerStatefulWidget {
 
 class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
   Future<Transcript>? _loading;
+  var _captured = false;
 
   void _onExpanded(bool expanded) {
     if (!expanded || _loading != null) return;
     setState(() {
       _loading = ref.read(repositoryProvider).getEpisodeTranscript(widget.pid);
     });
+    // Opening the transcript also indexes it for search, so an episode a
+    // listener streams but never downloads becomes findable by its words.
+    // Best-effort: a capture failure never affects the display transcript.
+    if (!_captured) {
+      _captured = true;
+      unawaited(
+        ref
+            .read(repositoryProvider)
+            .captureEpisodeTranscript(widget.pid)
+            .catchError((_) {}),
+      );
+    }
   }
 
   @override

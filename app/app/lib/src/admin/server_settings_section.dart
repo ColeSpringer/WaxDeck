@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../providers.dart';
 import '../review/review_controller.dart';
 import 'admin_providers.dart';
 
@@ -94,6 +95,8 @@ class ServerSettingsSection extends ConsumerWidget {
           const _TranscodingFields(),
           const SizedBox(height: 8),
           const _TrashRetentionField(),
+          const SizedBox(height: 8),
+          const _AddLibraryField(),
           if (libraries.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text('Library read-only', style: textTheme.titleSmall),
@@ -290,6 +293,135 @@ class _TrashRetentionFieldState extends ConsumerState<_TrashRetentionField> {
           key: const Key('trash-retention-save'),
           onPressed: _busy ? null : () => _save(settings),
           child: const Text('Save trash retention'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Registers a new library root at runtime. The catalog scans it in the
+/// background, so browsing and downloading its files work once indexed;
+/// streaming through the WaxFlow sidecar additionally needs the sidecar to
+/// mount the same-named root.
+class _AddLibraryField extends ConsumerStatefulWidget {
+  const _AddLibraryField();
+
+  @override
+  ConsumerState<_AddLibraryField> createState() => _AddLibraryFieldState();
+}
+
+class _AddLibraryFieldState extends ConsumerState<_AddLibraryField> {
+  final _name = TextEditingController();
+  final _path = TextEditingController();
+  String _media = 'mixed';
+  bool _managed = false;
+  var _busy = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _path.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    if (_busy) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final name = _name.text.trim();
+    final path = _path.text.trim();
+    if (name.isEmpty || path.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('A name and an absolute path are required'),
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(repositoryProvider)
+          .createLibrary(
+            name: name,
+            path: path,
+            media: _media,
+            managed: _managed,
+          );
+      // The widget may have been disposed while the create was in flight;
+      // touching ref or setState after that throws.
+      if (!mounted) return;
+      // Refresh the library list so the new root shows in the read-only
+      // section and everywhere else the list feeds.
+      ref.invalidate(librariesProvider);
+      _name.clear();
+      _path.clear();
+      setState(() {
+        _media = 'mixed';
+        _managed = false;
+      });
+      messenger.showSnackBar(
+        SnackBar(content: Text('Library "$name" created; scanning started')),
+      );
+    } on WaxDeckApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Add library', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 4),
+        TextField(
+          key: const Key('add-library-name'),
+          controller: _name,
+          decoration: const InputDecoration(
+            labelText: 'Name',
+            helperText: 'Also the WaxFlow root name serving this directory',
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          key: const Key('add-library-path'),
+          controller: _path,
+          decoration: const InputDecoration(
+            labelText: 'Absolute path on the server',
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: const Key('add-library-media'),
+          initialValue: _media,
+          decoration: const InputDecoration(labelText: 'Content'),
+          items: const [
+            DropdownMenuItem(value: 'mixed', child: Text('Mixed')),
+            DropdownMenuItem(value: 'music', child: Text('Music')),
+            DropdownMenuItem(value: 'audiobook', child: Text('Audiobooks')),
+          ],
+          onChanged: _busy
+              ? null
+              : (value) => setState(() => _media = value ?? 'mixed'),
+        ),
+        const SizedBox(height: 4),
+        SwitchListTile(
+          key: const Key('add-library-managed'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Catalog-managed'),
+          subtitle: const Text(
+            'Let uploads and organizing place files in this root',
+          ),
+          value: _managed,
+          onChanged: _busy ? null : (value) => setState(() => _managed = value),
+        ),
+        const SizedBox(height: 8),
+        FilledButton.tonal(
+          key: const Key('add-library-create'),
+          onPressed: _busy ? null : _create,
+          child: const Text('Create library'),
         ),
       ],
     );

@@ -211,10 +211,20 @@ here waits on upstream.
   documented OpenAPI contract that would let community regional
   providers plug in (the Audiobookshelf pattern) still needs writing;
   the in-process provider port it would bridge to is live.
-- `[in-repo]` **Small artwork is not yet a health rule.** The art
-  resolution path does not expose dimensions cheaply; the rule needs
-  either a size probe during the sweep or an upstream dimensions
-  report on resolved art.
+- `[in-repo]` **The provider chain fills only the front artwork slot.**
+  The art-role model (front, back, disc, booklet, background) ships on
+  the read and write surfaces, but enrichment still fills the front
+  cover alone: a provider candidate carries a single cover image, so
+  fanning providers out to the auxiliary slots (a fanart.tv artist
+  background, disc art) needs the candidate/provider model extended to
+  carry per-role art first. The slots are readable and hand-settable
+  meanwhile (docs/adr/0014).
+- `[in-repo]` **No multi-slot artwork editor in the app.** The client
+  can read `art-roles` and write any slot, and the metadata editor shows
+  the own-versus-inherited cover indicator, but a surface to view every
+  slot and upload or clear each one is unbuilt. It is a net-new UI (no
+  artwork upload existed before), tracked rather than rushed into the
+  art-role slice (docs/adr/0014).
 - `[in-repo]` **Android folder picking is excluded from the upload
   surface.** File picking works on every platform (the endorsed
   `file_selector_android` implementation covers in-app file picks),
@@ -287,6 +297,13 @@ here waits on upstream.
 
 ## Admin and ops
 
+- `[upstream]` **Streaming from a runtime-added library needs a sidecar
+  restart.** An admin can create a library root at runtime and the
+  catalog scans it, so browsing and downloading its files work at once;
+  but the WaxFlow streaming sidecar mounts roots from startup config, so
+  transcoded and gapless-timeline streaming from the new root waits for a
+  sidecar restart. Rides the "Runtime root configuration in the streaming
+  sidecar" ask in upstream-requests.md.
 - `[in-repo]` **Subsonic album and artist stars are pulled but not
   written.** The migration importer reads getStarred2's albums and
   artists alongside songs, but WaxDeck's star surface is item-scoped,

@@ -100,6 +100,16 @@ type libraryDir struct {
 	pid  string // bare library PID
 }
 
+// invalidateAttribution drops the path-to-library attribution cache so the
+// next lookup rebuilds it. A miss already forces a reload, so this is not
+// required for correctness; it makes a runtime library add take effect at
+// once rather than on the first cache miss under the new root.
+func (l *Library) invalidateAttribution() {
+	l.libDirs.mu.Lock()
+	l.libDirs.dirs = nil
+	l.libDirs.mu.Unlock()
+}
+
 // attribution returns the attribution table, loading it on first use.
 // forceReload refreshes it (a miss may mean a library appeared since).
 func (l *Library) attribution(ctx context.Context, forceReload bool) ([]libraryDir, error) {
@@ -252,8 +262,9 @@ func (l *Library) Libraries(ctx context.Context) ([]LibraryInfo, error) {
 	if err != nil {
 		return nil, classify(err)
 	}
-	byPath := make(map[string]string, len(l.roots))
-	for _, r := range l.roots {
+	roots := l.libraryRoots()
+	byPath := make(map[string]string, len(roots))
+	for _, r := range roots {
 		byPath[filepath.Clean(r.Path)] = r.Name
 	}
 	out := make([]LibraryInfo, 0, len(libs))

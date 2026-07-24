@@ -438,6 +438,44 @@ func (s *Server) SetLibraryReadOnly(ctx context.Context, req SetLibraryReadOnlyR
 	return SetLibraryReadOnly200JSONResponse(LibraryReadOnly{ReadOnly: req.Body.ReadOnly, LibraryPid: ptr(req.Pid)}), nil
 }
 
+func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObject) (CreateLibraryResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return CreateLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if req.Body == nil {
+		return CreateLibrary400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	in := service.AddLibraryInput{
+		Name:    req.Body.Name,
+		Path:    req.Body.Path,
+		Managed: derefBool(req.Body.Managed),
+	}
+	if req.Body.Media != nil {
+		in.Media = string(*req.Body.Media)
+	}
+	lib, err := s.svc.AddLibrary(ctx, uc, in)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return CreateLibrary400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindConflict:
+			return CreateLibrary409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		case service.KindForbidden:
+			return CreateLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	out := Library{Pid: lib.PID, Name: lib.Name}
+	if lib.Media != "" {
+		out.Media = ptr(lib.Media)
+	}
+	return CreateLibrary201JSONResponse(out), nil
+}
+
 // --- migration ---------------------------------------------------------------------
 
 func (s *Server) CreateMigration(ctx context.Context, req CreateMigrationRequestObject) (CreateMigrationResponseObject, error) {

@@ -190,6 +190,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
           _fieldsCard(context, state),
           if (_writeBackFailures.isNotEmpty) _writeBackWarnings(context),
           _creditsCard(context, state),
+          _artworkCard(context, state),
           _tagsCard(context, state),
           _lyricsCard(context),
           _releaseStatusCard(context, state),
@@ -313,6 +314,36 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
                 '${failure.path ?? failure.filePid}: ${failure.reason}',
                 style: textTheme.bodySmall,
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _artworkCard(BuildContext context, MetadataEditorState state) {
+    final textTheme = Theme.of(context).textTheme;
+    final meta = state.metadata;
+    final (String status, IconData icon) = meta.hasOwnArtwork
+        ? ('Has its own cover', Icons.image)
+        : meta.hasArtwork
+        ? ('Inherits a cover from its album or artist', Icons.image_outlined)
+        : ('No cover', Icons.hide_image_outlined);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Artwork', style: textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Row(
+              key: const Key('artwork-status'),
+              children: [
+                Icon(icon),
+                const SizedBox(width: 8),
+                Expanded(child: Text(status)),
+              ],
+            ),
           ],
         ),
       ),
