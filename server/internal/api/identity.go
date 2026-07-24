@@ -525,6 +525,170 @@ func (s *Server) SetRating(ctx context.Context, req SetRatingRequestObject) (Set
 	return SetRating200JSONResponse(playStateJSON(st)), nil
 }
 
+// --- entity stars & ratings --------------------------------------------------------
+//
+// Artists and albums carry their own star and rating, independent of
+// their members: starring an album does not star its tracks. The four
+// write paths and two reads all funnel through one service pair, which
+// splits the prefix and authorizes the caller; the per-operation
+// wrappers exist only because the generated request and response types
+// are per-path.
+
+func entityPlayStateJSON(st service.EntityPlayState) EntityPlayState {
+	out := EntityPlayState{
+		Pid:     st.PID,
+		Starred: st.Starred,
+		Rating:  st.Rating,
+	}
+	if !st.StarredAt.IsZero() {
+		out.StarredAt = &st.StarredAt
+	}
+	if !st.UpdatedAt.IsZero() {
+		out.UpdatedAt = &st.UpdatedAt
+	}
+	return out
+}
+
+// entityStateResult folds a service answer into the JSON body plus the
+// error kind the per-path wrapper renders.
+func (s *Server) entityStateResult(st service.EntityPlayState, err error) (EntityPlayState, service.ErrorKind) {
+	if err != nil {
+		return EntityPlayState{}, service.KindOf(err)
+	}
+	return entityPlayStateJSON(st), ""
+}
+
+func (s *Server) GetArtistPlayState(ctx context.Context, req GetArtistPlayStateRequestObject) (GetArtistPlayStateResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	st, svcErr := s.svc.EntityPlayStateFor(ctx, uc, req.Pid)
+	body, kind := s.entityStateResult(st, svcErr)
+	switch kind {
+	case "":
+		return GetArtistPlayState200JSONResponse(body), nil
+	case service.KindNotFound:
+		return GetArtistPlayState404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artist with pid "+req.Pid))}, nil
+	}
+	return nil, svcErr
+}
+
+func (s *Server) SetArtistStar(ctx context.Context, req SetArtistStarRequestObject) (SetArtistStarResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return SetArtistStar400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	st, svcErr := s.svc.SetEntityStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
+	body, kind := s.entityStateResult(st, svcErr)
+	switch kind {
+	case "":
+		return SetArtistStar200JSONResponse(body), nil
+	case service.KindNotFound:
+		return SetArtistStar404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artist with pid "+req.Pid))}, nil
+	case service.KindInvalid:
+		return SetArtistStar400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", svcErr.Error()))}, nil
+	}
+	return nil, svcErr
+}
+
+func (s *Server) SetArtistRating(ctx context.Context, req SetArtistRatingRequestObject) (SetArtistRatingResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return SetArtistRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	st, svcErr := s.svc.SetEntityRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
+	body, kind := s.entityStateResult(st, svcErr)
+	switch kind {
+	case "":
+		return SetArtistRating200JSONResponse(body), nil
+	case service.KindNotFound:
+		return SetArtistRating404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no artist with pid "+req.Pid))}, nil
+	case service.KindInvalid:
+		return SetArtistRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", svcErr.Error()))}, nil
+	}
+	return nil, svcErr
+}
+
+func (s *Server) GetAlbumPlayState(ctx context.Context, req GetAlbumPlayStateRequestObject) (GetAlbumPlayStateResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	st, svcErr := s.svc.EntityPlayStateFor(ctx, uc, req.Pid)
+	body, kind := s.entityStateResult(st, svcErr)
+	switch kind {
+	case "":
+		return GetAlbumPlayState200JSONResponse(body), nil
+	case service.KindNotFound:
+		return GetAlbumPlayState404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no album with pid "+req.Pid))}, nil
+	}
+	return nil, svcErr
+}
+
+func (s *Server) SetAlbumStar(ctx context.Context, req SetAlbumStarRequestObject) (SetAlbumStarResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return SetAlbumStar400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	st, svcErr := s.svc.SetEntityStar(ctx, uc, req.Pid, req.Body.Starred, req.Body.RecordedAt)
+	body, kind := s.entityStateResult(st, svcErr)
+	switch kind {
+	case "":
+		return SetAlbumStar200JSONResponse(body), nil
+	case service.KindNotFound:
+		return SetAlbumStar404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no album with pid "+req.Pid))}, nil
+	case service.KindInvalid:
+		return SetAlbumStar400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", svcErr.Error()))}, nil
+	}
+	return nil, svcErr
+}
+
+func (s *Server) SetAlbumRating(ctx context.Context, req SetAlbumRatingRequestObject) (SetAlbumRatingResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return SetAlbumRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	st, svcErr := s.svc.SetEntityRating(ctx, uc, req.Pid, req.Body.Rating, req.Body.RecordedAt)
+	body, kind := s.entityStateResult(st, svcErr)
+	switch kind {
+	case "":
+		return SetAlbumRating200JSONResponse(body), nil
+	case service.KindNotFound:
+		return SetAlbumRating404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no album with pid "+req.Pid))}, nil
+	case service.KindInvalid:
+		return SetAlbumRating400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", svcErr.Error()))}, nil
+	}
+	return nil, svcErr
+}
+
+func (s *Server) ListStarredEntities(ctx context.Context, _ ListStarredEntitiesRequestObject) (ListStarredEntitiesResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.svc.StarredEntities(ctx, uc)
+	if err != nil {
+		return nil, err
+	}
+	return ListStarredEntities200JSONResponse(StarredEntities{
+		Artists: searchHitsJSON(res.Artists),
+		Albums:  searchHitsJSON(res.Albums),
+	}), nil
+}
+
 // --- conversion helpers ------------------------------------------------------------
 
 func userAccountJSON(acct service.Account) UserAccount {

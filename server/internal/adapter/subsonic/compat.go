@@ -44,7 +44,7 @@ func (h *Handler) getIndexes(w http.ResponseWriter, r *http.Request, uc *service
 			out.Index = append(out.Index, folderIndex{Name: letter})
 			section = &out.Index[len(out.Index)-1]
 		}
-		section.Artists = append(section.Artists, folderArtist{ID: encodeArtistID(a.name), Name: a.name})
+		section.Artists = append(section.Artists, folderArtist{ID: a.id, Name: a.name})
 	}
 	h.ok(w, r, envelope{Indexes: out})
 }
@@ -56,26 +56,18 @@ func (h *Handler) getMusicDirectory(w http.ResponseWriter, r *http.Request, uc *
 		h.fail(w, r, 0, "reading the library failed")
 		return
 	}
-	if artistName, albumName, ok := decodeAlbumID(id); ok {
-		al := idx.albumByKey[albumKey(artistName, albumName)]
-		if al == nil {
-			h.fail(w, r, 70, "no such directory")
-			return
-		}
-		out := &directory{ID: id, Parent: encodeArtistID(al.artist), Name: al.name}
+	// The id may be either scheme, and the two namespaces are disjoint,
+	// so try the album reading before the artist one.
+	if al := idx.findAlbum(id); al != nil {
+		out := &directory{ID: al.id, Parent: al.artistID, Name: al.name}
 		for _, tr := range al.tracks {
 			out.Children = append(out.Children, songChild(tr, al))
 		}
 		h.ok(w, r, envelope{Directory: out})
 		return
 	}
-	if name, ok := decodeArtistID(id); ok {
-		a := idx.artistByName[name]
-		if a == nil {
-			h.fail(w, r, 70, "no such directory")
-			return
-		}
-		out := &directory{ID: id, Name: a.name}
+	if a := idx.findArtist(id); a != nil {
+		out := &directory{ID: a.id, Name: a.name}
 		for _, al := range a.albums {
 			out.Children = append(out.Children, albumDirChild(al))
 		}
@@ -98,30 +90,30 @@ func (h *Handler) getAlbumList(w http.ResponseWriter, r *http.Request, uc *servi
 	h.ok(w, r, envelope{AlbumList: out})
 }
 
-// getStarred is getStarred2's folder-mode twin. Only songs can carry
-// stars on this surface (album and artist stars answer an explicit
-// not-supported on write), so those lists are always empty.
+// getStarred is getStarred2's folder-mode twin: the same three lists in
+// the directory shapes this mode uses.
 func (h *Handler) getStarred(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
 	idx, err := h.index(r.Context(), uc)
 	if err != nil {
 		h.fail(w, r, 0, "reading the library failed")
 		return
 	}
-	out := &starred{}
-	cursor := ""
-	for {
-		page, err := h.svc.Browse(r.Context(), uc, "starred", 0, cursor, 500)
-		if err != nil {
-			h.failFromService(w, r, err, "listing starred items failed")
-			return
-		}
-		for _, it := range page.Items {
-			out.Songs = append(out.Songs, h.entryChild(idx, it))
-		}
-		if page.Next == "" {
-			break
-		}
-		cursor = page.Next
+	songs, err := h.starredSongs(r, uc, idx)
+	if err != nil {
+		h.failFromService(w, r, err, "listing starred items failed")
+		return
+	}
+	artists, albums, err := h.starredGroups(r, uc, idx)
+	if err != nil {
+		h.failFromService(w, r, err, "listing starred entities failed")
+		return
+	}
+	out := &starred{Songs: songs}
+	for _, a := range artists {
+		out.Artists = append(out.Artists, folderArtist{ID: a.id, Name: a.name})
+	}
+	for _, al := range albums {
+		out.Albums = append(out.Albums, albumDirChild(al))
 	}
 	h.ok(w, r, envelope{Starred: out})
 }
@@ -162,7 +154,7 @@ func (h *Handler) getRandomSongs(w http.ResponseWriter, r *http.Request, uc *ser
 			break
 		}
 		tr := idx.tracks[i]
-		out.Songs = append(out.Songs, songChild(tr, idx.albumByKey[albumKeyForTrack(tr)]))
+		out.Songs = append(out.Songs, songChild(tr, idx.albumForTrack(tr)))
 	}
 	h.ok(w, r, envelope{RandomSongs: out})
 }
@@ -193,7 +185,7 @@ func (h *Handler) getSongsByGenre(w http.ResponseWriter, r *http.Request, uc *se
 		if len(out.Songs) >= count {
 			break
 		}
-		out.Songs = append(out.Songs, songChild(tr, idx.albumByKey[albumKeyForTrack(tr)]))
+		out.Songs = append(out.Songs, songChild(tr, idx.albumForTrack(tr)))
 	}
 	h.ok(w, r, envelope{SongsByGenre: out})
 }

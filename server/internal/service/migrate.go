@@ -89,21 +89,32 @@ type migrationParams struct {
 // summary document. A dry run counts what would be written; a re-import
 // counts only what was new (duplicates are the idempotency working).
 type migrationSummary struct {
-	Source        string           `json:"source"`
-	DryRun        bool             `json:"dryRun"`
-	Matched       int              `json:"matched"`
-	Unmatched     int              `json:"unmatched"`
-	Stars         int              `json:"stars"`
-	Ratings       int              `json:"ratings"`
-	Listens       int              `json:"listens"`
-	Progress      int              `json:"progress"`
-	ListensCapped int              `json:"listensCapped,omitempty"`
-	Samples       migrationSamples `json:"samples"`
+	Source        string `json:"source"`
+	DryRun        bool   `json:"dryRun"`
+	Matched       int    `json:"matched"`
+	Unmatched     int    `json:"unmatched"`
+	Stars         int    `json:"stars"`
+	AlbumStars    int    `json:"albumStars,omitempty"`
+	ArtistStars   int    `json:"artistStars,omitempty"`
+	Ratings       int    `json:"ratings"`
+	Listens       int    `json:"listens"`
+	Progress      int    `json:"progress"`
+	ListensCapped int    `json:"listensCapped,omitempty"`
+	// UnmatchedEntities counts starred albums and artists that reached
+	// no local entity, kept apart from the per-song Unmatched count: a
+	// report that conflated them would read as missing tracks.
+	UnmatchedEntities int              `json:"unmatchedEntities,omitempty"`
+	Samples           migrationSamples `json:"samples"`
 }
 
 // migrationSamples carries a bounded set of examples for the report.
 type migrationSamples struct {
 	Unmatched []string `json:"unmatched"`
+	// UnmatchedEntities samples starred albums and artists that missed,
+	// which are a different failure from a song that missed: the group
+	// may be absent, or present under a spelling the ladder did not
+	// reach through any of its members.
+	UnmatchedEntities []string `json:"unmatchedEntities,omitempty"`
 }
 
 // noteUnmatched counts a miss and keeps a bounded sample of it.
@@ -117,6 +128,16 @@ func (s *migrationSummary) noteUnmatched(artist, title string) {
 		label = artist + " - " + title
 	}
 	s.Samples.Unmatched = append(s.Samples.Unmatched, label)
+}
+
+// noteUnmatchedEntity is noteUnmatched's entity twin: a starred album or
+// artist no member song could resolve.
+func (s *migrationSummary) noteUnmatchedEntity(label string) {
+	s.UnmatchedEntities++
+	if len(s.Samples.UnmatchedEntities) >= migrateUnmatchedSamples {
+		return
+	}
+	s.Samples.UnmatchedEntities = append(s.Samples.UnmatchedEntities, label)
 }
 
 // StartMigration queues an import from another server. Administrators

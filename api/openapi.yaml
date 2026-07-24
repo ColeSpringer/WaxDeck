@@ -4062,6 +4062,213 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /artists/{pid}/play-state:
+    get:
+      operationId: getArtistPlayState
+      summary: Get the caller's star and rating for an artist
+      description: >
+        An artist the caller has never starred or rated returns a zero
+        state, not a 404. Catalog entities carry no playback position or
+        play count of their own, so this is the star and rating pair
+        only; the artist's items keep their own play state.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The caller's state for the artist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityPlayState"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /artists/{pid}/star:
+    put:
+      operationId: setArtistStar
+      summary: Star or unstar an artist
+      description: >
+        Sets the calling user's star on the artist and returns the
+        resulting state. Starring is idempotent: setting the current
+        value again succeeds without changing the star's set time.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StarUpdate"
+      responses:
+        "200":
+          description: The caller's updated state for the artist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityPlayState"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /artists/{pid}/rating:
+    put:
+      operationId: setArtistRating
+      summary: Rate an artist
+      description: >
+        Sets or clears the calling user's rating for the artist and
+        returns the resulting state. Ratings are 0 to 100 on the same
+        scale items use; null clears the rating.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RatingUpdate"
+      responses:
+        "200":
+          description: The caller's updated state for the artist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityPlayState"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /albums/{pid}/play-state:
+    get:
+      operationId: getAlbumPlayState
+      summary: Get the caller's star and rating for an album
+      description: >
+        An album the caller has never starred or rated returns a zero
+        state, not a 404. See the artist endpoint for why this is the
+        star and rating pair only.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The caller's state for the album.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityPlayState"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /albums/{pid}/star:
+    put:
+      operationId: setAlbumStar
+      summary: Star or unstar an album
+      description: >
+        Sets the calling user's star on the album and returns the
+        resulting state. Starring is idempotent: setting the current
+        value again succeeds without changing the star's set time.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StarUpdate"
+      responses:
+        "200":
+          description: The caller's updated state for the album.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityPlayState"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /albums/{pid}/rating:
+    put:
+      operationId: setAlbumRating
+      summary: Rate an album
+      description: >
+        Sets or clears the calling user's rating for the album and
+        returns the resulting state. Ratings are 0 to 100 on the same
+        scale items use; null clears the rating.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RatingUpdate"
+      responses:
+        "200":
+          description: The caller's updated state for the album.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityPlayState"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /starred-entities:
+    get:
+      operationId: listStarredEntities
+      summary: List the caller's starred artists and albums
+      description: >
+        The calling user's starred catalog entities, most recently
+        starred first within each group. Item stars live on the
+        `starred` discovery list; this is its entity twin, and the two
+        are independent (starring an album does not star its tracks).
+        Restricted callers see only entities with a member item in a
+        library they are granted.
+      tags: [playback]
+      responses:
+        "200":
+          description: The caller's starred entities.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StarredEntities"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /items/{pid}/skip-map:
     get:
       operationId: getSkipMap
@@ -11415,6 +11622,52 @@ components:
           type: string
           format: date-time
           description: When this state last changed.
+
+    EntityPlayState:
+      type: object
+      description: >
+        The calling user's star and rating for one catalog entity (an
+        artist or an album). Entities carry no resume position or play
+        count of their own; their items keep those.
+      required: [pid, starred]
+      properties:
+        pid:
+          type: string
+          description: The entity this state belongs to.
+          example: al-01JZX5N8QW3F4V9T2B7KD3M9R6
+        starred:
+          type: boolean
+          description: Whether the caller starred the entity.
+        starredAt:
+          type: string
+          format: date-time
+          description: >
+            When the star was set, which is what orders the starred
+            list. Absent when the entity is not starred.
+        rating:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: The caller's rating (0 to 100); absent or null when unrated.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this state last changed.
+
+    StarredEntities:
+      type: object
+      description: The caller's starred catalog entities, grouped by kind.
+      required: [artists, albums]
+      properties:
+        artists:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
+        albums:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchHit"
 
     PlayStateQuery:
       type: object

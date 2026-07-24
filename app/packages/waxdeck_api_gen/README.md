@@ -380,13 +380,20 @@ Class | Method | HTTP request | Description
 [*OrganizeApi*](doc/OrganizeApi.md) | [**applyOrganize**](doc/OrganizeApi.md#applyorganize) | **POST** /organize/apply | Apply an organize pass
 [*OrganizeApi*](doc/OrganizeApi.md) | [**listOrganizeProfiles**](doc/OrganizeApi.md#listorganizeprofiles) | **GET** /organize/profiles | List organize profiles
 [*OrganizeApi*](doc/OrganizeApi.md) | [**previewOrganize**](doc/OrganizeApi.md#previeworganize) | **POST** /organize/preview | Dry-run an organize pass
+[*PlaybackApi*](doc/PlaybackApi.md) | [**getAlbumPlayState**](doc/PlaybackApi.md#getalbumplaystate) | **GET** /albums/{pid}/play-state | Get the caller&#39;s star and rating for an album
+[*PlaybackApi*](doc/PlaybackApi.md) | [**getArtistPlayState**](doc/PlaybackApi.md#getartistplaystate) | **GET** /artists/{pid}/play-state | Get the caller&#39;s star and rating for an artist
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getDownloadInfo**](doc/PlaybackApi.md#getdownloadinfo) | **GET** /items/{pid}/download-info | Resolve an offline download for an item
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getPlayInfo**](doc/PlaybackApi.md#getplayinfo) | **GET** /items/{pid}/play-info | Resolve a playable stream for an item
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getPlayState**](doc/PlaybackApi.md#getplaystate) | **GET** /items/{pid}/play-state | Get the caller&#39;s playback state for an item
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getSkipMap**](doc/PlaybackApi.md#getskipmap) | **GET** /items/{pid}/skip-map | Get an item&#39;s silence skip map
 [*PlaybackApi*](doc/PlaybackApi.md) | [**listPlayStates**](doc/PlaybackApi.md#listplaystates) | **POST** /play-states | Read the caller&#39;s playback state for many items
+[*PlaybackApi*](doc/PlaybackApi.md) | [**listStarredEntities**](doc/PlaybackApi.md#liststarredentities) | **GET** /starred-entities | List the caller&#39;s starred artists and albums
 [*PlaybackApi*](doc/PlaybackApi.md) | [**putPlayState**](doc/PlaybackApi.md#putplaystate) | **PUT** /items/{pid}/play-state | Checkpoint the caller&#39;s playback position
 [*PlaybackApi*](doc/PlaybackApi.md) | [**reportListens**](doc/PlaybackApi.md#reportlistens) | **POST** /listens | Report listen sessions
+[*PlaybackApi*](doc/PlaybackApi.md) | [**setAlbumRating**](doc/PlaybackApi.md#setalbumrating) | **PUT** /albums/{pid}/rating | Rate an album
+[*PlaybackApi*](doc/PlaybackApi.md) | [**setAlbumStar**](doc/PlaybackApi.md#setalbumstar) | **PUT** /albums/{pid}/star | Star or unstar an album
+[*PlaybackApi*](doc/PlaybackApi.md) | [**setArtistRating**](doc/PlaybackApi.md#setartistrating) | **PUT** /artists/{pid}/rating | Rate an artist
+[*PlaybackApi*](doc/PlaybackApi.md) | [**setArtistStar**](doc/PlaybackApi.md#setartiststar) | **PUT** /artists/{pid}/star | Star or unstar an artist
 [*PlaybackApi*](doc/PlaybackApi.md) | [**setRating**](doc/PlaybackApi.md#setrating) | **PUT** /items/{pid}/rating | Rate an item
 [*PlaybackApi*](doc/PlaybackApi.md) | [**setStar**](doc/PlaybackApi.md#setstar) | **PUT** /items/{pid}/star | Star or unstar an item
 [*PlayerApi*](doc/PlayerApi.md) | [**createPlaybackSession**](doc/PlayerApi.md#createplaybacksession) | **POST** /player/sessions | Start playback on an endpoint
@@ -564,6 +571,7 @@ Class | Method | HTTP request | Description
  - [EntityCuratedField](doc/EntityCuratedField.md)
  - [EntityCuration](doc/EntityCuration.md)
  - [EntityEdit](doc/EntityEdit.md)
+ - [EntityPlayState](doc/EntityPlayState.md)
  - [EntityTypeFields](doc/EntityTypeFields.md)
  - [Episode](doc/Episode.md)
  - [EpisodePage](doc/EpisodePage.md)
@@ -749,6 +757,7 @@ Class | Method | HTTP request | Description
  - [SonicPath](doc/SonicPath.md)
  - [Soundbite](doc/Soundbite.md)
  - [StarUpdate](doc/StarUpdate.md)
+ - [StarredEntities](doc/StarredEntities.md)
  - [SubscribeRequest](doc/SubscribeRequest.md)
  - [Subscription](doc/Subscription.md)
  - [SubscriptionPage](doc/SubscriptionPage.md)

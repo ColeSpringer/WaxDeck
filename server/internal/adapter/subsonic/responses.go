@@ -297,19 +297,18 @@ type nowPlaying struct {
 // --- shape builders ----------------------------------------------------------
 
 func (a *artist) id3() artistID3 {
-	out := artistID3{ID: encodeArtistID(a.name), Name: a.name, AlbumCount: len(a.albums)}
+	out := artistID3{ID: a.id, Name: a.name, AlbumCount: len(a.albums)}
 	out.CoverArt = out.ID
 	return out
 }
 
 func (al *album) id3() albumID3 {
-	id := encodeAlbumID(al.artist, al.name)
 	return albumID3{
-		ID:        id,
+		ID:        al.id,
 		Name:      al.name,
 		Artist:    al.artist,
-		ArtistID:  encodeArtistID(al.artist),
-		CoverArt:  id,
+		ArtistID:  al.artistID,
+		CoverArt:  al.id,
 		SongCount: len(al.tracks),
 		Duration:  int(al.durMS / 1000),
 		Year:      al.year,
@@ -330,19 +329,18 @@ var subsonicMimes = map[string]string{
 
 // albumDirChild renders an album as a folder-mode directory entry.
 func albumDirChild(al *album) child {
-	id := encodeAlbumID(al.artist, al.name)
 	return child{
-		ID:       id,
-		Parent:   encodeArtistID(al.artist),
+		ID:       al.id,
+		Parent:   al.artistID,
 		IsDir:    true,
 		Title:    al.name,
 		Artist:   al.artist,
 		Year:     al.year,
 		Genre:    al.genre,
-		CoverArt: id,
+		CoverArt: al.id,
 		Duration: int(al.durMS / 1000),
-		AlbumID:  id,
-		ArtistID: encodeArtistID(al.artist),
+		AlbumID:  al.id,
+		ArtistID: al.artistID,
 		Type:     "music",
 	}
 }
@@ -365,8 +363,8 @@ func songChild(tr track, al *album) child {
 		Type:        "music",
 	}
 	if al != nil {
-		c.AlbumID = encodeAlbumID(al.artist, al.name)
-		c.ArtistID = encodeArtistID(al.artist)
+		c.AlbumID = al.id
+		c.ArtistID = al.artistID
 		c.Parent = c.AlbumID
 	}
 	return c

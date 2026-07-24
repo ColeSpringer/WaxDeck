@@ -164,26 +164,32 @@ func applyReplayedPosition(recencyPrim bool, positionMS, recNS, curPositionMS, s
 // through, which is what clients call at their coarse interval. A nil
 // recordedAt is a live checkpoint and always applies; a non-nil one is
 // an offline replay, reconciled per medium against the position stamp.
-func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, recordedAt *time.Time) error {
+//
+// The reported applied says whether the position moved. A skipped
+// replay is a success, not an error — the winning state is already in
+// the event stream — but a caller counting what it wrote (a migration
+// report) must not count one, so the outcome is returned rather than
+// hidden behind a nil error.
+func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, recordedAt *time.Time) (applied bool, err error) {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if positionMS < 0 {
-		return errInvalid("positionMs must not be negative")
+		return false, errInvalid("positionMs must not be negative")
 	}
 	stampNS := time.Now().UnixNano()
 	if recordedAt != nil {
 		recNS := clampRecorded(*recordedAt)
 		stamp, err := l.db.PlayStamp(ctx, uc.ID, string(it.PID))
 		if err != nil {
-			return &Error{Kind: KindInternal, Err: err}
+			return false, &Error{Kind: KindInternal, Err: err}
 		}
 		var curPos int64
 		if !recencyPrimary(it) {
 			cur, err := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), it.PID)
 			if err != nil {
-				return classify(err)
+				return false, classify(err)
 			}
 			if cur != nil {
 				curPos = cur.PositionMS
@@ -192,7 +198,7 @@ func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string
 		if !applyReplayedPosition(recencyPrimary(it), positionMS, recNS, curPos, stamp.PositionNS) {
 			// Skipped replays answer success: the winning state is
 			// already in the event stream for this client to pull.
-			return nil
+			return false, nil
 		}
 		stampNS = recNS
 		if stamp.PositionNS > stampNS {
@@ -204,14 +210,14 @@ func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string
 		}
 	}
 	if err := l.lib.Playback().Checkpoint(ctx, model.PID(uc.CatalogPID), it.PID, positionMS); err != nil {
-		return classify(err)
+		return false, classify(err)
 	}
-	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), wdb.StampPosition, stampNS); err != nil {
+	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), stampNS); err != nil {
 		l.log.Warn("stamping position", "pid", apiItemPID, "err", err)
 	}
 	l.markSpokenWordProgress(ctx, uc, it, positionMS)
 	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
-	return nil
+	return true, nil
 }
 
 // markSpokenWordProgress derives played and finished for podcasts and
@@ -266,53 +272,49 @@ func (l *Library) spokenWordCrossing(ctx context.Context, uc *UserCtx, it *model
 	return true, finished, nil
 }
 
+// asOfNS projects a client-reported change time onto the catalog's
+// as-of argument: nil for a live change (the catalog stamps its own
+// clock), the clamped recorded time for an offline replay. The catalog
+// enforces recorded-time last-writer-wins itself, so a stale replay is
+// dropped there rather than guarded here.
+//
+// One recorded consequence: a replay the catalog skips still emits the
+// sync event below, where the older WaxDeck-side guard returned early
+// without one. The catalog knows the write was skipped, its
+// play-state writer suppresses its own change-feed delta when nothing
+// changed, but the facade returns only error, so learning the same
+// thing here would cost a state read and a StarredChangedAt comparison
+// on every write. A redundant sync event is cheaper, and the client
+// reconciles from the state it fetches. When the changed-bool upstream
+// ask lands, this note and the redundant event go away together.
+func asOfNS(recordedAt *time.Time) *int64 {
+	if recordedAt == nil {
+		return nil
+	}
+	ns := clampRecorded(*recordedAt)
+	return &ns
+}
+
 // SetStar stars or unstars the item for the acting user and returns the
-// resulting state. Replayed offline toggles (recordedAt set) are
-// skipped when the star changed more recently: the stamp is written on
-// set and on clear, so a stale replay never resurrects an undone state.
+// resulting state. A replayed offline toggle (recordedAt set) carries
+// its recorded time to the catalog, which drops it when the star
+// changed more recently, so a stale replay never resurrects an undone
+// state.
 func (l *Library) SetStar(ctx context.Context, uc *UserCtx, apiItemPID string, starred bool, recordedAt *time.Time) (PlayState, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return PlayState{}, err
 	}
-	stampNS := time.Now().UnixNano()
-	if recordedAt != nil {
-		recNS := clampRecorded(*recordedAt)
-		stamp, err := l.db.PlayStamp(ctx, uc.ID, string(it.PID))
-		if err != nil {
-			return PlayState{}, &Error{Kind: KindInternal, Err: err}
-		}
-		lastStar := stamp.StarNS
-		if lastStar == 0 {
-			// No WaxDeck star history to order against: fall back to the
-			// catalog's own per-field stamp, which catches a star set through
-			// another surface (or before this mirror existed) that a stale
-			// replay must not override. The catalog stamps in server-apply
-			// time, not the client's recorded time, so it is consulted only
-			// here, where the mirror holds nothing of its own; once WaxDeck
-			// owns a stamp, that recorded-time frame governs the ordering.
-			if cur, err := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), it.PID); err == nil && cur != nil {
-				lastStar = cur.StarredChangedAt
-			}
-		}
-		if lastStar > recNS {
-			return l.playStateFor(ctx, uc, apiItemPID, it.PID)
-		}
-		stampNS = recNS
-	}
-	if err := l.lib.Playback().SetStar(ctx, model.PID(uc.CatalogPID), it.PID, starred); err != nil {
+	if err := l.lib.Playback().SetStar(ctx, model.PID(uc.CatalogPID), it.PID, starred, asOfNS(recordedAt)); err != nil {
 		return PlayState{}, classify(err)
-	}
-	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), wdb.StampStar, stampNS); err != nil {
-		l.log.Warn("stamping star", "pid", apiItemPID, "err", err)
 	}
 	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
 	return l.playStateFor(ctx, uc, apiItemPID, it.PID)
 }
 
 // SetRating sets (0..100) or clears (nil) the acting user's rating and
-// returns the resulting state. Replayed offline changes are skipped
-// when the rating changed more recently.
+// returns the resulting state. Replayed offline changes carry their
+// recorded time and are ordered by the catalog; see SetStar.
 func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string, rating *int, recordedAt *time.Time) (PlayState, error) {
 	if rating != nil && (*rating < 0 || *rating > 100) {
 		return PlayState{}, errInvalid("rating must be between 0 and 100")
@@ -321,34 +323,8 @@ func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string,
 	if err != nil {
 		return PlayState{}, err
 	}
-	stampNS := time.Now().UnixNano()
-	if recordedAt != nil {
-		recNS := clampRecorded(*recordedAt)
-		stamp, err := l.db.PlayStamp(ctx, uc.ID, string(it.PID))
-		if err != nil {
-			return PlayState{}, &Error{Kind: KindInternal, Err: err}
-		}
-		lastRating := stamp.RatingNS
-		if lastRating == 0 {
-			// No WaxDeck rating history to order against: fall back to the
-			// catalog's own per-field stamp, catching a rating set through
-			// another surface that a stale replay must not override. Server-
-			// apply time, so consulted only where the mirror is silent (see
-			// SetStar).
-			if cur, err := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), it.PID); err == nil && cur != nil {
-				lastRating = cur.RatingChangedAt
-			}
-		}
-		if lastRating > recNS {
-			return l.playStateFor(ctx, uc, apiItemPID, it.PID)
-		}
-		stampNS = recNS
-	}
-	if err := l.lib.Playback().SetRating(ctx, model.PID(uc.CatalogPID), it.PID, rating); err != nil {
+	if err := l.lib.Playback().SetRating(ctx, model.PID(uc.CatalogPID), it.PID, rating, asOfNS(recordedAt)); err != nil {
 		return PlayState{}, classify(err)
-	}
-	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), wdb.StampRating, stampNS); err != nil {
-		l.log.Warn("stamping rating", "pid", apiItemPID, "err", err)
 	}
 	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
 	return l.playStateFor(ctx, uc, apiItemPID, it.PID)

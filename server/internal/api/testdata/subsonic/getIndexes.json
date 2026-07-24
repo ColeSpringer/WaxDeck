@@ -1,1 +1,1 @@
-{"subsonic-response":{"status":"ok","version":"1.16.1","type":"waxdeck","serverVersion":"VERSION","openSubsonic":true,"indexes":{"lastModified":"LM","ignoredArticles":"","index":[{"name":"F","artist":[{"id":"A!Rml4dHVyZSBBcnRpc3Q","name":"Fixture Artist"}]}]}}}
+{"subsonic-response":{"status":"ok","version":"1.16.1","type":"waxdeck","serverVersion":"VERSION","openSubsonic":true,"indexes":{"lastModified":"LM","ignoredArticles":"","index":[{"name":"F","artist":[{"id":"ar-ULID_1","name":"Fixture Artist"}]}]}}}

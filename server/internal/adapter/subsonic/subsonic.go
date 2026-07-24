@@ -8,16 +8,20 @@
 // mapping, visibility, media-token minting, and the scrobble outbox
 // apply identically.
 //
-// Identifier scheme: songs are real item PIDs. The item query grammar
-// addresses artists and albums by display string, so artist and album
-// identifiers are minted from those strings (opaque to clients, stable
-// across requests). Cover art for a minted id resolves through one of
-// its member items, whose art chain falls back to the album and artist.
+// Identifier scheme: songs are real item PIDs, and so are artists and
+// albums wherever the catalog holds an entity for them. A group with no
+// entity behind it — a loose track has no album row — falls back to an
+// identifier minted from its display strings, opaque to clients and
+// stable across requests, which is also what still resolves an id a
+// client cached before the surface moved to entity pids. Cover art for
+// either resolves through one of the group's member items, whose art
+// chain falls back to the album and artist.
 package subsonic
 
 import (
 	"context"
 	"encoding/base64"
+	"maps"
 	"math/rand/v2"
 	"net/http"
 	"net/url"
@@ -261,9 +265,9 @@ func (h *Handler) getArtists(w http.ResponseWriter, r *http.Request, uc *service
 }
 
 func (h *Handler) getArtist(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	name, ok := decodeArtistID(r.Form.Get("id"))
-	if !ok {
-		h.fail(w, r, 10, "missing or malformed id")
+	id := r.Form.Get("id")
+	if id == "" {
+		h.fail(w, r, 10, "missing id")
 		return
 	}
 	idx, err := h.index(r.Context(), uc)
@@ -271,7 +275,7 @@ func (h *Handler) getArtist(w http.ResponseWriter, r *http.Request, uc *service.
 		h.fail(w, r, 0, "reading the library failed")
 		return
 	}
-	a := idx.artistByName[name]
+	a := idx.findArtist(id)
 	if a == nil {
 		h.fail(w, r, 70, "no such artist")
 		return
@@ -284,9 +288,9 @@ func (h *Handler) getArtist(w http.ResponseWriter, r *http.Request, uc *service.
 }
 
 func (h *Handler) getAlbum(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	artist, album, ok := decodeAlbumID(r.Form.Get("id"))
-	if !ok {
-		h.fail(w, r, 10, "missing or malformed id")
+	id := r.Form.Get("id")
+	if id == "" {
+		h.fail(w, r, 10, "missing id")
 		return
 	}
 	idx, err := h.index(r.Context(), uc)
@@ -294,7 +298,7 @@ func (h *Handler) getAlbum(w http.ResponseWriter, r *http.Request, uc *service.U
 		h.fail(w, r, 0, "reading the library failed")
 		return
 	}
-	al := idx.albumByKey[albumKey(artist, album)]
+	al := idx.findAlbum(id)
 	if al == nil {
 		h.fail(w, r, 70, "no such album")
 		return
@@ -376,7 +380,7 @@ func (h *Handler) getSong(w http.ResponseWriter, r *http.Request, uc *service.Us
 		h.fail(w, r, 70, "no such song")
 		return
 	}
-	al := idx.albumByKey[albumKeyForTrack(*tr)]
+	al := idx.albumForTrack(*tr)
 	song := songChild(*tr, al)
 	h.ok(w, r, envelope{Song: &song})
 }
@@ -447,7 +451,7 @@ func (h *Handler) search3(w http.ResponseWriter, r *http.Request, uc *service.Us
 			break
 		}
 		if match(tr.Title) || match(tr.Artist) || match(tr.Album) {
-			al := idx.albumByKey[albumKeyForTrack(tr)]
+			al := idx.albumForTrack(tr)
 			out.Songs = append(out.Songs, songChild(tr, al))
 		}
 	}
@@ -457,32 +461,29 @@ func (h *Handler) search3(w http.ResponseWriter, r *http.Request, uc *service.Us
 func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
 	id := r.Form.Get("id")
 	pid := id
-	// Minted artist and album ids resolve through a member item, whose
-	// art chain falls back to album and artist artwork.
-	if artist, album, ok := decodeAlbumID(id); ok {
+	// Artist and album ids resolve through a member item, whose art
+	// chain falls back to album and artist artwork. An entity pid could
+	// be handed to the art path directly, but the artist level has no
+	// derived fallback to a member's embedded cover the way the album
+	// level does, so going through a member is what keeps artist covers
+	// working for a library whose artists carry no art of their own.
+	if entityGroupID(id) {
 		idx, err := h.index(r.Context(), uc)
 		if err != nil {
 			h.fail(w, r, 0, "reading the library failed")
 			return
 		}
-		al := idx.albumByKey[albumKey(artist, album)]
-		if al == nil || len(al.tracks) == 0 {
+		var tracks []track
+		if al := idx.findAlbum(id); al != nil {
+			tracks = al.tracks
+		} else if a := idx.findArtist(id); a != nil && len(a.albums) > 0 {
+			tracks = a.albums[0].tracks
+		}
+		if len(tracks) == 0 {
 			h.fail(w, r, 70, "no such cover")
 			return
 		}
-		pid = al.tracks[0].PID
-	} else if name, ok := decodeArtistID(id); ok {
-		idx, err := h.index(r.Context(), uc)
-		if err != nil {
-			h.fail(w, r, 0, "reading the library failed")
-			return
-		}
-		a := idx.artistByName[name]
-		if a == nil || len(a.albums) == 0 || len(a.albums[0].tracks) == 0 {
-			h.fail(w, r, 70, "no such cover")
-			return
-		}
-		pid = a.albums[0].tracks[0].PID
+		pid = tracks[0].PID
 	}
 	size := formInt(r, "size", 0)
 	// Subsonic has no artwork-slot concept; it always serves the front cover.
@@ -538,31 +539,82 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	http.Redirect(w, r, info.URL, http.StatusFound)
 }
 
-// --- the string-grouped index ------------------------------------------------
+// --- the entity-keyed index --------------------------------------------------
 
 type track = service.TrackFacts
 
 type album struct {
-	artist string
-	name   string
-	year   int
-	genre  string
-	durMS  int64
-	tracks []track
+	// id is what the protocol carries: the catalog's album entity pid
+	// where the tracks have one, a minted identifier otherwise. pid is
+	// empty in the minted case, which is how the entity-scoped surfaces
+	// tell the two apart.
+	id       string
+	pid      string
+	artist   string
+	artistID string
+	name     string
+	year     int
+	genre    string
+	durMS    int64
+	tracks   []track
 }
 
 type artist struct {
+	id     string
+	pid    string
 	name   string
 	albums []*album
 }
 
 type index struct {
-	tracks       []track
-	artists      []*artist
-	albums       []*album
+	tracks     []track
+	artists    []*artist
+	albums     []*album
+	artistByID map[string]*artist
+	albumByID  map[string]*album
+	trackByPID map[string]*track
+	// albumByTrack records the group each track actually joined, keyed
+	// by item pid. Reconstructing it from the track's tags would miss
+	// wherever the group took the catalog's canonical spelling instead.
+	albumByTrack map[string]*album
+
+	// Display-key maps, kept only so an identifier a client cached
+	// before the surface moved to entity pids still resolves. Best
+	// effort: an id minted from a tag spelling this build no longer
+	// displays misses, and the client refetches the index.
 	artistByName map[string]*artist
 	albumByKey   map[string]*album
-	trackByPID   map[string]*track
+}
+
+// findArtist resolves an artist identifier from either scheme: the
+// entity pid the surface hands out now, or a minted id a client cached
+// before the cutover. Every caller goes through it rather than
+// re-deriving the fallback.
+func (idx *index) findArtist(id string) *artist {
+	if a := idx.artistByID[id]; a != nil {
+		return a
+	}
+	if name, ok := decodeArtistID(id); ok {
+		return idx.artistByName[name]
+	}
+	return nil
+}
+
+// findAlbum is findArtist's album twin.
+func (idx *index) findAlbum(id string) *album {
+	if al := idx.albumByID[id]; al != nil {
+		return al
+	}
+	if artistName, albumName, ok := decodeAlbumID(id); ok {
+		return idx.albumByKey[albumKey(artistName, albumName)]
+	}
+	return nil
+}
+
+// albumForTrack finds the album a track grouped under, which every song
+// response needs for its album and artist linkage.
+func (idx *index) albumForTrack(tr track) *album {
+	return idx.albumByTrack[tr.PID]
 }
 
 // index returns the grouped view over the service's track sweep. The
@@ -570,12 +622,19 @@ type index struct {
 // mirroring the sweep's own cache; restricted callers group per request
 // over their filtered sweep, keeping visibility exact.
 func (h *Handler) index(ctx context.Context, uc *service.UserCtx) (*index, error) {
-	if !uc.AllLibraries {
+	build := func() (*index, error) {
 		rows, err := h.svc.TrackFacts(ctx, uc)
 		if err != nil {
 			return nil, err
 		}
-		return buildIndex(rows), nil
+		names, err := h.entityNames(ctx, rows)
+		if err != nil {
+			return nil, err
+		}
+		return buildIndex(rows, names), nil
+	}
+	if !uc.AllLibraries {
+		return build()
 	}
 	tail := h.svc.CatalogTailSeq()
 	h.idxMu.Lock()
@@ -585,42 +644,98 @@ func (h *Handler) index(ctx context.Context, uc *service.UserCtx) (*index, error
 		return idx, nil
 	}
 	h.idxMu.Unlock()
-	rows, err := h.svc.TrackFacts(ctx, uc)
+	idx, err := build()
 	if err != nil {
 		return nil, err
 	}
-	idx := buildIndex(rows)
 	h.idxMu.Lock()
 	h.idxTail, h.idxShared = tail, idx
 	h.idxMu.Unlock()
 	return idx, nil
 }
 
-func buildIndex(rows []track) *index {
+// entityNames resolves the catalog's display name for every artist and
+// album entity the sweep references, keyed by API pid. Once a group is
+// keyed on identity its label can no longer come from whichever member
+// row the sweep reached first: two tracks of one album with differently
+// spelled tags would otherwise name the group nondeterministically, in
+// a cached index. Two batched lookups per build, one per kind.
+func (h *Handler) entityNames(ctx context.Context, rows []track) (map[string]string, error) {
+	var artistPIDs, albumPIDs []string
+	seen := make(map[string]bool, len(rows))
+	collect := func(pid string, into *[]string) {
+		if pid == "" || seen[pid] {
+			return
+		}
+		seen[pid] = true
+		*into = append(*into, pid)
+	}
+	for _, tr := range rows {
+		collect(tr.AlbumArtistPID, &artistPIDs)
+		collect(tr.AlbumPID, &albumPIDs)
+	}
+	names := make(map[string]string, len(artistPIDs)+len(albumPIDs))
+	for _, pids := range [][]string{artistPIDs, albumPIDs} {
+		if len(pids) == 0 {
+			continue
+		}
+		batch, err := h.svc.EntityNames(ctx, pids)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(names, batch)
+	}
+	return names, nil
+}
+
+func buildIndex(rows []track, names map[string]string) *index {
 	idx := &index{
 		tracks:       rows,
+		artistByID:   make(map[string]*artist),
+		albumByID:    make(map[string]*album),
+		trackByPID:   make(map[string]*track, len(rows)),
+		albumByTrack: make(map[string]*album, len(rows)),
 		artistByName: make(map[string]*artist),
 		albumByKey:   make(map[string]*album),
-		trackByPID:   make(map[string]*track, len(rows)),
 	}
+	// An album whose tracks credit several artists (a compilation with
+	// no album-artist tag) is one catalog album but reaches several
+	// artist groups. Attach it to each so no artist ends up albumless,
+	// while its own responses keep the single artist id the protocol
+	// allows.
+	attached := make(map[*artist]map[*album]bool)
 	for i := range rows {
 		tr := rows[i]
 		idx.trackByPID[tr.PID] = &rows[i]
-		artistName, albumName := groupNames(tr)
-		a := idx.artistByName[artistName]
-		if a == nil {
-			a = &artist{name: artistName}
-			idx.artistByName[artistName] = a
-			idx.artists = append(idx.artists, a)
+		artistName, albumName := groupNames(tr, names)
+
+		artistID := tr.AlbumArtistPID
+		if artistID == "" {
+			artistID = encodeArtistID(artistName)
 		}
-		key := albumKey(artistName, albumName)
-		al := idx.albumByKey[key]
+		a := idx.artistByID[artistID]
+		if a == nil {
+			a = &artist{id: artistID, pid: tr.AlbumArtistPID, name: artistName}
+			idx.artistByID[artistID] = a
+			idx.artists = append(idx.artists, a)
+			attached[a] = make(map[*album]bool)
+		}
+
+		albumID := tr.AlbumPID
+		if albumID == "" {
+			albumID = encodeAlbumID(artistName, albumName)
+		}
+		al := idx.albumByID[albumID]
 		if al == nil {
-			al = &album{artist: artistName, name: albumName}
-			idx.albumByKey[key] = al
+			al = &album{id: albumID, pid: tr.AlbumPID, artist: a.name, artistID: a.id, name: albumName}
+			idx.albumByID[albumID] = al
 			idx.albums = append(idx.albums, al)
+		}
+		if !attached[a][al] {
+			attached[a][al] = true
 			a.albums = append(a.albums, al)
 		}
+		idx.albumByTrack[tr.PID] = al
 		al.tracks = append(al.tracks, tr)
 		al.durMS += tr.DurationMS
 		if al.year == 0 {
@@ -639,16 +754,29 @@ func buildIndex(rows []track) *index {
 		if li != lj {
 			return li < lj
 		}
-		return foldLess(idx.artists[i].name, idx.artists[j].name)
+		if !strings.EqualFold(idx.artists[i].name, idx.artists[j].name) {
+			return foldLess(idx.artists[i].name, idx.artists[j].name)
+		}
+		// Two distinct entities can share a display name; the id breaks
+		// the tie so the order stays stable across builds.
+		return idx.artists[i].id < idx.artists[j].id
 	})
 	sort.Slice(idx.albums, func(i, j int) bool {
 		if !strings.EqualFold(idx.albums[i].name, idx.albums[j].name) {
 			return foldLess(idx.albums[i].name, idx.albums[j].name)
 		}
-		return foldLess(idx.albums[i].artist, idx.albums[j].artist)
+		if !strings.EqualFold(idx.albums[i].artist, idx.albums[j].artist) {
+			return foldLess(idx.albums[i].artist, idx.albums[j].artist)
+		}
+		return idx.albums[i].id < idx.albums[j].id
 	})
 	for _, a := range idx.artists {
-		sort.Slice(a.albums, func(i, j int) bool { return foldLess(a.albums[i].name, a.albums[j].name) })
+		sort.Slice(a.albums, func(i, j int) bool {
+			if !strings.EqualFold(a.albums[i].name, a.albums[j].name) {
+				return foldLess(a.albums[i].name, a.albums[j].name)
+			}
+			return a.albums[i].id < a.albums[j].id
+		})
 	}
 	for _, al := range idx.albums {
 		sort.Slice(al.tracks, func(i, j int) bool {
@@ -661,6 +789,18 @@ func buildIndex(rows []track) *index {
 			}
 			return ti.Title < tj.Title
 		})
+	}
+	// The legacy id maps, filled in sorted order so a display-name
+	// collision resolves the same way on every build.
+	for _, a := range idx.artists {
+		if _, ok := idx.artistByName[a.name]; !ok {
+			idx.artistByName[a.name] = a
+		}
+	}
+	for _, al := range idx.albums {
+		if k := albumKey(al.artist, al.name); idx.albumByKey[k] == nil {
+			idx.albumByKey[k] = al
+		}
 	}
 	return idx
 }
@@ -683,32 +823,46 @@ const (
 	unknownAlbum  = "[Unknown Album]"
 )
 
-// groupNames returns the names a track groups under, empty tags folded
-// into the unknown buckets.
-func groupNames(tr track) (artistName, albumName string) {
+// groupNames returns the names a track groups under: the catalog's
+// canonical entity name where the track carries an entity handle, its
+// own tags otherwise, empty tags folded into the unknown buckets.
+func groupNames(tr track, names map[string]string) (artistName, albumName string) {
 	artistName = tr.AlbumArtist
+	if n := names[tr.AlbumArtistPID]; n != "" {
+		artistName = n
+	}
 	if artistName == "" {
 		artistName = unknownArtist
 	}
 	albumName = tr.Album
+	if n := names[tr.AlbumPID]; n != "" {
+		albumName = n
+	}
 	if albumName == "" {
 		albumName = unknownAlbum
 	}
 	return artistName, albumName
 }
 
-// albumKeyForTrack keys a track's album with the grouping defaults
-// applied; keying on the raw tags misses the unknown buckets.
-func albumKeyForTrack(tr track) string {
-	artistName, albumName := groupNames(tr)
-	return albumKey(artistName, albumName)
-}
-
 func albumKey(artist, album string) string { return artist + "\x1f" + album }
 
+// entityGroupID reports whether an id names an artist or album group
+// rather than a song, in either identifier scheme. It is the routing
+// test wherever the protocol overloads one parameter across the two:
+// getCoverArt (where it also keeps the song case off the index, which
+// the cover path would otherwise build on every thumbnail request) and
+// the star and rating writes.
+func entityGroupID(id string) bool {
+	return strings.HasPrefix(id, "A!") || strings.HasPrefix(id, "L!") ||
+		strings.HasPrefix(id, service.PrefixArtist+"-") ||
+		strings.HasPrefix(id, service.PrefixAlbum+"-")
+}
+
 // Minted identifiers: "A!" + base64(artist) and "L!" + base64(artist
-// US album). Opaque to clients, stable across requests, decodable
-// without state.
+// US album). They name a group the catalog holds no entity for — a
+// loose track has no album row — and stay decodable without state so an
+// id a client cached before the surface moved to entity pids still
+// resolves.
 func encodeArtistID(name string) string {
 	return "A!" + base64.RawURLEncoding.EncodeToString([]byte(name))
 }

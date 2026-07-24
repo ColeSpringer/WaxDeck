@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -317,6 +318,71 @@ func streamAndAssertBytes(t *testing.T, h *harness, path string) {
 	resp.Body.Close()
 	if resp.StatusCode != 200 || len(audio) == 0 {
 		t.Fatalf("proxied stream status = %d bytes = %d", resp.StatusCode, len(audio))
+	}
+}
+
+// TestSubsonicEntityIDCutover pins the identifier change on the wire.
+// Browse hands out catalog entity pids now, and an id a client cached
+// from the previous minted scheme still resolves, so the cutover does
+// not strand the stored favorites and playlists already in the wild.
+func TestSubsonicEntityIDCutover(t *testing.T) {
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	const c = "test"
+
+	env := mustOK(t, h, secret, c, "getArtists", "")
+	var artistID string
+	for _, sec := range jlist(jmap(env["artists"])["index"]) {
+		for _, a := range jlist(jmap(sec)["artist"]) {
+			if jmap(a)["name"] == "Fixture Artist" {
+				artistID, _ = jmap(a)["id"].(string)
+			}
+		}
+	}
+	if !strings.HasPrefix(artistID, "ar-") {
+		t.Fatalf("artist id = %q, want a catalog entity pid", artistID)
+	}
+	env = mustOK(t, h, secret, c, "getArtist", "&id="+url.QueryEscape(artistID))
+	albumID, _ := jmap(jlist(jmap(env["artist"])["album"])[0])["id"].(string)
+	if !strings.HasPrefix(albumID, "al-") {
+		t.Fatalf("album id = %q, want a catalog entity pid", albumID)
+	}
+
+	// The pre-cutover forms: "A!" + base64(artist) and "L!" +
+	// base64(artist US album).
+	minted := func(prefix, s string) string {
+		return prefix + "!" + base64.RawURLEncoding.EncodeToString([]byte(s))
+	}
+	legacyArtist := minted("A", "Fixture Artist")
+	legacyAlbum := minted("L", "Fixture Artist\x1fFixture Album")
+
+	env = mustOK(t, h, secret, c, "getArtist", "&id="+url.QueryEscape(legacyArtist))
+	if jmap(env["artist"])["name"] != "Fixture Artist" {
+		t.Fatalf("cached minted artist id did not resolve: %v", env["artist"])
+	}
+	// Following a cached id hands back the entity form, so a client that
+	// stores what it reads migrates itself.
+	if got := jmap(env["artist"])["id"]; got != artistID {
+		t.Errorf("getArtist by cached id returned %v, want the entity id %s", got, artistID)
+	}
+	env = mustOK(t, h, secret, c, "getAlbum", "&id="+url.QueryEscape(legacyAlbum))
+	if got := jmap(env["album"])["id"]; got != albumID {
+		t.Errorf("getAlbum by cached id returned %v, want the entity id %s", got, albumID)
+	}
+
+	// Folder-mode browse takes either scheme, and answers the same
+	// directory for both.
+	for _, id := range []string{legacyAlbum, albumID} {
+		env = mustOK(t, h, secret, c, "getMusicDirectory", "&id="+url.QueryEscape(id))
+		dir := jmap(env["directory"])
+		if dir["id"] != albumID || len(jlist(dir["child"])) != 4 {
+			t.Errorf("getMusicDirectory(%q) = %v, want the album with its 4 songs", id, dir)
+		}
+	}
+	// An id in neither scheme is still an unknown directory, not a
+	// server error.
+	if env := clientCall(t, h, secret, c, "getMusicDirectory", "&id=nonsense"); env["status"] != "failed" {
+		t.Errorf("getMusicDirectory with a junk id = %v, want failed", env)
 	}
 }
 

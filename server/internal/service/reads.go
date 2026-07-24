@@ -123,23 +123,29 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 	if err != nil {
 		return SearchResults{}, classify(err)
 	}
-	convEntity := func(hits []read.SearchHit, prefix string, kind read.EntityKind) []SearchHit {
+	convEntity := func(hits []read.SearchHit, prefix string, kind read.EntityKind) ([]SearchHit, error) {
+		// Entities carry no stored library column, so a restricted caller's
+		// hits are attributed through the libraries holding their member
+		// items, in one batched lookup per kind. Full-visibility callers
+		// see every entity and skip it entirely.
+		var infos map[model.PID]*read.EntityInfo
+		if !uc.AllLibraries && len(hits) > 0 {
+			pids := make([]model.PID, 0, len(hits))
+			for _, h := range hits {
+				pids = append(pids, h.PID)
+			}
+			var err error
+			if infos, err = l.lib.EntityByPIDs(ctx, kind, pids); err != nil {
+				// The batch is the gate, so a failure can neither hand the
+				// caller entities it may not see nor pass as an honest
+				// empty group: it fails the search.
+				return nil, classify(err)
+			}
+		}
 		out := make([]SearchHit, 0, len(hits))
 		for _, h := range hits {
-			if !uc.AllLibraries {
-				// Entities carry no stored library column, so attribute
-				// each to the libraries holding its member items and keep
-				// it only when the caller is granted one of them. This is
-				// one entity lookup per hit, each aggregating the entity's
-				// members over libraries; it is paid only by restricted
-				// callers and bounded by the search page limit (full-
-				// visibility callers skip the whole block). A batch
-				// attribution primitive would retire the per-hit lookup
-				// (noted in upstream-requests.md).
-				info, err := l.lib.EntityByPID(ctx, kind, h.PID)
-				if err != nil || !l.entityInLibraries(info, uc) {
-					continue
-				}
+			if !uc.AllLibraries && !l.entityInLibraries(infos[h.PID], uc) {
+				continue
 			}
 			out = append(out, SearchHit{
 				PID:      apiPID(prefix, h.PID),
@@ -148,7 +154,7 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 				Subtitle: h.Subtitle,
 			})
 		}
-		return out
+		return out, nil
 	}
 	subs := l.newSubscriptionFilter(uc)
 	convItem := func(hits []read.SearchHit, prefix string) []SearchHit {
@@ -174,15 +180,67 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 		}
 		return out
 	}
+	artists, err := convEntity(res.Artists, PrefixArtist, read.EntityArtist)
+	if err != nil {
+		return SearchResults{}, err
+	}
+	albums, err := convEntity(res.Albums, PrefixAlbum, read.EntityAlbum)
+	if err != nil {
+		return SearchResults{}, err
+	}
 	return SearchResults{
 		Query:     res.Query,
-		Artists:   convEntity(res.Artists, PrefixArtist, read.EntityArtist),
-		Albums:    convEntity(res.Albums, PrefixAlbum, read.EntityAlbum),
+		Artists:   artists,
+		Albums:    albums,
 		Tracks:    convItem(res.Tracks, PrefixTrack),
 		Books:     convItem(res.Books, PrefixBook),
 		Episodes:  convItem(res.Episodes, PrefixEpisode),
 		Truncated: res.Truncated,
 	}, nil
+}
+
+// EntityNames resolves the catalog's display name for a batch of API
+// entity pids, keyed by the pid passed in. Every pid must share one
+// prefix (the catalog batches within a kind); unknown or unparseable
+// pids are omitted rather than erroring, so a caller hydrating labels
+// falls back to whatever it already had.
+//
+// This is the compatibility surface's naming primitive: once a group is
+// keyed on an entity rather than on a display string, the label has to
+// come from the entity too.
+func (l *Library) EntityNames(ctx context.Context, apiPIDs []string) (map[string]string, error) {
+	if len(apiPIDs) == 0 {
+		return nil, nil
+	}
+	prefix, _, ok := parseAPIPID(apiPIDs[0])
+	if !ok {
+		return nil, errInvalid("malformed entity pid " + apiPIDs[0])
+	}
+	kind, ok := entityKindForPrefix(prefix)
+	if !ok {
+		return nil, errInvalid("no entity kind for pid " + apiPIDs[0])
+	}
+	pids := make([]model.PID, 0, len(apiPIDs))
+	back := make(map[model.PID]string, len(apiPIDs))
+	for _, api := range apiPIDs {
+		p, pid, ok := parseAPIPID(api)
+		if !ok || p != prefix {
+			continue
+		}
+		pids = append(pids, pid)
+		back[pid] = api
+	}
+	infos, err := l.lib.EntityByPIDs(ctx, kind, pids)
+	if err != nil {
+		return nil, classify(err)
+	}
+	out := make(map[string]string, len(infos))
+	for pid, info := range infos {
+		if info != nil && info.Name != "" {
+			out[back[pid]] = info.Name
+		}
+	}
+	return out, nil
 }
 
 // entityInLibraries reports whether any library holding the entity's

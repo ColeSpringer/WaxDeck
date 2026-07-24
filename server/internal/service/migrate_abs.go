@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/colespringer/waxbin/model"
 
@@ -156,12 +157,28 @@ func (l *Library) runABSImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx
 			// than carrying a separate flag.
 			posMS = it.DurationMS
 		}
+		// Replay the checkpoint in the source's own recorded time so the
+		// position stamp orders it against whatever the user has already
+		// listened to here: a backdated import stops reading as a
+		// just-now checkpoint and losing them their place.
+		var recordedAt *time.Time
+		if mp.LastUpdate > 0 {
+			ts := time.UnixMilli(mp.LastUpdate)
+			recordedAt = &ts
+		}
 		if !p.DryRun {
-			if err := l.Checkpoint(ctx, uc, apiPID(PrefixBook, it.PID), posMS, nil); err != nil {
+			applied, err := l.Checkpoint(ctx, uc, apiPID(PrefixBook, it.PID), posMS, recordedAt)
+			if err != nil {
 				if !migrateWriteSkippable(err) {
 					return sum, err
 				}
 				l.log.Warn("migration progress skipped", "task", t.ID, "item", string(it.PID), "err", err)
+				continue
+			}
+			if !applied {
+				// The local position is newer than the source's recorded
+				// time, so the replay lost. Counting it would report a
+				// write the import did not make.
 				continue
 			}
 		}

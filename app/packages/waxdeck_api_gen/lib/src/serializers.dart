@@ -79,6 +79,7 @@ import 'package:waxdeck_api_gen/src/model/enrichment_status.dart';
 import 'package:waxdeck_api_gen/src/model/entity_curated_field.dart';
 import 'package:waxdeck_api_gen/src/model/entity_curation.dart';
 import 'package:waxdeck_api_gen/src/model/entity_edit.dart';
+import 'package:waxdeck_api_gen/src/model/entity_play_state.dart';
 import 'package:waxdeck_api_gen/src/model/entity_type_fields.dart';
 import 'package:waxdeck_api_gen/src/model/episode.dart';
 import 'package:waxdeck_api_gen/src/model/episode_page.dart';
@@ -264,6 +265,7 @@ import 'package:waxdeck_api_gen/src/model/smart_rule.dart';
 import 'package:waxdeck_api_gen/src/model/sonic_path.dart';
 import 'package:waxdeck_api_gen/src/model/soundbite.dart';
 import 'package:waxdeck_api_gen/src/model/star_update.dart';
+import 'package:waxdeck_api_gen/src/model/starred_entities.dart';
 import 'package:waxdeck_api_gen/src/model/subscribe_request.dart';
 import 'package:waxdeck_api_gen/src/model/subscription.dart';
 import 'package:waxdeck_api_gen/src/model/subscription_page.dart';
@@ -388,6 +390,7 @@ part 'serializers.g.dart';
   EntityCuratedField,
   EntityCuration,
   EntityEdit,
+  EntityPlayState,
   EntityTypeFields,
   Episode,
   EpisodePage,
@@ -573,6 +576,7 @@ part 'serializers.g.dart';
   SonicPath,
   Soundbite,
   StarUpdate,
+  StarredEntities,
   SubscribeRequest,
   Subscription,
   SubscriptionPage,

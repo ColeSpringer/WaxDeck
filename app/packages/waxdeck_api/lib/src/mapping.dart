@@ -202,6 +202,23 @@ PlayState playStateFromGen(gen.PlayState state) {
   );
 }
 
+EntityPlayState entityPlayStateFromGen(gen.EntityPlayState state) {
+  return EntityPlayState(
+    pid: state.pid,
+    starred: state.starred,
+    starredAt: state.starredAt,
+    rating: state.rating,
+    updatedAt: state.updatedAt,
+  );
+}
+
+StarredEntities starredEntitiesFromGen(gen.StarredEntities entities) {
+  return StarredEntities(
+    artists: entities.artists.map(searchHitFromGen).toList(),
+    albums: entities.albums.map(searchHitFromGen).toList(),
+  );
+}
+
 gen.ListenSession listenSessionToGen(ListenSession session) {
   return gen.ListenSession(
     (b) => b

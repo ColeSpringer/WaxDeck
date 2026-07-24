@@ -87,7 +87,7 @@ func (l *Library) PlayerCheckpoint(ctx context.Context, userID, pid string, posi
 	if err != nil {
 		return
 	}
-	if err := l.Checkpoint(ctx, uc, pid, positionMS, nil); err != nil {
+	if _, err := l.Checkpoint(ctx, uc, pid, positionMS, nil); err != nil {
 		l.log.Warn("player checkpoint", "pid", pid, "err", err)
 	}
 }

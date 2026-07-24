@@ -81,6 +81,7 @@ Serializers _$serializers =
           ..add(EntityCuratedField.serializer)
           ..add(EntityCuration.serializer)
           ..add(EntityEdit.serializer)
+          ..add(EntityPlayState.serializer)
           ..add(EntityTypeFields.serializer)
           ..add(Episode.serializer)
           ..add(EpisodePage.serializer)
@@ -276,6 +277,7 @@ Serializers _$serializers =
           ..add(SonicPath.serializer)
           ..add(Soundbite.serializer)
           ..add(StarUpdate.serializer)
+          ..add(StarredEntities.serializer)
           ..add(SubscribeRequest.serializer)
           ..add(Subscription.serializer)
           ..add(SubscriptionPage.serializer)
@@ -727,6 +729,14 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),
             () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(SearchHit)]),
+            () => ListBuilder<SearchHit>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(SearchHit)]),
+            () => ListBuilder<SearchHit>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(SearchHit)]),

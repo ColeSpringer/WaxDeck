@@ -153,6 +153,33 @@ abstract interface class WaxDeckRepository {
   /// marks an offline-queue replay.
   Future<PlayState> setRating(String pid, int? rating, {DateTime? recordedAt});
 
+  /// `GET /artists/{pid}/play-state` or `GET /albums/{pid}/play-state`:
+  /// the caller's star and rating for one catalog entity, selected by
+  /// the pid's own prefix. An untouched entity reads back zero.
+  Future<EntityPlayState> getEntityPlayState(String pid);
+
+  /// `PUT /artists/{pid}/star` or `PUT /albums/{pid}/star`: stars or
+  /// unstars one catalog entity, returning its updated state. Entity
+  /// stars are independent of item stars: starring an album does not
+  /// star its tracks. [recordedAt] marks an offline-queue replay.
+  Future<EntityPlayState> setEntityStar(
+    String pid,
+    bool starred, {
+    DateTime? recordedAt,
+  });
+
+  /// `PUT /artists/{pid}/rating` or `PUT /albums/{pid}/rating`: rates
+  /// one catalog entity, 0 to 100, or clears the rating with null.
+  /// [recordedAt] marks an offline-queue replay.
+  Future<EntityPlayState> setEntityRating(
+    String pid,
+    int? rating, {
+    DateTime? recordedAt,
+  });
+
+  /// `GET /starred-entities`: the caller's starred artists and albums.
+  Future<StarredEntities> listStarredEntities();
+
   /// `POST /listens`: reports listen sessions. Idempotent per session ID, so
   /// retrying a failed batch is always safe.
   Future<ListenOutcome> reportListens(List<ListenSession> sessions);
@@ -1542,6 +1569,76 @@ class WaxDeckClient implements WaxDeckRepository {
       ),
     );
     return playStateFromGen(_require(response.data));
+  });
+
+  /// Entity star and rating calls route on the pid's own prefix: the
+  /// artist and album paths are separate operations in the contract but
+  /// one surface to callers, so the prefix picks the operation rather
+  /// than every call site knowing which endpoint it wants.
+  ///
+  /// Only those two prefixes name a catalog entity. Anything else is a
+  /// caller mistake (an item pid, a typo) and is refused here rather
+  /// than sent to the album endpoint to come back as a confusing
+  /// "no album with pid tr-…".
+  static bool _isArtistPid(String pid) {
+    if (pid.startsWith('ar-')) return true;
+    if (pid.startsWith('al-')) return false;
+    throw ArgumentError.value(
+      pid,
+      'pid',
+      'not a catalog entity pid; expected an ar- artist or al- album',
+    );
+  }
+
+  @override
+  Future<EntityPlayState> getEntityPlayState(String pid) => _guard(() async {
+    final api = _gen.getPlaybackApi();
+    final response = _isArtistPid(pid)
+        ? await api.getArtistPlayState(pid: pid)
+        : await api.getAlbumPlayState(pid: pid);
+    return entityPlayStateFromGen(_require(response.data));
+  });
+
+  @override
+  Future<EntityPlayState> setEntityStar(
+    String pid,
+    bool starred, {
+    DateTime? recordedAt,
+  }) => _guard(() async {
+    final api = _gen.getPlaybackApi();
+    final update = gen.StarUpdate(
+      (b) => b
+        ..starred = starred
+        ..recordedAt = recordedAt?.toUtc(),
+    );
+    final response = _isArtistPid(pid)
+        ? await api.setArtistStar(pid: pid, starUpdate: update)
+        : await api.setAlbumStar(pid: pid, starUpdate: update);
+    return entityPlayStateFromGen(_require(response.data));
+  });
+
+  @override
+  Future<EntityPlayState> setEntityRating(
+    String pid,
+    int? rating, {
+    DateTime? recordedAt,
+  }) => _guard(() async {
+    final api = _gen.getPlaybackApi();
+    final update = gen.RatingUpdate(
+      (b) => b
+        ..rating = rating
+        ..recordedAt = recordedAt?.toUtc(),
+    );
+    final response = _isArtistPid(pid)
+        ? await api.setArtistRating(pid: pid, ratingUpdate: update)
+        : await api.setAlbumRating(pid: pid, ratingUpdate: update);
+    return entityPlayStateFromGen(_require(response.data));
+  });
+
+  @override
+  Future<StarredEntities> listStarredEntities() => _guard(() async {
+    final response = await _gen.getPlaybackApi().listStarredEntities();
+    return starredEntitiesFromGen(_require(response.data));
   });
 
   @override

@@ -80,6 +80,11 @@ const (
 	eventReview       = "review"
 	eventUpload       = "upload"
 	eventTask         = "task"
+	// eventEntityState marks a star or rating change on a catalog
+	// entity. A marker, not a hydrated kind: its pid is an artist or
+	// album, which the item-shaped play-state payload cannot carry, and
+	// the entity state endpoints are live reads anyway.
+	eventEntityState = "entity-state"
 )
 
 // ErrSyncReset marks a cursor the stream can no longer serve
@@ -780,7 +785,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 	seenPrefs := false
 	for _, e := range events {
 		switch e.Kind {
-		case eventReview, eventUpload, eventTask:
+		case eventReview, eventUpload, eventTask, eventEntityState:
 			// Marker kinds hydrate nothing: the pid names what to
 			// refetch and the surfaces are live reads.
 			key := e.Kind + "\x00" + e.ItemPID

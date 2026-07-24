@@ -26,6 +26,53 @@ func TestEntityInLibraries(t *testing.T) {
 	}
 }
 
+// TestRestrictedEntitySearchAttribution drives the batched attribution
+// end to end. Entity hits carry no stored library column, so a
+// restricted caller's are kept or dropped by which libraries hold their
+// members; the lookup is batched per kind now, and a batch that keyed
+// or filtered wrongly would either leak entities or empty the results.
+func TestRestrictedEntitySearchAttribution(t *testing.T) {
+	ctx, svc, uc := newCatalogFixture(t)
+
+	libs, err := svc.Libraries(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(libs) != 1 {
+		t.Fatalf("libraries = %d, want the one fixture root", len(libs))
+	}
+	granted := &UserCtx{
+		ID: uc.ID, CatalogPID: uc.CatalogPID,
+		Libraries: map[string]bool{strings.TrimPrefix(libs[0].PID, PrefixLibrary+"-"): true},
+	}
+	res, err := svc.Search(ctx, granted, "Signal Garden", 10)
+	if err != nil {
+		t.Fatalf("granted search: %v", err)
+	}
+	if len(res.Albums) == 0 {
+		t.Fatal("a caller granted the only library sees no album entities")
+	}
+
+	// The same search under a grant for a different library keeps
+	// nothing: every hit attributes to a library outside the grant.
+	other, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "other", Path: t.TempDir()})
+	if err != nil {
+		t.Fatalf("adding a second library: %v", err)
+	}
+	elsewhere := &UserCtx{
+		ID: uc.ID, CatalogPID: uc.CatalogPID,
+		Libraries: map[string]bool{strings.TrimPrefix(other.PID, PrefixLibrary+"-"): true},
+	}
+	res, err = svc.Search(ctx, elsewhere, "Signal Garden", 10)
+	if err != nil {
+		t.Fatalf("ungranted search: %v", err)
+	}
+	if len(res.Albums) != 0 || len(res.Artists) != 0 {
+		t.Fatalf("a caller granted no holding library saw %d albums and %d artists",
+			len(res.Albums), len(res.Artists))
+	}
+}
+
 // The fixture catalog groups every track under the album "Signal
 // Garden", so a search for it yields a real album entity pid the mix
 // and share surfaces can seed and target.

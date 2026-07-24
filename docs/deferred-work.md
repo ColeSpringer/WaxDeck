@@ -44,6 +44,17 @@ here waits on upstream.
   and settings surface shipped; the client still needs the
   distributor plugin wrapped behind a WaxDeck-owned interface and a
   real device to verify against. Blocked on hardware access.
+- `[in-repo]` **No artist or album detail screen in the app.** Artists
+  and albums are real entities everywhere else now: they carry their own
+  stars and ratings, the endpoints and the repository wrapper are in
+  place, and the star and rating row (`EntityStarRatingRow`, backed by
+  `EntityPlayStateController`, with the same optimistic-then-settle and
+  offline-outbox behavior the item controls have) is built and tested.
+  What is missing is a screen to host it: the app has no artist or album
+  view, and nothing in it navigates to an entity pid, because the
+  browse surface that would list entities is the faceted-browse work
+  below. The Subsonic surface and the REST API carry entity stars today;
+  the first-party app picks them up when that browse lands.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
@@ -390,18 +401,6 @@ here waits on upstream.
   mixes and inherit nothing sonic. Fixing it means keying embeddings
   by essence plus sample window and teaching the worker audio pull to
   serve the window (the stream surface already can).
-- `[upstream]` **Subsonic artist and album ids stay string-minted.**
-  The entity-pid item facets that landed let WaxDeck seed instant mixes
-  and target share links at an album, and retire the artist facet scan,
-  all by entity identity. They did not retire the Subsonic
-  compatibility surface's minted `A!`/`L!` ids: that index groups by
-  display string and would need to enumerate album entities (no `album`
-  facet group exists) or read an item's entity pids off its view (the
-  facet fields filter but do not project), neither of which the landed
-  capability provides. The minted ids stay (stable, decodable, never
-  persisted, so a cached one still resolves). Rides the "Entity
-  enumeration for the compatibility surface" ask in
-  upstream-requests.md.
 - `[in-repo]` **Time and mood mixes.** Daylist-style rotating mixes
   with scheduled auto-names are a scheduler and a naming table over
   the instant-mix engine that shipped; nothing else blocks them.
@@ -427,16 +426,6 @@ here waits on upstream.
   transcoded and gapless-timeline streaming from the new root waits for a
   sidecar restart. Rides the "Runtime root configuration in the streaming
   sidecar" ask in upstream-requests.md.
-- `[upstream]` **Subsonic album and artist stars are pulled but not
-  written.** The migration importer reads getStarred2's albums and
-  artists alongside songs, but WaxDeck's star surface is item-scoped
-  (as is WaxBin's `SetStar`), so only song stars import and the
-  album/artist stars are dropped. Persisting them faithfully needs an
-  entity-scoped star write, tracked as the "Entity-scoped star writes"
-  ask in upstream-requests.md; the in-repo stopgap is to expand an
-  entity star into stars on its member items, which carries the intent
-  but round-trips as N item stars rather than one entity star, so it is
-  deferred in favor of the faithful surface.
 - `[in-repo]` **Importers beyond Navidrome/Subsonic and
   Audiobookshelf.** The migration framework (portable-ref matching,
   backdated idempotent listen ingest, dry runs, task reports) is

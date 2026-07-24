@@ -46,8 +46,8 @@ func (h *Handler) getSimilarSongs(w http.ResponseWriter, r *http.Request, uc *se
 	h.ok(w, r, envelope{SimilarSongs: list})
 }
 
-// similarSeed resolves a Subsonic id (song pid, minted artist id, or
-// minted album id) to a seed track pid. An index-read failure is an
+// similarSeed resolves a Subsonic id (song pid, artist id, or album
+// id, in either identifier scheme) to a seed track pid. An index-read failure is an
 // error, distinct from an unknown id.
 func (h *Handler) similarSeed(r *http.Request, uc *service.UserCtx, id string) (string, bool, error) {
 	idx, err := h.index(r.Context(), uc)
@@ -57,16 +57,14 @@ func (h *Handler) similarSeed(r *http.Request, uc *service.UserCtx, id string) (
 	if tr := idx.trackByPID[id]; tr != nil {
 		return tr.PID, true, nil
 	}
-	if artistName, albumName, ok := decodeAlbumID(id); ok {
-		if al := idx.albumByKey[albumKey(artistName, albumName)]; al != nil && len(al.tracks) > 0 {
+	if al := idx.findAlbum(id); al != nil {
+		if len(al.tracks) > 0 {
 			return al.tracks[0].PID, true, nil
 		}
 		return "", false, nil
 	}
-	if name, ok := decodeArtistID(id); ok {
-		if a := idx.artistByName[name]; a != nil && len(a.albums) > 0 && len(a.albums[0].tracks) > 0 {
-			return a.albums[0].tracks[0].PID, true, nil
-		}
+	if a := idx.findArtist(id); a != nil && len(a.albums) > 0 && len(a.albums[0].tracks) > 0 {
+		return a.albums[0].tracks[0].PID, true, nil
 	}
 	return "", false, nil
 }
@@ -139,7 +137,7 @@ func (h *Handler) summariesToSongs(r *http.Request, uc *service.UserCtx, items [
 		if tr == nil {
 			continue
 		}
-		out.Songs = append(out.Songs, songChild(*tr, idx.albumByKey[albumKeyForTrack(*tr)]))
+		out.Songs = append(out.Songs, songChild(*tr, idx.albumForTrack(*tr)))
 	}
 	return out, nil
 }

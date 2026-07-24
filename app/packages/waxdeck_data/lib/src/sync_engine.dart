@@ -66,6 +66,10 @@ class SyncEngine {
   /// Fires after mirror rows changed (drift watches also work; these
   /// are for invalidating server-backed views).
   Stream<void> get catalogChanged => _catalogChanged.stream;
+
+  /// Pids whose per-user playback state moved: an item's own state, or
+  /// an artist or album whose star or rating changed. Consumers treat it
+  /// as an invalidation signal, not a payload.
   Stream<String> get playStateChanged => _playStateChanged.stream;
 
   /// Starts the engine: reconcile now, then follow invalidations.
@@ -341,6 +345,12 @@ class SyncEngine {
           if (ev.kind == 'play-state' && ev.playState != null) {
             await _storePlayState(ev.playState!);
             _playStateChanged.add(ev.playState!.pid);
+          } else if (ev.kind == 'entity-state' && ev.pid != null) {
+            // A marker: an artist or album star or rating moved. There
+            // is nothing to mirror (entity state is a live read, and the
+            // mirror is item-scoped), so it only announces the pid to
+            // refetch.
+            _playStateChanged.add(ev.pid!);
           }
           // prefs events invalidate through catalogChanged consumers
           // watching prefs; the prefs controller refetches on its own.
@@ -485,6 +495,40 @@ class SyncEngine {
     );
   }
 
+  /// Queues a star on a catalog entity (an artist or an album).
+  ///
+  /// No mirror write: mirror_play_states is the item play-state cache,
+  /// and an entity star is its own fact, not a member's. The winning
+  /// value comes back through the server stream on reconnect.
+  Future<void> queueEntityStar(String pid, bool starred) async {
+    await _coalesce('entity-star', pid);
+    await db
+        .into(db.outboxMutations)
+        .insert(
+          OutboxMutationsCompanion.insert(
+            kind: 'entity-star',
+            pid: pid,
+            starred: Value(starred),
+            recordedAt: DateTime.now(),
+          ),
+        );
+  }
+
+  /// Queues a rating on a catalog entity; see [queueEntityStar].
+  Future<void> queueEntityRating(String pid, int? rating) async {
+    await _coalesce('entity-rating', pid);
+    await db
+        .into(db.outboxMutations)
+        .insert(
+          OutboxMutationsCompanion.insert(
+            kind: 'entity-rating',
+            pid: pid,
+            rating: Value(rating),
+            recordedAt: DateTime.now(),
+          ),
+        );
+  }
+
   /// Queues a finished listen session; the session id is the
   /// idempotency key, so a duplicate flush can never double-count.
   Future<void> queueListen(ListenSession session) async {
@@ -528,6 +572,18 @@ class SyncEngine {
             );
           case 'rating':
             await repository.setRating(
+              m.pid,
+              m.rating,
+              recordedAt: m.recordedAt,
+            );
+          case 'entity-star':
+            await repository.setEntityStar(
+              m.pid,
+              m.starred ?? false,
+              recordedAt: m.recordedAt,
+            );
+          case 'entity-rating':
+            await repository.setEntityRating(
               m.pid,
               m.rating,
               recordedAt: m.recordedAt,

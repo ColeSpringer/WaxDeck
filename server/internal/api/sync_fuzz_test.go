@@ -27,6 +27,16 @@ import (
 // media, restated here independently of the implementation constant.
 const fuzzGuard = 10 * time.Minute
 
+// sameRating reports whether two optional ratings hold the same value,
+// an unset pair included: the value-identical test the change stamp
+// hangs off.
+func sameRating(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
 // modelState is the model's per-item expected outcome.
 type modelState struct {
 	positionMS int64
@@ -93,6 +103,14 @@ func runSyncModelFuzz(t *testing.T, seed uint64) {
 	// contract says the server must: live writes always apply; replays
 	// reconcile per medium (the fixture library is short music, so
 	// furthest-wins governs positions).
+	//
+	// Stars and ratings order on their change stamp, and the stamp moves
+	// only when the value moves: a write storing the value already held
+	// is a silent no-op that preserves the stamp, so re-starring a
+	// starred item keeps "starred since" truthful and an idempotent
+	// re-rate never masquerades as a newer change to a syncing client.
+	// Positions carry no such rule — every checkpoint is a real
+	// observation — so their stamp bumps unconditionally.
 	applyModel := func(m fuzzMutation, replay bool) {
 		st := stateOf(m.pid)
 		now := time.Now()
@@ -114,6 +132,9 @@ func runSyncModelFuzz(t *testing.T, seed uint64) {
 				}
 			}
 		case "star":
+			if m.starred == st.starred {
+				return
+			}
 			if !replay {
 				st.starred, st.starStamp = m.starred, now
 				return
@@ -122,6 +143,9 @@ func runSyncModelFuzz(t *testing.T, seed uint64) {
 				st.starred, st.starStamp = m.starred, m.recordedAt
 			}
 		case "rating":
+			if sameRating(m.rating, st.rating) {
+				return
+			}
 			if !replay {
 				st.rating, st.ratingStmp = m.rating, now
 				return

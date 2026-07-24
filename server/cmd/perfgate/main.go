@@ -140,7 +140,7 @@ func run(library string, runs int) error {
 		if _, err := svc.SetStar(ctx, uc, it.PID, true, nil); err != nil {
 			return err
 		}
-		if err := svc.Checkpoint(ctx, uc, it.PID, int64(1000+i), nil); err != nil {
+		if _, err := svc.Checkpoint(ctx, uc, it.PID, int64(1000+i), nil); err != nil {
 			return err
 		}
 		starredPIDs = append(starredPIDs, it.PID)

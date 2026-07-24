@@ -121,7 +121,7 @@ func (h *Handler) renderPlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 // renders from the summary row.
 func (h *Handler) entryChild(idx *index, it service.ItemSummary) child {
 	if tr := idx.trackByPID[it.PID]; tr != nil {
-		return songChild(*tr, idx.albumByKey[albumKeyForTrack(*tr)])
+		return songChild(*tr, idx.albumForTrack(*tr))
 	}
 	return child{
 		ID:       it.PID,
@@ -242,19 +242,102 @@ func (h *Handler) deletePlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 
 // --- stars and ratings -------------------------------------------------------
 
-func (h *Handler) setStar(w http.ResponseWriter, r *http.Request, uc *service.UserCtx, starred bool) {
-	if len(r.Form["albumId"]) > 0 || len(r.Form["artistId"]) > 0 {
-		h.fail(w, r, 0, "starring albums and artists is not supported by this server; star songs instead")
-		return
+// Entity identifier kinds the protocol's parameters name. An empty want
+// searches both, which is what a folder-mode `id` needs: it can name a
+// song, an album directory, or an artist directory.
+const (
+	wantAlbum  = "album"
+	wantArtist = "artist"
+)
+
+// resolveEntityID resolves an artist or album identifier the protocol
+// handed us, in either identifier scheme, to the catalog entity pid the
+// entity-state service takes. A group with no entity behind it (a loose
+// track's minted album bucket) has nothing to star, and reports why
+// rather than claiming the server does not support entity stars at all.
+func resolveEntityID(idx *index, id, want string) (pid, reason string) {
+	var al *album
+	var a *artist
+	if want != wantArtist {
+		al = idx.findAlbum(id)
 	}
+	if want != wantAlbum {
+		a = idx.findArtist(id)
+	}
+	switch {
+	case al != nil && al.pid != "":
+		return al.pid, ""
+	case a != nil && a.pid != "":
+		return a.pid, ""
+	case al != nil:
+		return "", "this album is a grouping of tracks with no catalog album, so it cannot be starred or rated"
+	case a != nil:
+		return "", "this artist is a grouping of untagged tracks, not a catalog artist, so it cannot be starred or rated"
+	case want == wantAlbum:
+		return "", "no such album"
+	case want == wantArtist:
+		return "", "no such artist"
+	}
+	return "", "no such album or artist"
+}
+
+func (h *Handler) setStar(w http.ResponseWriter, r *http.Request, uc *service.UserCtx, starred bool) {
+	albumIDs, artistIDs := r.Form["albumId"], r.Form["artistId"]
 	ids := r.Form["id"]
-	if len(ids) == 0 {
+	if len(ids) == 0 && len(albumIDs) == 0 && len(artistIDs) == 0 {
 		h.fail(w, r, 10, "missing id")
 		return
 	}
+	// albumId and artistId are ID3 mode's explicit forms, but folder
+	// mode stars an album or artist through the same `id` parameter it
+	// stars a song with, so each id is sorted by the scheme it is in
+	// rather than by which parameter carried it.
+	var itemIDs []string
+	type entityTarget struct{ id, want string }
+	targets := make([]entityTarget, 0, len(albumIDs)+len(artistIDs))
 	for _, id := range ids {
+		if entityGroupID(id) {
+			targets = append(targets, entityTarget{id, ""})
+			continue
+		}
+		itemIDs = append(itemIDs, id)
+	}
+	for _, id := range artistIDs {
+		targets = append(targets, entityTarget{id, wantArtist})
+	}
+	for _, id := range albumIDs {
+		targets = append(targets, entityTarget{id, wantAlbum})
+	}
+
+	// Every entity id resolves before anything is written: a request
+	// naming several must not half-apply and then report failure. Item
+	// ids cannot be pre-validated without a read apiece, so a bad one
+	// still fails mid-batch, which is the protocol's own shape.
+	pids := make([]string, 0, len(targets))
+	if len(targets) > 0 {
+		idx, err := h.index(r.Context(), uc)
+		if err != nil {
+			h.fail(w, r, 0, "reading the library failed")
+			return
+		}
+		for _, t := range targets {
+			pid, reason := resolveEntityID(idx, t.id, t.want)
+			if reason != "" {
+				h.fail(w, r, 70, reason)
+				return
+			}
+			pids = append(pids, pid)
+		}
+	}
+	for _, id := range itemIDs {
 		if _, err := h.svc.SetStar(r.Context(), uc, id, starred, nil); err != nil {
 			h.failFromService(w, r, err, "no such song")
+			return
+		}
+	}
+	for _, pid := range pids {
+		if _, err := h.svc.SetEntityStar(r.Context(), uc, pid, starred, nil); err != nil {
+			h.failFromService(w, r, err, "no such entity")
 			return
 		}
 	}
@@ -278,11 +361,84 @@ func (h *Handler) setRating(w http.ResponseWriter, r *http.Request, uc *service.
 		v := stars * 20
 		rating = &v
 	}
+	// The protocol overloads one id parameter across songs, albums, and
+	// artists. Item pids route to the item surface; anything in the
+	// entity or minted schemes routes to the entity surface, resolved
+	// across both kinds since the parameter does not say which it is.
+	if entityGroupID(id) {
+		idx, err := h.index(r.Context(), uc)
+		if err != nil {
+			h.fail(w, r, 0, "reading the library failed")
+			return
+		}
+		pid, reason := resolveEntityID(idx, id, "")
+		if reason != "" {
+			h.fail(w, r, 70, reason)
+			return
+		}
+		if _, err := h.svc.SetEntityRating(r.Context(), uc, pid, rating, nil); err != nil {
+			h.failFromService(w, r, err, "no such entity")
+			return
+		}
+		h.ok(w, r, envelope{})
+		return
+	}
 	if _, err := h.svc.SetRating(r.Context(), uc, id, rating, nil); err != nil {
 		h.failFromService(w, r, err, "no such song")
 		return
 	}
 	h.ok(w, r, envelope{})
+}
+
+// starredSongs walks the caller's starred items into Subsonic children.
+func (h *Handler) starredSongs(r *http.Request, uc *service.UserCtx, idx *index) ([]child, error) {
+	var out []child
+	cursor := ""
+	for {
+		page, err := h.svc.Browse(r.Context(), uc, "starred", 0, cursor, 500)
+		if err != nil {
+			return nil, err
+		}
+		for _, it := range page.Items {
+			out = append(out, h.entryChild(idx, it))
+		}
+		if page.Next == "" {
+			return out, nil
+		}
+		cursor = page.Next
+	}
+}
+
+// starredGroups maps the caller's starred entities back through the
+// index. An entity with no index entry is dropped rather than emitted:
+// it would otherwise hand the client an id that 404s on the follow-up
+// getArtist or getAlbum.
+//
+// Three cases reach that: an entity whose tracks all sit outside the
+// caller's grant, one with no tracks at all, and an artist who only
+// ever appears as a track artist under someone else's album artist (a
+// compilation guest), since the index groups artists by album artist.
+// The star itself is intact and shows on the first-party surface; what
+// the compatibility surface cannot list is an artist it does not
+// model.
+func (h *Handler) starredGroups(r *http.Request, uc *service.UserCtx, idx *index) ([]*artist, []*album, error) {
+	res, err := h.svc.StarredEntities(r.Context(), uc)
+	if err != nil {
+		return nil, nil, err
+	}
+	var artists []*artist
+	for _, hit := range res.Artists {
+		if a := idx.artistByID[hit.PID]; a != nil {
+			artists = append(artists, a)
+		}
+	}
+	var albums []*album
+	for _, hit := range res.Albums {
+		if al := idx.albumByID[hit.PID]; al != nil {
+			albums = append(albums, al)
+		}
+	}
+	return artists, albums, nil
 }
 
 func (h *Handler) getStarred2(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
@@ -291,21 +447,22 @@ func (h *Handler) getStarred2(w http.ResponseWriter, r *http.Request, uc *servic
 		h.fail(w, r, 0, "reading the library failed")
 		return
 	}
-	out := &starred2{}
-	cursor := ""
-	for {
-		page, err := h.svc.Browse(r.Context(), uc, "starred", 0, cursor, 500)
-		if err != nil {
-			h.failFromService(w, r, err, "listing starred items failed")
-			return
-		}
-		for _, it := range page.Items {
-			out.Songs = append(out.Songs, h.entryChild(idx, it))
-		}
-		if page.Next == "" {
-			break
-		}
-		cursor = page.Next
+	songs, err := h.starredSongs(r, uc, idx)
+	if err != nil {
+		h.failFromService(w, r, err, "listing starred items failed")
+		return
+	}
+	artists, albums, err := h.starredGroups(r, uc, idx)
+	if err != nil {
+		h.failFromService(w, r, err, "listing starred entities failed")
+		return
+	}
+	out := &starred2{Songs: songs}
+	for _, a := range artists {
+		out.Artists = append(out.Artists, a.id3())
+	}
+	for _, al := range albums {
+		out.Albums = append(out.Albums, al.id3())
 	}
 	h.ok(w, r, envelope{Starred2: out})
 }
@@ -427,7 +584,7 @@ func (h *Handler) createBookmark(w http.ResponseWriter, r *http.Request, uc *ser
 		h.fail(w, r, 10, "missing or malformed id or position")
 		return
 	}
-	if err := h.svc.Checkpoint(r.Context(), uc, id, pos, nil); err != nil {
+	if _, err := h.svc.Checkpoint(r.Context(), uc, id, pos, nil); err != nil {
 		h.failFromService(w, r, err, "no such item")
 		return
 	}
@@ -440,7 +597,7 @@ func (h *Handler) deleteBookmark(w http.ResponseWriter, r *http.Request, uc *ser
 		h.fail(w, r, 10, "missing id")
 		return
 	}
-	if err := h.svc.Checkpoint(r.Context(), uc, id, 0, nil); err != nil {
+	if _, err := h.svc.Checkpoint(r.Context(), uc, id, 0, nil); err != nil {
 		h.failFromService(w, r, err, "no such item")
 		return
 	}

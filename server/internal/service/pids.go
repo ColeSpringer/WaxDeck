@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/read"
 )
 
 // API-surface PID prefixes. WaxBin PIDs are bare ULIDs; the type prefix
@@ -72,6 +73,17 @@ func apiPID(prefix string, pid model.PID) string {
 	return prefix + "-" + string(pid)
 }
 
+// entityAPIPID renders an optional entity handle, which is legitimately
+// absent (a loose track has no album, a facet bucket has no entity
+// behind it). Prefixing an empty PID would mint "al-", which parseAPIPID
+// then rejects as malformed; an absent handle stays the empty string.
+func entityAPIPID(prefix string, pid model.PID) string {
+	if pid == "" {
+		return ""
+	}
+	return apiPID(prefix, pid)
+}
+
 // itemAPIPID renders an item's PID with the prefix its kind implies.
 func itemAPIPID(it *model.ItemView) string {
 	return apiPID(prefixForKind(it.Kind), it.PID)
@@ -89,6 +101,19 @@ func parseAPIPID(s string) (prefix string, pid model.PID, ok bool) {
 		return "", "", false
 	}
 	return prefix, pid, true
+}
+
+// entityKindForPrefix maps an API entity prefix to the catalog entity
+// kind it addresses. Item prefixes have no entity kind and report false.
+func entityKindForPrefix(prefix string) (read.EntityKind, bool) {
+	switch prefix {
+	case PrefixArtist:
+		return read.EntityArtist, true
+	case PrefixAlbum:
+		return read.EntityAlbum, true
+	default:
+		return "", false
+	}
 }
 
 // itemPrefix reports whether prefix names a playable item type.

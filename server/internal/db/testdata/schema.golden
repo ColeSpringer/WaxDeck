@@ -242,8 +242,6 @@ table oidc_codes
 table play_state_stamps
   column item_pid|TEXT|notnull=1|default=<none>|pk=2
   column position_ns|INTEGER|notnull=1|default=0|pk=0
-  column rating_ns|INTEGER|notnull=1|default=0|pk=0
-  column star_ns|INTEGER|notnull=1|default=0|pk=0
   column user_id|TEXT|notnull=1|default=<none>|pk=1
   autoindex pk|unique=1|(user_id,item_pid)
 table playback_sessions

@@ -333,24 +333,13 @@ func (s *Server) Search(ctx context.Context, req SearchRequestObject) (SearchRes
 	if err != nil {
 		return nil, err
 	}
-	conv := func(hits []service.SearchHit) []SearchHit {
-		out := make([]SearchHit, 0, len(hits))
-		for _, h := range hits {
-			hit := SearchHit{Pid: h.PID, Kind: h.Kind, Title: h.Title}
-			if h.Subtitle != "" {
-				hit.Subtitle = ptr(h.Subtitle)
-			}
-			out = append(out, hit)
-		}
-		return out
-	}
 	return Search200JSONResponse{
 		Query:     res.Query,
-		Artists:   conv(res.Artists),
-		Albums:    conv(res.Albums),
-		Tracks:    conv(res.Tracks),
-		Books:     conv(res.Books),
-		Episodes:  conv(res.Episodes),
+		Artists:   searchHitsJSON(res.Artists),
+		Albums:    searchHitsJSON(res.Albums),
+		Tracks:    searchHitsJSON(res.Tracks),
+		Books:     searchHitsJSON(res.Books),
+		Episodes:  searchHitsJSON(res.Episodes),
 		Truncated: ptr(res.Truncated),
 	}, nil
 }
@@ -625,6 +614,20 @@ func (s *Server) GetPlayState(ctx context.Context, req GetPlayStateRequestObject
 	return GetPlayState200JSONResponse(playStateJSON(st)), nil
 }
 
+// searchHitsJSON projects service search hits onto the wire shape, the
+// entity summary every hit-shaped surface shares.
+func searchHitsJSON(hits []service.SearchHit) []SearchHit {
+	out := make([]SearchHit, 0, len(hits))
+	for _, h := range hits {
+		hit := SearchHit{Pid: h.PID, Kind: h.Kind, Title: h.Title}
+		if h.Subtitle != "" {
+			hit.Subtitle = ptr(h.Subtitle)
+		}
+		out = append(out, hit)
+	}
+	return out
+}
+
 func playStateJSON(st service.PlayState) PlayState {
 	out := PlayState{
 		Pid:        st.PID,
@@ -649,7 +652,9 @@ func (s *Server) PutPlayState(ctx context.Context, req PutPlayStateRequestObject
 	if err != nil {
 		return nil, err
 	}
-	err = s.svc.Checkpoint(ctx, uc, req.Pid, req.Body.PositionMs, req.Body.RecordedAt)
+	// A skipped replay is still a 204: the winning state is already in
+	// the caller's event stream, so there is nothing to report.
+	_, err = s.svc.Checkpoint(ctx, uc, req.Pid, req.Body.PositionMs, req.Body.RecordedAt)
 	switch service.KindOf(err) {
 	case "":
 		return PutPlayState204Response{}, nil

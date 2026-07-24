@@ -4,6 +4,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../library/library_controller.dart';
 import '../metadata/metadata_controller.dart';
+import '../player/entity_play_state_controller.dart';
 import '../player/play_state_controller.dart';
 import '../playlists/playlists_controller.dart';
 import '../podcasts/podcasts_controller.dart';
@@ -93,6 +94,9 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
 
   void invalidateUserState() {
     ref.invalidate(playStateControllerProvider);
+    // Entity stars and ratings ride the same user stream, as the
+    // entity-state marker kind.
+    ref.invalidate(entityPlayStateControllerProvider);
     ref.invalidate(continueListeningProvider);
     ref.invalidate(prefsControllerProvider);
     // Subscriptions and their settings ride the user stream, and a

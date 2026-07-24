@@ -125,6 +125,34 @@ func (f *migrateFixture) playState(t *testing.T, ctx context.Context, pid string
 	return st
 }
 
+// starredAt reads the catalog's star time for an item, which the API
+// play state does not carry.
+func (f *migrateFixture) starredAt(t *testing.T, ctx context.Context, apiPID string) time.Time {
+	t.Helper()
+	_, catalogPID, ok := parseAPIPID(apiPID)
+	if !ok {
+		t.Fatalf("unparseable pid %q", apiPID)
+	}
+	st, err := f.svc.lib.Playback().State(ctx, model.PID(f.uc.CatalogPID), catalogPID)
+	if err != nil {
+		t.Fatalf("catalog state for %s: %v", apiPID, err)
+	}
+	if st == nil || st.StarredAt == 0 {
+		t.Fatalf("%s carries no star time: %+v", apiPID, st)
+	}
+	return time.Unix(0, st.StarredAt).UTC()
+}
+
+// starredEntities reads back the caller's starred artists and albums.
+func (f *migrateFixture) starredEntities(t *testing.T, ctx context.Context) StarredEntities {
+	t.Helper()
+	res, err := f.svc.StarredEntities(ctx, f.uc)
+	if err != nil {
+		t.Fatalf("StarredEntities: %v", err)
+	}
+	return res
+}
+
 // runMigration queues the task through the public entry, asserts the
 // credential never lands in params plaintext, then drives the row
 // through the dispatch seam directly (standing in for the runToolTask
@@ -159,12 +187,16 @@ func (f *migrateFixture) runMigration(t *testing.T, ctx context.Context, req Mig
 	return sum
 }
 
+// navStarredAt is the star time Alpha carries on the source, which the
+// import must preserve rather than restamping at import time.
+var navStarredAt = time.Date(2025, 11, 5, 10, 20, 30, 0, time.UTC)
+
 // Canned Navidrome songs. Alpha matches the fixture catalog and
-// carries an MBID plus play history; Bravo matches by descriptive
-// metadata alone; Charlie appears only as a bookmark entry; Nowhere
-// matches nothing local.
+// carries an MBID, a star with its set time, plus play history; Bravo
+// matches by descriptive metadata alone; Charlie appears only as a
+// bookmark entry; Nowhere matches nothing local.
 const (
-	navSongAlpha   = `{"id":"s-alpha","title":"Alpha Song","artist":"Fixture Artist","album":"Fixture Album","duration":2,"playCount":3,"played":"2026-01-02T03:04:05.000Z","musicBrainzId":"5f2ab3d1-6f70-4d67-9028-53144d5f2f9c"}`
+	navSongAlpha   = `{"id":"s-alpha","title":"Alpha Song","artist":"Fixture Artist","album":"Fixture Album","duration":2,"playCount":3,"played":"2026-01-02T03:04:05.000Z","starred":"2025-11-05T10:20:30.000Z","musicBrainzId":"5f2ab3d1-6f70-4d67-9028-53144d5f2f9c"}`
 	navSongBravo   = `{"id":"s-bravo","title":"Bravo Song","artist":"Fixture Artist","album":"Fixture Album","duration":3,"userRating":4}`
 	navSongCharlie = `{"id":"s-charlie","title":"Charlie Song","artist":"Fixture Artist","album":"Fixture Album","duration":3}`
 	navSongNowhere = `{"id":"s-nowhere","title":"Nowhere Song","artist":"Unknown Artist","album":"Ghost Album","duration":3,"playCount":1}`
@@ -181,7 +213,8 @@ func writeSubsonic(w http.ResponseWriter, payload string, ok bool) {
 
 // newFakeNavidrome emulates the slice of Navidrome the import walks:
 // token auth verified per request, two albums with three songs, one
-// starred song, and one bookmark, everything in the standard envelope.
+// starred song plus a starred album and artist, and one bookmark,
+// everything in the standard envelope.
 func newFakeNavidrome(t *testing.T, username, password string) *httptest.Server {
 	t.Helper()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +227,15 @@ func newFakeNavidrome(t *testing.T, username, password string) *httptest.Server 
 		}
 		switch method {
 		case "getStarred2":
-			writeSubsonic(w, `"starred2":{"song":[`+navSongAlpha+`],"album":[],"artist":[]}`, true)
+			writeSubsonic(w, `"starred2":{"song":[`+navSongAlpha+`],`+
+				`"album":[{"id":"al-1","name":"Fixture Album","artist":"Fixture Artist","starred":"2025-11-05T10:20:30.000Z"}],`+
+				`"artist":[{"id":"ar-1","name":"Fixture Artist","starred":"2025-11-05T10:20:30.000Z"}]}`, true)
+		case "getArtist":
+			if q.Get("id") != "ar-1" {
+				writeSubsonic(w, `"error":{"code":70,"message":"not found"}`, false)
+				return
+			}
+			writeSubsonic(w, `"artist":{"id":"ar-1","name":"Fixture Artist","album":[{"id":"al-1","name":"Fixture Album"}]}`, true)
 		case "getAlbumList2":
 			if q.Get("offset") != "0" {
 				writeSubsonic(w, `"albumList2":{"album":[]}`, true)
@@ -271,6 +312,12 @@ func TestMigrateSubsonicImport(t *testing.T) {
 	if dry.Stars != 1 || dry.Ratings != 1 || dry.Listens != 3 || dry.Progress != 1 {
 		t.Fatalf("dry counts = %+v", dry)
 	}
+	if dry.AlbumStars != 1 || dry.ArtistStars != 1 {
+		t.Fatalf("dry entity star counts = %d album / %d artist, want 1 each", dry.AlbumStars, dry.ArtistStars)
+	}
+	if ents := f.starredEntities(t, ctx); len(ents.Albums) != 0 || len(ents.Artists) != 0 {
+		t.Fatalf("dry run wrote entity stars: %+v", ents)
+	}
 	if st := f.playState(t, ctx, alpha); st.Starred || st.PlayCount != 0 || st.PositionMS != 0 {
 		t.Fatalf("dry run wrote state: %+v", st)
 	}
@@ -287,6 +334,18 @@ func TestMigrateSubsonicImport(t *testing.T) {
 	if sum.Stars != 1 || sum.Ratings != 1 || sum.Listens != 3 || sum.Progress != 1 {
 		t.Fatalf("counts = %+v", sum)
 	}
+	if sum.AlbumStars != 1 || sum.ArtistStars != 1 {
+		t.Fatalf("entity star counts = %d album / %d artist, want 1 each", sum.AlbumStars, sum.ArtistStars)
+	}
+	// getStarred2's albums and artists land as catalog entity stars,
+	// resolved through one member song rather than an entity matcher.
+	ents := f.starredEntities(t, ctx)
+	if len(ents.Albums) != 1 || ents.Albums[0].Title != "Fixture Album" {
+		t.Fatalf("starred albums = %+v, want the fixture album", ents.Albums)
+	}
+	if len(ents.Artists) != 1 || ents.Artists[0].Title != "Fixture Artist" {
+		t.Fatalf("starred artists = %+v, want the fixture artist", ents.Artists)
+	}
 	if len(sum.Samples.Unmatched) != 1 || sum.Samples.Unmatched[0] != "Unknown Artist - Nowhere Song" {
 		t.Fatalf("unmatched samples = %v", sum.Samples.Unmatched)
 	}
@@ -296,6 +355,11 @@ func TestMigrateSubsonicImport(t *testing.T) {
 	}
 	if alphaState.PlayCount != 3 {
 		t.Fatalf("alpha play count = %d, want 3", alphaState.PlayCount)
+	}
+	// The star landed in the source's recorded time, not import time, so
+	// a starred list ordered by star time keeps the user's history.
+	if got := f.starredAt(t, ctx, alpha); !got.Equal(navStarredAt) {
+		t.Errorf("alpha starred at %v, want the source's %v", got, navStarredAt)
 	}
 	bravoState := f.playState(t, ctx, bravo)
 	if bravoState.Rating == nil || *bravoState.Rating != 80 {
@@ -320,6 +384,121 @@ func TestMigrateSubsonicImport(t *testing.T) {
 	}
 	if st := f.playState(t, ctx, alpha); st.PlayCount != 3 {
 		t.Fatalf("alpha play count after re-run = %d, want 3", st.PlayCount)
+	}
+}
+
+// newFakeNavidromeLateMatch emulates a source whose starred groups only
+// reach the local library past their first candidate: the starred
+// album's first song matches nothing here, and the starred artist's
+// first album matches nothing at all. Stopping at either would silently
+// drop a star for a group that is largely present.
+func newFakeNavidromeLateMatch(t *testing.T, username, password string) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/rest/"), ".view")
+		q := r.URL.Query()
+		sum := md5.Sum([]byte(password + q.Get("s")))
+		if q.Get("u") != username || q.Get("t") != hex.EncodeToString(sum[:]) {
+			writeSubsonic(w, `"error":{"code":40,"message":"Wrong username or password"}`, false)
+			return
+		}
+		switch method {
+		case "getStarred2":
+			writeSubsonic(w, `"starred2":{"song":[],`+
+				`"album":[{"id":"al-late","name":"Fixture Album","artist":"Fixture Artist"}],`+
+				`"artist":[{"id":"ar-late","name":"Fixture Artist"}]}`, true)
+		case "getArtist":
+			// The all-miss album comes first, so a search that stopped at
+			// the first candidate album would find nothing.
+			writeSubsonic(w, `"artist":{"id":"ar-late","name":"Fixture Artist",`+
+				`"album":[{"id":"al-ghost"},{"id":"al-late"}]}`, true)
+		case "getAlbum":
+			switch q.Get("id") {
+			case "al-late":
+				// The unmatchable song comes first.
+				writeSubsonic(w, `"album":{"id":"al-late","song":[`+navSongNowhere+`,`+navSongAlpha+`]}`, true)
+			case "al-ghost":
+				writeSubsonic(w, `"album":{"id":"al-ghost","song":[`+navSongNowhere+`]}`, true)
+			default:
+				writeSubsonic(w, `"error":{"code":70,"message":"not found"}`, false)
+			}
+		case "getBookmarks":
+			writeSubsonic(w, `"bookmarks":{"bookmark":[]}`, true)
+		default:
+			writeSubsonic(w, `"error":{"code":0,"message":"unknown method"}`, false)
+		}
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+func TestMigrateSubsonicEntityStarsSearchPastFirstCandidate(t *testing.T) {
+	ctx, f := newMigrateFixture(t)
+	ts := newFakeNavidromeLateMatch(t, "demo", "demo-pass")
+
+	sum := f.runMigration(t, ctx, MigrationRequest{
+		Source: "navidrome", ServerURL: ts.URL,
+		Username: "demo", Password: "demo-pass",
+		Stars: true,
+	})
+	if sum.AlbumStars != 1 {
+		t.Errorf("album stars = %d, want 1: the album's second song matches locally", sum.AlbumStars)
+	}
+	if sum.ArtistStars != 1 {
+		t.Errorf("artist stars = %d, want 1: the artist's second album matches locally", sum.ArtistStars)
+	}
+	ents := f.starredEntities(t, ctx)
+	if len(ents.Albums) != 1 || ents.Albums[0].Title != "Fixture Album" {
+		t.Errorf("starred albums = %+v, want the fixture album", ents.Albums)
+	}
+	if len(ents.Artists) != 1 || ents.Artists[0].Title != "Fixture Artist" {
+		t.Errorf("starred artists = %+v, want the fixture artist", ents.Artists)
+	}
+}
+
+// A starred group with no local member anywhere is still an unmatched
+// sample, not a silent skip: exhausting the search must not turn a real
+// miss into a success.
+func TestMigrateSubsonicEntityStarsUnmatchedGroup(t *testing.T) {
+	ctx, f := newMigrateFixture(t)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/rest/"), ".view") {
+		case "getStarred2":
+			writeSubsonic(w, `"starred2":{"song":[],`+
+				`"album":[{"id":"al-ghost","name":"Ghost Album","artist":"Unknown Artist"}],"artist":[]}`, true)
+		case "getAlbum":
+			writeSubsonic(w, `"album":{"id":"al-ghost","song":[`+navSongNowhere+`]}`, true)
+		case "getBookmarks":
+			writeSubsonic(w, `"bookmarks":{"bookmark":[]}`, true)
+		default:
+			writeSubsonic(w, `"error":{"code":0,"message":"unknown method"}`, false)
+		}
+	}))
+	t.Cleanup(ts.Close)
+
+	sum := f.runMigration(t, ctx, MigrationRequest{
+		Source: "navidrome", ServerURL: ts.URL,
+		Username: "demo", Password: "demo-pass",
+		Stars: true,
+	})
+	if sum.AlbumStars != 0 {
+		t.Errorf("album stars = %d, want 0", sum.AlbumStars)
+	}
+	// The miss is reported as an entity miss, not folded into the
+	// per-song counter, which would read as a missing track.
+	if sum.UnmatchedEntities != 1 || len(sum.Samples.UnmatchedEntities) != 1 {
+		t.Errorf("unmatched entities = %d %v, want the ghost album reported",
+			sum.UnmatchedEntities, sum.Samples.UnmatchedEntities)
+	}
+	if sum.Samples.UnmatchedEntities[0] != "Unknown Artist - Ghost Album" {
+		t.Errorf("entity sample = %q", sum.Samples.UnmatchedEntities[0])
+	}
+	if sum.Unmatched != 0 || len(sum.Samples.Unmatched) != 0 {
+		t.Errorf("song-level unmatched = %d %v, want none: no song was imported",
+			sum.Unmatched, sum.Samples.Unmatched)
+	}
+	if ents := f.starredEntities(t, ctx); len(ents.Albums) != 0 {
+		t.Errorf("starred albums = %+v, want none", ents.Albums)
 	}
 }
 
@@ -383,10 +562,69 @@ func TestMigrateAudiobookshelfImport(t *testing.T) {
 		t.Fatalf("finished book state = %+v, want played and finished", fin)
 	}
 
-	// Re-running rewrites the same positions without error.
+	// Re-running is a no-op, and says so: the positions already sit at
+	// their source-recorded time, so every replay loses to what the
+	// first run wrote and the report counts no new writes. Same shape as
+	// the listen queues' idempotency.
 	again := f.runMigration(t, ctx, req)
-	if again.Matched != 2 || again.Progress != 2 {
+	if again.Matched != 2 {
 		t.Fatalf("re-run summary = %+v", again)
+	}
+	if again.Progress != 0 {
+		t.Errorf("re-run progress = %d, want 0: nothing was rewritten", again.Progress)
+	}
+	if st := f.playState(t, ctx, book); st.PositionMS != 12500 {
+		t.Errorf("book position after re-run = %d, want the imported 12500 intact", st.PositionMS)
+	}
+
+	// The imported positions feed the resume shelf, which is what the
+	// position stamps exist for beyond replay ordering.
+	resume, err := f.svc.RecentlyPositionedItems(ctx, f.uc, 10)
+	if err != nil {
+		t.Fatalf("RecentlyPositionedItems: %v", err)
+	}
+	found := false
+	for _, it := range resume {
+		if it.PID == book {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("imported book missing from the resume shelf: %+v", resume)
+	}
+}
+
+// TestMigrateABSBackdatedProgressLosesToLocal pins the recency guard the
+// importer now feeds: mediaProgress carries lastUpdate, so a stale
+// source row replays in its own time instead of masquerading as a
+// just-now checkpoint and taking the listener's place.
+func TestMigrateABSBackdatedProgressLosesToLocal(t *testing.T) {
+	ctx, f := newMigrateFixture(t)
+	ts := newFakeABS(t, "abs-token")
+	book := f.itemPID(t, ctx, model.KindBook, "The Fixture Book")
+
+	// The listener is already further along here, checkpointed live.
+	// Books are recency-primary, so only a newer replay may move them.
+	if _, err := f.svc.Checkpoint(ctx, f.uc, book, 9000, nil); err != nil {
+		t.Fatalf("live checkpoint: %v", err)
+	}
+
+	// The source row is stamped 2026-01-02, well behind that live write.
+	sum := f.runMigration(t, ctx, MigrationRequest{
+		Source: "audiobookshelf", ServerURL: ts.URL, Token: "abs-token",
+		Progress: true,
+	})
+	if sum.Matched != 2 {
+		t.Fatalf("summary = %+v, want 2 matched", sum)
+	}
+	if st := f.playState(t, ctx, book); st.PositionMS != 9000 {
+		t.Errorf("book position = %d, want the live 9000 to survive the backdated import", st.PositionMS)
+	}
+	// The report counts writes, not attempts: the dropped replay must
+	// not read as an imported position. Only the second book, which had
+	// no local position to lose to, lands.
+	if sum.Progress != 1 {
+		t.Errorf("progress = %d, want 1: the backdated replay was dropped, not written", sum.Progress)
 	}
 }
 

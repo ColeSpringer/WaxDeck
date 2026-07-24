@@ -7,26 +7,26 @@ import (
 	"fmt"
 )
 
-// PlayStamp carries when each play-state field last changed for one
-// (user, item), in server-clock nanoseconds. Offline replay
-// reconciliation compares against these; WaxBin's play_state row keeps
-// only one UpdatedAt, which every position checkpoint bumps. A star
-// stamp is written on set and on clear, so a stale offline star can
-// never resurrect an undone one.
+// PlayStamp carries when the resume position last changed for one
+// (user, item), in server-clock nanoseconds. Offline position replays
+// reconcile against it; WaxBin's play_state row keeps only one
+// UpdatedAt, which every position checkpoint bumps, so it cannot order
+// a replay against the observation it competes with. Stars and ratings
+// carried stamps here too until the catalog grew recorded-time
+// last-writer-wins on its own writes; ordering those is its job now,
+// and this table is purely the resume shelf.
 type PlayStamp struct {
 	PositionNS int64
-	StarNS     int64
-	RatingNS   int64
 }
 
-// PlayStamp reads the stamps for one (user, item); zero when never
+// PlayStamp reads the stamp for one (user, item); zero when never
 // stamped.
 func (d *DB) PlayStamp(ctx context.Context, userID, itemPID string) (PlayStamp, error) {
 	var st PlayStamp
 	err := d.r.QueryRowContext(ctx, `
-		SELECT position_ns, star_ns, rating_ns FROM play_state_stamps
+		SELECT position_ns FROM play_state_stamps
 		WHERE user_id = ? AND item_pid = ?`,
-		userID, itemPID).Scan(&st.PositionNS, &st.StarNS, &st.RatingNS)
+		userID, itemPID).Scan(&st.PositionNS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PlayStamp{}, nil
 	}
@@ -36,25 +36,12 @@ func (d *DB) PlayStamp(ctx context.Context, userID, itemPID string) (PlayStamp, 
 	return st, nil
 }
 
-// Stampable play-state fields.
-const (
-	StampPosition = "position_ns"
-	StampStar     = "star_ns"
-	StampRating   = "rating_ns"
-)
-
-// StampPlayState records when one field changed. field must be one of
-// the Stamp constants (compiled into the statement, never user input).
-func (d *DB) StampPlayState(ctx context.Context, userID, itemPID, field string, ns int64) error {
-	switch field {
-	case StampPosition, StampStar, StampRating:
-	default:
-		return fmt.Errorf("db: unknown play stamp field %q", field)
-	}
+// StampPlayState records when the resume position changed.
+func (d *DB) StampPlayState(ctx context.Context, userID, itemPID string, ns int64) error {
 	_, err := d.w.ExecContext(ctx, `
-		INSERT INTO play_state_stamps (user_id, item_pid, `+field+`)
+		INSERT INTO play_state_stamps (user_id, item_pid, position_ns)
 		VALUES (?, ?, ?)
-		ON CONFLICT (user_id, item_pid) DO UPDATE SET `+field+` = excluded.`+field,
+		ON CONFLICT (user_id, item_pid) DO UPDATE SET position_ns = excluded.position_ns`,
 		userID, itemPID, ns)
 	if err != nil {
 		return fmt.Errorf("db: writing play stamp: %w", err)
@@ -62,14 +49,14 @@ func (d *DB) StampPlayState(ctx context.Context, userID, itemPID, field string, 
 	return nil
 }
 
-// PruneStamps drops stamp rows whose every field last changed before
-// the cutoff. The stamps exist to guard offline replays and to serve
-// the in-progress surface; a pair untouched for the retention window
-// serves neither.
+// PruneStamps drops stamp rows last changed before the cutoff. The
+// stamps exist to guard offline position replays and to serve the
+// in-progress surface; a pair untouched for the retention window serves
+// neither.
 func (d *DB) PruneStamps(ctx context.Context, olderThanNS int64) (int64, error) {
 	res, err := d.w.ExecContext(ctx, `
 		DELETE FROM play_state_stamps
-		WHERE MAX(position_ns, star_ns, rating_ns) < ?`, olderThanNS)
+		WHERE position_ns < ?`, olderThanNS)
 	if err != nil {
 		return 0, fmt.Errorf("db: pruning play stamps: %w", err)
 	}

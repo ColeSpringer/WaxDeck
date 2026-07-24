@@ -410,6 +410,67 @@ class FakeRepository implements WaxDeckRepository {
     return [for (final pid in pids) await getPlayState(pid)];
   }
 
+  /// Entity stars and ratings, keyed by entity pid. Their own maps, not
+  /// the item ones: an entity star is independent of its members'.
+  final Map<String, bool> entityStarredByPid = {};
+  final Map<String, int?> entityRatingByPid = {};
+
+  @override
+  Future<EntityPlayState> getEntityPlayState(String pid) async =>
+      EntityPlayState(
+        pid: pid,
+        starred: entityStarredByPid[pid] ?? false,
+        rating: entityRatingByPid[pid],
+      );
+
+  @override
+  Future<EntityPlayState> setEntityStar(
+    String pid,
+    bool starred, {
+    DateTime? recordedAt,
+  }) async {
+    await (mutationGate ?? Future<void>.value());
+    final error = playStateError;
+    if (error != null) {
+      return Future<EntityPlayState>.delayed(
+        const Duration(milliseconds: 1),
+        () => throw error,
+      );
+    }
+    entityStarredByPid[pid] = starred;
+    return getEntityPlayState(pid);
+  }
+
+  @override
+  Future<EntityPlayState> setEntityRating(
+    String pid,
+    int? rating, {
+    DateTime? recordedAt,
+  }) async {
+    await (mutationGate ?? Future<void>.value());
+    final error = playStateError;
+    if (error != null) {
+      return Future<EntityPlayState>.delayed(
+        const Duration(milliseconds: 1),
+        () => throw error,
+      );
+    }
+    entityRatingByPid[pid] = rating;
+    return getEntityPlayState(pid);
+  }
+
+  @override
+  Future<StarredEntities> listStarredEntities() async {
+    final starred = entityStarredByPid.entries
+        .where((e) => e.value)
+        .map((e) => SearchHit(pid: e.key, kind: 'album', title: e.key))
+        .toList();
+    return StarredEntities(
+      artists: starred.where((h) => h.pid.startsWith('ar-')).toList(),
+      albums: starred.where((h) => h.pid.startsWith('al-')).toList(),
+    );
+  }
+
   @override
   Future<CatalogSyncPage> syncCatalog({
     String? since,

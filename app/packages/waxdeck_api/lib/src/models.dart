@@ -402,6 +402,44 @@ class PlayState {
   final DateTime? updatedAt;
 }
 
+/// The caller's star and rating for one catalog entity (an artist or an
+/// album).
+///
+/// Entities carry no resume position or play count of their own; their
+/// items keep those. An entity the caller has never starred or rated
+/// reads back as the zero state rather than an error.
+class EntityPlayState {
+  const EntityPlayState({
+    required this.pid,
+    required this.starred,
+    this.starredAt,
+    this.rating,
+    this.updatedAt,
+  });
+
+  final String pid;
+  final bool starred;
+
+  /// When the star was set, which is what orders the starred list; null
+  /// when the entity is not starred.
+  final DateTime? starredAt;
+
+  /// The caller's rating, 0 to 100; null when unrated.
+  final int? rating;
+
+  final DateTime? updatedAt;
+}
+
+/// The caller's starred artists and albums, most recently starred first
+/// within each group. Independent of item stars: starring an album does
+/// not star its tracks.
+class StarredEntities {
+  const StarredEntities({required this.artists, required this.albums});
+
+  final List<SearchHit> artists;
+  final List<SearchHit> albums;
+}
+
 /// One listen session as reported by this client.
 ///
 /// [sessionId] is a client-generated idempotency ID, unique per playback

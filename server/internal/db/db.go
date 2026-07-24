@@ -149,14 +149,17 @@ const baselineSchema = `
 	-- Sync and compatibility-API state. event_log is the server change
 	-- stream (the serverSeq cursor): one row per user-scoped state
 	-- change, written by the sole writer (the service) at mutation
-	-- time. play_state_stamps carry the per-field change times offline
-	-- replay reconciliation compares against; WaxBin's play_state row
-	-- has only one UpdatedAt, which position checkpoints bump
-	-- constantly. sync_state is a small key-value table for stream
-	-- generations, floors, cursors, per-user grant epochs, and the
-	-- schema baseline fingerprint. app_passwords hold the recoverable
-	-- per-client secrets the Subsonic scheme demands, sealed with the
-	-- server key; secret_hash serves apiKey lookup.
+	-- time. play_state_stamps is the resume shelf: when each user last
+	-- moved an item's position, which orders an offline position replay
+	-- against the observation it competes with and feeds the in-progress
+	-- list. WaxBin's play_state row has only one UpdatedAt, which
+	-- position checkpoints bump constantly. Star and rating stamps used
+	-- to live here too; the catalog orders those itself now, by the
+	-- recorded time its writes carry. sync_state is a small key-value
+	-- table for stream generations, floors, cursors, per-user grant
+	-- epochs, and the schema baseline fingerprint. app_passwords hold
+	-- the recoverable per-client secrets the Subsonic scheme demands,
+	-- sealed with the server key; secret_hash serves apiKey lookup.
 	CREATE TABLE event_log (
 		id            INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id       TEXT    NOT NULL,
@@ -169,8 +172,6 @@ const baselineSchema = `
 		user_id     TEXT    NOT NULL,
 		item_pid    TEXT    NOT NULL,
 		position_ns INTEGER NOT NULL DEFAULT 0,
-		star_ns     INTEGER NOT NULL DEFAULT 0,
-		rating_ns   INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (user_id, item_pid)
 	);
 	CREATE TABLE sync_state (

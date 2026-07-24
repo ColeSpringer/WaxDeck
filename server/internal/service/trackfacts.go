@@ -10,10 +10,12 @@ import (
 )
 
 // TrackFacts is the flat per-track shape the Subsonic adapter groups
-// into its artist and album views. The catalog has real artist and
-// album entities, but the item query grammar addresses them by display
-// string, so the compatibility surface derives its groupings from
-// these rows and mints string-based identifiers.
+// into its artist and album views. The display strings carry the
+// grouping labels; the entity pids carry the identity the catalog
+// actually keeps, so the compatibility surface can key a group on the
+// real artist or album instead of on its spelling. A pid is empty when
+// the catalog holds no such entity for the track (a loose track has no
+// album row), and the adapter falls back to a minted identifier there.
 type TrackFacts struct {
 	PID         string
 	Title       string
@@ -27,6 +29,14 @@ type TrackFacts struct {
 	DurationMS  int64
 	Codec       string
 	Container   string
+
+	// API-form entity pids (ar-…, al-…). AlbumArtistPID carries the same
+	// fallback as the AlbumArtist display string above, so it is the
+	// grouping handle; the raw track-artist pid is deliberately absent,
+	// because a consumer reaching for it would be reaching for the
+	// wrong key.
+	AlbumArtistPID string
+	AlbumPID       string
 }
 
 // trackFactsCache holds the full-visibility sweep, keyed by the catalog
@@ -90,6 +100,16 @@ func (l *Library) sweepTrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFact
 			if albumArtist == "" {
 				albumArtist = it.Artist
 			}
+			// Mirror that fallback in pid space. The catalog's own
+			// album-artist handle resolves a book's author but does not
+			// fall back to the track artist, so a track with no
+			// album-artist tag would otherwise come back with no
+			// album-artist identity at all and drop out of the artist
+			// index the display string still places it in.
+			albumArtistPID := it.AlbumArtistPID
+			if albumArtistPID == "" {
+				albumArtistPID = it.ArtistPID
+			}
 			out = append(out, TrackFacts{
 				PID:         itemAPIPID(it),
 				Title:       it.Title,
@@ -103,6 +123,9 @@ func (l *Library) sweepTrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFact
 				DurationMS:  it.DurationMS,
 				Codec:       it.Codec,
 				Container:   it.Container,
+
+				AlbumArtistPID: entityAPIPID(PrefixArtist, albumArtistPID),
+				AlbumPID:       entityAPIPID(PrefixAlbum, it.AlbumPID),
 			})
 		}
 		if !page.HasMore {

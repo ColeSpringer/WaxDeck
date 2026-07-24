@@ -19,6 +19,7 @@ import '../connect/device_picker.dart';
 import 'playback_session.dart';
 import 'session_registry.dart';
 import 'sleep_timer.dart';
+import 'star_rating_row.dart';
 
 /// Speed presets the player button cycles through.
 const playerSpeedSteps = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
@@ -723,9 +724,7 @@ class _ChapterSheet extends StatelessWidget {
   }
 }
 
-/// Star toggle plus the five-star rating row, backed by the item's play
-/// state. Ratings map star N to N times 20 on the 0 to 100 wire scale;
-/// tapping the current rating again clears it.
+/// The item's star toggle and rating row, backed by its play state.
 class _StarRatingRow extends ConsumerWidget {
   const _StarRatingRow({required this.pid});
 
@@ -733,7 +732,6 @@ class _StarRatingRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colorScheme = Theme.of(context).colorScheme;
     // A failed mutation rolls the value back and lands here as an error
     // still carrying that previous value; tell the user the tap did not
     // stick while the row keeps rendering the real state.
@@ -748,53 +746,16 @@ class _StarRatingRow extends ConsumerWidget {
     });
     final playState = ref.watch(playStateControllerProvider(pid)).value;
     final notifier = ref.read(playStateControllerProvider(pid).notifier);
-    final starred = playState?.starred ?? false;
-    final rating = playState?.rating;
-    final stars = rating == null ? 0 : (rating / 20).round().clamp(0, 5);
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // excludeSemantics collapses the control to one accessibility
-        // node: the wrapper's label plus the button's own (tooltip-fed)
-        // node would otherwise announce twice.
-        Semantics(
-          identifier: 'star-button',
-          label: starred ? 'Unstar' : 'Star',
-          button: true,
-          excludeSemantics: true,
-          onTap: playState == null ? null : () => notifier.setStarred(!starred),
-          child: IconButton(
-            key: const Key('star-button'),
-            tooltip: starred ? 'Unstar' : 'Star',
-            color: starred ? colorScheme.primary : null,
-            onPressed: playState == null
-                ? null
-                : () => notifier.setStarred(!starred),
-            icon: Icon(starred ? Icons.favorite : Icons.favorite_border),
-          ),
-        ),
-        const SizedBox(width: 8),
-        for (var n = 1; n <= 5; n++)
-          Semantics(
-            identifier: 'rating-$n',
-            label: '$n star rating',
-            button: true,
-            excludeSemantics: true,
-            onTap: playState == null
-                ? null
-                : () => notifier.rate(n == stars ? null : n * 20),
-            child: IconButton(
-              key: Key('rating-$n'),
-              visualDensity: VisualDensity.compact,
-              color: n <= stars ? colorScheme.primary : null,
-              onPressed: playState == null
-                  ? null
-                  : () => notifier.rate(n == stars ? null : n * 20),
-              icon: Icon(n <= stars ? Icons.star : Icons.star_border),
-            ),
-          ),
-      ],
+    return StarRatingRow(
+      starred: playState?.starred ?? false,
+      rating: playState?.rating,
+      enabled: playState != null,
+      onStar: notifier.setStarred,
+      onRate: notifier.rate,
+      idPrefix: '',
+      starLabel: (starred) => starred ? 'Unstar' : 'Star',
+      ratingLabel: (n) => '$n star rating',
     );
   }
 }

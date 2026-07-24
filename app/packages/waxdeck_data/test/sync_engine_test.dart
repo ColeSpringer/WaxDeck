@@ -426,6 +426,32 @@ void main() {
     expect(cursors.serverSince, 'scur-2');
   });
 
+  test('entity-state markers announce their pid without mirroring', () async {
+    repo.serverPages.addAll([const ServerSyncPage(nextSince: 'scur-1')]);
+    await engine.pullServer(); // mints
+    final announced = <String>[];
+    final sub = engine.playStateChanged.listen(announced.add);
+    repo.serverPages.add(
+      const ServerSyncPage(
+        events: [
+          ServerSyncEvent(kind: 'entity-state', pid: 'al-A'),
+          ServerSyncEvent(kind: 'entity-state', pid: 'ar-B'),
+        ],
+        nextSince: 'scur-2',
+      ),
+    );
+    await engine.pullServer();
+    await Future<void>.delayed(Duration.zero);
+    await sub.cancel();
+
+    // The marker is the whole payload: it invalidates the entity views
+    // and writes nothing to the item mirror.
+    expect(announced, ['al-A', 'ar-B']);
+    expect(await db.select(db.mirrorPlayStates).get(), isEmpty);
+    final cursors = await db.select(db.syncCursors).getSingle();
+    expect(cursors.serverSince, 'scur-2');
+  });
+
   test('subscription and book-settings events are skipped cleanly', () async {
     repo.serverPages.addAll([const ServerSyncPage(nextSince: 'scur-1')]);
     await engine.pullServer(); // mints

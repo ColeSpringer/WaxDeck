@@ -146,7 +146,10 @@ func (l *Library) GpodderApplyPlay(ctx context.Context, uc *UserCtx, podcastURL,
 				recordedAt = &t
 			}
 		}
-		return l.Checkpoint(ctx, uc, apiPID(PrefixEpisode, ep.PID), *positionSec*1000, recordedAt)
+		// The gpodder protocol has no way to report a skipped replay,
+		// and a skip is a success there as it is everywhere else.
+		_, err := l.Checkpoint(ctx, uc, apiPID(PrefixEpisode, ep.PID), *positionSec*1000, recordedAt)
+		return err
 	}
 	return nil
 }
