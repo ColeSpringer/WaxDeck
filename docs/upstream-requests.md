@@ -51,6 +51,24 @@ sidecar injection seam) all landed and are not repeated here.
   with the catalog stamp only where the mirror is silent: conservative-
   safe (it never resurrects an undone state) but it skips a legitimately
   newer replay when an out-of-band change intervened.
+- **Playlist as a first-class art entity.** The catalog art store keys
+  `art_map` by `entity_type` over
+  `track|album|release_group|artist|genre|episode|podcast`, and
+  `ResolveArt`/`ArtRoles`/the art write facade take an `EntityRef` that
+  cannot name a playlist. WaxDeck wants a synced or imported playlist to
+  carry a cover (a custom upload, the source's own thumbnail, or an auto
+  four-cover mosaic WaxDeck generates) stored and served through the
+  same content-addressed blob store, thumbnail cache, and ETag path as
+  every other cover, so it shows up uniformly in the REST playlist
+  reads, the Subsonic `coverArt`, and M3U8 exports. This needs
+  `art_map.entity_type` to accept `playlist`, the resolve and write
+  surfaces to take a playlist ref, and the `front` role to resolve at
+  the playlist's own level with no parent fallback walk (a playlist has
+  no art ancestry). The synced-playlist feature ships without a cover
+  meanwhile; the available workaround is a WaxDeck-side cover in
+  `waxdeck.db` keyed by playlist pid, injected into the playlist DTO and
+  the Subsonic mapping, deferred by choice so the plumbing is not laid
+  down and later retired. Extends the art-role model (docs/adr/0014).
 
 ## WaxFlow
 

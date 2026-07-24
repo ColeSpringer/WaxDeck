@@ -202,6 +202,35 @@ here waits on upstream.
   whitelist mapping (provider tags normalized through an editable
   tree, with a shipped default) is specified but unbuilt; the health
   dashboard consequently has no genre-whitelist rule yet.
+- `[in-repo]` **First-party faceted browse (genres, artists, albums,
+  years, and custom tags).** The app can list items (`listItems`,
+  media-type filter, fixed title/pid order) and page discovery lists
+  (`browseList`: newest, most played, random, starred, alphabetical),
+  but it cannot enumerate a browse dimension or filter by one: there is
+  no "all genres" or "all artists" list with counts, and no "items
+  where genre is Jazz" query on the first-party API. The engine already
+  has the facet groups (`read.GroupGenre`/`GroupArtist`/
+  `GroupAlbumArtist`/`GroupYear`/`GroupKind`), WaxDeck already calls the
+  `Facet` facade internally (enrichment buckets artists through it), and
+  the Subsonic adapter already answers `getGenres` (genres with counts)
+  and `getSongsByGenre` and builds an in-memory album index by display
+  key, so every piece is proven on the compatibility side. Net-new is
+  the first-party contract: a dimension-enumeration endpoint (bucket
+  plus count, keyset-paged) over genre, artist, album-artist, year,
+  kind, and every custom tag (all already browse dimensions), plus
+  either a dimension filter on `listItems` or a drill endpoint, then the
+  app tabs on top. All WaxDeck-side, and it would be the first
+  faceted-browse surface on the first-party API, so it sets the pattern
+  the others reuse. Two honest edges. Album is not a facet group, so an
+  album browse groups items by album display key the way the Subsonic
+  album index already does (fine for list-and-drill, but display-string
+  keyed, not entity-pid backed); binding any bucket (an artist, an
+  album) to its stable catalog entity for a rich entity page rides the
+  existing "Entity enumeration for the compatibility surface" ask in
+  upstream-requests.md, not a new one. And the genre dimension wants the
+  Genre normalization item above done first, or the genre tab lists raw
+  tag strings ("Hip-Hop", "Hip Hop", "hiphop") as separate buckets; the
+  other dimensions do not depend on it.
 - `[in-repo]` **Book and remaining metadata providers.** Hardcover
   (the ASIN to ISBN bridge), Google Books and Open Library fallbacks,
   and Discogs are not yet implemented as enrichment providers; Deezer,
@@ -263,6 +292,93 @@ here waits on upstream.
   render; mapping it from the episode flag and the ITUNESADVISORY
   custom tag is a small adapter change next time that surface is
   touched.
+- `[in-repo]` **Synced external playlists.** A YouTube playlist reaches
+  the library two ways today and neither keeps a WaxDeck playlist in
+  step with its source: "Add from URL" acquisition
+  (`service/acquire.go`) downloads a playlist's videos once, clusters
+  them into album review entries, and records no link back to the
+  playlist; subscribing that same playlist as a show does sync on a
+  schedule (the `feed-refresh` worker over the `feed_state` cursor) but
+  models it as podcast episodes, not music tracks. The wanted feature
+  binds a WaxDeck static playlist to an external source and reconciles
+  its membership on a schedule. Most of the machinery exists: WaxTap
+  enumerates a playlist in playlist order with a per-entry index,
+  `waxtapsource` wraps that enumeration, the download path stamps
+  `SOURCE_URL`/`SOURCE_ID`/`ACQUISITION_DATE` into every file,
+  `feed_state` is the durable last-run/last-error/consecutive-failure
+  record to copy, and `ReplacePlaylistItems` is the ordered-membership
+  reconcile primitive (optimistic `baseUpdatedAt`). Net-new, all
+  WaxDeck-side (a binding table in `waxdeck.db` keyed by playlist pid,
+  per ADR-0003): (1) the binding row (source type, source ref,
+  per-playlist sync mode, refresh interval, enumeration cursor); (2) a
+  video-id-to-item map kept current as acquisitions resolve, since the
+  provenance tag is never lifted into a queryable column and
+  match/dedup/merge can move an item; (3) an eventually-consistent
+  attach, because new tracks ride the normal review queue (chosen over
+  auto-import) and join the playlist only once their review entry
+  resolves into an item, in source order; (4) a raw ordered-entry
+  accessor on `waxtapsource` (its current `Enumerate` is podcast-shaped:
+  it drops currently-unavailable entries and carries an append-only
+  newest-first cursor, neither of which suits a mutable playlist whose
+  mirror must retain an already-downloaded track after its source video
+  goes private). Decisions recorded so they are not re-litigated. Sync
+  mode is per-playlist, not a global switch (one field on an
+  already-per-playlist binding, one dropdown beside the interval; a
+  faithful mirror and a seed-then-curate list are different intents),
+  with three values: `append` (add new only, manual edits preserved),
+  `mirror` (contents and order follow the source, manual edits
+  overwritten, a removed video detaches but its file stays), and
+  `mirror+trash` (mirror, and a removed video's file goes to the
+  recoverable trash); default `mirror`, keeping files. Intervals are
+  1/3/6/12/24 hours plus a manual sync-now; per ADR-0005 the scheduler
+  and its failure accounting are WaxDeck's, so no new worker primitive
+  is needed (extend the `feed-refresh` sweep or add a sibling that reads
+  a per-binding due time). The binding is source-agnostic by design
+  (chosen over YouTube-only): YouTube is the live re-fetchable source
+  that auto-syncs, while matched sources (Spotify/Apple/CSV, already a
+  one-shot import through `ImportStreamingPlaylist`'s portable-ref
+  ladder) reconcile match-only and on demand until a live connector for
+  them exists, downloading nothing and reporting misses rather than
+  fetching. Refinements to fold in when this is built: a dry-run
+  preview beside the manual sync-now (report would-add, would-remove,
+  and unavailable counts before committing, mirroring the migration
+  dry run and the rule preview); a sync-health surface reusing
+  `feed_state`'s last-run, last-error, consecutive-failure, and
+  auto-disable fields plus per-run add/remove/unavailable counts (the
+  delivery-health shape the scrobble and notification rows already
+  show); provenance dedup that reuses an in-library item matched by
+  `SOURCE_ID` instead of re-downloading, with an append-mode tombstone
+  so a track the user hand-removed is not re-added (mirror mode re-adds
+  by design); and a sync notification event (added N, or failed) on the
+  existing event catalog, which also closes the
+  import-completed-notification gap recorded under Admin and ops. The
+  worker gating is worth noting: the `feed-refresh` sweep only spawns
+  when a podcast directory is configured, so a music-only instance
+  wants a sibling sweeper (WaxDeck-owned composition-root wiring, no
+  upstream), not an extension of that one. Playlist artwork for these
+  lists is the separate `[upstream]` entry below.
+- `[upstream]` **Playlist artwork (custom, source thumbnail, or a
+  4-cover mosaic).** Playlists carry no cover at any layer today: the
+  catalog art store keys `art_map` by `entity_type` over
+  track/album/release-group/artist/genre/episode/podcast with no
+  `playlist` value, and the art endpoints reject `pl-` pids. The wanted
+  default follows YouTube Music: a custom upload when set, else the
+  source playlist's own thumbnail (the enumeration already surfaces
+  one), else an auto mosaic of the first four member covers that have
+  distinct art (deduplicated by art hash so a shared album cover does
+  not tile), else the single first-track cover. The mosaic generator is
+  net-new WaxDeck image code on `golang.org/x/image/draw` (already a
+  dependency; nothing composites today, only single-image
+  `art.Thumbnail` scaling) and should be the cover default for every
+  playlist, not only synced ones. Storage rides the "Playlist as a
+  first-class art entity" ask in upstream-requests.md (chosen over a
+  WaxDeck-side store-and-inject workaround, so the cover is canonical
+  across the REST reads, the Subsonic `coverArt`, and M3U8 rather than
+  injected per surface). The mosaic compositor is a general primitive
+  (genre, decade, and entity shelves can tile the same way), so it
+  should be built standalone rather than playlist-specific. Pairs with
+  the synced-external-playlists entry above; art-role model is
+  docs/adr/0014.
 
 ## Discovery and stats
 
