@@ -30,7 +30,7 @@ require (
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
-	github.com/colespringer/waxbin v0.0.0-20260724181115-541c5722a7c3
+	github.com/colespringer/waxbin v0.0.0-20260724191533-382eafbc8567
 	github.com/colespringer/waxflow v0.0.0-20260724175608-9ef61dbc2ca8
 	github.com/colespringer/waxflow/cli v0.0.0-20260724175608-9ef61dbc2ca8
 	github.com/colespringer/waxlabel v1.2.0
