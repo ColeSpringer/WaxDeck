@@ -51,6 +51,23 @@ sidecar injection seam) all landed and are not repeated here.
   with the catalog stamp only where the mirror is silent: conservative-
   safe (it never resurrects an undone state) but it skips a legitimately
   newer replay when an out-of-band change intervened.
+- **Entity-scoped star writes.** `SetStar` operates on item pids, and
+  WaxDeck's star surface is item-scoped to match. The entity-pid facets
+  that landed (`album_pid`, `artist_pid`, `album_artist_pid`) gave the
+  catalog stable album and artist identities, but nothing writes a star
+  against one, so a migration import that reads getStarred2 (Subsonic,
+  Navidrome) keeps its song stars and drops the album and artist stars
+  it carries alongside them: there is no release-group or artist star to
+  persist. A `SetStar` overload taking an entity ref, stored and
+  queryable the way item stars are (and stamped in recorded time, so it
+  pairs with the as-of-timestamp ask above), would let WaxDeck keep an
+  imported album or artist star as what it is; `SetRating` would want
+  the same overload the day WaxDeck imports entity ratings. Today
+  WaxDeck imports the song stars only; the available in-repo stopgap is
+  to expand an entity star into stars on its member items, which carries
+  the intent but round-trips as N item stars rather than one entity star
+  (and would re-star a member the user later unstarred), so it is
+  deferred in favor of the faithful surface.
 - **Playlist as a first-class art entity.** The catalog art store keys
   `art_map` by `entity_type` over
   `track|album|release_group|artist|genre|episode|podcast`, and

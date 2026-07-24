@@ -427,11 +427,16 @@ here waits on upstream.
   transcoded and gapless-timeline streaming from the new root waits for a
   sidecar restart. Rides the "Runtime root configuration in the streaming
   sidecar" ask in upstream-requests.md.
-- `[in-repo]` **Subsonic album and artist stars are pulled but not
+- `[upstream]` **Subsonic album and artist stars are pulled but not
   written.** The migration importer reads getStarred2's albums and
-  artists alongside songs, but WaxDeck's star surface is item-scoped,
-  so only song stars import. Album/artist stars would need either an
-  entity star surface or expansion to member items.
+  artists alongside songs, but WaxDeck's star surface is item-scoped
+  (as is WaxBin's `SetStar`), so only song stars import and the
+  album/artist stars are dropped. Persisting them faithfully needs an
+  entity-scoped star write, tracked as the "Entity-scoped star writes"
+  ask in upstream-requests.md; the in-repo stopgap is to expand an
+  entity star into stars on its member items, which carries the intent
+  but round-trips as N item stars rather than one entity star, so it is
+  deferred in favor of the faithful surface.
 - `[in-repo]` **Importers beyond Navidrome/Subsonic and
   Audiobookshelf.** The migration framework (portable-ref matching,
   backdated idempotent listen ingest, dry runs, task reports) is
