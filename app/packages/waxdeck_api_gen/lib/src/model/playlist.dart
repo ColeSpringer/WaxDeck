@@ -19,6 +19,7 @@ part 'playlist.g.dart';
 /// * [visibility] - `private` (owner only) or `shared` (readable by every user). A string, not a closed enum. 
 /// * [ownerName] - The owning user's display name.
 /// * [isOwner] - True when the caller owns this playlist and may edit it.
+/// * [hasArt] - A cover is stored for this playlist, readable at `/items/{pid}/art` with the playlist's own PID. It is true for an owner's uploaded cover and for the mosaic the server builds from the members when there is none; the two are the same slot, and uploading wins until it is cleared. Absent means false. 
 /// * [itemCount] - Member count. Stored count for static playlists; computed for smart playlists on detail reads and absent on list pages. 
 /// * [rule] 
 /// * [createdAt] - When the playlist was created.
@@ -53,6 +54,10 @@ abstract class Playlist implements Built<Playlist, PlaylistBuilder> {
   /// True when the caller owns this playlist and may edit it.
   @BuiltValueField(wireName: r'isOwner')
   bool get isOwner;
+
+  /// A cover is stored for this playlist, readable at `/items/{pid}/art` with the playlist's own PID. It is true for an owner's uploaded cover and for the mosaic the server builds from the members when there is none; the two are the same slot, and uploading wins until it is cleared. Absent means false. 
+  @BuiltValueField(wireName: r'hasArt')
+  bool? get hasArt;
 
   /// Member count. Stored count for static playlists; computed for smart playlists on detail reads and absent on list pages. 
   @BuiltValueField(wireName: r'itemCount')
@@ -129,6 +134,13 @@ class _$PlaylistSerializer implements PrimitiveSerializer<Playlist> {
       object.isOwner,
       specifiedType: const FullType(bool),
     );
+    if (object.hasArt != null) {
+      yield r'hasArt';
+      yield serializers.serialize(
+        object.hasArt,
+        specifiedType: const FullType(bool),
+      );
+    }
     if (object.itemCount != null) {
       yield r'itemCount';
       yield serializers.serialize(
@@ -224,6 +236,13 @@ class _$PlaylistSerializer implements PrimitiveSerializer<Playlist> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.isOwner = valueDes;
+          break;
+        case r'hasArt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.hasArt = valueDes;
           break;
         case r'itemCount':
           final valueDes = serializers.deserialize(

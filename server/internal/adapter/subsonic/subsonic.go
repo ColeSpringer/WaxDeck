@@ -21,6 +21,7 @@ package subsonic
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"maps"
 	"math/rand/v2"
 	"net/http"
@@ -467,6 +468,9 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 	// derived fallback to a member's embedded cover the way the album
 	// level does, so going through a member is what keeps artist covers
 	// working for a library whose artists carry no art of their own.
+	// Playlist ids need none of that: a playlist is a terminal art level
+	// holding its own cover, and it goes straight to the art path, which
+	// applies the same owner-or-shared gate as every other playlist read.
 	if entityGroupID(id) {
 		idx, err := h.index(r.Context(), uc)
 		if err != nil {
@@ -490,6 +494,16 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 	blob, err := h.svc.Art(r.Context(), uc, pid, "", size)
 	if err != nil {
 		h.fail(w, r, 70, "no such cover")
+		return
+	}
+	// The same validator the first-party art endpoint mints: the source
+	// hash scoped by the requested size. Covers are the bulkiest thing
+	// these clients refetch, and the protocol says nothing against
+	// ordinary HTTP revalidation.
+	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", blob.SourceHash, size))
+	w.Header().Set("ETag", etag)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
 		return
 	}
 	w.Header().Set("Content-Type", blob.MimeType)

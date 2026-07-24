@@ -170,10 +170,13 @@ paths:
       description: >
         Artwork as image bytes: the original at full size, or a square-fit
         thumbnail when `size` is given. Besides item PIDs this endpoint also
-        accepts album (`al-`), artist (`ar-`), and podcast show (`pc-`)
-        PIDs, so search hits and subscription lists can render artwork
-        directly. Items without any artwork in their fallback chain return
-        404. Responses carry a content-addressed `ETag`; revalidate with
+        accepts album (`al-`), artist (`ar-`), podcast show (`pc-`), and
+        playlist (`pl-`) PIDs, so search hits, subscription lists, and
+        playlist grids can render artwork directly. A playlist answers its
+        own cover, whether the owner uploaded one or the server built it
+        from the members, and follows the same visibility rule as every
+        other playlist read. Items without any artwork in their fallback
+        chain return 404. Responses carry a content-addressed `ETag`; revalidate with
         `If-None-Match` instead of refetching.
       tags: [library]
       parameters:
@@ -245,8 +248,8 @@ paths:
         The artwork slots present at the entity's own level, not inherited
         from the album or artist chain, each with its stored format and pixel
         dimensions (0 when the image was not decodable). Besides item PIDs
-        this accepts album (`al-`), artist (`ar-`), and podcast show (`pc-`)
-        PIDs. It answers the own-versus-inherited question a front-cover read
+        this accepts album (`al-`), artist (`ar-`), podcast show (`pc-`), and
+        playlist (`pl-`) PIDs. It answers the own-versus-inherited question a front-cover read
         cannot: an item that lists a `front` slot here holds its own cover,
         while one that resolves art only through `/items/{pid}/art` inherits
         it from the chain.

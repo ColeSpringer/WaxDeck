@@ -1227,6 +1227,7 @@ class Playlist {
     this.previousPid,
     this.itemCount,
     this.rule,
+    this.artUrl,
   });
 
   final String pid;
@@ -1247,6 +1248,11 @@ class Playlist {
   final bool isOwner;
   final int? itemCount;
   final SmartRule? rule;
+
+  /// The playlist's cover, when it has one: an owner's upload, or the
+  /// mosaic the server builds from the members. Null means neither, so
+  /// the client draws its own placeholder rather than fetching a 404.
+  final String? artUrl;
   final DateTime createdAt;
   final DateTime updatedAt;
 

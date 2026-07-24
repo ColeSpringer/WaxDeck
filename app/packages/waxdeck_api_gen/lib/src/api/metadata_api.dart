@@ -145,6 +145,73 @@ class MetadataApi {
     );
   }
 
+  /// Clear entity artwork
+  /// Removes one artwork slot (&#x60;role&#x60;, default &#x60;front&#x60;) from an album, artist, release group, genre, or playlist entity. Files already carrying an embedded cover are untouched; this clears the catalog&#39;s copy. Clearing a playlist&#39;s uploaded cover hands the slot back to the mosaic the server builds from the members, so the playlist keeps a cover rather than going bare. Catalog entities are administrators-only; a playlist cover is cleared by its owner. 
+  ///
+  /// Parameters:
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
+  /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [role] - Which artwork slot to clear. Defaults to `front`.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future]
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<void>> clearEntityArtwork({ 
+    required String entityType,
+    required String entityPid,
+    ArtRole? role,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/entities/{entityType}/{entityPid}/artwork'.replaceAll('{' r'entityType' '}', encodeQueryParameter(_serializers, entityType, const FullType(String)).toString()).replaceAll('{' r'entityPid' '}', encodeQueryParameter(_serializers, entityPid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'DELETE',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (role != null) r'role': encodeQueryParameter(_serializers, role, const FullType(ArtRole)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    return _response;
+  }
+
   /// Clear item artwork
   /// Removes the stored item art in one slot (&#x60;role&#x60;, default &#x60;front&#x60;). A cleared front cover falls back to the entity chain (album, release group, artist); the other slots have no fallback and simply become absent. 
   ///
@@ -332,7 +399,7 @@ class MetadataApi {
   /// Edits an entity&#39;s own fields: sort name and MusicBrainz id for artists; sort name, MusicBrainz id, and type for release groups; sort name, MusicBrainz id, barcode, label, and catalog number for albums. Entity edits carry their own provenance, readable below. &#x60;writeBack&#x60; pushes the values that have tag forms into member files. 
   ///
   /// Parameters:
-  /// * [entityType] - The entity kind an entity operation targets.
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [entityEdit] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -658,7 +725,7 @@ class MetadataApi {
   /// The entity&#39;s curated fields with source and time.
   ///
   /// Parameters:
-  /// * [entityType] - The entity kind an entity operation targets.
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
@@ -1107,10 +1174,10 @@ class MetadataApi {
   }
 
   /// Set entity artwork
-  /// Stores the raw image bytes in one artwork slot (&#x60;role&#x60;, default &#x60;front&#x60;) of an album, artist, release group, or genre entity. Album front covers may additionally embed into member files with &#x60;writeBack&#x3D;true&#x60;; other slots and entity types are catalog-only. An artist portrait lands under &#x60;background&#x60;, which has no separate portrait role. 
+  /// Stores the raw image bytes in one artwork slot (&#x60;role&#x60;, default &#x60;front&#x60;) of an album, artist, release group, genre, or playlist entity. Album front covers may additionally embed into member files with &#x60;writeBack&#x3D;true&#x60;; other slots and entity types are catalog-only. An artist portrait lands under &#x60;background&#x60;, which has no separate portrait role. Catalog entities are administrators-only; a playlist cover is set by its owner, and replaces the cover the server generates from the members until it is cleared. 
   ///
   /// Parameters:
-  /// * [entityType] - The entity kind an entity operation targets.
+  /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 
   /// * [entityPid] - Entity PID (e.g. `al-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [body] 
   /// * [role] - Which artwork slot to set. Defaults to `front`.

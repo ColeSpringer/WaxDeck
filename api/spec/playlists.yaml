@@ -731,6 +731,15 @@ components:
         isOwner:
           type: boolean
           description: True when the caller owns this playlist and may edit it.
+        hasArt:
+          type: boolean
+          description: >
+            A cover is stored for this playlist, readable at
+            `/items/{pid}/art` with the playlist's own PID. It is true
+            for an owner's uploaded cover and for the mosaic the server
+            builds from the members when there is none; the two are the
+            same slot, and uploading wins until it is cleared. Absent
+            means false.
         itemCount:
           type: integer
           description: >

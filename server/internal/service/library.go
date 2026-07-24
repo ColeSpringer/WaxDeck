@@ -177,8 +177,14 @@ type Library struct {
 	defaultRetentionKeep int64
 	retentionInUseWindow time.Duration
 	// flowJobs is the streaming sidecar's analysis surface, wired after
-	// construction (the bridge needs this service as its resolver).
-	flowJobs FlowJobs
+	// construction (the bridge needs this service as its resolver);
+	// flowRoots is its runtime-root surface, wired the same way.
+	flowJobs  FlowJobs
+	flowRoots FlowRootSync
+	// coverSyncing single-flights playlist cover generation per playlist,
+	// so concurrent readers of one shared list do not each composite it.
+	coverSyncing map[model.PID]bool
+	coverSyncMu  sync.Mutex
 	// transcriptHTTP is the guarded client for transcript pointers,
 	// built on first use; allowPrivateFeedHosts relaxes its SSRF guard.
 	transcriptHTTP        *http.Client

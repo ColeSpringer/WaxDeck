@@ -421,7 +421,10 @@ func (s *Server) SetEntityArtwork(ctx context.Context, req SetEntityArtworkReque
 	if err != nil {
 		return nil, err
 	}
-	if !uc.Admin {
+	// A playlist cover is its owner's, not the catalog's, so it is the one
+	// entity type here that is not administrators-only; the service
+	// enforces ownership.
+	if !uc.Admin && !service.EntityArtworkOwned(string(req.EntityType)) {
 		return SetEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	// Reject a bad role before buffering up to 16 MiB of image body.
@@ -432,7 +435,7 @@ func (s *Server) SetEntityArtwork(ctx context.Context, req SetEntityArtworkReque
 	if err != nil {
 		return SetEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "reading the image body failed"))}, nil
 	}
-	out, err := s.svc.SetEntityArtwork(ctx, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), raw,
+	out, err := s.svc.SetEntityArtwork(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role), raw,
 		derefBool(req.Params.WriteBack))
 	if err != nil {
 		switch service.KindOf(err) {
@@ -440,12 +443,39 @@ func (s *Server) SetEntityArtwork(ctx context.Context, req SetEntityArtworkReque
 			return SetEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 		case service.KindFormat:
 			return SetEntityArtwork415JSONResponse{UnsupportedFormatJSONResponse(errObj("unsupported-format", err.Error()))}, nil
+		case service.KindForbidden:
+			return SetEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindNotFound:
 			return SetEntityArtwork404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
 		}
 		return nil, err
 	}
 	return SetEntityArtwork200JSONResponse(editResultJSON(out)), nil
+}
+
+func (s *Server) ClearEntityArtwork(ctx context.Context, req ClearEntityArtworkRequestObject) (ClearEntityArtworkResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !uc.Admin && !service.EntityArtworkOwned(string(req.EntityType)) {
+		return ClearEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if req.Params.Role != nil && !req.Params.Role.Valid() {
+		return ClearEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "unknown art role"))}, nil
+	}
+	if err := s.svc.ClearEntityArtwork(ctx, uc, string(req.EntityType), req.EntityPid, enumStr(req.Params.Role)); err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return ClearEntityArtwork400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return ClearEntityArtwork403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindNotFound:
+			return ClearEntityArtwork404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
+		}
+		return nil, err
+	}
+	return ClearEntityArtwork204Response{}, nil
 }
 
 // --- custom tags ------------------------------------------------------------------

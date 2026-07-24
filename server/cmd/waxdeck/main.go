@@ -69,6 +69,7 @@ func run() error {
 		rootsFlag  = flag.String("library-roots", envOr("WAXDECK_LIBRARY_ROOTS", ""), "library roots as name=path pairs, comma separated; names must match the WaxFlow roots serving the same directories")
 		flowURL    = flag.String("flow-url", envOr("WAXDECK_FLOW_URL", ""), "WaxFlow sidecar base URL (empty disables streaming)")
 		flowAPIKey = flag.String("flow-api-key", envOr("WAXDECK_FLOW_API_KEY", ""), "API key WaxDeck presents to the WaxFlow sidecar")
+		flowConfig = flag.String("flow-config", envOr("WAXDECK_FLOW_CONFIG", ""), "the WaxFlow sidecar's JSON config file, as WaxDeck sees it; set it (and point the sidecar at the same file) so a library created at runtime streams without a sidecar restart")
 		scanStart  = flag.Bool("scan-on-start", envOr("WAXDECK_SCAN_ON_START", "true") == "true", "launch a library scan at startup")
 		cookieSec  = flag.Bool("cookie-secure", envOr("WAXDECK_COOKIE_SECURE", "false") == "true", "mark session cookies Secure (set whenever the origin is HTTPS)")
 		publicBase = flag.String("public-base", envOr("WAXDECK_PUBLIC_BASE", ""), "externally reachable base URL (needed for OIDC callbacks), e.g. https://wax.example.com")
@@ -432,17 +433,19 @@ func run() error {
 			flowRoots = append(flowRoots, flow.Root{Name: *podcastRoot, Path: *podcastDir})
 		}
 		bridge, err = flow.New(ctx, flow.Config{
-			BaseURL:  *flowURL,
-			APIKey:   *flowAPIKey,
-			Roots:    flowRoots,
-			Tokens:   media,
-			Resolver: svc,
-			Logger:   log,
+			BaseURL:    *flowURL,
+			APIKey:     *flowAPIKey,
+			Roots:      flowRoots,
+			ConfigPath: *flowConfig,
+			Tokens:     media,
+			Resolver:   svc,
+			Logger:     log,
 		})
 		if err != nil {
 			return err
 		}
 		svc.SetFlowJobs(bridge)
+		svc.SetFlowRoots(bridge)
 		bridge.SetTranscodeGate(svc.TranscodeGate())
 	} else {
 		log.Warn("WAXDECK_FLOW_URL is not set; playing original files directly (no transcoding, gapless timelines, or voice boost)")

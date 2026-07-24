@@ -690,8 +690,14 @@ gen.SmartRule smartRuleToGen(SmartRule rule) {
   );
 }
 
-Playlist playlistFromGen(gen.Playlist pl) {
+Playlist playlistFromGen(gen.Playlist pl, {String baseUrl = ''}) {
   final rule = pl.rule;
+  // The wire carries hasArt rather than a URL: a playlist's cover lives
+  // at the shared art endpoint under the playlist's own pid, so there is
+  // nothing for the server to say that the pid does not already.
+  final artUrl = pl.hasArt == true
+      ? resolveMediaUrl(baseUrl, '/api/v1/items/${pl.pid}/art')
+      : null;
   return Playlist(
     // previousPid is retired: rule edits apply in place, so the server
     // never sets it. The wrapper field stays null.
@@ -703,14 +709,17 @@ Playlist playlistFromGen(gen.Playlist pl) {
     isOwner: pl.isOwner,
     itemCount: pl.itemCount,
     rule: rule == null ? null : smartRuleFromGen(rule),
+    artUrl: artUrl,
     createdAt: pl.createdAt.toUtc(),
     updatedAt: pl.updatedAt.toUtc(),
   );
 }
 
-PlaylistPage playlistPageFromGen(gen.PlaylistPage page) {
+PlaylistPage playlistPageFromGen(gen.PlaylistPage page, {String baseUrl = ''}) {
   return PlaylistPage(
-    playlists: page.playlists.map(playlistFromGen).toList(),
+    playlists: page.playlists
+        .map((p) => playlistFromGen(p, baseUrl: baseUrl))
+        .toList(),
     nextCursor: page.nextCursor,
   );
 }
@@ -764,9 +773,12 @@ RuleFields ruleFieldsFromGen(gen.RuleFields fields) {
   );
 }
 
-M3uImportResult m3uImportResultFromGen(gen.M3uImportResult res) {
+M3uImportResult m3uImportResultFromGen(
+  gen.M3uImportResult res, {
+  String baseUrl = '',
+}) {
   return M3uImportResult(
-    playlist: playlistFromGen(res.playlist),
+    playlist: playlistFromGen(res.playlist, baseUrl: baseUrl),
     matched: res.matched,
     unmatched: res.unmatched,
     unmatchedPaths: res.unmatchedPaths?.toList() ?? const [],

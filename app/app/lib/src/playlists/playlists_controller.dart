@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
@@ -158,6 +160,24 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
 
   Future<void> removeAt(int position) async {
     await ref.read(repositoryProvider).removePlaylistItemAt(pid, position);
+    ref.invalidateSelf();
+    ref.invalidate(playlistsProvider);
+  }
+
+  /// Uploads a cover, which stands in for the one the server generates
+  /// from the members until it is reset.
+  Future<void> setCover(Uint8List bytes) async {
+    await ref
+        .read(repositoryProvider)
+        .setEntityArtwork('playlist', pid, bytes: bytes);
+    ref.invalidateSelf();
+    ref.invalidate(playlistsProvider);
+  }
+
+  /// Drops an uploaded cover, which hands the slot back to the
+  /// generated one rather than leaving the playlist bare.
+  Future<void> resetCover() async {
+    await ref.read(repositoryProvider).clearEntityArtwork('playlist', pid);
     ref.invalidateSelf();
     ref.invalidate(playlistsProvider);
   }

@@ -26,14 +26,36 @@ type AddLibraryInput struct {
 	Managed bool
 }
 
+// FlowRootSync is the streaming bridge's runtime-root surface, wired
+// after construction like FlowJobs (the bridge needs this service as its
+// resolver). A nil sync means no sidecar is configured, or one whose
+// roots are pinned at startup; either way a runtime-added root browses
+// and downloads normally and streams once the sidecar learns it.
+type FlowRootSync interface {
+	// RootNames lists every root name the bridge maps. It is wider than
+	// the service's own table: the podcast download dir is a bridge root
+	// and never enters it.
+	RootNames() []string
+	// SyncRoot teaches the bridge the new root and brings the sidecar to
+	// the same set. Both halves are needed: reloading the sidecar alone
+	// leaves streaming broken, because stream-ref resolution walks the
+	// bridge's own table. A nil error means streaming works now; any
+	// error says what an administrator still has to do.
+	SyncRoot(ctx context.Context, name, path string) error
+}
+
+// SetFlowRoots wires the bridge's runtime-root surface.
+func (l *Library) SetFlowRoots(s FlowRootSync) { l.flowRoots = s }
+
 // AddLibrary registers a new library root at runtime. It catalogs the root
 // through the facade (which validates the path is absolute and does not
 // overlap an existing root, the inbox, or the podcast dir), adopts it into
 // the service's own root table so the configured name and managed policy
-// take effect without a restart, and kicks a background scan. Browsing and
-// downloading the new root's files work once the scan indexes them;
-// streaming through the WaxFlow sidecar additionally needs the sidecar to
-// mount the same-named root. Administrators only.
+// take effect without a restart, teaches the streaming sidecar the same
+// root, and kicks a background scan. Browsing and downloading the new
+// root's files work once the scan indexes them; streaming works as soon as
+// the sidecar reconciles, and degrades to needing a sidecar restart when
+// it cannot. Administrators only.
 func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInput) (LibraryInfo, error) {
 	if !uc.Admin {
 		return LibraryInfo{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
@@ -71,6 +93,7 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 	// Drop the path-to-library attribution cache so a lookup under the new
 	// root resolves immediately instead of waiting for the first miss.
 	l.invalidateAttribution()
+	streamWarning := l.syncFlowRoot(ctx, name, path)
 	// Scan the new root in the background. A scan (or other catalog job)
 	// already in flight was snapshotted before this root existed and will not
 	// cover it, so on a conflict the root waits for the next scan; log that so
@@ -84,9 +107,34 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 		}
 	}
 	apiLibPID := apiPID(PrefixLibrary, lib.PID)
-	l.Audit(ctx, uc, "library.create", AuditTarget{Kind: "library", PID: apiLibPID},
-		map[string]any{"name": name, "path": path, "media": string(media), "managed": in.Managed})
+	detail := map[string]any{"name": name, "path": path, "media": string(media), "managed": in.Managed}
+	if streamWarning != "" {
+		// The reload error is the verification that the sidecar can see the
+		// path (it opens each root with os.Root while reconciling), so it
+		// belongs where the administrator who made the change will find it,
+		// not only in the server log.
+		detail["streamingWarning"] = streamWarning
+	}
+	l.Audit(ctx, uc, "library.create", AuditTarget{Kind: "library", PID: apiLibPID}, detail)
 	return LibraryInfo{PID: apiLibPID, Name: name, Media: string(lib.MediaType())}, nil
+}
+
+// syncFlowRoot brings the streaming sidecar to the new root. It
+// degrades rather than fails: the library is already created, and
+// browsing, downloading, and direct playback never depended on the
+// sidecar. The returned string is empty when streaming works now, and
+// otherwise says what an administrator still has to do.
+func (l *Library) syncFlowRoot(ctx context.Context, name, path string) string {
+	if l.flowRoots == nil {
+		return ""
+	}
+	err := l.flowRoots.SyncRoot(ctx, name, path)
+	if err == nil {
+		return ""
+	}
+	l.log.Warn("the streaming sidecar did not take the new library's root",
+		"library", name, "err", err)
+	return "streaming from this library is not available yet: " + err.Error()
 }
 
 // registerRoot holds rootsMu across the name-uniqueness check, the facade add,
@@ -96,11 +144,28 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 // would make stream-ref resolution ambiguous. AddRoot is a bounded catalog
 // write and does not re-enter the service, so holding the lock across it only
 // serializes the rare runtime library create.
+//
+// The check covers every name the streaming bridge maps, not only this
+// table. The podcast download dir is appended to the bridge separately
+// and never enters l.roots, so a library named after it would pass a
+// table-only check and then shadow the sidecar's podcast root, which is
+// the exact ambiguity this check exists to prevent.
 func (l *Library) registerRoot(ctx context.Context, name, path string, mode model.Mode, media model.MediaType, managed bool) (*model.Library, error) {
 	l.rootsMu.Lock()
 	defer l.rootsMu.Unlock()
+	taken := make([]string, 0, len(l.roots)+1)
 	for _, r := range l.roots {
-		if r.Name == name {
+		taken = append(taken, r.Name)
+	}
+	if l.flowRoots != nil {
+		taken = append(taken, l.flowRoots.RootNames()...)
+	} else if l.podcastRootName != "" {
+		// Without a bridge the podcast root has no other registry, but the
+		// name is still reserved: a sidecar configured later mounts it.
+		taken = append(taken, l.podcastRootName)
+	}
+	for _, n := range taken {
+		if n == name {
 			return nil, &Error{Kind: KindConflict, Msg: "a library named " + name + " already exists"}
 		}
 	}

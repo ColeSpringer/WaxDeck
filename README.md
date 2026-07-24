@@ -34,8 +34,14 @@ Deployment (compose):
 
 ```sh
 cd deploy && cp .env.example .env   # edit paths/keys
+mkdir -p waxflow-config && cp waxflow-config.example.json waxflow-config/waxflow.json
 docker compose up -d                # waxdeck on :4420, waxflow internal-only
 ```
+
+The second line seeds the streaming engine's roots file, which the server
+then owns: creating a library at runtime merges it into that file and has
+the engine reconcile, so a new root streams without a restart. `make up`
+does both steps for you.
 
 ## Contract-first rule
 

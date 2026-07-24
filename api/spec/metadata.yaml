@@ -398,11 +398,13 @@ paths:
       summary: Set entity artwork
       description: >
         Stores the raw image bytes in one artwork slot (`role`, default
-        `front`) of an album, artist, release group, or genre entity. Album
-        front covers may additionally embed into member files with
-        `writeBack=true`; other slots and entity types are catalog-only. An
-        artist portrait lands under `background`, which has no separate
-        portrait role.
+        `front`) of an album, artist, release group, genre, or playlist
+        entity. Album front covers may additionally embed into member files
+        with `writeBack=true`; other slots and entity types are
+        catalog-only. An artist portrait lands under `background`, which has
+        no separate portrait role. Catalog entities are administrators-only;
+        a playlist cover is set by its owner, and replaces the cover the
+        server generates from the members until it is cleared.
       tags: [metadata]
       parameters:
         - name: role
@@ -442,6 +444,37 @@ paths:
           $ref: "#/components/responses/NotFound"
         "415":
           $ref: "#/components/responses/UnsupportedFormat"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: clearEntityArtwork
+      summary: Clear entity artwork
+      description: >
+        Removes one artwork slot (`role`, default `front`) from an album,
+        artist, release group, genre, or playlist entity. Files already
+        carrying an embedded cover are untouched; this clears the catalog's
+        copy. Clearing a playlist's uploaded cover hands the slot back to
+        the mosaic the server builds from the members, so the playlist keeps
+        a cover rather than going bare. Catalog entities are
+        administrators-only; a playlist cover is cleared by its owner.
+      tags: [metadata]
+      parameters:
+        - name: role
+          in: query
+          description: Which artwork slot to clear. Defaults to `front`.
+          schema:
+            $ref: "#/components/schemas/ArtRole"
+      responses:
+        "204":
+          description: Cleared.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -733,10 +766,14 @@ components:
       name: entityType
       in: path
       required: true
-      description: The entity kind an entity operation targets.
+      description: >
+        The entity kind an entity operation targets. `playlist` is a
+        WaxDeck-side entity rather than a catalog one: it carries artwork
+        and nothing else, and its operations are owner-gated instead of
+        administrators-only.
       schema:
         type: string
-        enum: [album, artist, release-group, genre]
+        enum: [album, artist, release-group, genre, playlist]
 
     EntityPid:
       name: entityPid

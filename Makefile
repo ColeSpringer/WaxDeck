@@ -121,10 +121,23 @@ COMPOSE := docker compose -f deploy/compose.yaml
 # waxflow streaming sidecar, wired over the internal network. Generates
 # deploy/.env with fresh internal keys on first run; set WAXDECK_LIBRARY
 # in it to point at your music (defaults to an empty deploy/library).
-up: deploy/.env
+up: deploy/.env deploy/waxflow-config/waxflow.json
 	@mkdir -p deploy/library deploy/podcasts
 	WAXDECK_UID=$$(id -u) WAXDECK_GID=$$(id -g) $(COMPOSE) up --build -d
 	@echo "WaxDeck is up on http://localhost:4420  (make logs / make down)"
+
+# Seed the sidecar's roots config from the committed example, which
+# carries the same roots compose.yaml gives WaxDeck (WAXDECK_LIBRARY_ROOTS
+# plus the podcast dir). The sidecar reads its roots from a file rather
+# than WAXFLOW_ROOTS so a library created at runtime can be reconciled
+# without a restart; WaxDeck merges its own roots into the file from then
+# on. The file itself is deployment state, so it stays untracked -- like
+# deploy/.env, which is seeded the same way. A bare `docker compose up`
+# needs this copy first; README documents it beside the .env step.
+deploy/waxflow-config/waxflow.json: deploy/waxflow-config.example.json
+	@mkdir -p $(@D)
+	@cp deploy/waxflow-config.example.json $@
+	@echo "wrote $@ (the sidecar's roots; WaxDeck merges runtime libraries into it)"
 
 # Generate deploy/.env from the example with matching internal API keys,
 # so the stack comes up without hand-editing secrets.

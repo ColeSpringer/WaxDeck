@@ -46,7 +46,26 @@ Playlists round-trip M3U8 for interop with path-based players. Import
 lives on the playlists screen (paste a file's contents; the server
 matches entries against the library and reports what it could not
 place), and every playlist detail menu offers Export M3U with a copy
-button.
+button. M3U8 carries no cover: the format has no directive for one, so
+an exported playlist is text and its cover stays on the server.
+
+### Covers
+
+Every playlist gets a cover without being given one. The server tiles
+the first four member covers that differ into one square image,
+deduplicated by the artwork itself, so a playlist drawn from a single
+album shows that album's cover once instead of four times; below four
+distinct covers it shows the first member's. The cover refreshes when
+the membership moves or when a member's own artwork changes, which for a
+smart playlist means the next time anyone opens it.
+
+An owner can upload a cover instead (playlist menu, Set cover). It
+replaces the generated one everywhere at once, and Reset cover hands
+the slot back rather than leaving the playlist bare. Covers serve at
+the same artwork endpoint as everything else, under the playlist's own
+id, so third-party Subsonic clients pick them up through `coverArt`
+with no extra work; a private playlist's cover is as private as the
+playlist.
 
 ## Internet radio
 

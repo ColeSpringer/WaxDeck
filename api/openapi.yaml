@@ -2449,10 +2449,13 @@ paths:
       description: >
         Artwork as image bytes: the original at full size, or a square-fit
         thumbnail when `size` is given. Besides item PIDs this endpoint also
-        accepts album (`al-`), artist (`ar-`), and podcast show (`pc-`)
-        PIDs, so search hits and subscription lists can render artwork
-        directly. Items without any artwork in their fallback chain return
-        404. Responses carry a content-addressed `ETag`; revalidate with
+        accepts album (`al-`), artist (`ar-`), podcast show (`pc-`), and
+        playlist (`pl-`) PIDs, so search hits, subscription lists, and
+        playlist grids can render artwork directly. A playlist answers its
+        own cover, whether the owner uploaded one or the server built it
+        from the members, and follows the same visibility rule as every
+        other playlist read. Items without any artwork in their fallback
+        chain return 404. Responses carry a content-addressed `ETag`; revalidate with
         `If-None-Match` instead of refetching.
       tags: [library]
       parameters:
@@ -2524,8 +2527,8 @@ paths:
         The artwork slots present at the entity's own level, not inherited
         from the album or artist chain, each with its stored format and pixel
         dimensions (0 when the image was not decodable). Besides item PIDs
-        this accepts album (`al-`), artist (`ar-`), and podcast show (`pc-`)
-        PIDs. It answers the own-versus-inherited question a front-cover read
+        this accepts album (`al-`), artist (`ar-`), podcast show (`pc-`), and
+        playlist (`pl-`) PIDs. It answers the own-versus-inherited question a front-cover read
         cannot: an item that lists a `front` slot here holds its own cover,
         while one that resolves art only through `/items/{pid}/art` inherits
         it from the chain.
@@ -2986,11 +2989,13 @@ paths:
       summary: Set entity artwork
       description: >
         Stores the raw image bytes in one artwork slot (`role`, default
-        `front`) of an album, artist, release group, or genre entity. Album
-        front covers may additionally embed into member files with
-        `writeBack=true`; other slots and entity types are catalog-only. An
-        artist portrait lands under `background`, which has no separate
-        portrait role.
+        `front`) of an album, artist, release group, genre, or playlist
+        entity. Album front covers may additionally embed into member files
+        with `writeBack=true`; other slots and entity types are
+        catalog-only. An artist portrait lands under `background`, which has
+        no separate portrait role. Catalog entities are administrators-only;
+        a playlist cover is set by its owner, and replaces the cover the
+        server generates from the members until it is cleared.
       tags: [metadata]
       parameters:
         - name: role
@@ -3030,6 +3035,37 @@ paths:
           $ref: "#/components/responses/NotFound"
         "415":
           $ref: "#/components/responses/UnsupportedFormat"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: clearEntityArtwork
+      summary: Clear entity artwork
+      description: >
+        Removes one artwork slot (`role`, default `front`) from an album,
+        artist, release group, genre, or playlist entity. Files already
+        carrying an embedded cover are untouched; this clears the catalog's
+        copy. Clearing a playlist's uploaded cover hands the slot back to
+        the mosaic the server builds from the members, so the playlist keeps
+        a cover rather than going bare. Catalog entities are
+        administrators-only; a playlist cover is cleared by its owner.
+      tags: [metadata]
+      parameters:
+        - name: role
+          in: query
+          description: Which artwork slot to clear. Defaults to `front`.
+          schema:
+            $ref: "#/components/schemas/ArtRole"
+      responses:
+        "204":
+          description: Cleared.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -8042,10 +8078,14 @@ components:
       name: entityType
       in: path
       required: true
-      description: The entity kind an entity operation targets.
+      description: >
+        The entity kind an entity operation targets. `playlist` is a
+        WaxDeck-side entity rather than a catalog one: it carries artwork
+        and nothing else, and its operations are owner-gated instead of
+        administrators-only.
       schema:
         type: string
-        enum: [album, artist, release-group, genre]
+        enum: [album, artist, release-group, genre, playlist]
 
     EntityPid:
       name: entityPid
@@ -12645,6 +12685,15 @@ components:
         isOwner:
           type: boolean
           description: True when the caller owns this playlist and may edit it.
+        hasArt:
+          type: boolean
+          description: >
+            A cover is stored for this playlist, readable at
+            `/items/{pid}/art` with the playlist's own PID. It is true
+            for an owner's uploaded cover and for the mosaic the server
+            builds from the members when there is none; the two are the
+            same slot, and uploading wins until it is cleared. Absent
+            means false.
         itemCount:
           type: integer
           description: >

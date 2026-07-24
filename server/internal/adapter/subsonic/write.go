@@ -667,6 +667,9 @@ func playlistHeader(pl service.Playlist) playlistShape {
 		Created: pl.CreatedAt.UTC().Format(time.RFC3339),
 		Changed: pl.UpdatedAt.UTC().Format(time.RFC3339),
 	}
+	if pl.HasArt {
+		out.CoverArt = pl.PID
+	}
 	if pl.ItemCount != nil {
 		out.SongCount = *pl.ItemCount
 	}

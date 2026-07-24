@@ -655,6 +655,22 @@ const baselineSchema = `
 		revoked        INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX shares_user ON shares (user_id, created_at_ns DESC, id);
+
+	-- Playlist covers. The catalog stores the image and cannot tell a
+	-- user's upload from a generated mosaic: both are a front-role art
+	-- row on the playlist entity, and both set HasArt. This table is
+	-- the provenance the catalog has no place for. origin says which
+	-- one it is, so clearing a custom cover falls back to the mosaic
+	-- instead of leaving the playlist bare; fingerprint is over the
+	-- member list the mosaic was built from plus the artwork-write epoch
+	-- in sync_state, so a membership change or a member repainting its
+	-- own cover regenerates it and an unrelated read does not.
+	CREATE TABLE playlist_cover (
+		playlist_pid  TEXT    PRIMARY KEY,
+		origin        TEXT    NOT NULL,
+		fingerprint   TEXT    NOT NULL DEFAULT '',
+		updated_at_ns INTEGER NOT NULL DEFAULT 0
+	);
 `
 
 // Open opens (creating if needed) the database at path and applies

@@ -760,8 +760,15 @@ func (l *Library) SetItemArtwork(ctx context.Context, uc *UserCtx, apiPID, role 
 			return EditOutcomeDTO{}, err
 		}
 	}
-	err = l.lib.SetItemArt(ctx, it.PID, art, raw, lock, true, writeBack)
-	return editOutcomeFromWriteBack(err)
+	out, err := editOutcomeFromWriteBack(l.lib.SetItemArt(ctx, it.PID, art, raw, lock, true, writeBack))
+	if err == nil {
+		// The catalog write committed (a write-back failure rides the
+		// outcome, not the error). A generated playlist cover may have been
+		// built from this item's old art, and a replacement in place moves
+		// no membership, so the epoch is what tells those covers to rebuild.
+		l.noteArtworkChanged(ctx)
+	}
+	return out, err
 }
 
 // ClearItemArtwork removes the stored item art in one slot. A cleared front
@@ -779,6 +786,7 @@ func (l *Library) ClearItemArtwork(ctx context.Context, uc *UserCtx, apiPID, rol
 	if err := l.lib.SetItemArt(ctx, it.PID, art, nil, false, true, false); err != nil {
 		return classify(err)
 	}
+	l.noteArtworkChanged(ctx)
 	return nil
 }
 
@@ -793,10 +801,18 @@ func artEntityForType(entityType string) (model.ArtEntity, bool) {
 		return model.ArtReleaseGroup, true
 	case "genre":
 		return model.ArtGenre, true
+	case "playlist":
+		return model.ArtPlaylist, true
 	default:
 		return "", false
 	}
 }
+
+// EntityArtworkOwned reports whether an entity type's artwork belongs to
+// a user rather than to the catalog. A playlist cover is the owner's;
+// every catalog entity is administrators-only, which is what the API
+// layer checks before it gets here.
+func EntityArtworkOwned(entityType string) bool { return entityType == "playlist" }
 
 // mergeEntityForType maps an API entity type to the curation entity
 // vocabulary.
@@ -840,8 +856,9 @@ func editorEntityPID(entityType, apiEntityPID string) (model.PID, error) {
 // SetEntityArtwork stores durable front-cover art on an entity. Albums
 // may fan the cover into member files with writeBack; other entity
 // types are catalog-only (the facade treats their write-back as a
-// no-op).
-func (l *Library) SetEntityArtwork(ctx context.Context, entityType, apiEntityPID, role string, raw []byte, writeBack bool) (EditOutcomeDTO, error) {
+// no-op). A playlist takes its owner's cover here, over the one the
+// server generates from its members.
+func (l *Library) SetEntityArtwork(ctx context.Context, uc *UserCtx, entityType, apiEntityPID, role string, raw []byte, writeBack bool) (EditOutcomeDTO, error) {
 	art, ok := model.ParseArtRole(role)
 	if !ok {
 		return EditOutcomeDTO{}, errInvalid("unknown art role " + role)
@@ -850,11 +867,14 @@ func (l *Library) SetEntityArtwork(ctx context.Context, entityType, apiEntityPID
 	if !ok {
 		return EditOutcomeDTO{}, errInvalid("unknown entity type " + entityType)
 	}
-	pid, err := editorEntityPID(entityType, apiEntityPID)
-	if err != nil {
+	if err := validateArtworkBytes(raw); err != nil {
 		return EditOutcomeDTO{}, err
 	}
-	if err := validateArtworkBytes(raw); err != nil {
+	if ent == model.ArtPlaylist {
+		return l.setPlaylistArtwork(ctx, uc, apiEntityPID, art, raw)
+	}
+	pid, err := editorEntityPID(entityType, apiEntityPID)
+	if err != nil {
 		return EditOutcomeDTO{}, err
 	}
 	// Only a front cover fans into member files; the auxiliary slots are
@@ -867,8 +887,104 @@ func (l *Library) SetEntityArtwork(ctx context.Context, entityType, apiEntityPID
 			return EditOutcomeDTO{}, err
 		}
 	}
-	err = l.lib.SetEntityArt(ctx, ent, pid, art, raw, writeBack)
-	return editOutcomeFromWriteBack(err)
+	out, err := editOutcomeFromWriteBack(l.lib.SetEntityArt(ctx, ent, pid, art, raw, writeBack))
+	if err == nil {
+		// An album or artist cover is what a member track resolves when it
+		// carries none of its own, so this moves playlist covers too.
+		l.noteArtworkChanged(ctx)
+	}
+	return out, err
+}
+
+// ClearEntityArtwork removes one artwork slot from an entity. Files
+// already carrying an embedded cover keep it; this clears the catalog's
+// copy. Clearing a playlist's uploaded cover hands the slot back to the
+// generated mosaic rather than leaving the playlist bare.
+func (l *Library) ClearEntityArtwork(ctx context.Context, uc *UserCtx, entityType, apiEntityPID, role string) error {
+	art, ok := model.ParseArtRole(role)
+	if !ok {
+		return errInvalid("unknown art role " + role)
+	}
+	ent, ok := artEntityForType(entityType)
+	if !ok {
+		return errInvalid("unknown entity type " + entityType)
+	}
+	if ent == model.ArtPlaylist {
+		return l.clearPlaylistArtwork(ctx, uc, apiEntityPID, art)
+	}
+	pid, err := editorEntityPID(entityType, apiEntityPID)
+	if err != nil {
+		return err
+	}
+	// No write-back on a clear: a cover already embedded in a file is the
+	// file's, and stripping it is the organizer's business, not this
+	// endpoint's.
+	if err := l.lib.SetEntityArt(ctx, ent, pid, art, nil, false); err != nil {
+		return classify(err)
+	}
+	l.noteArtworkChanged(ctx)
+	return nil
+}
+
+// setPlaylistArtwork stores an owner's cover and records it as custom,
+// so the member-derived mosaic stops overwriting it.
+func (l *Library) setPlaylistArtwork(ctx context.Context, uc *UserCtx, apiPlaylistPID string, role model.ArtRole, raw []byte) (EditOutcomeDTO, error) {
+	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
+	if err != nil {
+		return EditOutcomeDTO{}, err
+	}
+	// Claim the slot before storing the image, and fail the request if the
+	// claim cannot be recorded. Both halves matter: with the image first,
+	// a concurrent playlist read regenerates the mosaic over the upload in
+	// the window between them, and with a best-effort claim the endpoint
+	// answers 200 while the next read overwrites what the user just
+	// uploaded. Only the front cover is the playlist's face; an auxiliary
+	// slot does not displace the generated one.
+	var undoClaim func()
+	if role == model.ArtRoleFront {
+		undo, err := l.claimPlaylistCoverCustom(ctx, pl.PID)
+		if err != nil {
+			return EditOutcomeDTO{}, classify(err)
+		}
+		undoClaim = undo
+	}
+	// A playlist has no files to write a cover back into: it is a
+	// terminal art level with no ancestry and no members of its own.
+	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, role, raw, false); err != nil {
+		if undoClaim != nil {
+			// Nothing was stored, so the claim has to go back the way it was
+			// or the next read leaves the previous cover in place while
+			// believing it is a custom one.
+			undoClaim()
+		}
+		return EditOutcomeDTO{}, classify(err)
+	}
+	return EditOutcomeDTO{}, nil
+}
+
+// clearPlaylistArtwork drops an owner's cover and rebuilds the mosaic
+// in its place, so clearing gives the default back rather than nothing.
+func (l *Library) clearPlaylistArtwork(ctx context.Context, uc *UserCtx, apiPlaylistPID string, role model.ArtRole) error {
+	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
+	if err != nil {
+		return err
+	}
+	// Drop the provenance before the art, and fail on it. The other order
+	// leaves the playlist bare with a custom marker on it, which no later
+	// read repairs: the marker is exactly what stops regeneration.
+	if role == model.ArtRoleFront {
+		if err := l.db.DeletePlaylistCover(ctx, string(pl.PID)); err != nil {
+			return classify(err)
+		}
+		pl.HasArt = false
+	}
+	if err := l.lib.SetEntityArt(ctx, model.ArtPlaylist, pl.PID, role, nil, false); err != nil {
+		return classify(err)
+	}
+	if role == model.ArtRoleFront {
+		l.refreshPlaylistCover(ctx, pl)
+	}
+	return nil
 }
 
 // --- custom tags ------------------------------------------------------------------

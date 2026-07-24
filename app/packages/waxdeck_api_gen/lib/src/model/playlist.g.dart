@@ -22,6 +22,8 @@ class _$Playlist extends Playlist {
   @override
   final bool isOwner;
   @override
+  final bool? hasArt;
+  @override
   final int? itemCount;
   @override
   final SmartRule? rule;
@@ -41,6 +43,7 @@ class _$Playlist extends Playlist {
     required this.visibility,
     required this.ownerName,
     required this.isOwner,
+    this.hasArt,
     this.itemCount,
     this.rule,
     required this.createdAt,
@@ -64,6 +67,7 @@ class _$Playlist extends Playlist {
         visibility == other.visibility &&
         ownerName == other.ownerName &&
         isOwner == other.isOwner &&
+        hasArt == other.hasArt &&
         itemCount == other.itemCount &&
         rule == other.rule &&
         createdAt == other.createdAt &&
@@ -80,6 +84,7 @@ class _$Playlist extends Playlist {
     _$hash = $jc(_$hash, visibility.hashCode);
     _$hash = $jc(_$hash, ownerName.hashCode);
     _$hash = $jc(_$hash, isOwner.hashCode);
+    _$hash = $jc(_$hash, hasArt.hashCode);
     _$hash = $jc(_$hash, itemCount.hashCode);
     _$hash = $jc(_$hash, rule.hashCode);
     _$hash = $jc(_$hash, createdAt.hashCode);
@@ -98,6 +103,7 @@ class _$Playlist extends Playlist {
           ..add('visibility', visibility)
           ..add('ownerName', ownerName)
           ..add('isOwner', isOwner)
+          ..add('hasArt', hasArt)
           ..add('itemCount', itemCount)
           ..add('rule', rule)
           ..add('createdAt', createdAt)
@@ -137,6 +143,10 @@ class PlaylistBuilder implements Builder<Playlist, PlaylistBuilder> {
   bool? get isOwner => _$this._isOwner;
   set isOwner(bool? isOwner) => _$this._isOwner = isOwner;
 
+  bool? _hasArt;
+  bool? get hasArt => _$this._hasArt;
+  set hasArt(bool? hasArt) => _$this._hasArt = hasArt;
+
   int? _itemCount;
   int? get itemCount => _$this._itemCount;
   set itemCount(int? itemCount) => _$this._itemCount = itemCount;
@@ -167,6 +177,7 @@ class PlaylistBuilder implements Builder<Playlist, PlaylistBuilder> {
       _visibility = $v.visibility;
       _ownerName = $v.ownerName;
       _isOwner = $v.isOwner;
+      _hasArt = $v.hasArt;
       _itemCount = $v.itemCount;
       _rule = $v.rule?.toBuilder();
       _createdAt = $v.createdAt;
@@ -222,6 +233,7 @@ class PlaylistBuilder implements Builder<Playlist, PlaylistBuilder> {
               r'Playlist',
               'isOwner',
             ),
+            hasArt: hasArt,
             itemCount: itemCount,
             rule: _rule?.build(),
             createdAt: BuiltValueNullFieldError.checkNotNull(

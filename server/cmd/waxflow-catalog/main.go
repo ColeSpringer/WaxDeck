@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/pidpath"
@@ -48,19 +49,21 @@ func openResolver(ctx context.Context, opts cli.ResolverOptions) (source.Resolve
 	if err != nil {
 		return nil, nil, waxerr.Wrap(waxerr.CodeCatalogUnavailable, "opening catalog", err)
 	}
-	cat := &catalog{cache: cache, next: opts.Next, maxBytes: opts.MaxBytes}
-	if cat.maxBytes <= 0 {
-		cat.maxBytes = source.DefaultMaxBytes
-	}
+	cat := &catalog{cache: cache, next: opts.Next}
+	cat.ReloadSourceMaxBytes(opts.MaxBytes)
 	return cat, cache, nil
 }
 
 // catalog resolves pid: references through the pidpath cache and
 // delegates everything else to the configured roots.
 type catalog struct {
-	cache    *pidpath.Cache
-	next     source.Resolver
-	maxBytes int64
+	cache *pidpath.Cache
+	next  source.Resolver
+	// maxBytes caps the pid: sources this resolver opens itself. A root
+	// reload rewrites it while Resolve reads it, so it is atomic; root
+	// references delegate to next, whose roots enforce their own
+	// reconciled cap.
+	maxBytes atomic.Int64
 }
 
 func (c *catalog) Resolve(ctx context.Context, ref string) (*source.File, error) {
@@ -79,7 +82,7 @@ func (c *catalog) Resolve(ctx context.Context, ref string) (*source.File, error)
 	if err != nil {
 		return nil, err
 	}
-	if f.ID.Size > c.maxBytes {
+	if f.ID.Size > c.maxBytes.Load() {
 		f.Close()
 		return nil, waxerr.New(waxerr.CodePayloadTooLarge, "source exceeds the size cap")
 	}
@@ -88,6 +91,18 @@ func (c *catalog) Resolve(ctx context.Context, ref string) (*source.File, error)
 
 // PIDSources reports pid capability for /caps.delivery.pid.
 func (c *catalog) PIDSources() bool { return true }
+
+// ReloadSourceMaxBytes implements cli.ReloadableResolver: a root reload
+// hands back the re-read source cap, so the pid: files this resolver
+// opens itself track a changed sourceMaxBytes instead of holding the
+// value snapshotted at open. Root references need nothing here; they
+// delegate to next, whose roots the same reload reconciles.
+func (c *catalog) ReloadSourceMaxBytes(maxBytes int64) {
+	if maxBytes <= 0 {
+		maxBytes = source.DefaultMaxBytes
+	}
+	c.maxBytes.Store(maxBytes)
+}
 
 // noCatalog owns the pid: refusal when no catalog is configured.
 type noCatalog struct{ next source.Resolver }

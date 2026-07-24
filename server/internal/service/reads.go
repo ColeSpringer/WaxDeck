@@ -341,6 +341,17 @@ func (l *Library) artRef(ctx context.Context, uc *UserCtx, apiPID string) (model
 		// A podcast show is not a catalog item, so it resolves to its own art
 		// level directly (its feed image), like album and artist entities.
 		return model.EntityRef{Type: model.ArtPodcast, PID: pid}, nil
+	case prefix == PrefixPlaylist:
+		// Unlike the entity cases above, a playlist goes through its
+		// visibility check. Those skip attribution because entity pids are
+		// unguessable and never surface through a filtered listing; a
+		// playlist has explicit user-facing visibility, and resolvePlaylist
+		// is the same owner-or-shared gate every other playlist read uses.
+		pl, err := l.resolvePlaylist(ctx, uc, apiPID)
+		if err != nil {
+			return model.EntityRef{}, err
+		}
+		return model.EntityRef{Type: model.ArtPlaylist, PID: pl.PID}, nil
 	case itemPrefix(prefix):
 		it, err := l.getVisibleItem(ctx, uc, apiPID)
 		if err != nil {

@@ -29,37 +29,22 @@ sidecar injection seam) all landed and are not repeated here.
   redundant event, not a wrong one (the client reconciles from the
   state it fetches), and one read per write is the more expensive
   alternative.
-- **Playlist as a first-class art entity.** The catalog art store keys
-  `art_map` by `entity_type` over
-  `track|album|release_group|artist|genre|episode|podcast`, and
-  `ResolveArt`/`ArtRoles`/the art write facade take an `EntityRef` that
-  cannot name a playlist. WaxDeck wants a synced or imported playlist to
-  carry a cover (a custom upload, the source's own thumbnail, or an auto
-  four-cover mosaic WaxDeck generates) stored and served through the
-  same content-addressed blob store, thumbnail cache, and ETag path as
-  every other cover, so it shows up uniformly in the REST playlist
-  reads, the Subsonic `coverArt`, and M3U8 exports. This needs
-  `art_map.entity_type` to accept `playlist`, the resolve and write
-  surfaces to take a playlist ref, and the `front` role to resolve at
-  the playlist's own level with no parent fallback walk (a playlist has
-  no art ancestry). The synced-playlist feature ships without a cover
-  meanwhile; the available workaround is a WaxDeck-side cover in
-  `waxdeck.db` keyed by playlist pid, injected into the playlist DTO and
-  the Subsonic mapping, deferred by choice so the plumbing is not laid
-  down and later retired. Extends the art-role model (docs/adr/0014).
 
 ## WaxFlow
 
-- **Runtime root configuration in the streaming sidecar.** WaxDeck now
-  adds a library root at runtime through WaxBin `AddRoot`, and the
-  catalog scans it so browsing and downloading its files work at once.
-  But the streaming sidecar (`waxflow-catalog`) mounts its roots from
-  startup configuration and re-reads them only on restart, so a stream
-  request for a file under a runtime-added root fails until the sidecar
-  restarts. A reload endpoint or a config watch on the sidecar would let
-  a runtime-added root stream without downtime. Until then WaxDeck serves
-  the new root's files by direct download and documents the restart the
-  streaming path needs.
+- **A `ReloadRoots` method on the Go client.** `client.Caps` exposes
+  `Delivery.RootsReload`, so a consumer can learn the daemon serves
+  `POST /roots/reload`, but `client.Client` has no method to call it:
+  every other control endpoint (caps, sign, timelines, jobs, cache) has
+  one. WaxDeck adds a library root at runtime and reconciles the sidecar
+  against a rewritten config file, so it hand-rolls the POST with its
+  own `http.Client`, its own `X-API-Key` header, and its own decode of
+  the `{added, removed, changed, roots}` delta and the error envelope --
+  duplicating what `postJSON` and `decodeEnvelope` already do correctly,
+  including the envelope-to-code mapping this copy does not attempt.
+  The workaround is shipped and working
+  (`server/internal/bridge/flow/bridge.go`); it retires the day the
+  method exists.
 
 ## Recorded upstream non-goals
 
@@ -80,3 +65,7 @@ are not re-filed as asks:
   in every runtime path; ffmpeg appears only in WaxFlow's test
   utilities for cross-validation and a doctor diagnostic. Do not
   file native fingerprinting as an ask.
+- Playlist covers are not exported to M3U8. The format has no standard
+  cover directive, so the playlist art entity stores and serves a cover
+  everywhere else (the REST art endpoint, the Subsonic `coverArt`) and
+  the export stays text. Do not re-file it as a gap.

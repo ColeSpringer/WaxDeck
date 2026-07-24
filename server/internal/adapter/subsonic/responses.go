@@ -243,7 +243,10 @@ type playlists struct {
 // playlistShape is the protocol's playlist header. Duration and song
 // count are exact on detail responses; list responses report the
 // stored count for manual playlists and zero for smart ones, whose
-// membership is computed on read.
+// membership is computed on read. CoverArt is the playlist's own id,
+// which getCoverArt resolves to the owner's uploaded cover or the
+// mosaic built from the members; it is omitted when neither exists, so
+// a client draws its own placeholder rather than requesting a 404.
 type playlistShape struct {
 	ID        string `xml:"id,attr" json:"id"`
 	Name      string `xml:"name,attr" json:"name"`
@@ -253,6 +256,7 @@ type playlistShape struct {
 	Duration  int    `xml:"duration,attr" json:"duration"`
 	Created   string `xml:"created,attr" json:"created"`
 	Changed   string `xml:"changed,attr" json:"changed"`
+	CoverArt  string `xml:"coverArt,attr,omitempty" json:"coverArt,omitempty"`
 }
 
 type playlistWithSongs struct {

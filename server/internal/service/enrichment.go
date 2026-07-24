@@ -397,6 +397,7 @@ func (l *Library) enrichCover(ctx context.Context, it *model.ItemView, locked ma
 			l.log.Warn("enrich: applying cover", "provider", p.Name(), "item", it.PID, "err", err)
 			continue
 		}
+		l.noteArtworkChanged(ctx)
 		return "cover: " + p.Name(), ""
 	}
 	return "", "cover: no provider hit"

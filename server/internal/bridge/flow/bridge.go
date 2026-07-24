@@ -6,6 +6,7 @@ package flow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -27,6 +28,9 @@ import (
 // capsStartupWait bounds how long New waits for the sidecar's /caps
 // before giving up.
 const capsStartupWait = 30 * time.Second
+
+// rootsReloadTimeout bounds one /roots/reload call.
+const rootsReloadTimeout = 30 * time.Second
 
 // Root maps one library directory to the WaxFlow root name the same
 // directory is mounted under in the sidecar.
@@ -50,6 +54,13 @@ type Config struct {
 	APIKey string
 	// Roots is the library-path to root-name map.
 	Roots []Root
+	// ConfigPath is the sidecar's JSON config file, as WaxDeck sees it.
+	// Set it and a runtime-added library root reaches the sidecar
+	// without a restart: WaxDeck rewrites the file's roots array and
+	// posts /roots/reload. Empty leaves root reload unavailable, which
+	// is right for an env-configured sidecar (WAXFLOW_ROOTS is read
+	// once at process start, so no reload could reflect an edit).
+	ConfigPath string
 	// Tokens mints and verifies media tokens.
 	Tokens *auth.MediaTokens
 	// Resolver resolves item PIDs to stream sources.
@@ -60,15 +71,22 @@ type Config struct {
 // Bridge is the live bridge, holding the sidecar's capabilities as
 // fetched at startup.
 type Bridge struct {
-	base     *url.URL
-	apiKey   string
-	roots    []Root
-	tokens   *auth.MediaTokens
-	resolver SourceResolver
-	caps     *client.Caps
-	client   *client.Client
-	proxy    *httputil.ReverseProxy
-	log      *slog.Logger
+	base   *url.URL
+	apiKey string
+	// roots is read by srcRef on every stream mint and grown by AddRoot
+	// when a library is created at runtime; rootsMu guards the swap.
+	roots   []Root
+	rootsMu sync.RWMutex
+	// configPath is the sidecar's config file; reloadMu serializes the
+	// rewrite-then-reconcile against it.
+	configPath string
+	reloadMu   sync.Mutex
+	tokens     *auth.MediaTokens
+	resolver   SourceResolver
+	caps       *client.Caps
+	client     *client.Client
+	proxy      *httputil.ReverseProxy
+	log        *slog.Logger
 	// gate admits engine-backed stream sessions; nil admits everything.
 	gate TranscodeGate
 
@@ -121,19 +139,19 @@ func New(ctx context.Context, cfg Config) (*Bridge, error) {
 	if !caps.Delivery.Progressive {
 		return nil, fmt.Errorf("flow: sidecar at %s does not serve progressive streams", cfg.BaseURL)
 	}
-	// Longest path first so nested roots resolve to the most specific name.
 	roots := append([]Root(nil), cfg.Roots...)
-	sort.Slice(roots, func(i, j int) bool { return len(roots[i].Path) > len(roots[j].Path) })
+	sortRoots(roots)
 
 	b := &Bridge{
-		base:     base,
-		apiKey:   cfg.APIKey,
-		roots:    roots,
-		tokens:   cfg.Tokens,
-		resolver: cfg.Resolver,
-		caps:     caps,
-		client:   c,
-		log:      log,
+		base:       base,
+		apiKey:     cfg.APIKey,
+		roots:      roots,
+		configPath: cfg.ConfigPath,
+		tokens:     cfg.Tokens,
+		resolver:   cfg.Resolver,
+		caps:       caps,
+		client:     c,
+		log:        log,
 	}
 	b.proxy = &httputil.ReverseProxy{
 		Rewrite:        b.rewrite,
@@ -149,8 +167,15 @@ func New(ctx context.Context, cfg Config) (*Bridge, error) {
 		"base", cfg.BaseURL,
 		"outputs", len(caps.Outputs),
 		"cutFormats", caps.Delivery.CutFormats,
-		"hls", caps.Delivery.HLS)
+		"hls", caps.Delivery.HLS,
+		"rootsReload", b.RootsReloadSupported())
 	return b, nil
+}
+
+// sortRoots orders roots longest path first, so a root nested inside
+// another resolves to the most specific name.
+func sortRoots(roots []Root) {
+	sort.SliceStable(roots, func(i, j int) bool { return len(roots[i].Path) > len(roots[j].Path) })
 }
 
 // Caps exposes the sidecar capabilities fetched at startup.
@@ -237,6 +262,8 @@ func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts 
 // srcRef maps an absolute file path onto a WaxFlow root reference
 // (name/relpath, forward slashes).
 func (b *Bridge) srcRef(path string) (string, error) {
+	b.rootsMu.RLock()
+	defer b.rootsMu.RUnlock()
 	for _, r := range b.roots {
 		rel, err := filepath.Rel(r.Path, path)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -245,6 +272,225 @@ func (b *Bridge) srcRef(path string) (string, error) {
 		return r.Name + "/" + filepath.ToSlash(rel), nil
 	}
 	return "", fmt.Errorf("flow: %s is under no configured root", path)
+}
+
+// AddRoot teaches the bridge a library root created at runtime. Without
+// it a reload the sidecar accepted still leaves streaming broken: srcRef
+// walks the startup snapshot, so a path under a root the bridge has
+// never heard of maps to no reference at all. The append keeps New's
+// longest-path-first ordering, and swaps the slice copy-on-write.
+func (b *Bridge) AddRoot(name, path string) {
+	b.rootsMu.Lock()
+	defer b.rootsMu.Unlock()
+	roots := append(append([]Root(nil), b.roots...), Root{Name: name, Path: path})
+	sortRoots(roots)
+	b.roots = roots
+}
+
+// removeRoot drops a root the sidecar refused, so the bridge's table
+// stays what the sidecar can actually serve.
+func (b *Bridge) removeRoot(name string) {
+	b.rootsMu.Lock()
+	defer b.rootsMu.Unlock()
+	roots := make([]Root, 0, len(b.roots))
+	for _, r := range b.roots {
+		if r.Name != name {
+			roots = append(roots, r)
+		}
+	}
+	b.roots = roots
+}
+
+// SyncRoot teaches the bridge a library root created at runtime and
+// brings the sidecar to the same set. A nil error means streaming from
+// the new root works now; any error names what an administrator still
+// has to do.
+//
+// Either both sides end up knowing the root or neither does. A refused
+// reload restores the config file and drops the root back out of the
+// bridge, for two reasons: the sidecar opens every root at startup, so
+// a path it refused would turn its next restart into a boot failure,
+// and a rejected root left in the set would be re-sent with the next
+// library and take that one down with it.
+func (b *Bridge) SyncRoot(ctx context.Context, name, path string) error {
+	if !b.RootsReloadSupported() {
+		b.AddRoot(name, path)
+		// The root is not written to the sidecar's config either, and the
+		// message says so rather than implying a restart alone would find
+		// it. Writing it unreloaded would put an unvalidated path in a file
+		// the sidecar opens at startup: the reload is what proves the
+		// sidecar can see a path, and a config it cannot open is a boot
+		// failure, which is the same hazard the refusal rollback below
+		// exists to prevent.
+		//
+		// The bridge keeps the root: its table is WaxDeck's own view, and
+		// an operator who configures the root on the sidecar and restarts it
+		// then gets streaming without restarting WaxDeck too.
+		if b.configPath == "" {
+			return fmt.Errorf("no sidecar config file is configured (set --flow-config), so this root has to be added to the sidecar's own configuration and the sidecar restarted before it streams")
+		}
+		return fmt.Errorf("the sidecar at %s does not accept root reloads, so this root has to be added to its configuration and the sidecar restarted before it streams", b.base)
+	}
+	// The lock spans the add as well as the reload. Without that, two
+	// concurrent library creates cross-contaminate: each adds its root,
+	// then the first reload carries both, and one bad path fails the other
+	// create's reload and rolls its good root back out.
+	b.reloadMu.Lock()
+	defer b.reloadMu.Unlock()
+	b.AddRoot(name, path)
+	if err := b.reloadRootsLocked(ctx); err != nil {
+		b.removeRoot(name)
+		return err
+	}
+	return nil
+}
+
+// RootNames lists every root name the bridge maps. It is wider than the
+// service's library-root table on purpose: the podcast download dir is
+// appended here and never enters that table, and the name is the
+// sidecar's addressing key, so a library reusing one would make
+// stream-ref resolution ambiguous.
+func (b *Bridge) RootNames() []string {
+	b.rootsMu.RLock()
+	defer b.rootsMu.RUnlock()
+	names := make([]string, len(b.roots))
+	for i, r := range b.roots {
+		names[i] = r.Name
+	}
+	return names
+}
+
+// snapshotRoots copies the root table for a caller that ranges outside
+// the lock.
+func (b *Bridge) snapshotRoots() []Root {
+	b.rootsMu.RLock()
+	defer b.rootsMu.RUnlock()
+	return append([]Root(nil), b.roots...)
+}
+
+// RootsReloadSupported reports whether a runtime-added root can reach
+// the sidecar without restarting it: the sidecar has to serve the
+// reload endpoint, and WaxDeck has to know which config file to rewrite.
+func (b *Bridge) RootsReloadSupported() bool {
+	return b.configPath != "" && b.caps != nil && b.caps.Delivery.RootsReload
+}
+
+// RootsDelta is the sidecar's reconcile report: what moved, plus the
+// full root set after the reload, in configuration order.
+type RootsDelta struct {
+	Added   []string `json:"added"`
+	Removed []string `json:"removed"`
+	Changed []string `json:"changed"`
+	Roots   []string `json:"roots"`
+}
+
+// ReloadRoots rewrites the sidecar's config file with the bridge's
+// current root set and has the sidecar reconcile against it.
+//
+// The two steps are strictly ordered. The sidecar re-reads the file
+// synchronously inside the request, so a reload racing the rename would
+// reconcile the pre-edit config and report a success that changed
+// nothing; writeRootsConfig returns only once its fsync and rename have
+// landed. The sidecar opens each root with os.Root during reconcile, so
+// a path it cannot see fails here with a clear error instead of half
+// working -- and a refusal puts the file back as it was, because the
+// sidecar opens its roots at startup too and would refuse to boot from
+// the config it just rejected.
+func (b *Bridge) ReloadRoots(ctx context.Context) error {
+	if b.configPath == "" {
+		return fmt.Errorf("flow: no sidecar config file is configured (set --flow-config)")
+	}
+	if b.caps == nil || !b.caps.Delivery.RootsReload {
+		return fmt.Errorf("flow: the sidecar at %s does not serve root reloads", b.base)
+	}
+	// One reload at a time. Two concurrent library creates would
+	// otherwise interleave their rewrites, and a rollback from one could
+	// undo the other's accepted set. Library creates are rare enough that
+	// serializing them costs nothing.
+	b.reloadMu.Lock()
+	defer b.reloadMu.Unlock()
+	return b.reloadRootsLocked(ctx)
+}
+
+// reloadRootsLocked is ReloadRoots' body, called with reloadMu held so
+// SyncRoot can hold the lock across its own AddRoot too.
+func (b *Bridge) reloadRootsLocked(ctx context.Context) error {
+	prev, perm, err := readRootsConfig(b.configPath)
+	if err != nil {
+		return err
+	}
+	if err := writeRootsConfig(b.configPath, prev, perm, b.snapshotRoots()); err != nil {
+		return err
+	}
+	delta, err := b.postRootsReload(ctx)
+	if err != nil {
+		if rerr := writeFileCrashSafe(b.configPath, prev, perm); rerr != nil {
+			// The sidecar's next start reads whatever is on disk now, so a
+			// failed restore is worse than the reload it followed.
+			b.log.Error("restoring the sidecar config after a refused reload",
+				"path", b.configPath, "err", rerr)
+		}
+		return err
+	}
+	b.log.Info("waxflow roots reloaded",
+		"added", delta.Added, "removed", delta.Removed, "changed", delta.Changed, "roots", delta.Roots)
+	return nil
+}
+
+// postRootsReload calls the sidecar's /roots/reload. The typed client
+// has no method for it, so this hand-rolls the POST with the same
+// X-API-Key the proxy presents.
+func (b *Bridge) postRootsReload(ctx context.Context) (RootsDelta, error) {
+	var delta RootsDelta
+	// The sidecar re-reads its config and reopens every root inside this
+	// request, so it is bounded work; the bound is here because an
+	// unbounded POST would hang the library create that triggered it.
+	// This matches the typed client's own per-call default.
+	ctx, cancel := context.WithTimeout(ctx, rootsReloadTimeout)
+	defer cancel()
+	endpoint := b.base.JoinPath("roots", "reload").String()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return delta, fmt.Errorf("flow: %w", err)
+	}
+	req.Header.Set("X-API-Key", b.apiKey)
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return delta, fmt.Errorf("flow: posting roots reload: %w", err)
+	}
+	defer resp.Body.Close()
+	// Cap the read: an error envelope and a delta are both small, and an
+	// unbounded body from a misconfigured endpoint is not worth buffering.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return delta, fmt.Errorf("flow: reading roots reload response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return delta, fmt.Errorf("flow: roots reload refused (%s): %s",
+			resp.Status, strings.TrimSpace(sidecarErrMessage(body)))
+	}
+	if err := json.Unmarshal(body, &delta); err != nil {
+		return delta, fmt.Errorf("flow: decoding roots reload response: %w", err)
+	}
+	return delta, nil
+}
+
+// sidecarErrMessage pulls the message out of the family error envelope
+// ({error, code, schemaVersion}), falling back to the raw body when the
+// response is something else speaking (a proxy's own error page).
+func sidecarErrMessage(body []byte) string {
+	var env struct {
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}
+	if err := json.Unmarshal(body, &env); err == nil && env.Error != "" {
+		if env.Code != "" {
+			return env.Code + ": " + env.Error
+		}
+		return env.Error
+	}
+	return string(body)
 }
 
 // ServeStream is the /media/stream handler: verify the media token,

@@ -289,6 +289,9 @@ func playlistJSON(pl service.Playlist) Playlist {
 		CreatedAt:  pl.CreatedAt,
 		UpdatedAt:  pl.UpdatedAt,
 	}
+	if pl.HasArt {
+		out.HasArt = ptr(true)
+	}
 	if pl.Rule != nil {
 		r := ruleToWire(*pl.Rule)
 		out.Rule = &r

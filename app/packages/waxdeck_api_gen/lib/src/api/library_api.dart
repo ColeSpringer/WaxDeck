@@ -323,7 +323,7 @@ class LibraryApi {
   }
 
   /// Get artwork
-  /// Artwork as image bytes: the original at full size, or a square-fit thumbnail when &#x60;size&#x60; is given. Besides item PIDs this endpoint also accepts album (&#x60;al-&#x60;), artist (&#x60;ar-&#x60;), and podcast show (&#x60;pc-&#x60;) PIDs, so search hits and subscription lists can render artwork directly. Items without any artwork in their fallback chain return 404. Responses carry a content-addressed &#x60;ETag&#x60;; revalidate with &#x60;If-None-Match&#x60; instead of refetching. 
+  /// Artwork as image bytes: the original at full size, or a square-fit thumbnail when &#x60;size&#x60; is given. Besides item PIDs this endpoint also accepts album (&#x60;al-&#x60;), artist (&#x60;ar-&#x60;), podcast show (&#x60;pc-&#x60;), and playlist (&#x60;pl-&#x60;) PIDs, so search hits, subscription lists, and playlist grids can render artwork directly. A playlist answers its own cover, whether the owner uploaded one or the server built it from the members, and follows the same visibility rule as every other playlist read. Items without any artwork in their fallback chain return 404. Responses carry a content-addressed &#x60;ETag&#x60;; revalidate with &#x60;If-None-Match&#x60; instead of refetching. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -420,7 +420,7 @@ class LibraryApi {
   }
 
   /// List the artwork slots an entity holds
-  /// The artwork slots present at the entity&#39;s own level, not inherited from the album or artist chain, each with its stored format and pixel dimensions (0 when the image was not decodable). Besides item PIDs this accepts album (&#x60;al-&#x60;), artist (&#x60;ar-&#x60;), and podcast show (&#x60;pc-&#x60;) PIDs. It answers the own-versus-inherited question a front-cover read cannot: an item that lists a &#x60;front&#x60; slot here holds its own cover, while one that resolves art only through &#x60;/items/{pid}/art&#x60; inherits it from the chain. 
+  /// The artwork slots present at the entity&#39;s own level, not inherited from the album or artist chain, each with its stored format and pixel dimensions (0 when the image was not decodable). Besides item PIDs this accepts album (&#x60;al-&#x60;), artist (&#x60;ar-&#x60;), podcast show (&#x60;pc-&#x60;), and playlist (&#x60;pl-&#x60;) PIDs. It answers the own-versus-inherited question a front-cover read cannot: an item that lists a &#x60;front&#x60; slot here holds its own cover, while one that resolves art only through &#x60;/items/{pid}/art&#x60; inherits it from the chain. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

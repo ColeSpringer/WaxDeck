@@ -34,7 +34,9 @@ and every stream is proxied through the WaxDeck origin, so clients, cast
 devices, and reverse proxies only ever need to reach one address.
 
 (The underlying command is `docker compose -f deploy/compose.yaml up`;
-`make up` just wraps it with the key generation.)
+`make up` wraps it with the key generation and seeds the engine's roots
+file from `deploy/waxflow-config.example.json`. Running compose directly
+needs both of those in place first -- see the README's compose snippet.)
 
 ## Run from source
 

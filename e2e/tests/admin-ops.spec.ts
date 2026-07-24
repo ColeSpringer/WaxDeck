@@ -329,3 +329,60 @@ test('an exported archive imports back through the backups screen', async ({
     ).toBeTruthy();
   }).toPass({ timeout: 60_000 });
 });
+
+// Creating a library at runtime has to reach the streaming sidecar, or
+// the root browses and downloads while streaming waits for a restart.
+// The stack runs a file-configured sidecar, so this drives the real
+// loop: WaxDeck rewrites the roots array, posts /roots/reload, and the
+// sidecar opens the new root with os.Root while reconciling. A path it
+// cannot see fails there, and the reason lands on the audit entry.
+//
+// The new root is deliberately empty. The reload is what is under test,
+// and adding media here would shift the fixture listings the specs
+// running beside this one page through.
+test('a library created at runtime reaches the streaming sidecar', async ({ request }) => {
+  const token = await ensureAdmin(request);
+  const fs = await import('node:fs/promises');
+  const pathMod = await import('node:path');
+
+  // run-stack.sh builds the stack under e2e/.run, and playwright runs
+  // from e2e/ (the config's directory), so the sidecar and this test
+  // name the same absolute paths.
+  const runDir = pathMod.resolve(process.cwd(), '.run');
+  const extra = pathMod.join(runDir, 'runtime-root');
+  await fs.mkdir(extra, { recursive: true });
+
+  const created = await request.post('/api/v1/admin/libraries', {
+    ...authed(token),
+    data: { name: 'runtime', path: extra, media: 'music' },
+  });
+  expect(created.status(), await created.text()).toBe(201);
+  const libraryPid = (await created.json()).pid as string;
+
+  // The sidecar's own reconcile is the verification: a refusal (a path
+  // it cannot open, a reload it does not serve) is recorded here.
+  const audit = await request.get(
+    '/api/v1/admin/audit?action=library.create&limit=10',
+    authed(token),
+  );
+  expect(audit.ok()).toBeTruthy();
+  const events = (await audit.json()).events as Array<{
+    targetPid?: string;
+    detail?: Record<string, unknown>;
+  }>;
+  const hit = events.find((e) => e.targetPid === libraryPid);
+  expect(hit, 'the create is on the record').toBeTruthy();
+  expect(
+    hit!.detail?.streamingWarning,
+    'the sidecar reconciled the new root without a restart',
+  ).toBeUndefined();
+
+  // The name is the sidecar's addressing key, so one already mapped
+  // there is refused even though it is not in the library table: the
+  // podcast download root is exactly that case.
+  const clash = await request.post('/api/v1/admin/libraries', {
+    ...authed(token),
+    data: { name: 'podcasts', path: pathMod.join(runDir, 'runtime-clash') },
+  });
+  expect(clash.status()).toBe(409);
+});

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import 'playlist_cover.dart';
 import 'playlist_screen.dart';
 import 'playlists_controller.dart';
 import 'rule_editor_screen.dart';
@@ -110,9 +111,7 @@ class _PlaylistRow extends StatelessWidget {
       button: true,
       child: ListTile(
         key: ValueKey('playlist-${playlist.pid}'),
-        leading: Icon(
-          playlist.isSmart ? Icons.auto_awesome : Icons.queue_music,
-        ),
+        leading: PlaylistCover(playlist: playlist, size: 40),
         title: Text(
           playlist.name,
           maxLines: 1,

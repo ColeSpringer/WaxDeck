@@ -807,13 +807,24 @@ abstract interface class WaxDeckRepository {
 
   /// `PUT /entities/{entityType}/{entityPid}/artwork`: replaces a
   /// browse entity's artwork in one slot ([role], default `front`) with
-  /// the uploaded image [bytes].
+  /// the uploaded image [bytes]. `playlist` is an owner-edited entity
+  /// type here rather than an administrators-only catalog one.
   Future<MetadataEditResult> setEntityArtwork(
     String entityType,
     String entityPid, {
     required Uint8List bytes,
     String role = 'front',
     bool writeBack = false,
+  });
+
+  /// `DELETE /entities/{entityType}/{entityPid}/artwork`: removes a
+  /// browse entity's artwork in one slot ([role], default `front`).
+  /// Clearing a playlist's uploaded cover restores the one the server
+  /// generates from the members.
+  Future<void> clearEntityArtwork(
+    String entityType,
+    String entityPid, {
+    String role = 'front',
   });
 
   /// `PUT /items/{pid}/tags/{key}`: replaces one custom tag's values.
@@ -1937,7 +1948,7 @@ class WaxDeckClient implements WaxDeckRepository {
       limit: limit,
       containsItem: containsItem,
     );
-    return playlistPageFromGen(_require(response.data));
+    return playlistPageFromGen(_require(response.data), baseUrl: _baseUrl);
   });
 
   @override
@@ -1958,13 +1969,13 @@ class WaxDeckClient implements WaxDeckRepository {
           ..itemPids = itemPids.isEmpty ? null : ListBuilder<String>(itemPids),
       ),
     );
-    return playlistFromGen(_require(response.data));
+    return playlistFromGen(_require(response.data), baseUrl: _baseUrl);
   });
 
   @override
   Future<Playlist> getPlaylist(String pid) => _guard(() async {
     final response = await _gen.getPlaylistsApi().getPlaylist(pid: pid);
-    return playlistFromGen(_require(response.data));
+    return playlistFromGen(_require(response.data), baseUrl: _baseUrl);
   });
 
   @override
@@ -1983,7 +1994,7 @@ class WaxDeckClient implements WaxDeckRepository {
           ..rule = rule == null ? null : smartRuleToGen(rule).toBuilder(),
       ),
     );
-    return playlistFromGen(_require(response.data));
+    return playlistFromGen(_require(response.data), baseUrl: _baseUrl);
   });
 
   @override
@@ -2081,7 +2092,7 @@ class WaxDeckClient implements WaxDeckRepository {
           ..visibility = visibility,
       ),
     );
-    return m3uImportResultFromGen(_require(response.data));
+    return m3uImportResultFromGen(_require(response.data), baseUrl: _baseUrl);
   });
 
   @override
@@ -2905,6 +2916,19 @@ class WaxDeckClient implements WaxDeckRepository {
       writeBack: writeBack,
     );
     return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> clearEntityArtwork(
+    String entityType,
+    String entityPid, {
+    String role = 'front',
+  }) => _guard(() async {
+    await _gen.getMetadataApi().clearEntityArtwork(
+      entityType: entityType,
+      entityPid: entityPid,
+      role: gen.ArtRole.valueOf(role),
+    );
   });
 
   @override

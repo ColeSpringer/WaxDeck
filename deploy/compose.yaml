@@ -28,9 +28,14 @@ services:
     environment:
       WAXDECK_ADDR: 0.0.0.0:4420
       WAXDECK_DATA_DIR: /data
-      # Root names must match WAXFLOW_ROOTS below: streams address
-      # sources as <name>/<relpath> against the sidecar.
+      # Root names must match the sidecar's roots (waxflow-config below):
+      # streams address sources as <name>/<relpath> against the sidecar.
       WAXDECK_LIBRARY_ROOTS: lib=/library
+      # The sidecar's config file, which WaxDeck owns and the sidecar
+      # reads. Creating a library at runtime rewrites its roots array and
+      # posts /roots/reload, so the new root streams without a sidecar
+      # restart. `make up` seeds the file.
+      WAXDECK_FLOW_CONFIG: /waxflow-config/waxflow.json
       # Roots (by name) the catalog may place files into, for uploads
       # and URL acquisitions. The compose library is WaxDeck-managed by
       # design (mounted read-write above), so it defaults to "lib"; set
@@ -113,6 +118,11 @@ services:
       - ${WAXDECK_LIBRARY:-./library}:/library
       # Episode downloads: WaxDeck writes, WaxFlow streams.
       - waxdeck-podcasts:/podcasts
+      # The sidecar's roots config: WaxDeck is its only writer, so this
+      # side is read-write. A directory, not a single file, because the
+      # rewrite is a rename over the old file and a bind-mounted file
+      # cannot be replaced that way.
+      - ./waxflow-config:/waxflow-config
     networks: [internal]
     cap_drop: [ALL]
     security_opt:
@@ -142,10 +152,17 @@ services:
       WAXFLOW_ADDR: 0.0.0.0:4418
       # WaxFlow fails closed: a non-loopback listen address requires API keys.
       WAXFLOW_API_KEYS: ${WAXFLOW_API_KEYS:?set WAXFLOW_API_KEYS (comma-separated; generate with openssl rand -hex 24)}
-      WAXFLOW_ROOTS: lib=/library,podcasts=/podcasts
+      # Roots come from the shared config file rather than WAXFLOW_ROOTS:
+      # the env form is read once at process start, so WaxFlow wires
+      # /roots/reload (and advertises delivery.rootsReload) only for a
+      # file-configured daemon. Everything else here stays environment;
+      # the reload re-runs config.Load, which reapplies env precedence.
+      WAXFLOW_CONFIG: /waxflow-config/waxflow.json
       # The catalog resolver behind pid: sources reads waxbin.db.
       WAXFLOW_CATALOG_DB: /catalog/waxbin.db
     volumes:
+      # WaxDeck writes this file; the sidecar only reads it.
+      - ./waxflow-config:/waxflow-config:ro
       # Same library as waxdeck, but WaxFlow only reads it.
       - ${WAXDECK_LIBRARY:-./library}:/library:ro
       # Episode downloads, read-only for streaming.

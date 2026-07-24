@@ -268,6 +268,12 @@ table player_endpoints
   column shared|INTEGER|notnull=1|default=1|pk=0
   autoindex pk|unique=1|(id)
   autoindex u|unique=1|(kind,device_key)
+table playlist_cover
+  column fingerprint|TEXT|notnull=1|default=''|pk=0
+  column origin|TEXT|notnull=1|default=<none>|pk=0
+  column playlist_pid|TEXT|notnull=0|default=<none>|pk=1
+  column updated_at_ns|INTEGER|notnull=1|default=0|pk=0
+  autoindex pk|unique=1|(playlist_pid)
 table podcast_subscriptions
   column auto_download|INTEGER|notnull=1|default=0|pk=0
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0

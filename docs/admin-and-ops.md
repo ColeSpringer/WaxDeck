@@ -153,6 +153,40 @@ error code, while playback, browsing, and per-user state (stars,
 progress, playlists) keep working. Podcast libraries need a writable
 root for episode fetching; the flag refuses fetches too.
 
+## Adding a library at runtime
+
+Settings → Libraries creates a library root without restarting the
+server: the path is validated (absolute, not overlapping an existing
+root, the inbox, or the podcast download dir), cataloged, and scanned in
+the background. Browsing and downloading its files work as soon as the
+scan indexes them. The library name doubles as the streaming engine's
+root name, so it also has to be free there — including the podcast root
+name, which the engine mounts but the library list never shows.
+
+Streaming needs the engine to mount the same root, which it can learn at
+runtime. Point both sides at one JSON config file — `WAXDECK_FLOW_CONFIG`
+for the server, `WAXFLOW_CONFIG` for the engine — and creating a library
+rewrites the file's `roots` array and asks the engine to reconcile.
+`make up` wires this and seeds the file; the compose service mounts the
+directory read-write into WaxDeck and read-only into the engine, and
+both containers run as the same UID (as they already must for the shared
+catalog volume). Under compose the file holds roots only:
+`WAXFLOW_API_KEYS` and `WAXFLOW_CATALOG_DB` stay environment variables,
+and the engine reapplies environment precedence on every reload, so they
+keep working untouched.
+
+Two limits are worth knowing. The engine advertises whether it reloads
+at all (`delivery.rootsReload`), and it only does so when its roots come
+from a config file — pinning them with `WAXFLOW_ROOTS` disables the
+endpoint, since that variable is read once at process start. And a
+runtime-added root only streams if its path is already inside a volume
+the engine mounts; the reload reconciles names and paths, it cannot
+mount a filesystem. The engine opens each root while reconciling, so a
+path it cannot see fails the reload with a plain error rather than half
+working. Either way the library is created and keeps browsing and
+downloading; the reason streaming has to wait for an engine restart is
+recorded on the `library.create` audit entry.
+
 ## Transcoding limits
 
 Transcode sessions are limited at the media proxy, where the server

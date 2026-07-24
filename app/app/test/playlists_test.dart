@@ -1,11 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/playlists/playlist_cover.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/playlists/rule_editor_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
@@ -18,9 +21,56 @@ const _track = ItemSummary(
   durationMs: 214000,
 );
 
-Widget _host(FakeRepository repo, Widget home) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: MaterialApp(home: home),
+Widget _host(FakeRepository repo, Widget home, {FilePickerPort? picker}) =>
+    ProviderScope(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        // The port is real on the host running these tests, so pin it:
+        // null hides every pick affordance, a fake proves one shows.
+        filePickerProvider.overrideWithValue(picker),
+      ],
+      child: MaterialApp(home: home),
+    );
+
+/// A picker that resolves pickFile to one fixed image.
+class _CoverPicker implements FilePickerPort {
+  _CoverPicker(this.image);
+
+  final PickedAudioFile? image;
+
+  @override
+  bool get canPickFolders => false;
+
+  @override
+  Future<List<PickedAudioFile>> pickAudioFiles() async => const [];
+
+  @override
+  Future<List<PickedAudioFile>> pickAudioFolder() async => const [];
+
+  @override
+  Future<PickedAudioFile?> pickFile({
+    required Set<String> extensions,
+    required String label,
+  }) async => image;
+}
+
+/// A playlist carrying a cover. The wire says only that one exists; the
+/// repository layer turns that into the art endpoint's URL under the
+/// playlist's own pid.
+Playlist _covered({
+  String pid = 'pl-COVERED',
+  String? artUrl = '/api/v1/items/pl-COVERED/art',
+}) => Playlist(
+  pid: pid,
+  name: 'Covered',
+  kind: 'static',
+  visibility: 'private',
+  ownerName: 'me',
+  isOwner: true,
+  itemCount: 1,
+  artUrl: artUrl,
+  createdAt: DateTime.utc(2026),
+  updatedAt: DateTime.utc(2026),
 );
 
 void main() {
@@ -375,5 +425,141 @@ void main() {
     await tester.tap(find.byKey(const Key('m3u-export-copy')));
     await tester.pumpAndSettle();
     expect(find.text('Playlist copied as M3U'), findsOneWidget);
+  });
+
+  testWidgets('a playlist with a cover draws it instead of the kind icon', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.playlistsByPid['pl-COVERED'] = _covered();
+    repo.playlistMembers['pl-COVERED'] = [_track.pid];
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+
+    // The row hands the cover widget a URL rather than falling through
+    // to the kind icon. (The image itself cannot load in a widget test,
+    // so the drawn result is the error placeholder either way.)
+    final cover = tester.widget<PlaylistCover>(find.byType(PlaylistCover));
+    expect(cover.playlist.artUrl, '/api/v1/items/pl-COVERED/art');
+  });
+
+  testWidgets('a playlist without a cover falls back to the kind icon', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.playlistsByPid['pl-BARE'] = _covered(pid: 'pl-BARE', artUrl: null);
+    repo.playlistMembers['pl-BARE'] = [_track.pid];
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+
+    final cover = tester.widget<PlaylistCover>(find.byType(PlaylistCover));
+    expect(cover.playlist.artUrl, isNull);
+    expect(find.byIcon(Icons.queue_music), findsOneWidget);
+  });
+
+  testWidgets('resetting a cover hands the slot back to the generated one', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.playlistsByPid['pl-COVERED'] = _covered();
+    repo.playlistMembers['pl-COVERED'] = [_track.pid];
+    await tester.pumpWidget(
+      _host(repo, const PlaylistScreen(pid: 'pl-COVERED')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('playlist-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('playlist-reset-cover')));
+    await tester.pumpAndSettle();
+
+    expect(
+      repo.clearEntityArtworkCalls,
+      contains((entityType: 'playlist', entityPid: 'pl-COVERED')),
+    );
+  });
+
+  testWidgets('the set-cover action hides without a file picker', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.playlistsByPid['pl-COVERED'] = _covered();
+    repo.playlistMembers['pl-COVERED'] = [_track.pid];
+    await tester.pumpWidget(
+      _host(repo, const PlaylistScreen(pid: 'pl-COVERED')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('playlist-menu')));
+    await tester.pumpAndSettle();
+    // The hide-when-null port contract is what keeps a platform with no
+    // picker from offering a dead action; reset needs no picker and
+    // stays.
+    expect(find.byKey(const Key('playlist-set-cover')), findsNothing);
+    expect(find.byKey(const Key('playlist-reset-cover')), findsOneWidget);
+  });
+
+  testWidgets('a picked image is uploaded as the playlist cover', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.playlistsByPid['pl-COVERED'] = _covered();
+    repo.playlistMembers['pl-COVERED'] = [_track.pid];
+    final bytes = Uint8List.fromList(List<int>.filled(64, 7));
+    final picker = _CoverPicker(
+      PickedAudioFile(
+        name: 'cover.png',
+        size: bytes.length,
+        openRead: ([int? start, int? end]) => Stream.value(bytes),
+      ),
+    );
+    await tester.pumpWidget(
+      _host(repo, const PlaylistScreen(pid: 'pl-COVERED'), picker: picker),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('playlist-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('playlist-set-cover')));
+    await tester.pumpAndSettle();
+
+    expect(
+      repo.entityArtworkCalls,
+      contains((
+        entityType: 'playlist',
+        entityPid: 'pl-COVERED',
+        byteCount: bytes.length,
+      )),
+    );
+  });
+
+  testWidgets('an unreadable image reports instead of throwing', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.playlistsByPid['pl-COVERED'] = _covered();
+    repo.playlistMembers['pl-COVERED'] = [_track.pid];
+    // A file that vanished between the dialog and the read, or one the
+    // process cannot open: the platform throws, not the API.
+    final picker = _CoverPicker(
+      PickedAudioFile(
+        name: 'gone.png',
+        size: 10,
+        openRead: ([int? start, int? end]) =>
+            Stream<List<int>>.error(const FileSystemException('no such file')),
+      ),
+    );
+    await tester.pumpWidget(
+      _host(repo, const PlaylistScreen(pid: 'pl-COVERED'), picker: picker),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('playlist-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('playlist-set-cover')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Could not read that image'), findsOneWidget);
+    expect(repo.entityArtworkCalls, isEmpty);
   });
 }

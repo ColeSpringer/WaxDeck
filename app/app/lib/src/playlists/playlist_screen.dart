@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +10,9 @@ import '../books/book_screen.dart';
 import '../player/player_screen.dart';
 import '../providers.dart';
 import '../sharing/share_dialog.dart';
+import '../uploads/file_picker_port.dart';
 import 'name_dialog.dart';
+import 'playlist_cover.dart';
 import 'playlists_controller.dart';
 import 'rule_editor_screen.dart';
 
@@ -166,6 +169,71 @@ class PlaylistScreen extends ConsumerWidget {
     ],
   });
 
+  /// Cover images the picker offers. The server decides what it
+  /// accepts; this only keeps the dialog from listing every file.
+  static const _coverExtensions = {'jpg', 'jpeg', 'png', 'webp', 'gif'};
+
+  /// Picks an image and uploads it as the playlist's cover. Covers are
+  /// small and the server caps the body, so the bytes are read whole
+  /// rather than streamed the way an upload or a backup archive is.
+  Future<void> _setCover(BuildContext context, WidgetRef ref) async {
+    final picker = ref.read(filePickerProvider);
+    if (picker == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    // The URL is stable across cover changes, so the old bytes have to
+    // leave the image cache or this client keeps painting them.
+    final stale = ref.read(playlistDetailProvider(pid)).value?.playlist.artUrl;
+    // Picking and reading are inside the guard too: a permission error or
+    // a file that vanished between the dialog and the read throws from
+    // the platform, not from the API.
+    try {
+      final file = await picker.pickFile(
+        extensions: _coverExtensions,
+        label: 'Cover image',
+      );
+      final openRead = file?.openRead;
+      if (file == null || openRead == null) return;
+      final bytes = BytesBuilder(copy: false);
+      await for (final chunk in openRead()) {
+        bytes.add(chunk);
+      }
+      await ref
+          .read(playlistDetailProvider(pid).notifier)
+          .setCover(bytes.takeBytes());
+      await evictPlaylistCover(stale);
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+    } on Exception catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('Could not read that image: $e')),
+        );
+    }
+  }
+
+  /// Drops an uploaded cover. The playlist does not go bare: the server
+  /// rebuilds the one it makes from the member covers.
+  Future<void> _resetCover(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final stale = ref.read(playlistDetailProvider(pid)).value?.playlist.artUrl;
+    try {
+      await ref.read(playlistDetailProvider(pid).notifier).resetCover();
+      await evictPlaylistCover(stale);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Back to the cover made from members')),
+        );
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final navigator = Navigator.of(context);
     final confirmed = await showDialog<bool>(
@@ -231,6 +299,8 @@ class PlaylistScreen extends ConsumerWidget {
                             : 'shared',
                       ),
                 'share-link' => showShareLinkDialog(context, pid: pid),
+                'set-cover' => _setCover(context, ref),
+                'reset-cover' => _resetCover(context, ref),
                 'export' => _exportM3u(context, ref),
                 'portable' => _exportPortable(context, ref),
                 'delete' => _delete(context, ref),
@@ -256,6 +326,32 @@ class PlaylistScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+                if (isOwner && ref.watch(filePickerProvider) != null)
+                  PopupMenuItem(
+                    value: 'set-cover',
+                    child: Semantics(
+                      identifier: 'playlist-set-cover',
+                      child: const Text(
+                        'Set cover',
+                        key: Key('playlist-set-cover'),
+                      ),
+                    ),
+                  ),
+                // Reset is offered whenever a cover is showing: the
+                // wire does not say whether it was uploaded or
+                // generated, and resetting a generated one just
+                // rebuilds it.
+                if (isOwner && view.playlist.artUrl != null)
+                  PopupMenuItem(
+                    value: 'reset-cover',
+                    child: Semantics(
+                      identifier: 'playlist-reset-cover',
+                      child: const Text(
+                        'Reset cover',
+                        key: Key('playlist-reset-cover'),
+                      ),
+                    ),
+                  ),
                 const PopupMenuItem(value: 'export', child: Text('Export M3U')),
                 PopupMenuItem(
                   value: 'portable',
@@ -292,14 +388,25 @@ class PlaylistScreen extends ConsumerWidget {
     final entries = view.entries;
     final header = Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Text(
-        [
-          if (playlist.isSmart) 'Smart playlist' else 'Manual playlist',
-          '${entries.length} items',
-          if (playlist.isShared)
-            playlist.isOwner ? 'Shared' : 'Shared by ${playlist.ownerName}',
-        ].join(' | '),
-        style: Theme.of(context).textTheme.bodySmall,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          PlaylistCover(playlist: playlist, size: 72),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              [
+                if (playlist.isSmart) 'Smart playlist' else 'Manual playlist',
+                '${entries.length} items',
+                if (playlist.isShared)
+                  playlist.isOwner
+                      ? 'Shared'
+                      : 'Shared by ${playlist.ownerName}',
+              ].join(' | '),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
       ),
     );
     if (entries.isEmpty) {

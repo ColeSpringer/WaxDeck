@@ -26,8 +26,12 @@ type Playlist struct {
 	IsOwner    bool
 	ItemCount  *int
 	Rule       *SmartRule
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	// HasArt says a cover is stored for this playlist, whether the owner
+	// uploaded one or WaxDeck built it from the members. It is what tells
+	// a grid to fetch the art endpoint instead of drawing a placeholder.
+	HasArt    bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // SmartRule is the wire shape of a smart playlist rule. LimitMode
@@ -625,6 +629,7 @@ func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playli
 		Visibility: string(pl.Visibility),
 		OwnerName:  pl.OwnerName,
 		IsOwner:    string(pl.OwnerPID) == uc.CatalogPID,
+		HasArt:     pl.HasArt,
 		CreatedAt:  time.Unix(0, pl.CreatedAt).UTC(),
 		UpdatedAt:  time.Unix(0, pl.UpdatedAt).UTC(),
 	}
@@ -816,6 +821,10 @@ func (l *Library) CreatePlaylist(ctx context.Context, uc *UserCtx, req PlaylistC
 	if err != nil {
 		return Playlist{}, classify(err)
 	}
+	// Cover the playlist now rather than on its first open, so a list
+	// created from a selection is not a blank tile on the grid it lands
+	// back on.
+	l.refreshPlaylistCover(ctx, pl)
 	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pid))
 	return l.playlistDTO(ctx, uc, pl, true), nil
 }
@@ -895,6 +904,13 @@ func (l *Library) UpdatePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 	if err != nil {
 		return Playlist{}, classify(err)
 	}
+	if newRule != nil {
+		// A new rule is a new member list, so the cover built from the old
+		// one is stale. This is a one-shot edit, not a gesture like the
+		// reorder, and the caller often lands back on the playlist grid,
+		// which loads no members of its own.
+		l.refreshPlaylistCover(ctx, got)
+	}
 	return l.playlistDTO(ctx, uc, got, true), nil
 }
 
@@ -907,6 +923,12 @@ func (l *Library) DeletePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 	wasShared := pl.Visibility == model.VisibilityShared
 	if err := l.lib.Playlists().Delete(ctx, pl.PID); err != nil {
 		return classify(err)
+	}
+	// The catalog drops the art rows with the playlist; this drops the
+	// provenance beside them, so a later playlist minted with the same
+	// pid does not inherit a custom origin over an empty slot.
+	if err := l.db.DeletePlaylistCover(ctx, string(pl.PID)); err != nil {
+		l.log.Warn("clearing playlist cover state", "playlist", pl.PID, "err", err)
 	}
 	l.emitPlaylistEvent(ctx, uc, wasShared, string(pl.PID))
 	l.Audit(ctx, uc, "playlist.delete",
@@ -931,6 +953,14 @@ func (l *Library) PlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylistPID
 	if err != nil {
 		return PlaylistItemsPage{}, err
 	}
+	// The members are loaded here anyway, so this is where a generated
+	// cover catches up with them: a smart playlist whose computed
+	// membership drifted refreshes the next time anyone opens it, without
+	// costing an art request a resolve. It runs after the cursor check, so
+	// a malformed cursor answers 400 without doing the work. The full
+	// member list is used, not the caller's filtered view -- the cover
+	// belongs to the playlist, like its name, not to whoever is reading it.
+	l.syncPlaylistCover(ctx, pl, items)
 	static := pl.Kind == model.PlaylistStatic
 	subs := l.newSubscriptionFilter(uc)
 	out := PlaylistItemsPage{Entries: []PlaylistEntry{}}
@@ -1002,6 +1032,10 @@ func (l *Library) ReplacePlaylistItems(ctx context.Context, uc *UserCtx, apiPlay
 	if err := l.lib.Playlists().Set(ctx, pl.PID, items); err != nil {
 		return classify(err)
 	}
+	// No eager cover rebuild here. This is the reorder primitive, so it
+	// runs on every drag, and rebuilding a mosaic is four art resolves
+	// and a composite; the caller is looking at the member list and
+	// re-reads it immediately, where the read-path sync catches up.
 	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pl.PID))
 	return nil
 }
@@ -1025,6 +1059,10 @@ func (l *Library) AddPlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylist
 	if err := l.lib.Playlists().Add(ctx, pl.PID, items...); err != nil {
 		return classify(err)
 	}
+	// Unlike the reorder and remove above, nothing reads the members
+	// after this: adding happens from the player, and the next thing to
+	// show the playlist is a grid tile. Cover it now.
+	l.refreshPlaylistCover(ctx, pl)
 	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pl.PID))
 	return nil
 }
@@ -1041,6 +1079,8 @@ func (l *Library) RemovePlaylistItemAt(ctx context.Context, uc *UserCtx, apiPlay
 	if err := l.lib.Playlists().RemoveAt(ctx, pl.PID, position); err != nil {
 		return classify(err)
 	}
+	// Same as the reorder: the caller is in the member list and re-reads
+	// it, so the cover catches up there rather than on this request.
 	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pl.PID))
 	return nil
 }

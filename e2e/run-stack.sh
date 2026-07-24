@@ -19,8 +19,23 @@ mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,fe
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR/testidp" ./cmd/testidp)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR/feedserv" ./cmd/feedserv)
 
+# Roots come from a config file rather than WAXFLOW_ROOTS: the env form
+# is read once at process start, so the sidecar only wires POST
+# /roots/reload (and advertises delivery.rootsReload) when its roots come
+# from a file. That is what lets the admin-ops spec create a library at
+# runtime and have this same sidecar pick it up. WaxDeck owns the file
+# from then on and rewrites its roots array in place.
+cat >"$RUN_DIR/waxflow.json" <<JSON
+{
+  "roots": [
+    { "name": "lib", "path": "$RUN_DIR/library" },
+    { "name": "podcasts", "path": "$RUN_DIR/podcasts" }
+  ]
+}
+JSON
+
 WAXFLOW_ADDR=127.0.0.1:4418 \
-WAXFLOW_ROOTS="lib=$RUN_DIR/library,podcasts=$RUN_DIR/podcasts" \
+WAXFLOW_CONFIG="$RUN_DIR/waxflow.json" \
 WAXFLOW_DATA_DIR="$RUN_DIR/waxflow-data" \
 WAXFLOW_CACHE_DIR="$RUN_DIR/waxflow-cache" \
 WAXFLOW_API_KEYS=e2e-test-key \
@@ -51,6 +66,7 @@ WAXDECK_PODCAST_DIR="$RUN_DIR/podcasts" \
 WAXDECK_ALLOW_PRIVATE_FEED_HOSTS=true \
 WAXDECK_FLOW_URL=http://127.0.0.1:4418 \
 WAXDECK_FLOW_API_KEY=e2e-test-key \
+WAXDECK_FLOW_CONFIG="$RUN_DIR/waxflow.json" \
 WAXDECK_PUBLIC_BASE=http://localhost:4420 \
 WAXDECK_WORKER_TOKENS=e2e-worker-token \
 WAXDECK_OIDC_ISSUER=http://127.0.0.1:4419 \

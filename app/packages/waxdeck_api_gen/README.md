@@ -344,6 +344,7 @@ Class | Method | HTTP request | Description
 [*LibraryApi*](doc/LibraryApi.md) | [**listItems**](doc/LibraryApi.md#listitems) | **GET** /library/items | Browse library items
 [*LibraryApi*](doc/LibraryApi.md) | [**search**](doc/LibraryApi.md#search) | **GET** /library/search | Search the library
 [*MetadataApi*](doc/MetadataApi.md) | [**bulkEditMetadata**](doc/MetadataApi.md#bulkeditmetadata) | **POST** /items/bulk-edit | Edit fields on many items
+[*MetadataApi*](doc/MetadataApi.md) | [**clearEntityArtwork**](doc/MetadataApi.md#clearentityartwork) | **DELETE** /entities/{entityType}/{entityPid}/artwork | Clear entity artwork
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemArtwork**](doc/MetadataApi.md#clearitemartwork) | **DELETE** /items/{pid}/artwork | Clear item artwork
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemLyrics**](doc/MetadataApi.md#clearitemlyrics) | **DELETE** /items/{pid}/lyrics | Clear lyrics
 [*MetadataApi*](doc/MetadataApi.md) | [**clearItemTag**](doc/MetadataApi.md#clearitemtag) | **DELETE** /items/{pid}/tags/{key} | Clear a custom tag

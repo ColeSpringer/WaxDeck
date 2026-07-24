@@ -366,30 +366,11 @@ here waits on upstream.
   worker gating is worth noting: the `feed-refresh` sweep only spawns
   when a podcast directory is configured, so a music-only instance
   wants a sibling sweeper (WaxDeck-owned composition-root wiring, no
-  upstream), not an extension of that one. Playlist artwork for these
-  lists is the separate `[upstream]` entry below.
-- `[upstream]` **Playlist artwork (custom, source thumbnail, or a
-  4-cover mosaic).** Playlists carry no cover at any layer today: the
-  catalog art store keys `art_map` by `entity_type` over
-  track/album/release-group/artist/genre/episode/podcast with no
-  `playlist` value, and the art endpoints reject `pl-` pids. The wanted
-  default follows YouTube Music: a custom upload when set, else the
-  source playlist's own thumbnail (the enumeration already surfaces
-  one), else an auto mosaic of the first four member covers that have
-  distinct art (deduplicated by art hash so a shared album cover does
-  not tile), else the single first-track cover. The mosaic generator is
-  net-new WaxDeck image code on `golang.org/x/image/draw` (already a
-  dependency; nothing composites today, only single-image
-  `art.Thumbnail` scaling) and should be the cover default for every
-  playlist, not only synced ones. Storage rides the "Playlist as a
-  first-class art entity" ask in upstream-requests.md (chosen over a
-  WaxDeck-side store-and-inject workaround, so the cover is canonical
-  across the REST reads, the Subsonic `coverArt`, and M3U8 rather than
-  injected per surface). The mosaic compositor is a general primitive
-  (genre, decade, and entity shelves can tile the same way), so it
-  should be built standalone rather than playlist-specific. Pairs with
-  the synced-external-playlists entry above; art-role model is
-  docs/adr/0014.
+  upstream), not an extension of that one. One cover rung rides this
+  feature rather than the shipped playlist artwork: a synced list
+  should prefer its source playlist's own thumbnail (the enumeration
+  already surfaces one) over the mosaic built from members, which means
+  fetching and storing it on bind and re-checking it on sync.
 
 ## Discovery and stats
 
@@ -419,13 +400,16 @@ here waits on upstream.
 
 ## Admin and ops
 
-- `[upstream]` **Streaming from a runtime-added library needs a sidecar
-  restart.** An admin can create a library root at runtime and the
-  catalog scans it, so browsing and downloading its files work at once;
-  but the WaxFlow streaming sidecar mounts roots from startup config, so
-  transcoded and gapless-timeline streaming from the new root waits for a
-  sidecar restart. Rides the "Runtime root configuration in the streaming
-  sidecar" ask in upstream-requests.md.
+- `[in-repo]` **A degraded runtime library reports streaming trouble only
+  on the audit entry.** Creating a library at runtime reconciles the
+  streaming engine, and when that cannot happen (an engine too old to
+  reload, or a path it cannot open) the reason is recorded on the
+  `library.create` audit entry and logged, while the 201 itself is a
+  plain success. Putting it in the response wants a `streamingWarning`
+  on the create body; deferred because nothing consumes library creation
+  yet -- there is no libraries screen in the app, so the field would be
+  wire with no reader. Add it with that screen, which is where an
+  administrator would actually see it.
 - `[in-repo]` **Importers beyond Navidrome/Subsonic and
   Audiobookshelf.** The migration framework (portable-ref matching,
   backdated idempotent listen ingest, dry runs, task reports) is

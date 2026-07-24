@@ -2102,6 +2102,8 @@ class FakeRepository implements WaxDeckRepository {
   editItemMetadataCalls = [];
   final List<({String entityType, String entityPid, int byteCount})>
   entityArtworkCalls = [];
+  final List<({String entityType, String entityPid})> clearEntityArtworkCalls =
+      [];
   final List<String> rematchCalls = [];
   final List<({String pid, List<String> want})> enrichItemCalls = [];
   final List<({String pid, List<String> fields, bool locked})>
@@ -2312,6 +2314,17 @@ class FakeRepository implements WaxDeckRepository {
       byteCount: bytes.length,
     ));
     return const MetadataEditResult(applied: true);
+  }
+
+  @override
+  Future<void> clearEntityArtwork(
+    String entityType,
+    String entityPid, {
+    String role = 'front',
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    clearEntityArtworkCalls.add((entityType: entityType, entityPid: entityPid));
   }
 
   @override

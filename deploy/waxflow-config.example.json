@@ -1,0 +1,6 @@
+{
+  "roots": [
+    { "name": "lib", "path": "/library" },
+    { "name": "podcasts", "path": "/podcasts" }
+  ]
+}
