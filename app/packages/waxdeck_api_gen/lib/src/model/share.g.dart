@@ -6,78 +6,6 @@ part of 'share.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-const ShareTargetKindEnum _$shareTargetKindEnum_track =
-    const ShareTargetKindEnum._('track');
-const ShareTargetKindEnum _$shareTargetKindEnum_playlist =
-    const ShareTargetKindEnum._('playlist');
-const ShareTargetKindEnum _$shareTargetKindEnum_book =
-    const ShareTargetKindEnum._('book');
-const ShareTargetKindEnum _$shareTargetKindEnum_episode =
-    const ShareTargetKindEnum._('episode');
-
-ShareTargetKindEnum _$shareTargetKindEnumValueOf(String name) {
-  switch (name) {
-    case 'track':
-      return _$shareTargetKindEnum_track;
-    case 'playlist':
-      return _$shareTargetKindEnum_playlist;
-    case 'book':
-      return _$shareTargetKindEnum_book;
-    case 'episode':
-      return _$shareTargetKindEnum_episode;
-    default:
-      throw ArgumentError(name);
-  }
-}
-
-final BuiltSet<ShareTargetKindEnum> _$shareTargetKindEnumValues =
-    BuiltSet<ShareTargetKindEnum>(const <ShareTargetKindEnum>[
-      _$shareTargetKindEnum_track,
-      _$shareTargetKindEnum_playlist,
-      _$shareTargetKindEnum_book,
-      _$shareTargetKindEnum_episode,
-    ]);
-
-Serializer<ShareTargetKindEnum> _$shareTargetKindEnumSerializer =
-    _$ShareTargetKindEnumSerializer();
-
-class _$ShareTargetKindEnumSerializer
-    implements PrimitiveSerializer<ShareTargetKindEnum> {
-  static const Map<String, Object> _toWire = const <String, Object>{
-    'track': 'track',
-    'playlist': 'playlist',
-    'book': 'book',
-    'episode': 'episode',
-  };
-  static const Map<Object, String> _fromWire = const <Object, String>{
-    'track': 'track',
-    'playlist': 'playlist',
-    'book': 'book',
-    'episode': 'episode',
-  };
-
-  @override
-  final Iterable<Type> types = const <Type>[ShareTargetKindEnum];
-  @override
-  final String wireName = 'ShareTargetKindEnum';
-
-  @override
-  Object serialize(
-    Serializers serializers,
-    ShareTargetKindEnum object, {
-    FullType specifiedType = FullType.unspecified,
-  }) => _toWire[object.name] ?? object.name;
-
-  @override
-  ShareTargetKindEnum deserialize(
-    Serializers serializers,
-    Object serialized, {
-    FullType specifiedType = FullType.unspecified,
-  }) => ShareTargetKindEnum.valueOf(
-    _fromWire[serialized] ?? (serialized is String ? serialized : ''),
-  );
-}
-
 class _$Share extends Share {
   @override
   final String pid;
@@ -86,7 +14,7 @@ class _$Share extends Share {
   @override
   final String targetPid;
   @override
-  final ShareTargetKindEnum targetKind;
+  final String targetKind;
   @override
   final String targetTitle;
   @override
@@ -187,10 +115,9 @@ class ShareBuilder implements Builder<Share, ShareBuilder> {
   String? get targetPid => _$this._targetPid;
   set targetPid(String? targetPid) => _$this._targetPid = targetPid;
 
-  ShareTargetKindEnum? _targetKind;
-  ShareTargetKindEnum? get targetKind => _$this._targetKind;
-  set targetKind(ShareTargetKindEnum? targetKind) =>
-      _$this._targetKind = targetKind;
+  String? _targetKind;
+  String? get targetKind => _$this._targetKind;
+  set targetKind(String? targetKind) => _$this._targetKind = targetKind;
 
   String? _targetTitle;
   String? get targetTitle => _$this._targetTitle;

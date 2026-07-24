@@ -12,8 +12,8 @@ part 'playlist.g.dart';
 /// A playlist: a manual ordered list (`static`) or a rule evaluated per user on read (`smart`). `rule` is present only for smart playlists. `itemCount` is the stored member count for a static playlist; for a smart playlist it is computed on detail reads and omitted from list pages. 
 ///
 /// Properties:
-/// * [pid] - Type-prefixed ULID. Stable for the playlist's lifetime, except that replacing a smart playlist's rule reissues it (see the conventions). 
-/// * [previousPid] - The pid this playlist replaced. Present on a rule-replace response, on the reissued playlist's sync events, and on its detail reads, so clients relink instead of treating the reissue as a delete and create. Absent for playlists never reissued. 
+/// * [pid] - Type-prefixed ULID. Stable for the playlist's lifetime, including across rule edits. 
+/// * [previousPid] - Retired. Rule edits once reissued the pid and set this to the retired one; edits now apply in place under a stable pid, so this is never populated. Retained for wire compatibility and always absent. 
 /// * [name] - Display name.
 /// * [kind] - `static` (manual ordered members) or `smart` (rule evaluated on read). A string, not a closed enum; clients must treat unknown kinds as read-only. 
 /// * [visibility] - `private` (owner only) or `shared` (readable by every user). A string, not a closed enum. 
@@ -21,15 +21,16 @@ part 'playlist.g.dart';
 /// * [isOwner] - True when the caller owns this playlist and may edit it.
 /// * [itemCount] - Member count. Stored count for static playlists; computed for smart playlists on detail reads and absent on list pages. 
 /// * [rule] 
-/// * [createdAt] - When the playlist was created. Restarts on a rule-replace reissue; clients that care about original creation order follow `previousPid`. 
+/// * [createdAt] - When the playlist was created.
 /// * [updatedAt] - When the playlist row last changed.
 @BuiltValue()
 abstract class Playlist implements Built<Playlist, PlaylistBuilder> {
-  /// Type-prefixed ULID. Stable for the playlist's lifetime, except that replacing a smart playlist's rule reissues it (see the conventions). 
+  /// Type-prefixed ULID. Stable for the playlist's lifetime, including across rule edits. 
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
-  /// The pid this playlist replaced. Present on a rule-replace response, on the reissued playlist's sync events, and on its detail reads, so clients relink instead of treating the reissue as a delete and create. Absent for playlists never reissued. 
+  /// Retired. Rule edits once reissued the pid and set this to the retired one; edits now apply in place under a stable pid, so this is never populated. Retained for wire compatibility and always absent. 
+  @Deprecated('previousPid has been deprecated')
   @BuiltValueField(wireName: r'previousPid')
   String? get previousPid;
 
@@ -60,7 +61,7 @@ abstract class Playlist implements Built<Playlist, PlaylistBuilder> {
   @BuiltValueField(wireName: r'rule')
   SmartRule? get rule;
 
-  /// When the playlist was created. Restarts on a rule-replace reissue; clients that care about original creation order follow `previousPid`. 
+  /// When the playlist was created.
   @BuiltValueField(wireName: r'createdAt')
   DateTime get createdAt;
 

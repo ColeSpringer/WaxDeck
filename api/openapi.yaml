@@ -176,17 +176,11 @@ info:
       viewers see the owner's list, not their own recomputation. Item
       reads through a playlist still apply the caller's own library
       visibility, so a viewer may see fewer items than the owner.
-      Replacing a smart playlist's rule reissues its pid: the update
-      response carries the new pid with `previousPid` set to the old
-      one, the old pid stops resolving, and `createdAt` restarts. The
-      caller's server sync stream carries exactly two `playlist`
-      events for a reissue, the old pid absent and the new pid
-      present (the new pid's hydrated playlist carries
-      `previousPid`), so mirrors relink instead of seeing an
-      unrelated delete and create. A client whose rule-replace
-      response was lost recovers by re-listing and matching
-      `previousPid`. Clients treat the pid as stable only between
-      rule changes.
+      Replacing a smart playlist's rule applies in place: the pid is
+      stable across rule edits, and the caller's server sync stream
+      carries one `playlist` event hydrating the changed playlist. The
+      deprecated `previousPid` property is retained for wire
+      compatibility and is never populated.
     - Player endpoints and playback sessions are ephemeral control-plane
       state, not mirrored data: reads always return current truth, there
       are no cursors, and lifecycle changes reach connected clients as
@@ -1801,8 +1795,8 @@ paths:
       operationId: createInstantMix
       summary: Instant mix
       description: >
-        Builds a mix from a seed: a track or artist pid, or a genre
-        name. Exactly one seed field must be set. With embedding
+        Builds a mix from a seed: a track, artist, or album pid, or a
+        genre name. Exactly one seed field must be set. With embedding
         coverage the mix is sonic and `adventurousness` widens it: 0
         hugs the seed's closest neighbors, 1 wanders far into the
         neighbor graph. Without coverage the mix falls back to metadata
@@ -4662,10 +4656,9 @@ paths:
         Partial update: renames a playlist, changes its visibility, or
         replaces a smart playlist's rule. Owner only. Omitted
         properties stay unchanged (this is a PATCH; a bare rename
-        never touches the rule). Replacing the rule reissues the
-        playlist's pid (see the conventions): the response carries the
-        new pid with `previousPid` set and the old pid stops
-        resolving. Supplying `rule` for a static playlist answers
+        never touches the rule). Replacing the rule applies in place
+        under the same pid; the response carries the updated playlist.
+        Supplying `rule` for a static playlist answers
         `invalid-request`. Changing a shared playlist to `private`
         removes it from other users' view; their sync streams see it
         become absent.
@@ -4680,7 +4673,7 @@ paths:
               $ref: "#/components/schemas/PlaylistUpdate"
       responses:
         "200":
-          description: The updated playlist, possibly under a new pid.
+          description: The updated playlist.
           content:
             application/json:
               schema:
@@ -6139,15 +6132,14 @@ paths:
       operationId: createShare
       summary: Create a share link
       description: >
-        Creates a public share link for a track, book, or episode the
-        caller can see, or a playlist the caller owns. Playlists
+        Creates a public share link for a track, album, book, or
+        episode the caller can see, or a playlist the caller owns. An
+        album share opens the album's tracks in order. Playlists
         require ownership because the public page serves the owner's
         member view for the link's whole life: another user's shared
         playlist is theirs to publish, not the viewer's, and their
         later edits or a flip back to private must not leak through a
-        link they cannot revoke. (Albums share through a playlist of
-        their tracks for now: an album pid alone does not resolve to
-        members server-side.) The link is a capability
+        link they cannot revoke. The link is a capability
         URL: anyone holding it can open the landing page and listen
         until it expires or is revoked. Episodes accept `positionMs`
         for copy-link-at-timestamp. `allowDownload` additionally
@@ -9199,10 +9191,10 @@ components:
         seedPid:
           type: string
           description: >
-            Seed track (`tr-`) or artist (`ar-`) pid. To mix from an
-            album, seed with one of its tracks (the catalog's item
-            query addresses entities by display string, so an album
-            pid alone does not resolve to members yet).
+            Seed track (`tr-`), artist (`ar-`), or album (`al-`) pid.
+            An artist or album seed anchors the mix on that entity's
+            tracks (resolved by entity identity, so the mix follows the
+            catalog's grouping rather than a display-string match).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         genre:
           type: string
@@ -12366,17 +12358,16 @@ components:
           type: string
           description: >
             Type-prefixed ULID. Stable for the playlist's lifetime,
-            except that replacing a smart playlist's rule reissues it
-            (see the conventions).
+            including across rule edits.
           example: pl-01JZX5N8QW3F4V9T2B7KD3M9R6
         previousPid:
           type: string
+          deprecated: true
           description: >
-            The pid this playlist replaced. Present on a rule-replace
-            response, on the reissued playlist's sync events, and on
-            its detail reads, so clients relink instead of treating
-            the reissue as a delete and create. Absent for playlists
-            never reissued.
+            Retired. Rule edits once reissued the pid and set this to
+            the retired one; edits now apply in place under a stable
+            pid, so this is never populated. Retained for wire
+            compatibility and always absent.
         name:
           type: string
           description: Display name.
@@ -12412,10 +12403,7 @@ components:
         createdAt:
           type: string
           format: date-time
-          description: >
-            When the playlist was created. Restarts on a rule-replace
-            reissue; clients that care about original creation order
-            follow `previousPid`.
+          description: When the playlist was created.
         updatedAt:
           type: string
           format: date-time
@@ -12466,7 +12454,8 @@ components:
       type: object
       description: >
         Update a playlist. Omitted properties stay unchanged; `rule`
-        applies only to smart playlists and reissues the pid.
+        applies only to smart playlists and updates in place under the
+        same pid.
       properties:
         name:
           type: string
@@ -12534,7 +12523,7 @@ components:
       type: object
       description: >
         A smart playlist rule: a condition tree, optional sort order,
-        and an optional row limit. Rules are evaluated per user on
+        and an optional limit. Rules are evaluated per user on
         read; fields that read user state (stars, ratings, play
         counts) bind to the evaluating user at that moment. Without
         `sorts` the engine orders by title ascending so results are
@@ -12547,16 +12536,45 @@ components:
           $ref: "#/components/schemas/RuleNode"
         sorts:
           type: array
-          description: Sort order, applied in sequence.
+          description: >
+            Sort order, applied in sequence. Rejected with
+            `limitMode` `random` (the shuffle is the order).
           maxItems: 4
           items:
             $ref: "#/components/schemas/RuleSort"
         limit:
           type: integer
           description: >
-            Maximum members, applied after sorting. Zero or absent
-            means unlimited.
+            The limit value, interpreted by `limitMode`: a maximum
+            member count (`count`, the default), a maximum count of a
+            random draw (`random`), or a playtime or size budget in
+            whole minutes (`minutes`) or megabytes (`megabytes`). Zero
+            or absent means unlimited and is only valid with `count`.
           minimum: 0
+        limitMode:
+          type: string
+          description: >
+            How `limit` is interpreted: `count` (the default; a plain
+            member cap in sort order), `random` (that many members
+            drawn by a seeded shuffle, so a rule can mean "25 songs at
+            random"), `minutes` (members accumulated in rule order
+            until the next would exceed `limit` minutes of playtime),
+            or `megabytes` (the same, budgeted by summed file size, so
+            a rule can mean "what fits on the device"). A budget mode
+            skips a member with no measurable playtime or size rather
+            than counting it as free. A string, not a closed enum;
+            unknown values answer `invalid-request`. Absent means
+            `count`.
+          example: random
+        limitSeed:
+          type: integer
+          format: int64
+          description: >
+            Pins the shuffle order of a `random` or budget evaluation
+            so the same rule yields the same members each read; zero or
+            absent draws a fresh order per read. Only meaningful when
+            `limitMode` is not `count`; supplying it with `count`
+            answers `invalid-request`.
 
     RuleNode:
       type: object
@@ -12570,13 +12588,16 @@ components:
         children matches nothing. Unknown `type` strings are rejected
         on write. Condition values are strings on the wire regardless
         of the field's kind: numbers in decimal, booleans as `true`
-        or `false`, dates as absolute RFC 3339 timestamps (there are
-        no relative date operators; a rule meaning "recently" must be
-        re-saved to move its cutoff), media types as `music`,
-        `podcast`, or `audiobook`. `inTheRange` is inclusive on both
-        ends. The field vocabulary and each field's accepted
-        operators come from the rule-fields endpoint; custom tags are
-        addressed as `tag.KEY`.
+        or `false`, dates as absolute RFC 3339 timestamps, media
+        types as `music`, `podcast`, or `audiobook`. Date fields also
+        accept the relative operators `inTheLast` and `notInTheLast`,
+        whose `value` is a positive whole number of days counted back
+        from read time: a rule meaning "played in the last 30 days"
+        re-evaluates its window on every read instead of pinning an
+        absolute cutoff. `inTheRange` is inclusive on both ends. The
+        field vocabulary and each field's accepted operators come from
+        the rule-fields endpoint; custom tags are addressed as
+        `tag.KEY`.
       required: [type]
       properties:
         type:
@@ -12600,8 +12621,10 @@ components:
           description: >
             Operator: one of `is`, `isNot`, `contains`, `startsWith`,
             `endsWith`, `gt`, `lt`, `gte`, `lte`, `inTheRange`,
-            `before`, `after`, `isPresent`, `isMissing`. Each field
-            accepts a subset; see the rule-fields endpoint.
+            `before`, `after`, `inTheLast`, `notInTheLast`,
+            `isPresent`, `isMissing`. Each field accepts a subset; see
+            the rule-fields endpoint. `inTheLast` and `notInTheLast`
+            are the relative-date operators (date fields only).
           example: gte
         value:
           type: string
@@ -13887,12 +13910,16 @@ components:
           example: /s/01JZX5N8QW3F4V9T2B7KD3M9R6.aBcDeFgHiJkLmNoPqRsTuV
         targetPid:
           type: string
-          description: The shared track, playlist, book, or episode.
+          description: The shared track, album, playlist, book, or episode.
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         targetKind:
           type: string
-          description: What kind of thing the share opens.
-          enum: [track, playlist, book, episode]
+          description: >
+            What kind of thing the share opens: `track`, `album`,
+            `playlist`, `book`, or `episode`. A string, not a closed
+            enum; clients must tolerate an unknown kind (render a
+            generic label) rather than fail.
+          example: album
         targetTitle:
           type: string
           description: The target's display title at read time.
@@ -13941,8 +13968,9 @@ components:
         pid:
           type: string
           description: >
-            The track (`tr-`), playlist (`pl-`), book (`bk-`), or
-            episode (`ep-`) to share. Must be visible to the caller.
+            The track (`tr-`), album (`al-`), playlist (`pl-`), book
+            (`bk-`), or episode (`ep-`) to share. An album share opens
+            the album's tracks in order. Must be visible to the caller.
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         expiresInHours:
           type: integer

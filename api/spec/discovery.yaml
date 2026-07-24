@@ -43,8 +43,8 @@ paths:
       operationId: createInstantMix
       summary: Instant mix
       description: >
-        Builds a mix from a seed: a track or artist pid, or a genre
-        name. Exactly one seed field must be set. With embedding
+        Builds a mix from a seed: a track, artist, or album pid, or a
+        genre name. Exactly one seed field must be set. With embedding
         coverage the mix is sonic and `adventurousness` widens it: 0
         hugs the seed's closest neighbors, 1 wanders far into the
         neighbor graph. Without coverage the mix falls back to metadata
@@ -164,10 +164,10 @@ components:
         seedPid:
           type: string
           description: >
-            Seed track (`tr-`) or artist (`ar-`) pid. To mix from an
-            album, seed with one of its tracks (the catalog's item
-            query addresses entities by display string, so an album
-            pid alone does not resolve to members yet).
+            Seed track (`tr-`), artist (`ar-`), or album (`al-`) pid.
+            An artist or album seed anchors the mix on that entity's
+            tracks (resolved by entity identity, so the mix follows the
+            catalog's grouping rather than a display-string match).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         genre:
           type: string

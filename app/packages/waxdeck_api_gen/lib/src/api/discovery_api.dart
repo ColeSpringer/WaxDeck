@@ -24,7 +24,7 @@ class DiscoveryApi {
   const DiscoveryApi(this._dio, this._serializers);
 
   /// Instant mix
-  /// Builds a mix from a seed: a track or artist pid, or a genre name. Exactly one seed field must be set. With embedding coverage the mix is sonic and &#x60;adventurousness&#x60; widens it: 0 hugs the seed&#39;s closest neighbors, 1 wanders far into the neighbor graph. Without coverage the mix falls back to metadata heuristics (seed genre and artist neighborhoods, weighted toward starred and most-played), where &#x60;adventurousness&#x60; loosens the genre bound. The mix is computed fresh per call and not persisted; clients wanting endless radio request another mix excluding what already played. Results honor the caller&#39;s library visibility. 
+  /// Builds a mix from a seed: a track, artist, or album pid, or a genre name. Exactly one seed field must be set. With embedding coverage the mix is sonic and &#x60;adventurousness&#x60; widens it: 0 hugs the seed&#39;s closest neighbors, 1 wanders far into the neighbor graph. Without coverage the mix falls back to metadata heuristics (seed genre and artist neighborhoods, weighted toward starred and most-played), where &#x60;adventurousness&#x60; loosens the genre bound. The mix is computed fresh per call and not persisted; clients wanting endless radio request another mix excluding what already played. Results honor the caller&#39;s library visibility. 
   ///
   /// Parameters:
   /// * [instantMixRequest] 

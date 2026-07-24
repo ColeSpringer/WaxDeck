@@ -262,7 +262,6 @@ Serializers _$serializers =
           ..add(Share.serializer)
           ..add(ShareCreate.serializer)
           ..add(SharePage.serializer)
-          ..add(ShareTargetKindEnum.serializer)
           ..add(SignupApproval.serializer)
           ..add(SignupRequest.serializer)
           ..add(SignupResult.serializer)

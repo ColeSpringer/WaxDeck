@@ -177,17 +177,11 @@ info:
       viewers see the owner's list, not their own recomputation. Item
       reads through a playlist still apply the caller's own library
       visibility, so a viewer may see fewer items than the owner.
-      Replacing a smart playlist's rule reissues its pid: the update
-      response carries the new pid with `previousPid` set to the old
-      one, the old pid stops resolving, and `createdAt` restarts. The
-      caller's server sync stream carries exactly two `playlist`
-      events for a reissue, the old pid absent and the new pid
-      present (the new pid's hydrated playlist carries
-      `previousPid`), so mirrors relink instead of seeing an
-      unrelated delete and create. A client whose rule-replace
-      response was lost recovers by re-listing and matching
-      `previousPid`. Clients treat the pid as stable only between
-      rule changes.
+      Replacing a smart playlist's rule applies in place: the pid is
+      stable across rule edits, and the caller's server sync stream
+      carries one `playlist` event hydrating the changed playlist. The
+      deprecated `previousPid` property is retained for wire
+      compatibility and is never populated.
     - Player endpoints and playback sessions are ephemeral control-plane
       state, not mirrored data: reads always return current truth, there
       are no cursors, and lifecycle changes reach connected clients as

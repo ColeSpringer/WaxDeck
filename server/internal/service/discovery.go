@@ -131,8 +131,10 @@ func (l *Library) InstantMix(ctx context.Context, uc *UserCtx, in InstantMixInpu
 			return l.trackMix(ctx, uc, in.SeedPID, adv, size, exclude)
 		case PrefixArtist:
 			return l.artistMix(ctx, uc, in.SeedPID, adv, size, exclude)
+		case PrefixAlbum:
+			return l.albumMix(ctx, uc, in.SeedPID, adv, size, exclude)
 		default:
-			return InstantMixResult{}, errInvalid("seedPid must be a track or artist pid")
+			return InstantMixResult{}, errInvalid("seedPid must be a track, artist, or album pid")
 		}
 	}
 }
@@ -166,11 +168,16 @@ func (l *Library) trackMix(ctx context.Context, uc *UserCtx, apiItemPID string, 
 
 func (l *Library) artistMix(ctx context.Context, uc *UserCtx, apiArtistPID string, adv float64, size int, exclude map[string]bool) (InstantMixResult, error) {
 	_, pid, _ := parseAPIPID(apiArtistPID)
-	name, err := l.artistName(ctx, uc, pid)
+	// The entity lookup validates the pid and gives the canonical name
+	// for the metadata fallback; the artist_pid facet field resolves the
+	// members directly, retiring the old full-facet scan that mapped pid
+	// to display name.
+	info, err := l.lib.EntityByPID(ctx, read.EntityArtist, pid)
 	if err != nil {
-		return InstantMixResult{}, err
+		return InstantMixResult{}, classify(err)
 	}
-	tracks, err := l.tracksWhere(ctx, uc, "artist", name, 200)
+	name := info.Name
+	tracks, err := l.tracksWhere(ctx, uc, "artist_pid", string(pid), 200)
 	if err != nil {
 		return InstantMixResult{}, err
 	}
@@ -202,6 +209,56 @@ func (l *Library) artistMix(ctx context.Context, uc *UserCtx, apiArtistPID strin
 		}
 	}
 	items, err := l.metadataMix(ctx, uc, genre, name, adv, size, exclude)
+	if err != nil {
+		return InstantMixResult{}, err
+	}
+	return InstantMixResult{Basis: BasisMetadata, Items: items}, nil
+}
+
+// albumMix builds a mix seeded from an album entity: the album's own
+// tracks anchor the sonic centroid, with a metadata blend as the
+// zero-embedding fallback. The album_pid facet field resolves the
+// members by entity identity rather than a display-string match.
+func (l *Library) albumMix(ctx context.Context, uc *UserCtx, apiAlbumPID string, adv float64, size int, exclude map[string]bool) (InstantMixResult, error) {
+	_, pid, _ := parseAPIPID(apiAlbumPID)
+	if _, err := l.lib.EntityByPID(ctx, read.EntityAlbum, pid); err != nil {
+		return InstantMixResult{}, classify(err)
+	}
+	tracks, err := l.tracksWhere(ctx, uc, "album_pid", string(pid), 200)
+	if err != nil {
+		return InstantMixResult{}, err
+	}
+	if len(tracks) == 0 {
+		return InstantMixResult{}, errNotFound("no tracks for album " + apiAlbumPID)
+	}
+	var essences []string
+	genre, artist := "", ""
+	for _, t := range tracks {
+		if genre == "" && t.Genre != "" {
+			genre = t.Genre
+		}
+		if artist == "" {
+			if t.AlbumArtist != "" {
+				artist = t.AlbumArtist
+			} else if t.Artist != "" {
+				artist = t.Artist
+			}
+		}
+		if es := l.itemEssence(ctx, t); es != "" {
+			essences = append(essences, es)
+		}
+	}
+	if vec, ok := l.sim.Centroid(essences); ok {
+		// No essence exclusions: the album's own tracks are valid members.
+		items, err := l.sonicSample(ctx, uc, vec, map[string]bool{}, adv, size, exclude)
+		if err != nil {
+			return InstantMixResult{}, err
+		}
+		if len(items) > 0 {
+			return InstantMixResult{Basis: BasisSonic, Items: items}, nil
+		}
+	}
+	items, err := l.metadataMix(ctx, uc, genre, artist, adv, size, exclude)
 	if err != nil {
 		return InstantMixResult{}, err
 	}
@@ -363,22 +420,6 @@ func (l *Library) edgesToSummaries(ctx context.Context, uc *UserCtx, edges []sim
 		out = append(out, summary(v))
 	}
 	return out, nil
-}
-
-// artistName resolves an artist entity pid to its display name through
-// the artist facet (the item grammar has no entity-pid filter yet).
-func (l *Library) artistName(ctx context.Context, uc *UserCtx, pid model.PID) (string, error) {
-	q := query.New(query.EntityItems).Where("kind", query.OpIs, string(model.KindTrack)).Build()
-	res, err := l.lib.Facet(ctx, q, read.GroupArtist, model.PID(uc.CatalogPID))
-	if err != nil {
-		return "", classify(err)
-	}
-	for _, b := range res.Buckets {
-		if b.EntityPID == pid {
-			return b.Display, nil
-		}
-	}
-	return "", errNotFound("unknown artist " + string(pid))
 }
 
 // tracksWhere pages music tracks matching one text field exactly

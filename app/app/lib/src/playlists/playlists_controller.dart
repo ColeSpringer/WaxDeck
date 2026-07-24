@@ -130,13 +130,13 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
     ref.invalidate(playlistsProvider);
   }
 
-  /// Replaces a smart playlist's rule. The pid is reissued: the caller
-  /// receives the successor playlist and must navigate to its pid (this
-  /// controller's family key stays on the retired pid).
+  /// Replaces a smart playlist's rule in place; the pid is stable, so
+  /// the caller keeps this detail view. Returns the updated playlist.
   Future<Playlist> replaceRule(SmartRule rule) async {
     final next = await ref
         .read(repositoryProvider)
         .updatePlaylist(pid, rule: rule);
+    ref.invalidateSelf();
     ref.invalidate(playlistsProvider);
     return next;
   }

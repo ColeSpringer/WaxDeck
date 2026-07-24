@@ -14,34 +14,28 @@ sidecar injection seam) all landed and are not repeated here.
 
 ## WaxBin
 
-- **In-place playlist rule update.** The playlists facade has no way
-  to change a smart playlist's rule under a stable pid, so WaxDeck
-  reissues the pid and links the generations with `previousPid`
-  (docs/adr/0006). An engine-side rule setter dissolves that whole
-  seam: the reissue contract, the two-event sync story, and the
-  client-side follow logic.
-- **Relative date operators in the query engine.** Conditions compare
-  absolute timestamps only, so a rule meaning "played in the last 30
-  days" must be re-saved to move its cutoff. WaxDeck's contract
-  documents the gap (docs/adr/0006).
-- **Smart-list limit modes beyond item count.** Random-sample, total
-  minutes, and total megabytes limits have no engine primitive; the
-  API exposes a count limit only.
-- **Entity-level library attribution.** Artists and albums cannot be
-  attributed to library roots, so users restricted to a subset of
-  roots lose entity search entirely (docs/adr/0004). WaxDeck filters
-  at the item level and hides entity surfaces from restricted users.
-- **Entity facets in the item query grammar.** Items cannot be
-  filtered by artist or album entity pid, only by display string,
-  which is why the Subsonic surface mints its artist and album ids
-  from strings. A real entity facet would retire the minted ids. The
-  discovery and sharing surfaces added two more consumers: instant
-  mixes cannot take an album pid as a seed (clients seed with a
-  member track instead), and share links cannot target an album
-  (users share a playlist of its tracks instead). Artist seeds work
-  today only through a full artist facet scan that maps pid to
-  display name; an entity lookup or entity-pid filter retires that
-  scan too.
+- **Entity enumeration for the compatibility surface.** The entity-pid
+  item facets (`artist_pid`, `album_pid`, `album_artist_pid`,
+  `genre_pid`) and the `EntityByPID` lookup landed, and WaxDeck adopted
+  them: album-seeded instant mixes, album share links, and the
+  retirement of the artist facet scan all ride the new filters, and
+  restricted-user entity search rides `EntityInfo.LibraryPIDs`
+  (docs/adr/0004) — one `EntityByPID` per entity hit, bounded by the
+  search page and paid only by restricted callers; a batch entity
+  lookup over a set of pids would retire that per-hit cost. One consumer
+  stays on the string-minted workaround.
+  The Subsonic compatibility surface groups its in-memory artist and
+  album index by display string and mints `A!`/`L!` base64 ids;
+  retiring them for real entity pids needs a way to *enumerate* album
+  entities (there is no `album` facet group — only artist, albumArtist,
+  genre, year, kind, and library) or to read an item's artist and album
+  entity pids off its view (an item view carries display strings only;
+  the facet fields filter but do not project). Either an album facet
+  group or entity pids on the item view would let the compatibility
+  index carry real entity pids. Until then WaxDeck keeps the minted
+  ids, which are stable, decodable without state, and never persisted
+  (stars, playlist rows, and shares all key on real item pids), so a
+  client that cached one loses nothing.
 - **As-of timestamp on play-state mutations.** The per-field
   `StarredChangedAt`/`RatingChangedAt` stamps landed (retiring the
   earlier `UpdatedAt`/`StarredAt` request), but `SetStar`/`SetRating`

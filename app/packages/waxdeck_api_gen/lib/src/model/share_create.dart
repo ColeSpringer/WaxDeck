@@ -11,13 +11,13 @@ part 'share_create.g.dart';
 /// A new share link.
 ///
 /// Properties:
-/// * [pid] - The track (`tr-`), playlist (`pl-`), book (`bk-`), or episode (`ep-`) to share. Must be visible to the caller. 
+/// * [pid] - The track (`tr-`), album (`al-`), playlist (`pl-`), book (`bk-`), or episode (`ep-`) to share. An album share opens the album's tracks in order. Must be visible to the caller. 
 /// * [expiresInHours] - Lifetime in hours from creation. Omitted means the link never expires (it can still be revoked). 
 /// * [allowDownload] - Offer the original file on the landing page. Requires the caller's own download permission. 
 /// * [positionMs] - Start position for copy-link-at-timestamp (episodes only; `invalid-request` on other kinds). 
 @BuiltValue()
 abstract class ShareCreate implements Built<ShareCreate, ShareCreateBuilder> {
-  /// The track (`tr-`), playlist (`pl-`), book (`bk-`), or episode (`ep-`) to share. Must be visible to the caller. 
+  /// The track (`tr-`), album (`al-`), playlist (`pl-`), book (`bk-`), or episode (`ep-`) to share. An album share opens the album's tracks in order. Must be visible to the caller. 
   @BuiltValueField(wireName: r'pid')
   String get pid;
 

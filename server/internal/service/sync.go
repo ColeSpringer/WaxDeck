@@ -850,9 +850,8 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 			seenPlaylist[e.ItemPID] = true
 			ev := ServerSyncEvent{Kind: eventPlaylist, PID: apiPID(PrefixPlaylist, model.PID(e.ItemPID))}
 			// Hydrate fresh: a playlist the caller can still read
-			// carries its current state; one that is gone, private, or
-			// reissued under a new pid carries none (the absence is
-			// the payload).
+			// carries its current state; one that is gone or now
+			// private carries none (the absence is the payload).
 			if pl, err := l.PlaylistByPID(ctx, uc, ev.PID); err == nil {
 				ev.Playlist = &pl
 			} else if KindOf(err) != KindNotFound {

@@ -14,7 +14,7 @@ func (s *Server) shareJSON(info service.ShareInfo) Share {
 		Pid:           info.ID,
 		Url:           "/s/" + s.shares.Mint(barePID(info.ID)),
 		TargetPid:     info.TargetPID,
-		TargetKind:    ShareTargetKind(info.TargetKind),
+		TargetKind:    info.TargetKind,
 		TargetTitle:   info.TargetTitle,
 		AllowDownload: info.AllowDownload,
 		CreatedAt:     info.CreatedAt,

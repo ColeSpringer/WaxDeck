@@ -647,6 +647,8 @@ SmartRule smartRuleFromGen(gen.SmartRule rule) {
             .toList() ??
         const [],
     limit: rule.limit ?? 0,
+    limitMode: rule.limitMode ?? '',
+    limitSeed: rule.limitSeed ?? 0,
   );
 }
 
@@ -665,15 +667,18 @@ gen.SmartRule smartRuleToGen(SmartRule rule) {
                 ),
               ),
             )
-      ..limit = rule.limit > 0 ? rule.limit : null,
+      ..limit = rule.limit > 0 ? rule.limit : null
+      ..limitMode = rule.limitMode.isEmpty ? null : rule.limitMode
+      ..limitSeed = rule.limitSeed != 0 ? rule.limitSeed : null,
   );
 }
 
 Playlist playlistFromGen(gen.Playlist pl) {
   final rule = pl.rule;
   return Playlist(
+    // previousPid is retired: rule edits apply in place, so the server
+    // never sets it. The wrapper field stays null.
     pid: pl.pid,
-    previousPid: pl.previousPid,
     name: pl.name,
     kind: pl.kind,
     visibility: pl.visibility,
@@ -1945,7 +1950,7 @@ Share shareFromGen(gen.Share share, {String baseUrl = ''}) {
     pid: share.pid,
     url: resolveMediaUrl(baseUrl, share.url),
     targetPid: share.targetPid,
-    targetKind: share.targetKind.name,
+    targetKind: share.targetKind,
     targetTitle: share.targetTitle,
     allowDownload: share.allowDownload,
     positionMs: share.positionMs,

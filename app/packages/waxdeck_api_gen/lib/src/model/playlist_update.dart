@@ -9,7 +9,7 @@ import 'package:built_value/serializer.dart';
 
 part 'playlist_update.g.dart';
 
-/// Update a playlist. Omitted properties stay unchanged; `rule` applies only to smart playlists and reissues the pid. 
+/// Update a playlist. Omitted properties stay unchanged; `rule` applies only to smart playlists and updates in place under the same pid. 
 ///
 /// Properties:
 /// * [name] - New display name.

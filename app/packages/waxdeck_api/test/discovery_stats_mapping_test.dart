@@ -36,7 +36,7 @@ void main() {
         ..pid = 'sh-01JZX5N8QW3F4V9T2B7KDSHARE1'
         ..url = '/s/01JZX5N8QW3F4V9T2B7KSECRET'
         ..targetPid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE'
-        ..targetKind = gen.ShareTargetKindEnum.track
+        ..targetKind = 'track'
         ..targetTitle = 'Prancing Pony Blues'
         ..allowDownload = true
         ..createdAt = DateTime.utc(2026, 7, 20, 12)

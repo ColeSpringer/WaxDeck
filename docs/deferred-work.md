@@ -274,11 +274,18 @@ here waits on upstream.
   mixes and inherit nothing sonic. Fixing it means keying embeddings
   by essence plus sample window and teaching the worker audio pull to
   serve the window (the stream surface already can).
-- `[upstream]` **Album seeds and album shares.** Instant mixes cannot
-  seed from an album pid and share links cannot target one, because
-  the item query addresses entities by display string only; clients
-  seed mixes with a member track and share a playlist instead. Rides
-  the entity-lookup ask in upstream-requests.md.
+- `[upstream]` **Subsonic artist and album ids stay string-minted.**
+  The entity-pid item facets that landed let WaxDeck seed instant mixes
+  and target share links at an album, and retire the artist facet scan,
+  all by entity identity. They did not retire the Subsonic
+  compatibility surface's minted `A!`/`L!` ids: that index groups by
+  display string and would need to enumerate album entities (no `album`
+  facet group exists) or read an item's entity pids off its view (the
+  facet fields filter but do not project), neither of which the landed
+  capability provides. The minted ids stay (stable, decodable, never
+  persisted, so a cached one still resolves). Rides the "Entity
+  enumeration for the compatibility surface" ask in
+  upstream-requests.md.
 - `[in-repo]` **Time and mood mixes.** Daylist-style rotating mixes
   with scheduled auto-names are a scheduler and a naming table over
   the instant-mix engine that shipped; nothing else blocks them.

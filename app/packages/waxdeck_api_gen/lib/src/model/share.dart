@@ -3,7 +3,6 @@
 //
 
 // ignore_for_file: unused_element
-import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -14,8 +13,8 @@ part 'share.g.dart';
 /// Properties:
 /// * [pid] - Share PID.
 /// * [url] - Origin-relative capability URL of the landing page. Anyone holding the full URL can open it; treat it as the secret it is. 
-/// * [targetPid] - The shared track, playlist, book, or episode.
-/// * [targetKind] - What kind of thing the share opens.
+/// * [targetPid] - The shared track, album, playlist, book, or episode.
+/// * [targetKind] - What kind of thing the share opens: `track`, `album`, `playlist`, `book`, or `episode`. A string, not a closed enum; clients must tolerate an unknown kind (render a generic label) rather than fail. 
 /// * [targetTitle] - The target's display title at read time.
 /// * [allowDownload] - Whether the landing page offers the original file.
 /// * [positionMs] - Start position for copy-link-at-timestamp shares (episodes). Absent otherwise. 
@@ -32,14 +31,13 @@ abstract class Share implements Built<Share, ShareBuilder> {
   @BuiltValueField(wireName: r'url')
   String get url;
 
-  /// The shared track, playlist, book, or episode.
+  /// The shared track, album, playlist, book, or episode.
   @BuiltValueField(wireName: r'targetPid')
   String get targetPid;
 
-  /// What kind of thing the share opens.
+  /// What kind of thing the share opens: `track`, `album`, `playlist`, `book`, or `episode`. A string, not a closed enum; clients must tolerate an unknown kind (render a generic label) rather than fail. 
   @BuiltValueField(wireName: r'targetKind')
-  ShareTargetKindEnum get targetKind;
-  // enum targetKindEnum {  track,  playlist,  book,  episode,  };
+  String get targetKind;
 
   /// The target's display title at read time.
   @BuiltValueField(wireName: r'targetTitle')
@@ -106,7 +104,7 @@ class _$ShareSerializer implements PrimitiveSerializer<Share> {
     yield r'targetKind';
     yield serializers.serialize(
       object.targetKind,
-      specifiedType: const FullType(ShareTargetKindEnum),
+      specifiedType: const FullType(String),
     );
     yield r'targetTitle';
     yield serializers.serialize(
@@ -189,8 +187,8 @@ class _$ShareSerializer implements PrimitiveSerializer<Share> {
         case r'targetKind':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ShareTargetKindEnum),
-          ) as ShareTargetKindEnum;
+            specifiedType: const FullType(String),
+          ) as String;
           result.targetKind = valueDes;
           break;
         case r'targetTitle':
@@ -262,28 +260,5 @@ class _$ShareSerializer implements PrimitiveSerializer<Share> {
     );
     return result.build();
   }
-}
-
-class ShareTargetKindEnum extends EnumClass {
-
-  /// What kind of thing the share opens.
-  @BuiltValueEnumConst(wireName: r'track')
-  static const ShareTargetKindEnum track = _$shareTargetKindEnum_track;
-  /// What kind of thing the share opens.
-  @BuiltValueEnumConst(wireName: r'playlist')
-  static const ShareTargetKindEnum playlist = _$shareTargetKindEnum_playlist;
-  /// What kind of thing the share opens.
-  @BuiltValueEnumConst(wireName: r'book')
-  static const ShareTargetKindEnum book = _$shareTargetKindEnum_book;
-  /// What kind of thing the share opens.
-  @BuiltValueEnumConst(wireName: r'episode')
-  static const ShareTargetKindEnum episode = _$shareTargetKindEnum_episode;
-
-  static Serializer<ShareTargetKindEnum> get serializer => _$shareTargetKindEnumSerializer;
-
-  const ShareTargetKindEnum._(String name): super(name);
-
-  static BuiltSet<ShareTargetKindEnum> get values => _$shareTargetKindEnumValues;
-  static ShareTargetKindEnum valueOf(String name) => _$shareTargetKindEnumValueOf(name);
 }
 

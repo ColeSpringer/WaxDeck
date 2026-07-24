@@ -9,14 +9,14 @@ import 'package:built_value/serializer.dart';
 
 part 'rule_node.g.dart';
 
-/// One node of a rule's condition tree. `type` selects the shape: `all` (every child must match) and `any` (at least one child must match) carry `nodes`; `not` inverts its single `node`; `condition` compares one `field` with `op` against `value` (or `values` for `inTheRange`, exactly two, low then high). An `all` with no children matches everything; an `any` with no children matches nothing. Unknown `type` strings are rejected on write. Condition values are strings on the wire regardless of the field's kind: numbers in decimal, booleans as `true` or `false`, dates as absolute RFC 3339 timestamps (there are no relative date operators; a rule meaning \"recently\" must be re-saved to move its cutoff), media types as `music`, `podcast`, or `audiobook`. `inTheRange` is inclusive on both ends. The field vocabulary and each field's accepted operators come from the rule-fields endpoint; custom tags are addressed as `tag.KEY`. 
+/// One node of a rule's condition tree. `type` selects the shape: `all` (every child must match) and `any` (at least one child must match) carry `nodes`; `not` inverts its single `node`; `condition` compares one `field` with `op` against `value` (or `values` for `inTheRange`, exactly two, low then high). An `all` with no children matches everything; an `any` with no children matches nothing. Unknown `type` strings are rejected on write. Condition values are strings on the wire regardless of the field's kind: numbers in decimal, booleans as `true` or `false`, dates as absolute RFC 3339 timestamps, media types as `music`, `podcast`, or `audiobook`. Date fields also accept the relative operators `inTheLast` and `notInTheLast`, whose `value` is a positive whole number of days counted back from read time: a rule meaning \"played in the last 30 days\" re-evaluates its window on every read instead of pinning an absolute cutoff. `inTheRange` is inclusive on both ends. The field vocabulary and each field's accepted operators come from the rule-fields endpoint; custom tags are addressed as `tag.KEY`. 
 ///
 /// Properties:
 /// * [type] - `all`, `any`, `not`, or `condition`.
 /// * [nodes] - Children of an `all` or `any` group.
 /// * [node] 
 /// * [field] - Field name from the rule-fields vocabulary.
-/// * [op] - Operator: one of `is`, `isNot`, `contains`, `startsWith`, `endsWith`, `gt`, `lt`, `gte`, `lte`, `inTheRange`, `before`, `after`, `isPresent`, `isMissing`. Each field accepts a subset; see the rule-fields endpoint. 
+/// * [op] - Operator: one of `is`, `isNot`, `contains`, `startsWith`, `endsWith`, `gt`, `lt`, `gte`, `lte`, `inTheRange`, `before`, `after`, `inTheLast`, `notInTheLast`, `isPresent`, `isMissing`. Each field accepts a subset; see the rule-fields endpoint. `inTheLast` and `notInTheLast` are the relative-date operators (date fields only). 
 /// * [value] - Comparison value, string-encoded per the field's kind.
 /// * [values] - Exactly two values for `inTheRange`, low then high.
 @BuiltValue()
@@ -36,7 +36,7 @@ abstract class RuleNode implements Built<RuleNode, RuleNodeBuilder> {
   @BuiltValueField(wireName: r'field')
   String? get field;
 
-  /// Operator: one of `is`, `isNot`, `contains`, `startsWith`, `endsWith`, `gt`, `lt`, `gte`, `lte`, `inTheRange`, `before`, `after`, `isPresent`, `isMissing`. Each field accepts a subset; see the rule-fields endpoint. 
+  /// Operator: one of `is`, `isNot`, `contains`, `startsWith`, `endsWith`, `gt`, `lt`, `gte`, `lte`, `inTheRange`, `before`, `after`, `inTheLast`, `notInTheLast`, `isPresent`, `isMissing`. Each field accepts a subset; see the rule-fields endpoint. `inTheLast` and `notInTheLast` are the relative-date operators (date fields only). 
   @BuiltValueField(wireName: r'op')
   String? get op;
 

@@ -56,6 +56,19 @@ void main() {
     expect(find.text('playlist | 0 plays | never expires'), findsOneWidget);
   });
 
+  testWidgets('an album share shows the album icon', (tester) async {
+    final repo = FakeRepository()
+      ..shares.addAll([
+        _share('sh-1', targetKind: 'album', targetTitle: 'Signal Garden'),
+      ]);
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    // Distinct from a track's note icon, so album shares are legible.
+    expect(find.byIcon(Icons.album), findsOneWidget);
+    expect(find.byIcon(Icons.music_note), findsNothing);
+  });
+
   testWidgets('revoking removes the share', (tester) async {
     final repo = FakeRepository()..shares.addAll([_share('sh-1')]);
     await tester.pumpWidget(_host(repo));

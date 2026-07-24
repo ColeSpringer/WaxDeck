@@ -76,10 +76,11 @@ recreated. Deleting an account orphans its catalog history rather than
 destroying it. Roles are `admin` and `user`; per-library visibility
 grants live in waxdeck.db and are enforced by attributing each item's
 file path to a library root. An item outside the caller's scope
-behaves exactly as if it did not exist, list pages simply omit it, and
-restricted callers get no artist or album search groups at all
-(entities have no cheap library attribution, and hiding beats leaking
-a private library's catalog). Album and artist artwork is served
+behaves exactly as if it did not exist, and list pages simply omit it.
+Restricted callers get artist and album search groups attributed by
+member library: the catalog engine reports the libraries holding an
+entity's members, and an entity survives search when one of them is
+granted (see the update below). Album and artist artwork is served
 without an attribution check: PIDs are unguessable ULIDs and every
 discovery path is filtered, so the residual exposure is accepted.
 
@@ -116,5 +117,17 @@ immediate, which proxy-mode streaming inherits (media tokens stay
 short-lived). Web clients must carry the CSRF header after a reload;
 native clients must store the bearer token in the OS keychain and
 rotate it periodically. OIDC requires the deployment to state its
-public base URL. The visibility design trades entity-level search for
-restricted users until entities gain library attribution upstream.
+public base URL.
+
+## Update — 2026-07-23: entity search restored for restricted users
+
+The catalog engine grew per-entity library attribution: an entity read
+reports the distinct libraries holding its members' primary files.
+Search now uses it. A restricted caller's artist and album groups are
+no longer dropped wholesale; each hit is attributed to its member
+libraries and survives when one is granted, the same test item hits
+already pass. Full-visibility callers are unchanged and pay no extra
+lookup (the attribution check runs only for restricted callers). This
+retires the "trades entity-level search for restricted users" tradeoff
+recorded above; the artwork residual (unguessable ULIDs, filtered
+discovery paths) is unchanged.

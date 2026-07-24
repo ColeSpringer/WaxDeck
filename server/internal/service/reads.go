@@ -95,9 +95,9 @@ func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page) Page {
 const searchMaxCandidates = 5000
 
 // Search runs grouped full-text search. Restricted callers get item
-// hits filtered by library visibility; artist and album groups are
-// omitted for them, since entities have no cheap library attribution
-// yet, and hiding beats leaking another library's catalog.
+// hits filtered by library visibility, and artist and album groups
+// filtered by entity library attribution: an entity survives when one
+// of the libraries holding its members is granted to the caller.
 func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) (SearchResults, error) {
 	// A restricted caller with no granted libraries can see nothing: every
 	// item hit fails the visibility check below and entity groups are
@@ -123,12 +123,24 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 	if err != nil {
 		return SearchResults{}, classify(err)
 	}
-	convEntity := func(hits []read.SearchHit, prefix string) []SearchHit {
-		if !uc.AllLibraries {
-			return nil
-		}
+	convEntity := func(hits []read.SearchHit, prefix string, kind read.EntityKind) []SearchHit {
 		out := make([]SearchHit, 0, len(hits))
 		for _, h := range hits {
+			if !uc.AllLibraries {
+				// Entities carry no stored library column, so attribute
+				// each to the libraries holding its member items and keep
+				// it only when the caller is granted one of them. This is
+				// one entity lookup per hit, each aggregating the entity's
+				// members over libraries; it is paid only by restricted
+				// callers and bounded by the search page limit (full-
+				// visibility callers skip the whole block). A batch
+				// attribution primitive would retire the per-hit lookup
+				// (noted in upstream-requests.md).
+				info, err := l.lib.EntityByPID(ctx, kind, h.PID)
+				if err != nil || !l.entityInLibraries(info, uc) {
+					continue
+				}
+			}
 			out = append(out, SearchHit{
 				PID:      apiPID(prefix, h.PID),
 				Kind:     h.Kind,
@@ -164,13 +176,30 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 	}
 	return SearchResults{
 		Query:     res.Query,
-		Artists:   convEntity(res.Artists, PrefixArtist),
-		Albums:    convEntity(res.Albums, PrefixAlbum),
+		Artists:   convEntity(res.Artists, PrefixArtist, read.EntityArtist),
+		Albums:    convEntity(res.Albums, PrefixAlbum, read.EntityAlbum),
 		Tracks:    convItem(res.Tracks, PrefixTrack),
 		Books:     convItem(res.Books, PrefixBook),
 		Episodes:  convItem(res.Episodes, PrefixEpisode),
 		Truncated: res.Truncated,
 	}, nil
+}
+
+// entityInLibraries reports whether any library holding the entity's
+// members is in the caller's grant. Full-visibility callers never reach
+// this (they see every entity). A nil info (which the facade never
+// returns alongside a nil error, but the helper stays robust to)
+// attributes to no library and reads as not visible.
+func (l *Library) entityInLibraries(info *read.EntityInfo, uc *UserCtx) bool {
+	if info == nil {
+		return false
+	}
+	for _, lib := range info.LibraryPIDs {
+		if uc.Libraries[string(lib)] {
+			return true
+		}
+	}
+	return false
 }
 
 // Item returns full detail for one item.

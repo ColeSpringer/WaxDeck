@@ -1151,11 +1151,26 @@ class RuleSort {
 /// A smart playlist rule: condition tree, sort order, and row limit
 /// (0 means unlimited).
 class SmartRule {
-  const SmartRule({required this.root, this.sorts = const [], this.limit = 0});
+  const SmartRule({
+    required this.root,
+    this.sorts = const [],
+    this.limit = 0,
+    this.limitMode = '',
+    this.limitSeed = 0,
+  });
 
   final RuleNode root;
   final List<RuleSort> sorts;
   final int limit;
+
+  /// How [limit] is read: empty or `count` is a plain member cap;
+  /// `random`, `minutes`, and `megabytes` are the shuffle and budget
+  /// modes.
+  final String limitMode;
+
+  /// Pins a `random` or budget draw so the same rule yields the same
+  /// members each read; 0 draws a fresh order per read.
+  final int limitSeed;
 }
 
 /// A playlist: `static` (manual ordered members) or `smart` (rule
@@ -1178,8 +1193,8 @@ class Playlist {
 
   final String pid;
 
-  /// Set after a rule replace reissued the pid; clients relink instead of
-  /// treating the reissue as a delete and create.
+  /// Retired. Rule edits once reissued the pid and set this; edits now
+  /// apply in place under a stable pid, so this is always null.
   final String? previousPid;
   final String name;
 

@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/query"
+	"github.com/colespringer/waxbin/read"
 	"github.com/oklog/ulid/v2"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -23,7 +25,7 @@ type ShareInfo struct {
 	ID            string // sh-... API pid; the bare id keys the token
 	OwnerID       string
 	TargetPID     string // API pid
-	TargetKind    string // track | playlist | book | episode
+	TargetKind    string // track | playlist | book | episode | album
 	TargetTitle   string
 	AllowDownload bool
 	PositionMs    int64
@@ -55,6 +57,7 @@ var shareKindForPrefix = map[string]string{
 	PrefixPlaylist: "playlist",
 	PrefixBook:     "book",
 	PrefixEpisode:  "episode",
+	PrefixAlbum:    "album",
 }
 
 // CreateShare validates a target and records a share link.
@@ -65,7 +68,7 @@ func (l *Library) CreateShare(ctx context.Context, uc *UserCtx, targetAPIPID str
 	}
 	kind, ok := shareKindForPrefix[prefix]
 	if !ok {
-		return ShareInfo{}, errInvalid("only tracks, playlists, books, and episodes can be shared")
+		return ShareInfo{}, errInvalid("only tracks, albums, playlists, books, and episodes can be shared")
 	}
 	if positionMs != 0 && kind != "episode" {
 		return ShareInfo{}, errInvalid("positionMs is for episode shares")
@@ -138,6 +141,18 @@ func (l *Library) shareTargetTitle(ctx context.Context, uc *UserCtx, kind, targe
 				Msg: "episodes of private feeds cannot be shared"}
 		}
 		return it.Title, nil
+	case "album":
+		_, pid, _ := parseAPIPID(targetAPIPID)
+		info, err := l.lib.EntityByPID(ctx, read.EntityAlbum, pid)
+		if err != nil {
+			return "", classify(err)
+		}
+		// A restricted owner can only share an album they can see: one of
+		// the libraries holding its members must be granted to them.
+		if !uc.AllLibraries && !l.entityInLibraries(info, uc) {
+			return "", errNotFound("no album with pid " + targetAPIPID)
+		}
+		return info.Name, nil
 	default:
 		it, err := l.getVisibleItem(ctx, uc, targetAPIPID)
 		if err != nil {
@@ -303,6 +318,20 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 		for _, it := range items {
 			pub.Items = append(pub.Items, summary(it))
 		}
+	case "album":
+		info, err := l.lib.EntityByPID(ctx, read.EntityAlbum, pid)
+		if err != nil {
+			return nil, errNotFound("no such share")
+		}
+		pub.Title = info.Name
+		pub.Subtitle = "Album"
+		items, err := l.albumMemberViews(ctx, pid, 500)
+		if err != nil {
+			return nil, err
+		}
+		for _, it := range items {
+			pub.Items = append(pub.Items, summary(it))
+		}
 	default:
 		it, err := l.lib.Get(ctx, pid)
 		if err != nil {
@@ -316,6 +345,36 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 		pub.ArtItemPID = pub.Items[0].PID
 	}
 	return pub, nil
+}
+
+// albumMemberViews resolves an album's member tracks in disc then
+// track order for anonymous share serving. Album membership is catalog
+// structure, independent of any user, so the query needs no user
+// context; the album_pid facet field addresses the album by entity
+// identity rather than a display-string match.
+func (l *Library) albumMemberViews(ctx context.Context, albumPID model.PID, cap int) ([]*model.ItemView, error) {
+	q := query.New(query.EntityTracks).
+		Where("album_pid", query.OpIs, string(albumPID)).
+		OrderBy("disc_no", false).
+		OrderBy("track_no", false).
+		Build()
+	var out []*model.ItemView
+	cursor := read.Cursor("")
+	for len(out) < cap {
+		page, err := l.lib.QueryPage(ctx, q, cursor, 200, false, model.PID(""))
+		if err != nil {
+			return nil, classify(err)
+		}
+		out = append(out, page.Items...)
+		if !page.HasMore {
+			break
+		}
+		cursor = page.Next
+	}
+	if len(out) > cap {
+		out = out[:cap]
+	}
+	return out, nil
 }
 
 // CountSharePlay bumps a share's anonymous play counter (best effort).

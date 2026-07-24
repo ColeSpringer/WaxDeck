@@ -289,9 +289,6 @@ func playlistJSON(pl service.Playlist) Playlist {
 		CreatedAt:  pl.CreatedAt,
 		UpdatedAt:  pl.UpdatedAt,
 	}
-	if pl.PreviousPID != "" {
-		out.PreviousPid = ptr(pl.PreviousPID)
-	}
 	if pl.Rule != nil {
 		r := ruleToWire(*pl.Rule)
 		out.Rule = &r
@@ -303,6 +300,12 @@ func ruleFromWire(r SmartRule) service.SmartRule {
 	out := service.SmartRule{Root: ruleNodeFromWire(r.Root)}
 	if r.Limit != nil {
 		out.Limit = *r.Limit
+	}
+	if r.LimitMode != nil {
+		out.LimitMode = *r.LimitMode
+	}
+	if r.LimitSeed != nil {
+		out.LimitSeed = *r.LimitSeed
 	}
 	if r.Sorts != nil {
 		for _, s := range *r.Sorts {
@@ -346,6 +349,12 @@ func ruleToWire(r service.SmartRule) SmartRule {
 	out := SmartRule{Root: ruleNodeToWire(r.Root)}
 	if r.Limit > 0 {
 		out.Limit = ptr(r.Limit)
+	}
+	if r.LimitMode != "" {
+		out.LimitMode = ptr(r.LimitMode)
+	}
+	if r.LimitSeed != 0 {
+		out.LimitSeed = ptr(r.LimitSeed)
 	}
 	if len(r.Sorts) > 0 {
 		sorts := make([]RuleSort, 0, len(r.Sorts))

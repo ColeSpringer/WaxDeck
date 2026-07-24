@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"io"
 	"net/url"
 	"strings"
@@ -350,7 +349,7 @@ func TestPlaylistRuleValidation(t *testing.T) {
 	}
 }
 
-func TestPlaylistRuleReplaceReissue(t *testing.T) {
+func TestPlaylistRuleUpdateInPlace(t *testing.T) {
 	h := newHarness(t)
 
 	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
@@ -363,53 +362,138 @@ func TestPlaylistRuleReplaceReissue(t *testing.T) {
 	}
 	pl := decode[Playlist](t, resp)
 
-	// A cursor minted before the replace observes the reissue as events.
+	// A cursor minted before the edit observes it as one event.
 	mint := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server", h.token))
 
 	resp = h.patchJSON(t, "/api/v1/playlists/"+pl.Pid, map[string]any{"rule": musicRatingRule(5)})
 	if resp.StatusCode != 200 {
-		t.Fatalf("rule replace status = %d", resp.StatusCode)
+		t.Fatalf("rule update status = %d", resp.StatusCode)
 	}
 	upd := decode[Playlist](t, resp)
-	if upd.Pid == pl.Pid {
-		t.Fatal("rule replace kept the pid; the contract reissues it")
+	if upd.Pid != pl.Pid {
+		t.Fatalf("rule update changed the pid %s -> %s; the rule now updates in place", pl.Pid, upd.Pid)
 	}
-	if upd.PreviousPid == nil || *upd.PreviousPid != pl.Pid {
-		t.Fatalf("previousPid = %v, want %s", upd.PreviousPid, pl.Pid)
+	if upd.PreviousPid != nil {
+		t.Fatalf("previousPid = %v, want nil (the reissue seam is retired)", *upd.PreviousPid)
 	}
 	if upd.Rule == nil || upd.Rule.Limit == nil || *upd.Rule.Limit != 5 {
-		t.Fatalf("reissued rule = %+v, want the new rule with limit 5", upd.Rule)
+		t.Fatalf("updated rule = %+v, want the new rule with limit 5", upd.Rule)
 	}
 
+	// The pid still resolves and carries the new rule.
 	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid, h.token)
-	if resp.StatusCode != 404 {
-		t.Fatalf("retired pid status = %d, want 404", resp.StatusCode)
+	if resp.StatusCode != 200 {
+		t.Fatalf("updated pid status = %d, want 200", resp.StatusCode)
 	}
-	resp.Body.Close()
+	got := decode[Playlist](t, resp)
+	if got.Rule == nil || got.Rule.Limit == nil || *got.Rule.Limit != 5 {
+		t.Fatalf("reread rule = %+v, want limit 5", got.Rule)
+	}
 
-	// The caller's server delta carries both playlist events: the old
-	// pid absent, the new pid present with the reissue link.
+	// The caller's server delta carries exactly one playlist event: the
+	// stable pid, hydrated with its current state, no previousPid.
 	delta := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server?since="+mint.NextSince, h.token))
-	var sawOld, sawNew bool
+	var events int
 	for _, ev := range delta.Events {
-		if ev.Kind != "playlist" || ev.Pid == nil {
+		if ev.Kind != "playlist" || ev.Pid == nil || *ev.Pid != pl.Pid {
 			continue
 		}
-		switch *ev.Pid {
-		case pl.Pid:
-			if ev.Playlist != nil {
-				t.Fatalf("retired pid event still carries a playlist: %+v", ev.Playlist)
-			}
-			sawOld = true
-		case upd.Pid:
-			if ev.Playlist == nil || ev.Playlist.PreviousPid == nil || *ev.Playlist.PreviousPid != pl.Pid {
-				t.Fatalf("reissued pid event = %+v, want previousPid %s", ev.Playlist, pl.Pid)
-			}
-			sawNew = true
+		events++
+		if ev.Playlist == nil {
+			t.Fatalf("in-place edit event carries no playlist: %+v", ev)
+		}
+		if ev.Playlist.PreviousPid != nil {
+			t.Fatalf("in-place edit event carries previousPid %v", *ev.Playlist.PreviousPid)
 		}
 	}
-	if !sawOld || !sawNew {
-		t.Fatalf("reissue delta old=%v new=%v (events %+v)", sawOld, sawNew, delta.Events)
+	if events != 1 {
+		t.Fatalf("playlist events for the stable pid = %d, want 1 (events %+v)", events, delta.Events)
+	}
+}
+
+// TestPlaylistRelativeAndLimitModes pins the wire contract for the
+// relative-date operators and limit modes the rule setter unlocked:
+// each round-trips through create and detail read, and the guarded
+// combinations answer invalid-request.
+func TestPlaylistRelativeAndLimitModes(t *testing.T) {
+	h := newHarness(t)
+
+	// A relative-date rule with a random draw round-trips: the day
+	// window comes back as the same day count, the mode as random.
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Fresh shuffle", "kind": "smart",
+		"rule": map[string]any{
+			"root": map[string]any{
+				"type": "condition", "field": "addedAt", "op": "inTheLast", "value": "30",
+			},
+			"limit": 25, "limitMode": "random",
+		},
+	})
+	if resp.StatusCode != 201 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("create status = %d (%s)", resp.StatusCode, body)
+	}
+	pl := decode[Playlist](t, resp)
+	got := decode[Playlist](t, get(t, h.ts, "/api/v1/playlists/"+pl.Pid, h.token))
+	if got.Rule == nil {
+		t.Fatal("smart playlist read back without a rule")
+	}
+	if got.Rule.LimitMode == nil || *got.Rule.LimitMode != "random" {
+		t.Fatalf("limitMode = %v, want random", got.Rule.LimitMode)
+	}
+	if got.Rule.Limit == nil || *got.Rule.Limit != 25 {
+		t.Fatalf("limit = %v, want 25", got.Rule.Limit)
+	}
+	root := got.Rule.Root
+	if root.Op == nil || *root.Op != "inTheLast" || root.Value == nil || *root.Value != "30" {
+		t.Fatalf("relative condition read back as op=%v value=%v, want inTheLast/30", root.Op, root.Value)
+	}
+
+	// A minutes budget round-trips its mode.
+	resp = h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "An hour", "kind": "smart",
+		"rule": map[string]any{
+			"root":  map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+			"limit": 60, "limitMode": "minutes",
+		},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("minutes create status = %d", resp.StatusCode)
+	}
+	mins := decode[Playlist](t, resp)
+	minsGot := decode[Playlist](t, get(t, h.ts, "/api/v1/playlists/"+mins.Pid, h.token))
+	if minsGot.Rule == nil || minsGot.Rule.LimitMode == nil || *minsGot.Rule.LimitMode != "minutes" {
+		t.Fatalf("minutes mode did not round-trip: %+v", minsGot.Rule)
+	}
+
+	// Guarded combinations answer invalid-request, not a 500.
+	bad := []map[string]any{
+		{ // random cannot take a sort order
+			"root":  map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+			"limit": 5, "limitMode": "random",
+			"sorts": []any{map[string]any{"field": "title"}},
+		},
+		{ // a seed needs a non-count mode
+			"root":      map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+			"limitSeed": 7,
+		},
+		{ // relative operators apply only to date fields
+			"root": map[string]any{"type": "condition", "field": "title", "op": "inTheLast", "value": "30"},
+		},
+		{ // a budget mode needs a positive limit
+			"root":  map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+			"limit": 0, "limitMode": "megabytes",
+		},
+	}
+	for i, rule := range bad {
+		resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+			"name": "bad", "kind": "smart", "rule": rule,
+		})
+		if resp.StatusCode != 400 {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("bad rule %d status = %d, want 400 (%s)", i, resp.StatusCode, body)
+		}
+		resp.Body.Close()
 	}
 }
 
@@ -579,38 +663,5 @@ func TestPlaylistReplaceRefusesUnsubscribedMembers(t *testing.T) {
 	}
 	if e := decode[Error](t, resp); e.Code != "conflict" || !strings.Contains(e.Message, "subscribed") {
 		t.Fatalf("replace error = %+v, want the subscription refusal", e)
-	}
-}
-
-func TestPlaylistReissuePrunesPrevLinks(t *testing.T) {
-	h := newHarness(t)
-	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
-		"name": "Chained", "kind": "smart", "rule": musicRatingRule(1),
-	})
-	if resp.StatusCode != 201 {
-		t.Fatalf("create status = %d", resp.StatusCode)
-	}
-	first := decode[Playlist](t, resp)
-	second := decode[Playlist](t, h.patchJSON(t, "/api/v1/playlists/"+first.Pid, map[string]any{"rule": musicRatingRule(2)}))
-	third := decode[Playlist](t, h.patchJSON(t, "/api/v1/playlists/"+second.Pid, map[string]any{"rule": musicRatingRule(3)}))
-
-	bare := func(pid string) string { return strings.TrimPrefix(pid, "pl-") }
-	ctx := context.Background()
-	// The live link survives; the retired generation's link is pruned
-	// at reissue rather than accumulating one settings row per edit.
-	if v, err := h.store.SettingGet(ctx, "playlist-prev:"+bare(third.Pid)); err != nil || v != bare(second.Pid) {
-		t.Fatalf("live link = %q, %v; want %q", v, err, bare(second.Pid))
-	}
-	if _, err := h.store.SettingGet(ctx, "playlist-prev:"+bare(second.Pid)); err == nil {
-		t.Fatal("retired generation's link survived the reissue")
-	}
-	// Deleting the playlist drops its link too.
-	resp = h.deleteReq(t, "/api/v1/playlists/"+third.Pid)
-	if resp.StatusCode != 204 {
-		t.Fatalf("delete status = %d", resp.StatusCode)
-	}
-	resp.Body.Close()
-	if _, err := h.store.SettingGet(ctx, "playlist-prev:"+bare(third.Pid)); err == nil {
-		t.Fatal("deleted playlist's link survived")
 	}
 }

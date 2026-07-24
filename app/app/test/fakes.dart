@@ -864,6 +864,21 @@ class FakeRepository implements WaxDeckRepository {
         userState: false,
         sortable: false,
       ),
+      RuleField(
+        name: 'addedAt',
+        kind: 'date',
+        ops: [
+          'before',
+          'after',
+          'inTheRange',
+          'inTheLast',
+          'notInTheLast',
+          'isPresent',
+          'isMissing',
+        ],
+        userState: false,
+        sortable: true,
+      ),
     ],
     tagKeys: [RuleTagKey(key: 'MOOD', itemCount: 3)],
   );
@@ -946,7 +961,9 @@ class FakeRepository implements WaxDeckRepository {
     SmartRule? rule,
   }) async {
     final pl = await getPlaylist(pid);
-    var next = Playlist(
+    // Name, visibility, and rule all apply in place under a stable pid,
+    // like the real server since the reissue seam was retired.
+    final next = Playlist(
       pid: pl.pid,
       name: name ?? pl.name,
       kind: pl.kind,
@@ -958,22 +975,6 @@ class FakeRepository implements WaxDeckRepository {
       createdAt: pl.createdAt,
       updatedAt: DateTime.utc(2026, 2),
     );
-    if (rule != null) {
-      // A rule replace reissues the pid, like the real server.
-      playlistsByPid.remove(pid);
-      next = Playlist(
-        pid: 'pl-FAKE${_playlistSeq++}',
-        previousPid: pid,
-        name: next.name,
-        kind: next.kind,
-        visibility: next.visibility,
-        ownerName: next.ownerName,
-        isOwner: next.isOwner,
-        rule: rule,
-        createdAt: DateTime.utc(2026, 2),
-        updatedAt: DateTime.utc(2026, 2),
-      );
-    }
     playlistsByPid[next.pid] = next;
     return next;
   }

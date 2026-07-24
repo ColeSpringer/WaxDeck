@@ -110,6 +110,7 @@ class _ShareRow extends StatelessWidget {
   final VoidCallback onRevoke;
 
   static IconData _kindIcon(String kind) => switch (kind) {
+    'album' => Icons.album,
     'playlist' => Icons.queue_music,
     'book' => Icons.menu_book,
     'episode' => Icons.podcasts,

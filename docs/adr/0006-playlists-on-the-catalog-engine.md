@@ -80,3 +80,43 @@ fail the create, not the first read.
   expressed; the engine compares absolute timestamps only. The
   contract documents the gap and it is the second recorded upstream
   candidate.
+
+## Update — 2026-07-23: the reissue seam is dissolved
+
+Both recorded upstream candidates landed. The catalog engine grew an
+in-place rule setter (`playlist.SetRule`), relative-date operators
+(`inTheLast`/`notInTheLast`, anchored at read time), and limit modes
+beyond a plain count (a seeded random draw and minutes or megabytes
+budgets). WaxDeck adopted all three.
+
+- **Rule edits apply in place.** `UpdatePlaylist` calls the rule setter
+  under the existing pid instead of creating a successor and deleting
+  the original. The pid is now stable for the playlist's whole
+  lifetime, `createdAt` no longer restarts, and a rule edit reaches
+  every affected user's server stream as a single `playlist` event that
+  re-hydrates the changed playlist. The reissue machinery is retired:
+  the `previousPid` settings mirror, the two-event sync, and the client
+  follow logic are all gone.
+- **`previousPid` stays in the contract, deprecated.** Removing a
+  response property is a breaking change under the compatibility gate,
+  so the property remains, marked deprecated, and is never populated (a
+  now-stable pid leaves it permanently absent). This ADR's "clients
+  must follow `previousPid`" and "`createdAt` restarts" consequences
+  above no longer hold.
+- **Relative dates and limit modes are expressible.** A date condition
+  accepts `inTheLast`/`notInTheLast` with a whole-days value that
+  re-evaluates its window on every read; a rule carries an optional
+  limit mode (`random`, `minutes`, `megabytes`) with an optional seed.
+  WaxDeck converts the day count to the engine's nanosecond window and
+  maps the wire mode onto the engine's, validating the same
+  combinations the engine rejects (a random draw takes no sort order, a
+  seed needs a non-count mode, a budget needs a positive limit) so a
+  bad rule answers `invalid-request` on write rather than on first
+  read.
+
+Pre-1.0 forward-compatibility, recorded so it is not re-derived: the
+limit mode rides an additive field on the version-1 rule document. An
+older WaxBin binary parsing a mode-carrying doc drops the mode and
+still honors the limit, so a "random 25" rule degrades to "the first 25
+in sort order" and a "60 minutes" rule to "60 rows". That silent drift
+is accepted before 1.0.

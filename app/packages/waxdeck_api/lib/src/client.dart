@@ -331,8 +331,8 @@ abstract interface class WaxDeckRepository {
   Future<Playlist> getPlaylist(String pid);
 
   /// `PATCH /playlists/{pid}`: partial update. Replacing a smart rule
-  /// reissues the pid; the returned playlist carries the new pid with
-  /// `previousPid` set.
+  /// applies in place under the same pid; the returned playlist carries
+  /// the updated rule.
   Future<Playlist> updatePlaylist(
     String pid, {
     String? name,

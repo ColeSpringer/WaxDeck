@@ -49,15 +49,14 @@ paths:
       operationId: createShare
       summary: Create a share link
       description: >
-        Creates a public share link for a track, book, or episode the
-        caller can see, or a playlist the caller owns. Playlists
+        Creates a public share link for a track, album, book, or
+        episode the caller can see, or a playlist the caller owns. An
+        album share opens the album's tracks in order. Playlists
         require ownership because the public page serves the owner's
         member view for the link's whole life: another user's shared
         playlist is theirs to publish, not the viewer's, and their
         later edits or a flip back to private must not leak through a
-        link they cannot revoke. (Albums share through a playlist of
-        their tracks for now: an album pid alone does not resolve to
-        members server-side.) The link is a capability
+        link they cannot revoke. The link is a capability
         URL: anyone holding it can open the landing page and listen
         until it expires or is revoked. Episodes accept `positionMs`
         for copy-link-at-timestamp. `allowDownload` additionally
@@ -143,12 +142,16 @@ components:
           example: /s/01JZX5N8QW3F4V9T2B7KD3M9R6.aBcDeFgHiJkLmNoPqRsTuV
         targetPid:
           type: string
-          description: The shared track, playlist, book, or episode.
+          description: The shared track, album, playlist, book, or episode.
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         targetKind:
           type: string
-          description: What kind of thing the share opens.
-          enum: [track, playlist, book, episode]
+          description: >
+            What kind of thing the share opens: `track`, `album`,
+            `playlist`, `book`, or `episode`. A string, not a closed
+            enum; clients must tolerate an unknown kind (render a
+            generic label) rather than fail.
+          example: album
         targetTitle:
           type: string
           description: The target's display title at read time.
@@ -197,8 +200,9 @@ components:
         pid:
           type: string
           description: >
-            The track (`tr-`), playlist (`pl-`), book (`bk-`), or
-            episode (`ep-`) to share. Must be visible to the caller.
+            The track (`tr-`), album (`al-`), playlist (`pl-`), book
+            (`bk-`), or episode (`ep-`) to share. An album share opens
+            the album's tracks in order. Must be visible to the caller.
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         expiresInHours:
           type: integer

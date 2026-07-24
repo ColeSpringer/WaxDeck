@@ -18,24 +18,28 @@ import (
 // count is omitted (smart playlists on list pages, where computing it
 // would evaluate every rule); Rule is nil for static playlists.
 type Playlist struct {
-	PID         string
-	PreviousPID string
-	Name        string
-	Kind        string
-	Visibility  string
-	OwnerName   string
-	IsOwner     bool
-	ItemCount   *int
-	Rule        *SmartRule
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	PID        string
+	Name       string
+	Kind       string
+	Visibility string
+	OwnerName  string
+	IsOwner    bool
+	ItemCount  *int
+	Rule       *SmartRule
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
-// SmartRule is the wire shape of a smart playlist rule.
+// SmartRule is the wire shape of a smart playlist rule. LimitMode
+// interprets Limit (empty or "count" is a plain member cap; "random",
+// "minutes", and "megabytes" are the shuffle and budget modes);
+// LimitSeed pins a random or budget draw.
 type SmartRule struct {
-	Root  RuleNode
-	Sorts []RuleSort
-	Limit int
+	Root      RuleNode
+	Sorts     []RuleSort
+	Limit     int
+	LimitMode string
+	LimitSeed int64
 }
 
 // RuleNode is one node of a rule's condition tree; Type selects which
@@ -149,13 +153,36 @@ const (
 var ruleOpsByKind = map[string][]string{
 	ruleKindText:      {"is", "isNot", "contains", "startsWith", "endsWith", "isPresent", "isMissing"},
 	ruleKindNumber:    {"is", "isNot", "gt", "lt", "gte", "lte", "inTheRange", "isPresent", "isMissing"},
-	ruleKindDate:      {"before", "after", "inTheRange", "isPresent", "isMissing"},
+	ruleKindDate:      {"before", "after", "inTheRange", "inTheLast", "notInTheLast", "isPresent", "isMissing"},
 	ruleKindBoolean:   {"is"},
 	ruleKindMediaType: {"is", "isNot"},
 }
 
 // presenceOps take no value.
 var presenceOps = map[string]bool{"isPresent": true, "isMissing": true}
+
+// relativeOps take a day-count window rather than an absolute value;
+// they map to the engine's relative-time operators on date fields.
+var relativeOps = map[string]bool{"inTheLast": true, "notInTheLast": true}
+
+// nanosPerDay is the day unit the relative-date wire value carries; the
+// engine's relative operators compare a nanosecond window.
+const nanosPerDay = int64(24 * time.Hour)
+
+// maxRelativeDays bounds the wire window so days-to-nanoseconds stays
+// well inside int64 (100000 days is ~273 years).
+const maxRelativeDays = 100000
+
+// limitModeToEngine maps the wire limit mode onto the engine's. Empty
+// and "count" are the plain member cap; the rest ride the engine
+// constants one-to-one.
+var limitModeToEngine = map[string]query.LimitMode{
+	"":          query.LimitCount,
+	"count":     query.LimitCount,
+	"random":    query.LimitRandom,
+	"minutes":   query.LimitMinutes,
+	"megabytes": query.LimitMegabytes,
+}
 
 // ruleFieldSpec maps one API rule field onto the engine's vocabulary.
 type ruleFieldSpec struct {
@@ -255,9 +282,27 @@ func ruleToQuery(r SmartRule) (query.Query, error) {
 	if len(r.Sorts) > maxRuleSorts {
 		return query.Query{}, errInvalid(fmt.Sprintf("at most %d sort keys", maxRuleSorts))
 	}
-	q := query.Query{Entity: query.EntityItems, Where: where, Limit: r.Limit}
 	if r.Limit < 0 {
 		return query.Query{}, errInvalid("limit cannot be negative")
+	}
+	mode, ok := limitModeToEngine[r.LimitMode]
+	if !ok {
+		return query.Query{}, errInvalid("limitMode must be count, random, minutes, or megabytes")
+	}
+	q := query.Query{Entity: query.EntityItems, Where: where, Limit: r.Limit, LimitMode: mode, LimitSeed: r.LimitSeed}
+	// Mirror the engine's limit-mode contract so a bad rule answers 400
+	// on write instead of failing its first evaluation. The dry-run
+	// Count call is the backstop, but an early check gives a message
+	// naming the offending combination.
+	switch mode {
+	case query.LimitCount:
+		if r.LimitSeed != 0 {
+			return query.Query{}, errInvalid("limitSeed needs a random, minutes, or megabytes limit mode")
+		}
+	case query.LimitRandom, query.LimitMinutes, query.LimitMegabytes:
+		if r.Limit <= 0 {
+			return query.Query{}, errInvalid("the " + r.LimitMode + " limit mode needs a positive limit")
+		}
 	}
 	for _, s := range r.Sorts {
 		spec, ok := ruleFieldsByAPI[s.Field]
@@ -266,9 +311,25 @@ func ruleToQuery(r SmartRule) (query.Query, error) {
 		}
 		q.Sorts = append(q.Sorts, query.Sort{Field: spec.engine, Desc: s.Desc})
 	}
-	if len(q.Sorts) == 0 {
-		// A deterministic default order, per the contract.
-		q.Sorts = []query.Sort{{Field: "title"}}
+	switch mode {
+	case query.LimitRandom:
+		if len(q.Sorts) > 0 {
+			return query.Query{}, errInvalid("a random limit cannot take a sort order; the shuffle is the order")
+		}
+	case query.LimitMinutes, query.LimitMegabytes:
+		if r.LimitSeed != 0 && len(q.Sorts) > 0 {
+			return query.Query{}, errInvalid("a seeded budget limit cannot take a sort order; the seed supplies the order")
+		}
+		if len(q.Sorts) == 0 && r.LimitSeed == 0 {
+			// Budget fill order defaults to title, per the contract, unless
+			// a seed is shuffling it.
+			q.Sorts = []query.Sort{{Field: "title"}}
+		}
+	default:
+		if len(q.Sorts) == 0 {
+			// A deterministic default order, per the contract.
+			q.Sorts = []query.Sort{{Field: "title"}}
+		}
 	}
 	return q, nil
 }
@@ -335,6 +396,12 @@ func ruleCondToEngine(n RuleNode) (query.Node, error) {
 	switch {
 	case presenceOps[n.Op]:
 		// No value.
+	case relativeOps[n.Op]:
+		ns, err := relativeWindowToNanos(n.Field, kind, n.Value)
+		if err != nil {
+			return nil, err
+		}
+		cond.Value = ns
 	case n.Op == "inTheRange":
 		if len(n.Values) != 2 {
 			return nil, errInvalid("inTheRange on " + n.Field + " needs exactly two values")
@@ -405,11 +472,36 @@ func ruleValueToEngine(kind, field, v string) (any, error) {
 	return nil, errInvalid("unsupported value kind for " + field)
 }
 
+// relativeWindowToNanos parses a relative-date wire value (a positive
+// whole number of days) into the nanosecond window the engine's
+// inTheLast/notInTheLast operators compare, anchored at read time.
+func relativeWindowToNanos(field, kind, v string) (int64, error) {
+	if kind != ruleKindDate {
+		return 0, errInvalid("inTheLast and notInTheLast apply only to date fields, not " + field)
+	}
+	days, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	if err != nil || days <= 0 {
+		return 0, errInvalid("value for " + field + " must be a positive number of days")
+	}
+	if days > maxRelativeDays {
+		return 0, errInvalid("value for " + field + " is too large a day window")
+	}
+	return days * nanosPerDay, nil
+}
+
 // queryToRule converts a stored engine query back to the wire shape.
 // Unknown engine fields keep their engine names, so a rule created by
 // a different tool still renders read-only.
 func queryToRule(q query.Query) SmartRule {
-	r := SmartRule{Limit: q.Limit}
+	r := SmartRule{Limit: q.Limit, LimitSeed: q.LimitSeed}
+	switch q.LimitMode {
+	case query.LimitRandom:
+		r.LimitMode = "random"
+	case query.LimitMinutes:
+		r.LimitMode = "minutes"
+	case query.LimitMegabytes:
+		r.LimitMode = "megabytes"
+	}
 	if q.Where != nil {
 		r.Root = engineNodeToRule(q.Where)
 	} else {
@@ -458,7 +550,16 @@ func engineNodeToRule(n query.Node) RuleNode {
 			out.Field = v.Field
 		}
 		if v.Value != nil {
-			out.Value = engineValueToRule(kind, v.Value)
+			if relativeOps[string(v.Op)] {
+				// The engine stores a nanosecond window; the wire carries days.
+				if ns, ok := numAsInt64(v.Value); ok {
+					out.Value = strconv.FormatInt(ns/nanosPerDay, 10)
+				} else {
+					out.Value = engineValueToRule(kind, v.Value)
+				}
+			} else {
+				out.Value = engineValueToRule(kind, v.Value)
+			}
 		}
 		for _, val := range v.Values {
 			out.Values = append(out.Values, engineValueToRule(kind, val))
@@ -515,12 +616,8 @@ func numAsInt64(v any) (int64, bool) {
 	return 0, false
 }
 
-// playlistPrevKey is the settings key remembering which pid a
-// rule-replace reissue retired, keyed by the new bare pid.
-const playlistPrevKey = "playlist-prev:"
-
 // playlistDTO converts one catalog playlist for a caller.
-func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playlist, withCount, withPrev bool) Playlist {
+func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playlist, withCount bool) Playlist {
 	out := Playlist{
 		PID:        apiPID(PrefixPlaylist, pl.PID),
 		Name:       pl.Name,
@@ -549,11 +646,6 @@ func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playli
 			if n, err := l.lib.Count(ctx, *pl.Rule, pl.OwnerPID); err == nil {
 				out.ItemCount = &n
 			}
-		}
-	}
-	if withPrev {
-		if prev, err := l.db.SettingGet(ctx, playlistPrevKey+string(pl.PID)); err == nil && prev != "" {
-			out.PreviousPID = apiPID(PrefixPlaylist, model.PID(prev))
 		}
 	}
 	return out
@@ -623,7 +715,7 @@ func (l *Library) Playlists(ctx context.Context, uc *UserCtx, containsItem, curs
 			out.Next = encodeOffsetCursor(i)
 			break
 		}
-		out.Playlists = append(out.Playlists, l.playlistDTO(ctx, uc, all[i], false, false))
+		out.Playlists = append(out.Playlists, l.playlistDTO(ctx, uc, all[i], false))
 	}
 	return out, nil
 }
@@ -657,13 +749,13 @@ func (l *Library) filterPlaylistsByMember(ctx context.Context, all []*model.Play
 }
 
 // PlaylistByPID returns one playlist with a computed count for smart
-// lists and the reissue link when one exists.
+// lists.
 func (l *Library) PlaylistByPID(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (Playlist, error) {
 	pl, err := l.resolvePlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return Playlist{}, err
 	}
-	return l.playlistDTO(ctx, uc, pl, true, true), nil
+	return l.playlistDTO(ctx, uc, pl, true), nil
 }
 
 // CreatePlaylist creates a static or smart playlist owned by the
@@ -725,13 +817,13 @@ func (l *Library) CreatePlaylist(ctx context.Context, uc *UserCtx, req PlaylistC
 		return Playlist{}, classify(err)
 	}
 	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pid))
-	return l.playlistDTO(ctx, uc, pl, true, false), nil
+	return l.playlistDTO(ctx, uc, pl, true), nil
 }
 
-// UpdatePlaylist applies a partial update. Replacing a smart playlist's
-// rule reissues the pid: the engine has no in-place rule update, so the
-// service creates the successor first, links it to the retired pid, and
-// then deletes the original.
+// UpdatePlaylist applies a partial update: a rename, a visibility
+// change, or a smart playlist's rule, in any combination. Each applies
+// in place under a stable pid — the rule setter lets the rule change
+// without reissuing — so one server event carries the result.
 func (l *Library) UpdatePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPID string, req PlaylistUpdate) (Playlist, error) {
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
@@ -754,6 +846,11 @@ func (l *Library) UpdatePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 		}
 	}
 
+	// Validate the rule before any mutation, so a bad rule (a static
+	// playlist, an unknown field, an invalid limit mode) fails the whole
+	// PATCH with nothing changed. The dry-run Count surfaces engine-level
+	// rejections at write time, per the contract.
+	var newRule *query.Query
 	if req.Rule != nil {
 		if pl.Kind != model.PlaylistSmart {
 			return Playlist{}, errInvalid("a static playlist does not take a rule")
@@ -765,35 +862,17 @@ func (l *Library) UpdatePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 		if _, err := l.lib.Count(ctx, q, pl.OwnerPID); err != nil {
 			return Playlist{}, classify(err)
 		}
-		newPID, err := l.lib.Playlists().CreateSmart(ctx, name, pl.OwnerPID, vis, q)
-		if err != nil {
-			return Playlist{}, classify(err)
-		}
-		if err := l.db.SettingSet(ctx, playlistPrevKey+string(newPID), string(pl.PID), time.Now().UnixNano()); err != nil {
-			l.log.Warn("recording playlist reissue link", "playlist", newPID, "err", err)
-		}
-		// The retired pid's own link (one reissue older) is now
-		// unreachable: nothing serves the retired pid anymore, so
-		// nothing can read its previousPid. Drop it or it lives in
-		// settings forever, one row per rule edit.
-		if err := l.db.SettingDelete(ctx, playlistPrevKey+string(pl.PID)); err != nil {
-			l.log.Warn("dropping stale reissue link", "err", err)
-		}
-		if err := l.lib.Playlists().Delete(ctx, pl.PID); err != nil {
-			// The successor exists; surface the failure but do not
-			// leave the caller guessing which one won.
-			return Playlist{}, classify(err)
-		}
-		shared := wasShared || vis == model.VisibilityShared
-		l.emitPlaylistEvent(ctx, uc, shared, string(pl.PID))
-		l.emitPlaylistEvent(ctx, uc, shared, string(newPID))
-		got, err := l.lib.Playlists().Get(ctx, newPID)
-		if err != nil {
-			return Playlist{}, classify(err)
-		}
-		return l.playlistDTO(ctx, uc, got, true, true), nil
+		newRule = &q
 	}
 
+	// Apply the changes. The engine facade has no cross-call transaction,
+	// so a multi-field PATCH interrupted by a transient engine fault can
+	// apply some fields and not others. Two things bound that: every
+	// validation is front-loaded above (name, visibility, and the rule
+	// dry-run all run before the first mutation), so only an I/O fault
+	// can interrupt here; and each setter is idempotent, so the caller's
+	// retry converges. The cheap metadata applies first and the rule
+	// last, so a metadata fault never leaves a changed rule behind.
 	if req.Name != nil && name != pl.Name {
 		if err := l.lib.Playlists().Rename(ctx, pl.PID, name); err != nil {
 			return Playlist{}, classify(err)
@@ -804,12 +883,19 @@ func (l *Library) UpdatePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 			return Playlist{}, classify(err)
 		}
 	}
+	if newRule != nil {
+		if err := l.lib.Playlists().SetRule(ctx, pl.PID, *newRule); err != nil {
+			return Playlist{}, classify(err)
+		}
+	}
+	// A visibility flip in either direction changes who can see the
+	// playlist, so fan out to everyone when it is (or was) shared.
 	l.emitPlaylistEvent(ctx, uc, wasShared || vis == model.VisibilityShared, string(pl.PID))
 	got, err := l.lib.Playlists().Get(ctx, pl.PID)
 	if err != nil {
 		return Playlist{}, classify(err)
 	}
-	return l.playlistDTO(ctx, uc, got, true, false), nil
+	return l.playlistDTO(ctx, uc, got, true), nil
 }
 
 // DeletePlaylist deletes an owned playlist.
@@ -821,12 +907,6 @@ func (l *Library) DeletePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 	wasShared := pl.Visibility == model.VisibilityShared
 	if err := l.lib.Playlists().Delete(ctx, pl.PID); err != nil {
 		return classify(err)
-	}
-	// The reissue link pointing at this pid's predecessor is garbage
-	// once the pid is gone; without this, settings grow one permanent
-	// row per rule edit for the life of the table.
-	if err := l.db.SettingDelete(ctx, playlistPrevKey+string(pl.PID)); err != nil {
-		l.log.Warn("dropping reissue link", "err", err)
 	}
 	l.emitPlaylistEvent(ctx, uc, wasShared, string(pl.PID))
 	l.Audit(ctx, uc, "playlist.delete",
@@ -972,22 +1052,36 @@ func (l *Library) PreviewRule(ctx context.Context, uc *UserCtx, rule SmartRule, 
 		return PlaylistPreview{}, err
 	}
 	user := model.PID(uc.CatalogPID)
+	// Total is the condition-match count, ignoring the rule's own limit.
+	// A random or budget mode rejects a zero limit, so count as a plain
+	// match count rather than reusing the rule's mode.
 	qc := q
 	qc.Limit = 0
+	qc.LimitMode = query.LimitCount
+	qc.LimitSeed = 0
+	qc.Sorts = nil
 	total, err := l.lib.Count(ctx, qc, user)
 	if err != nil {
 		return PlaylistPreview{}, classify(err)
 	}
-	if q.Limit == 0 || q.Limit > limit {
-		q.Limit = limit
+	// The items evaluate the real rule. A plain count limit can be
+	// narrowed to the preview page for efficiency; a random or budget
+	// limit must evaluate as written (its limit is a draw size or a
+	// budget, not a row cap) and is capped for display in the loop.
+	qi := q
+	if qi.LimitMode == query.LimitCount && (qi.Limit == 0 || qi.Limit > limit) {
+		qi.Limit = limit
 	}
-	items, err := l.lib.Query(ctx, q, user)
+	items, err := l.lib.Query(ctx, qi, user)
 	if err != nil {
 		return PlaylistPreview{}, classify(err)
 	}
 	subs := l.newSubscriptionFilter(uc)
 	out := PlaylistPreview{Items: []ItemSummary{}, Total: total}
 	for _, it := range items {
+		if len(out.Items) >= limit {
+			break
+		}
 		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
 			continue
 		}
@@ -1032,7 +1126,7 @@ func (l *Library) ImportPlaylistM3U(ctx context.Context, uc *UserCtx, name, visi
 	}
 	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pl.PID))
 	return M3uImportOutcome{
-		Playlist:       l.playlistDTO(ctx, uc, pl, true, false),
+		Playlist:       l.playlistDTO(ctx, uc, pl, true),
 		Matched:        res.Matched,
 		Unmatched:      res.Unmatched,
 		UnmatchedPaths: res.UnmatchedPaths,

@@ -8,9 +8,10 @@ import '../providers.dart';
 import 'playlists_controller.dart';
 
 /// The smart playlist rule editor: nested ALL and ANY groups of typed
-/// conditions, sort keys, a member limit, and a live match preview.
-/// Creating takes [createName] and [createShared]; editing takes the
-/// [editing] playlist and pops with the reissued successor on save.
+/// conditions, sort keys, a limit (a member cap, a random draw, or a
+/// minutes or size budget), and a live match preview. Creating takes
+/// [createName] and [createShared]; editing takes the [editing]
+/// playlist and pops with the updated playlist (a stable pid) on save.
 class RuleEditorScreen extends ConsumerStatefulWidget {
   const RuleEditorScreen({
     super.key,
@@ -82,10 +83,25 @@ const _tagOps = [
 /// Operators that take no value.
 const _presenceOps = {'isPresent', 'isMissing'};
 
+/// Relative-date operators; their value is a whole number of days
+/// rather than an absolute timestamp.
+const _relativeOps = {'inTheLast', 'notInTheLast'};
+
+/// Limit modes the editor can render. `limitMode` is an open string, so
+/// a rule carrying a future mode opens read-only rather than crashing
+/// the mode dropdown, matching how the field and operator dropdowns
+/// clamp unknown values.
+const _knownLimitModes = {'', 'random', 'minutes', 'megabytes'};
+
 class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   late _DraftNode _root;
   final List<_DraftSort> _sorts = [];
   final _limitController = TextEditingController();
+  // '' (or count) is a plain member cap; 'random', 'minutes', and
+  // 'megabytes' are the shuffle and budget modes.
+  var _limitMode = '';
+  // Non-zero pins a random or budget draw so it repeats each read.
+  var _limitSeed = 0;
   var _unsupported = false;
   var _busy = false;
   PlaylistPreview? _preview;
@@ -113,6 +129,12 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
         _sorts.add(_DraftSort(s.field, s.desc));
       }
       if (rule.limit > 0) _limitController.text = '${rule.limit}';
+      _limitMode = rule.limitMode;
+      _limitSeed = rule.limitSeed;
+      // A future/unknown limit mode is one the editor cannot represent;
+      // open read-only rather than feeding the mode dropdown a value it
+      // has no item for (which would trip its one-item assertion).
+      if (!_knownLimitModes.contains(_limitMode)) _unsupported = true;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _schedulePreview());
   }
@@ -178,7 +200,38 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
       root: _nodeFromDraft(_root),
       sorts: [for (final s in _sorts) RuleSort(field: s.field, desc: s.desc)],
       limit: int.tryParse(_limitController.text.trim()) ?? 0,
+      limitMode: _limitMode,
+      limitSeed: _limitSeed,
     );
+  }
+
+  String _limitUnitLabel() {
+    switch (_limitMode) {
+      case 'minutes':
+        return 'minutes';
+      case 'megabytes':
+        return 'MB';
+      default:
+        return 'items';
+    }
+  }
+
+  bool get _isBudgetMode =>
+      _limitMode == 'minutes' || _limitMode == 'megabytes';
+
+  // Sorts are incompatible with a random draw (always) and with a pinned
+  // budget (the seed supplies the fill order); the server rejects both
+  // pairs, so the editor hides the sort card and drops staged sorts
+  // rather than letting the save answer 400.
+  bool get _sortsBlocked =>
+      _limitMode == 'random' || (_isBudgetMode && _limitSeed != 0);
+
+  // A random draw or a budget needs a positive limit (a count limit
+  // treats zero/blank as "no limit"). Block the save so the missing
+  // limit is caught here, not as a 400 after the round trip.
+  bool get _limitInvalid {
+    if (_limitMode.isEmpty) return false;
+    return (int.tryParse(_limitController.text.trim()) ?? 0) <= 0;
   }
 
   void _changed() {
@@ -258,7 +311,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             button: true,
             child: TextButton(
               key: const Key('rule-save'),
-              onPressed: _busy || _unsupported ? null : _save,
+              onPressed: _busy || _unsupported || _limitInvalid ? null : _save,
               child: const Text('Save'),
             ),
           ),
@@ -298,21 +351,79 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
         Card(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Expanded(child: Text('Limit to')),
-                SizedBox(
-                  width: 96,
-                  child: TextField(
-                    key: const Key('rule-limit-field'),
-                    controller: _limitController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(hintText: 'no limit'),
-                    onChanged: (_) => _changed(),
-                  ),
+                Row(
+                  children: [
+                    const Expanded(child: Text('Limit')),
+                    DropdownButton<String>(
+                      key: const Key('rule-limit-mode'),
+                      value: _limitMode,
+                      items: const [
+                        DropdownMenuItem(value: '', child: Text('by count')),
+                        DropdownMenuItem(
+                          value: 'random',
+                          child: Text('at random'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'minutes',
+                          child: Text('by minutes'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'megabytes',
+                          child: Text('by size'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        setState(() {
+                          _limitMode = v ?? '';
+                          if (_limitMode.isEmpty) _limitSeed = 0;
+                          // A mode whose order the draw supplies cannot
+                          // also carry a sort order; drop any staged sorts.
+                          if (_sortsBlocked) _sorts.clear();
+                        });
+                        _schedulePreview();
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                const Text('items'),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 96,
+                      child: TextField(
+                        key: const Key('rule-limit-field'),
+                        controller: _limitController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          hintText: _limitMode.isEmpty
+                              ? 'no limit'
+                              : 'required',
+                        ),
+                        onChanged: (_) => _changed(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(_limitUnitLabel()),
+                  ],
+                ),
+                if (_limitMode.isNotEmpty)
+                  CheckboxListTile(
+                    key: const Key('rule-limit-seed'),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: _limitSeed != 0,
+                    title: const Text('Keep the same selection each time'),
+                    onChanged: (v) {
+                      setState(() {
+                        _limitSeed = (v ?? false) ? 1 : 0;
+                        // Pinning a budget's order drops its sort keys.
+                        if (_sortsBlocked) _sorts.clear();
+                      });
+                      _schedulePreview();
+                    },
+                  ),
               ],
             ),
           ),
@@ -503,6 +614,14 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             ],
             onChanged: (v) {
               if (v == null) return;
+              // A relative operator's value is a day count; an absolute
+              // one's is a timestamp. Clear the value when crossing that
+              // boundary so a stale shape does not linger.
+              if (_relativeOps.contains(v) !=
+                  _relativeOps.contains(condition.op)) {
+                condition.value = '';
+                condition.valueHigh = '';
+              }
               condition.op = v;
               _changed();
             },
@@ -599,6 +718,18 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   }
 
   Widget _dateEditor(BuildContext context, _DraftNode condition) {
+    if (_relativeOps.contains(condition.op)) {
+      // A relative window: a whole number of days counted back from now.
+      return Row(
+        children: [
+          Expanded(child: _valueField(condition, low: true)),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text('days'),
+          ),
+        ],
+      );
+    }
     final current = DateTime.tryParse(condition.value);
     if (condition.op == 'inTheRange') {
       // Range dates fall back to two text fields; the common date rules
@@ -637,6 +768,20 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   }
 
   Widget _sortsCard(BuildContext context, RuleFields vocabulary) {
+    if (_sortsBlocked) {
+      // The draw supplies its own order, so a sort order is meaningless
+      // (and the server rejects the pair).
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            _limitMode == 'random'
+                ? 'A random limit draws its own order.'
+                : 'A pinned budget draws its own order.',
+          ),
+        ),
+      );
+    }
     final sortable = [
       for (final f in vocabulary.fields)
         if (f.sortable) f.name,

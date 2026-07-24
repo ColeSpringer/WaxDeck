@@ -12,14 +12,14 @@ part 'instant_mix_request.g.dart';
 /// A mix seed. Exactly one of `seedPid` and `genre` must be set. 
 ///
 /// Properties:
-/// * [seedPid] - Seed track (`tr-`) or artist (`ar-`) pid. To mix from an album, seed with one of its tracks (the catalog's item query addresses entities by display string, so an album pid alone does not resolve to members yet). 
+/// * [seedPid] - Seed track (`tr-`), artist (`ar-`), or album (`al-`) pid. An artist or album seed anchors the mix on that entity's tracks (resolved by entity identity, so the mix follows the catalog's grouping rather than a display-string match). 
 /// * [genre] - Seed genre name, matched case-insensitively.
 /// * [adventurousness] - How far the mix wanders from the seed. 0 hugs the seed's closest sonic neighbors; 1 wanders far. On the metadata fallback this loosens the genre bound instead. 
 /// * [size] - Requested mix length in tracks.
 /// * [excludePids] - Tracks to leave out (already played in this radio session). The seed is always excluded. 
 @BuiltValue()
 abstract class InstantMixRequest implements Built<InstantMixRequest, InstantMixRequestBuilder> {
-  /// Seed track (`tr-`) or artist (`ar-`) pid. To mix from an album, seed with one of its tracks (the catalog's item query addresses entities by display string, so an album pid alone does not resolve to members yet). 
+  /// Seed track (`tr-`), artist (`ar-`), or album (`al-`) pid. An artist or album seed anchors the mix on that entity's tracks (resolved by entity identity, so the mix follows the catalog's grouping rather than a display-string match). 
   @BuiltValueField(wireName: r'seedPid')
   String? get seedPid;
 

@@ -1276,7 +1276,7 @@ class PlaylistsApi {
   }
 
   /// Update a playlist
-  /// Partial update: renames a playlist, changes its visibility, or replaces a smart playlist&#39;s rule. Owner only. Omitted properties stay unchanged (this is a PATCH; a bare rename never touches the rule). Replacing the rule reissues the playlist&#39;s pid (see the conventions): the response carries the new pid with &#x60;previousPid&#x60; set and the old pid stops resolving. Supplying &#x60;rule&#x60; for a static playlist answers &#x60;invalid-request&#x60;. Changing a shared playlist to &#x60;private&#x60; removes it from other users&#39; view; their sync streams see it become absent. 
+  /// Partial update: renames a playlist, changes its visibility, or replaces a smart playlist&#39;s rule. Owner only. Omitted properties stay unchanged (this is a PATCH; a bare rename never touches the rule). Replacing the rule applies in place under the same pid; the response carries the updated playlist. Supplying &#x60;rule&#x60; for a static playlist answers &#x60;invalid-request&#x60;. Changing a shared playlist to &#x60;private&#x60; removes it from other users&#39; view; their sync streams see it become absent. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

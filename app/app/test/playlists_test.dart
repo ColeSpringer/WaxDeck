@@ -115,7 +115,9 @@ void main() {
     expect(condition.value, '80');
   });
 
-  testWidgets('editing a rule pops with the reissued playlist', (tester) async {
+  testWidgets('editing a rule pops with the updated playlist in place', (
+    tester,
+  ) async {
     final repo = FakeRepository(items: const [_track]);
     final created = await repo.createPlaylist(
       name: 'Smart',
@@ -158,9 +160,157 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(popped, isNotNull);
-    expect(popped!.pid, isNot(created.pid));
-    expect(popped!.previousPid, created.pid);
-    expect(repo.playlistsByPid.containsKey(created.pid), isFalse);
+    expect(popped!.pid, created.pid);
+    expect(popped!.previousPid, isNull);
+    expect(repo.playlistsByPid.containsKey(created.pid), isTrue);
+    expect(popped!.rule!.root.nodes.single.value, '90');
+  });
+
+  testWidgets('rule editor sets a random limit mode', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 5);
+    await tester.pumpWidget(
+      _host(repo, const RuleEditorScreen(createName: 'Shuffle')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('rule-limit-mode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('at random').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('rule-limit-field')), '10');
+    await tester.pump();
+
+    // The sorts card collapses to its random-mode note.
+    expect(find.text('A random limit draws its own order.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('rule-save')));
+    await tester.pumpAndSettle();
+
+    final saved = repo.playlistsByPid.values.singleWhere(
+      (p) => p.name == 'Shuffle',
+    );
+    expect(saved.rule!.limitMode, 'random');
+    expect(saved.rule!.limit, 10);
+  });
+
+  testWidgets('pinning a budget limit drops its sort order', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 3);
+    await tester.pumpWidget(
+      _host(repo, const RuleEditorScreen(createName: 'Hour')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('rule-limit-mode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('by minutes').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('rule-limit-field')), '60');
+    await tester.pump();
+
+    // A budget without a pinned seed may sort; add one.
+    await tester.tap(find.byKey(const Key('rule-add-sort')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rule-add-sort')), findsOneWidget);
+
+    // Pinning the selection makes the seed supply the order, so the sort
+    // card collapses and the staged sort is dropped: the saved rule can
+    // never carry the seed+sort pair the server rejects.
+    await tester.tap(find.byKey(const Key('rule-limit-seed')));
+    await tester.pumpAndSettle();
+    expect(find.text('A pinned budget draws its own order.'), findsOneWidget);
+    expect(find.byKey(const Key('rule-add-sort')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('rule-save')));
+    await tester.pumpAndSettle();
+
+    final saved = repo.playlistsByPid.values.singleWhere(
+      (p) => p.name == 'Hour',
+    );
+    expect(saved.rule!.limitMode, 'minutes');
+    expect(saved.rule!.limitSeed, isNot(0));
+    expect(saved.rule!.sorts, isEmpty);
+  });
+
+  testWidgets('a random limit with no count disables save', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    await tester.pumpWidget(
+      _host(repo, const RuleEditorScreen(createName: 'Blank')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('rule-limit-mode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('at random').last);
+    await tester.pumpAndSettle();
+
+    // A random draw needs a positive count; leaving it blank blocks the
+    // save so the missing limit is caught here, not as a 400.
+    TextButton saveButton() =>
+        tester.widget<TextButton>(find.byKey(const Key('rule-save')));
+    expect(saveButton().onPressed, isNull);
+
+    await tester.enterText(find.byKey(const Key('rule-limit-field')), '10');
+    await tester.pump();
+    expect(saveButton().onPressed, isNotNull);
+  });
+
+  testWidgets('a rule with an unknown limit mode opens read-only', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    final future = await repo.createPlaylist(
+      name: 'Future',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'rating', op: 'gte', value: '60'),
+        ]),
+        limitMode: 'weekly-rotation',
+      ),
+    );
+    await tester.pumpWidget(_host(repo, RuleEditorScreen(editing: future)));
+    await tester.pumpAndSettle();
+
+    // The condition tree is representable, but the future limit mode is
+    // not, so the whole rule opens read-only instead of crashing the
+    // mode dropdown.
+    expect(find.textContaining('opens read-only'), findsOneWidget);
+  });
+
+  testWidgets('rule editor builds a relative-date condition', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 7);
+    await tester.pumpWidget(
+      _host(repo, const RuleEditorScreen(createName: 'Recent')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('rule-add-condition')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('rule-field-select')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('addedAt').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rule-op-select')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('inTheLast').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('rule-value-field')), '30');
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('rule-save')));
+    await tester.pumpAndSettle();
+
+    final saved = repo.playlistsByPid.values.singleWhere(
+      (p) => p.name == 'Recent',
+    );
+    final condition = saved.rule!.root.nodes.single;
+    expect(condition.field, 'addedAt');
+    expect(condition.op, 'inTheLast');
+    expect(condition.value, '30');
   });
 
   testWidgets('imports a pasted M3U as a playlist', (tester) async {
