@@ -300,6 +300,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**listLibraries**](doc/AdminApi.md#listlibraries) | **GET** /libraries | List libraries
 [*AdminApi*](doc/AdminApi.md) | [**listSchedules**](doc/AdminApi.md#listschedules) | **GET** /admin/schedules | List the scheduled jobs
 [*AdminApi*](doc/AdminApi.md) | [**listTrash**](doc/AdminApi.md#listtrash) | **GET** /admin/trash | List the trash
+[*AdminApi*](doc/AdminApi.md) | [**purgeTrashEntry**](doc/AdminApi.md#purgetrashentry) | **DELETE** /admin/trash/{trashId} | Purge one trashed file
 [*AdminApi*](doc/AdminApi.md) | [**putAdminSettings**](doc/AdminApi.md#putadminsettings) | **PUT** /admin/settings | Replace the server&#39;s runtime settings
 [*AdminApi*](doc/AdminApi.md) | [**putSchedule**](doc/AdminApi.md#putschedule) | **PUT** /admin/schedules/{kind} | Set a scheduled job&#39;s cron and enabled state
 [*AdminApi*](doc/AdminApi.md) | [**putScrobblingConfig**](doc/AdminApi.md#putscrobblingconfig) | **PUT** /admin/scrobbling | Set the server&#39;s Last.fm API credentials
@@ -564,6 +565,7 @@ Class | Method | HTTP request | Description
  - [EpisodePage](doc/EpisodePage.md)
  - [EpisodeSummary](doc/EpisodeSummary.md)
  - [Error](doc/Error.md)
+ - [FeedPerson](doc/FeedPerson.md)
  - [FieldProvenance](doc/FieldProvenance.md)
  - [Health](doc/Health.md)
  - [HealthFixRequest](doc/HealthFixRequest.md)
@@ -669,6 +671,7 @@ Class | Method | HTTP request | Description
  - [PlaylistPreview](doc/PlaylistPreview.md)
  - [PlaylistUpdate](doc/PlaylistUpdate.md)
  - [PodcastDetail](doc/PodcastDetail.md)
+ - [PodcastFunding](doc/PodcastFunding.md)
  - [PodcastShow](doc/PodcastShow.md)
  - [PortablePlaylist](doc/PortablePlaylist.md)
  - [PortableRef](doc/PortableRef.md)
@@ -737,6 +740,7 @@ Class | Method | HTTP request | Description
  - [SkipSpan](doc/SkipSpan.md)
  - [SmartRule](doc/SmartRule.md)
  - [SonicPath](doc/SonicPath.md)
+ - [Soundbite](doc/Soundbite.md)
  - [StarUpdate](doc/StarUpdate.md)
  - [SubscribeRequest](doc/SubscribeRequest.md)
  - [Subscription](doc/Subscription.md)
@@ -759,6 +763,7 @@ Class | Method | HTTP request | Description
  - [TrashEmptyResult](doc/TrashEmptyResult.md)
  - [TrashEntry](doc/TrashEntry.md)
  - [TrashList](doc/TrashList.md)
+ - [TrashPurgeResult](doc/TrashPurgeResult.md)
  - [UpgradeGroup](doc/UpgradeGroup.md)
  - [UpgradeGroups](doc/UpgradeGroups.md)
  - [UpgradeMember](doc/UpgradeMember.md)

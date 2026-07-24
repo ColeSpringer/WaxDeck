@@ -17,6 +17,8 @@ class _$AdminSettings extends AdminSettings {
   final int backupKeepCount;
   @override
   final int backupKeepBytes;
+  @override
+  final int? trashRetentionDays;
 
   factory _$AdminSettings([void Function(AdminSettingsBuilder)? updates]) =>
       (AdminSettingsBuilder()..update(updates))._build();
@@ -27,6 +29,7 @@ class _$AdminSettings extends AdminSettings {
     this.sonicAnalysis,
     required this.backupKeepCount,
     required this.backupKeepBytes,
+    this.trashRetentionDays,
   }) : super._();
   @override
   AdminSettings rebuild(void Function(AdminSettingsBuilder) updates) =>
@@ -43,7 +46,8 @@ class _$AdminSettings extends AdminSettings {
         readOnly == other.readOnly &&
         sonicAnalysis == other.sonicAnalysis &&
         backupKeepCount == other.backupKeepCount &&
-        backupKeepBytes == other.backupKeepBytes;
+        backupKeepBytes == other.backupKeepBytes &&
+        trashRetentionDays == other.trashRetentionDays;
   }
 
   @override
@@ -54,6 +58,7 @@ class _$AdminSettings extends AdminSettings {
     _$hash = $jc(_$hash, sonicAnalysis.hashCode);
     _$hash = $jc(_$hash, backupKeepCount.hashCode);
     _$hash = $jc(_$hash, backupKeepBytes.hashCode);
+    _$hash = $jc(_$hash, trashRetentionDays.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -65,7 +70,8 @@ class _$AdminSettings extends AdminSettings {
           ..add('readOnly', readOnly)
           ..add('sonicAnalysis', sonicAnalysis)
           ..add('backupKeepCount', backupKeepCount)
-          ..add('backupKeepBytes', backupKeepBytes))
+          ..add('backupKeepBytes', backupKeepBytes)
+          ..add('trashRetentionDays', trashRetentionDays))
         .toString();
   }
 }
@@ -98,6 +104,11 @@ class AdminSettingsBuilder
   set backupKeepBytes(int? backupKeepBytes) =>
       _$this._backupKeepBytes = backupKeepBytes;
 
+  int? _trashRetentionDays;
+  int? get trashRetentionDays => _$this._trashRetentionDays;
+  set trashRetentionDays(int? trashRetentionDays) =>
+      _$this._trashRetentionDays = trashRetentionDays;
+
   AdminSettingsBuilder() {
     AdminSettings._defaults(this);
   }
@@ -110,6 +121,7 @@ class AdminSettingsBuilder
       _sonicAnalysis = $v.sonicAnalysis;
       _backupKeepCount = $v.backupKeepCount;
       _backupKeepBytes = $v.backupKeepBytes;
+      _trashRetentionDays = $v.trashRetentionDays;
       _$v = null;
     }
     return this;
@@ -153,6 +165,7 @@ class AdminSettingsBuilder
             r'AdminSettings',
             'backupKeepBytes',
           ),
+          trashRetentionDays: trashRetentionDays,
         );
     replace(_$result);
     return _$result;

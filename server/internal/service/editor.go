@@ -155,9 +155,9 @@ type MetadataEditParams struct {
 // has an on-disk tag form.
 var editorTrackFields = []EditableFieldDTO{
 	{"title", true}, {"artist", true}, {"album_artist", true}, {"album", true},
-	{"composer", true}, {"comment", true}, {"genre", true}, {"year", true},
-	{"track_no", true}, {"disc_no", true}, {"isrc", true}, {"mbid", true},
-	{"compilation", true},
+	{"composer", true}, {"composer_sort", true}, {"comment", true}, {"genre", true},
+	{"year", true}, {"track_no", true}, {"disc_no", true}, {"isrc", true},
+	{"mbid", true}, {"compilation", true},
 }
 
 // editorBookFields is the book scalar vocabulary. Only the fields the
@@ -165,9 +165,9 @@ var editorTrackFields = []EditableFieldDTO{
 // fields (subtitle, identifiers, publisher, edition, description, mbid)
 // are database-only by upstream design.
 var editorBookFields = []EditableFieldDTO{
-	{"title", true}, {"author", true}, {"narrator", true}, {"series", true},
-	{"subtitle", false}, {"genre", true}, {"year", true}, {"asin", false},
-	{"isbn", false}, {"publisher", false}, {"edition", false},
+	{"title", true}, {"author", true}, {"author_sort", true}, {"narrator", true},
+	{"series", true}, {"subtitle", false}, {"genre", true}, {"year", true},
+	{"asin", false}, {"isbn", false}, {"publisher", false}, {"edition", false},
 	{"description", false}, {"mbid", false},
 }
 
@@ -659,9 +659,11 @@ func (l *Library) ClearItemLyrics(ctx context.Context, uc *UserCtx, apiPID strin
 
 // --- chapters ---------------------------------------------------------------------
 
-// SetBookChapters replaces a single-file audiobook's chapter list; an
-// empty list restores the embedded chapters. Multi-file books keep
-// their part boundaries as the navigation grain, an upstream limit.
+// SetBookChapters replaces an audiobook's chapter list; an empty list
+// restores the embedded chapters. Chapters are addressed on the book
+// timeline (StartMS/EndMS spanning all parts, symmetric with the read);
+// the facade splits them across a multi-file book's parts internally, so
+// the same flat list works for single- and multi-file books alike.
 func (l *Library) SetBookChapters(ctx context.Context, uc *UserCtx, apiPID string, chapters []ChapterMark, lock, force bool) (EditOutcomeDTO, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiPID)
 	if err != nil {
@@ -670,22 +672,15 @@ func (l *Library) SetBookChapters(ctx context.Context, uc *UserCtx, apiPID strin
 	if it.Kind != model.KindBook {
 		return EditOutcomeDTO{}, errInvalid("chapters are only editable on audiobooks")
 	}
-	bd, err := l.lib.Book(ctx, it.PID)
-	if err != nil {
-		return EditOutcomeDTO{}, classify(err)
-	}
-	if len(bd.Files) > 1 {
-		return EditOutcomeDTO{}, errInvalid("user chapters are limited to single-file books upstream; multi-file books navigate by their parts")
-	}
 	if err := validateChapterList(chapters); err != nil {
 		return EditOutcomeDTO{}, err
 	}
-	// A single-file book's timeline is its file's timeline, so the
-	// book-timeline offsets store directly as file offsets.
+	// Book-timeline offsets go straight to the facade, which resolves each
+	// chapter to the part that backs it and stores per-part file offsets.
 	stored := make([]model.Chapter, 0, len(chapters))
 	for i, ch := range chapters {
 		stored = append(stored, model.Chapter{
-			Position: i, Title: ch.Title, FileStartMS: ch.StartMS, FileEndMS: ch.EndMS,
+			Position: i, Title: ch.Title, StartMS: ch.StartMS, EndMS: ch.EndMS,
 		})
 	}
 	if err := l.lib.SetChapters(ctx, it.PID, stored, lock, force); err != nil {
@@ -1171,6 +1166,7 @@ func editorScalarFields(it *model.ItemView, prov []model.FieldProvenance) map[st
 	case model.KindBook:
 		set("title", it.Title)
 		set("author", it.Artist)
+		set("author_sort", it.AuthorSort)
 		set("narrator", it.Narrator)
 		set("series", it.Series)
 		set("subtitle", it.Subtitle)
@@ -1185,6 +1181,8 @@ func editorScalarFields(it *model.ItemView, prov []model.FieldProvenance) map[st
 		set("artist", it.Artist)
 		set("album_artist", it.AlbumArtist)
 		set("album", it.Album)
+		set("composer", it.Composer)
+		set("composer_sort", it.ComposerSort)
 		set("genre", it.Genre)
 		setInt("year", it.Year)
 		setInt("track_no", it.TrackNo)
@@ -1194,9 +1192,9 @@ func editorScalarFields(it *model.ItemView, prov []model.FieldProvenance) map[st
 		}
 	}
 	// Curated values cover the vocabulary the view does not surface
-	// (composer, comment, identifiers, the episode extras); a
-	// tag-sourced value for those fields has no provenance row and
-	// stays absent until a fuller item read exists upstream.
+	// (comment, identifiers, the episode extras); a tag-sourced value
+	// for those fields has no provenance row and stays absent until a
+	// fuller item read exists upstream.
 	allowed := map[string]bool{}
 	for _, f := range editorFieldsForKind(it.Kind) {
 		allowed[f.Name] = true

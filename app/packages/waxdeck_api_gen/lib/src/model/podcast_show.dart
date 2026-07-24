@@ -3,6 +3,9 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/podcast_funding.dart';
+import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/feed_person.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -23,6 +26,9 @@ part 'podcast_show.g.dart';
 /// * [lastPublishedAt] - Publication time of the newest cataloged episode.
 /// * [refreshDisabled] - True when scheduled refresh is suspended after repeated feed failures. A successful manual refresh clears it. 
 /// * [explicit] - Feed-declared explicit flag for the whole show. Episodes carry their own flag, which wins where the feed sets both. 
+/// * [funding] 
+/// * [medium] - The show's declared medium from its feed's `<podcast:medium>` tag, lowercased (`podcast`, `music`, `audiobook`, ...). Open set; absent when the feed declares none. 
+/// * [persons] - Show-level `<podcast:person>` credits (hosts, guests, and other roles). Populated on the show detail read only; absent on subscription list rows. 
 @BuiltValue()
 abstract class PodcastShow implements Built<PodcastShow, PodcastShowBuilder> {
   /// Show PID.
@@ -72,6 +78,17 @@ abstract class PodcastShow implements Built<PodcastShow, PodcastShowBuilder> {
   /// Feed-declared explicit flag for the whole show. Episodes carry their own flag, which wins where the feed sets both. 
   @BuiltValueField(wireName: r'explicit')
   bool? get explicit;
+
+  @BuiltValueField(wireName: r'funding')
+  PodcastFunding? get funding;
+
+  /// The show's declared medium from its feed's `<podcast:medium>` tag, lowercased (`podcast`, `music`, `audiobook`, ...). Open set; absent when the feed declares none. 
+  @BuiltValueField(wireName: r'medium')
+  String? get medium;
+
+  /// Show-level `<podcast:person>` credits (hosts, guests, and other roles). Populated on the show detail read only; absent on subscription list rows. 
+  @BuiltValueField(wireName: r'persons')
+  BuiltList<FeedPerson>? get persons;
 
   PodcastShow._();
 
@@ -172,6 +189,27 @@ class _$PodcastShowSerializer implements PrimitiveSerializer<PodcastShow> {
       yield serializers.serialize(
         object.explicit,
         specifiedType: const FullType(bool),
+      );
+    }
+    if (object.funding != null) {
+      yield r'funding';
+      yield serializers.serialize(
+        object.funding,
+        specifiedType: const FullType(PodcastFunding),
+      );
+    }
+    if (object.medium != null) {
+      yield r'medium';
+      yield serializers.serialize(
+        object.medium,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.persons != null) {
+      yield r'persons';
+      yield serializers.serialize(
+        object.persons,
+        specifiedType: const FullType(BuiltList, [FullType(FeedPerson)]),
       );
     }
   }
@@ -280,6 +318,27 @@ class _$PodcastShowSerializer implements PrimitiveSerializer<PodcastShow> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.explicit = valueDes;
+          break;
+        case r'funding':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(PodcastFunding),
+          ) as PodcastFunding;
+          result.funding.replace(valueDes);
+          break;
+        case r'medium':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.medium = valueDes;
+          break;
+        case r'persons':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(FeedPerson)]),
+          ) as BuiltList<FeedPerson>;
+          result.persons.replace(valueDes);
           break;
         default:
           unhandled.add(key);

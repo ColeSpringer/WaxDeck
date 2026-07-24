@@ -2893,6 +2893,7 @@ class FakeRepository implements WaxDeckRepository {
     sonicAnalysis: true,
     backupKeepCount: 5,
     backupKeepBytes: 0,
+    trashRetentionDays: 0,
   );
 
   /// Thrown by the admin mutation endpoints when set.
@@ -3186,6 +3187,19 @@ class FakeRepository implements WaxDeckRepository {
       errored: 0,
       reclaimedBytes: purgeable.fold(0, (sum, e) => sum + e.sizeBytes),
     );
+  }
+
+  final List<String> purgeTrashCalls = [];
+
+  @override
+  Future<int> purgeTrashEntry(String trashId) async {
+    final error = adminError;
+    if (error != null) throw error;
+    purgeTrashCalls.add(trashId);
+    final index = trashEntries.indexWhere((e) => e.id == trashId);
+    if (index < 0) return 0;
+    final entry = trashEntries.removeAt(index);
+    return entry.sizeBytes;
   }
 
   /// Background jobs served by [listJobs].

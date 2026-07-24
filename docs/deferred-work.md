@@ -179,11 +179,6 @@ here waits on upstream.
 
 ## Infrastructure
 
-- `[upstream]` **Age-based trash retention.** The trash surface ships
-  list, restore, and empty-everything; a retention policy (purge
-  entries older than N days) needs a per-entry or age-scoped purge on
-  the facade, where EmptyTrash is all-or-nothing. The ask is filed in
-  upstream-requests.md.
 - `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists.

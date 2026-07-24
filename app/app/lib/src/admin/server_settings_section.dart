@@ -92,6 +92,8 @@ class ServerSettingsSection extends ConsumerWidget {
           ],
           const SizedBox(height: 8),
           const _TranscodingFields(),
+          const SizedBox(height: 8),
+          const _TrashRetentionField(),
           if (libraries.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text('Library read-only', style: textTheme.titleSmall),
@@ -204,6 +206,90 @@ class _TranscodingFieldsState extends ConsumerState<_TranscodingFields> {
           key: const Key('transcoding-save'),
           onPressed: _busy ? null : () => _save(limits),
           child: const Text('Save transcoding limits'),
+        ),
+      ],
+    );
+  }
+}
+
+class _TrashRetentionField extends ConsumerStatefulWidget {
+  const _TrashRetentionField();
+
+  @override
+  ConsumerState<_TrashRetentionField> createState() =>
+      _TrashRetentionFieldState();
+}
+
+class _TrashRetentionFieldState extends ConsumerState<_TrashRetentionField> {
+  final _days = TextEditingController();
+  var _seeded = false;
+  var _busy = false;
+
+  @override
+  void dispose() {
+    _days.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save(AdminSettings current) async {
+    if (_busy) return;
+    final messenger = ScaffoldMessenger.of(context);
+    // Reject non-numeric or negative input outright rather than silently
+    // falling back to the stored value and still reporting success.
+    final parsed = int.tryParse(_days.text.trim());
+    if (parsed == null || parsed < 0) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Enter a whole number of days (0 disables retention)'),
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(adminSettingsProvider.notifier)
+          .save(current.copyWith(trashRetentionDays: parsed));
+      // Reflect what was saved so the field never disagrees with stored
+      // state (e.g. a padded "007" shows back as "7").
+      _days.text = '$parsed';
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Trash retention saved')),
+      );
+    } on WaxDeckApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = ref.watch(adminSettingsProvider).value;
+    if (settings == null) return const SizedBox.shrink();
+    if (!_seeded) {
+      _seeded = true;
+      _days.text = '${settings.trashRetentionDays}';
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Trash', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 4),
+        TextField(
+          key: const Key('trash-retention-days'),
+          controller: _days,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Auto-purge trashed files after (days)',
+            helperText: '0 keeps trashed files until emptied by hand',
+          ),
+        ),
+        const SizedBox(height: 8),
+        FilledButton.tonal(
+          key: const Key('trash-retention-save'),
+          onPressed: _busy ? null : () => _save(settings),
+          child: const Text('Save trash retention'),
         ),
       ],
     );

@@ -60,6 +60,25 @@ void main() {
     expect(find.textContaining('Restored Music/'), findsOneWidget);
   });
 
+  testWidgets('purging one entry confirms and drops it from the view', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.trashEntries.addAll([_entry('ts-1'), _entry('ts-2')]);
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('trash-purge-ts-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('trash-purge-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(repo.purgeTrashCalls, ['ts-1']);
+    expect(find.byKey(const ValueKey('trash-row-ts-1')), findsNothing);
+    expect(find.byKey(const ValueKey('trash-row-ts-2')), findsOneWidget);
+    expect(find.textContaining('reclaimed 2.0 MB'), findsOneWidget);
+  });
+
   testWidgets('emptying the trash confirms and reports reclaimed bytes', (
     tester,
   ) async {

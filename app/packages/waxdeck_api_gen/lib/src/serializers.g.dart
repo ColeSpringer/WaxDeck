@@ -80,6 +80,7 @@ Serializers _$serializers =
           ..add(Episode.serializer)
           ..add(EpisodePage.serializer)
           ..add(Error.serializer)
+          ..add(FeedPerson.serializer)
           ..add(FieldProvenance.serializer)
           ..add(Health.serializer)
           ..add(HealthFixRequest.serializer)
@@ -191,6 +192,7 @@ Serializers _$serializers =
           ..add(PlaylistPreview.serializer)
           ..add(PlaylistUpdate.serializer)
           ..add(PodcastDetail.serializer)
+          ..add(PodcastFunding.serializer)
           ..add(PodcastShow.serializer)
           ..add(PortablePlaylist.serializer)
           ..add(PortableRef.serializer)
@@ -264,6 +266,7 @@ Serializers _$serializers =
           ..add(SkipSpan.serializer)
           ..add(SmartRule.serializer)
           ..add(SonicPath.serializer)
+          ..add(Soundbite.serializer)
           ..add(StarUpdate.serializer)
           ..add(SubscribeRequest.serializer)
           ..add(Subscription.serializer)
@@ -288,6 +291,7 @@ Serializers _$serializers =
           ..add(TrashEmptyResult.serializer)
           ..add(TrashEntry.serializer)
           ..add(TrashList.serializer)
+          ..add(TrashPurgeResult.serializer)
           ..add(UpgradeGroup.serializer)
           ..add(UpgradeGroups.serializer)
           ..add(UpgradeMember.serializer)
@@ -365,10 +369,6 @@ Serializers _$serializers =
             () => ListBuilder<ChapterMark>(),
           )
           ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(ChapterMark)]),
-            () => ListBuilder<ChapterMark>(),
-          )
-          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(DeletePlanEntry)]),
             () => ListBuilder<DeletePlanEntry>(),
           )
@@ -425,6 +425,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(EpisodeSummary)]),
             () => ListBuilder<EpisodeSummary>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(FeedPerson)]),
+            () => ListBuilder<FeedPerson>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(HealthIssue)]),
@@ -741,6 +745,18 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(SkipSpan)]),
             () => ListBuilder<SkipSpan>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Soundbite)]),
+            () => ListBuilder<Soundbite>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(FeedPerson)]),
+            () => ListBuilder<FeedPerson>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ChapterMark)]),
+            () => ListBuilder<ChapterMark>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

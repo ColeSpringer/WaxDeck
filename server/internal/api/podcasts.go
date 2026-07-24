@@ -220,6 +220,12 @@ func (s *Server) GetEpisode(ctx context.Context, req GetEpisodeRequestObject) (G
 		}
 		out.Chapters = &chapters
 	}
+	if persons := feedPersonsJSON(det.Persons); len(persons) > 0 {
+		out.Persons = &persons
+	}
+	if soundbites := soundbitesJSON(det.Soundbites); len(soundbites) > 0 {
+		out.Soundbites = &soundbites
+	}
 	return GetEpisode200JSONResponse(out), nil
 }
 
@@ -539,6 +545,46 @@ func showJSON(show service.PodcastShow) PodcastShow {
 	if show.Explicit {
 		v := true
 		out.Explicit = &v
+	}
+	if show.FundingURL != "" {
+		f := PodcastFunding{Url: show.FundingURL}
+		setOpt(&f.Message, show.FundingMessage)
+		out.Funding = &f
+	}
+	setOpt(&out.Medium, show.Medium)
+	if persons := feedPersonsJSON(show.Persons); len(persons) > 0 {
+		out.Persons = &persons
+	}
+	return out
+}
+
+// feedPersonsJSON maps service person credits onto the generated API type.
+func feedPersonsJSON(in []service.FeedPerson) []FeedPerson {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]FeedPerson, 0, len(in))
+	for _, p := range in {
+		fp := FeedPerson{Name: p.Name}
+		setOpt(&fp.Role, p.Role)
+		setOpt(&fp.Group, p.Group)
+		setOpt(&fp.Img, p.Img)
+		setOpt(&fp.Href, p.Href)
+		out = append(out, fp)
+	}
+	return out
+}
+
+// soundbitesJSON maps service soundbites onto the generated API type.
+func soundbitesJSON(in []service.Soundbite) []Soundbite {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]Soundbite, 0, len(in))
+	for _, s := range in {
+		sb := Soundbite{StartMs: s.StartMS, DurationMs: s.DurationMS}
+		setOpt(&sb.Title, s.Title)
+		out = append(out, sb)
 	}
 	return out
 }

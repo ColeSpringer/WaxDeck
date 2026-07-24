@@ -773,6 +773,34 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /admin/trash/{trashId}:
+    parameters:
+      - $ref: "#/components/parameters/TrashId"
+    delete:
+      operationId: purgeTrashEntry
+      summary: Purge one trashed file
+      description: >
+        Permanently deletes a single trashed file and reports the bytes
+        it reclaimed. Irreversible; the age-based retention sweep
+        (`trashRetentionDays`) purges the same way in bulk.
+        Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: What the purge reclaimed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrashPurgeResult"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /admin/migrations:
     post:
       operationId: createMigration
@@ -1017,6 +1045,15 @@ components:
           description: >
             Total archive bytes to keep, oldest deleted first when
             exceeded. 0 is unlimited. Imported archives are exempt.
+        trashRetentionDays:
+          type: integer
+          minimum: 0
+          description: >
+            Automatically purge trashed files older than this many days
+            on a periodic sweep; 0 disables retention (the trash keeps
+            entries until an administrator empties it). Optional on PUT
+            so settings writers predating this field never change it:
+            absent keeps the current value. Always present in responses.
 
     TranscodingLimits:
       type: object
@@ -1320,6 +1357,16 @@ components:
           type: integer
           format: int64
           description: Disk space reclaimed.
+
+    TrashPurgeResult:
+      type: object
+      description: What purging one trash entry reclaimed.
+      required: [reclaimedBytes]
+      properties:
+        reclaimedBytes:
+          type: integer
+          format: int64
+          description: Disk space reclaimed by purging the entry.
 
     MigrationCreate:
       type: object

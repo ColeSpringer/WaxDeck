@@ -120,6 +120,14 @@ class TrashController extends AsyncNotifier<TrashList> {
     if (ref.mounted) ref.invalidateSelf();
     return result;
   }
+
+  Future<int> purge(String trashId) async {
+    final reclaimed = await ref
+        .read(repositoryProvider)
+        .purgeTrashEntry(trashId);
+    if (ref.mounted) ref.invalidateSelf();
+    return reclaimed;
+  }
 }
 
 final trashProvider = AsyncNotifierProvider<TrashController, TrashList>(

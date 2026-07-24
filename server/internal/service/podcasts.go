@@ -32,6 +32,30 @@ type PodcastShow struct {
 	LastPublishedNS int64
 	RefreshDisabled bool
 	Explicit        bool
+	// Podcasting 2.0 channel extras. FundingURL/FundingMessage and Medium
+	// come back on every read; Persons is populated on the detail read only.
+	FundingURL     string
+	FundingMessage string
+	Medium         string
+	Persons        []FeedPerson
+}
+
+// FeedPerson is one <podcast:person> credit at the show or episode level.
+// An empty Role reads as "host" per the podcast namespace.
+type FeedPerson struct {
+	Name  string
+	Role  string
+	Group string
+	Img   string
+	Href  string
+}
+
+// Soundbite is one <podcast:soundbite> highlight clip of an episode: a
+// window into the episode audio. An empty Title reuses the episode title.
+type Soundbite struct {
+	StartMS    int64
+	DurationMS int64
+	Title      string
 }
 
 // SubscriptionSettings is one user's per-subscription settings; nil
@@ -93,6 +117,8 @@ type EpisodeDetail struct {
 	DescriptionHTML string
 	Link            string
 	Chapters        []ChapterMark
+	Persons         []FeedPerson
+	Soundbites      []Soundbite
 }
 
 // ChapterMark is one chapter on an item's timeline. EndMS zero means
@@ -533,6 +559,8 @@ func (l *Library) EpisodeDetailFor(ctx context.Context, uc *UserCtx, apiEpisodeP
 		EpisodeSummary:  l.episodeSummary(ctx, det.Episode),
 		DescriptionHTML: sanitizeShowNotes(det.Episode.Description),
 		Link:            det.Episode.Link,
+		Persons:         feedPersonsDTO(det.Persons),
+		Soundbites:      soundbitesDTO(det.Soundbites),
 	}
 	for i, ch := range det.Chapters {
 		out.Chapters = append(out.Chapters, ChapterMark{
@@ -540,6 +568,31 @@ func (l *Library) EpisodeDetailFor(ctx context.Context, uc *UserCtx, apiEpisodeP
 		})
 	}
 	return out, nil
+}
+
+// feedPersonsDTO maps facade person credits onto the service DTO, dropping
+// to nil for an empty slice so the surface omits the field.
+func feedPersonsDTO(in []model.FeedPerson) []FeedPerson {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]FeedPerson, 0, len(in))
+	for _, p := range in {
+		out = append(out, FeedPerson{Name: p.Name, Role: p.Role, Group: p.Group, Img: p.Img, Href: p.Href})
+	}
+	return out
+}
+
+// soundbitesDTO maps facade soundbites onto the service DTO.
+func soundbitesDTO(in []model.FeedSoundbite) []Soundbite {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]Soundbite, 0, len(in))
+	for _, s := range in {
+		out = append(out, Soundbite{StartMS: s.StartMS, DurationMS: s.DurationMS, Title: s.Title})
+	}
+	return out
 }
 
 // RefreshPodcast syncs one show's feed now (subscribers only) and
@@ -811,6 +864,10 @@ func (l *Library) showDTO(ctx context.Context, pod *model.Podcast, withCounts bo
 		Link:            pod.Link,
 		SourceType:      string(pod.SourceType),
 		Explicit:        pod.Explicit,
+		FundingURL:      pod.FundingURL,
+		FundingMessage:  pod.FundingMessage,
+		Medium:          pod.Medium,
+		Persons:         feedPersonsDTO(pod.Persons),
 	}
 	if out.SourceType == "" {
 		out.SourceType = "rss"

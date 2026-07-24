@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../player/player_screen.dart';
 import '../providers.dart';
+import 'credits.dart';
 import 'episode_screen.dart';
 import 'explicit_badge.dart';
 import 'podcasts_controller.dart';
@@ -281,10 +282,33 @@ class _ShowHeader extends ConsumerWidget {
               ),
             ],
           ),
+          if (show.funding != null) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    ref.read(urlOpenerProvider).open(show.funding!.url),
+                icon: const Icon(Icons.favorite_outline, size: 18),
+                label: Text(
+                  show.funding!.message?.isNotEmpty ?? false
+                      ? show.funding!.message!
+                      : 'Support this show',
+                ),
+              ),
+            ),
+          ],
           if (descriptionHtml != null && descriptionHtml.isNotEmpty) ...[
             const SizedBox(height: 16),
             ShowNotesView(
               html: descriptionHtml,
+              onOpenLink: ref.read(urlOpenerProvider).open,
+            ),
+          ],
+          if (show.persons.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            PodcastCredits(
+              persons: show.persons,
               onOpenLink: ref.read(urlOpenerProvider).open,
             ),
           ],

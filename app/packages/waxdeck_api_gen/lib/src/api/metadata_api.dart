@@ -991,7 +991,7 @@ class MetadataApi {
   }
 
   /// Replace a book&#39;s chapters
-  /// Replaces the chapter list of a single-file audiobook (user chapters win over embedded ones on read; multi-file books keep their part boundaries as the navigation grain, an upstream limit). Chapters must be ordered and non-overlapping on the book timeline. An empty list restores the embedded chapters. 
+  /// Replaces an audiobook&#39;s chapter list (user chapters win over embedded ones on read). Chapters are addressed on the book timeline, ordered and non-overlapping; for a multi-file book the server splits the flat list across its parts. An empty list restores the embedded chapters. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

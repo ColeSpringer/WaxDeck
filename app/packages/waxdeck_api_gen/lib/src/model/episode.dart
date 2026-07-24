@@ -5,7 +5,9 @@
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
 import 'package:waxdeck_api_gen/src/model/chapter_mark.dart';
+import 'package:waxdeck_api_gen/src/model/feed_person.dart';
 import 'package:waxdeck_api_gen/src/model/media_type.dart';
+import 'package:waxdeck_api_gen/src/model/soundbite.dart';
 import 'package:waxdeck_api_gen/src/model/episode_summary.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -35,8 +37,18 @@ part 'episode.g.dart';
 /// * [descriptionHtml] - Show notes as sanitized HTML (server-side allowlist; safe to render directly). 
 /// * [link] - The episode's web page, when the feed declares one.
 /// * [chapters] - Chapter marks, ordered by `startMs`.
+/// * [persons] - Episode-level `<podcast:person>` credits, layered on top of the show's credits for this episode. 
+/// * [soundbites] - Highlight clips the feed marks with `<podcast:soundbite>`, each a window into the episode audio. 
 @BuiltValue()
 abstract class Episode implements EpisodeSummary, Built<Episode, EpisodeBuilder> {
+  /// Highlight clips the feed marks with `<podcast:soundbite>`, each a window into the episode audio. 
+  @BuiltValueField(wireName: r'soundbites')
+  BuiltList<Soundbite>? get soundbites;
+
+  /// Episode-level `<podcast:person>` credits, layered on top of the show's credits for this episode. 
+  @BuiltValueField(wireName: r'persons')
+  BuiltList<FeedPerson>? get persons;
+
   /// Chapter marks, ordered by `startMs`.
   @BuiltValueField(wireName: r'chapters')
   BuiltList<ChapterMark>? get chapters;
@@ -160,11 +172,25 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         specifiedType: const FullType(bool),
       );
     }
+    if (object.soundbites != null) {
+      yield r'soundbites';
+      yield serializers.serialize(
+        object.soundbites,
+        specifiedType: const FullType(BuiltList, [FullType(Soundbite)]),
+      );
+    }
     if (object.explicit != null) {
       yield r'explicit';
       yield serializers.serialize(
         object.explicit,
         specifiedType: const FullType(bool),
+      );
+    }
+    if (object.persons != null) {
+      yield r'persons';
+      yield serializers.serialize(
+        object.persons,
+        specifiedType: const FullType(BuiltList, [FullType(FeedPerson)]),
       );
     }
     if (object.episodeType != null) {
@@ -319,12 +345,26 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
           ) as bool;
           result.hasTranscript = valueDes;
           break;
+        case r'soundbites':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(Soundbite)]),
+          ) as BuiltList<Soundbite>;
+          result.soundbites.replace(valueDes);
+          break;
         case r'explicit':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(bool),
           ) as bool;
           result.explicit = valueDes;
+          break;
+        case r'persons':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(FeedPerson)]),
+          ) as BuiltList<FeedPerson>;
+          result.persons.replace(valueDes);
           break;
         case r'episodeType':
           final valueDes = serializers.deserialize(

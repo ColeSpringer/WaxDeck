@@ -98,18 +98,23 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 	if req.Body == nil {
 		return PutAdminSettings400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
-	// Absent keeps the current value: a settings writer predating the
-	// field must never flip analysis off by omission.
+	// Absent keeps the current value: a settings writer predating either
+	// field must never flip analysis off or clear retention by omission.
 	sonic := s.svc.SonicAnalysisEnabled()
 	if req.Body.SonicAnalysis != nil {
 		sonic = *req.Body.SonicAnalysis
 	}
+	retentionDays := s.svc.TrashRetentionDays(ctx)
+	if req.Body.TrashRetentionDays != nil {
+		retentionDays = *req.Body.TrashRetentionDays
+	}
 	st, err := s.svc.AdminSettingsPut(ctx, uc, service.AdminSettings{
-		SignupEnabled:   req.Body.SignupEnabled,
-		ReadOnly:        req.Body.ReadOnly,
-		SonicAnalysis:   sonic,
-		BackupKeepCount: req.Body.BackupKeepCount,
-		BackupKeepBytes: req.Body.BackupKeepBytes,
+		SignupEnabled:      req.Body.SignupEnabled,
+		ReadOnly:           req.Body.ReadOnly,
+		SonicAnalysis:      sonic,
+		BackupKeepCount:    req.Body.BackupKeepCount,
+		BackupKeepBytes:    req.Body.BackupKeepBytes,
+		TrashRetentionDays: retentionDays,
 	})
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {
@@ -122,11 +127,12 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 
 func adminSettingsJSON(st service.AdminSettings) AdminSettings {
 	return AdminSettings{
-		SignupEnabled:   st.SignupEnabled,
-		ReadOnly:        st.ReadOnly,
-		SonicAnalysis:   ptr(st.SonicAnalysis),
-		BackupKeepCount: st.BackupKeepCount,
-		BackupKeepBytes: st.BackupKeepBytes,
+		SignupEnabled:      st.SignupEnabled,
+		ReadOnly:           st.ReadOnly,
+		SonicAnalysis:      ptr(st.SonicAnalysis),
+		BackupKeepCount:    st.BackupKeepCount,
+		BackupKeepBytes:    st.BackupKeepBytes,
+		TrashRetentionDays: ptr(st.TrashRetentionDays),
 	}
 }
 
@@ -306,6 +312,26 @@ func (s *Server) EmptyTrash(ctx context.Context, _ EmptyTrashRequestObject) (Emp
 		Errored:        rep.Errored,
 		ReclaimedBytes: rep.ReclaimedBytes,
 	}), nil
+}
+
+func (s *Server) PurgeTrashEntry(ctx context.Context, req PurgeTrashEntryRequestObject) (PurgeTrashEntryResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return PurgeTrashEntry403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	reclaimed, err := s.svc.PurgeTrashEntry(ctx, uc, string(req.TrashId))
+	if err != nil {
+		// A malformed or unknown trash id both read as "no such entry".
+		switch service.KindOf(err) {
+		case service.KindNotFound, service.KindInvalid:
+			return PurgeTrashEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no trash entry with id "+string(req.TrashId)))}, nil
+		}
+		return nil, err
+	}
+	return PurgeTrashEntry200JSONResponse(TrashPurgeResult{ReclaimedBytes: reclaimed}), nil
 }
 
 // --- deletion ----------------------------------------------------------------------

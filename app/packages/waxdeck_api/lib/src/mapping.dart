@@ -342,6 +342,7 @@ AppPassword appPasswordFromGen(gen.AppPassword ap) {
 
 PodcastShow podcastShowFromGen(gen.PodcastShow show, {String baseUrl = ''}) {
   final artUrl = show.artUrl;
+  final funding = show.funding;
   return PodcastShow(
     pid: show.pid,
     title: show.title,
@@ -355,6 +356,29 @@ PodcastShow podcastShowFromGen(gen.PodcastShow show, {String baseUrl = ''}) {
     lastPublishedAt: show.lastPublishedAt,
     refreshDisabled: show.refreshDisabled ?? false,
     explicit: show.explicit ?? false,
+    funding: funding == null
+        ? null
+        : PodcastFunding(url: funding.url, message: funding.message),
+    medium: show.medium,
+    persons: show.persons?.map(feedPersonFromGen).toList() ?? const [],
+  );
+}
+
+FeedPerson feedPersonFromGen(gen.FeedPerson person) {
+  return FeedPerson(
+    name: person.name,
+    role: person.role,
+    group: person.group,
+    img: person.img,
+    href: person.href,
+  );
+}
+
+Soundbite soundbiteFromGen(gen.Soundbite bite) {
+  return Soundbite(
+    startMs: bite.startMs,
+    durationMs: bite.durationMs,
+    title: bite.title,
   );
 }
 
@@ -490,6 +514,8 @@ EpisodeDetail episodeDetailFromGen(gen.Episode episode, {String baseUrl = ''}) {
     descriptionHtml: episode.descriptionHtml,
     link: episode.link,
     chapters: episode.chapters?.map(chapterMarkFromGen).toList() ?? const [],
+    persons: episode.persons?.map(feedPersonFromGen).toList() ?? const [],
+    soundbites: episode.soundbites?.map(soundbiteFromGen).toList() ?? const [],
   );
 }
 
@@ -1513,6 +1539,7 @@ AdminSettings adminSettingsFromGen(gen.AdminSettings settings) {
     sonicAnalysis: settings.sonicAnalysis ?? true,
     backupKeepCount: settings.backupKeepCount,
     backupKeepBytes: settings.backupKeepBytes,
+    trashRetentionDays: settings.trashRetentionDays ?? 0,
   );
 }
 
@@ -1523,7 +1550,8 @@ gen.AdminSettings adminSettingsToGen(AdminSettings settings) {
       ..readOnly = settings.readOnly
       ..sonicAnalysis = settings.sonicAnalysis
       ..backupKeepCount = settings.backupKeepCount
-      ..backupKeepBytes = settings.backupKeepBytes,
+      ..backupKeepBytes = settings.backupKeepBytes
+      ..trashRetentionDays = settings.trashRetentionDays,
   );
 }
 

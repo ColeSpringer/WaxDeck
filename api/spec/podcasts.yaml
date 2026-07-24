@@ -540,6 +540,23 @@ components:
           description: >
             Feed-declared explicit flag for the whole show. Episodes
             carry their own flag, which wins where the feed sets both.
+        funding:
+          $ref: "#/components/schemas/PodcastFunding"
+        medium:
+          type: string
+          description: >
+            The show's declared medium from its feed's `<podcast:medium>`
+            tag, lowercased (`podcast`, `music`, `audiobook`, ...). Open
+            set; absent when the feed declares none.
+          example: podcast
+        persons:
+          type: array
+          description: >
+            Show-level `<podcast:person>` credits (hosts, guests, and
+            other roles). Populated on the show detail read only; absent
+            on subscription list rows.
+          items:
+            $ref: "#/components/schemas/FeedPerson"
 
     SubscriptionSettings:
       type: object
@@ -812,6 +829,20 @@ components:
               description: Chapter marks, ordered by `startMs`.
               items:
                 $ref: "#/components/schemas/ChapterMark"
+            persons:
+              type: array
+              description: >
+                Episode-level `<podcast:person>` credits, layered on top
+                of the show's credits for this episode.
+              items:
+                $ref: "#/components/schemas/FeedPerson"
+            soundbites:
+              type: array
+              description: >
+                Highlight clips the feed marks with `<podcast:soundbite>`,
+                each a window into the episode audio.
+              items:
+                $ref: "#/components/schemas/Soundbite"
       description: Full detail for one episode.
 
     TranscriptCue:
@@ -851,3 +882,65 @@ components:
           description: Cues ordered by `startMs`.
           items:
             $ref: "#/components/schemas/TranscriptCue"
+
+    PodcastFunding:
+      type: object
+      description: >
+        A show's funding pointer from its feed's `<podcast:funding>` tag:
+        a donation or support URL with the label text the feed suggests.
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: Funding or support URL.
+          example: https://example.com/support
+        message:
+          type: string
+          description: Suggested call-to-action label for the link.
+
+    FeedPerson:
+      type: object
+      description: >
+        One person credited in a feed, from a `<podcast:person>` tag at
+        the show or episode level.
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The person's name.
+        role:
+          type: string
+          description: >
+            Their role, lowercased as the feed published it (`host`,
+            `guest`, `producer`, ...). Open set; an absent role reads as
+            `host`, the podcast namespace default.
+        group:
+          type: string
+          description: >
+            The role's grouping, lowercased (`cast`, `writing`, ...), when
+            the feed declares one.
+        img:
+          type: string
+          description: Portrait image URL, when the feed declares one.
+        href:
+          type: string
+          description: Profile or information URL, when the feed declares one.
+
+    Soundbite:
+      type: object
+      description: >
+        One highlight clip of an episode from a `<podcast:soundbite>` tag:
+        a window into the episode audio worth surfacing on its own.
+      required: [startMs, durationMs]
+      properties:
+        startMs:
+          type: integer
+          format: int64
+          description: Clip start offset into the episode, in milliseconds.
+        durationMs:
+          type: integer
+          format: int64
+          description: Clip length in milliseconds.
+        title:
+          type: string
+          description: Clip title; absent means reuse the episode title.

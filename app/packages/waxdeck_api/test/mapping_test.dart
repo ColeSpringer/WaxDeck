@@ -433,6 +433,88 @@ void main() {
       expect(episode.hasTranscript, isFalse);
     });
 
+    test('show detail carries funding, medium, and person credits', () {
+      final show = podcastShowFromGen(
+        gen.PodcastShow(
+          (b) => b
+            ..pid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01'
+            ..title = 'Second Breakfast'
+            ..sourceType = 'rss'
+            ..medium = 'podcast'
+            ..funding.replace(
+              gen.PodcastFunding(
+                (f) => f
+                  ..url = 'https://example.com/support'
+                  ..message = 'Chip in',
+              ),
+            )
+            ..persons.add(
+              gen.FeedPerson(
+                (p) => p
+                  ..name = 'Merry'
+                  ..role = 'host'
+                  ..href = 'https://example.com/merry',
+              ),
+            ),
+        ),
+      );
+      expect(show.medium, 'podcast');
+      expect(show.funding?.url, 'https://example.com/support');
+      expect(show.funding?.message, 'Chip in');
+      expect(show.persons.single.name, 'Merry');
+      expect(show.persons.single.role, 'host');
+      expect(show.persons.single.href, 'https://example.com/merry');
+    });
+
+    test('a show without 2.0 extras keeps funding null and credits empty', () {
+      final show = podcastShowFromGen(
+        gen.PodcastShow(
+          (b) => b
+            ..pid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW02'
+            ..title = 'Bare Feed'
+            ..sourceType = 'rss',
+        ),
+      );
+      expect(show.funding, isNull);
+      expect(show.medium, isNull);
+      expect(show.persons, isEmpty);
+    });
+
+    test('episode detail carries person credits and soundbites', () {
+      final episode = episodeDetailFromGen(
+        gen.Episode(
+          (b) => b
+            ..pid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001'
+            ..mediaType = gen.MediaType.podcast
+            ..title = 'Pipeweed Economics'
+            ..durationMs = 214000
+            ..showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01'
+            ..publishedAt = DateTime.utc(2026, 7, 10)
+            ..downloaded = true
+            ..persons.add(
+              gen.FeedPerson(
+                (p) => p
+                  ..name = 'Pippin'
+                  ..role = 'guest',
+              ),
+            )
+            ..soundbites.add(
+              gen.Soundbite(
+                (s) => s
+                  ..startMs = 5000
+                  ..durationMs = 30000
+                  ..title = 'Best bit',
+              ),
+            ),
+        ),
+      );
+      expect(episode.persons.single.name, 'Pippin');
+      expect(episode.persons.single.role, 'guest');
+      expect(episode.soundbites.single.startMs, 5000);
+      expect(episode.soundbites.single.durationMs, 30000);
+      expect(episode.soundbites.single.title, 'Best bit');
+    });
+
     test('subscription settings round trip through the wire shape', () {
       const settings = SubscriptionSettings(
         retentionKeep: 5,

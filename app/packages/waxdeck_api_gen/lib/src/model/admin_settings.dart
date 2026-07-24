@@ -16,6 +16,7 @@ part 'admin_settings.g.dart';
 /// * [sonicAnalysis] - Whether the server analyzes its own library for sonic similarity in the background (the embedded analyzer). Applies immediately; turning it off mid-library keeps the embeddings already computed. The boot default comes from `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it once saved. External workers are unaffected (their access is the worker-token configuration). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
 /// * [backupKeepCount] - How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. 
 /// * [backupKeepBytes] - Total archive bytes to keep, oldest deleted first when exceeded. 0 is unlimited. Imported archives are exempt. 
+/// * [trashRetentionDays] - Automatically purge trashed files older than this many days on a periodic sweep; 0 disables retention (the trash keeps entries until an administrator empties it). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
 @BuiltValue()
 abstract class AdminSettings implements Built<AdminSettings, AdminSettingsBuilder> {
   /// Whether open self-serve signup is accepted (registrations land pending). Invite links work regardless. 
@@ -37,6 +38,10 @@ abstract class AdminSettings implements Built<AdminSettings, AdminSettingsBuilde
   /// Total archive bytes to keep, oldest deleted first when exceeded. 0 is unlimited. Imported archives are exempt. 
   @BuiltValueField(wireName: r'backupKeepBytes')
   int get backupKeepBytes;
+
+  /// Automatically purge trashed files older than this many days on a periodic sweep; 0 disables retention (the trash keeps entries until an administrator empties it). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
+  @BuiltValueField(wireName: r'trashRetentionDays')
+  int? get trashRetentionDays;
 
   AdminSettings._();
 
@@ -88,6 +93,13 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
       object.backupKeepBytes,
       specifiedType: const FullType(int),
     );
+    if (object.trashRetentionDays != null) {
+      yield r'trashRetentionDays';
+      yield serializers.serialize(
+        object.trashRetentionDays,
+        specifiedType: const FullType(int),
+      );
+    }
   }
 
   @override
@@ -145,6 +157,13 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
             specifiedType: const FullType(int),
           ) as int;
           result.backupKeepBytes = valueDes;
+          break;
+        case r'trashRetentionDays':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.trashRetentionDays = valueDes;
           break;
         default:
           unhandled.add(key);

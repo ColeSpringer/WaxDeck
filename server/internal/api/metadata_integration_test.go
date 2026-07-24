@@ -125,12 +125,18 @@ func TestMetadataFieldsVocabulary(t *testing.T) {
 	if f := field(music, "isrc"); f == nil || !f.WriteBack {
 		t.Fatalf("music isrc = %+v, want writeBack true", f)
 	}
+	if f := field(music, "composer_sort"); f == nil || !f.WriteBack {
+		t.Fatalf("music composer_sort = %+v, want writeBack true", f)
+	}
 	if len(music.CreditRoles) != 11 {
 		t.Fatalf("music roles = %d, want 11", len(music.CreditRoles))
 	}
 	book := byKind["audiobook"]
 	if f := field(book, "author"); f == nil || !f.WriteBack {
 		t.Fatalf("book author = %+v, want writeBack true", f)
+	}
+	if f := field(book, "author_sort"); f == nil || !f.WriteBack {
+		t.Fatalf("book author_sort = %+v, want writeBack true", f)
 	}
 	for _, dbOnly := range []string{"subtitle", "asin", "isbn", "publisher", "edition", "description", "mbid"} {
 		if f := field(book, dbOnly); f == nil || f.WriteBack {
@@ -249,11 +255,28 @@ func TestMetadataEditorLifecycle(t *testing.T) {
 		t.Fatalf("curated isrc = %q, want normalized USRC17607839", got)
 	}
 
+	// Composer sort-name: a track-only field the new pin makes editable,
+	// surfaced back through the open fields map alongside the composer.
+	resp = h.patchJSON(t, "/api/v1/items/"+alpha+"/metadata", map[string]any{
+		"fields": map[string]string{"composer": "Ada Composer", "composer_sort": "Composer, Ada"},
+	})
+	wantStatus(t, resp, 200, "composer sort edit")
+	md = h.itemMeta(t, alpha)
+	if md.Fields["composer"] != "Ada Composer" || md.Fields["composer_sort"] != "Composer, Ada" {
+		t.Fatalf("composer fields = %+v", md.Fields)
+	}
+
 	// A field outside the kind's vocabulary is rejected.
 	resp = h.patchJSON(t, "/api/v1/items/"+alpha+"/metadata", map[string]any{
 		"fields": map[string]string{"narrator": "Nobody"},
 	})
 	wantStatus(t, resp, 400, "off-vocabulary field")
+
+	// author_sort is a book-only field: it is not editable on a track.
+	resp = h.patchJSON(t, "/api/v1/items/"+alpha+"/metadata", map[string]any{
+		"fields": map[string]string{"author_sort": "Nobody"},
+	})
+	wantStatus(t, resp, 400, "book sort field on a track")
 
 	// Bulk edit lands on every unlocked item.
 	resp = h.postJSON(t, "/api/v1/items/bulk-edit", map[string]any{
@@ -575,8 +598,18 @@ func TestMetadataBookChapters(t *testing.T) {
 		t.Fatalf("embedded chapters = %+v", md.Chapters)
 	}
 
+	// author_sort is a book-only sort-name field the new pin makes
+	// editable; it round-trips through the open fields map.
+	resp := h.patchJSON(t, "/api/v1/items/"+single+"/metadata", map[string]any{
+		"fields": map[string]string{"author_sort": "Author, Ada"},
+	})
+	wantStatus(t, resp, 200, "author sort edit")
+	if got := h.itemMeta(t, single).Fields["author_sort"]; got != "Author, Ada" {
+		t.Fatalf("author_sort = %q, want Author, Ada", got)
+	}
+
 	// Replacement chapters land on the single-file book and win on read.
-	resp := h.putJSON(t, "/api/v1/books/"+single+"/chapters", map[string]any{
+	resp = h.putJSON(t, "/api/v1/books/"+single+"/chapters", map[string]any{
 		"chapters": []map[string]any{
 			{"index": 0, "startMs": 0, "endMs": 3000, "title": "One"},
 			{"index": 1, "startMs": 3000, "title": "Two"},
@@ -587,9 +620,8 @@ func TestMetadataBookChapters(t *testing.T) {
 	if md.Chapters == nil || len(*md.Chapters) != 2 {
 		t.Fatalf("user chapters = %+v", md.Chapters)
 	}
-	// The book-timeline offsets survive the new flat-timeline SetChapters: a
-	// single-file book sends file-relative offsets and upstream's legacy-shape
-	// sniff maps them onto the timeline, so both starts round-trip exactly.
+	// SetBookChapters sends book-timeline offsets directly and the read
+	// reports them the same way, so both starts round-trip exactly.
 	gotCh := *md.Chapters
 	if deref(gotCh[0].Title) != "One" || gotCh[0].StartMs != 0 {
 		t.Fatalf("chapter 0 = %+v, want title One start 0", gotCh[0])
@@ -617,11 +649,37 @@ func TestMetadataBookChapters(t *testing.T) {
 	})
 	wantStatus(t, resp, 400, "overlapping chapters")
 
-	// Multi-file books keep their part boundaries, an upstream limit.
+	// Multi-file books now accept a flat book-timeline chapter list; the
+	// server splits it across the parts. "The Fixture Book" has three parts
+	// of 4s, 5s, and 6s (book timeline [0,4000), [4000,9000), [9000,15000)).
+	// The middle chapter deliberately spans the first part boundary and the
+	// final chapter starts inside the second part, so a correct split must
+	// distribute the flat list across parts and reassemble book-timeline
+	// spans on read.
 	resp = h.putJSON(t, "/api/v1/books/"+multi+"/chapters", map[string]any{
-		"chapters": []map[string]any{{"index": 0, "startMs": 0, "title": "Nope"}},
+		"chapters": []map[string]any{
+			{"index": 0, "startMs": 0, "endMs": 2000, "title": "Prologue"},
+			{"index": 1, "startMs": 2000, "endMs": 7000, "title": "Middle"},
+			{"index": 2, "startMs": 7000, "title": "Finale"},
+		},
 	})
-	wantStatus(t, resp, 400, "multi-file chapters")
+	wantStatus(t, resp, 200, "multi-file chapters set")
+	md = h.itemMeta(t, multi)
+	if md.Chapters == nil || len(*md.Chapters) != 3 {
+		t.Fatalf("multi-file user chapters = %+v", md.Chapters)
+	}
+	multiCh := *md.Chapters
+	if deref(multiCh[0].Title) != "Prologue" || multiCh[0].StartMs != 0 {
+		t.Fatalf("multi chapter 0 = %+v, want Prologue@0", multiCh[0])
+	}
+	// The middle chapter spans the first part boundary yet round-trips on the
+	// book timeline, proving the split-and-reassemble is book-timeline honest.
+	if deref(multiCh[1].Title) != "Middle" || multiCh[1].StartMs != 2000 || derefInt64(multiCh[1].EndMs) != 7000 {
+		t.Fatalf("multi chapter 1 = %+v, want Middle [2000,7000)", multiCh[1])
+	}
+	if deref(multiCh[2].Title) != "Finale" || multiCh[2].StartMs != 7000 {
+		t.Fatalf("multi chapter 2 = %+v, want Finale@7000", multiCh[2])
+	}
 
 	// An empty list restores the embedded chapters.
 	resp = h.putJSON(t, "/api/v1/books/"+single+"/chapters", map[string]any{

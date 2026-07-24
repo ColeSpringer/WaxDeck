@@ -79,6 +79,7 @@ import 'package:waxdeck_api_gen/src/model/episode.dart';
 import 'package:waxdeck_api_gen/src/model/episode_page.dart';
 import 'package:waxdeck_api_gen/src/model/episode_summary.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
+import 'package:waxdeck_api_gen/src/model/feed_person.dart';
 import 'package:waxdeck_api_gen/src/model/field_provenance.dart';
 import 'package:waxdeck_api_gen/src/model/health.dart';
 import 'package:waxdeck_api_gen/src/model/health_fix_request.dart';
@@ -184,6 +185,7 @@ import 'package:waxdeck_api_gen/src/model/playlist_page.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_preview.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_update.dart';
 import 'package:waxdeck_api_gen/src/model/podcast_detail.dart';
+import 'package:waxdeck_api_gen/src/model/podcast_funding.dart';
 import 'package:waxdeck_api_gen/src/model/podcast_show.dart';
 import 'package:waxdeck_api_gen/src/model/portable_playlist.dart';
 import 'package:waxdeck_api_gen/src/model/portable_ref.dart';
@@ -252,6 +254,7 @@ import 'package:waxdeck_api_gen/src/model/skip_map.dart';
 import 'package:waxdeck_api_gen/src/model/skip_span.dart';
 import 'package:waxdeck_api_gen/src/model/smart_rule.dart';
 import 'package:waxdeck_api_gen/src/model/sonic_path.dart';
+import 'package:waxdeck_api_gen/src/model/soundbite.dart';
 import 'package:waxdeck_api_gen/src/model/star_update.dart';
 import 'package:waxdeck_api_gen/src/model/subscribe_request.dart';
 import 'package:waxdeck_api_gen/src/model/subscription.dart';
@@ -274,6 +277,7 @@ import 'package:waxdeck_api_gen/src/model/transcript_cue.dart';
 import 'package:waxdeck_api_gen/src/model/trash_empty_result.dart';
 import 'package:waxdeck_api_gen/src/model/trash_entry.dart';
 import 'package:waxdeck_api_gen/src/model/trash_list.dart';
+import 'package:waxdeck_api_gen/src/model/trash_purge_result.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_group.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_groups.dart';
 import 'package:waxdeck_api_gen/src/model/upgrade_member.dart';
@@ -376,6 +380,7 @@ part 'serializers.g.dart';
   EpisodePage,
   EpisodeSummary,$EpisodeSummary,
   Error,
+  FeedPerson,
   FieldProvenance,
   Health,
   HealthFixRequest,
@@ -481,6 +486,7 @@ part 'serializers.g.dart';
   PlaylistPreview,
   PlaylistUpdate,
   PodcastDetail,
+  PodcastFunding,
   PodcastShow,
   PortablePlaylist,
   PortableRef,
@@ -549,6 +555,7 @@ part 'serializers.g.dart';
   SkipSpan,
   SmartRule,
   SonicPath,
+  Soundbite,
   StarUpdate,
   SubscribeRequest,
   Subscription,
@@ -571,6 +578,7 @@ part 'serializers.g.dart';
   TrashEmptyResult,
   TrashEntry,
   TrashList,
+  TrashPurgeResult,
   UpgradeGroup,
   UpgradeGroups,
   UpgradeMember,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
@@ -91,6 +92,59 @@ func (l *Library) EmptyTrash(ctx context.Context, uc *UserCtx) (TrashEmptyDTO, e
 	l.Audit(ctx, uc, "trash.empty", AuditTarget{Kind: "trash"},
 		map[string]any{"purged": out.Purged, "errored": out.Errored, "reclaimedBytes": out.ReclaimedBytes})
 	return out, nil
+}
+
+// PurgeTrashEntry permanently purges one trashed file and reports the
+// bytes it reclaimed. Administrators only.
+func (l *Library) PurgeTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID string) (int64, error) {
+	if !uc.Admin {
+		return 0, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	prefix, pid, ok := parseAPIPID(apiTrashID)
+	if !ok || prefix != PrefixTrash {
+		return 0, errInvalid("bad trash id " + apiTrashID)
+	}
+	reclaimed, err := l.lib.PurgeTrash(ctx, pid)
+	if err != nil {
+		return 0, classify(err)
+	}
+	l.Audit(ctx, uc, "trash.purge", AuditTarget{Kind: "trash", PID: apiTrashID},
+		map[string]any{"reclaimedBytes": reclaimed})
+	return reclaimed, nil
+}
+
+// PurgeTrashOlderThan purges trashed files trashed longer ago than the
+// given age, backing the retention sweeper. A zero or negative age is a
+// no-op rather than an empty-everything, so a disabled policy (0 days) or
+// a misconfigured caller never wipes the whole undo journal.
+func (l *Library) PurgeTrashOlderThan(ctx context.Context, olderThan time.Duration) (TrashEmptyDTO, error) {
+	if olderThan <= 0 {
+		return TrashEmptyDTO{}, nil
+	}
+	rep, err := l.lib.EmptyTrash(ctx, waxbin.EmptyTrashOptions{OlderThan: olderThan})
+	if err != nil {
+		return TrashEmptyDTO{}, classify(err)
+	}
+	out := TrashEmptyDTO{Purged: rep.Purged, Errored: rep.Errored, ReclaimedBytes: rep.ReclaimedBytes}
+	// The retention sweep has no human actor; audit it with a nil actor the
+	// way backup retention does, but only when it actually reclaimed
+	// something so a routine no-op pass never floods the log.
+	if out.Purged > 0 || out.Errored > 0 {
+		l.Audit(ctx, nil, "trash.retention", AuditTarget{Kind: "trash"},
+			map[string]any{"purged": out.Purged, "errored": out.Errored, "reclaimedBytes": out.ReclaimedBytes})
+	}
+	return out, nil
+}
+
+// SweepTrashRetention runs one retention pass using the configured
+// policy. It is the entry point for the supervised background sweeper;
+// when retention is disabled (0 days) it purges nothing.
+func (l *Library) SweepTrashRetention(ctx context.Context) (TrashEmptyDTO, error) {
+	days := l.TrashRetentionDays(ctx)
+	if days <= 0 {
+		return TrashEmptyDTO{}, nil
+	}
+	return l.PurgeTrashOlderThan(ctx, time.Duration(days)*24*time.Hour)
 }
 
 // DeletePlanDTO is one item's share of a deletion.

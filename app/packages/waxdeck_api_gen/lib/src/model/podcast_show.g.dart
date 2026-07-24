@@ -31,6 +31,12 @@ class _$PodcastShow extends PodcastShow {
   final bool? refreshDisabled;
   @override
   final bool? explicit;
+  @override
+  final PodcastFunding? funding;
+  @override
+  final String? medium;
+  @override
+  final BuiltList<FeedPerson>? persons;
 
   factory _$PodcastShow([void Function(PodcastShowBuilder)? updates]) =>
       (PodcastShowBuilder()..update(updates))._build();
@@ -48,6 +54,9 @@ class _$PodcastShow extends PodcastShow {
     this.lastPublishedAt,
     this.refreshDisabled,
     this.explicit,
+    this.funding,
+    this.medium,
+    this.persons,
   }) : super._();
   @override
   PodcastShow rebuild(void Function(PodcastShowBuilder) updates) =>
@@ -71,7 +80,10 @@ class _$PodcastShow extends PodcastShow {
         episodeCount == other.episodeCount &&
         lastPublishedAt == other.lastPublishedAt &&
         refreshDisabled == other.refreshDisabled &&
-        explicit == other.explicit;
+        explicit == other.explicit &&
+        funding == other.funding &&
+        medium == other.medium &&
+        persons == other.persons;
   }
 
   @override
@@ -89,6 +101,9 @@ class _$PodcastShow extends PodcastShow {
     _$hash = $jc(_$hash, lastPublishedAt.hashCode);
     _$hash = $jc(_$hash, refreshDisabled.hashCode);
     _$hash = $jc(_$hash, explicit.hashCode);
+    _$hash = $jc(_$hash, funding.hashCode);
+    _$hash = $jc(_$hash, medium.hashCode);
+    _$hash = $jc(_$hash, persons.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -107,7 +122,10 @@ class _$PodcastShow extends PodcastShow {
           ..add('episodeCount', episodeCount)
           ..add('lastPublishedAt', lastPublishedAt)
           ..add('refreshDisabled', refreshDisabled)
-          ..add('explicit', explicit))
+          ..add('explicit', explicit)
+          ..add('funding', funding)
+          ..add('medium', medium)
+          ..add('persons', persons))
         .toString();
   }
 }
@@ -166,6 +184,20 @@ class PodcastShowBuilder implements Builder<PodcastShow, PodcastShowBuilder> {
   bool? get explicit => _$this._explicit;
   set explicit(bool? explicit) => _$this._explicit = explicit;
 
+  PodcastFundingBuilder? _funding;
+  PodcastFundingBuilder get funding =>
+      _$this._funding ??= PodcastFundingBuilder();
+  set funding(PodcastFundingBuilder? funding) => _$this._funding = funding;
+
+  String? _medium;
+  String? get medium => _$this._medium;
+  set medium(String? medium) => _$this._medium = medium;
+
+  ListBuilder<FeedPerson>? _persons;
+  ListBuilder<FeedPerson> get persons =>
+      _$this._persons ??= ListBuilder<FeedPerson>();
+  set persons(ListBuilder<FeedPerson>? persons) => _$this._persons = persons;
+
   PodcastShowBuilder() {
     PodcastShow._defaults(this);
   }
@@ -185,6 +217,9 @@ class PodcastShowBuilder implements Builder<PodcastShow, PodcastShowBuilder> {
       _lastPublishedAt = $v.lastPublishedAt;
       _refreshDisabled = $v.refreshDisabled;
       _explicit = $v.explicit;
+      _funding = $v.funding?.toBuilder();
+      _medium = $v.medium;
+      _persons = $v.persons?.toBuilder();
       _$v = null;
     }
     return this;
@@ -204,34 +239,56 @@ class PodcastShowBuilder implements Builder<PodcastShow, PodcastShowBuilder> {
   PodcastShow build() => _build();
 
   _$PodcastShow _build() {
-    final _$result =
-        _$v ??
-        _$PodcastShow._(
-          pid: BuiltValueNullFieldError.checkNotNull(
-            pid,
-            r'PodcastShow',
-            'pid',
-          ),
-          title: BuiltValueNullFieldError.checkNotNull(
-            title,
-            r'PodcastShow',
-            'title',
-          ),
-          author: author,
-          descriptionHtml: descriptionHtml,
-          feedUrl: feedUrl,
-          link: link,
-          sourceType: BuiltValueNullFieldError.checkNotNull(
-            sourceType,
-            r'PodcastShow',
-            'sourceType',
-          ),
-          artUrl: artUrl,
-          episodeCount: episodeCount,
-          lastPublishedAt: lastPublishedAt,
-          refreshDisabled: refreshDisabled,
-          explicit: explicit,
+    _$PodcastShow _$result;
+    try {
+      _$result =
+          _$v ??
+          _$PodcastShow._(
+            pid: BuiltValueNullFieldError.checkNotNull(
+              pid,
+              r'PodcastShow',
+              'pid',
+            ),
+            title: BuiltValueNullFieldError.checkNotNull(
+              title,
+              r'PodcastShow',
+              'title',
+            ),
+            author: author,
+            descriptionHtml: descriptionHtml,
+            feedUrl: feedUrl,
+            link: link,
+            sourceType: BuiltValueNullFieldError.checkNotNull(
+              sourceType,
+              r'PodcastShow',
+              'sourceType',
+            ),
+            artUrl: artUrl,
+            episodeCount: episodeCount,
+            lastPublishedAt: lastPublishedAt,
+            refreshDisabled: refreshDisabled,
+            explicit: explicit,
+            funding: _funding?.build(),
+            medium: medium,
+            persons: _persons?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'funding';
+        _funding?.build();
+
+        _$failedField = 'persons';
+        _persons?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'PodcastShow',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

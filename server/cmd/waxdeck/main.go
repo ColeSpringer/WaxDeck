@@ -387,6 +387,34 @@ func run() error {
 		}
 	})
 
+	// Trash retention: purge trashed files older than the configured
+	// window (0 disables it). Self-gates on the runtime admin setting so
+	// administrators change the policy without a restart, and a slow
+	// cadence is plenty for a space-reclaim pass.
+	group.Go(ctx, "trash-retention", func(ctx context.Context) error {
+		first := time.NewTimer(5 * time.Minute)
+		defer first.Stop()
+		tick := time.NewTicker(6 * time.Hour)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-first.C:
+			case <-tick.C:
+			}
+			rep, err := svc.SweepTrashRetention(ctx)
+			if err != nil {
+				log.Warn("trash retention sweep", "err", err)
+				continue
+			}
+			if rep.Purged > 0 || rep.Errored > 0 {
+				log.Info("trash retention sweep",
+					"purged", rep.Purged, "errored", rep.Errored, "reclaimedBytes", rep.ReclaimedBytes)
+			}
+		}
+	})
+
 	// The WaxFlow bridge is optional in development: without it every
 	// catalog surface works and play-info reports streaming unavailable.
 	// When configured it validates against the live sidecar and fails

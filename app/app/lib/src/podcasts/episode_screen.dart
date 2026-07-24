@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../player/session_registry.dart';
 import '../providers.dart';
+import 'credits.dart';
 import 'explicit_badge.dart';
 import 'podcasts_controller.dart';
 import 'show_notes.dart';
@@ -14,6 +15,29 @@ String formatCueTimestamp(int ms) {
   final m = d.inMinutes.remainder(60);
   final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
   return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$s' : '$m:$s';
+}
+
+/// Seeks the live player to [ms] when [pid] is the episode currently loaded;
+/// otherwise reports the offset in a SnackBar. [label] names what is being
+/// pointed at ("Clip", "Cue"). Loosely coupled on purpose: the timestamp
+/// stays useful even when this episode is not the one playing.
+void seekLiveOrReport(
+  BuildContext context,
+  WidgetRef ref,
+  String pid,
+  int ms,
+  String label,
+) {
+  final session = ref.read(currentSessionRegistryProvider).current;
+  if (session != null && session.item.pid == pid) {
+    session.seek(Duration(milliseconds: ms));
+    return;
+  }
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(content: Text('$label starts at ${formatCueTimestamp(ms)}')),
+    );
 }
 
 /// One episode's detail: show notes, chapter marks, and a lazy-loading
@@ -88,6 +112,31 @@ class _EpisodeBody extends ConsumerWidget {
               title: Text(chapter.title ?? 'Chapter ${chapter.index + 1}'),
             ),
         ],
+        if (episode.soundbites.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('Highlights', style: textTheme.titleMedium),
+          for (final (i, bite) in episode.soundbites.indexed)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Text(formatCueTimestamp(bite.startMs)),
+              title: Text(bite.title ?? 'Highlight ${i + 1}'),
+              onTap: () => seekLiveOrReport(
+                context,
+                ref,
+                episode.pid,
+                bite.startMs,
+                'Clip',
+              ),
+            ),
+        ],
+        if (episode.persons.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          PodcastCredits(
+            persons: episode.persons,
+            onOpenLink: ref.read(urlOpenerProvider).open,
+          ),
+        ],
         if (episode.hasTranscript) ...[
           const SizedBox(height: 16),
           _TranscriptSection(pid: episode.pid),
@@ -128,24 +177,6 @@ class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
     setState(() {
       _loading = ref.read(repositoryProvider).getEpisodeTranscript(widget.pid);
     });
-  }
-
-  void _onCueTap(TranscriptCue cue) {
-    // Loosely coupled on purpose: when this episode is the one loaded in
-    // the live player, the cue seeks it; otherwise the timestamp is
-    // still useful information.
-    final session = ref.read(currentSessionRegistryProvider).current;
-    if (session != null && session.item.pid == widget.pid) {
-      session.seek(Duration(milliseconds: cue.startMs));
-      return;
-    }
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Cue starts at ${formatCueTimestamp(cue.startMs)}'),
-        ),
-      );
   }
 
   @override
@@ -194,7 +225,13 @@ class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
                               ? cue.text
                               : '${cue.speaker}: ${cue.text}',
                         ),
-                        onTap: () => _onCueTap(cue),
+                        onTap: () => seekLiveOrReport(
+                          context,
+                          ref,
+                          widget.pid,
+                          cue.startMs,
+                          'Cue',
+                        ),
                       ),
                     ),
                 ],

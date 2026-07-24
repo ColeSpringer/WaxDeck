@@ -1127,6 +1127,34 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /admin/trash/{trashId}:
+    parameters:
+      - $ref: "#/components/parameters/TrashId"
+    delete:
+      operationId: purgeTrashEntry
+      summary: Purge one trashed file
+      description: >
+        Permanently deletes a single trashed file and reports the bytes
+        it reclaimed. Irreversible; the age-based retention sweep
+        (`trashRetentionDays`) purges the same way in bulk.
+        Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: What the purge reclaimed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrashPurgeResult"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /admin/migrations:
     post:
       operationId: createMigration
@@ -2672,12 +2700,11 @@ paths:
       operationId: setBookChapters
       summary: Replace a book's chapters
       description: >
-        Replaces the chapter list of a single-file audiobook (user
-        chapters win over embedded ones on read; multi-file books
-        keep their part boundaries as the navigation grain, an
-        upstream limit). Chapters must be ordered and non-overlapping
-        on the book timeline. An empty list restores the embedded
-        chapters.
+        Replaces an audiobook's chapter list (user chapters win over
+        embedded ones on read). Chapters are addressed on the book
+        timeline, ordered and non-overlapping; for a multi-file book
+        the server splits the flat list across its parts. An empty
+        list restores the embedded chapters.
       tags: [metadata]
       requestBody:
         required: true
@@ -8077,6 +8104,15 @@ components:
           description: >
             Total archive bytes to keep, oldest deleted first when
             exceeded. 0 is unlimited. Imported archives are exempt.
+        trashRetentionDays:
+          type: integer
+          minimum: 0
+          description: >
+            Automatically purge trashed files older than this many days
+            on a periodic sweep; 0 disables retention (the trash keeps
+            entries until an administrator empties it). Optional on PUT
+            so settings writers predating this field never change it:
+            absent keeps the current value. Always present in responses.
 
     TranscodingLimits:
       type: object
@@ -8380,6 +8416,16 @@ components:
           type: integer
           format: int64
           description: Disk space reclaimed.
+
+    TrashPurgeResult:
+      type: object
+      description: What purging one trash entry reclaimed.
+      required: [reclaimedBytes]
+      properties:
+        reclaimedBytes:
+          type: integer
+          format: int64
+          description: Disk space reclaimed by purging the entry.
 
     MigrationCreate:
       type: object
@@ -12367,6 +12413,23 @@ components:
           description: >
             Feed-declared explicit flag for the whole show. Episodes
             carry their own flag, which wins where the feed sets both.
+        funding:
+          $ref: "#/components/schemas/PodcastFunding"
+        medium:
+          type: string
+          description: >
+            The show's declared medium from its feed's `<podcast:medium>`
+            tag, lowercased (`podcast`, `music`, `audiobook`, ...). Open
+            set; absent when the feed declares none.
+          example: podcast
+        persons:
+          type: array
+          description: >
+            Show-level `<podcast:person>` credits (hosts, guests, and
+            other roles). Populated on the show detail read only; absent
+            on subscription list rows.
+          items:
+            $ref: "#/components/schemas/FeedPerson"
 
     SubscriptionSettings:
       type: object
@@ -12639,6 +12702,20 @@ components:
               description: Chapter marks, ordered by `startMs`.
               items:
                 $ref: "#/components/schemas/ChapterMark"
+            persons:
+              type: array
+              description: >
+                Episode-level `<podcast:person>` credits, layered on top
+                of the show's credits for this episode.
+              items:
+                $ref: "#/components/schemas/FeedPerson"
+            soundbites:
+              type: array
+              description: >
+                Highlight clips the feed marks with `<podcast:soundbite>`,
+                each a window into the episode audio.
+              items:
+                $ref: "#/components/schemas/Soundbite"
       description: Full detail for one episode.
 
     TranscriptCue:
@@ -12678,6 +12755,68 @@ components:
           description: Cues ordered by `startMs`.
           items:
             $ref: "#/components/schemas/TranscriptCue"
+
+    PodcastFunding:
+      type: object
+      description: >
+        A show's funding pointer from its feed's `<podcast:funding>` tag:
+        a donation or support URL with the label text the feed suggests.
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: Funding or support URL.
+          example: https://example.com/support
+        message:
+          type: string
+          description: Suggested call-to-action label for the link.
+
+    FeedPerson:
+      type: object
+      description: >
+        One person credited in a feed, from a `<podcast:person>` tag at
+        the show or episode level.
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The person's name.
+        role:
+          type: string
+          description: >
+            Their role, lowercased as the feed published it (`host`,
+            `guest`, `producer`, ...). Open set; an absent role reads as
+            `host`, the podcast namespace default.
+        group:
+          type: string
+          description: >
+            The role's grouping, lowercased (`cast`, `writing`, ...), when
+            the feed declares one.
+        img:
+          type: string
+          description: Portrait image URL, when the feed declares one.
+        href:
+          type: string
+          description: Profile or information URL, when the feed declares one.
+
+    Soundbite:
+      type: object
+      description: >
+        One highlight clip of an episode from a `<podcast:soundbite>` tag:
+        a window into the episode audio worth surfacing on its own.
+      required: [startMs, durationMs]
+      properties:
+        startMs:
+          type: integer
+          format: int64
+          description: Clip start offset into the episode, in milliseconds.
+        durationMs:
+          type: integer
+          format: int64
+          description: Clip length in milliseconds.
+        title:
+          type: string
+          description: Clip title; absent means reuse the episode title.
 
     RadioStation:
       type: object

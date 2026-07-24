@@ -68,7 +68,9 @@ func (fs *feedServer) writeFeed(t *testing.T, n int) {
 		}
 		extra := ""
 		if i == 0 {
-			extra = `<podcast:transcript url="` + fs.ts.URL + `/transcript.vtt" type="text/vtt"/>`
+			extra = `<podcast:transcript url="` + fs.ts.URL + `/transcript.vtt" type="text/vtt"/>` +
+				`<podcast:person role="Guest">Guest Star</podcast:person>` +
+				`<podcast:soundbite startTime="1.5" duration="1.0">A great moment</podcast:soundbite>`
 		}
 		fmt.Fprintf(&items, `<item>
 			<title>Episode %d</title>
@@ -86,6 +88,9 @@ func (fs *feedServer) writeFeed(t *testing.T, n int) {
 <itunes:author>Fixture Author</itunes:author>
 <description><![CDATA[A show about <i>fixtures</i>.]]></description>
 <podcast:guid>fixture-cast-guid</podcast:guid>
+<podcast:medium>podcast</podcast:medium>
+<podcast:funding url="https://example.com/support">Support the show</podcast:funding>
+<podcast:person role="Host" href="https://example.com/host">Fixture Host</podcast:person>
 ` + items.String() + `
 </channel>
 </rss>`
@@ -447,6 +452,61 @@ func TestPodcastLifecycle(t *testing.T) {
 	resp = get(t, h.ts, "/api/v1/podcasts", h.token)
 	if subs := decode[SubscriptionPage](t, resp); len(subs.Items) != 1 {
 		t.Fatalf("subscriptions after import = %d, want 1", len(subs.Items))
+	}
+}
+
+// TestPodcastTwoPointOhExtras verifies the Podcasting 2.0 channel and item
+// extras (funding, medium, person credits, and soundbites) parse from the feed
+// and surface on the show and episode detail reads.
+func TestPodcastTwoPointOhExtras(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 2)
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	if resp.StatusCode != 201 {
+		t.Fatalf("subscribe status = %d", resp.StatusCode)
+	}
+	sub := decode[Subscription](t, resp)
+
+	// Show detail carries the channel-level extras.
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid, h.token)
+	show := decode[PodcastDetail](t, resp).Show
+	if show.Medium == nil || *show.Medium != "podcast" {
+		t.Fatalf("show medium = %v, want podcast", show.Medium)
+	}
+	if show.Funding == nil || show.Funding.Url != "https://example.com/support" {
+		t.Fatalf("show funding = %+v", show.Funding)
+	}
+	if show.Funding.Message == nil || *show.Funding.Message != "Support the show" {
+		t.Fatalf("funding message = %v", show.Funding.Message)
+	}
+	if show.Persons == nil || len(*show.Persons) != 1 {
+		t.Fatalf("show persons = %+v", show.Persons)
+	}
+	if host := (*show.Persons)[0]; host.Name != "Fixture Host" ||
+		host.Role == nil || *host.Role != "host" ||
+		host.Href == nil || *host.Href != "https://example.com/host" {
+		t.Fatalf("host credit = %+v", host)
+	}
+
+	// Episode 1 (oldest, first published) carries the item-level extras.
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+	ep := decode[EpisodePage](t, resp).Items[1] // newest-first; Episode 1 is oldest
+	resp = get(t, h.ts, "/api/v1/episodes/"+ep.Pid, h.token)
+	epDetail := decode[Episode](t, resp)
+	if epDetail.Persons == nil || len(*epDetail.Persons) != 1 {
+		t.Fatalf("episode persons = %+v", epDetail.Persons)
+	}
+	if guest := (*epDetail.Persons)[0]; guest.Name != "Guest Star" ||
+		guest.Role == nil || *guest.Role != "guest" {
+		t.Fatalf("guest credit = %+v", guest)
+	}
+	if epDetail.Soundbites == nil || len(*epDetail.Soundbites) != 1 {
+		t.Fatalf("episode soundbites = %+v", epDetail.Soundbites)
+	}
+	if bite := (*epDetail.Soundbites)[0]; bite.StartMs != 1500 || bite.DurationMs != 1000 ||
+		bite.Title == nil || *bite.Title != "A great moment" {
+		t.Fatalf("soundbite = %+v", bite)
 	}
 }
 

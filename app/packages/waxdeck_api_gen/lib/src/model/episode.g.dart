@@ -8,6 +8,10 @@ part of 'episode.dart';
 
 class _$Episode extends Episode {
   @override
+  final BuiltList<Soundbite>? soundbites;
+  @override
+  final BuiltList<FeedPerson>? persons;
+  @override
   final BuiltList<ChapterMark>? chapters;
   @override
   final String? link;
@@ -52,6 +56,8 @@ class _$Episode extends Episode {
       (EpisodeBuilder()..update(updates))._build();
 
   _$Episode._({
+    this.soundbites,
+    this.persons,
     this.chapters,
     this.link,
     this.descriptionHtml,
@@ -84,6 +90,8 @@ class _$Episode extends Episode {
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
     return other is Episode &&
+        soundbites == other.soundbites &&
+        persons == other.persons &&
         chapters == other.chapters &&
         link == other.link &&
         descriptionHtml == other.descriptionHtml &&
@@ -109,6 +117,8 @@ class _$Episode extends Episode {
   @override
   int get hashCode {
     var _$hash = 0;
+    _$hash = $jc(_$hash, soundbites.hashCode);
+    _$hash = $jc(_$hash, persons.hashCode);
     _$hash = $jc(_$hash, chapters.hashCode);
     _$hash = $jc(_$hash, link.hashCode);
     _$hash = $jc(_$hash, descriptionHtml.hashCode);
@@ -136,6 +146,8 @@ class _$Episode extends Episode {
   @override
   String toString() {
     return (newBuiltValueToStringHelper(r'Episode')
+          ..add('soundbites', soundbites)
+          ..add('persons', persons)
           ..add('chapters', chapters)
           ..add('link', link)
           ..add('descriptionHtml', descriptionHtml)
@@ -163,6 +175,18 @@ class _$Episode extends Episode {
 class EpisodeBuilder
     implements Builder<Episode, EpisodeBuilder>, EpisodeSummaryBuilder {
   _$Episode? _$v;
+
+  ListBuilder<Soundbite>? _soundbites;
+  ListBuilder<Soundbite> get soundbites =>
+      _$this._soundbites ??= ListBuilder<Soundbite>();
+  set soundbites(covariant ListBuilder<Soundbite>? soundbites) =>
+      _$this._soundbites = soundbites;
+
+  ListBuilder<FeedPerson>? _persons;
+  ListBuilder<FeedPerson> get persons =>
+      _$this._persons ??= ListBuilder<FeedPerson>();
+  set persons(covariant ListBuilder<FeedPerson>? persons) =>
+      _$this._persons = persons;
 
   ListBuilder<ChapterMark>? _chapters;
   ListBuilder<ChapterMark> get chapters =>
@@ -261,6 +285,8 @@ class EpisodeBuilder
   EpisodeBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
+      _soundbites = $v.soundbites?.toBuilder();
+      _persons = $v.persons?.toBuilder();
       _chapters = $v.chapters?.toBuilder();
       _link = $v.link;
       _descriptionHtml = $v.descriptionHtml;
@@ -305,6 +331,8 @@ class EpisodeBuilder
       _$result =
           _$v ??
           _$Episode._(
+            soundbites: _soundbites?.build(),
+            persons: _persons?.build(),
             chapters: _chapters?.build(),
             link: link,
             descriptionHtml: descriptionHtml,
@@ -353,6 +381,10 @@ class EpisodeBuilder
     } catch (_) {
       late String _$failedField;
       try {
+        _$failedField = 'soundbites';
+        _soundbites?.build();
+        _$failedField = 'persons';
+        _persons?.build();
         _$failedField = 'chapters';
         _chapters?.build();
       } catch (e) {

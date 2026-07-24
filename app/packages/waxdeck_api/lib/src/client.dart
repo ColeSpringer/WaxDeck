@@ -1117,6 +1117,10 @@ abstract interface class WaxDeckRepository {
   /// (administrators).
   Future<TrashEmptyResult> emptyTrash();
 
+  /// `DELETE /admin/trash/{trashId}`: purges one trashed file for good,
+  /// returning the bytes reclaimed (administrators).
+  Future<int> purgeTrashEntry(String trashId);
+
   /// `GET /jobs`: currently known background jobs (administrators).
   Future<List<Job>> listJobs();
 
@@ -3451,6 +3455,14 @@ class WaxDeckClient implements WaxDeckRepository {
       errored: body.errored,
       reclaimedBytes: body.reclaimedBytes,
     );
+  });
+
+  @override
+  Future<int> purgeTrashEntry(String trashId) => _guard(() async {
+    final body = _require(
+      (await _gen.getAdminApi().purgeTrashEntry(trashId: trashId)).data,
+    );
+    return body.reclaimedBytes;
   });
 
   @override

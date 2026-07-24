@@ -673,6 +673,52 @@ class AppPasswordCreated extends AppPassword {
   final String secret;
 }
 
+/// A show's funding pointer from its feed's `<podcast:funding>` tag.
+class PodcastFunding {
+  const PodcastFunding({required this.url, this.message});
+
+  final String url;
+
+  /// Suggested call-to-action label for the link.
+  final String? message;
+}
+
+/// One person credited in a feed, from a `<podcast:person>` tag at the
+/// show or episode level. An absent [role] reads as `host`.
+class FeedPerson {
+  const FeedPerson({
+    required this.name,
+    this.role,
+    this.group,
+    this.img,
+    this.href,
+  });
+
+  final String name;
+  final String? role;
+  final String? group;
+
+  /// Portrait image URL, when the feed declares one.
+  final String? img;
+
+  /// Profile or information URL, when the feed declares one.
+  final String? href;
+}
+
+/// One highlight clip of an episode from a `<podcast:soundbite>` tag. An
+/// absent [title] reuses the episode title.
+class Soundbite {
+  const Soundbite({
+    required this.startMs,
+    required this.durationMs,
+    this.title,
+  });
+
+  final int startMs;
+  final int durationMs;
+  final String? title;
+}
+
 /// One podcast show as cataloged on the server.
 class PodcastShow {
   const PodcastShow({
@@ -688,6 +734,9 @@ class PodcastShow {
     this.lastPublishedAt,
     this.refreshDisabled = false,
     this.explicit = false,
+    this.funding,
+    this.medium,
+    this.persons = const [],
   });
 
   final String pid;
@@ -714,6 +763,16 @@ class PodcastShow {
   /// Feed-declared explicit flag for the whole show; episodes carry
   /// their own flag, which wins where the feed sets both.
   final bool explicit;
+
+  /// The show's funding/support pointer, when the feed declares one.
+  final PodcastFunding? funding;
+
+  /// The show's declared medium (`podcast`, `music`, `audiobook`, ...),
+  /// lowercased. Open set; null when the feed declares none.
+  final String? medium;
+
+  /// Show-level person credits. Populated on the detail read only.
+  final List<FeedPerson> persons;
 }
 
 /// The caller's per-subscription settings. The PUT endpoint replaces the
@@ -861,12 +920,20 @@ class EpisodeDetail extends EpisodeSummary {
     this.descriptionHtml,
     this.link,
     this.chapters = const [],
+    this.persons = const [],
+    this.soundbites = const [],
   });
 
   /// Show notes as sanitized HTML (server-side allowlist).
   final String? descriptionHtml;
   final String? link;
   final List<ChapterMark> chapters;
+
+  /// Episode-level person credits, layered on the show's credits.
+  final List<FeedPerson> persons;
+
+  /// Highlight clips the feed marks with `<podcast:soundbite>`.
+  final List<Soundbite> soundbites;
 }
 
 /// One chapter mark, ordered by [startMs].
@@ -2687,6 +2754,7 @@ class AdminSettings {
     required this.sonicAnalysis,
     required this.backupKeepCount,
     required this.backupKeepBytes,
+    required this.trashRetentionDays,
   });
 
   final bool signupEnabled;
@@ -2705,18 +2773,24 @@ class AdminSettings {
   /// Backup retention: total archive bytes to keep (0 keeps all).
   final int backupKeepBytes;
 
+  /// Trash retention: purge trashed files older than this many days on a
+  /// periodic sweep (0 disables retention).
+  final int trashRetentionDays;
+
   AdminSettings copyWith({
     bool? signupEnabled,
     bool? readOnly,
     bool? sonicAnalysis,
     int? backupKeepCount,
     int? backupKeepBytes,
+    int? trashRetentionDays,
   }) => AdminSettings(
     signupEnabled: signupEnabled ?? this.signupEnabled,
     readOnly: readOnly ?? this.readOnly,
     sonicAnalysis: sonicAnalysis ?? this.sonicAnalysis,
     backupKeepCount: backupKeepCount ?? this.backupKeepCount,
     backupKeepBytes: backupKeepBytes ?? this.backupKeepBytes,
+    trashRetentionDays: trashRetentionDays ?? this.trashRetentionDays,
   );
 }
 

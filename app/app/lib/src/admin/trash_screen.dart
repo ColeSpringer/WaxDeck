@@ -24,6 +24,47 @@ class TrashScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _purge(
+    BuildContext context,
+    WidgetRef ref,
+    TrashEntry entry,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Purge this file?'),
+        content: Text(
+          '${entry.name} is deleted for good. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('trash-purge-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Purge'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final reclaimed = await ref.read(trashProvider.notifier).purge(entry.id);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Purged ${entry.name}, reclaimed ${formatBytes(reclaimed)}',
+          ),
+        ),
+      );
+    } on WaxDeckApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _empty(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(
@@ -103,6 +144,7 @@ class TrashScreen extends ConsumerWidget {
                       _TrashRow(
                         entry: entry,
                         onRestore: () => _restore(context, ref, entry),
+                        onPurge: () => _purge(context, ref, entry),
                       ),
                   ],
                 ),
@@ -124,10 +166,15 @@ class TrashScreen extends ConsumerWidget {
 }
 
 class _TrashRow extends StatelessWidget {
-  const _TrashRow({required this.entry, required this.onRestore});
+  const _TrashRow({
+    required this.entry,
+    required this.onRestore,
+    required this.onPurge,
+  });
 
   final TrashEntry entry;
   final VoidCallback onRestore;
+  final VoidCallback onPurge;
 
   static String _date(DateTime at) {
     final local = at.toLocal();
@@ -163,13 +210,26 @@ class _TrashRow extends StatelessWidget {
         ),
         trailing: restored
             ? null
-            : Semantics(
-                identifier: 'trash-restore-${entry.id}',
-                child: TextButton(
-                  key: Key('trash-restore-${entry.id}'),
-                  onPressed: onRestore,
-                  child: const Text('Restore'),
-                ),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Semantics(
+                    identifier: 'trash-purge-${entry.id}',
+                    child: TextButton(
+                      key: Key('trash-purge-${entry.id}'),
+                      onPressed: onPurge,
+                      child: const Text('Purge'),
+                    ),
+                  ),
+                  Semantics(
+                    identifier: 'trash-restore-${entry.id}',
+                    child: TextButton(
+                      key: Key('trash-restore-${entry.id}'),
+                      onPressed: onRestore,
+                      child: const Text('Restore'),
+                    ),
+                  ),
+                ],
               ),
       ),
     );

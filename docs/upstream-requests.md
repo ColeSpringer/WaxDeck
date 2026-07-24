@@ -31,13 +31,6 @@ sidecar injection seam) all landed and are not repeated here.
   attributed to library roots, so users restricted to a subset of
   roots lose entity search entirely (docs/adr/0004). WaxDeck filters
   at the item level and hides entity surfaces from restricted users.
-- **Podcasting 2.0 funding, soundbites, medium, and person tags.**
-  The feed parser skips them, so WaxDeck cannot surface them.
-- **Chapter marks on multi-file books.** Chapters exist only for
-  single-file books; a multi-file book falls back to its part
-  boundaries as the navigation grain.
-- **Sort names beyond artist and album.** Those are the only two
-  editable sort fields; composers and book authors have none.
 - **More than one artwork slot.** Item and entity art hold a single
   front cover; back covers, disc art, booklets, and artist
   backgrounds have nowhere canonical to land, so WaxDeck's provider
@@ -63,12 +56,6 @@ sidecar injection seam) all landed and are not repeated here.
   restarting; the admin-and-ops slice wants an admin creating a
   library at runtime. The streaming sidecar's matching root config
   has the same shape, so this ask spans both repos if it lands.
-- **Age-scoped trash purge.** The trash facade offers list, restore,
-  and EmptyTrash (everything at once); WaxDeck's admin surface wants a
-  retention policy (purge entries older than N days), which needs a
-  per-entry purge or an age-scoped empty. Until then the trash UI
-  ships without automatic retention; empty-everything is the manual
-  answer.
 - **A level-scoped artwork read.** ResolveArt walks the fallback chain
   (item, album, release group, artist), so a caller cannot tell
   item-own art from inherited art; the editor's has-artwork indicator

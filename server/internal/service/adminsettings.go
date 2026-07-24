@@ -14,6 +14,10 @@ type AdminSettings struct {
 	SonicAnalysis   bool
 	BackupKeepCount int
 	BackupKeepBytes int64
+	// TrashRetentionDays purges trashed files older than this many days on
+	// a periodic sweep; 0 disables retention (the trash keeps entries until
+	// emptied by hand).
+	TrashRetentionDays int
 }
 
 // TranscodingLimits cap transcode sessions at the media proxy; zero
@@ -30,7 +34,12 @@ const (
 	settingBackupKeep      = "backup:keep-count"
 	settingBackupKeepBytes = "backup:keep-bytes"
 	settingTranscodeLimits = "transcode:limits"
+	settingTrashRetention  = "trash:retention-days"
 	readOnlyLibPrefix      = "read-only:"
+
+	// maxTrashRetentionDays bounds the retention window at 100 years, far
+	// under the ~106752-day point where days*24h overflows time.Duration.
+	maxTrashRetentionDays = 36500
 )
 
 // runtimeToggles is the hot-path cache of settings consulted per
@@ -94,7 +103,28 @@ func (l *Library) AdminSettingsGet(ctx context.Context) (AdminSettings, error) {
 	if v, err := l.db.SettingGet(ctx, settingBackupKeepBytes); err == nil {
 		out.BackupKeepBytes, _ = strconv.ParseInt(v, 10, 64)
 	}
+	out.TrashRetentionDays = l.TrashRetentionDays(ctx)
 	return out, nil
+}
+
+// TrashRetentionDays reads the configured trash retention window in days;
+// 0 (the default and the value on a parse error) disables retention.
+func (l *Library) TrashRetentionDays(ctx context.Context) int {
+	v, err := l.db.SettingGet(ctx, settingTrashRetention)
+	if err != nil {
+		return 0
+	}
+	days, err := strconv.Atoi(v)
+	if err != nil || days < 0 {
+		return 0
+	}
+	// Clamp at read too: a value stored before the cap existed (or set
+	// out-of-band) must never reach the sweep's day→duration conversion
+	// large enough to overflow.
+	if days > maxTrashRetentionDays {
+		return maxTrashRetentionDays
+	}
+	return days
 }
 
 // AdminSettingsPut replaces the runtime settings; they apply
@@ -103,6 +133,12 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 	if s.BackupKeepCount < 0 || s.BackupKeepBytes < 0 {
 		return AdminSettings{}, errInvalid("backup retention must not be negative")
 	}
+	// Cap well under the point where days*24h overflows time.Duration's
+	// int64 nanoseconds (~106752 days): a wrapped negative would silently
+	// disable the sweep and a wrapped-positive-small could over-purge.
+	if s.TrashRetentionDays < 0 || s.TrashRetentionDays > maxTrashRetentionDays {
+		return AdminSettings{}, errInvalid("trash retention must be between 0 and 36500 days")
+	}
 	now := time.Now().UnixNano()
 	writes := map[string]string{
 		settingSignupEnabled:   strconv.FormatBool(s.SignupEnabled),
@@ -110,6 +146,7 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 		settingSonicAnalysis:   strconv.FormatBool(s.SonicAnalysis),
 		settingBackupKeep:      strconv.Itoa(s.BackupKeepCount),
 		settingBackupKeepBytes: strconv.FormatInt(s.BackupKeepBytes, 10),
+		settingTrashRetention:  strconv.Itoa(s.TrashRetentionDays),
 	}
 	for k, v := range writes {
 		if err := l.db.SettingSet(ctx, k, v, now); err != nil {
@@ -120,7 +157,8 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 	l.Audit(ctx, actor, "settings.update", AuditTarget{Kind: "settings"},
 		map[string]any{"signupEnabled": s.SignupEnabled, "readOnly": s.ReadOnly,
 			"sonicAnalysis":   s.SonicAnalysis,
-			"backupKeepCount": s.BackupKeepCount, "backupKeepBytes": s.BackupKeepBytes})
+			"backupKeepCount": s.BackupKeepCount, "backupKeepBytes": s.BackupKeepBytes,
+			"trashRetentionDays": s.TrashRetentionDays})
 	return l.AdminSettingsGet(ctx)
 }
 
