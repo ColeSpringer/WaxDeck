@@ -8,6 +8,7 @@ import {
   typeInto,
   waitForLibrary,
 } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The curation journey: seed a pending review entry by requesting a
 // rematch of a scanned track (the stack runs with matching off, so the
@@ -16,7 +17,6 @@ import {
 // decide it. This exercises the app's first shortcuts layer and the
 // review surface end to end.
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 
 async function firstMusicPid(
   request: APIRequestContext,
@@ -74,12 +74,12 @@ test('review a queued match with the keyboard', async ({ page, request }) => {
 
   // Open the review queue through the curation menu.
   await clickThrough(
-    page.locator(sem('curation-menu')),
-    page.locator(sem('curation-review')),
+    page.locator(sem(SemanticsIds.curationMenu)),
+    page.locator(sem(SemanticsIds.curationReview)),
   );
   await clickThrough(
-    page.locator(sem('curation-review')),
-    page.locator(sem(`review-row-${entryId}`)),
+    page.locator(sem(SemanticsIds.curationReview)),
+    page.locator(sem(SemanticsIds.reviewRow(entryId))),
   );
 
   // Keyboard-first: j selects the first row, e opens it. The shortcuts
@@ -89,7 +89,7 @@ test('review a queued match with the keyboard', async ({ page, request }) => {
 
   // The entry screen offers the as-is decision (no candidates to
   // approve). Accept it, which returns to the queue.
-  const asIs = page.locator(sem('review-as-is'));
+  const asIs = page.locator(sem(SemanticsIds.reviewAsIs));
   await asIs.waitFor({ timeout: 15_000 });
   await asIs.click();
 

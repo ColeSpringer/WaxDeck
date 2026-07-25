@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../admin/server_settings_section.dart';
 import '../auth/auth_controller.dart';
+import '../shell/semantics_ids.dart';
 import 'integrations_sections.dart';
 import 'listening_sections.dart';
 import 'prefs_controller.dart';
@@ -102,9 +103,9 @@ class SettingsScreen extends ConsumerWidget {
             leading: const Icon(Icons.palette_outlined),
             title: const Text('Theme'),
             trailing: Semantics(
-              identifier: 'theme-select',
+              identifier: SemanticsIds.themeSelect,
               child: DropdownButton<ThemePref>(
-                key: const Key('theme-select'),
+                key: const Key(SemanticsIds.themeSelect),
                 value: prefs?.theme ?? ThemePref.dark,
                 onChanged: (theme) {
                   if (theme == null) return;
@@ -162,9 +163,9 @@ class SettingsScreen extends ConsumerWidget {
           ],
           const SizedBox(height: 24),
           Semantics(
-            identifier: 'logout-button',
+            identifier: SemanticsIds.logoutButton,
             child: FilledButton.tonalIcon(
-              key: const Key('logout-button'),
+              key: const Key(SemanticsIds.logoutButton),
               onPressed: () => _signOut(context, ref),
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
@@ -197,9 +198,9 @@ class _DeviceRow extends StatelessWidget {
       subtitle.write(' with $client');
     }
     return Semantics(
-      identifier: 'device-row-${session.id}',
+      identifier: SemanticsIds.deviceRow(session.id),
       child: ListTile(
-        key: Key('device-row-${session.id}'),
+        key: Key(SemanticsIds.deviceRow(session.id)),
         leading: Icon(
           session.kind == SessionKind.web
               ? Icons.language
@@ -222,9 +223,9 @@ class _DeviceRow extends StatelessWidget {
         ),
         subtitle: Text(subtitle.toString()),
         trailing: Semantics(
-          identifier: 'device-revoke-${session.id}',
+          identifier: SemanticsIds.deviceRevoke(session.id),
           child: IconButton(
-            key: Key('device-revoke-${session.id}'),
+            key: Key(SemanticsIds.deviceRevoke(session.id)),
             tooltip: 'Sign out device',
             icon: const Icon(Icons.logout),
             onPressed: onRevoke,

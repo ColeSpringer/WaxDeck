@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import 'auth_controller.dart';
 import 'signup_screen.dart';
 
@@ -123,9 +124,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
                   Semantics(
-                    identifier: 'login-username',
+                    identifier: SemanticsIds.loginUsername,
                     child: TextFormField(
-                      key: const Key('login-username'),
+                      key: const Key(SemanticsIds.loginUsername),
                       controller: _username,
                       autofillHints: const [AutofillHints.username],
                       decoration: const InputDecoration(
@@ -140,9 +141,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   Semantics(
-                    identifier: 'login-password',
+                    identifier: SemanticsIds.loginPassword,
                     child: TextFormField(
-                      key: const Key('login-password'),
+                      key: const Key(SemanticsIds.loginPassword),
                       controller: _password,
                       obscureText: true,
                       autofillHints: const [AutofillHints.password],
@@ -159,10 +160,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 24),
                   if (_error != null) ...[
                     Semantics(
-                      identifier: 'login-error',
+                      identifier: SemanticsIds.loginError,
                       child: Text(
                         _error!,
-                        key: const Key('login-error'),
+                        key: const Key(SemanticsIds.loginError),
                         style: textTheme.bodyMedium?.copyWith(
                           color: colorScheme.error,
                         ),
@@ -172,9 +173,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 16),
                   ],
                   Semantics(
-                    identifier: 'login-submit',
+                    identifier: SemanticsIds.loginSubmit,
                     child: FilledButton(
-                      key: const Key('login-submit'),
+                      key: const Key(SemanticsIds.loginSubmit),
                       onPressed: _submitting ? null : _submit,
                       child: _submitting
                           ? const SizedBox(
@@ -189,9 +190,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   // Open signup gets the louder wording; without it the
                   // link still serves people holding an invite token.
                   Semantics(
-                    identifier: 'signup-open',
+                    identifier: SemanticsIds.signupOpen,
                     child: TextButton(
-                      key: const Key('signup-open'),
+                      key: const Key(SemanticsIds.signupOpen),
                       onPressed: _submitting ? null : _openSignup,
                       child: Text(
                         signupEnabled
@@ -215,9 +216,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     for (final provider in oidcProviders) ...[
                       const SizedBox(height: 16),
                       Semantics(
-                        identifier: 'oidc-login-${provider.id}',
+                        identifier: SemanticsIds.oidcLogin(provider.id),
                         child: OutlinedButton.icon(
-                          key: Key('oidc-login-${provider.id}'),
+                          key: Key(SemanticsIds.oidcLogin(provider.id)),
                           onPressed: _submitting
                               ? null
                               : () => _oidcSubmit(provider),

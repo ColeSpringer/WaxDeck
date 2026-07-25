@@ -1,0 +1,11 @@
+{
+    "name": "WaxDeck design system",
+    "short_name": "waxdeck_ui",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#16130F",
+    "theme_color": "#16130F",
+    "description": "Component catalogue and composites for review.",
+    "orientation": "any",
+    "prefer_related_applications": false
+}

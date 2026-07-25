@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../shell/semantics_ids.dart';
 
 /// A data-dense editing prototype shaped like the metadata review
 /// queue: a static-data table exercising exactly the interactions
@@ -74,14 +75,14 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
         PopupMenuItem(
           value: 'copy',
           child: Semantics(
-            identifier: 'proto-menu-copy',
+            identifier: SemanticsIds.protoMenuCopy,
             child: const Text('Copy proposed title'),
           ),
         ),
         PopupMenuItem(
           value: 'apply',
           child: Semantics(
-            identifier: 'proto-menu-apply',
+            identifier: SemanticsIds.protoMenuApply,
             child: const Text('Apply proposal'),
           ),
         ),
@@ -99,7 +100,7 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
       appBar: AppBar(title: const Text('Editing prototype')),
       body: SelectionArea(
         child: Semantics(
-          identifier: 'proto-table',
+          identifier: SemanticsIds.protoTable,
           child: ListView.builder(
             itemCount: rows.length + 1,
             itemBuilder: (context, index) {
@@ -111,7 +112,7 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
               return GestureDetector(
                 onSecondaryTapDown: (d) => _contextMenu(d.globalPosition, i),
                 child: Semantics(
-                  identifier: 'proto-row-$i',
+                  identifier: SemanticsIds.protoRow(i),
                   child: Container(
                     decoration: BoxDecoration(
                       border: Border(
@@ -127,14 +128,14 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
                         Expanded(
                           flex: 3,
                           child: Semantics(
-                            identifier: 'proto-cell-$i-current',
+                            identifier: SemanticsIds.protoCellCurrent(i),
                             child: Text(r.currentTitle),
                           ),
                         ),
                         Expanded(
                           flex: 3,
                           child: Semantics(
-                            identifier: 'proto-edit-$i',
+                            identifier: SemanticsIds.protoEdit(i),
                             child: TextField(
                               controller: proposed[i],
                               decoration: const InputDecoration(
@@ -148,7 +149,7 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
                         Expanded(
                           flex: 2,
                           child: Semantics(
-                            identifier: 'proto-cell-$i-artist',
+                            identifier: SemanticsIds.protoCellArtist(i),
                             child: Text(r.artist),
                           ),
                         ),
@@ -160,13 +161,13 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
                           ),
                         ),
                         Semantics(
-                          identifier: 'proto-kebab-$i',
+                          identifier: SemanticsIds.protoKebab(i),
                           label: 'Row actions',
                           button: true,
                           excludeSemantics: true,
                           onTap: () => _kebabMenu(i),
                           child: IconButton(
-                            key: Key('proto-kebab-$i'),
+                            key: Key(SemanticsIds.protoKebab(i)),
                             visualDensity: VisualDensity.compact,
                             icon: const Icon(Icons.more_vert, size: 18),
                             onPressed: () => _kebabMenu(i),

@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../media_icons.dart';
 import '../player/player_screen.dart';
+import '../shell/semantics_ids.dart';
 
 /// A computed list of playable tracks (an instant mix or a
 /// similar-tracks answer) in play order, with the answering engine
@@ -85,13 +86,13 @@ class _TrackRow extends StatelessWidget {
       ),
     );
     return Semantics(
-      identifier: '$idPrefix-item-$index',
+      identifier: SemanticsIds.scopedItem(idPrefix, index),
       label: item.artist == null
           ? item.title
           : '${item.title} by ${item.artist}',
       button: true,
       child: ListTile(
-        key: Key('$idPrefix-item-$index'),
+        key: Key(SemanticsIds.scopedItem(idPrefix, index)),
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(6),
           child: SizedBox(

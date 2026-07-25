@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/semantics_ids.dart';
 import 'share_dialog.dart';
 import 'shares_controller.dart';
 
@@ -133,9 +134,9 @@ class _ShareRow extends StatelessWidget {
       expiresAt == null ? 'never expires' : 'expires ${_date(expiresAt)}',
     ];
     return Semantics(
-      identifier: 'share-row-${share.pid}',
+      identifier: SemanticsIds.shareRow(share.pid),
       child: ListTile(
-        key: Key('share-row-${share.pid}'),
+        key: Key(SemanticsIds.shareRow(share.pid)),
         leading: Icon(_kindIcon(share.targetKind)),
         title: Text(
           share.targetTitle,
@@ -147,22 +148,22 @@ class _ShareRow extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Semantics(
-              identifier: 'share-copy-${share.pid}',
+              identifier: SemanticsIds.shareCopy(share.pid),
               label: 'Copy link',
               button: true,
               child: IconButton(
-                key: Key('share-copy-${share.pid}'),
+                key: Key(SemanticsIds.shareCopy(share.pid)),
                 tooltip: 'Copy link',
                 icon: const Icon(Icons.copy),
                 onPressed: onCopy,
               ),
             ),
             Semantics(
-              identifier: 'share-revoke-${share.pid}',
+              identifier: SemanticsIds.shareRevoke(share.pid),
               label: 'Revoke link',
               button: true,
               child: IconButton(
-                key: Key('share-revoke-${share.pid}'),
+                key: Key(SemanticsIds.shareRevoke(share.pid)),
                 tooltip: 'Revoke link',
                 icon: const Icon(Icons.link_off),
                 onPressed: onRevoke,

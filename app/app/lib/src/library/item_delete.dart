@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import 'library_controller.dart';
 import '../format_bytes.dart';
 
@@ -61,11 +62,11 @@ class ItemDeleteAction extends ConsumerWidget {
         false;
     if (!isAdmin) return const SizedBox.shrink();
     return Semantics(
-      identifier: 'item-delete',
+      identifier: SemanticsIds.itemDelete,
       label: 'Delete files',
       button: true,
       child: PopupMenuButton<String>(
-        key: const Key('item-delete'),
+        key: const Key(SemanticsIds.itemDelete),
         tooltip: 'More',
         onSelected: (_) => _delete(context, ref),
         itemBuilder: (context) => [
@@ -138,9 +139,9 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
           child: const Text('Cancel'),
         ),
         Semantics(
-          identifier: 'item-delete-confirm',
+          identifier: SemanticsIds.itemDeleteConfirm,
           child: FilledButton(
-            key: const Key('item-delete-confirm'),
+            key: const Key(SemanticsIds.itemDeleteConfirm),
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
               foregroundColor: Theme.of(context).colorScheme.onError,

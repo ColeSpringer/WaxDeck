@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import '../uploads/audio_drop_area.dart';
 import '../uploads/file_picker_port.dart';
 import 'admin_providers.dart';
@@ -82,7 +83,7 @@ class BackupsScreen extends ConsumerWidget {
     final anyRunning = backups.value?.any((b) => b.state == 'running') ?? false;
     final picker = ref.watch(filePickerProvider);
     return Semantics(
-      identifier: 'admin-backups',
+      identifier: SemanticsIds.adminBackups,
       container: true,
       child: Scaffold(
         appBar: AppBar(title: const Text('Backups')),
@@ -106,9 +107,9 @@ class BackupsScreen extends ConsumerWidget {
               Row(
                 children: [
                   Semantics(
-                    identifier: 'backup-create',
+                    identifier: SemanticsIds.backupCreate,
                     child: FilledButton.icon(
-                      key: const Key('backup-create'),
+                      key: const Key(SemanticsIds.backupCreate),
                       onPressed: anyRunning
                           ? null
                           : () => _createBackup(context, ref),
@@ -119,9 +120,9 @@ class BackupsScreen extends ConsumerWidget {
                   const SizedBox(width: 8),
                   if (picker != null)
                     Semantics(
-                      identifier: 'backup-import',
+                      identifier: SemanticsIds.backupImport,
                       child: OutlinedButton.icon(
-                        key: const Key('backup-import'),
+                        key: const Key(SemanticsIds.backupImport),
                         onPressed: () => _pickAndImport(context, ref),
                         icon: const Icon(Icons.unarchive_outlined),
                         label: const Text('Import archive'),
@@ -188,9 +189,9 @@ class _RestoreBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Semantics(
-      identifier: 'restore-banner',
+      identifier: SemanticsIds.restoreBanner,
       child: Card(
-        key: const Key('restore-banner'),
+        key: const Key(SemanticsIds.restoreBanner),
         color: colorScheme.tertiaryContainer,
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -206,9 +207,9 @@ class _RestoreBanner extends StatelessWidget {
                 ),
               ),
               Semantics(
-                identifier: 'restore-cancel',
+                identifier: SemanticsIds.restoreCancel,
                 child: TextButton(
-                  key: const Key('restore-cancel'),
+                  key: const Key(SemanticsIds.restoreCancel),
                   onPressed: onCancel,
                   child: const Text('Cancel'),
                 ),
@@ -310,9 +311,9 @@ class _BackupRow extends ConsumerWidget {
       _date(backup.createdAt),
     ].join(', ');
     return Semantics(
-      identifier: 'backup-row-${backup.id}',
+      identifier: SemanticsIds.backupRow(backup.id),
       child: ListTile(
-        key: ValueKey('backup-row-${backup.id}'),
+        key: ValueKey(SemanticsIds.backupRow(backup.id)),
         leading: Icon(
           backup.state == 'failed'
               ? Icons.error_outline
@@ -494,10 +495,10 @@ class _ScheduleRowState extends ConsumerState<_ScheduleRow> {
       status.write('next ${schedule.nextRunAt!.toLocal()}');
     }
     return Semantics(
-      identifier: 'schedule-row-$kind',
+      identifier: SemanticsIds.scheduleRow(kind),
       container: true,
       child: Card(
-        key: ValueKey('schedule-row-$kind'),
+        key: ValueKey(SemanticsIds.scheduleRow(kind)),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -509,9 +510,9 @@ class _ScheduleRowState extends ConsumerState<_ScheduleRow> {
                     child: Text(_label(kind), style: textTheme.titleSmall),
                   ),
                   Semantics(
-                    identifier: 'schedule-enabled-$kind',
+                    identifier: SemanticsIds.scheduleEnabled(kind),
                     child: Switch(
-                      key: Key('schedule-enabled-$kind'),
+                      key: Key(SemanticsIds.scheduleEnabled(kind)),
                       value: _enabled,
                       onChanged: (value) => setState(() => _enabled = value),
                     ),
@@ -523,9 +524,9 @@ class _ScheduleRowState extends ConsumerState<_ScheduleRow> {
                 children: [
                   Expanded(
                     child: Semantics(
-                      identifier: 'schedule-cron-$kind',
+                      identifier: SemanticsIds.scheduleCron(kind),
                       child: TextField(
-                        key: Key('schedule-cron-$kind'),
+                        key: Key(SemanticsIds.scheduleCron(kind)),
                         controller: _cron,
                         decoration: const InputDecoration(
                           labelText: 'Cron',
@@ -536,9 +537,9 @@ class _ScheduleRowState extends ConsumerState<_ScheduleRow> {
                   ),
                   const SizedBox(width: 8),
                   Semantics(
-                    identifier: 'schedule-save-$kind',
+                    identifier: SemanticsIds.scheduleSave(kind),
                     child: FilledButton.tonal(
-                      key: Key('schedule-save-$kind'),
+                      key: Key(SemanticsIds.scheduleSave(kind)),
                       onPressed: _busy ? null : _save,
                       child: const Text('Save'),
                     ),

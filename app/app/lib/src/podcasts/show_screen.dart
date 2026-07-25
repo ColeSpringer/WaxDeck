@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../player/player_screen.dart';
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import 'credits.dart';
 import 'episode_screen.dart';
 import 'explicit_badge.dart';
@@ -42,11 +43,11 @@ class ShowScreen extends ConsumerWidget {
         actions: [
           if (detail.value?.subscribed ?? false)
             Semantics(
-              identifier: 'podcast-settings-open',
+              identifier: SemanticsIds.podcastSettingsOpen,
               label: 'Subscription settings',
               button: true,
               child: IconButton(
-                key: const Key('podcast-settings-open'),
+                key: const Key(SemanticsIds.podcastSettingsOpen),
                 tooltip: 'Subscription settings',
                 icon: const Icon(Icons.tune),
                 onPressed: () => _openSettings(context, ref),
@@ -166,21 +167,21 @@ class _ShowHeader extends ConsumerWidget {
         ),
         actions: [
           Semantics(
-            identifier: 'unsubscribe-keep-files',
+            identifier: SemanticsIds.unsubscribeKeepFiles,
             label: 'Keep files',
             button: true,
             child: TextButton(
-              key: const Key('unsubscribe-keep-files'),
+              key: const Key(SemanticsIds.unsubscribeKeepFiles),
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('Keep files'),
             ),
           ),
           Semantics(
-            identifier: 'unsubscribe-remove-files',
+            identifier: SemanticsIds.unsubscribeRemoveFiles,
             label: 'Remove files',
             button: true,
             child: TextButton(
-              key: const Key('unsubscribe-remove-files'),
+              key: const Key(SemanticsIds.unsubscribeRemoveFiles),
               onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Remove files'),
             ),
@@ -257,22 +258,22 @@ class _ShowHeader extends ConsumerWidget {
                     const SizedBox(height: 8),
                     if (detail.subscribed)
                       Semantics(
-                        identifier: 'podcast-unsubscribe',
+                        identifier: SemanticsIds.podcastUnsubscribe,
                         label: 'Unsubscribe',
                         button: true,
                         child: OutlinedButton(
-                          key: const Key('podcast-unsubscribe'),
+                          key: const Key(SemanticsIds.podcastUnsubscribe),
                           onPressed: () => _unsubscribe(context, ref, guarded),
                           child: const Text('Unsubscribe'),
                         ),
                       )
                     else
                       Semantics(
-                        identifier: 'podcast-subscribe',
+                        identifier: SemanticsIds.podcastSubscribe,
                         label: 'Subscribe',
                         button: true,
                         child: FilledButton(
-                          key: const Key('podcast-subscribe'),
+                          key: const Key(SemanticsIds.podcastSubscribe),
                           onPressed: () => guarded(notifier.subscribe),
                           child: const Text('Subscribe'),
                         ),
@@ -388,11 +389,11 @@ class _EpisodeRow extends ConsumerWidget {
         (episode.fetchState == null || episode.fetchState == 'failed');
 
     return Semantics(
-      identifier: 'episode-${episode.pid}',
+      identifier: SemanticsIds.episode(episode.pid),
       label: episode.title,
       button: true,
       child: ListTile(
-        key: ValueKey('episode-${episode.pid}'),
+        key: ValueKey(SemanticsIds.episode(episode.pid)),
         title: Row(
           children: [
             if (episode.explicit)
@@ -413,13 +414,13 @@ class _EpisodeRow extends ConsumerWidget {
             ?chip,
             if (showFetchButton)
               Semantics(
-                identifier: 'episode-fetch-${episode.pid}',
+                identifier: SemanticsIds.episodeFetch(episode.pid),
                 label: 'Fetch episode',
                 button: true,
                 excludeSemantics: true,
                 onTap: () => _fetch(context, ref),
                 child: IconButton(
-                  key: ValueKey('episode-fetch-${episode.pid}'),
+                  key: ValueKey(SemanticsIds.episodeFetch(episode.pid)),
                   tooltip: 'Fetch to server',
                   icon: const Icon(Icons.cloud_download_outlined),
                   onPressed: () => _fetch(context, ref),
@@ -427,26 +428,26 @@ class _EpisodeRow extends ConsumerWidget {
               ),
             if (episode.downloaded)
               Semantics(
-                identifier: 'episode-remove-${episode.pid}',
+                identifier: SemanticsIds.episodeRemove(episode.pid),
                 label: 'Remove download',
                 button: true,
                 excludeSemantics: true,
                 onTap: () => _removeDownload(context, ref),
                 child: IconButton(
-                  key: ValueKey('episode-remove-${episode.pid}'),
+                  key: ValueKey(SemanticsIds.episodeRemove(episode.pid)),
                   tooltip: 'Remove from server',
                   icon: const Icon(Icons.cloud_off_outlined),
                   onPressed: () => _removeDownload(context, ref),
                 ),
               ),
             Semantics(
-              identifier: 'episode-info-${episode.pid}',
+              identifier: SemanticsIds.episodeInfo(episode.pid),
               label: 'Episode details',
               button: true,
               excludeSemantics: true,
               onTap: () => _openInfo(context),
               child: IconButton(
-                key: ValueKey('episode-info-${episode.pid}'),
+                key: ValueKey(SemanticsIds.episodeInfo(episode.pid)),
                 tooltip: 'Episode details',
                 icon: const Icon(Icons.info_outline),
                 onPressed: () => _openInfo(context),
@@ -566,10 +567,10 @@ class _SubscriptionSettingsSheetState
           const SizedBox(height: 8),
           Text('Speed ${_speed.toStringAsFixed(2)}x'),
           Semantics(
-            identifier: 'podcast-settings-speed',
+            identifier: SemanticsIds.podcastSettingsSpeed,
             label: 'Playback speed',
             child: Slider(
-              key: const Key('podcast-settings-speed'),
+              key: const Key(SemanticsIds.podcastSettingsSpeed),
               value: _speed,
               min: 0.5,
               max: 3.5,
@@ -600,10 +601,10 @@ class _SubscriptionSettingsSheetState
             onChanged: (v) => setState(() => _autoDownload = v),
           ),
           Semantics(
-            identifier: 'podcast-settings-retention',
+            identifier: SemanticsIds.podcastSettingsRetention,
             textField: true,
             child: TextField(
-              key: const Key('podcast-settings-retention'),
+              key: const Key(SemanticsIds.podcastSettingsRetention),
               controller: _retention,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
@@ -616,11 +617,11 @@ class _SubscriptionSettingsSheetState
           Align(
             alignment: Alignment.centerRight,
             child: Semantics(
-              identifier: 'podcast-settings-save',
+              identifier: SemanticsIds.podcastSettingsSave,
               label: 'Save settings',
               button: true,
               child: FilledButton(
-                key: const Key('podcast-settings-save'),
+                key: const Key(SemanticsIds.podcastSettingsSave),
                 onPressed: _busy ? null : _save,
                 child: const Text('Save'),
               ),

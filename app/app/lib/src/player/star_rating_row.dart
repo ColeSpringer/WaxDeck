@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../shell/semantics_ids.dart';
 
 /// Star toggle plus the five-star rating row, shared by the item
 /// controls and their artist/album twin. Ratings map star N to N times
@@ -58,13 +59,13 @@ class StarRatingRow extends StatelessWidget {
         // node: the wrapper's label plus the button's own (tooltip-fed)
         // node would otherwise announce twice.
         Semantics(
-          identifier: '${idPrefix}star-button',
+          identifier: SemanticsIds.starButton(idPrefix),
           label: label,
           button: true,
           excludeSemantics: true,
           onTap: enabled ? () => onStar(!starred) : null,
           child: IconButton(
-            key: Key('${idPrefix}star-button'),
+            key: Key(SemanticsIds.starButton(idPrefix)),
             tooltip: label,
             color: starred ? colorScheme.primary : null,
             onPressed: enabled ? () => onStar(!starred) : null,
@@ -74,13 +75,13 @@ class StarRatingRow extends StatelessWidget {
         const SizedBox(width: 8),
         for (var n = 1; n <= 5; n++)
           Semantics(
-            identifier: '${idPrefix}rating-$n',
+            identifier: SemanticsIds.rating(idPrefix, n),
             label: ratingLabel(n),
             button: true,
             excludeSemantics: true,
             onTap: enabled ? () => onRate(n == stars ? null : n * 20) : null,
             child: IconButton(
-              key: Key('${idPrefix}rating-$n'),
+              key: Key(SemanticsIds.rating(idPrefix, n)),
               visualDensity: VisualDensity.compact,
               color: n <= stars ? colorScheme.primary : null,
               onPressed: enabled

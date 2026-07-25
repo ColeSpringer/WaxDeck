@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/semantics_ids.dart';
 import 'podcasts_controller.dart';
 import 'show_screen.dart';
 
@@ -15,11 +16,11 @@ class PodcastsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Podcasts')),
       floatingActionButton: Semantics(
-        identifier: 'podcast-add',
+        identifier: SemanticsIds.podcastAdd,
         label: 'Add subscription',
         button: true,
         child: FloatingActionButton(
-          key: const Key('podcast-add'),
+          key: const Key(SemanticsIds.podcastAdd),
           tooltip: 'Add subscription',
           onPressed: () => showDialog<void>(
             context: context,
@@ -81,11 +82,11 @@ class _SubscriptionRow extends StatelessWidget {
     final artUrl = show.artUrl;
     final colorScheme = Theme.of(context).colorScheme;
     return Semantics(
-      identifier: 'podcast-${show.pid}',
+      identifier: SemanticsIds.podcast(show.pid),
       label: show.title,
       button: true,
       child: ListTile(
-        key: ValueKey('podcast-${show.pid}'),
+        key: ValueKey(SemanticsIds.podcast(show.pid)),
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(6),
           child: SizedBox(
@@ -193,11 +194,11 @@ class _SubscribeDialogState extends ConsumerState<_SubscribeDialog> {
           child: const Text('Cancel'),
         ),
         Semantics(
-          identifier: 'podcast-subscribe-confirm',
+          identifier: SemanticsIds.podcastSubscribeConfirm,
           label: 'Subscribe',
           button: true,
           child: FilledButton(
-            key: const Key('podcast-subscribe-confirm'),
+            key: const Key(SemanticsIds.podcastSubscribeConfirm),
             onPressed: _busy ? null : _subscribe,
             child: const Text('Subscribe'),
           ),

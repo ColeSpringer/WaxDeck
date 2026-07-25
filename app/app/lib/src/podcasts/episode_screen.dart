@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../player/session_registry.dart';
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import 'credits.dart';
 import 'explicit_badge.dart';
 import 'podcasts_controller.dart';
@@ -197,9 +198,9 @@ class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      identifier: 'transcript-open',
+      identifier: SemanticsIds.transcriptOpen,
       child: ExpansionTile(
-        key: const Key('transcript-open'),
+        key: const Key(SemanticsIds.transcriptOpen),
         tilePadding: EdgeInsets.zero,
         title: const Text('Transcript'),
         onExpansionChanged: _onExpanded,
@@ -229,10 +230,10 @@ class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
                 children: [
                   for (final (i, cue) in transcript.cues.indexed)
                     Semantics(
-                      identifier: 'transcript-cue-$i',
+                      identifier: SemanticsIds.transcriptCue(i),
                       button: true,
                       child: ListTile(
-                        key: ValueKey('transcript-cue-$i'),
+                        key: ValueKey(SemanticsIds.transcriptCue(i)),
                         dense: true,
                         leading: Text(formatCueTimestamp(cue.startMs)),
                         title: Text(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 
 /// The active per-code filter over the diagnostics list; null shows all.
 class DiagnosticCodeFilterController extends Notifier<String?> {
@@ -116,7 +117,7 @@ class DiagnosticsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final list = ref.watch(diagnosticsProvider);
     return Semantics(
-      identifier: 'admin-diagnostics',
+      identifier: SemanticsIds.adminDiagnostics,
       container: true,
       child: Scaffold(
         appBar: AppBar(title: const Text('Diagnostics')),

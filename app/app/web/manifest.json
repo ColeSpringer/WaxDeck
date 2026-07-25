@@ -2,11 +2,13 @@
     "name": "WaxDeck",
     "short_name": "WaxDeck",
     "start_url": ".",
+    "scope": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#16130F",
+    "theme_color": "#16130F",
+    "description": "Your music, podcasts, and audiobooks, on your own server.",
+    "orientation": "any",
+    "categories": ["music", "entertainment"],
     "prefer_related_applications": false,
     "icons": [
         {

@@ -1,12 +1,12 @@
 import { test, expect, APIRequestContext, Page } from '@playwright/test';
 import { authed, clickThrough, ensureAdmin, typeInto, waitForLibrary } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // Listening stats and public share links over the real stack: sessions
 // reported through the listen API surface in the stats screen and the
 // year in review, and a share link's whole life from creation through
 // anonymous playback to revocation.
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 
 // The stack's own origin, for request contexts created outside the
 // test fixtures (mirrors playwright.config.ts).
@@ -19,7 +19,7 @@ async function login(page: Page) {
   await typeInto(page, username, 'admin');
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
   await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem('playlists-open')).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.playlistsOpen)).waitFor({ timeout: 30_000 });
 }
 
 async function trackPid(
@@ -98,7 +98,7 @@ test('reported listens surface in stats and the year in review', async ({
   expect(outcome.accepted + outcome.duplicates).toBe(4);
 
   await login(page);
-  await clickThrough(page.locator(sem('open-stats')), page.locator(sem('stats-range-7d')));
+  await clickThrough(page.locator(sem(SemanticsIds.openStats)), page.locator(sem(SemanticsIds.statsRange('7d'))));
 
   // The default 30d view includes the backdated two-hour session, so
   // the listened headline reads in hours. Other specs' live playback
@@ -116,7 +116,7 @@ test('reported listens surface in stats and the year in review', async ({
   // handlers attach.
   await expect(async () => {
     await page
-      .locator(sem('stats-range-7d'))
+      .locator(sem(SemanticsIds.statsRange('7d')))
       .click({ timeout: 2_000, force: true })
       .catch(() => {});
     await expect(hoursTotal).toHaveCount(0, { timeout: 3_000 });
@@ -131,7 +131,7 @@ test('reported listens surface in stats and the year in review', async ({
   await page.mouse.move(viewport.width / 2, viewport.height / 2);
   await expect(async () => {
     await page.mouse.wheel(0, 1_200);
-    await expect(page.locator(sem('open-year-in-review'))).toBeVisible({
+    await expect(page.locator(sem(SemanticsIds.openYearInReview))).toBeVisible({
       timeout: 1_000,
     });
   }).toPass({ timeout: 30_000 });
@@ -143,8 +143,8 @@ test('reported listens surface in stats and the year in review', async ({
   const textOrLabel = (matcher: string | RegExp) =>
     page.getByText(matcher).or(page.getByLabel(matcher));
   await clickThrough(
-    page.locator(sem('open-year-in-review')),
-    page.locator(sem('yir-personal')),
+    page.locator(sem(SemanticsIds.openYearInReview)),
+    page.locator(sem(SemanticsIds.yirPersonal)),
   );
   const year = new Date().getFullYear();
   await expect(textOrLabel(`${year}`).first()).toBeVisible({
@@ -157,7 +157,7 @@ test('reported listens surface in stats and the year in review', async ({
   // The server-wide recap aggregates every enrolled listener; on this
   // stack that is the administrator alone.
   await clickThrough(
-    page.locator(sem('yir-server')),
+    page.locator(sem(SemanticsIds.yirServer)),
     textOrLabel('listeners counted in').first(),
   );
   await expect(

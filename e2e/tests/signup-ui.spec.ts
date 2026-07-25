@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { ensureAdmin, authed, typeInto, clickThrough } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 
 // The self-serve door as a person meets it: the login screen's invite
 // path, end to end, without touching the global open-signup toggle
@@ -20,14 +20,14 @@ test('an invite token walks a visitor in from the login screen', async ({ page, 
   // A fresh context carries no session, so the app lands on login;
   // with open signup off the affordance reads as the invite path.
   await page.goto('/');
-  await clickThrough(page.locator(sem('signup-open')), page.locator(sem('signup-username')));
-  await typeInto(page, page.locator(sem('signup-username')), username);
-  await typeInto(page, page.locator(sem('signup-password')), 'walkup-pass-123');
-  await typeInto(page, page.locator(sem('signup-invite-token')), inviteBody.token);
+  await clickThrough(page.locator(sem(SemanticsIds.signupOpen)), page.locator(sem(SemanticsIds.signupUsername)));
+  await typeInto(page, page.locator(sem(SemanticsIds.signupUsername)), username);
+  await typeInto(page, page.locator(sem(SemanticsIds.signupPassword)), 'walkup-pass-123');
+  await typeInto(page, page.locator(sem(SemanticsIds.signupInviteToken)), inviteBody.token);
   // An invited signup activates immediately, so the screen pops back
   // to the login form prefilled (signup-result renders only for the
   // pending path).
-  await clickThrough(page.locator(sem('signup-submit')), page.locator(sem('login-username')));
+  await clickThrough(page.locator(sem(SemanticsIds.signupSubmit)), page.locator(sem(SemanticsIds.loginUsername)));
 
   // The invite admitted an active account: it can log in immediately.
   const login = await request.post('/api/v1/auth/login', {

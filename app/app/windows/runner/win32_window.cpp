@@ -7,6 +7,21 @@
 
 namespace {
 
+// Whether the desktop is in light mode. Absent or unreadable, Windows
+// defaults to light, and so does this.
+bool UsesLightTheme() {
+  DWORD value = 1;
+  DWORD size = sizeof(value);
+  if (RegGetValueW(
+          HKEY_CURRENT_USER,
+          L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+          L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value,
+          &size) != ERROR_SUCCESS) {
+    return true;
+  }
+  return value != 0;
+}
+
 /// Window attribute that enables dark mode window decorations.
 ///
 /// Redefined in case the developer's machine has a Windows SDK older than
@@ -97,7 +112,15 @@ const wchar_t* WindowClassRegistrar::GetWindowClass() {
     window_class.hInstance = GetModuleHandle(nullptr);
     window_class.hIcon =
         LoadIcon(window_class.hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
-    window_class.hbrBackground = 0;
+    // WaxDeck's canvas colour: without a brush the client area is
+    // whatever was behind the window until Flutter's first frame lands.
+    // Follows the OS light/dark setting so a light-mode desktop does not
+    // flash charcoal. Keep in step with WaxColors.canvas. The brush is
+    // owned by the window class for the life of the process, which is why
+    // it is created once here rather than per window.
+    window_class.hbrBackground =
+        CreateSolidBrush(UsesLightTheme() ? RGB(0xFA, 0xF9, 0xF6)
+                                          : RGB(0x16, 0x13, 0x0F));
     window_class.lpszMenuName = nullptr;
     window_class.lpfnWndProc = Win32Window::WndProc;
     RegisterClass(&window_class);

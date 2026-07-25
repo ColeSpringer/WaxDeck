@@ -1,4 +1,4 @@
-.PHONY: generate spec-bundle gen-go gen-dart lint spec-lint test test-server test-fixtures test-app \
+.PHONY: generate spec-bundle gen-go gen-dart gen-semantics lint spec-lint test test-server test-fixtures test-app \
         web build run up down logs drift-check oasdiff e2e dist clean
 
 SPEC        := api/openapi.yaml
@@ -8,7 +8,7 @@ APP_WEB_OUT := app/app/build/web
 
 ## --- codegen -----------------------------------------------------------------
 
-generate: gen-go gen-dart
+generate: gen-go gen-dart gen-semantics
 
 # The contract is authored as fragments in api/spec/ (one file per API
 # domain); specbundle assembles the single bundled spec that every
@@ -28,13 +28,33 @@ gen-go: spec-bundle
 gen-dart: spec-bundle
 	tools/generate-dart.sh
 
+# The semantics identifiers the e2e suite drives the UI by, emitted into
+# the app and the specs from one list so the two cannot drift (the specs
+# would otherwise fail as "element not found" rather than as a renamed
+# contract). Independent of the OpenAPI bundle.
+gen-semantics:
+	dart run tools/gen-semantics-ids.dart
+
+# Assets that are generated but rarely regenerated: the bundled type,
+# the icon subsets, and the brand kit. Not part of `generate` (they hit
+# the network and take minutes); run them when the design changes.
+.PHONY: fonts icons brand
+fonts:
+	tools/fetch-fonts.sh
+
+icons:
+	tools/fetch-icons.sh
+
+brand:
+	python3 tools/generate-brand.py
+
 ## --- quality gates -----------------------------------------------------------
 
 lint: spec-lint
 	cd server && go vet ./... && test -z "$$(gofmt -l .)"
 	cd server && go run ./cmd/spawnlint ./...
 	cd fixtures && go vet ./... && test -z "$$(gofmt -l .)"
-	cd app && dart format --set-exit-if-changed app/lib app/test app/integration_test app/tool packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib packages/waxdeck_data/lib packages/waxdeck_data/test >/dev/null
+	cd app && dart format --set-exit-if-changed app/lib app/test app/integration_test app/tool packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib packages/waxdeck_data/lib packages/waxdeck_data/test packages/waxdeck_ui/lib packages/waxdeck_ui/test packages/waxdeck_ui/example/lib packages/waxdeck_ui/example/test >/dev/null
 	cd app && flutter analyze --no-pub
 
 # Lints the committed bundle as-is (lint never mutates the tree);
@@ -52,13 +72,16 @@ test-fixtures:
 
 test-app:
 	cd app/packages/waxdeck_api && dart test
+	cd app/packages/waxdeck_ui && flutter test
+	cd app/packages/waxdeck_ui/example && flutter test
 	cd app/packages/waxdeck_data && flutter test
 	cd app/packages/waxdeck_player_testing && flutter test
 	cd app/app && flutter test
 
 # Regenerate everything and fail if the tree changes (CI codegen-drift gate).
 drift-check: generate
-	git diff --exit-code -- $(SPEC) server/internal/api app/packages/waxdeck_api_gen
+	git diff --exit-code -- $(SPEC) server/internal/api app/packages/waxdeck_api_gen \
+		app/app/lib/src/shell/semantics_ids.dart e2e/tests/semantics-ids.ts
 
 # Breaking-change gate against the base ref (override BASE for CI).
 # api/oasdiff-allow.txt, when present, lists deliberately accepted

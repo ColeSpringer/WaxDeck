@@ -1,0 +1,307 @@
+import 'package:flutter/material.dart';
+
+import '../icons/wax_icon.dart';
+import '../tokens/colors.dart';
+import '../tokens/motion.dart';
+import '../tokens/radii.dart';
+import '../tokens/spacing.dart';
+import '../tokens/typography.dart';
+import 'controls.dart';
+
+/// An empty state: an invitation with exactly one next action.
+///
+/// "No podcasts yet. Follow a show to see new episodes here." plus a
+/// button. Never a shrug, never a dead end.
+class EmptyState extends StatelessWidget {
+  const EmptyState({
+    required this.title,
+    required this.message,
+    this.glyph,
+    this.actionLabel,
+    this.onAction,
+    this.semanticsId,
+    super.key,
+  });
+
+  final String title;
+  final String message;
+  final WaxGlyph? glyph;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final String? semanticsId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Semantics(
+      identifier: semanticsId,
+      container: true,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Padding(
+            padding: const EdgeInsets.all(WaxSpace.s32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (glyph != null) ...<Widget>[
+                  WaxIcon(glyph!, size: 32, color: colors.textTertiary),
+                  const SizedBox(height: WaxSpace.s16),
+                ],
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: WaxType.headline.copyWith(color: colors.textPrimary),
+                ),
+                const SizedBox(height: WaxSpace.s8),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: WaxType.body.copyWith(color: colors.textSecondary),
+                ),
+                if (actionLabel != null) ...<Widget>[
+                  const SizedBox(height: WaxSpace.s20),
+                  WaxButton(label: actionLabel!, onPressed: onAction),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// An error state: what happened, and what to do next.
+///
+/// No apologies, no "oops", and never a raw error code outside the
+/// diagnostic channel.
+class ErrorState extends StatelessWidget {
+  const ErrorState({
+    required this.message,
+    this.title = "Something didn't load",
+    this.onRetry,
+    this.detail,
+    this.semanticsId,
+    super.key,
+  });
+
+  final String title;
+  final String message;
+  final VoidCallback? onRetry;
+
+  /// The technical line, for the power-user channel: set in mono, shown
+  /// under the human sentence, never instead of it.
+  final String? detail;
+
+  final String? semanticsId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Semantics(
+      identifier: semanticsId,
+      container: true,
+      liveRegion: true,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Padding(
+            padding: const EdgeInsets.all(WaxSpace.s32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                WaxIcon(WaxIcons.errorCircle, size: 28, color: colors.error),
+                const SizedBox(height: WaxSpace.s12),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: WaxType.headline.copyWith(color: colors.textPrimary),
+                ),
+                const SizedBox(height: WaxSpace.s8),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: WaxType.body.copyWith(color: colors.textSecondary),
+                ),
+                if (detail != null) ...<Widget>[
+                  const SizedBox(height: WaxSpace.s12),
+                  Text(
+                    detail!,
+                    textAlign: TextAlign.center,
+                    style: WaxType.monoData.copyWith(
+                      color: colors.textTertiary,
+                    ),
+                  ),
+                ],
+                if (onRetry != null) ...<Widget>[
+                  const SizedBox(height: WaxSpace.s20),
+                  WaxButton(
+                    label: 'Try again',
+                    kind: WaxButtonKind.tonal,
+                    icon: WaxIcons.refresh,
+                    onPressed: onRetry,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The shape of the thing that is loading.
+enum SkeletonShape { shelf, grid, list, detail }
+
+/// Loading is drawn as the shape of what is coming, never as a spinner
+/// in a content area: a ghost of the layout keeps the page from jumping
+/// when the real thing lands.
+class SkeletonShapes extends StatefulWidget {
+  const SkeletonShapes({required this.shape, this.count = 6, super.key});
+
+  final SkeletonShape shape;
+  final int count;
+
+  @override
+  State<SkeletonShapes> createState() => _SkeletonShapesState();
+}
+
+class _SkeletonShapesState extends State<SkeletonShapes>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (WaxMotion.of(context).animationsEnabled) {
+      _controller.repeat(reverse: true);
+    } else {
+      _controller.value = 0.5;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final tint = Color.lerp(
+            colors.surface1,
+            colors.surface3,
+            _controller.value,
+          )!;
+          return switch (widget.shape) {
+            SkeletonShape.shelf => _row(tint, 168, 168 + 40),
+            SkeletonShape.grid => _grid(tint),
+            SkeletonShape.list => _list(tint),
+            SkeletonShape.detail => _detail(tint),
+          };
+        },
+      ),
+    );
+  }
+
+  Widget _block(Color tint, double w, double h, [BorderRadius? radius]) =>
+      Container(
+        width: w,
+        height: h,
+        decoration: BoxDecoration(
+          color: tint,
+          borderRadius: radius ?? WaxRadius.thumb,
+        ),
+      );
+
+  Widget _row(Color tint, double size, double height) => SizedBox(
+    height: height,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+      itemCount: widget.count,
+      separatorBuilder: (_, _) => const SizedBox(width: WaxSpace.s12),
+      itemBuilder: (_, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _block(tint, size, size),
+          const SizedBox(height: WaxSpace.s8),
+          _block(tint, size * 0.7, 12, WaxRadius.chip),
+        ],
+      ),
+    ),
+  );
+
+  Widget _grid(Color tint) => GridView.builder(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+      maxCrossAxisExtent: 180,
+      mainAxisSpacing: WaxSpace.s12,
+      crossAxisSpacing: WaxSpace.s12,
+      childAspectRatio: 0.78,
+    ),
+    itemCount: widget.count,
+    itemBuilder: (_, _) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(child: _block(tint, double.infinity, double.infinity)),
+        const SizedBox(height: WaxSpace.s8),
+        _block(tint, 100, 12, WaxRadius.chip),
+      ],
+    ),
+  );
+
+  Widget _list(Color tint) => Column(
+    children: List<Widget>.generate(
+      widget.count,
+      (_) => Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: WaxSpace.s16,
+          vertical: WaxSpace.s8,
+        ),
+        child: Row(
+          children: <Widget>[
+            _block(tint, 40, 40),
+            const SizedBox(width: WaxSpace.s12),
+            Expanded(child: _block(tint, double.infinity, 14, WaxRadius.chip)),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _detail(Color tint) => Padding(
+    padding: const EdgeInsets.all(WaxSpace.s16),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _block(tint, 160, 160, WaxRadius.hero),
+        const SizedBox(width: WaxSpace.s20),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _block(tint, 220, 24, WaxRadius.chip),
+              const SizedBox(height: WaxSpace.s12),
+              _block(tint, 160, 14, WaxRadius.chip),
+              const SizedBox(height: WaxSpace.s8),
+              _block(tint, 120, 14, WaxRadius.chip),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}

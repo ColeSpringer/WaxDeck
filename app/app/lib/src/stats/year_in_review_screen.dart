@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/semantics_ids.dart';
 import 'stats_charts.dart';
 import 'stats_controller.dart';
 import 'stats_screen.dart';
@@ -47,11 +48,11 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Semantics(
-                identifier: 'yir-prev-year',
+                identifier: SemanticsIds.yirPrevYear,
                 label: 'Previous year',
                 button: true,
                 child: IconButton(
-                  key: const Key('yir-prev-year'),
+                  key: const Key(SemanticsIds.yirPrevYear),
                   tooltip: 'Previous year',
                   icon: const Icon(Icons.chevron_left),
                   onPressed: () => setState(() => _year--),
@@ -66,11 +67,11 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
                 ),
               ),
               Semantics(
-                identifier: 'yir-next-year',
+                identifier: SemanticsIds.yirNextYear,
                 label: 'Next year',
                 button: true,
                 child: IconButton(
-                  key: const Key('yir-next-year'),
+                  key: const Key(SemanticsIds.yirNextYear),
                   tooltip: 'Next year',
                   icon: const Icon(Icons.chevron_right),
                   onPressed: () => setState(() => _year++),
@@ -86,15 +87,21 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
                 ButtonSegment(
                   value: false,
                   label: Semantics(
-                    identifier: 'yir-personal',
-                    child: const Text('My year', key: Key('yir-personal')),
+                    identifier: SemanticsIds.yirPersonal,
+                    child: const Text(
+                      'My year',
+                      key: Key(SemanticsIds.yirPersonal),
+                    ),
                   ),
                 ),
                 ButtonSegment(
                   value: true,
                   label: Semantics(
-                    identifier: 'yir-server',
-                    child: const Text('Whole server', key: Key('yir-server')),
+                    identifier: SemanticsIds.yirServer,
+                    child: const Text(
+                      'Whole server',
+                      key: Key(SemanticsIds.yirServer),
+                    ),
                   ),
                 ),
               ],

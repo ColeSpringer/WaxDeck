@@ -9,6 +9,7 @@ import {
   typeInto,
   waitForLibrary,
 } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The manual-upload journey: pick files in the web UI, group them as
 // one album through the upload batch, watch the batch finalize into a
@@ -16,7 +17,6 @@ import {
 // The source files live in .run/upload-src — outside the scanned
 // roots, so they only ever enter the library through this pipeline.
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 
 const uploadSrc = (name: string) =>
   path.join(__dirname, '..', '.run', 'upload-src', name);
@@ -28,7 +28,7 @@ async function loginAs(page: Page, username: string, password: string) {
   await typeInto(page, user, username);
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem('curation-menu')).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.curationMenu)).waitFor({ timeout: 30_000 });
 }
 
 type UploadRow = {
@@ -60,20 +60,20 @@ test('two picked files group as one album and import through review', async ({
 
   // Open the add sheet and choose the file upload.
   await clickThrough(
-    page.locator(sem('add-to-library')),
-    page.locator(sem('add-upload-file')),
+    page.locator(sem(SemanticsIds.addToLibrary)),
+    page.locator(sem(SemanticsIds.addUploadFile)),
   );
   const chooser = page.waitForEvent('filechooser');
-  await page.locator(sem('add-upload-file')).click({ force: true });
+  await page.locator(sem(SemanticsIds.addUploadFile)).click({ force: true });
   await (await chooser).setFiles([
     uploadSrc('lantern-one.mp3'),
     uploadSrc('lantern-two.mp3'),
   ]);
 
   // Several files: the dialog asks the grouping; declare one album.
-  await page.locator(sem('upload-grouping')).waitFor({ timeout: 30_000 });
-  await page.locator(sem('upload-grouping-album')).click({ force: true });
-  await page.locator(sem('upload-media-confirm')).click({ force: true });
+  await page.locator(sem(SemanticsIds.uploadGrouping)).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.uploadGroupingOption('album'))).click({ force: true });
+  await page.locator(sem(SemanticsIds.uploadMediaConfirm)).click({ force: true });
 
   // Both members stage under one batch and the finalize opens exactly
   // one review entry across them.
@@ -95,12 +95,12 @@ test('two picked files group as one album and import through review', async ({
 
   // The uploads screen shows the quota header and the batch group.
   await clickThrough(
-    page.locator(sem('curation-menu')),
-    page.locator(sem('curation-uploads')),
+    page.locator(sem(SemanticsIds.curationMenu)),
+    page.locator(sem(SemanticsIds.curationUploads)),
   );
   await clickThrough(
-    page.locator(sem('curation-uploads')),
-    page.locator(sem('upload-quota')),
+    page.locator(sem(SemanticsIds.curationUploads)),
+    page.locator(sem(SemanticsIds.uploadQuota)),
   );
 
   // The entry settles (matching is off) and holds both tracks.
@@ -186,7 +186,7 @@ test('a dropped file uploads through the drag-and-drop area', async ({
     files: [uploadSrc('lantern-two.mp3')],
     dragOperationsMask: 1,
   };
-  const dialog = page.locator(sem('upload-media-confirm'));
+  const dialog = page.locator(sem(SemanticsIds.uploadMediaConfirm));
   await expect(async () => {
     if (!(await dialog.isVisible())) {
       await client.send('Input.dispatchDragEvent', { type: 'dragEnter', x, y, data });
@@ -228,7 +228,7 @@ test('accounts without upload rights see no upload affordances', async ({
   await loginAs(page, `viewer-${suffix}`, 'viewer-pass-123');
 
   // No add button, and the curation menu offers no uploads entry.
-  await expect(page.locator(sem('add-to-library'))).toHaveCount(0);
-  await page.locator(sem('curation-menu')).click({ force: true });
-  await expect(page.locator(sem('curation-uploads'))).toHaveCount(0);
+  await expect(page.locator(sem(SemanticsIds.addToLibrary))).toHaveCount(0);
+  await page.locator(sem(SemanticsIds.curationMenu)).click({ force: true });
+  await expect(page.locator(sem(SemanticsIds.curationUploads))).toHaveCount(0);
 });

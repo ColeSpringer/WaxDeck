@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import '../tools/tasks_screen.dart';
 import 'file_picker_port.dart';
 import 'uploads_controller.dart';
@@ -33,10 +34,10 @@ Future<void> showAddToLibrarySheet(
         mainAxisSize: MainAxisSize.min,
         children: [
           Semantics(
-            identifier: 'add-from-url',
+            identifier: SemanticsIds.addFromUrl,
             button: true,
             child: ListTile(
-              key: const Key('add-from-url'),
+              key: const Key(SemanticsIds.addFromUrl),
               leading: const Icon(Icons.add_link),
               title: const Text('Add from URL'),
               subtitle: const Text('A video, playlist, or channel'),
@@ -45,10 +46,10 @@ Future<void> showAddToLibrarySheet(
           ),
           if (picker != null)
             Semantics(
-              identifier: 'add-upload-file',
+              identifier: SemanticsIds.addUploadFile,
               button: true,
               child: ListTile(
-                key: const Key('add-upload-file'),
+                key: const Key(SemanticsIds.addUploadFile),
                 leading: const Icon(Icons.upload_file),
                 title: const Text('Upload files'),
                 onTap: () => Navigator.of(sheetContext).pop('file'),
@@ -56,10 +57,10 @@ Future<void> showAddToLibrarySheet(
             ),
           if (picker != null && picker.canPickFolders)
             Semantics(
-              identifier: 'add-upload-folder',
+              identifier: SemanticsIds.addUploadFolder,
               button: true,
               child: ListTile(
-                key: const Key('add-upload-folder'),
+                key: const Key(SemanticsIds.addUploadFolder),
                 leading: const Icon(Icons.drive_folder_upload),
                 title: const Text('Upload a folder'),
                 subtitle: const Text('An album or a collection'),
@@ -309,11 +310,11 @@ class _AcquireDialogState extends State<AcquireDialog> {
           child: const Text('Cancel'),
         ),
         Semantics(
-          identifier: 'acquire-submit',
+          identifier: SemanticsIds.acquireSubmit,
           label: 'Queue download',
           button: true,
           child: FilledButton(
-            key: const Key('acquire-submit'),
+            key: const Key(SemanticsIds.acquireSubmit),
             onPressed: url.isEmpty
                 ? null
                 : () => Navigator.of(context).pop((
@@ -390,11 +391,11 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
           child: const Text('Cancel'),
         ),
         Semantics(
-          identifier: 'upload-media-confirm',
+          identifier: SemanticsIds.uploadMediaConfirm,
           label: 'Start upload',
           button: true,
           child: FilledButton(
-            key: const Key('upload-media-confirm'),
+            key: const Key(SemanticsIds.uploadMediaConfirm),
             onPressed: () => Navigator.of(
               context,
             ).pop((mediaType: _mediaType, grouping: _grouping)),
@@ -430,9 +431,9 @@ class UploadGroupingSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      identifier: 'upload-grouping',
+      identifier: SemanticsIds.uploadGrouping,
       child: Column(
-        key: const Key('upload-grouping'),
+        key: const Key(SemanticsIds.uploadGrouping),
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -442,10 +443,10 @@ class UploadGroupingSelector extends StatelessWidget {
           ),
           for (final (grouping, label, help) in _options)
             Semantics(
-              identifier: 'upload-grouping-${grouping.wireName}',
+              identifier: SemanticsIds.uploadGroupingOption(grouping.wireName),
               button: true,
               child: ListTile(
-                key: Key('upload-grouping-${grouping.wireName}'),
+                key: Key(SemanticsIds.uploadGroupingOption(grouping.wireName)),
                 contentPadding: EdgeInsets.zero,
                 dense: true,
                 leading: Icon(
@@ -482,9 +483,9 @@ class MediaTypeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      identifier: 'upload-media-type',
+      identifier: SemanticsIds.uploadMediaType,
       child: DropdownButton<MediaType>(
-        key: const Key('upload-media-type'),
+        key: const Key(SemanticsIds.uploadMediaType),
         value: value,
         isExpanded: true,
         onChanged: (selected) {
@@ -519,9 +520,9 @@ class AcquireFormatSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      identifier: 'acquire-format',
+      identifier: SemanticsIds.acquireFormat,
       child: DropdownButton<String>(
-        key: const Key('acquire-format'),
+        key: const Key(SemanticsIds.acquireFormat),
         value: value,
         isExpanded: true,
         onChanged: (selected) {

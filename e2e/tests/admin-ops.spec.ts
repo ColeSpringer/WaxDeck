@@ -8,6 +8,7 @@ import {
   typeInto,
   waitForLibrary,
 } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The admin-and-ops surface, driven over the API against the live
 // stack: the audit log answering "who deleted this playlist", the
@@ -301,18 +302,17 @@ test('an exported archive imports back through the backups screen', async ({
   await fs.writeFile(zipPath, await archive.body());
 
   // Import it back through the backups screen.
-  const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
   await page.goto('/');
   const username = page.getByRole('textbox', { name: 'Username' });
   await username.waitFor({ timeout: 30_000 });
   await typeInto(page, username, ADMIN_USER);
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await clickThrough(page.locator(sem('curation-menu')), page.locator(sem('curation-backups')));
-  await clickThrough(page.locator(sem('curation-backups')), page.locator(sem('backup-import')));
+  await clickThrough(page.locator(sem(SemanticsIds.curationMenu)), page.locator(sem(SemanticsIds.curationBackups)));
+  await clickThrough(page.locator(sem(SemanticsIds.curationBackups)), page.locator(sem(SemanticsIds.backupImport)));
 
   const chooser = page.waitForEvent('filechooser');
-  await page.locator(sem('backup-import')).click({ force: true });
+  await page.locator(sem(SemanticsIds.backupImport)).click({ force: true });
   await (await chooser).setFiles(zipPath);
 
   // The imported archive joins the listing with its own trigger.

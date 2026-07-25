@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 and up: the platform splash screen. The system centres
+         the icon itself, so this theme only supplies the colour and the
+         icon rather than a drawable of its own. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowSplashScreenBackground">@color/wax_canvas</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/splash_icon</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowBackground">@color/wax_canvas</item>
+    </style>
+</resources>

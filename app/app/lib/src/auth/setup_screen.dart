@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/semantics_ids.dart';
 import 'auth_controller.dart';
 
 /// First-run setup: creates the server's first administrator. Shown by the
@@ -87,9 +88,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   ),
                   const SizedBox(height: 32),
                   Semantics(
-                    identifier: 'setup-username',
+                    identifier: SemanticsIds.setupUsername,
                     child: TextFormField(
-                      key: const Key('setup-username'),
+                      key: const Key(SemanticsIds.setupUsername),
                       controller: _username,
                       autofillHints: const [AutofillHints.username],
                       decoration: const InputDecoration(
@@ -104,9 +105,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   ),
                   const SizedBox(height: 16),
                   Semantics(
-                    identifier: 'setup-password',
+                    identifier: SemanticsIds.setupPassword,
                     child: TextFormField(
-                      key: const Key('setup-password'),
+                      key: const Key(SemanticsIds.setupPassword),
                       controller: _password,
                       obscureText: true,
                       autofillHints: const [AutofillHints.newPassword],
@@ -121,9 +122,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   ),
                   const SizedBox(height: 16),
                   Semantics(
-                    identifier: 'setup-confirm',
+                    identifier: SemanticsIds.setupConfirm,
                     child: TextFormField(
-                      key: const Key('setup-confirm'),
+                      key: const Key(SemanticsIds.setupConfirm),
                       controller: _confirm,
                       obscureText: true,
                       decoration: const InputDecoration(
@@ -138,9 +139,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   ),
                   const SizedBox(height: 16),
                   Semantics(
-                    identifier: 'setup-display-name',
+                    identifier: SemanticsIds.setupDisplayName,
                     child: TextFormField(
-                      key: const Key('setup-display-name'),
+                      key: const Key(SemanticsIds.setupDisplayName),
                       controller: _displayName,
                       decoration: const InputDecoration(
                         labelText: 'Display name (optional)',
@@ -152,10 +153,10 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   const SizedBox(height: 24),
                   if (_error != null) ...[
                     Semantics(
-                      identifier: 'setup-error',
+                      identifier: SemanticsIds.setupError,
                       child: Text(
                         _error!,
-                        key: const Key('setup-error'),
+                        key: const Key(SemanticsIds.setupError),
                         style: textTheme.bodyMedium?.copyWith(
                           color: colorScheme.error,
                         ),
@@ -165,9 +166,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                     const SizedBox(height: 16),
                   ],
                   Semantics(
-                    identifier: 'setup-submit',
+                    identifier: SemanticsIds.setupSubmit,
                     child: FilledButton(
-                      key: const Key('setup-submit'),
+                      key: const Key(SemanticsIds.setupSubmit),
                       onPressed: _submitting ? null : _submit,
                       child: _submitting
                           ? const SizedBox(

@@ -7,13 +7,13 @@ import {
   ensureAdmin,
   typeInto,
 } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The podcast journey: subscribe to the fixture feed host through the
 // web UI, fetch an episode to the server, and play it with silence
 // trimming saving real time. The feed host (feedserv) serves a
 // generated three-episode feed whose audio carries lead silence.
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 const FEED_URL = 'http://127.0.0.1:4421/feed.xml';
 
 async function subscribedShowPid(request: APIRequestContext, token: string): Promise<string> {
@@ -51,20 +51,20 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   // swallowed while flutter's handlers are still attaching (the click
   // cousin of the keystroke gap typeInto retries around), and a
   // swallowed click here means the dialog never appears at all.
-  await page.locator(sem('podcasts-open')).click();
+  await page.locator(sem(SemanticsIds.podcastsOpen)).click();
   await expect(async () => {
-    await page.locator(sem('podcast-add')).click();
+    await page.locator(sem(SemanticsIds.podcastAdd)).click();
     await page
-      .locator(sem('podcast-subscribe-confirm'))
+      .locator(sem(SemanticsIds.podcastSubscribeConfirm))
       .waitFor({ timeout: 5_000 });
   }).toPass({ timeout: 30_000 });
   await typeInto(page, page.getByRole('textbox', { name: 'Feed or channel URL' }), FEED_URL);
-  await page.locator(sem('podcast-subscribe-confirm')).click();
+  await page.locator(sem(SemanticsIds.podcastSubscribeConfirm)).click();
 
   const showPid = await subscribedShowPid(request, token);
-  const showRow = page.locator(sem(`podcast-${showPid}`));
+  const showRow = page.locator(sem(SemanticsIds.podcast(showPid)));
   await showRow.waitFor({ timeout: 30_000 });
-  const episodeList = () => page.locator(sem('podcast-unsubscribe'));
+  const episodeList = () => page.locator(sem(SemanticsIds.podcastUnsubscribe));
 
   // Silence trimming is a per-subscription setting; flip it before
   // playback so the session starts trimming from the first load.
@@ -86,7 +86,7 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
 
   // Queue the server-side fetch from the UI; the background worker
   // lands it and the row flips to downloaded.
-  await page.locator(sem(`episode-fetch-${episode.pid}`)).click();
+  await page.locator(sem(SemanticsIds.episodeFetch(episode.pid))).click();
   await expect
     .poll(
       async () => {
@@ -119,28 +119,28 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   // flutter's navigator is handled asynchronously, and a deferred
   // popstate can pop the very screen the test just re-entered.
   await clickThrough(page.getByRole('button', { name: 'Back' }).first(), showRow);
-  await clickThrough(showRow, page.locator(sem(`episode-${episode.pid}`)));
+  await clickThrough(showRow, page.locator(sem(SemanticsIds.episode(episode.pid))));
 
   // Play it. The trim chip reports time actually saved once the
   // session seeks over the lead silence, which is the observable proof
   // the jump happened (positions stay honest, so only the counter can
   // tell trimmed playback from ordinary playback this quickly).
   await clickThrough(
-    page.locator(sem(`episode-${episode.pid}`)),
-    page.locator(sem('player-toggle')),
+    page.locator(sem(SemanticsIds.episode(episode.pid))),
+    page.locator(sem(SemanticsIds.playerToggle)),
   );
-  await expect(page.locator(sem('player-trim'))).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator(sem('player-trim'))).toHaveAccessibleName(/saved/, {
+  await expect(page.locator(sem(SemanticsIds.playerTrim))).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(sem(SemanticsIds.playerTrim))).toHaveAccessibleName(/saved/, {
     timeout: 30_000,
   });
 
   // Show notes were sanitized server-side and render as text.
   await clickThrough(
     page.getByRole('button', { name: 'Back' }).first(),
-    page.locator(sem(`episode-info-${episode.pid}`)),
+    page.locator(sem(SemanticsIds.episodeInfo(episode.pid))),
   );
   await clickThrough(
-    page.locator(sem(`episode-info-${episode.pid}`)),
+    page.locator(sem(SemanticsIds.episodeInfo(episode.pid))),
     page.getByText(/pilot episode/).first(),
   );
 
@@ -172,14 +172,14 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   // governed by whoever subscribes next.
   await clickThrough(
     page.getByRole('button', { name: 'Back' }).first(),
-    page.locator(sem('podcast-unsubscribe')),
+    page.locator(sem(SemanticsIds.podcastUnsubscribe)),
   );
   await expect(async () => {
-    await page.locator(sem('podcast-unsubscribe')).click();
-    await page.locator(sem('unsubscribe-keep-files')).waitFor({ timeout: 5_000 });
+    await page.locator(sem(SemanticsIds.podcastUnsubscribe)).click();
+    await page.locator(sem(SemanticsIds.unsubscribeKeepFiles)).waitFor({ timeout: 5_000 });
   }).toPass({ timeout: 30_000 });
-  await page.locator(sem('unsubscribe-keep-files')).click();
-  await page.locator(sem('podcast-subscribe')).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.unsubscribeKeepFiles)).click();
+  await page.locator(sem(SemanticsIds.podcastSubscribe)).waitFor({ timeout: 30_000 });
   const subs = await request.get('/api/v1/podcasts', authed(token));
   const gone = ((await subs.json()).items ?? []).find((s: any) => s.show.pid === showPid);
   expect(gone, 'the subscription should be gone').toBeFalsy();

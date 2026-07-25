@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../player/player_screen.dart';
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import 'track_list_screen.dart';
 
 /// How large an instant mix is asked to be.
@@ -130,10 +131,10 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
                 const Text('Familiar'),
                 Expanded(
                   child: Semantics(
-                    identifier: 'mix-adventurousness',
+                    identifier: SemanticsIds.mixAdventurousness,
                     label: 'Adventurousness',
                     child: Slider(
-                      key: const Key('mix-adventurousness'),
+                      key: const Key(SemanticsIds.mixAdventurousness),
                       value: _adventurousness,
                       onChanged: (v) => setState(() => _adventurousness = v),
                     ),
@@ -144,11 +145,11 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
             ),
             const SizedBox(height: 8),
             Semantics(
-              identifier: 'instant-mix-run',
+              identifier: SemanticsIds.instantMixRun,
               label: 'Mix',
               button: true,
               child: FilledButton(
-                key: const Key('instant-mix-run'),
+                key: const Key(SemanticsIds.instantMixRun),
                 onPressed: _busy ? null : _mix,
                 child: const Text('Mix'),
               ),

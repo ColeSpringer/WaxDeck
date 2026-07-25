@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../media_icons.dart';
+import '../shell/semantics_ids.dart';
 import 'stats_controller.dart';
 
 /// The caller's listen session log, newest first, cursor paged with
@@ -28,9 +29,9 @@ class ListenLogScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Semantics(
-              identifier: 'listen-log-client-filter',
+              identifier: SemanticsIds.listenLogClientFilter,
               child: DropdownButton<String?>(
-                key: const Key('listen-log-client-filter'),
+                key: const Key(SemanticsIds.listenLogClientFilter),
                 value: filter,
                 underline: const SizedBox.shrink(),
                 onChanged: (client) =>

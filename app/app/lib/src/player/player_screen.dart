@@ -11,6 +11,7 @@ import '../playlists/add_to_playlist_dialog.dart';
 import '../providers.dart';
 import '../sharing/share_dialog.dart';
 import '../radio/radio_controller.dart';
+import '../shell/semantics_ids.dart';
 import '../sync/sync_providers.dart';
 import 'play_state_controller.dart';
 import '../connect/connect_controller.dart';
@@ -109,7 +110,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         title: Text(item.title),
         actions: [
           Semantics(
-            identifier: 'player-devices',
+            identifier: SemanticsIds.playerDevices,
             label: 'Play on',
             button: true,
             excludeSemantics: true,
@@ -120,7 +121,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               positionMs: _session.displayPosition.inMilliseconds,
             ),
             child: IconButton(
-              key: const Key('player-devices'),
+              key: const Key(SemanticsIds.playerDevices),
               tooltip: 'Play on',
               icon: const Icon(Icons.cast),
               onPressed: () => showDevicePicker(
@@ -132,11 +133,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             ),
           ),
           Semantics(
-            identifier: 'add-to-playlist',
+            identifier: SemanticsIds.addToPlaylist,
             label: 'Add to playlist',
             button: true,
             child: IconButton(
-              key: const Key('add-to-playlist'),
+              key: const Key(SemanticsIds.addToPlaylist),
               tooltip: 'Add to playlist',
               icon: const Icon(Icons.playlist_add),
               onPressed: () => showDialog<void>(
@@ -146,11 +147,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             ),
           ),
           Semantics(
-            identifier: 'share-link',
+            identifier: SemanticsIds.shareLink,
             label: 'Share link',
             button: true,
             child: IconButton(
-              key: const Key('share-link'),
+              key: const Key(SemanticsIds.shareLink),
               tooltip: 'Share link',
               icon: const Icon(Icons.share_outlined),
               // Episodes offer the current position as the share's
@@ -166,11 +167,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           ),
           if (item.mediaType == MediaType.music)
             Semantics(
-              identifier: 'player-discover',
+              identifier: SemanticsIds.playerDiscover,
               label: 'Discover',
               button: true,
               child: PopupMenuButton<String>(
-                key: const Key('player-discover'),
+                key: const Key(SemanticsIds.playerDiscover),
                 tooltip: 'Discover',
                 icon: const Icon(Icons.auto_awesome_outlined),
                 onSelected: (choice) => switch (choice) {
@@ -182,17 +183,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   PopupMenuItem(
                     value: 'mix',
                     child: Semantics(
-                      identifier: 'instant-mix',
-                      child: const Text('Instant mix', key: Key('instant-mix')),
+                      identifier: SemanticsIds.instantMix,
+                      child: const Text(
+                        'Instant mix',
+                        key: Key(SemanticsIds.instantMix),
+                      ),
                     ),
                   ),
                   PopupMenuItem(
                     value: 'similar',
                     child: Semantics(
-                      identifier: 'similar-tracks',
+                      identifier: SemanticsIds.similarTracks,
                       child: const Text(
                         'Similar tracks',
-                        key: Key('similar-tracks'),
+                        key: Key(SemanticsIds.similarTracks),
                       ),
                     ),
                   ),
@@ -327,10 +331,10 @@ class _PlayerBody extends ConsumerWidget {
               return Column(
                 children: [
                   Semantics(
-                    identifier: 'player-seek',
+                    identifier: SemanticsIds.playerSeek,
                     label: 'Seek bar',
                     child: Slider(
-                      key: const Key('player-seek'),
+                      key: const Key(SemanticsIds.playerSeek),
                       value: valueMs.toDouble(),
                       max: (maxMs > 0 ? maxMs : 1).toDouble(),
                       onChanged: (value) =>
@@ -360,11 +364,11 @@ class _PlayerBody extends ConsumerWidget {
                 builder: (context, playingSnapshot) {
                   final playing = playingSnapshot.data ?? false;
                   return Semantics(
-                    identifier: 'player-toggle',
+                    identifier: SemanticsIds.playerToggle,
                     label: playing ? 'Pause' : 'Play',
                     button: true,
                     child: IconButton.filled(
-                      key: const Key('player-toggle'),
+                      key: const Key(SemanticsIds.playerToggle),
                       iconSize: 48,
                       onPressed: session.toggle,
                       icon: Icon(playing ? Icons.pause : Icons.play_arrow),
@@ -403,13 +407,13 @@ class _SpeedButton extends StatelessWidget {
       builder: (context, snapshot) {
         final speed = snapshot.data ?? 1.0;
         return Semantics(
-          identifier: 'player-speed',
+          identifier: SemanticsIds.playerSpeed,
           label: 'Playback speed ${formatPlayerSpeed(speed)}',
           button: true,
           excludeSemantics: true,
           onTap: () => session.setSpeed(nextPlayerSpeed(speed)),
           child: TextButton(
-            key: const Key('player-speed'),
+            key: const Key(SemanticsIds.playerSpeed),
             onPressed: () => session.setSpeed(nextPlayerSpeed(speed)),
             child: Text(formatPlayerSpeed(speed)),
           ),
@@ -448,13 +452,13 @@ class _TrimChip extends StatelessWidget {
             // wrapper mints a second node beside the chip's own and
             // the label rides an attribute assertions cannot read.
             return Semantics(
-              identifier: 'player-trim',
+              identifier: SemanticsIds.playerTrim,
               label: label,
               button: true,
               excludeSemantics: true,
               onTap: () => session.setTrimEnabled(!enabled),
               child: FilterChip(
-                key: const Key('player-trim'),
+                key: const Key(SemanticsIds.playerTrim),
                 selected: enabled,
                 label: Text(label),
                 onSelected: session.setTrimEnabled,
@@ -478,7 +482,7 @@ class _SleepTimerButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final timer = ref.watch(sleepTimerProvider);
     final button = IconButton(
-      key: const Key('sleep-timer-open'),
+      key: const Key(SemanticsIds.sleepTimerOpen),
       tooltip: timer.active ? 'Sleep timer (${timer.label})' : 'Sleep timer',
       icon: Icon(timer.active ? Icons.bedtime : Icons.bedtime_outlined),
       onPressed: () => showModalBottomSheet<void>(
@@ -487,7 +491,7 @@ class _SleepTimerButton extends ConsumerWidget {
       ),
     );
     return Semantics(
-      identifier: 'sleep-timer-open',
+      identifier: SemanticsIds.sleepTimerOpen,
       label: timer.active ? 'Sleep timer, ${timer.label} left' : 'Sleep timer',
       button: true,
       child: timer.active
@@ -550,10 +554,10 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
           children: [
             for (final minutes in const [5, 15, 30, 60])
               Semantics(
-                identifier: 'sleep-timer-$minutes',
+                identifier: SemanticsIds.sleepTimer(minutes),
                 button: true,
                 child: ListTile(
-                  key: ValueKey('sleep-timer-$minutes'),
+                  key: ValueKey(SemanticsIds.sleepTimer(minutes)),
                   leading: const Icon(Icons.timer_outlined),
                   title: Text('$minutes minutes'),
                   onTap: () => _startMinutes(minutes),
@@ -561,10 +565,10 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
               ),
             if (chapterEndMs != null)
               Semantics(
-                identifier: 'sleep-timer-chapter',
+                identifier: SemanticsIds.sleepTimerChapter,
                 button: true,
                 child: ListTile(
-                  key: const Key('sleep-timer-chapter'),
+                  key: const Key(SemanticsIds.sleepTimerChapter),
                   leading: const Icon(Icons.auto_stories_outlined),
                   title: const Text('End of chapter'),
                   onTap: () {
@@ -581,10 +585,10 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 children: [
                   Expanded(
                     child: Semantics(
-                      identifier: 'sleep-timer-custom-field',
+                      identifier: SemanticsIds.sleepTimerCustomField,
                       textField: true,
                       child: TextField(
-                        key: const Key('sleep-timer-custom-field'),
+                        key: const Key(SemanticsIds.sleepTimerCustomField),
                         controller: _custom,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
@@ -595,11 +599,11 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                   ),
                   const SizedBox(width: 8),
                   Semantics(
-                    identifier: 'sleep-timer-custom-start',
+                    identifier: SemanticsIds.sleepTimerCustomStart,
                     label: 'Start custom timer',
                     button: true,
                     child: TextButton(
-                      key: const Key('sleep-timer-custom-start'),
+                      key: const Key(SemanticsIds.sleepTimerCustomStart),
                       onPressed: () {
                         final minutes = int.tryParse(_custom.text.trim());
                         if (minutes != null && minutes > 0) {
@@ -614,10 +618,10 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
             ),
             if (active)
               Semantics(
-                identifier: 'sleep-timer-cancel',
+                identifier: SemanticsIds.sleepTimerCancel,
                 button: true,
                 child: ListTile(
-                  key: const Key('sleep-timer-cancel'),
+                  key: const Key(SemanticsIds.sleepTimerCancel),
                   leading: const Icon(Icons.close),
                   title: const Text('Cancel timer'),
                   onTap: () {
@@ -665,11 +669,11 @@ class _ChapterIndicator extends StatelessWidget {
             chapter?.title ??
             (chapter == null ? '' : 'Chapter ${chapter.index + 1}');
         return Semantics(
-          identifier: 'player-chapters',
+          identifier: SemanticsIds.playerChapters,
           label: 'Chapters, current: $title',
           button: true,
           child: TextButton.icon(
-            key: const Key('player-chapters'),
+            key: const Key(SemanticsIds.playerChapters),
             icon: const Icon(Icons.list, size: 18),
             label: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
             onPressed: () => showModalBottomSheet<void>(
@@ -705,10 +709,10 @@ class _ChapterSheet extends StatelessWidget {
         children: [
           for (final chapter in book.chapters)
             Semantics(
-              identifier: 'player-chapter-${chapter.index}',
+              identifier: SemanticsIds.playerChapter(chapter.index),
               button: true,
               child: ListTile(
-                key: ValueKey('player-chapter-${chapter.index}'),
+                key: ValueKey(SemanticsIds.playerChapter(chapter.index)),
                 dense: true,
                 leading: Text(stamp(chapter.startMs)),
                 title: Text(chapter.title ?? 'Chapter ${chapter.index + 1}'),
@@ -831,13 +835,13 @@ class _DownloadButtonState extends ConsumerState<_DownloadButton> {
     }
     final complete = _complete ?? false;
     return Semantics(
-      identifier: 'download-button',
+      identifier: SemanticsIds.downloadButton,
       label: complete ? 'Downloaded' : 'Download',
       button: true,
       excludeSemantics: true,
       onTap: complete || _inFlight ? null : _download,
       child: IconButton(
-        key: const Key('download-button'),
+        key: const Key(SemanticsIds.downloadButton),
         tooltip: complete ? 'Downloaded' : 'Download for offline playback',
         onPressed: complete || _inFlight ? null : _download,
         icon: _inFlight

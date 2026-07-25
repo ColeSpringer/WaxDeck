@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import 'integrations_controller.dart';
 
 /// Scrobbling connections: Last.fm through the browser authorization
@@ -80,10 +81,10 @@ class ScrobblingSection extends ConsumerWidget {
     final adminSetup = isAdmin && slot.service == 'lastfm';
     if (adminSetup && !slot.connected && !slot.available) {
       return Semantics(
-        identifier: 'scrobbler-setup-lastfm',
+        identifier: SemanticsIds.scrobblerSetupLastfm,
         button: true,
         child: TextButton(
-          key: const ValueKey('scrobbler-setup-lastfm'),
+          key: const ValueKey(SemanticsIds.scrobblerSetupLastfm),
           onPressed: () => _openLastfmSetup(context),
           child: const Text('Set up…'),
         ),
@@ -91,19 +92,19 @@ class ScrobblingSection extends ConsumerWidget {
     }
     final action = slot.connected
         ? Semantics(
-            identifier: 'scrobbler-disconnect-${slot.service}',
+            identifier: SemanticsIds.scrobblerDisconnect(slot.service),
             button: true,
             child: TextButton(
-              key: ValueKey('scrobbler-disconnect-${slot.service}'),
+              key: ValueKey(SemanticsIds.scrobblerDisconnect(slot.service)),
               onPressed: () => _disconnect(context, ref, slot),
               child: const Text('Disconnect'),
             ),
           )
         : Semantics(
-            identifier: 'scrobbler-connect-${slot.service}',
+            identifier: SemanticsIds.scrobblerConnect(slot.service),
             button: true,
             child: TextButton(
-              key: ValueKey('scrobbler-connect-${slot.service}'),
+              key: ValueKey(SemanticsIds.scrobblerConnect(slot.service)),
               onPressed: slot.available
                   ? () => _connect(context, ref, slot)
                   : null,
@@ -116,10 +117,10 @@ class ScrobblingSection extends ConsumerWidget {
       children: [
         action,
         Semantics(
-          identifier: 'scrobbler-setup-lastfm',
+          identifier: SemanticsIds.scrobblerSetupLastfm,
           button: true,
           child: IconButton(
-            key: const ValueKey('scrobbler-setup-lastfm'),
+            key: const ValueKey(SemanticsIds.scrobblerSetupLastfm),
             tooltip: 'Server API credentials',
             icon: const Icon(Icons.settings_outlined),
             visualDensity: VisualDensity.compact,
@@ -163,9 +164,9 @@ class ScrobblingSection extends ConsumerWidget {
             children: [
               for (final slot in value)
                 Semantics(
-                  identifier: 'scrobbler-${slot.service}',
+                  identifier: SemanticsIds.scrobbler(slot.service),
                   child: ListTile(
-                    key: ValueKey('scrobbler-${slot.service}'),
+                    key: ValueKey(SemanticsIds.scrobbler(slot.service)),
                     leading: const Icon(Icons.multitrack_audio),
                     title: Text(_label(slot.service)),
                     subtitle: Text(
@@ -269,11 +270,11 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
           child: const Text('Cancel'),
         ),
         Semantics(
-          identifier: 'listenbrainz-connect-confirm',
+          identifier: SemanticsIds.listenbrainzConnectConfirm,
           label: 'Connect',
           button: true,
           child: FilledButton(
-            key: const Key('listenbrainz-connect-confirm'),
+            key: const Key(SemanticsIds.listenbrainzConnectConfirm),
             onPressed: _busy ? null : _connect,
             child: const Text('Connect'),
           ),
@@ -387,10 +388,10 @@ class _LastfmCredentialsDialogState
         // is the fallback, not something this surface removes.
         if (config.value?.lastfmSource == 'settings')
           Semantics(
-            identifier: 'lastfm-credentials-clear',
+            identifier: SemanticsIds.lastfmCredentialsClear,
             button: true,
             child: TextButton(
-              key: const Key('lastfm-credentials-clear'),
+              key: const Key(SemanticsIds.lastfmCredentialsClear),
               onPressed: _busy ? null : () => _save(clear: true),
               child: const Text('Clear'),
             ),
@@ -400,11 +401,11 @@ class _LastfmCredentialsDialogState
           child: const Text('Cancel'),
         ),
         Semantics(
-          identifier: 'lastfm-credentials-save',
+          identifier: SemanticsIds.lastfmCredentialsSave,
           label: 'Save',
           button: true,
           child: FilledButton(
-            key: const Key('lastfm-credentials-save'),
+            key: const Key(SemanticsIds.lastfmCredentialsSave),
             onPressed: _busy || config is! AsyncData
                 ? null
                 : () => _save(clear: false),
@@ -509,11 +510,11 @@ class AppPasswordsSection extends ConsumerWidget {
               child: Text('App passwords', style: textTheme.titleMedium),
             ),
             Semantics(
-              identifier: 'app-password-add',
+              identifier: SemanticsIds.appPasswordAdd,
               label: 'New app password',
               button: true,
               child: IconButton(
-                key: const Key('app-password-add'),
+                key: const Key(SemanticsIds.appPasswordAdd),
                 tooltip: 'New app password',
                 icon: const Icon(Icons.add),
                 onPressed: () => _create(context, ref),
@@ -544,10 +545,12 @@ class AppPasswordsSection extends ConsumerWidget {
                             ap.label.isEmpty ? 'Unlabeled' : ap.label,
                           ),
                           trailing: Semantics(
-                            identifier: 'app-password-revoke-${ap.id}',
+                            identifier: SemanticsIds.appPasswordRevoke(ap.id),
                             button: true,
                             child: IconButton(
-                              key: ValueKey('app-password-revoke-${ap.id}'),
+                              key: ValueKey(
+                                SemanticsIds.appPasswordRevoke(ap.id),
+                              ),
                               tooltip: 'Revoke',
                               icon: const Icon(Icons.delete_outline),
                               onPressed: () => ref
@@ -1084,11 +1087,13 @@ class _TargetList extends ConsumerWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Semantics(
-                                identifier: 'notify-target-test-${target.pid}',
+                                identifier: SemanticsIds.notifyTargetTest(
+                                  target.pid,
+                                ),
                                 button: true,
                                 child: IconButton(
                                   key: ValueKey(
-                                    'notify-target-test-${target.pid}',
+                                    SemanticsIds.notifyTargetTest(target.pid),
                                   ),
                                   tooltip: 'Send test',
                                   icon: const Icon(
@@ -1139,7 +1144,7 @@ class PersonalNotificationTargetsSection extends ConsumerWidget {
       ownerIsAdmin: user?.roles.contains('admin') ?? false,
       targets: ref.watch(myNotificationTargetsProvider),
       controller: ref.read(myNotificationTargetsProvider.notifier),
-      addKey: 'notify-target-add',
+      addKey: SemanticsIds.notifyTargetAdd,
     );
   }
 }
@@ -1161,7 +1166,7 @@ class ServerNotificationTargetsSection extends ConsumerWidget {
       ownerIsAdmin: true,
       targets: ref.watch(serverNotificationTargetsProvider),
       controller: ref.read(serverNotificationTargetsProvider.notifier),
-      addKey: 'notify-server-target-add',
+      addKey: SemanticsIds.notifyServerTargetAdd,
     );
   }
 }

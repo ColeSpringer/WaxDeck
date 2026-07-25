@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 
 /// Requests an account: open signup queues the request for an
 /// administrator, an invite token activates it immediately. Pops the
@@ -83,9 +84,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             constraints: const BoxConstraints(maxWidth: 360),
             child: _pending
                 ? Semantics(
-                    identifier: 'signup-result',
+                    identifier: SemanticsIds.signupResult,
                     child: Column(
-                      key: const Key('signup-result'),
+                      key: const Key(SemanticsIds.signupResult),
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.hourglass_top, size: 48),
@@ -116,9 +117,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Semantics(
-                          identifier: 'signup-username',
+                          identifier: SemanticsIds.signupUsername,
                           child: TextFormField(
-                            key: const Key('signup-username'),
+                            key: const Key(SemanticsIds.signupUsername),
                             controller: _username,
                             autofillHints: const [AutofillHints.newUsername],
                             decoration: const InputDecoration(
@@ -133,9 +134,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         ),
                         const SizedBox(height: 16),
                         Semantics(
-                          identifier: 'signup-password',
+                          identifier: SemanticsIds.signupPassword,
                           child: TextFormField(
-                            key: const Key('signup-password'),
+                            key: const Key(SemanticsIds.signupPassword),
                             controller: _password,
                             obscureText: true,
                             autofillHints: const [AutofillHints.newPassword],
@@ -160,9 +161,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         ),
                         const SizedBox(height: 16),
                         Semantics(
-                          identifier: 'signup-invite-token',
+                          identifier: SemanticsIds.signupInviteToken,
                           child: TextFormField(
-                            key: const Key('signup-invite-token'),
+                            key: const Key(SemanticsIds.signupInviteToken),
                             controller: _inviteToken,
                             decoration: const InputDecoration(
                               labelText: 'Invite token (optional)',
@@ -177,10 +178,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         const SizedBox(height: 24),
                         if (_error != null) ...[
                           Semantics(
-                            identifier: 'signup-error',
+                            identifier: SemanticsIds.signupError,
                             child: Text(
                               _error!,
-                              key: const Key('signup-error'),
+                              key: const Key(SemanticsIds.signupError),
                               style: textTheme.bodyMedium?.copyWith(
                                 color: colorScheme.error,
                               ),
@@ -190,9 +191,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           const SizedBox(height: 16),
                         ],
                         Semantics(
-                          identifier: 'signup-submit',
+                          identifier: SemanticsIds.signupSubmit,
                           child: FilledButton(
-                            key: const Key('signup-submit'),
+                            key: const Key(SemanticsIds.signupSubmit),
                             onPressed: _submitting ? null : _submit,
                             child: _submitting
                                 ? const SizedBox(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import 'radio_controller.dart';
 
 /// The shared internet radio library: play or stop stations, add them
@@ -17,11 +18,11 @@ class RadioScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Radio')),
       floatingActionButton: Semantics(
-        identifier: 'radio-add',
+        identifier: SemanticsIds.radioAdd,
         label: 'Add station',
         button: true,
         child: FloatingActionButton(
-          key: const Key('radio-add'),
+          key: const Key(SemanticsIds.radioAdd),
           tooltip: 'Add station',
           onPressed: () => showDialog<void>(
             context: context,
@@ -69,11 +70,11 @@ class _StationRow extends ConsumerWidget {
     final controller = ref.read(radioPlaybackProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
     return Semantics(
-      identifier: 'radio-${station.pid}',
+      identifier: SemanticsIds.radio(station.pid),
       label: station.name,
       button: true,
       child: ListTile(
-        key: ValueKey('radio-${station.pid}'),
+        key: ValueKey(SemanticsIds.radio(station.pid)),
         leading: Icon(active ? Icons.radio : Icons.radio_outlined),
         title: Text(station.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: active
@@ -294,11 +295,11 @@ class _AddStationDialogState extends ConsumerState<_AddStationDialog> {
         ),
         if (_manual)
           Semantics(
-            identifier: 'radio-add-confirm',
+            identifier: SemanticsIds.radioAddConfirm,
             label: 'Add station',
             button: true,
             child: FilledButton(
-              key: const Key('radio-add-confirm'),
+              key: const Key(SemanticsIds.radioAddConfirm),
               onPressed: _busy
                   ? null
                   : () => _add(

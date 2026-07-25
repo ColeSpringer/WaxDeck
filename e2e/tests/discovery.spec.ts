@@ -1,5 +1,6 @@
 import { test, expect, APIRequestContext, Page } from '@playwright/test';
 import { authed, clickThrough, ensureAdmin, typeInto, waitForLibrary } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The discovery slice over the real stack: an instant mix started from
 // a playing track in the browser, the sonic surfaces (similar tracks
@@ -7,7 +8,6 @@ import { authed, clickThrough, ensureAdmin, typeInto, waitForLibrary } from './h
 // the worker API's token gate, and the streaming-service playlist
 // import round trip with its portable export.
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 
 // Matches the token run-stack.sh hands the server.
 const WORKER_TOKEN = 'e2e-worker-token';
@@ -19,7 +19,7 @@ async function login(page: Page) {
   await typeInto(page, username, 'admin');
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
   await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem('playlists-open')).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.playlistsOpen)).waitFor({ timeout: 30_000 });
 }
 
 async function trackPid(
@@ -82,15 +82,15 @@ test('an instant mix starts from any playing track', async ({ page, request }) =
   // The browser journey: play the track, open Discover, run the mix
   // with the default adventurousness.
   await login(page);
-  const card = page.locator(sem(`item-${pid}`));
+  const card = page.locator(sem(SemanticsIds.item(pid)));
   await card.waitFor({ timeout: 30_000 });
-  await clickThrough(card, page.locator(sem('player-toggle')));
-  await clickThrough(page.locator(sem('player-discover')), page.locator(sem('instant-mix')));
-  await clickThrough(page.locator(sem('instant-mix')), page.locator(sem('instant-mix-run')));
+  await clickThrough(card, page.locator(sem(SemanticsIds.playerToggle)));
+  await clickThrough(page.locator(sem(SemanticsIds.playerDiscover)), page.locator(sem(SemanticsIds.instantMix)));
+  await clickThrough(page.locator(sem(SemanticsIds.instantMix)), page.locator(sem(SemanticsIds.instantMixRun)));
 
   // The sheet closes only once the mix came back; a swallowed click
   // retries until it does.
-  const run = page.locator(sem('instant-mix-run'));
+  const run = page.locator(sem(SemanticsIds.instantMixRun));
   await expect(async () => {
     if (await run.isVisible()) {
       await run.click({ timeout: 2_000, force: true }).catch(() => {});
@@ -106,7 +106,7 @@ test('an instant mix starts from any playing track', async ({ page, request }) =
   });
   await clickThrough(
     page.getByRole('button', { name: 'Back' }).first(),
-    page.locator(sem('mix-item-0')),
+    page.locator(sem(SemanticsIds.scopedItem('mix', 0))),
   );
   await expect(page.getByText('Instant mix', { exact: true }).first()).toBeVisible();
   // The basis chip reports whichever engine answered; coverage may or

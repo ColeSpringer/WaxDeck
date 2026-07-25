@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
 import '../sharing/shares_screen.dart';
+import '../shell/semantics_ids.dart';
 import 'prefs_controller.dart';
 
 /// Listening preferences: shared-stats participation, the stats
@@ -28,9 +29,9 @@ class ListeningSection extends ConsumerWidget {
         Text('Listening', style: textTheme.titleMedium),
         const SizedBox(height: 8),
         Semantics(
-          identifier: 'shared-stats-switch',
+          identifier: SemanticsIds.sharedStatsSwitch,
           child: SwitchListTile(
-            key: const Key('shared-stats-switch'),
+            key: const Key(SemanticsIds.sharedStatsSwitch),
             secondary: const Icon(Icons.groups_outlined),
             title: const Text('Include me in server-wide stats'),
             subtitle: const Text(
@@ -45,11 +46,11 @@ class ListeningSection extends ConsumerWidget {
           ),
         ),
         Semantics(
-          identifier: 'timezone-edit',
+          identifier: SemanticsIds.timezoneEdit,
           label: 'Timezone',
           button: true,
           child: ListTile(
-            key: const Key('timezone-edit'),
+            key: const Key(SemanticsIds.timezoneEdit),
             leading: const Icon(Icons.schedule),
             title: const Text('Timezone'),
             subtitle: Text(prefs?.timezone ?? 'Server default'),
@@ -60,11 +61,11 @@ class ListeningSection extends ConsumerWidget {
           ),
         ),
         Semantics(
-          identifier: 'open-share-links',
+          identifier: SemanticsIds.openShareLinks,
           label: 'Share links',
           button: true,
           child: ListTile(
-            key: const Key('open-share-links'),
+            key: const Key(SemanticsIds.openShareLinks),
             leading: const Icon(Icons.link),
             title: const Text('Share links'),
             subtitle: const Text('Public links you have handed out'),
@@ -151,11 +152,11 @@ class _TimezoneDialogState extends ConsumerState<_TimezoneDialog> {
           child: const Text('Cancel'),
         ),
         Semantics(
-          identifier: 'timezone-save',
+          identifier: SemanticsIds.timezoneSave,
           label: 'Save',
           button: true,
           child: FilledButton(
-            key: const Key('timezone-save'),
+            key: const Key(SemanticsIds.timezoneSave),
             onPressed: _busy ? null : _save,
             child: const Text('Save'),
           ),

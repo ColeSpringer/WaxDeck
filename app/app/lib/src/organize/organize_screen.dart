@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 
 /// The configured file organization profiles.
 final organizeProfilesProvider = FutureProvider<List<OrganizeProfile>>(
@@ -131,9 +132,9 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
           Row(
             children: [
               Semantics(
-                identifier: 'organize-profile',
+                identifier: SemanticsIds.organizeProfile,
                 child: DropdownButton<String>(
-                  key: const Key('organize-profile'),
+                  key: const Key(SemanticsIds.organizeProfile),
                   value: profile,
                   onChanged: (value) => setState(() {
                     _profile = value;
@@ -148,22 +149,22 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
               ),
               const SizedBox(width: 16),
               Semantics(
-                identifier: 'organize-preview',
+                identifier: SemanticsIds.organizePreview,
                 label: 'Preview moves',
                 button: true,
                 child: OutlinedButton(
-                  key: const Key('organize-preview'),
+                  key: const Key(SemanticsIds.organizePreview),
                   onPressed: _busy ? null : () => _preview(profile),
                   child: const Text('Preview'),
                 ),
               ),
               const SizedBox(width: 8),
               Semantics(
-                identifier: 'organize-apply',
+                identifier: SemanticsIds.organizeApply,
                 label: 'Apply moves',
                 button: true,
                 child: FilledButton(
-                  key: const Key('organize-apply'),
+                  key: const Key(SemanticsIds.organizeApply),
                   onPressed: _busy || plan == null
                       ? null
                       : () => _apply(profile),
@@ -190,9 +191,9 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
     return Semantics(
-      identifier: 'organize-plan',
+      identifier: SemanticsIds.organizePlan,
       child: Column(
-        key: const Key('organize-plan'),
+        key: const Key(SemanticsIds.organizePlan),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -248,9 +249,9 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
     return Semantics(
-      identifier: 'organize-report',
+      identifier: SemanticsIds.organizeReport,
       child: Column(
-        key: const Key('organize-report'),
+        key: const Key(SemanticsIds.organizeReport),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -325,11 +326,11 @@ class _TypedConfirmDialogState extends State<_TypedConfirmDialog> {
           child: const Text('Cancel'),
         ),
         Semantics(
-          identifier: 'organize-confirm',
+          identifier: SemanticsIds.organizeConfirm,
           label: 'Confirm apply',
           button: true,
           child: FilledButton(
-            key: const Key('organize-confirm'),
+            key: const Key(SemanticsIds.organizeConfirm),
             onPressed: _controller.text.trim() == widget.profile
                 ? () => Navigator.of(context).pop(true)
                 : null,

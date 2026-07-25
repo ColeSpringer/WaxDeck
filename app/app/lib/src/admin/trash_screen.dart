@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/semantics_ids.dart';
 import 'admin_providers.dart';
 import '../format_bytes.dart';
 
@@ -108,16 +109,16 @@ class TrashScreen extends ConsumerWidget {
     final trash = ref.watch(trashProvider);
     final includeRestored = ref.watch(trashIncludeRestoredProvider);
     return Semantics(
-      identifier: 'admin-trash',
+      identifier: SemanticsIds.adminTrash,
       container: true,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Trash'),
           actions: [
             Semantics(
-              identifier: 'trash-empty',
+              identifier: SemanticsIds.trashEmpty,
               child: TextButton.icon(
-                key: const Key('trash-empty'),
+                key: const Key(SemanticsIds.trashEmpty),
                 onPressed: () => _empty(context, ref),
                 icon: const Icon(Icons.delete_forever_outlined),
                 label: const Text('Empty trash'),
@@ -187,9 +188,9 @@ class _TrashRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final restored = entry.restoredAt != null;
     return Semantics(
-      identifier: 'trash-row-${entry.id}',
+      identifier: SemanticsIds.trashRow(entry.id),
       child: ListTile(
-        key: ValueKey('trash-row-${entry.id}'),
+        key: ValueKey(SemanticsIds.trashRow(entry.id)),
         leading: const Icon(Icons.delete_outline),
         title: Row(
           children: [
@@ -214,17 +215,17 @@ class _TrashRow extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Semantics(
-                    identifier: 'trash-purge-${entry.id}',
+                    identifier: SemanticsIds.trashPurge(entry.id),
                     child: TextButton(
-                      key: Key('trash-purge-${entry.id}'),
+                      key: Key(SemanticsIds.trashPurge(entry.id)),
                       onPressed: onPurge,
                       child: const Text('Purge'),
                     ),
                   ),
                   Semantics(
-                    identifier: 'trash-restore-${entry.id}',
+                    identifier: SemanticsIds.trashRestore(entry.id),
                     child: TextButton(
-                      key: Key('trash-restore-${entry.id}'),
+                      key: Key(SemanticsIds.trashRestore(entry.id)),
                       onPressed: onRestore,
                       child: const Text('Restore'),
                     ),

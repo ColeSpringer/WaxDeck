@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../books/book_screen.dart';
 import '../media_icons.dart';
 import '../player/player_screen.dart';
+import '../shell/semantics_ids.dart';
 import 'browse_controller.dart';
 
 /// Browse the library by dimension: a tab per dimension listing its
@@ -27,9 +28,9 @@ class BrowseScreen extends StatelessWidget {
             tabs: [
               for (final d in dimensions)
                 Semantics(
-                  identifier: 'browse-tab-${d.wireName}',
+                  identifier: SemanticsIds.browseTab(d.wireName),
                   child: Tab(
-                    key: Key('browse-tab-${d.wireName}'),
+                    key: Key(SemanticsIds.browseTab(d.wireName)),
                     text: d.label,
                   ),
                 ),
@@ -101,7 +102,7 @@ class _BucketList extends ConsumerWidget {
             );
           }
           final bucket = state.buckets[index];
-          final id = 'browse-${dimension.wireName}-$index';
+          final id = SemanticsIds.browseBucket(dimension.wireName, index);
           return Semantics(
             identifier: id,
             label: '${bucket.label}, ${bucket.count} items',
@@ -218,13 +219,13 @@ class BrowseItemsScreen extends ConsumerWidget {
             ),
           );
           return Semantics(
-            identifier: 'browse-item-$index',
+            identifier: SemanticsIds.browseItem(index),
             label: item.artist == null
                 ? item.title
                 : '${item.title} by ${item.artist}',
             button: true,
             child: ListTile(
-              key: Key('browse-item-$index'),
+              key: Key(SemanticsIds.browseItem(index)),
               leading: ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: SizedBox(

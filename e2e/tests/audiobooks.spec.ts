@@ -7,12 +7,12 @@ import {
   ensureAdmin,
   typeInto,
 } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The audiobook journey: the scanned multi-part fixture book presents
 // one timeline, a position written by another device resolves to the
 // right chapter, and the web client resumes there.
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 
 async function fixtureBook(request: APIRequestContext, token: string): Promise<{ pid: string; durationMs: number }> {
   let pid = '';
@@ -84,15 +84,15 @@ test('a multi-part book resumes at the right chapter across devices', async ({ p
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
   await page.getByRole('button', { name: 'Log in' }).click();
 
-  const card = page.locator(sem(`item-${book.pid}`));
+  const card = page.locator(sem(SemanticsIds.item(book.pid)));
   await card.waitFor({ timeout: 30_000 });
-  await clickThrough(card, page.locator(sem('book-resume')));
+  await clickThrough(card, page.locator(sem(SemanticsIds.bookResume)));
 
-  await expect(page.locator(sem('chapter-0'))).toBeVisible();
-  await expect(page.locator(sem('chapter-2'))).toBeVisible();
+  await expect(page.locator(sem(SemanticsIds.chapter(0)))).toBeVisible();
+  await expect(page.locator(sem(SemanticsIds.chapter(2)))).toBeVisible();
   await clickThrough(
-    page.locator(sem('book-resume')),
-    page.locator(sem('player-toggle')),
+    page.locator(sem(SemanticsIds.bookResume)),
+    page.locator(sem(SemanticsIds.playerToggle)),
   );
 
   // Playback continues on the book timeline: the next checkpoints land

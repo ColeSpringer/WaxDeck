@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { typeInto } from './helpers';
+import { SemanticsIds } from './semantics-ids';
 
 // The web half of the large-library gate, run on demand against a
 // server holding the synthesized 100k-item corpus:
@@ -81,7 +82,7 @@ test.describe('large-library web gate', () => {
     const gridStart = Date.now();
     await page.getByRole('button', { name: 'Log in' }).click();
     await page
-      .locator('[flt-semantics-identifier^="item-"]')
+      .locator(`[flt-semantics-identifier^="${SemanticsIds.item('')}"]`)
       .first()
       .waitFor({ timeout: 60_000 });
     const gridMs = Date.now() - gridStart;

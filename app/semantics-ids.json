@@ -1,0 +1,1469 @@
+{
+  "_comment": [
+    "The semantics identifiers WaxDeck's UI exposes, and the single source",
+    "for both the app's registry and the e2e suite's constants.",
+    "",
+    "`make generate` emits app/app/lib/src/shell/semantics_ids.dart and",
+    "e2e/tests/semantics-ids.ts from this file. Never write an identifier",
+    "string in a widget or a spec: add it here, regenerate, and use the",
+    "constant, so the app and the specs cannot drift apart.",
+    "",
+    "An entry with `params` becomes a function in both languages; `{name}`",
+    "placeholders in the id are substituted in order.",
+    "",
+    "Renaming an id is a contract change: the spec that drives it has to",
+    "move in the same commit."
+  ],
+  "groups": [
+    {
+      "name": "admin",
+      "doc": "The admin console: users, settings, schedules, backups, trash, audit, migration.",
+      "ids": [
+        {
+          "name": "adminAudit",
+          "id": "admin-audit"
+        },
+        {
+          "name": "adminBackups",
+          "id": "admin-backups"
+        },
+        {
+          "name": "adminMigrate",
+          "id": "admin-migrate"
+        },
+        {
+          "name": "adminSettingsSection",
+          "id": "admin-settings-section"
+        },
+        {
+          "name": "adminTrash",
+          "id": "admin-trash"
+        },
+        {
+          "name": "adminUsers",
+          "id": "admin-users"
+        },
+        {
+          "name": "auditFilter",
+          "id": "audit-filter"
+        },
+        {
+          "name": "auditRow",
+          "id": "audit-row-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "backupCreate",
+          "id": "backup-create"
+        },
+        {
+          "name": "backupImport",
+          "id": "backup-import"
+        },
+        {
+          "name": "backupRow",
+          "id": "backup-row-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "inviteCreate",
+          "id": "invite-create"
+        },
+        {
+          "name": "inviteRevoke",
+          "id": "invite-revoke-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "inviteRow",
+          "id": "invite-row-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "inviteToken",
+          "id": "invite-token"
+        },
+        {
+          "name": "migratePassword",
+          "id": "migrate-password"
+        },
+        {
+          "name": "migrateServerUrl",
+          "id": "migrate-server-url"
+        },
+        {
+          "name": "migrateSource",
+          "id": "migrate-source"
+        },
+        {
+          "name": "migrateSubmit",
+          "id": "migrate-submit"
+        },
+        {
+          "name": "migrateToken",
+          "id": "migrate-token"
+        },
+        {
+          "name": "migrateUsername",
+          "id": "migrate-username"
+        },
+        {
+          "name": "requestApprove",
+          "id": "request-approve-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "requestReject",
+          "id": "request-reject-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "requestRow",
+          "id": "request-row-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "restoreBanner",
+          "id": "restore-banner"
+        },
+        {
+          "name": "restoreCancel",
+          "id": "restore-cancel"
+        },
+        {
+          "name": "scheduleCron",
+          "id": "schedule-cron-{kind}",
+          "params": [
+            "kind"
+          ]
+        },
+        {
+          "name": "scheduleEnabled",
+          "id": "schedule-enabled-{kind}",
+          "params": [
+            "kind"
+          ]
+        },
+        {
+          "name": "scheduleRow",
+          "id": "schedule-row-{kind}",
+          "params": [
+            "kind"
+          ]
+        },
+        {
+          "name": "scheduleSave",
+          "id": "schedule-save-{kind}",
+          "params": [
+            "kind"
+          ]
+        },
+        {
+          "name": "settingReadOnly",
+          "id": "setting-read-only"
+        },
+        {
+          "name": "settingSignupEnabled",
+          "id": "setting-signup-enabled"
+        },
+        {
+          "name": "settingSonicAnalysis",
+          "id": "setting-sonic-analysis"
+        },
+        {
+          "name": "signupRequests",
+          "id": "signup-requests"
+        },
+        {
+          "name": "trashEmpty",
+          "id": "trash-empty"
+        },
+        {
+          "name": "trashPurge",
+          "id": "trash-purge-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "trashRestore",
+          "id": "trash-restore-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "trashRow",
+          "id": "trash-row-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "userRow",
+          "id": "user-row-{id}",
+          "params": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "auth",
+      "doc": "Sign-in, first-run setup, and signup. The names here are frozen vocabulary for the accessibility audit.",
+      "ids": [
+        {
+          "name": "loginError",
+          "id": "login-error"
+        },
+        {
+          "name": "loginPassword",
+          "id": "login-password"
+        },
+        {
+          "name": "loginSubmit",
+          "id": "login-submit"
+        },
+        {
+          "name": "loginUsername",
+          "id": "login-username"
+        },
+        {
+          "name": "oidcLogin",
+          "id": "oidc-login-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "setupConfirm",
+          "id": "setup-confirm"
+        },
+        {
+          "name": "setupDisplayName",
+          "id": "setup-display-name"
+        },
+        {
+          "name": "setupError",
+          "id": "setup-error"
+        },
+        {
+          "name": "setupPassword",
+          "id": "setup-password"
+        },
+        {
+          "name": "setupSubmit",
+          "id": "setup-submit"
+        },
+        {
+          "name": "setupUsername",
+          "id": "setup-username"
+        },
+        {
+          "name": "signupError",
+          "id": "signup-error"
+        },
+        {
+          "name": "signupInviteToken",
+          "id": "signup-invite-token"
+        },
+        {
+          "name": "signupOpen",
+          "id": "signup-open"
+        },
+        {
+          "name": "signupPassword",
+          "id": "signup-password"
+        },
+        {
+          "name": "signupResult",
+          "id": "signup-result"
+        },
+        {
+          "name": "signupSubmit",
+          "id": "signup-submit"
+        },
+        {
+          "name": "signupUsername",
+          "id": "signup-username"
+        }
+      ]
+    },
+    {
+      "name": "books",
+      "doc": "Audiobooks: the book screen, its chapters, and its per-book settings.",
+      "ids": [
+        {
+          "name": "bookResume",
+          "id": "book-resume"
+        },
+        {
+          "name": "bookSettingsOpen",
+          "id": "book-settings-open"
+        },
+        {
+          "name": "bookSettingsSave",
+          "id": "book-settings-save"
+        },
+        {
+          "name": "bookSettingsSpeed",
+          "id": "book-settings-speed"
+        },
+        {
+          "name": "bookToolsMenu",
+          "id": "book-tools-menu"
+        },
+        {
+          "name": "chapter",
+          "id": "chapter-{index}",
+          "params": [
+            "index"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "connect",
+      "doc": "Connect: endpoints, remote sessions, and cast controls.",
+      "ids": [
+        {
+          "name": "endpoint",
+          "id": "endpoint-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "remoteNext",
+          "id": "remote-next"
+        },
+        {
+          "name": "remotePlayHere",
+          "id": "remote-play-here"
+        },
+        {
+          "name": "remotePrevious",
+          "id": "remote-previous"
+        },
+        {
+          "name": "remoteSeek",
+          "id": "remote-seek"
+        },
+        {
+          "name": "remoteToggle",
+          "id": "remote-toggle"
+        },
+        {
+          "name": "remoteVolume",
+          "id": "remote-volume"
+        },
+        {
+          "name": "session",
+          "id": "session-{id}",
+          "params": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "discovery",
+      "doc": "Instant mixes, similar tracks, and the track lists they open.",
+      "ids": [
+        {
+          "name": "instantMixRun",
+          "id": "instant-mix-run"
+        },
+        {
+          "name": "mixAdventurousness",
+          "id": "mix-adventurousness"
+        },
+        {
+          "name": "scopedItem",
+          "id": "{scope}-item-{index}",
+          "params": [
+            "scope",
+            "index"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "health",
+      "doc": "Library health: rules, issues, and their fixes.",
+      "ids": [
+        {
+          "name": "adminDiagnostics",
+          "id": "admin-diagnostics"
+        },
+        {
+          "name": "duplicateGroup",
+          "id": "duplicate-group-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "duplicateMerge",
+          "id": "duplicate-merge-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "health",
+          "id": "health-rule-{rule}",
+          "params": [
+            "rule"
+          ]
+        },
+        {
+          "name": "healthFix",
+          "id": "health-fix-{rule}",
+          "params": [
+            "rule"
+          ]
+        },
+        {
+          "name": "healthIssue",
+          "id": "health-issue-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "healthScore",
+          "id": "health-score"
+        },
+        {
+          "name": "healthSweep",
+          "id": "health-sweep"
+        },
+        {
+          "name": "healthWarmingUp",
+          "id": "health-warming-up"
+        },
+        {
+          "name": "upgradeGroup",
+          "id": "upgrade-group-{itemPid}",
+          "params": [
+            "itemPid"
+          ]
+        },
+        {
+          "name": "upgradeResolve",
+          "id": "upgrade-resolve-{itemPid}",
+          "params": [
+            "itemPid"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "library",
+      "doc": "Browse and the library grid, including the per-item cards the sync specs drive.",
+      "ids": [
+        {
+          "name": "addToLibrary",
+          "id": "add-to-library"
+        },
+        {
+          "name": "browseBucket",
+          "id": "browse-{dimension}-{index}",
+          "params": [
+            "dimension",
+            "index"
+          ]
+        },
+        {
+          "name": "browseItem",
+          "id": "browse-item-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "browseOpen",
+          "id": "browse-open"
+        },
+        {
+          "name": "browseTab",
+          "id": "browse-tab-{wireName}",
+          "params": [
+            "wireName"
+          ]
+        },
+        {
+          "name": "curationAudit",
+          "id": "curation-audit"
+        },
+        {
+          "name": "curationBackups",
+          "id": "curation-backups"
+        },
+        {
+          "name": "curationDiagnostics",
+          "id": "curation-diagnostics"
+        },
+        {
+          "name": "curationHealth",
+          "id": "curation-health"
+        },
+        {
+          "name": "curationMenu",
+          "id": "curation-menu"
+        },
+        {
+          "name": "curationMigrate",
+          "id": "curation-migrate"
+        },
+        {
+          "name": "curationOrganize",
+          "id": "curation-organize"
+        },
+        {
+          "name": "curationReview",
+          "id": "curation-review"
+        },
+        {
+          "name": "curationTasks",
+          "id": "curation-tasks"
+        },
+        {
+          "name": "curationTrash",
+          "id": "curation-trash"
+        },
+        {
+          "name": "curationUploads",
+          "id": "curation-uploads"
+        },
+        {
+          "name": "curationUsers",
+          "id": "curation-users"
+        },
+        {
+          "name": "item",
+          "id": "item-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "itemDelete",
+          "id": "item-delete"
+        },
+        {
+          "name": "itemDeleteConfirm",
+          "id": "item-delete-confirm"
+        },
+        {
+          "name": "offlineBanner",
+          "id": "offline-banner"
+        },
+        {
+          "name": "openStats",
+          "id": "open-stats"
+        },
+        {
+          "name": "playlistsOpen",
+          "id": "playlists-open"
+        },
+        {
+          "name": "podcastsOpen",
+          "id": "podcasts-open"
+        },
+        {
+          "name": "radioOpen",
+          "id": "radio-open"
+        },
+        {
+          "name": "resumeBanner",
+          "id": "resume-banner"
+        },
+        {
+          "name": "settingsOpen",
+          "id": "settings-open"
+        }
+      ]
+    },
+    {
+      "name": "metadata",
+      "doc": "The metadata editor: fields, locks, candidates, and artwork.",
+      "ids": [
+        {
+          "name": "creditsRole",
+          "id": "credits-role"
+        },
+        {
+          "name": "creditsSave",
+          "id": "credits-save"
+        },
+        {
+          "name": "fieldLock",
+          "id": "field-lock-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "lyricsClear",
+          "id": "lyrics-clear"
+        },
+        {
+          "name": "lyricsSave",
+          "id": "lyrics-save"
+        },
+        {
+          "name": "metadataEnrich",
+          "id": "metadata-enrich"
+        },
+        {
+          "name": "metadataForce",
+          "id": "metadata-force"
+        },
+        {
+          "name": "metadataLock",
+          "id": "metadata-lock"
+        },
+        {
+          "name": "metadataRematch",
+          "id": "metadata-rematch"
+        },
+        {
+          "name": "metadataSave",
+          "id": "metadata-save"
+        },
+        {
+          "name": "metadataWriteback",
+          "id": "metadata-writeback"
+        },
+        {
+          "name": "tagAdd",
+          "id": "tag-add"
+        },
+        {
+          "name": "tagRemove",
+          "id": "tag-remove-{key}",
+          "params": [
+            "key"
+          ]
+        },
+        {
+          "name": "unofficialSwitch",
+          "id": "unofficial-switch"
+        }
+      ]
+    },
+    {
+      "name": "organize",
+      "doc": "Organize: previews, duplicates, and upgrade groups.",
+      "ids": [
+        {
+          "name": "organizeApply",
+          "id": "organize-apply"
+        },
+        {
+          "name": "organizeConfirm",
+          "id": "organize-confirm"
+        },
+        {
+          "name": "organizePlan",
+          "id": "organize-plan"
+        },
+        {
+          "name": "organizePreview",
+          "id": "organize-preview"
+        },
+        {
+          "name": "organizeProfile",
+          "id": "organize-profile"
+        },
+        {
+          "name": "organizeReport",
+          "id": "organize-report"
+        }
+      ]
+    },
+    {
+      "name": "player",
+      "doc": "Playback surfaces: transport, stars and ratings, chapters, sleep timer, transcript.",
+      "ids": [
+        {
+          "name": "addToPlaylist",
+          "id": "add-to-playlist"
+        },
+        {
+          "name": "downloadButton",
+          "id": "download-button"
+        },
+        {
+          "name": "instantMix",
+          "id": "instant-mix"
+        },
+        {
+          "name": "playerChapter",
+          "id": "player-chapter-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "playerChapters",
+          "id": "player-chapters"
+        },
+        {
+          "name": "playerDevices",
+          "id": "player-devices"
+        },
+        {
+          "name": "playerDiscover",
+          "id": "player-discover"
+        },
+        {
+          "name": "playerSeek",
+          "id": "player-seek"
+        },
+        {
+          "name": "playerSpeed",
+          "id": "player-speed"
+        },
+        {
+          "name": "playerToggle",
+          "id": "player-toggle"
+        },
+        {
+          "name": "playerTrim",
+          "id": "player-trim"
+        },
+        {
+          "name": "rating",
+          "id": "{scope}rating-{value}",
+          "params": [
+            "scope",
+            "value"
+          ]
+        },
+        {
+          "name": "shareLink",
+          "id": "share-link"
+        },
+        {
+          "name": "similarTracks",
+          "id": "similar-tracks"
+        },
+        {
+          "name": "sleepTimer",
+          "id": "sleep-timer-{minutes}",
+          "params": [
+            "minutes"
+          ]
+        },
+        {
+          "name": "sleepTimerCancel",
+          "id": "sleep-timer-cancel"
+        },
+        {
+          "name": "sleepTimerChapter",
+          "id": "sleep-timer-chapter"
+        },
+        {
+          "name": "sleepTimerCustomField",
+          "id": "sleep-timer-custom-field"
+        },
+        {
+          "name": "sleepTimerCustomStart",
+          "id": "sleep-timer-custom-start"
+        },
+        {
+          "name": "sleepTimerOpen",
+          "id": "sleep-timer-open"
+        },
+        {
+          "name": "starButton",
+          "id": "{scope}star-button",
+          "params": [
+            "scope"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "playlists",
+      "doc": "Playlists, their entries, and the smart-rule editor.",
+      "ids": [
+        {
+          "name": "m3uImportConfirm",
+          "id": "m3u-import-confirm"
+        },
+        {
+          "name": "playlist",
+          "id": "playlist-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "playlistAdd",
+          "id": "playlist-add"
+        },
+        {
+          "name": "playlistCreateConfirm",
+          "id": "playlist-create-confirm"
+        },
+        {
+          "name": "playlistEditRule",
+          "id": "playlist-edit-rule"
+        },
+        {
+          "name": "playlistEntry",
+          "id": "playlist-entry-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "playlistEntryRemove",
+          "id": "playlist-entry-remove-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "playlistExportPortable",
+          "id": "playlist-export-portable"
+        },
+        {
+          "name": "playlistImport",
+          "id": "playlist-import"
+        },
+        {
+          "name": "playlistImportRun",
+          "id": "playlist-import-run"
+        },
+        {
+          "name": "playlistImportSource",
+          "id": "playlist-import-source"
+        },
+        {
+          "name": "playlistResetCover",
+          "id": "playlist-reset-cover"
+        },
+        {
+          "name": "playlistSetCover",
+          "id": "playlist-set-cover"
+        },
+        {
+          "name": "playlistShareLink",
+          "id": "playlist-share-link"
+        },
+        {
+          "name": "ruleAddCondition",
+          "id": "rule-add-condition"
+        },
+        {
+          "name": "ruleSave",
+          "id": "rule-save"
+        }
+      ]
+    },
+    {
+      "name": "podcasts",
+      "doc": "Podcasts: shows, episodes, and subscription actions.",
+      "ids": [
+        {
+          "name": "episode",
+          "id": "episode-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "episodeFetch",
+          "id": "episode-fetch-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "episodeInfo",
+          "id": "episode-info-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "episodeRemove",
+          "id": "episode-remove-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "notesLink",
+          "id": "notes-link-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "podcast",
+          "id": "podcast-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "podcastAdd",
+          "id": "podcast-add"
+        },
+        {
+          "name": "podcastSettingsOpen",
+          "id": "podcast-settings-open"
+        },
+        {
+          "name": "podcastSettingsRetention",
+          "id": "podcast-settings-retention"
+        },
+        {
+          "name": "podcastSettingsSave",
+          "id": "podcast-settings-save"
+        },
+        {
+          "name": "podcastSettingsSpeed",
+          "id": "podcast-settings-speed"
+        },
+        {
+          "name": "podcastSubscribe",
+          "id": "podcast-subscribe"
+        },
+        {
+          "name": "podcastSubscribeConfirm",
+          "id": "podcast-subscribe-confirm"
+        },
+        {
+          "name": "podcastUnsubscribe",
+          "id": "podcast-unsubscribe"
+        },
+        {
+          "name": "transcriptCue",
+          "id": "transcript-cue-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "transcriptOpen",
+          "id": "transcript-open"
+        },
+        {
+          "name": "unsubscribeKeepFiles",
+          "id": "unsubscribe-keep-files"
+        },
+        {
+          "name": "unsubscribeRemoveFiles",
+          "id": "unsubscribe-remove-files"
+        }
+      ]
+    },
+    {
+      "name": "prototype",
+      "doc": "The editing prototype kept behind its own route for the e2e keyboard contract.",
+      "ids": [
+        {
+          "name": "protoCellArtist",
+          "id": "proto-cell-{index}-artist",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "protoCellCurrent",
+          "id": "proto-cell-{index}-current",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "protoEdit",
+          "id": "proto-edit-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "protoKebab",
+          "id": "proto-kebab-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "protoMenuApply",
+          "id": "proto-menu-apply"
+        },
+        {
+          "name": "protoMenuCopy",
+          "id": "proto-menu-copy"
+        },
+        {
+          "name": "protoRow",
+          "id": "proto-row-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "protoTable",
+          "id": "proto-table"
+        }
+      ]
+    },
+    {
+      "name": "radio",
+      "doc": "Internet radio stations.",
+      "ids": [
+        {
+          "name": "radio",
+          "id": "radio-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "radioAdd",
+          "id": "radio-add"
+        },
+        {
+          "name": "radioAddConfirm",
+          "id": "radio-add-confirm"
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "doc": "The review queue and its keyboard-first controls.",
+      "ids": [
+        {
+          "name": "candidate",
+          "id": "candidate-{mbid}",
+          "params": [
+            "mbid"
+          ]
+        },
+        {
+          "name": "diffMissing",
+          "id": "diff-missing-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "diffRow",
+          "id": "diff-row-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "editMetadata",
+          "id": "edit-metadata-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "matchingMenu",
+          "id": "matching-menu"
+        },
+        {
+          "name": "reviewApprove",
+          "id": "review-approve"
+        },
+        {
+          "name": "reviewAsIs",
+          "id": "review-as-is"
+        },
+        {
+          "name": "reviewBulkApprove",
+          "id": "review-bulk-approve"
+        },
+        {
+          "name": "reviewBulkAsIs",
+          "id": "review-bulk-as-is"
+        },
+        {
+          "name": "reviewBulkSkip",
+          "id": "review-bulk-skip"
+        },
+        {
+          "name": "reviewDiscard",
+          "id": "review-discard"
+        },
+        {
+          "name": "reviewFilter",
+          "id": "review-filter-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "reviewRevert",
+          "id": "review-revert"
+        },
+        {
+          "name": "reviewRow",
+          "id": "review-row-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "reviewSelectToggle",
+          "id": "review-select-toggle"
+        },
+        {
+          "name": "reviewSkip",
+          "id": "review-skip"
+        },
+        {
+          "name": "reviewUnofficial",
+          "id": "review-unofficial"
+        },
+        {
+          "name": "trackMenu",
+          "id": "track-menu-{pid}",
+          "params": [
+            "pid"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "settings",
+      "doc": "Settings: account, devices, app passwords, notifications, scrobblers, appearance.",
+      "ids": [
+        {
+          "name": "appPasswordAdd",
+          "id": "app-password-add"
+        },
+        {
+          "name": "appPasswordRevoke",
+          "id": "app-password-revoke-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "deviceRevoke",
+          "id": "device-revoke-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "deviceRow",
+          "id": "device-row-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "lastfmCredentialsClear",
+          "id": "lastfm-credentials-clear"
+        },
+        {
+          "name": "lastfmCredentialsSave",
+          "id": "lastfm-credentials-save"
+        },
+        {
+          "name": "listenbrainzConnectConfirm",
+          "id": "listenbrainz-connect-confirm"
+        },
+        {
+          "name": "logoutButton",
+          "id": "logout-button"
+        },
+        {
+          "name": "notifyServerTargetAdd",
+          "id": "notify-server-target-add"
+        },
+        {
+          "name": "notifyTargetAdd",
+          "id": "notify-target-add"
+        },
+        {
+          "name": "notifyTargetTest",
+          "id": "notify-target-test-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "openShareLinks",
+          "id": "open-share-links"
+        },
+        {
+          "name": "scrobbler",
+          "id": "scrobbler-{service}",
+          "params": [
+            "service"
+          ]
+        },
+        {
+          "name": "scrobblerConnect",
+          "id": "scrobbler-connect-{service}",
+          "params": [
+            "service"
+          ]
+        },
+        {
+          "name": "scrobblerDisconnect",
+          "id": "scrobbler-disconnect-{service}",
+          "params": [
+            "service"
+          ]
+        },
+        {
+          "name": "scrobblerSetupLastfm",
+          "id": "scrobbler-setup-lastfm"
+        },
+        {
+          "name": "sharedStatsSwitch",
+          "id": "shared-stats-switch"
+        },
+        {
+          "name": "themeSelect",
+          "id": "theme-select"
+        },
+        {
+          "name": "timezoneEdit",
+          "id": "timezone-edit"
+        },
+        {
+          "name": "timezoneSave",
+          "id": "timezone-save"
+        }
+      ]
+    },
+    {
+      "name": "sharing",
+      "doc": "Shares and share links.",
+      "ids": [
+        {
+          "name": "shareCopy",
+          "id": "share-copy-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "shareCreate",
+          "id": "share-create"
+        },
+        {
+          "name": "shareExpiry",
+          "id": "share-expiry"
+        },
+        {
+          "name": "shareRevoke",
+          "id": "share-revoke-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "shareRow",
+          "id": "share-row-{pid}",
+          "params": [
+            "pid"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "stats",
+      "doc": "Listening stats and year in review.",
+      "ids": [
+        {
+          "name": "listenLogClientFilter",
+          "id": "listen-log-client-filter"
+        },
+        {
+          "name": "openListenLog",
+          "id": "open-listen-log"
+        },
+        {
+          "name": "openYearInReview",
+          "id": "open-year-in-review"
+        },
+        {
+          "name": "statsBucket",
+          "id": "stats-bucket-{bucket}",
+          "params": [
+            "bucket"
+          ]
+        },
+        {
+          "name": "statsRange",
+          "id": "stats-range-{range}",
+          "params": [
+            "range"
+          ]
+        },
+        {
+          "name": "top",
+          "id": "top-kind-{kind}",
+          "params": [
+            "kind"
+          ]
+        },
+        {
+          "name": "yirNextYear",
+          "id": "yir-next-year"
+        },
+        {
+          "name": "yirPersonal",
+          "id": "yir-personal"
+        },
+        {
+          "name": "yirPrevYear",
+          "id": "yir-prev-year"
+        },
+        {
+          "name": "yirServer",
+          "id": "yir-server"
+        }
+      ]
+    },
+    {
+      "name": "tools",
+      "doc": "Long-running tools and their progress rows.",
+      "ids": [
+        {
+          "name": "taskRow",
+          "id": "task-row-{id}",
+          "params": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "uploads",
+      "doc": "Uploads: batches, rows, duplicates, and the add-to-library flow.",
+      "ids": [
+        {
+          "name": "acquireFormat",
+          "id": "acquire-format"
+        },
+        {
+          "name": "acquireSubmit",
+          "id": "acquire-submit"
+        },
+        {
+          "name": "addFromUrl",
+          "id": "add-from-url"
+        },
+        {
+          "name": "addUploadFile",
+          "id": "add-upload-file"
+        },
+        {
+          "name": "addUploadFolder",
+          "id": "add-upload-folder"
+        },
+        {
+          "name": "uploadBatch",
+          "id": "upload-batch-{batchId}",
+          "params": [
+            "batchId"
+          ]
+        },
+        {
+          "name": "uploadDelete",
+          "id": "upload-delete-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "uploadDropTarget",
+          "id": "upload-drop-target"
+        },
+        {
+          "name": "uploadDuplicate",
+          "id": "upload-duplicate-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "uploadFromUrl",
+          "id": "upload-from-url"
+        },
+        {
+          "name": "uploadGrouping",
+          "id": "upload-grouping"
+        },
+        {
+          "name": "uploadGroupingOption",
+          "id": "upload-grouping-{wireName}",
+          "params": [
+            "wireName"
+          ]
+        },
+        {
+          "name": "uploadMediaConfirm",
+          "id": "upload-media-confirm"
+        },
+        {
+          "name": "uploadMediaType",
+          "id": "upload-media-type"
+        },
+        {
+          "name": "uploadPick",
+          "id": "upload-pick"
+        },
+        {
+          "name": "uploadQuota",
+          "id": "upload-quota"
+        },
+        {
+          "name": "uploadRetry",
+          "id": "upload-retry-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "uploadReview",
+          "id": "upload-review-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "uploadRow",
+          "id": "upload-row-{id}",
+          "params": [
+            "id"
+          ]
+        }
+      ]
+    }
+  ]
+}

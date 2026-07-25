@@ -8,6 +8,8 @@ environment:
 workspace:
   - app
   - packages/waxdeck_api
+  - packages/waxdeck_ui
+  - packages/waxdeck_ui/example
   - packages/waxdeck_data
   - packages/waxdeck_api_gen
   - packages/waxdeck_player

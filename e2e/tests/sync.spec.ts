@@ -1,6 +1,7 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 import crypto from 'node:crypto';
 import { authed, ensureAdmin, typeInto, waitForLibrary } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The live-sync slice over the real stack: the delta-sync endpoints, the
 // WebSocket invalidation channel (exercised as two live web clients
@@ -158,10 +159,10 @@ test('a server edit reaches a second live client in about a second', async ({
   await typeInto(page, username, 'admin');
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
   await page.getByRole('button', { name: 'Log in' }).click();
-  const card = page.locator(`[flt-semantics-identifier="item-${target.pid}"]`);
+  const card = page.locator(sem(SemanticsIds.item(target.pid)));
   await card.waitFor({ timeout: 30_000 });
   await card.click();
-  const star = page.locator('[flt-semantics-identifier="star-button"]');
+  const star = page.locator(sem(SemanticsIds.starButton('')));
   await star.waitFor({ timeout: 30_000 });
   await expect(star).toHaveAccessibleName('Star');
 

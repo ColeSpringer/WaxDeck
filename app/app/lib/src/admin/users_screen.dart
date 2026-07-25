@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
 import '../review/review_controller.dart';
+import '../shell/semantics_ids.dart';
 import 'admin_providers.dart';
 import 'user_edit_screen.dart';
 
@@ -88,7 +89,7 @@ class UsersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Semantics(
-      identifier: 'admin-users',
+      identifier: SemanticsIds.adminUsers,
       container: true,
       child: DefaultTabController(
         length: 3,
@@ -180,10 +181,10 @@ class _UserRow extends StatelessWidget {
     }
 
     return Semantics(
-      identifier: 'user-row-${user.id}',
+      identifier: SemanticsIds.userRow(user.id),
       button: true,
       child: ListTile(
-        key: ValueKey('user-row-${user.id}'),
+        key: ValueKey(SemanticsIds.userRow(user.id)),
         leading: const Icon(Icons.account_circle_outlined),
         title: Row(
           children: [
@@ -263,7 +264,7 @@ class _RequestsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final requests = ref.watch(signupRequestsProvider);
     return Semantics(
-      identifier: 'signup-requests',
+      identifier: SemanticsIds.signupRequests,
       container: true,
       child: switch (requests) {
         AsyncData(:final value) when value.isEmpty => const Center(
@@ -273,9 +274,9 @@ class _RequestsTab extends ConsumerWidget {
           children: [
             for (final user in value)
               Semantics(
-                identifier: 'request-row-${user.id}',
+                identifier: SemanticsIds.requestRow(user.id),
                 child: ListTile(
-                  key: ValueKey('request-row-${user.id}'),
+                  key: ValueKey(SemanticsIds.requestRow(user.id)),
                   leading: const Icon(Icons.person_add_alt),
                   title: Text(user.username),
                   subtitle: Text(
@@ -288,17 +289,17 @@ class _RequestsTab extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Semantics(
-                        identifier: 'request-approve-${user.id}',
+                        identifier: SemanticsIds.requestApprove(user.id),
                         child: TextButton(
-                          key: Key('request-approve-${user.id}'),
+                          key: Key(SemanticsIds.requestApprove(user.id)),
                           onPressed: () => _approve(context, ref, user),
                           child: const Text('Approve'),
                         ),
                       ),
                       Semantics(
-                        identifier: 'request-reject-${user.id}',
+                        identifier: SemanticsIds.requestReject(user.id),
                         child: TextButton(
-                          key: Key('request-reject-${user.id}'),
+                          key: Key(SemanticsIds.requestReject(user.id)),
                           onPressed: () => _reject(context, ref, user),
                           child: const Text('Reject'),
                         ),
@@ -360,10 +361,10 @@ class _InvitesTab extends ConsumerWidget {
               const Text('Share this token; it is shown exactly once.'),
               const SizedBox(height: 12),
               Semantics(
-                identifier: 'invite-token',
+                identifier: SemanticsIds.inviteToken,
                 child: SelectableText(
                   created.token,
-                  key: const Key('invite-token'),
+                  key: const Key(SemanticsIds.inviteToken),
                   style: const TextStyle(fontFamily: 'monospace'),
                 ),
               ),
@@ -420,11 +421,11 @@ class _InvitesTab extends ConsumerWidget {
     final invites = ref.watch(invitesProvider);
     return Scaffold(
       floatingActionButton: Semantics(
-        identifier: 'invite-create',
+        identifier: SemanticsIds.inviteCreate,
         label: 'Create invite',
         button: true,
         child: FloatingActionButton(
-          key: const Key('invite-create'),
+          key: const Key(SemanticsIds.inviteCreate),
           tooltip: 'Create invite',
           onPressed: () => _create(context, ref),
           child: const Icon(Icons.person_add),
@@ -464,9 +465,9 @@ class _InviteRow extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final spent = invite.revoked || invite.expired;
     return Semantics(
-      identifier: 'invite-row-${invite.id}',
+      identifier: SemanticsIds.inviteRow(invite.id),
       child: ListTile(
-        key: ValueKey('invite-row-${invite.id}'),
+        key: ValueKey(SemanticsIds.inviteRow(invite.id)),
         leading: const Icon(Icons.local_activity_outlined),
         title: Row(
           children: [
@@ -502,9 +503,9 @@ class _InviteRow extends StatelessWidget {
         trailing: spent
             ? null
             : Semantics(
-                identifier: 'invite-revoke-${invite.id}',
+                identifier: SemanticsIds.inviteRevoke(invite.id),
                 child: IconButton(
-                  key: Key('invite-revoke-${invite.id}'),
+                  key: Key(SemanticsIds.inviteRevoke(invite.id)),
                   tooltip: 'Revoke invite',
                   icon: const Icon(Icons.delete_outline),
                   onPressed: onRevoke,

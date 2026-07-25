@@ -1,46 +1,125 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
+    Replaced by `--base-href` at build time. WaxDeck is served from the
+    root of its own origin, so this is "/" in practice.
   -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="WaxDeck: your music, podcasts, and audiobooks, on your own server.">
+  <!-- Self-hosted and often LAN-only: nothing here may reach the network. -->
+  <meta name="referrer" content="same-origin">
 
-  <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="WaxDeck">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
-
   <title>WaxDeck</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- The browser chrome takes the canvas colour in both themes, so the
+       address bar does not sit as a bright band above a dark app. -->
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FAF9F6">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#16130F">
+
+  <style>
+    /* The instant paint. Flutter's first frame is a WasmGC download away,
+       and until it lands the page is whatever the browser decided:
+       white, then a sudden dark app. This skeleton paints the canvas
+       colour and the mark immediately, and the engine's first frame
+       removes it. Deliberately tiny, and no request of its own. */
+    :root {
+      color-scheme: light dark;
+      --wax-canvas: #FAF9F6;
+      --wax-text: #6C6555;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --wax-canvas: #16130F;
+        --wax-text: #9A8E78;
+      }
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background-color: var(--wax-canvas);
+    }
+    #wax-boot {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background-color: var(--wax-canvas);
+      color: var(--wax-text);
+      font: 400 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      letter-spacing: 0.02em;
+      transition: opacity 200ms ease-out;
+      /* The skeleton is a picture, never a target: without this it would
+         swallow taps for the length of its fade, right at the moment the
+         app becomes usable. */
+      pointer-events: none;
+    }
+    #wax-boot svg { width: 72px; height: 72px; }
+    /* The needle sweeps while the engine loads: a progress hint that needs
+       no percentage, and one the reduced-motion setting turns off. */
+    #wax-needle {
+      transform-origin: 32px 46px;
+      animation: wax-sweep 2.4s ease-in-out infinite alternate;
+    }
+    @keyframes wax-sweep {
+      from { transform: rotate(-19deg); }
+      to { transform: rotate(19deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #wax-needle { animation: none; }
+      #wax-boot { transition: none; }
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <div id="wax-boot" role="status" aria-live="polite">
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <path d="M12 46a20 20 0 0 1 40 0" fill="none" stroke="#827057" stroke-width="3.2" stroke-linecap="round"/>
+      <g id="wax-needle">
+        <line x1="32" y1="46" x2="32" y2="22" stroke="#E3A244" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="32" cy="46" r="4.6" fill="#E3A244"/>
+      </g>
+    </svg>
+    <span id="wax-boot-label">Starting WaxDeck</span>
+  </div>
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <script>
+    // Remove the skeleton when the engine has painted rather than on a
+    // timer: a slow LAN should keep the mark on screen for exactly as
+    // long as it actually takes.
+    window.addEventListener('flutter-first-frame', function () {
+      var boot = document.getElementById('wax-boot');
+      if (!boot) return;
+      boot.style.opacity = '0';
+      window.setTimeout(function () { boot.remove(); }, 220);
+    });
+
+    // If the first frame never arrives (an engine that failed to start,
+    // a truncated download), say so rather than sitting on "Starting"
+    // forever. The skeleton stays put: removing it would reveal a blank
+    // page, which tells the viewer even less.
+    window.setTimeout(function () {
+      var label = document.getElementById('wax-boot-label');
+      if (label) {
+        label.textContent =
+          'Still starting. If this does not clear, reload the page.';
+      }
+    }, 20000);
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

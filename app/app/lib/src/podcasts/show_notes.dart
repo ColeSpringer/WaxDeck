@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../shell/semantics_ids.dart';
 
 /// Renders the server's sanitized show-notes HTML.
 ///
@@ -148,7 +149,7 @@ class ShowNotesView extends StatelessWidget {
       alignment: PlaceholderAlignment.baseline,
       baseline: TextBaseline.alphabetic,
       child: Semantics(
-        identifier: 'notes-link-$index',
+        identifier: SemanticsIds.notesLink(index),
         link: true,
         label: run.text,
         child: GestureDetector(

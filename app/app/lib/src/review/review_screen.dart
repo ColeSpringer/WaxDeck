@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../media_icons.dart';
+import '../shell/semantics_ids.dart';
 import '../shell/shortcuts.dart';
 import 'review_controller.dart';
 import 'review_entry_screen.dart';
@@ -204,11 +205,11 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
           actions: [
             const _MatchingModeMenu(),
             Semantics(
-              identifier: 'review-select-toggle',
+              identifier: SemanticsIds.reviewSelectToggle,
               label: 'Select entries',
               button: true,
               child: IconButton(
-                key: const Key('review-select-toggle'),
+                key: const Key(SemanticsIds.reviewSelectToggle),
                 tooltip: _selecting ? 'Leave selection' : 'Select entries',
                 icon: Icon(_selecting ? Icons.close : Icons.checklist),
                 onPressed: () => setState(() {
@@ -299,31 +300,31 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
           Text('${_checked.length} selected'),
           const Spacer(),
           Semantics(
-            identifier: 'review-bulk-approve',
+            identifier: SemanticsIds.reviewBulkApprove,
             label: 'Approve selected',
             button: true,
             child: TextButton(
-              key: const Key('review-bulk-approve'),
+              key: const Key(SemanticsIds.reviewBulkApprove),
               onPressed: () => _decideBulk('approve'),
               child: const Text('Approve'),
             ),
           ),
           Semantics(
-            identifier: 'review-bulk-as-is',
+            identifier: SemanticsIds.reviewBulkAsIs,
             label: 'Keep selected as is',
             button: true,
             child: TextButton(
-              key: const Key('review-bulk-as-is'),
+              key: const Key(SemanticsIds.reviewBulkAsIs),
               onPressed: () => _decideBulk('as-is'),
               child: const Text('Keep as is'),
             ),
           ),
           Semantics(
-            identifier: 'review-bulk-skip',
+            identifier: SemanticsIds.reviewBulkSkip,
             label: 'Skip selected',
             button: true,
             child: TextButton(
-              key: const Key('review-bulk-skip'),
+              key: const Key(SemanticsIds.reviewBulkSkip),
               onPressed: () => _decideBulk('skip'),
               child: const Text('Skip'),
             ),
@@ -368,11 +369,11 @@ class _MatchingModeMenu extends ConsumerWidget {
     // into the void.
     final messenger = ScaffoldMessenger.of(context);
     return Semantics(
-      identifier: 'matching-menu',
+      identifier: SemanticsIds.matchingMenu,
       label: 'Matching mode',
       button: true,
       child: PopupMenuButton<void>(
-        key: const Key('matching-menu'),
+        key: const Key(SemanticsIds.matchingMenu),
         tooltip: 'Matching mode',
         icon: const Icon(Icons.auto_fix_high_outlined),
         itemBuilder: (context) => [
@@ -458,11 +459,11 @@ class _FilterChips extends ConsumerWidget {
         children: [
           for (final filter in ReviewFilter.values) ...[
             Semantics(
-              identifier: 'review-filter-${filter.name}',
+              identifier: SemanticsIds.reviewFilter(filter.name),
               label: filter.label,
               button: true,
               child: ChoiceChip(
-                key: Key('review-filter-${filter.name}'),
+                key: Key(SemanticsIds.reviewFilter(filter.name)),
                 label: Text(_label(filter, stats)),
                 selected: filter == selected,
                 onSelected: (_) =>
@@ -508,11 +509,11 @@ class _ReviewRow extends StatelessWidget {
         ? (entry.title ?? 'Untitled')
         : '${entry.title ?? 'Untitled'} by ${entry.artist}';
     return Semantics(
-      identifier: 'review-row-${entry.id}',
+      identifier: SemanticsIds.reviewRow(entry.id),
       label: title,
       button: true,
       child: Material(
-        key: ValueKey('review-row-${entry.id}'),
+        key: ValueKey(SemanticsIds.reviewRow(entry.id)),
         color: selected ? colorScheme.secondaryContainer : Colors.transparent,
         child: InkWell(
           onTap: onTap,

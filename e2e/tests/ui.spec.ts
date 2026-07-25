@@ -6,6 +6,7 @@ import {
   ensureAdmin,
   typeInto,
 } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The first-party web UI journey: log in through the real login form,
 // find a scanned fixture track in the library grid, open the player,
@@ -13,7 +14,6 @@ import {
 // proxy. The flutter app enables semantics at startup; widgets carry
 // flt-semantics-identifier attributes for exactly this suite.
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 
 // Wait for the startup scan through a separate cookie jar, so the page
 // context still sees the login screen.
@@ -71,12 +71,12 @@ test('login, browse the grid, and play a track', async ({ page, request }) => {
   await page.getByRole('button', { name: 'Log in' }).click();
 
   // The library grid renders the scanned fixture album.
-  const card = page.locator(sem(`item-${pid}`));
+  const card = page.locator(sem(SemanticsIds.item(pid)));
   await card.waitFor({ timeout: 30_000 });
 
   // Opening the item starts playback through the single-origin media
   // proxy. The rendered duration proves the stream's metadata decoded.
-  await clickThrough(card, page.locator(sem('player-toggle')));
+  await clickThrough(card, page.locator(sem(SemanticsIds.playerToggle)));
   await expect(page.getByText(/0:0[2-9]/).first()).toBeVisible({ timeout: 30_000 });
 
   // The fixture is two seconds long; when it completes, the client

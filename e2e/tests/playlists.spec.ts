@@ -1,13 +1,13 @@
 import { test, expect, APIRequestContext, Page } from '@playwright/test';
 import crypto from 'node:crypto';
 import { authed, clickThrough, ensureAdmin, typeInto, waitForLibrary } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The playlists slice over the real stack: the rule editor building a
 // smart playlist in the browser, live re-evaluation when user state
 // changes, the manual add-to-playlist flow, and the Subsonic playlist,
 // star, scrobble, and radio surfaces over app passwords.
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 
 async function login(page: Page) {
   await page.goto('/');
@@ -16,7 +16,7 @@ async function login(page: Page) {
   await typeInto(page, username, 'admin');
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
   await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem('playlists-open')).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.playlistsOpen)).waitFor({ timeout: 30_000 });
 }
 
 test('the rule editor builds, previews, and saves a smart playlist', async ({
@@ -31,27 +31,27 @@ test('the rule editor builds, previews, and saves a smart playlist', async ({
   // a playlist row's merged semantics ("Starred Live, Smart | ...")
   // would satisfy a bare 'Smart' before the dialog even opens.
   const smartSegment = page.getByRole('button', { name: 'Smart', exact: true });
-  await clickThrough(page.locator(sem('playlists-open')), page.locator(sem('playlist-add')));
-  await clickThrough(page.locator(sem('playlist-add')), smartSegment);
+  await clickThrough(page.locator(sem(SemanticsIds.playlistsOpen)), page.locator(sem(SemanticsIds.playlistAdd)));
+  await clickThrough(page.locator(sem(SemanticsIds.playlistAdd)), smartSegment);
   await smartSegment.click();
   const nameField = page.getByRole('textbox', { name: 'Playlist name' });
   await typeInto(page, nameField, 'All The Music');
-  await page.locator(sem('playlist-create-confirm')).click();
+  await page.locator(sem(SemanticsIds.playlistCreateConfirm)).click();
 
   // The editor's default condition is mediaType is music, which matches
   // the fixture library; the preview reports the live count.
-  const addCondition = page.locator(sem('rule-add-condition'));
+  const addCondition = page.locator(sem(SemanticsIds.ruleAddCondition));
   await addCondition.waitFor({ timeout: 30_000 });
   await addCondition.click();
   await expect(page.getByText(/Matches [1-9]\d* items/)).toBeVisible({
     timeout: 15_000,
   });
-  await page.locator(sem('rule-save')).click();
+  await page.locator(sem(SemanticsIds.ruleSave)).click();
 
   // Back on the listing (the add button proves the editor is gone,
   // so the row text cannot false-positive on the editor's heading),
   // the playlist exists; its detail evaluates.
-  await page.locator(sem('playlist-add')).waitFor({ timeout: 15_000 });
+  await page.locator(sem(SemanticsIds.playlistAdd)).waitFor({ timeout: 15_000 });
   const row = page.getByText('All The Music').first();
   await row.waitFor({ timeout: 15_000 });
   await clickThrough(row, page.getByText(/Smart playlist \| [1-9]\d* items/));
@@ -116,11 +116,11 @@ test('a smart playlist with user-state rules live-updates', async ({
   try {
     await login(page);
     await clickThrough(
-      page.locator(sem('playlists-open')),
-      page.locator(sem(`playlist-${created.pid}`)),
+      page.locator(sem(SemanticsIds.playlistsOpen)),
+      page.locator(sem(SemanticsIds.playlist(created.pid))),
     );
     await clickThrough(
-      page.locator(sem(`playlist-${created.pid}`)),
+      page.locator(sem(SemanticsIds.playlist(created.pid))),
       page.getByText('No items match the rules yet'),
     );
 
@@ -156,11 +156,11 @@ test('the player adds a track to a fresh manual playlist', async ({
   );
 
   await login(page);
-  const card = page.locator(sem(`item-${target.pid}`));
+  const card = page.locator(sem(SemanticsIds.item(target.pid)));
   await card.waitFor({ timeout: 30_000 });
-  await clickThrough(card, page.locator(sem('add-to-playlist')));
+  await clickThrough(card, page.locator(sem(SemanticsIds.addToPlaylist)));
   await clickThrough(
-    page.locator(sem('add-to-playlist')),
+    page.locator(sem(SemanticsIds.addToPlaylist)),
     page.getByRole('button', { name: 'New playlist', exact: true }),
   );
   await page.getByRole('button', { name: 'New playlist', exact: true }).click();

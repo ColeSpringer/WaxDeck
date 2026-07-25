@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { ADMIN_PASS, authed, ensureAdmin, waitForLibrary } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // Multi-user acceptance over the real stack: isolated per-user state,
 // device revocation, and browser-driven single sign-on against the
 // harness identity provider.
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 
 test('two users share the catalog but never each other\'s state', async ({ request }) => {
   const adminToken = await ensureAdmin(request);
@@ -112,7 +112,7 @@ test('single sign-on logs in through the identity provider', async ({ page, requ
   await page.goto('/');
 
   // The login screen offers the configured provider.
-  const sso = page.locator(sem('oidc-login-testidp'));
+  const sso = page.locator(sem(SemanticsIds.oidcLogin('testidp')));
   await sso.waitFor({ timeout: 30_000 });
   await sso.click();
 
@@ -125,7 +125,7 @@ test('single sign-on logs in through the identity provider', async ({ page, requ
   // The provider bounces through the server callback and the SPA loads
   // signed in as the provisioned account.
   await page.waitForURL(/localhost:4420/, { timeout: 30_000 });
-  await page.locator(sem('settings-open')).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.settingsOpen)).waitFor({ timeout: 30_000 });
 
   const session = await (await page.request.get('/api/v1/auth/session')).json();
   expect(session.authenticated).toBe(true);

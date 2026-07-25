@@ -1,5 +1,6 @@
 import { test, expect, Page, BrowserContext, Browser } from '@playwright/test';
 import { ensureAdmin, authed, typeInto, waitForLibrary } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // Connect: every signed-in client is a controller and a controllable
 // endpoint. Two live web clients: A plays locally and mirrors its
@@ -18,8 +19,8 @@ async function loginWeb(browser: Browser): Promise<{ context: BrowserContext; pa
   return { context, page };
 }
 
-function sem(page: Page, id: string) {
-  return page.locator(`[flt-semantics-identifier="${id}"]`);
+function locate(page: Page, id: string) {
+  return page.locator(sem(id));
 }
 
 test('a session mirrors to the server and relays remote control', async ({
@@ -37,10 +38,10 @@ test('a session mirrors to the server and relays remote control', async ({
 
   // Client A: plays the track on its own player.
   const a = await loginWeb(browser);
-  const card = sem(a.page, `item-${target.pid}`);
+  const card = locate(a.page, SemanticsIds.item(target.pid));
   await card.waitFor({ timeout: 30_000 });
   await card.click();
-  const toggle = sem(a.page, 'player-toggle');
+  const toggle = locate(a.page, SemanticsIds.playerToggle);
   await toggle.waitFor({ timeout: 30_000 });
 
   // A's playback reaches the server as a mirror session. Parallel
@@ -76,14 +77,17 @@ test('a session mirrors to the server and relays remote control', async ({
   // Client B: opens its own player screen on another item, then the
   // device picker, and finds A's session listed.
   const b = await loginWeb(browser);
-  const otherCard = sem(b.page, `item-${items.items.find((it: { title: string }) => it.title === 'Bravo Song').pid}`);
+  const otherCard = locate(
+    b.page,
+    SemanticsIds.item(items.items.find((it: { title: string }) => it.title === 'Bravo Song').pid),
+  );
   await otherCard.waitFor({ timeout: 30_000 });
   await otherCard.click();
-  const devices = sem(b.page, 'player-devices');
+  const devices = locate(b.page, SemanticsIds.playerDevices);
   await devices.waitFor({ timeout: 30_000 });
   await devices.click({ force: true });
 
-  const sessionRow = sem(b.page, `session-${session!.id}`);
+  const sessionRow = locate(b.page, SemanticsIds.session(session!.id));
   await sessionRow.waitFor({ timeout: 15_000 });
   await sessionRow.scrollIntoViewIfNeeded();
   await sessionRow.click({ force: true });
@@ -91,7 +95,7 @@ test('a session mirrors to the server and relays remote control', async ({
   // The remote screen renders A's playback and pauses it; the pause
   // must land on A's real engine, observed through the session state
   // the server republishes.
-  const remoteToggle = sem(b.page, 'remote-toggle');
+  const remoteToggle = locate(b.page, SemanticsIds.remoteToggle);
   await remoteToggle.waitFor({ timeout: 30_000 });
   await remoteToggle.click({ force: true });
   await expect

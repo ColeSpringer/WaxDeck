@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/semantics_ids.dart';
 import 'listen_log_screen.dart';
 import 'stats_charts.dart';
 import 'stats_controller.dart';
@@ -42,8 +43,11 @@ class StatsScreen extends ConsumerWidget {
                   ButtonSegment(
                     value: r,
                     label: Semantics(
-                      identifier: 'stats-range-$r',
-                      child: Text(_rangeLabel(r), key: Key('stats-range-$r')),
+                      identifier: SemanticsIds.statsRange(r),
+                      child: Text(
+                        _rangeLabel(r),
+                        key: Key(SemanticsIds.statsRange(r)),
+                      ),
                     ),
                   ),
               ],
@@ -66,10 +70,10 @@ class StatsScreen extends ConsumerWidget {
                     ButtonSegment(
                       value: b,
                       label: Semantics(
-                        identifier: 'stats-bucket-$b',
+                        identifier: SemanticsIds.statsBucket(b),
                         child: Text(
                           _bucketLabel(b),
-                          key: Key('stats-bucket-$b'),
+                          key: Key(SemanticsIds.statsBucket(b)),
                         ),
                       ),
                     ),
@@ -91,11 +95,11 @@ class StatsScreen extends ConsumerWidget {
           const _TopListsSection(),
           const SizedBox(height: 16),
           Semantics(
-            identifier: 'open-listen-log',
+            identifier: SemanticsIds.openListenLog,
             label: 'Listen log',
             button: true,
             child: ListTile(
-              key: const Key('open-listen-log'),
+              key: const Key(SemanticsIds.openListenLog),
               leading: const Icon(Icons.history),
               title: const Text('Listen log'),
               subtitle: const Text('Every recorded listen session'),
@@ -109,11 +113,11 @@ class StatsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Semantics(
-            identifier: 'open-year-in-review',
+            identifier: SemanticsIds.openYearInReview,
             label: 'Year in review',
             button: true,
             child: Card(
-              key: const Key('open-year-in-review'),
+              key: const Key(SemanticsIds.openYearInReview),
               color: Theme.of(context).colorScheme.secondaryContainer,
               child: ListTile(
                 leading: Icon(
@@ -310,8 +314,8 @@ class _TopListsSection extends ConsumerWidget {
                 ButtonSegment(
                   value: k,
                   label: Semantics(
-                    identifier: 'top-kind-$k',
-                    child: Text(_kindLabel(k), key: Key('top-kind-$k')),
+                    identifier: SemanticsIds.top(k),
+                    child: Text(_kindLabel(k), key: Key(SemanticsIds.top(k))),
                   ),
                 ),
             ],

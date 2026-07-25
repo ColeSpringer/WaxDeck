@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import 'playlists_controller.dart';
 
 /// The smart playlist rule editor: nested ALL and ANY groups of typed
@@ -306,11 +307,11 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
         ),
         actions: [
           Semantics(
-            identifier: 'rule-save',
+            identifier: SemanticsIds.ruleSave,
             label: 'Save rules',
             button: true,
             child: TextButton(
-              key: const Key('rule-save'),
+              key: const Key(SemanticsIds.ruleSave),
               onPressed: _busy || _unsupported || _limitInvalid ? null : _save,
               child: const Text('Save'),
             ),
@@ -509,11 +510,11 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             Row(
               children: [
                 Semantics(
-                  identifier: 'rule-add-condition',
+                  identifier: SemanticsIds.ruleAddCondition,
                   label: 'Add condition',
                   button: true,
                   child: TextButton.icon(
-                    key: const Key('rule-add-condition'),
+                    key: const Key(SemanticsIds.ruleAddCondition),
                     icon: const Icon(Icons.add),
                     label: const Text('Condition'),
                     onPressed: () {

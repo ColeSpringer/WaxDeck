@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 
 /// Accumulated pages of tool tasks, newest first.
 class ToolTasksState {
@@ -208,10 +209,10 @@ class _TaskRow extends StatelessWidget {
     final running = task.state == 'running' || task.state == 'queued';
     final summary = task.finishedAt == null ? null : task.summary;
     return Semantics(
-      identifier: 'task-row-${task.id}',
+      identifier: SemanticsIds.taskRow(task.id),
       label: _typeLabel(task.type),
       child: Card(
-        key: ValueKey('task-row-${task.id}'),
+        key: ValueKey(SemanticsIds.taskRow(task.id)),
         child: InkWell(
           onTap: summary == null ? null : () => _showSummary(context, summary),
           child: Padding(

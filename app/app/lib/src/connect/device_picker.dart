@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import 'connect_providers.dart';
 import 'remote_screen.dart';
 
@@ -80,13 +81,13 @@ class _DevicePickerSheet extends ConsumerWidget {
             AsyncData(:final value) => [
               for (final ep in value.where((e) => e.id != ownEndpoint))
                 Semantics(
-                  identifier: 'endpoint-${ep.id}',
+                  identifier: SemanticsIds.endpoint(ep.id),
                   label: ep.name,
                   button: true,
                   excludeSemantics: true,
                   onTap: () => _playOn(context, ref, ep),
                   child: ListTile(
-                    key: Key('endpoint-${ep.id}'),
+                    key: Key(SemanticsIds.endpoint(ep.id)),
                     leading: Icon(switch (ep.kind) {
                       'cast' => Icons.cast,
                       'dlna' => Icons.speaker,
@@ -108,13 +109,13 @@ class _DevicePickerSheet extends ConsumerWidget {
           if (sessions case AsyncData(:final value))
             for (final s in value.where((s) => s.endpointId != ownEndpoint))
               Semantics(
-                identifier: 'session-${s.id}',
+                identifier: SemanticsIds.session(s.id),
                 label: 'Now playing on ${s.endpointName ?? s.endpointId}',
                 button: true,
                 excludeSemantics: true,
                 onTap: () => _openRemote(context, s),
                 child: ListTile(
-                  key: Key('session-${s.id}'),
+                  key: Key(SemanticsIds.session(s.id)),
                   leading: const Icon(Icons.play_circle_outline),
                   title: Text(s.currentEntry?.title ?? 'Playing'),
                   subtitle: Text('on ${s.endpointName ?? s.endpointId}'),

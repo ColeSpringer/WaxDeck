@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../metadata/metadata_screen.dart';
+import '../shell/semantics_ids.dart';
 import 'review_controller.dart';
 
 /// One review entry: the ranked candidate picker, the file-by-file diff
@@ -155,11 +156,11 @@ class _ReviewEntryScreenState extends ConsumerState<ReviewEntryScreen> {
             ),
             if (revertible)
               Semantics(
-                identifier: 'review-revert',
+                identifier: SemanticsIds.reviewRevert,
                 label: 'Revert decision',
                 button: true,
                 child: OutlinedButton(
-                  key: const Key('review-revert'),
+                  key: const Key(SemanticsIds.reviewRevert),
                   onPressed: _revert,
                   child: const Text('Revert'),
                 ),
@@ -176,11 +177,11 @@ class _ReviewEntryScreenState extends ConsumerState<ReviewEntryScreen> {
         runSpacing: 8,
         children: [
           Semantics(
-            identifier: 'review-approve',
+            identifier: SemanticsIds.reviewApprove,
             label: 'Approve with the selected candidate',
             button: true,
             child: FilledButton(
-              key: const Key('review-approve'),
+              key: const Key(SemanticsIds.reviewApprove),
               onPressed: candidate == null
                   ? null
                   : () => _decide('approve', candidateMbid: candidate.mbid),
@@ -188,42 +189,42 @@ class _ReviewEntryScreenState extends ConsumerState<ReviewEntryScreen> {
             ),
           ),
           Semantics(
-            identifier: 'review-as-is',
+            identifier: SemanticsIds.reviewAsIs,
             label: 'Keep as is',
             button: true,
             child: OutlinedButton(
-              key: const Key('review-as-is'),
+              key: const Key(SemanticsIds.reviewAsIs),
               onPressed: () => _decide('as-is'),
               child: const Text('Keep as is'),
             ),
           ),
           Semantics(
-            identifier: 'review-unofficial',
+            identifier: SemanticsIds.reviewUnofficial,
             label: 'Mark unofficial',
             button: true,
             child: OutlinedButton(
-              key: const Key('review-unofficial'),
+              key: const Key(SemanticsIds.reviewUnofficial),
               onPressed: () => _decide('unofficial'),
               child: const Text('Mark unofficial'),
             ),
           ),
           Semantics(
-            identifier: 'review-skip',
+            identifier: SemanticsIds.reviewSkip,
             label: 'Skip',
             button: true,
             child: TextButton(
-              key: const Key('review-skip'),
+              key: const Key(SemanticsIds.reviewSkip),
               onPressed: () => _decide('skip'),
               child: const Text('Skip'),
             ),
           ),
           if (detail.origin == 'upload')
             Semantics(
-              identifier: 'review-discard',
+              identifier: SemanticsIds.reviewDiscard,
               label: 'Discard upload',
               button: true,
               child: TextButton(
-                key: const Key('review-discard'),
+                key: const Key(SemanticsIds.reviewDiscard),
                 onPressed: () => _decide('discard'),
                 child: const Text('Discard'),
               ),
@@ -287,11 +288,11 @@ class _CandidateTile extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     return Semantics(
-      identifier: 'candidate-${candidate.mbid}',
+      identifier: SemanticsIds.candidate(candidate.mbid),
       label: '${candidate.title} by ${candidate.artist}',
       button: true,
       child: Card(
-        key: ValueKey('candidate-${candidate.mbid}'),
+        key: ValueKey(SemanticsIds.candidate(candidate.mbid)),
         color: selected ? colorScheme.secondaryContainer : null,
         child: InkWell(
           onTap: onTap,
@@ -445,9 +446,9 @@ class _TrackDiffRow extends StatelessWidget {
     final paired = pairing;
     final pid = track.pid;
     return Semantics(
-      identifier: 'diff-row-$index',
+      identifier: SemanticsIds.diffRow(index),
       child: Container(
-        key: ValueKey('diff-row-$index'),
+        key: ValueKey(SemanticsIds.diffRow(index)),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: theme.dividerColor)),
         ),
@@ -486,11 +487,11 @@ class _TrackDiffRow extends StatelessWidget {
               child: pid == null
                   ? null
                   : Semantics(
-                      identifier: 'track-menu-$pid',
+                      identifier: SemanticsIds.trackMenu(pid),
                       label: 'Track actions',
                       button: true,
                       child: PopupMenuButton<String>(
-                        key: ValueKey('track-menu-$pid'),
+                        key: ValueKey(SemanticsIds.trackMenu(pid)),
                         tooltip: 'Track actions',
                         icon: const Icon(Icons.more_vert, size: 18),
                         onSelected: (action) {
@@ -506,10 +507,10 @@ class _TrackDiffRow extends StatelessWidget {
                           PopupMenuItem(
                             value: 'edit',
                             child: Semantics(
-                              identifier: 'edit-metadata-$pid',
+                              identifier: SemanticsIds.editMetadata(pid),
                               child: Text(
                                 'Edit metadata',
-                                key: ValueKey('edit-metadata-$pid'),
+                                key: ValueKey(SemanticsIds.editMetadata(pid)),
                               ),
                             ),
                           ),
@@ -534,9 +535,9 @@ class _MissingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Semantics(
-      identifier: 'diff-missing-$index',
+      identifier: SemanticsIds.diffMissing(index),
       child: Container(
-        key: ValueKey('diff-missing-$index'),
+        key: ValueKey(SemanticsIds.diffMissing(index)),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: theme.dividerColor)),
         ),

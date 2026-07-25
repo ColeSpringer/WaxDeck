@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import 'connect_bus.dart';
 import 'connect_providers.dart';
 
@@ -150,7 +151,7 @@ class _RemoteControlScreenState extends ConsumerState<RemoteControlScreen> {
                     ),
                   const SizedBox(height: 24),
                   Semantics(
-                    identifier: 'remote-seek',
+                    identifier: SemanticsIds.remoteSeek,
                     label: 'Seek',
                     slider: true,
                     child: Slider(
@@ -169,25 +170,25 @@ class _RemoteControlScreenState extends ConsumerState<RemoteControlScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Semantics(
-                        identifier: 'remote-previous',
+                        identifier: SemanticsIds.remotePrevious,
                         label: 'Previous',
                         button: true,
                         excludeSemantics: true,
                         onTap: () => _cmd('previous'),
                         child: IconButton(
-                          key: const Key('remote-previous'),
+                          key: const Key(SemanticsIds.remotePrevious),
                           icon: const Icon(Icons.skip_previous),
                           onPressed: () => _cmd('previous'),
                         ),
                       ),
                       Semantics(
-                        identifier: 'remote-toggle',
+                        identifier: SemanticsIds.remoteToggle,
                         label: _session.playing ? 'Pause' : 'Play',
                         button: true,
                         excludeSemantics: true,
                         onTap: () => _cmd(_session.playing ? 'pause' : 'play'),
                         child: IconButton(
-                          key: const Key('remote-toggle'),
+                          key: const Key(SemanticsIds.remoteToggle),
                           iconSize: 48,
                           icon: Icon(
                             _session.playing
@@ -199,13 +200,13 @@ class _RemoteControlScreenState extends ConsumerState<RemoteControlScreen> {
                         ),
                       ),
                       Semantics(
-                        identifier: 'remote-next',
+                        identifier: SemanticsIds.remoteNext,
                         label: 'Next',
                         button: true,
                         excludeSemantics: true,
                         onTap: () => _cmd('next'),
                         child: IconButton(
-                          key: const Key('remote-next'),
+                          key: const Key(SemanticsIds.remoteNext),
                           icon: const Icon(Icons.skip_next),
                           onPressed: () => _cmd('next'),
                         ),
@@ -214,7 +215,7 @@ class _RemoteControlScreenState extends ConsumerState<RemoteControlScreen> {
                   ),
                   if (_session.volume != null)
                     Semantics(
-                      identifier: 'remote-volume',
+                      identifier: SemanticsIds.remoteVolume,
                       label: 'Volume',
                       slider: true,
                       child: Slider(
@@ -224,13 +225,13 @@ class _RemoteControlScreenState extends ConsumerState<RemoteControlScreen> {
                     ),
                   const SizedBox(height: 16),
                   Semantics(
-                    identifier: 'remote-play-here',
+                    identifier: SemanticsIds.remotePlayHere,
                     label: 'Play here',
                     button: true,
                     excludeSemantics: true,
                     onTap: _playHere,
                     child: FilledButton.tonal(
-                      key: const Key('remote-play-here'),
+                      key: const Key(SemanticsIds.remotePlayHere),
                       onPressed: _playHere,
                       child: const Text('Play here'),
                     ),

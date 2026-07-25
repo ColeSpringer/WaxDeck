@@ -59,10 +59,17 @@ static void my_application_activate(GApplication* application) {
       project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
+  // The window that appears before Flutter's first frame takes WaxDeck's
+  // canvas colour, in the mode the desktop is actually in: charcoal in
+  // dark, porcelain in light. Keep in step with WaxColors.canvas.
+  gboolean prefer_dark = FALSE;
+  GtkSettings* settings = gtk_settings_get_default();
+  if (settings != nullptr) {
+    g_object_get(settings, "gtk-application-prefer-dark-theme", &prefer_dark,
+                 nullptr);
+  }
   GdkRGBA background_color;
-  // Background defaults to black, override it here if necessary, e.g. #00000000
-  // for transparent.
-  gdk_rgba_parse(&background_color, "#000000");
+  gdk_rgba_parse(&background_color, prefer_dark ? "#16130F" : "#FAF9F6");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));

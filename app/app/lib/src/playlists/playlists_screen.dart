@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/semantics_ids.dart';
 import 'playlist_cover.dart';
 import 'playlist_screen.dart';
 import 'playlists_controller.dart';
@@ -21,11 +22,11 @@ class PlaylistsScreen extends ConsumerWidget {
         title: const Text('Playlists'),
         actions: [
           Semantics(
-            identifier: 'playlist-import',
+            identifier: SemanticsIds.playlistImport,
             label: 'Import playlist',
             button: true,
             child: IconButton(
-              key: const Key('playlist-import'),
+              key: const Key(SemanticsIds.playlistImport),
               tooltip: 'Import playlist',
               icon: const Icon(Icons.playlist_add_circle_outlined),
               onPressed: () => showDialog<void>(
@@ -37,11 +38,11 @@ class PlaylistsScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: Semantics(
-        identifier: 'playlist-add',
+        identifier: SemanticsIds.playlistAdd,
         label: 'New playlist',
         button: true,
         child: FloatingActionButton(
-          key: const Key('playlist-add'),
+          key: const Key(SemanticsIds.playlistAdd),
           tooltip: 'New playlist',
           onPressed: () => showDialog<void>(
             context: context,
@@ -106,11 +107,11 @@ class _PlaylistRow extends StatelessWidget {
       if (playlist.isShared) 'Shared by ${playlist.ownerName}',
     ];
     return Semantics(
-      identifier: 'playlist-${playlist.pid}',
+      identifier: SemanticsIds.playlist(playlist.pid),
       label: playlist.name,
       button: true,
       child: ListTile(
-        key: ValueKey('playlist-${playlist.pid}'),
+        key: ValueKey(SemanticsIds.playlist(playlist.pid)),
         leading: PlaylistCover(playlist: playlist, size: 40),
         title: Text(
           playlist.name,
@@ -302,9 +303,9 @@ class _ImportPlaylistDialogState extends ConsumerState<_ImportPlaylistDialog> {
               contentPadding: EdgeInsets.zero,
               title: const Text('Source'),
               trailing: Semantics(
-                identifier: 'playlist-import-source',
+                identifier: SemanticsIds.playlistImportSource,
                 child: DropdownButton<_ImportSource>(
-                  key: const Key('playlist-import-source'),
+                  key: const Key(SemanticsIds.playlistImportSource),
                   value: _source,
                   onChanged: (source) {
                     if (source != null) setState(() => _source = source);
@@ -352,22 +353,22 @@ class _ImportPlaylistDialogState extends ConsumerState<_ImportPlaylistDialog> {
         ),
         if (isM3u)
           Semantics(
-            identifier: 'm3u-import-confirm',
+            identifier: SemanticsIds.m3uImportConfirm,
             label: 'Import',
             button: true,
             child: FilledButton(
-              key: const Key('m3u-import-confirm'),
+              key: const Key(SemanticsIds.m3uImportConfirm),
               onPressed: _busy ? null : _importM3u,
               child: const Text('Import'),
             ),
           )
         else
           Semantics(
-            identifier: 'playlist-import-run',
+            identifier: SemanticsIds.playlistImportRun,
             label: 'Import',
             button: true,
             child: FilledButton(
-              key: const Key('playlist-import-run'),
+              key: const Key(SemanticsIds.playlistImportRun),
               onPressed: _busy ? null : _importExport,
               child: const Text('Import'),
             ),
@@ -549,11 +550,11 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
           child: const Text('Cancel'),
         ),
         Semantics(
-          identifier: 'playlist-create-confirm',
+          identifier: SemanticsIds.playlistCreateConfirm,
           label: 'Create',
           button: true,
           child: FilledButton(
-            key: const Key('playlist-create-confirm'),
+            key: const Key(SemanticsIds.playlistCreateConfirm),
             onPressed: _busy ? null : _create,
             child: Text(_kind == 'smart' ? 'Next' : 'Create'),
           ),

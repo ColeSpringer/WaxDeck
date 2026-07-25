@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import '../tools/tasks_screen.dart';
 
 /// The importable sources. Podcast feeds move by OPML, which has no
@@ -109,7 +110,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
   Widget build(BuildContext context) {
     final url = _serverUrl.text.trim();
     return Semantics(
-      identifier: 'admin-migrate',
+      identifier: SemanticsIds.adminMigrate,
       container: true,
       child: Scaffold(
         appBar: AppBar(title: const Text('Import from another server')),
@@ -117,9 +118,9 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             Semantics(
-              identifier: 'migrate-source',
+              identifier: SemanticsIds.migrateSource,
               child: DropdownButton<_MigrationSource>(
-                key: const Key('migrate-source'),
+                key: const Key(SemanticsIds.migrateSource),
                 value: _source,
                 isExpanded: true,
                 onChanged: (selected) {
@@ -133,9 +134,9 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
             ),
             const SizedBox(height: 8),
             Semantics(
-              identifier: 'migrate-server-url',
+              identifier: SemanticsIds.migrateServerUrl,
               child: TextField(
-                key: const Key('migrate-server-url'),
+                key: const Key(SemanticsIds.migrateServerUrl),
                 controller: _serverUrl,
                 keyboardType: TextInputType.url,
                 decoration: const InputDecoration(
@@ -147,9 +148,9 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
             const SizedBox(height: 8),
             if (_source.usesToken)
               Semantics(
-                identifier: 'migrate-token',
+                identifier: SemanticsIds.migrateToken,
                 child: TextField(
-                  key: const Key('migrate-token'),
+                  key: const Key(SemanticsIds.migrateToken),
                   controller: _token,
                   obscureText: true,
                   decoration: const InputDecoration(labelText: 'API token'),
@@ -157,18 +158,18 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
               )
             else ...[
               Semantics(
-                identifier: 'migrate-username',
+                identifier: SemanticsIds.migrateUsername,
                 child: TextField(
-                  key: const Key('migrate-username'),
+                  key: const Key(SemanticsIds.migrateUsername),
                   controller: _username,
                   decoration: const InputDecoration(labelText: 'Username'),
                 ),
               ),
               const SizedBox(height: 8),
               Semantics(
-                identifier: 'migrate-password',
+                identifier: SemanticsIds.migratePassword,
                 child: TextField(
-                  key: const Key('migrate-password'),
+                  key: const Key(SemanticsIds.migratePassword),
                   controller: _password,
                   obscureText: true,
                   decoration: const InputDecoration(labelText: 'Password'),
@@ -209,9 +210,9 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
             ),
             const SizedBox(height: 16),
             Semantics(
-              identifier: 'migrate-submit',
+              identifier: SemanticsIds.migrateSubmit,
               child: FilledButton(
-                key: const Key('migrate-submit'),
+                key: const Key(SemanticsIds.migrateSubmit),
                 onPressed: _busy || url.isEmpty ? null : _submit,
                 child: const Text('Start import'),
               ),

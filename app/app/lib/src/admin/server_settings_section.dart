@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
 import '../review/review_controller.dart';
+import '../shell/semantics_ids.dart';
 import 'admin_providers.dart';
 
 /// Server-wide switches on the settings screen: signup, read-only mode,
@@ -31,7 +32,7 @@ class ServerSettingsSection extends ConsumerWidget {
     final settings = ref.watch(adminSettingsProvider).value;
     final libraries = ref.watch(librariesProvider).value ?? const [];
     return Semantics(
-      identifier: 'admin-settings-section',
+      identifier: SemanticsIds.adminSettingsSection,
       container: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -42,9 +43,9 @@ class ServerSettingsSection extends ConsumerWidget {
             const Center(child: CircularProgressIndicator())
           else ...[
             Semantics(
-              identifier: 'setting-signup-enabled',
+              identifier: SemanticsIds.settingSignupEnabled,
               child: SwitchListTile(
-                key: const Key('setting-signup-enabled'),
+                key: const Key(SemanticsIds.settingSignupEnabled),
                 title: const Text('Open signup'),
                 subtitle: const Text(
                   'Anyone may request an account; requests await approval',
@@ -58,9 +59,9 @@ class ServerSettingsSection extends ConsumerWidget {
               ),
             ),
             Semantics(
-              identifier: 'setting-read-only',
+              identifier: SemanticsIds.settingReadOnly,
               child: SwitchListTile(
-                key: const Key('setting-read-only'),
+                key: const Key(SemanticsIds.settingReadOnly),
                 title: const Text('Read-only mode'),
                 subtitle: const Text(
                   'Refuse every change to library content, server-wide',
@@ -74,9 +75,9 @@ class ServerSettingsSection extends ConsumerWidget {
               ),
             ),
             Semantics(
-              identifier: 'setting-sonic-analysis',
+              identifier: SemanticsIds.settingSonicAnalysis,
               child: SwitchListTile(
-                key: const Key('setting-sonic-analysis'),
+                key: const Key(SemanticsIds.settingSonicAnalysis),
                 title: const Text('Sonic analysis'),
                 subtitle: const Text(
                   'Analyze the library in the background for instant '

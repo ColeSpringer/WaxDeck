@@ -7,6 +7,7 @@ import '../player/player_screen.dart';
 import '../podcasts/episode_screen.dart' show formatCueTimestamp;
 import '../podcasts/show_notes.dart';
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 import '../tools/tasks_screen.dart';
 
 /// One audiobook's detail.
@@ -32,11 +33,11 @@ class BookScreen extends ConsumerWidget {
           if (detail.value != null) _BookToolsMenu(book: detail.value!),
           if (detail.hasValue)
             Semantics(
-              identifier: 'book-settings-open',
+              identifier: SemanticsIds.bookSettingsOpen,
               label: 'Playback settings',
               button: true,
               child: IconButton(
-                key: const Key('book-settings-open'),
+                key: const Key(SemanticsIds.bookSettingsOpen),
                 tooltip: 'Playback settings',
                 icon: const Icon(Icons.tune),
                 onPressed: () => showModalBottomSheet<void>(
@@ -183,11 +184,11 @@ class _BookBody extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         Semantics(
-          identifier: 'book-resume',
+          identifier: SemanticsIds.bookResume,
           label: 'Continue listening',
           button: true,
           child: FilledButton.icon(
-            key: const Key('book-resume'),
+            key: const Key(SemanticsIds.bookResume),
             onPressed: () => _resume(context, ref),
             icon: const Icon(Icons.play_arrow),
             label: const Text('Continue'),
@@ -205,10 +206,10 @@ class _BookBody extends ConsumerWidget {
           Text('Chapters', style: textTheme.titleMedium),
           for (final chapter in book.chapters)
             Semantics(
-              identifier: 'chapter-${chapter.index}',
+              identifier: SemanticsIds.chapter(chapter.index),
               button: true,
               child: ListTile(
-                key: ValueKey('chapter-${chapter.index}'),
+                key: ValueKey(SemanticsIds.chapter(chapter.index)),
                 dense: true,
                 leading: Text(formatCueTimestamp(chapter.startMs)),
                 title: Text(chapter.title ?? 'Chapter ${chapter.index + 1}'),
@@ -293,10 +294,10 @@ class _BookSettingsSheetState extends ConsumerState<_BookSettingsSheet> {
           const SizedBox(height: 8),
           Text('Speed ${_speed.toStringAsFixed(2)}x'),
           Semantics(
-            identifier: 'book-settings-speed',
+            identifier: SemanticsIds.bookSettingsSpeed,
             label: 'Playback speed',
             child: Slider(
-              key: const Key('book-settings-speed'),
+              key: const Key(SemanticsIds.bookSettingsSpeed),
               value: _speed,
               min: 0.5,
               max: 3.5,
@@ -323,11 +324,11 @@ class _BookSettingsSheetState extends ConsumerState<_BookSettingsSheet> {
           Align(
             alignment: Alignment.centerRight,
             child: Semantics(
-              identifier: 'book-settings-save',
+              identifier: SemanticsIds.bookSettingsSave,
               label: 'Save settings',
               button: true,
               child: FilledButton(
-                key: const Key('book-settings-save'),
+                key: const Key(SemanticsIds.bookSettingsSave),
                 onPressed: _busy ? null : _save,
                 child: const Text('Save'),
               ),
@@ -397,11 +398,11 @@ class _BookToolsMenu extends ConsumerWidget {
     }
     final repo = ref.read(repositoryProvider);
     return Semantics(
-      identifier: 'book-tools-menu',
+      identifier: SemanticsIds.bookToolsMenu,
       label: 'Audiobook tools',
       button: true,
       child: PopupMenuButton<String>(
-        key: const Key('book-tools-menu'),
+        key: const Key(SemanticsIds.bookToolsMenu),
         tooltip: 'Audiobook tools',
         icon: const Icon(Icons.auto_awesome_motion_outlined),
         onSelected: (action) {

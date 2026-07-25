@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 
 /// Expiry choices the share dialog offers.
 enum ShareExpiry {
@@ -118,9 +119,9 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Expires'),
             trailing: Semantics(
-              identifier: 'share-expiry',
+              identifier: SemanticsIds.shareExpiry,
               child: DropdownButton<ShareExpiry>(
-                key: const Key('share-expiry'),
+                key: const Key(SemanticsIds.shareExpiry),
                 value: _expiry,
                 onChanged: (choice) {
                   if (choice != null) setState(() => _expiry = choice);
@@ -155,11 +156,11 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
           child: const Text('Cancel'),
         ),
         Semantics(
-          identifier: 'share-create',
+          identifier: SemanticsIds.shareCreate,
           label: 'Create link',
           button: true,
           child: FilledButton(
-            key: const Key('share-create'),
+            key: const Key(SemanticsIds.shareCreate),
             onPressed: _busy ? null : _create,
             child: const Text('Create link'),
           ),

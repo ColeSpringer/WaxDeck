@@ -6,6 +6,7 @@ import '../auth/auth_controller.dart';
 import '../format_bytes.dart';
 import '../media_icons.dart';
 import '../review/review_entry_screen.dart';
+import '../shell/semantics_ids.dart';
 import 'add_to_library.dart';
 import 'audio_drop_area.dart';
 import 'file_picker_port.dart';
@@ -77,11 +78,11 @@ class UploadsScreen extends ConsumerWidget {
         actions: [
           if (picker != null && canUpload)
             Semantics(
-              identifier: 'upload-pick',
+              identifier: SemanticsIds.uploadPick,
               label: 'Upload files',
               button: true,
               child: IconButton(
-                key: const Key('upload-pick'),
+                key: const Key(SemanticsIds.uploadPick),
                 tooltip: 'Upload files',
                 icon: const Icon(Icons.upload_file),
                 onPressed: () => pickAndUpload(context, ref, picker),
@@ -89,11 +90,11 @@ class UploadsScreen extends ConsumerWidget {
             ),
           if (canUpload)
             Semantics(
-              identifier: 'upload-from-url',
+              identifier: SemanticsIds.uploadFromUrl,
               label: 'Add from URL',
               button: true,
               child: IconButton(
-                key: const Key('upload-from-url'),
+                key: const Key(SemanticsIds.uploadFromUrl),
                 tooltip: 'Add from URL',
                 icon: const Icon(Icons.add_link),
                 onPressed: () => acquireFromUrl(context, ref),
@@ -138,7 +139,10 @@ class UploadsScreen extends ConsumerWidget {
       return Column(
         children: [
           if (quota != null)
-            _QuotaHeader(key: const Key('upload-quota'), quota: quota),
+            _QuotaHeader(
+              key: const Key(SemanticsIds.uploadQuota),
+              quota: quota,
+            ),
           const Expanded(child: Center(child: Text('No uploads yet'))),
         ],
       );
@@ -159,7 +163,10 @@ class UploadsScreen extends ConsumerWidget {
         itemBuilder: (context, index) {
           if (quota != null) {
             if (index == 0) {
-              return _QuotaHeader(key: const Key('upload-quota'), quota: quota);
+              return _QuotaHeader(
+                key: const Key(SemanticsIds.uploadQuota),
+                quota: quota,
+              );
             }
             index--;
           }
@@ -171,12 +178,12 @@ class UploadsScreen extends ConsumerWidget {
           // not just the finders inside them.
           return switch (rows[index]) {
             _BatchHeaderRow(:final batchId, :final count) => _BatchHeader(
-              key: ValueKey('upload-batch-$batchId'),
+              key: ValueKey(SemanticsIds.uploadBatch(batchId)),
               batchId: batchId,
               count: count,
             ),
             _SessionRow(:final upload) => _UploadRow(
-              key: ValueKey('upload-row-${upload.id}'),
+              key: ValueKey(SemanticsIds.uploadRow(upload.id)),
               upload: upload,
               failed: state.failed.contains(upload.id),
               onRetry: () => _retry(context, ref, upload.id),
@@ -247,7 +254,7 @@ class _BatchHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return Semantics(
-      identifier: 'upload-batch-$batchId',
+      identifier: SemanticsIds.uploadBatch(batchId),
       child: Padding(
         padding: const EdgeInsets.only(top: 12, bottom: 4),
         child: Row(
@@ -283,7 +290,7 @@ class _QuotaHeader extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final cap = quota.quotaBytes;
     return Semantics(
-      identifier: 'upload-quota',
+      identifier: SemanticsIds.uploadQuota,
       child: Padding(
         padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
         child: Column(
@@ -338,7 +345,7 @@ class _UploadRow extends StatelessWidget {
     final receiving = upload.state == 'receiving';
     final discardable = receiving || upload.state == 'staged';
     return Semantics(
-      identifier: 'upload-row-${upload.id}',
+      identifier: SemanticsIds.uploadRow(upload.id),
       label: upload.fileName,
       child: Card(
         child: Padding(
@@ -379,11 +386,11 @@ class _UploadRow extends StatelessWidget {
                     ),
                   if (failed)
                     Semantics(
-                      identifier: 'upload-retry-${upload.id}',
+                      identifier: SemanticsIds.uploadRetry(upload.id),
                       label: 'Retry upload',
                       button: true,
                       child: IconButton(
-                        key: ValueKey('upload-retry-${upload.id}'),
+                        key: ValueKey(SemanticsIds.uploadRetry(upload.id)),
                         tooltip: 'Retry upload',
                         icon: const Icon(Icons.refresh),
                         onPressed: onRetry,
@@ -391,11 +398,11 @@ class _UploadRow extends StatelessWidget {
                     ),
                   if (discardable)
                     Semantics(
-                      identifier: 'upload-delete-${upload.id}',
+                      identifier: SemanticsIds.uploadDelete(upload.id),
                       label: 'Discard upload',
                       button: true,
                       child: IconButton(
-                        key: ValueKey('upload-delete-${upload.id}'),
+                        key: ValueKey(SemanticsIds.uploadDelete(upload.id)),
                         tooltip: 'Discard upload',
                         icon: const Icon(Icons.delete_outline),
                         onPressed: onDiscard,
@@ -423,9 +430,9 @@ class _UploadRow extends StatelessWidget {
               if (duplicate != null) ...[
                 const SizedBox(height: 8),
                 Semantics(
-                  identifier: 'upload-duplicate-${upload.id}',
+                  identifier: SemanticsIds.uploadDuplicate(upload.id),
                   child: Container(
-                    key: ValueKey('upload-duplicate-${upload.id}'),
+                    key: ValueKey(SemanticsIds.uploadDuplicate(upload.id)),
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -459,11 +466,11 @@ class _UploadRow extends StatelessWidget {
                 Align(
                   alignment: Alignment.centerRight,
                   child: Semantics(
-                    identifier: 'upload-review-${upload.id}',
+                    identifier: SemanticsIds.uploadReview(upload.id),
                     label: 'Open review entry',
                     button: true,
                     child: TextButton(
-                      key: ValueKey('upload-review-${upload.id}'),
+                      key: ValueKey(SemanticsIds.uploadReview(upload.id)),
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) =>

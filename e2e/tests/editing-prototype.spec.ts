@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { typeInto } from './helpers';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The data-dense editing prototype: a review-queue-shaped table probed
 // at exactly the interactions canvas rendering is weakest at. Each
@@ -9,21 +10,20 @@ import { typeInto } from './helpers';
 
 test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
-const sem = (id: string) => `[flt-semantics-identifier="${id}"]`;
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/#/prototype/editing');
-  await page.locator(sem('proto-table')).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.protoTable)).waitFor({ timeout: 30_000 });
 });
 
 test('a dense column of text fields edits reliably', async ({ page }) => {
-  const cell = page.locator(sem('proto-edit-2'));
+  const cell = page.locator(sem(SemanticsIds.protoEdit(2)));
   await cell.scrollIntoViewIfNeeded();
   await typeInto(page, cell, 'Corrected Title 02');
   // A neighboring field kept its own text: focus and editing stay
   // per-cell. Unfocused canvas fields expose no DOM value, so focus it
   // first (which is also how a user would inspect it).
-  const neighbor = page.locator(sem('proto-edit-3')).locator('input, textarea');
+  const neighbor = page.locator(sem(SemanticsIds.protoEdit(3))).locator('input, textarea');
   await neighbor.first().click();
   await expect(neighbor.first()).toHaveValue('Proposed Title 03');
 });
@@ -31,8 +31,8 @@ test('a dense column of text fields edits reliably', async ({ page }) => {
 test('the row action menu opens and copies to the clipboard', async ({
   page,
 }) => {
-  await page.locator(sem('proto-kebab-4')).click();
-  const copy = page.locator(sem('proto-menu-copy'));
+  await page.locator(sem(SemanticsIds.protoKebab(4))).click();
+  const copy = page.locator(sem(SemanticsIds.protoMenuCopy));
   await copy.waitFor({ timeout: 5_000 });
   await copy.click();
   await expect
@@ -49,7 +49,7 @@ test('a right click does not destroy the selection', async ({ page }) => {
   // asserted from here; that fact is part of the gate record. What can
   // be pinned: the click must not wreck the selection, and keyboard
   // copy must still deliver it afterwards.
-  const cell = page.locator(sem('proto-cell-7-current'));
+  const cell = page.locator(sem(SemanticsIds.protoCellCurrent(7)));
   await cell.scrollIntoViewIfNeeded();
   const box = (await cell.boundingBox())!;
   const y = box.y + box.height / 2;
@@ -91,7 +91,7 @@ test('a right click does not destroy the selection', async ({ page }) => {
 test('static cell text selects with the pointer and copies', async ({
   page,
 }) => {
-  const cell = page.locator(sem('proto-cell-5-current'));
+  const cell = page.locator(sem(SemanticsIds.protoCellCurrent(5)));
   await cell.scrollIntoViewIfNeeded();
   const box = await cell.boundingBox();
   expect(box).toBeTruthy();

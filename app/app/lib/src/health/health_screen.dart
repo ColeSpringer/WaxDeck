@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../media_icons.dart';
+import '../shell/semantics_ids.dart';
 import 'health_controller.dart';
 
 /// The library health dashboard: the score headline, the per-rule
@@ -140,11 +141,11 @@ class HealthScreen extends ConsumerWidget {
         actions: [
           if (isAdmin)
             Semantics(
-              identifier: 'health-sweep',
+              identifier: SemanticsIds.healthSweep,
               label: 'Sweep now',
               button: true,
               child: IconButton(
-                key: const Key('health-sweep'),
+                key: const Key(SemanticsIds.healthSweep),
                 tooltip: 'Sweep now',
                 icon: const Icon(Icons.autorenew),
                 onPressed: () => _sweep(context, ref),
@@ -216,9 +217,9 @@ class HealthScreen extends ConsumerWidget {
           ? null
           : summary.evaluatedItems / summary.totalItems;
       return Card(
-        key: const Key('health-warming-up'),
+        key: const Key(SemanticsIds.healthWarmingUp),
         child: Semantics(
-          identifier: 'health-warming-up',
+          identifier: SemanticsIds.healthWarmingUp,
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -245,11 +246,11 @@ class HealthScreen extends ConsumerWidget {
         child: Row(
           children: [
             Semantics(
-              identifier: 'health-score',
+              identifier: SemanticsIds.healthScore,
               label: 'Health score ${summary.score.round()}',
               child: Text(
                 '${summary.score.round()}',
-                key: const Key('health-score'),
+                key: const Key(SemanticsIds.healthScore),
                 style: textTheme.displayLarge?.copyWith(
                   color: colorScheme.primary,
                 ),
@@ -284,22 +285,22 @@ class _RuleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      identifier: 'health-rule-${rule.rule}',
+      identifier: SemanticsIds.health(rule.rule),
       label: rule.label ?? rule.rule,
       button: true,
       child: ListTile(
-        key: ValueKey('health-rule-${rule.rule}'),
+        key: ValueKey(SemanticsIds.health(rule.rule)),
         contentPadding: EdgeInsets.zero,
         title: Text(rule.label ?? rule.rule),
         subtitle: Text('${rule.failing} failing'),
         onTap: onOpen,
         trailing: rule.fixable && rule.failing > 0
             ? Semantics(
-                identifier: 'health-fix-${rule.rule}',
+                identifier: SemanticsIds.healthFix(rule.rule),
                 label: 'Fix ${rule.label ?? rule.rule}',
                 button: true,
                 child: FilledButton.tonal(
-                  key: ValueKey('health-fix-${rule.rule}'),
+                  key: ValueKey(SemanticsIds.healthFix(rule.rule)),
                   onPressed: onFix,
                   child: const Text('Fix'),
                 ),
@@ -356,9 +357,9 @@ class _DuplicateCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
     return Semantics(
-      identifier: 'duplicate-group-${group.survivor.pid}',
+      identifier: SemanticsIds.duplicateGroup(group.survivor.pid),
       child: Card(
-        key: ValueKey('duplicate-group-${group.survivor.pid}'),
+        key: ValueKey(SemanticsIds.duplicateGroup(group.survivor.pid)),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -381,11 +382,13 @@ class _DuplicateCard extends StatelessWidget {
                 ),
               ),
               Semantics(
-                identifier: 'duplicate-merge-${group.survivor.pid}',
+                identifier: SemanticsIds.duplicateMerge(group.survivor.pid),
                 label: 'Merge into ${group.survivor.name}',
                 button: true,
                 child: FilledButton.tonal(
-                  key: ValueKey('duplicate-merge-${group.survivor.pid}'),
+                  key: ValueKey(
+                    SemanticsIds.duplicateMerge(group.survivor.pid),
+                  ),
                   onPressed: onMerge,
                   child: const Text('Merge'),
                 ),
@@ -457,9 +460,9 @@ class _UpgradeCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final best = _best;
     return Semantics(
-      identifier: 'upgrade-group-${best.itemPid}',
+      identifier: SemanticsIds.upgradeGroup(best.itemPid),
       child: Card(
-        key: ValueKey('upgrade-group-${best.itemPid}'),
+        key: ValueKey(SemanticsIds.upgradeGroup(best.itemPid)),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -498,11 +501,11 @@ class _UpgradeCard extends StatelessWidget {
               Align(
                 alignment: Alignment.centerRight,
                 child: Semantics(
-                  identifier: 'upgrade-resolve-${best.itemPid}',
+                  identifier: SemanticsIds.upgradeResolve(best.itemPid),
                   label: 'Keep the best version',
                   button: true,
                   child: FilledButton.tonal(
-                    key: ValueKey('upgrade-resolve-${best.itemPid}'),
+                    key: ValueKey(SemanticsIds.upgradeResolve(best.itemPid)),
                     onPressed: onResolve,
                     child: const Text('Resolve'),
                   ),
@@ -587,10 +590,10 @@ class HealthIssuesScreen extends ConsumerWidget {
           }
           final issue = state.items[index];
           return Semantics(
-            identifier: 'health-issue-${issue.pid}',
+            identifier: SemanticsIds.healthIssue(issue.pid),
             label: issue.title,
             child: ListTile(
-              key: ValueKey('health-issue-${issue.pid}'),
+              key: ValueKey(SemanticsIds.healthIssue(issue.pid)),
               leading: Icon(mediaFallbackIcon(issue.mediaType)),
               title: Text(
                 issue.artist == null

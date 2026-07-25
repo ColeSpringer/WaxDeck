@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 and up, dark. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowSplashScreenBackground">@color/wax_canvas_dark</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/splash_icon</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowBackground">@color/wax_canvas_dark</item>
+    </style>
+</resources>

@@ -1,6 +1,7 @@
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 
+import '../shell/semantics_ids.dart';
 import 'file_picker_impl.dart' as impl;
 import 'file_picker_port.dart';
 
@@ -97,10 +98,10 @@ class _AudioDropAreaState extends State<AudioDropArea> {
             Positioned.fill(
               child: IgnorePointer(
                 child: Semantics(
-                  identifier: 'upload-drop-target',
+                  identifier: SemanticsIds.uploadDropTarget,
                   label: widget.hint,
                   child: Container(
-                    key: const Key('upload-drop-target'),
+                    key: const Key(SemanticsIds.uploadDropTarget),
                     decoration: BoxDecoration(
                       color: colorScheme.primary.withValues(alpha: 0.08),
                       border: Border.all(color: colorScheme.primary, width: 2),

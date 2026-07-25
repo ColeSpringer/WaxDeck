@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/semantics_ids.dart';
 import 'metadata_controller.dart';
 
 /// The per-item metadata editor: a scalar-field form built from the
@@ -233,29 +234,29 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 _flagBox(
-                  id: 'metadata-writeback',
+                  id: SemanticsIds.metadataWriteback,
                   label: 'Write tags to files',
                   value: _writeBack,
                   onChanged: (v) => setState(() => _writeBack = v),
                 ),
                 _flagBox(
-                  id: 'metadata-lock',
+                  id: SemanticsIds.metadataLock,
                   label: 'Lock edited fields',
                   value: _lock,
                   onChanged: (v) => setState(() => _lock = v),
                 ),
                 _flagBox(
-                  id: 'metadata-force',
+                  id: SemanticsIds.metadataForce,
                   label: 'Force',
                   value: _force,
                   onChanged: (v) => setState(() => _force = v),
                 ),
                 Semantics(
-                  identifier: 'metadata-save',
+                  identifier: SemanticsIds.metadataSave,
                   label: 'Save changed fields',
                   button: true,
                   child: FilledButton(
-                    key: const Key('metadata-save'),
+                    key: const Key(SemanticsIds.metadataSave),
                     onPressed: changed.isEmpty || _busy
                         ? null
                         : () => _save(state),
@@ -371,9 +372,9 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
               Row(
                 children: [
                   Semantics(
-                    identifier: 'credits-role',
+                    identifier: SemanticsIds.creditsRole,
                     child: DropdownButton<String>(
-                      key: const Key('credits-role'),
+                      key: const Key(SemanticsIds.creditsRole),
                       value: role,
                       onChanged: (v) => setState(() => _creditRole = v),
                       items: [
@@ -395,11 +396,11 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
                   ),
                   const SizedBox(width: 8),
                   Semantics(
-                    identifier: 'credits-save',
+                    identifier: SemanticsIds.creditsSave,
                     label: 'Save credits',
                     button: true,
                     child: FilledButton.tonal(
-                      key: const Key('credits-save'),
+                      key: const Key(SemanticsIds.creditsSave),
                       onPressed: role == null || _busy
                           ? null
                           : () => _run(() async {
@@ -444,11 +445,11 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
                 children: [
                   Expanded(child: Text('${tag.key}: ${tag.values.join(', ')}')),
                   Semantics(
-                    identifier: 'tag-remove-${tag.key}',
+                    identifier: SemanticsIds.tagRemove(tag.key),
                     label: 'Remove tag ${tag.key}',
                     button: true,
                     child: IconButton(
-                      key: ValueKey('tag-remove-${tag.key}'),
+                      key: ValueKey(SemanticsIds.tagRemove(tag.key)),
                       tooltip: 'Remove tag',
                       icon: const Icon(Icons.close, size: 18),
                       onPressed: () => _run(
@@ -488,11 +489,11 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
                 ),
                 const SizedBox(width: 8),
                 Semantics(
-                  identifier: 'tag-add',
+                  identifier: SemanticsIds.tagAdd,
                   label: 'Add tag',
                   button: true,
                   child: FilledButton.tonal(
-                    key: const Key('tag-add'),
+                    key: const Key(SemanticsIds.tagAdd),
                     onPressed: _busy
                         ? null
                         : () => _run(() async {
@@ -548,11 +549,11 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Semantics(
-                  identifier: 'lyrics-clear',
+                  identifier: SemanticsIds.lyricsClear,
                   label: 'Clear lyrics',
                   button: true,
                   child: TextButton(
-                    key: const Key('lyrics-clear'),
+                    key: const Key(SemanticsIds.lyricsClear),
                     onPressed: _busy
                         ? null
                         : () => _run(() async {
@@ -570,11 +571,11 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
                 ),
                 const SizedBox(width: 8),
                 Semantics(
-                  identifier: 'lyrics-save',
+                  identifier: SemanticsIds.lyricsSave,
                   label: 'Save lyrics',
                   button: true,
                   child: FilledButton.tonal(
-                    key: const Key('lyrics-save'),
+                    key: const Key(SemanticsIds.lyricsSave),
                     onPressed: _busy
                         ? null
                         : () => _run(() async {
@@ -601,9 +602,9 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   Widget _releaseStatusCard(BuildContext context, MetadataEditorState state) {
     return Card(
       child: Semantics(
-        identifier: 'unofficial-switch',
+        identifier: SemanticsIds.unofficialSwitch,
         child: SwitchListTile(
-          key: const Key('unofficial-switch'),
+          key: const Key(SemanticsIds.unofficialSwitch),
           title: const Text('Unofficial release'),
           subtitle: const Text(
             'Marks this release as a bootleg or other unofficial issue.',
@@ -635,22 +636,22 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
               spacing: 8,
               children: [
                 Semantics(
-                  identifier: 'metadata-rematch',
+                  identifier: SemanticsIds.metadataRematch,
                   label: 'Rematch',
                   button: true,
                   child: OutlinedButton.icon(
-                    key: const Key('metadata-rematch'),
+                    key: const Key(SemanticsIds.metadataRematch),
                     onPressed: _busy ? null : _rematch,
                     icon: const Icon(Icons.manage_search),
                     label: const Text('Rematch'),
                   ),
                 ),
                 Semantics(
-                  identifier: 'metadata-enrich',
+                  identifier: SemanticsIds.metadataEnrich,
                   label: 'Fetch metadata',
                   button: true,
                   child: OutlinedButton.icon(
-                    key: const Key('metadata-enrich'),
+                    key: const Key(SemanticsIds.metadataEnrich),
                     onPressed: _busy ? null : () => _enrich(state),
                     icon: const Icon(Icons.cloud_download_outlined),
                     label: const Text('Fetch metadata'),
@@ -707,11 +708,11 @@ class _FieldRow extends StatelessWidget {
         Tooltip(
           message: _provenanceText,
           child: Semantics(
-            identifier: 'field-lock-${field.name}',
+            identifier: SemanticsIds.fieldLock(field.name),
             label: locked ? 'Unlock ${field.name}' : 'Lock ${field.name}',
             button: true,
             child: IconButton(
-              key: Key('field-lock-${field.name}'),
+              key: Key(SemanticsIds.fieldLock(field.name)),
               icon: Icon(locked ? Icons.lock : Icons.lock_open, size: 18),
               onPressed: onToggleLock,
             ),

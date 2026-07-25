@@ -192,6 +192,26 @@ here waits on upstream.
 
 ## Infrastructure
 
+- `[in-repo]` **CJK metadata renders as boxes on web unless someone
+  supplies the font.** The design system bundles Latin, Greek, Cyrillic,
+  Arabic, Hebrew, and Thai, and `WaxFonts.ensureCjk()` loads a CJK face
+  from WaxDeck's own origin when the locale or the metadata on screen
+  needs one — but no CJK asset ships, because a usable subset is an
+  order of magnitude larger than the whole rest of the chain. Native
+  builds fall back to system fonts and are fine; a LAN-only web client
+  with Han, kana, or hangul in its library is not, since Flutter web's
+  own fallback fetches Noto from Google's CDN and an air-gapped instance
+  cannot reach it. Closing it means choosing a subset (a common-hanzi
+  core is roughly 2 MB), adding it to `tools/fetch-fonts.sh`, and
+  dropping it in `waxdeck_ui/assets/fonts/`; the loader already handles
+  the rest. See ADR-0016.
+- `[in-repo]` **The Noto fallbacks load eagerly on web.** Arabic, Hebrew,
+  and Thai are declared fonts, so the engine fetches all three (about
+  750 KB) at startup even on an all-Latin library. Deferring them behind
+  the same on-demand loader CJK uses would trade a startup cost for a
+  brief re-layout when non-Latin metadata first appears; the call
+  belongs with the bundle-size pass of the UI overhaul, which measures
+  the whole picture.
 - `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists.

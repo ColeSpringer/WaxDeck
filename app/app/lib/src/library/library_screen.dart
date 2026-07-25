@@ -19,6 +19,7 @@ import '../podcasts/podcasts_screen.dart';
 import '../radio/radio_screen.dart';
 import '../review/review_screen.dart';
 import '../settings/settings_screen.dart';
+import '../shell/semantics_ids.dart';
 import '../stats/stats_screen.dart';
 import '../sync/sync_providers.dart';
 import '../tools/tasks_screen.dart';
@@ -33,17 +34,26 @@ import 'library_controller.dart';
 /// while they hold upload rights, without which the uploads screen is
 /// an empty list they can do nothing on.
 enum _CurationDestination {
-  review('curation-review', 'Review queue', adminOnly: true),
-  uploads('curation-uploads', 'Uploads', adminOnly: false, needsUpload: true),
-  health('curation-health', 'Health', adminOnly: true),
-  diagnostics('curation-diagnostics', 'Diagnostics', adminOnly: true),
-  organize('curation-organize', 'Organize', adminOnly: true),
-  tasks('curation-tasks', 'Tasks', adminOnly: true),
-  users('curation-users', 'Users', adminOnly: true),
-  audit('curation-audit', 'Audit log', adminOnly: true),
-  backups('curation-backups', 'Backups', adminOnly: true),
-  trash('curation-trash', 'Trash', adminOnly: true),
-  migrate('curation-migrate', 'Import from another server', adminOnly: true);
+  review(SemanticsIds.curationReview, 'Review queue', adminOnly: true),
+  uploads(
+    SemanticsIds.curationUploads,
+    'Uploads',
+    adminOnly: false,
+    needsUpload: true,
+  ),
+  health(SemanticsIds.curationHealth, 'Health', adminOnly: true),
+  diagnostics(SemanticsIds.curationDiagnostics, 'Diagnostics', adminOnly: true),
+  organize(SemanticsIds.curationOrganize, 'Organize', adminOnly: true),
+  tasks(SemanticsIds.curationTasks, 'Tasks', adminOnly: true),
+  users(SemanticsIds.curationUsers, 'Users', adminOnly: true),
+  audit(SemanticsIds.curationAudit, 'Audit log', adminOnly: true),
+  backups(SemanticsIds.curationBackups, 'Backups', adminOnly: true),
+  trash(SemanticsIds.curationTrash, 'Trash', adminOnly: true),
+  migrate(
+    SemanticsIds.curationMigrate,
+    'Import from another server',
+    adminOnly: true,
+  );
 
   const _CurationDestination(
     this.id,
@@ -112,11 +122,11 @@ class LibraryScreen extends ConsumerWidget {
       floatingActionButton: filter == LibraryFilter.podcasts || !canUpload
           ? null
           : Semantics(
-              identifier: 'add-to-library',
+              identifier: SemanticsIds.addToLibrary,
               label: 'Add music',
               button: true,
               child: FloatingActionButton(
-                key: const Key('add-to-library'),
+                key: const Key(SemanticsIds.addToLibrary),
                 tooltip: 'Add to library',
                 onPressed: () => showAddToLibrarySheet(
                   context,
@@ -130,10 +140,10 @@ class LibraryScreen extends ConsumerWidget {
         title: const Text('WaxDeck'),
         actions: [
           Semantics(
-            identifier: 'curation-menu',
+            identifier: SemanticsIds.curationMenu,
             label: 'Curation',
             child: PopupMenuButton<_CurationDestination>(
-              key: const Key('curation-menu'),
+              key: const Key(SemanticsIds.curationMenu),
               tooltip: 'Curation',
               icon: const Icon(Icons.build_outlined),
               onSelected: (destination) => Navigator.of(context).push(
@@ -162,9 +172,9 @@ class LibraryScreen extends ConsumerWidget {
             ),
           ),
           Semantics(
-            identifier: 'browse-open',
+            identifier: SemanticsIds.browseOpen,
             child: IconButton(
-              key: const Key('browse-open'),
+              key: const Key(SemanticsIds.browseOpen),
               tooltip: 'Browse by genre, artist, album',
               icon: const Icon(Icons.category_outlined),
               onPressed: () => Navigator.of(context).push(
@@ -173,9 +183,9 @@ class LibraryScreen extends ConsumerWidget {
             ),
           ),
           Semantics(
-            identifier: 'open-stats',
+            identifier: SemanticsIds.openStats,
             child: IconButton(
-              key: const Key('open-stats'),
+              key: const Key(SemanticsIds.openStats),
               tooltip: 'Listening stats',
               icon: const Icon(Icons.insights),
               onPressed: () => Navigator.of(context).push(
@@ -184,9 +194,9 @@ class LibraryScreen extends ConsumerWidget {
             ),
           ),
           Semantics(
-            identifier: 'playlists-open',
+            identifier: SemanticsIds.playlistsOpen,
             child: IconButton(
-              key: const Key('playlists-open'),
+              key: const Key(SemanticsIds.playlistsOpen),
               tooltip: 'Playlists',
               icon: const Icon(Icons.queue_music),
               onPressed: () => Navigator.of(context).push(
@@ -197,9 +207,9 @@ class LibraryScreen extends ConsumerWidget {
             ),
           ),
           Semantics(
-            identifier: 'radio-open',
+            identifier: SemanticsIds.radioOpen,
             child: IconButton(
-              key: const Key('radio-open'),
+              key: const Key(SemanticsIds.radioOpen),
               tooltip: 'Radio',
               icon: const Icon(Icons.radio),
               onPressed: () => Navigator.of(context).push(
@@ -208,9 +218,9 @@ class LibraryScreen extends ConsumerWidget {
             ),
           ),
           Semantics(
-            identifier: 'podcasts-open',
+            identifier: SemanticsIds.podcastsOpen,
             child: IconButton(
-              key: const Key('podcasts-open'),
+              key: const Key(SemanticsIds.podcastsOpen),
               tooltip: 'Podcasts',
               icon: const Icon(Icons.podcasts),
               onPressed: () => Navigator.of(context).push(
@@ -219,9 +229,9 @@ class LibraryScreen extends ConsumerWidget {
             ),
           ),
           Semantics(
-            identifier: 'settings-open',
+            identifier: SemanticsIds.settingsOpen,
             child: IconButton(
-              key: const Key('settings-open'),
+              key: const Key(SemanticsIds.settingsOpen),
               tooltip: 'Settings',
               icon: const Icon(Icons.settings_outlined),
               onPressed: () => Navigator.of(context).push(
@@ -239,7 +249,7 @@ class LibraryScreen extends ConsumerWidget {
           children: [
             if (ref.watch(offlineProvider))
               Semantics(
-                identifier: 'offline-banner',
+                identifier: SemanticsIds.offlineBanner,
                 child: Container(
                   width: double.infinity,
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -357,11 +367,11 @@ class _ResumeBanner extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Semantics(
-        identifier: 'resume-banner',
+        identifier: SemanticsIds.resumeBanner,
         label: 'Continue listening to ${item.title}',
         button: true,
         child: Card(
-          key: const Key('resume-banner'),
+          key: const Key(SemanticsIds.resumeBanner),
           color: colorScheme.secondaryContainer,
           child: ListTile(
             onTap: onTap,
@@ -404,13 +414,13 @@ class _ItemCard extends StatelessWidget {
       ),
     );
     return Semantics(
-      identifier: 'item-${item.pid}',
+      identifier: SemanticsIds.item(item.pid),
       label: item.artist == null
           ? item.title
           : '${item.title} by ${item.artist}',
       button: true,
       child: Card(
-        key: ValueKey('item-${item.pid}'),
+        key: ValueKey(SemanticsIds.item(item.pid)),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,

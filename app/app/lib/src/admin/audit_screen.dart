@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/semantics_ids.dart';
 
 /// The action-prefix filter above the audit list.
 class AuditFilterController extends Notifier<String> {
@@ -126,7 +127,7 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
     final audit = ref.watch(auditProvider);
     final filter = ref.watch(auditFilterProvider);
     return Semantics(
-      identifier: 'admin-audit',
+      identifier: SemanticsIds.adminAudit,
       container: true,
       child: Scaffold(
         appBar: AppBar(title: const Text('Audit log')),
@@ -135,9 +136,9 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Semantics(
-                identifier: 'audit-filter',
+                identifier: SemanticsIds.auditFilter,
                 child: TextField(
-                  key: const Key('audit-filter'),
+                  key: const Key(SemanticsIds.auditFilter),
                   controller: _filter,
                   decoration: InputDecoration(
                     labelText: 'Filter by action',
@@ -241,9 +242,9 @@ class _AuditRow extends StatelessWidget {
     }
     subtitle.write(', ${relativeTime(event.createdAt)}');
     return Semantics(
-      identifier: 'audit-row-${event.id}',
+      identifier: SemanticsIds.auditRow(event.id),
       child: ExpansionTile(
-        key: ValueKey('audit-row-${event.id}'),
+        key: ValueKey(SemanticsIds.auditRow(event.id)),
         title: Text(event.action, style: textTheme.titleSmall),
         subtitle: Text(subtitle.toString()),
         children: [

@@ -10,6 +10,7 @@ import '../books/book_screen.dart';
 import '../player/player_screen.dart';
 import '../providers.dart';
 import '../sharing/share_dialog.dart';
+import '../shell/semantics_ids.dart';
 import '../uploads/file_picker_port.dart';
 import 'name_dialog.dart';
 import 'playlist_cover.dart';
@@ -275,11 +276,11 @@ class PlaylistScreen extends ConsumerWidget {
         actions: [
           if (view != null && isOwner && playlist!.isSmart)
             Semantics(
-              identifier: 'playlist-edit-rule',
+              identifier: SemanticsIds.playlistEditRule,
               label: 'Edit rules',
               button: true,
               child: IconButton(
-                key: const Key('playlist-edit-rule'),
+                key: const Key(SemanticsIds.playlistEditRule),
                 tooltip: 'Edit rules',
                 icon: const Icon(Icons.tune),
                 onPressed: () => _editRule(context, ref, view),
@@ -319,10 +320,10 @@ class PlaylistScreen extends ConsumerWidget {
                 PopupMenuItem(
                   value: 'share-link',
                   child: Semantics(
-                    identifier: 'playlist-share-link',
+                    identifier: SemanticsIds.playlistShareLink,
                     child: const Text(
                       'Share link',
-                      key: Key('playlist-share-link'),
+                      key: Key(SemanticsIds.playlistShareLink),
                     ),
                   ),
                 ),
@@ -330,10 +331,10 @@ class PlaylistScreen extends ConsumerWidget {
                   PopupMenuItem(
                     value: 'set-cover',
                     child: Semantics(
-                      identifier: 'playlist-set-cover',
+                      identifier: SemanticsIds.playlistSetCover,
                       child: const Text(
                         'Set cover',
-                        key: Key('playlist-set-cover'),
+                        key: Key(SemanticsIds.playlistSetCover),
                       ),
                     ),
                   ),
@@ -345,10 +346,10 @@ class PlaylistScreen extends ConsumerWidget {
                   PopupMenuItem(
                     value: 'reset-cover',
                     child: Semantics(
-                      identifier: 'playlist-reset-cover',
+                      identifier: SemanticsIds.playlistResetCover,
                       child: const Text(
                         'Reset cover',
-                        key: Key('playlist-reset-cover'),
+                        key: Key(SemanticsIds.playlistResetCover),
                       ),
                     ),
                   ),
@@ -356,10 +357,10 @@ class PlaylistScreen extends ConsumerWidget {
                 PopupMenuItem(
                   value: 'portable',
                   child: Semantics(
-                    identifier: 'playlist-export-portable',
+                    identifier: SemanticsIds.playlistExportPortable,
                     child: const Text(
                       'Export portable',
-                      key: Key('playlist-export-portable'),
+                      key: Key(SemanticsIds.playlistExportPortable),
                     ),
                   ),
                 ),
@@ -486,7 +487,7 @@ class PlaylistScreen extends ConsumerWidget {
     final position = entry.position;
     return Semantics(
       key: ValueKey('playlist-entry-$index-${item.pid}'),
-      identifier: 'playlist-entry-$index',
+      identifier: SemanticsIds.playlistEntry(index),
       label: item.title,
       button: true,
       child: ListTile(
@@ -502,11 +503,11 @@ class PlaylistScreen extends ConsumerWidget {
             : Text(item.artist!, maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: playlist.isOwner && !playlist.isSmart && position != null
             ? Semantics(
-                identifier: 'playlist-entry-remove-$index',
+                identifier: SemanticsIds.playlistEntryRemove(index),
                 label: 'Remove from playlist',
                 button: true,
                 child: IconButton(
-                  key: ValueKey('playlist-entry-remove-$index'),
+                  key: ValueKey(SemanticsIds.playlistEntryRemove(index)),
                   tooltip: 'Remove from playlist',
                   icon: const Icon(Icons.close),
                   onPressed: () => ref

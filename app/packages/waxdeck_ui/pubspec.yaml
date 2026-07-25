@@ -1,0 +1,74 @@
+name: waxdeck_ui
+description: "WaxDeck design system: tokens, themes, and the components every client screen composes."
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
+
+# This package depends on Flutter and nothing else: it never imports
+# waxdeck_api, so components take plain view-data structs and the app
+# maps API models at call sites. That keeps golden tests free of the API
+# fakes and keeps the design system out of invalidation traffic.
+#
+# The icon set is vendored rather than depended on: phosphor_flutter
+# subclasses IconData, which Flutter 3.44 made a final class, so the
+# package no longer compiles. WaxIcon wraps the two subset fonts instead
+# (tools/fetch-icons.sh).
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  alchemist: 0.14.0
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Variable fonts, declared once per family: the type tokens select
+  # weights and widths through FontVariation, which reaches the axis
+  # values (460, 520, 560, 620, Archivo's wdth) that fontWeight's
+  # 100-step ladder cannot. Refreshed by tools/fetch-fonts.sh.
+  fonts:
+    - family: Archivo
+      fonts:
+        - asset: fonts/Archivo-Variable.ttf
+    - family: Inter
+      fonts:
+        - asset: fonts/Inter-Variable.ttf
+    - family: SplineSansMono
+      fonts:
+        - asset: fonts/SplineSansMono-Variable.ttf
+    # Fallback chain. Native platforms would resolve these per glyph from
+    # system fonts, but Flutter web fetches Noto fallbacks from Google's
+    # CDN, which an air-gapped instance cannot reach: an owned chain is
+    # the only way non-Latin metadata renders everywhere.
+    - family: NotoSansArabic
+      fonts:
+        - asset: fonts/NotoSansArabic-Variable.ttf
+    - family: NotoSansHebrew
+      fonts:
+        - asset: fonts/NotoSansHebrew-Variable.ttf
+    - family: NotoSansThai
+      fonts:
+        - asset: fonts/NotoSansThai-Variable.ttf
+    # Phosphor (MIT), subset to the glyphs WaxIcons names: regular is the
+    # inactive weight, fill the active one. 27 KB for both, against the
+    # 950 KB the upstream pair would cost.
+    - family: PhosphorRegular
+      fonts:
+        - asset: fonts/PhosphorRegular-Subset.ttf
+    - family: PhosphorFill
+      fonts:
+        - asset: fonts/PhosphorFill-Subset.ttf
+
+  assets:
+    - assets/brand/
+    # Loaded at runtime by WaxFonts.ensureCjk(), not declared as a font:
+    # see assets/fonts/README.md.
+    - assets/fonts/
