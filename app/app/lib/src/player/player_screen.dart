@@ -5,21 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-import '../connect/connect_controller.dart';
-import '../connect/connect_providers.dart';
 import '../connect/device_picker.dart';
 import '../discovery/discovery_actions.dart';
 import '../library/item_delete.dart';
 import '../media_icons.dart';
 import '../playlists/add_to_playlist_dialog.dart';
-import '../providers.dart';
-import '../radio/radio_controller.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/semantics_ids.dart';
 import '../sync/sync_providers.dart';
+import 'now_playing_controller.dart';
 import 'play_state_controller.dart';
 import 'playback_session.dart';
-import 'session_registry.dart';
 import 'sleep_timer.dart';
 import 'star_rating_row.dart';
 
@@ -43,195 +39,176 @@ String formatPlayerSpeed(double speed) {
   return '${text}x';
 }
 
-/// Full-screen player for one item: artwork, transport controls, and a seek
-/// bar, with resume and listen accounting handled by [PlaybackSession].
-/// Spoken-word items add speed, silence trimming, a sleep timer, and (for
-/// books) chapter navigation.
-class PlayerScreen extends ConsumerStatefulWidget {
-  const PlayerScreen({super.key, required this.item, this.initialPositionMs});
-
-  final ItemSummary item;
-
-  /// Overrides the saved resume position (book resume, chapter start).
-  final int? initialPositionMs;
-
-  @override
-  ConsumerState<PlayerScreen> createState() => _PlayerScreenState();
-}
-
-class _PlayerScreenState extends ConsumerState<PlayerScreen> {
-  late final PlaybackSession _session;
-  late final ConnectEndpointController _connect;
-  late final Future<void> _starting;
-  // Captured in initState: ref is not usable inside dispose.
-  late final CurrentSessionRegistry _registry;
-  StreamSubscription<Duration>? _sleepFeed;
+/// Full-screen view of what is playing: artwork, transport controls, and
+/// a seek bar, with resume and listen accounting handled by the
+/// [PlaybackSession] the [NowPlayingController] owns. Spoken-word items
+/// add speed, silence trimming, a sleep timer, and (for books) chapter
+/// navigation.
+///
+/// A viewer, deliberately: nothing here starts, stops, or outlives
+/// playback, so leaving this screen keeps the music on.
+class PlayerScreen extends ConsumerWidget {
+  const PlayerScreen({super.key});
 
   @override
-  void initState() {
-    super.initState();
-    // Live radio bypasses sessions; loading an item takes the engine
-    // back, so the radio surface must stop claiming it.
-    ref.read(radioPlaybackProvider.notifier).markInterrupted();
-    _session = PlaybackSession(
-      repository: ref.read(repositoryProvider),
-      engine: ref.read(audioEngineProvider),
-      item: widget.item,
-      clientId: listenClientId,
-      sync: ref.read(syncEngineProvider),
-      downloads: ref.read(downloadManagerProvider),
-      initialPositionMs: widget.initialPositionMs,
-    );
-    _registry = ref.read(currentSessionRegistryProvider);
-    _registry.register(_session);
-    _connect = ref.read(connectControllerProvider);
-    _connect.attachLocal(_session, widget.item.pid);
-    _starting = _session.start();
-    // End-of-chapter sleep mode watches the display timeline.
-    final sleepTimer = ref.read(sleepTimerProvider.notifier);
-    _sleepFeed = _session.displayPositionStream.listen(sleepTimer.onPosition);
-  }
-
-  @override
-  void dispose() {
-    unawaited(_sleepFeed?.cancel());
-    _connect.detachLocal(_session);
-    _registry.unregister(_session);
-    // Fire and forget: the final checkpoint and listen report run out of
-    // band while the route animates away.
-    unawaited(_session.dispose());
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final item = widget.item;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final nowPlaying = ref.watch(nowPlayingProvider);
+    // The queue is what decides whether anything is playing. An item
+    // still resolving, or one whose start failed before it could be
+    // named, is not nothing: saying so would hide the failure and the
+    // button that retries it.
+    if (nowPlaying.entry == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Now playing')),
+        body: const Center(
+          child: Text('Nothing is playing', key: Key('player-idle')),
+        ),
+      );
+    }
+    final item = nowPlaying.item;
+    final session = nowPlaying.session;
+    // Read at tap time, never at build time: this screen rebuilds when
+    // what is playing changes, not as it plays, so a captured position
+    // would be where the item stood when it started. Actions fall back
+    // to the top of the item while it loads, when the transport is not
+    // up either.
+    int positionMs() => session?.displayPosition.inMilliseconds ?? 0;
     return Scaffold(
       appBar: AppBar(
-        title: Text(item.title),
-        actions: [
-          Semantics(
-            identifier: SemanticsIds.playerDevices,
-            label: 'Play on',
-            button: true,
-            excludeSemantics: true,
-            onTap: () => showDevicePicker(
-              context,
-              ref,
-              currentPid: item.pid,
-              positionMs: _session.displayPosition.inMilliseconds,
-            ),
-            child: IconButton(
-              key: const Key(SemanticsIds.playerDevices),
-              tooltip: 'Play on',
-              icon: const Icon(Icons.cast),
-              onPressed: () => showDevicePicker(
-                context,
-                ref,
-                currentPid: item.pid,
-                positionMs: _session.displayPosition.inMilliseconds,
-              ),
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.addToPlaylist,
-            label: 'Add to playlist',
-            button: true,
-            child: IconButton(
-              key: const Key(SemanticsIds.addToPlaylist),
-              tooltip: 'Add to playlist',
-              icon: const Icon(Icons.playlist_add),
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => AddToPlaylistDialog(item: item),
-              ),
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.shareLink,
-            label: 'Share link',
-            button: true,
-            child: IconButton(
-              key: const Key(SemanticsIds.shareLink),
-              tooltip: 'Share link',
-              icon: const Icon(Icons.share_outlined),
-              // Episodes offer the current position as the share's
-              // start point; other media share from the top.
-              onPressed: () => showShareLinkDialog(
-                context,
-                pid: item.pid,
-                positionMs: item.mediaType == MediaType.podcast
-                    ? _session.displayPosition.inMilliseconds
-                    : null,
-              ),
-            ),
-          ),
-          if (item.mediaType == MediaType.music)
-            Semantics(
-              identifier: SemanticsIds.playerDiscover,
-              label: 'Discover',
-              button: true,
-              child: PopupMenuButton<String>(
-                key: const Key(SemanticsIds.playerDiscover),
-                tooltip: 'Discover',
-                icon: const Icon(Icons.auto_awesome_outlined),
-                onSelected: (choice) => switch (choice) {
-                  'mix' => showInstantMixSheet(context, item),
-                  'similar' => openSimilarTracks(context, ref, item),
-                  _ => Future<void>.value(),
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'mix',
-                    child: Semantics(
-                      identifier: SemanticsIds.instantMix,
-                      child: const Text(
-                        'Instant mix',
-                        key: Key(SemanticsIds.instantMix),
-                      ),
+        title: Text(item?.title ?? 'Now playing'),
+        // Every one of these acts on an item; until there is one to act
+        // on, the bar carries the title alone.
+        actions: item == null
+            ? const []
+            : [
+                Semantics(
+                  identifier: SemanticsIds.playerDevices,
+                  label: 'Play on',
+                  button: true,
+                  excludeSemantics: true,
+                  onTap: () => showDevicePicker(
+                    context,
+                    ref,
+                    currentPid: item.pid,
+                    positionMs: positionMs(),
+                  ),
+                  child: IconButton(
+                    key: const Key(SemanticsIds.playerDevices),
+                    tooltip: 'Play on',
+                    icon: const Icon(Icons.cast),
+                    onPressed: () => showDevicePicker(
+                      context,
+                      ref,
+                      currentPid: item.pid,
+                      positionMs: positionMs(),
                     ),
                   ),
-                  PopupMenuItem(
-                    value: 'similar',
-                    child: Semantics(
-                      identifier: SemanticsIds.similarTracks,
-                      child: const Text(
-                        'Similar tracks',
-                        key: Key(SemanticsIds.similarTracks),
-                      ),
+                ),
+                Semantics(
+                  identifier: SemanticsIds.addToPlaylist,
+                  label: 'Add to playlist',
+                  button: true,
+                  child: IconButton(
+                    key: const Key(SemanticsIds.addToPlaylist),
+                    tooltip: 'Add to playlist',
+                    icon: const Icon(Icons.playlist_add),
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => AddToPlaylistDialog(item: item),
                     ),
                   ),
-                ],
-              ),
-            ),
-          _DownloadButton(pid: item.pid),
-          ItemDeleteAction(pid: item.pid, onDeleted: () => context.pop()),
-        ],
+                ),
+                Semantics(
+                  identifier: SemanticsIds.shareLink,
+                  label: 'Share link',
+                  button: true,
+                  child: IconButton(
+                    key: const Key(SemanticsIds.shareLink),
+                    tooltip: 'Share link',
+                    icon: const Icon(Icons.share_outlined),
+                    // Episodes offer the current position as the share's
+                    // start point; other media share from the top.
+                    onPressed: () => showShareLinkDialog(
+                      context,
+                      pid: item.pid,
+                      positionMs: item.mediaType == MediaType.podcast
+                          ? positionMs()
+                          : null,
+                    ),
+                  ),
+                ),
+                if (item.mediaType == MediaType.music)
+                  Semantics(
+                    identifier: SemanticsIds.playerDiscover,
+                    label: 'Discover',
+                    button: true,
+                    child: PopupMenuButton<String>(
+                      key: const Key(SemanticsIds.playerDiscover),
+                      tooltip: 'Discover',
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                      onSelected: (choice) => switch (choice) {
+                        'mix' => showInstantMixSheet(context, item),
+                        'similar' => openSimilarTracks(context, ref, item),
+                        _ => Future<void>.value(),
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'mix',
+                          child: Semantics(
+                            identifier: SemanticsIds.instantMix,
+                            child: const Text(
+                              'Instant mix',
+                              key: Key(SemanticsIds.instantMix),
+                            ),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'similar',
+                          child: Semantics(
+                            identifier: SemanticsIds.similarTracks,
+                            child: const Text(
+                              'Similar tracks',
+                              key: Key(SemanticsIds.similarTracks),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                _DownloadButton(pid: item.pid),
+                ItemDeleteAction(pid: item.pid, onDeleted: () => context.pop()),
+              ],
       ),
-      body: FutureBuilder<void>(
-        future: _starting,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            final error = snapshot.error;
-            // The pane stays terse; the console carries the real
-            // failure so field reports and browser tests can see it.
-            debugPrint('playback start failed: $error');
-            return Center(
-              child: Text(
+      body: switch (nowPlaying) {
+        NowPlaying(:final Object error) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
                 error is WaxDeckApiException
                     ? error.message
                     : 'Playback failed to start',
                 key: const Key('player-error'),
                 textAlign: TextAlign.center,
               ),
-            );
-          }
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return _PlayerBody(session: _session, item: item);
-        },
-      ),
+              const SizedBox(height: 12),
+              // The queue still holds the entry, and nothing else will
+              // try it again: without this the failure is where playback
+              // stops until something rebuilds the queue.
+              OutlinedButton(
+                key: const Key('player-retry'),
+                onPressed: ref.read(nowPlayingProvider.notifier).retry,
+                child: const Text('Try again'),
+              ),
+            ],
+          ),
+        ),
+        // Both, always: the state publishes a session and the item it
+        // is for together.
+        NowPlaying(:final PlaybackSession session, :final ItemSummary item) =>
+          _PlayerBody(session: session, item: item),
+        _ => const Center(child: CircularProgressIndicator()),
+      },
     );
   }
 }

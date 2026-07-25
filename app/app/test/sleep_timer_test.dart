@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/player/sleep_timer.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 
 const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 
@@ -18,19 +18,22 @@ class _FakeClock {
   void advance(Duration d) => now = now.add(d);
 }
 
-Widget _host(
+/// The player over a container whose sleep-timer clock the test drives.
+ProviderContainer _container(
   FakeRepository repo,
   FakeEngine engine,
-  Widget home, {
-  _FakeClock? clock,
-}) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    audioEngineProvider.overrideWithValue(engine),
-    if (clock != null) sleepClockProvider.overrideWithValue(() => clock.now),
-  ],
-  child: MaterialApp(home: home),
-);
+  _FakeClock clock,
+) {
+  final container = ProviderContainer(
+    overrides: [
+      repositoryProvider.overrideWithValue(repo),
+      audioEngineProvider.overrideWithValue(engine),
+      sleepClockProvider.overrideWithValue(() => clock.now),
+    ],
+  );
+  addTearDown(container.dispose);
+  return container;
+}
 
 void main() {
   testWidgets('a preset timer pauses playback when it fires', (tester) async {
@@ -40,10 +43,13 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
     final clock = _FakeClock();
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testItem(pid)), clock: clock),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+      container: _container(repo, engine, clock),
     );
-    await tester.pumpAndSettle();
     expect(engine.playing, isTrue);
 
     await tester.tap(find.byKey(const Key('sleep-timer-open')));
@@ -59,6 +65,7 @@ void main() {
     clock.advance(const Duration(minutes: 1, seconds: 1));
     await tester.pump(const Duration(minutes: 1, seconds: 1));
     expect(engine.playing, isFalse);
+    await harness.endPlayback(tester);
   });
 
   testWidgets('a throttled tick cadence never stretches the countdown', (
@@ -70,10 +77,13 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
     final clock = _FakeClock();
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testItem(pid)), clock: clock),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+      container: _container(repo, engine, clock),
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('sleep-timer-open')));
     await tester.pumpAndSettle();
@@ -86,6 +96,7 @@ void main() {
     clock.advance(const Duration(minutes: 20));
     await tester.pump(const Duration(seconds: 1));
     expect(engine.playing, isFalse);
+    await harness.endPlayback(tester);
   });
 
   testWidgets('cancel stops the countdown', (tester) async {
@@ -95,10 +106,13 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
     final clock = _FakeClock();
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testItem(pid)), clock: clock),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+      container: _container(repo, engine, clock),
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('sleep-timer-open')));
     await tester.pumpAndSettle();
@@ -113,6 +127,7 @@ void main() {
     clock.advance(const Duration(minutes: 6));
     await tester.pump(const Duration(minutes: 6));
     expect(engine.playing, isTrue);
+    await harness.endPlayback(tester);
   });
 
   testWidgets('end-of-chapter mode pauses at the chapter boundary', (
@@ -128,22 +143,18 @@ void main() {
         ],
       );
     final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
-    await tester.pumpWidget(
-      _host(
-        repo,
-        engine,
-        PlayerScreen(
-          item: ItemSummary(
-            pid: bookPid,
-            mediaType: MediaType.audiobook,
-            title: 'There And Back Again',
-            durationMs: 3600000,
-          ),
-          initialPositionMs: 0,
-        ),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: const ItemSummary(
+        pid: bookPid,
+        mediaType: MediaType.audiobook,
+        title: 'There And Back Again',
+        durationMs: 3600000,
       ),
+      positionMs: 0,
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('sleep-timer-open')));
     await tester.pumpAndSettle();
@@ -159,5 +170,6 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(engine.playing, isFalse);
+    await harness.endPlayback(tester);
   });
 }

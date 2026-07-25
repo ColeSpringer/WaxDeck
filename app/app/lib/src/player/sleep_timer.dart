@@ -80,12 +80,24 @@ class SleepTimerController extends Notifier<SleepTimerState> {
     state = SleepTimerState(endOfChapterEndMs: chapterEndMs);
   }
 
-  /// Position feed for end-of-chapter mode; the player screen calls this
-  /// with display-timeline positions.
+  /// Position feed for end-of-chapter mode; the playback layer calls
+  /// this with display-timeline positions.
   void onPosition(Duration position) {
     final endMs = state.endOfChapterEndMs;
     if (endMs == null) return;
     if (position.inMilliseconds >= endMs) _fire();
+  }
+
+  /// Drops end-of-chapter mode, leaving a countdown running.
+  ///
+  /// The boundary is a bare position on the item that armed it, so it
+  /// means nothing on the next one: playback calls this when the item
+  /// changes, or a chapter end of 42 minutes would pause a three minute
+  /// track that never had a chapter. A countdown is wall clock and
+  /// belongs to the listener, not to any item, so it stays.
+  void clearEndOfChapter() {
+    if (state.endOfChapterEndMs == null) return;
+    state = const SleepTimerState();
   }
 
   void cancel() {

@@ -93,6 +93,16 @@ class PlaybackSession {
   int? _partCount;
   int _partStartMs = 0;
 
+  /// Whether media ever reached the engine under this session. A start
+  /// that failed before loading has no position of its own: the engine's
+  /// is the previous item's, or zero.
+  bool _loaded = false;
+
+  /// Where this item ended, when it ended on its own terms (an outro
+  /// cutoff). The final checkpoint uses it instead of the engine's
+  /// position, which stopped short of it by design.
+  Duration? _endedAt;
+
   // Silence trimming. Spans are in the loaded file's own timeline.
   List<SkipSpan> _skipSpans = const [];
   int _lastJumpedSpan = -1;
@@ -108,6 +118,15 @@ class PlaybackSession {
   /// Milliseconds of silence skipped so far, for the hours-saved badge.
   final ValueNotifier<int> hoursSavedMs = ValueNotifier(0);
 
+  final StreamController<void> _sessionCompleted =
+      StreamController<void>.broadcast();
+
+  /// Fires once when this item is truly over: the last part of a book
+  /// ran out, or an episode reached its outro cutoff. Rolling from one
+  /// part of a book to the next is internal and never fires here, so the
+  /// queue above cannot mistake a part boundary for the end of an item.
+  Stream<void> get sessionCompleted => _sessionCompleted.stream;
+
   /// The book detail behind an audiobook session (chapters, parts), when
   /// it could be fetched.
   BookDetail? get book => _book;
@@ -116,6 +135,11 @@ class PlaybackSession {
 
   /// Whether this item carries spoken-word playback affordances.
   bool get isSpokenWord => item.mediaType != MediaType.music;
+
+  /// Whether media has actually reached the engine under this session.
+  /// Until it has, the engine's position and duration belong to whatever
+  /// played before it, so nothing here reads as this item's.
+  bool get isLoaded => _loaded;
 
   /// Current playback speed multiplier.
   double get speed => engine.speed;
@@ -145,9 +169,14 @@ class PlaybackSession {
   /// the resume position, and starts playing. When the server is
   /// unreachable and the item's original is downloaded, playback runs
   /// from the local file with the mirrored resume position instead.
-  Future<void> start() async {
+  ///
+  /// [autoplay] false loads and stops there, for a queue put back at
+  /// launch: the item stands at its checkpoint until someone presses
+  /// play.
+  Future<void> start({bool autoplay = true}) async {
     _engineOwners[engine] = this;
     await _loadConfig();
+    if (_disposed) return;
     await engine.setSpeed(_configuredSpeed());
     try {
       var resumeMs = initialPositionMs;
@@ -155,10 +184,15 @@ class PlaybackSession {
         final saved = await repository.getPlayState(item.pid);
         resumeMs = saved.positionMs;
       }
+      // Let go while this was resolving: a tap on something else, or the
+      // queue emptying. Loading here would put this item's media over
+      // whatever took the engine, under a session nothing can reach.
+      if (_disposed) return;
       if (_isBook) {
         await _loadPartFor(resumeMs, autoplay: false);
       } else {
         final info = await repository.getPlayInfo(item.pid);
+        if (_disposed) return;
         _playInfo = info;
         _applyOutroCutoff(info.durationMs);
         resumeMs = _applyIntroSkip(resumeMs);
@@ -183,6 +217,9 @@ class PlaybackSession {
       final local = await _localFallback(e);
       if (local == null) rethrow;
       final saved = await sync?.localPlayState(item.pid);
+      // The offline branch loads below; this is what keeps a session
+      // already let go from doing so.
+      if (_disposed) return;
       var resumeMs = initialPositionMs ?? saved?.positionMs ?? 0;
       if (!_isBook) resumeMs = _applyIntroSkip(resumeMs);
       final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
@@ -203,11 +240,44 @@ class PlaybackSession {
             : Duration(milliseconds: local.spanEndMs!),
       );
     }
+    if (_disposed) return;
     _lastPosition = engine.position;
+    _loaded = true;
+    _watchEngine();
+    if (autoplay) await engine.play();
+  }
+
+  /// Takes over media the engine is already playing: this item was
+  /// preloaded behind the previous one and the engine has crossed into
+  /// it. [info] is the play-info that preload was minted from, so
+  /// nothing is resolved, loaded, or seeked here — the stream never
+  /// stopped, and this session picks up accounting where it stands.
+  ///
+  /// Only ever called for an item the preload admission policy let
+  /// through, which is why the book and offline branches of [start] have
+  /// no counterpart: neither is ever preloaded.
+  Future<void> adopt(PlayInfo info) async {
+    _engineOwners[engine] = this;
+    await _loadConfig();
+    if (_disposed) return;
+    await engine.setSpeed(_configuredSpeed());
+    if (_disposed) return;
+    _playInfo = info;
+    _applyOutroCutoff(info.durationMs);
+    _lastPosition = engine.position;
+    _loaded = true;
+    _watchEngine();
+    if (trimEnabled.value) unawaited(_loadSkipMap());
+    // Nothing here starts playback, but the checkpoint timer hangs off a
+    // play transition that already happened under the previous session,
+    // so this one is told what it walked into.
+    if (engine.playing) _onPlayingChanged(true);
+  }
+
+  void _watchEngine() {
     _positionSub = engine.positionStream.listen(_onPosition);
     _playingSub = engine.playingStream.listen(_onPlayingChanged);
     _completedSub = engine.completed.listen((_) => _onCompleted());
-    await engine.play();
   }
 
   /// Fetches the per-show or per-book playback config; playback works
@@ -256,6 +326,9 @@ class PlaybackSession {
   /// (single-file items resolve to the whole file with partStartMs 0).
   Future<void> _loadPartFor(int bookMs, {required bool autoplay}) async {
     final info = await repository.getPlayInfo(item.pid, positionMs: bookMs);
+    // Let go while the part was resolving: loading it now would put this
+    // book over whatever took the engine.
+    if (_disposed) return;
     _playInfo = info;
     _partIndex = info.partIndex;
     _partCount = info.partCount;
@@ -379,15 +452,60 @@ class PlaybackSession {
     }
   }
 
+  /// Plays this item again from the top, for repeat-one. The finished
+  /// session was reported when it completed, so the next counted
+  /// position mints a fresh listen session id and the second play is
+  /// accounted as its own rather than extending the first.
+  Future<void> replay() async {
+    _outroFired = false;
+    _lastJumpedSpan = -1;
+    _finished = false;
+    // Through the display timeline, so a book on repeat-one goes back to
+    // its first part rather than to the top of the part it ended on.
+    await seek(Duration.zero);
+    await engine.play();
+  }
+
   /// Stops playback, flushing a final checkpoint and the listen report.
-  Future<void> dispose() async {
+  ///
+  /// The position is read here, synchronously: the engine is shared, and
+  /// by the time the shutdown's awaits run a newer session may have
+  /// loaded different media into it. The checkpoint must record where
+  /// THIS item was, and stop() must not cut off the newer session.
+  Future<void> dispose() => _shutdown(
+    at: _endedAt ?? engine.position,
+    finished: _finished,
+    stopEngine: true,
+  );
+
+  /// Lets go of the engine without stopping it, for a hand-over to
+  /// something that drives it directly (live radio). The item is
+  /// checkpointed where it stands and its listen reported as unfinished;
+  /// what plays next is the caller's business.
+  Future<void> handOver() => _shutdown(
+    at: _endedAt ?? engine.position,
+    finished: _finished,
+    stopEngine: false,
+  );
+
+  /// Finalizes this item because the engine walked out of it and into
+  /// the item preloaded behind it. The checkpoint lands at this item's
+  /// own end rather than at the engine's position, which already belongs
+  /// to the next item, and the listen report says finished. The stream
+  /// is left running: the next item's session adopts it.
+  Future<void> finishAtBoundary() => _shutdown(
+    at: Duration(milliseconds: _playInfo?.durationMs ?? item.durationMs),
+    finished: true,
+    stopEngine: false,
+  );
+
+  Future<void> _shutdown({
+    required Duration at,
+    required bool finished,
+    required bool stopEngine,
+  }) async {
     if (_disposed) return;
     _disposed = true;
-    // Snapshot the position now, synchronously: the engine is shared, and
-    // by the time the awaits below run a newer session may have loaded
-    // different media into it. The checkpoint must record where THIS
-    // item was, and stop() must not cut off the newer session.
-    final finalPosition = engine.position;
     _checkpointTimer?.cancel();
     _skipMapRetry?.cancel();
     // Cancellations are not awaited: an idle subscription's cancel future is
@@ -396,18 +514,24 @@ class PlaybackSession {
     unawaited(_positionSub?.cancel());
     unawaited(_playingSub?.cancel());
     unawaited(_completedSub?.cancel());
-    await _checkpoint(at: finalPosition);
-    await _reportSession(finished: _finished);
+    unawaited(_sessionCompleted.close());
+    // A start that never got as far as loading has nothing to record,
+    // and the engine's position belongs to whatever played before it:
+    // writing that as this item's resume point would lose the
+    // listener's place on a failure they can retry.
+    if (_loaded) await _checkpoint(at: at);
+    await _reportSession(finished: finished);
     await _flushRetry();
     trimEnabled.dispose();
     hoursSavedMs.dispose();
     if (identical(_engineOwners[engine], this)) {
       _engineOwners[engine] = null;
-      await engine.stop();
+      if (stopEngine) await engine.stop();
     }
   }
 
   void _onPosition(Duration position) {
+    if (_disposed) return;
     final delta = position - _lastPosition;
     _lastPosition = position;
     if (!engine.playing) return;
@@ -446,9 +570,14 @@ class PlaybackSession {
     _finished = true;
     unawaited(engine.pause());
     // The checkpoint records the real end so resume lands past the outro.
+    // Held as well as written: the engine is paused at the cutoff, so a
+    // final checkpoint taken from it would put the resume point back
+    // before the outro and fire this again on the next play.
     final endMs = _playInfo?.durationMs ?? position.inMilliseconds;
-    unawaited(_checkpoint(at: Duration(milliseconds: endMs)));
+    _endedAt = Duration(milliseconds: endMs);
+    unawaited(_checkpoint(at: _endedAt!));
     unawaited(_reportSession(finished: true));
+    _announceCompleted();
   }
 
   void _onPlayingChanged(bool playing) {
@@ -479,6 +608,7 @@ class PlaybackSession {
     _finished = true;
     unawaited(_checkpoint());
     unawaited(_reportSession(finished: true));
+    _announceCompleted();
   }
 
   Future<void> _advanceToNextPart() async {
@@ -491,7 +621,15 @@ class PlaybackSession {
       _finished = true;
       unawaited(_checkpoint());
       unawaited(_reportSession(finished: true));
+      _announceCompleted();
     }
+  }
+
+  /// Tells the layer above that this item is over. Reported after the
+  /// checkpoint and the listen report are on their way, so whatever
+  /// advances the queue cannot outrun this item's own accounting.
+  void _announceCompleted() {
+    if (!_sessionCompleted.isClosed) _sessionCompleted.add(null);
   }
 
   /// Mints the idempotency ID the first time playback makes progress and

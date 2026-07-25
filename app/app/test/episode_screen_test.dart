@@ -8,6 +8,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 
 const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
@@ -75,10 +76,12 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testEpisode(episodePid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testEpisode(episodePid),
     );
-    await tester.pumpAndSettle();
     expect(engine.playing, isTrue);
 
     // Open the episode detail on top of the live player.
@@ -96,5 +99,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(engine.position, const Duration(seconds: 30));
+    await harness.endPlayback(tester);
   });
 }

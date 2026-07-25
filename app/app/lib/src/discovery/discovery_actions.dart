@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../player/now_playing_controller.dart';
 import '../providers.dart';
+import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 
@@ -53,10 +55,14 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
     setState(() => _busy = true);
     ref.read(mixAdventurousnessProvider.notifier).set(_adventurousness);
     // The sheet's own navigator closes the sheet; pushes go through
-    // the router, whose stack outlives it.
+    // the router, whose stack outlives it. Playback likewise: the
+    // controller belongs to the container, and reaching for it through
+    // ref after the await would throw if the sheet were dismissed while
+    // the mix was building.
     final navigator = Navigator.of(context);
     final router = GoRouter.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    final playback = ref.read(nowPlayingProvider.notifier);
     try {
       final mix = await ref
           .read(repositoryProvider)
@@ -65,6 +71,10 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
             adventurousness: _adventurousness,
             size: instantMixSize,
           );
+      // Dismissed while the mix was building: that is a cancel, and
+      // popping again from here would take the screen underneath with
+      // it.
+      if (!mounted) return;
       navigator.pop();
       if (mix.items.isEmpty) {
         messenger
@@ -90,12 +100,11 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
           ),
         ),
       );
-      unawaited(
-        router.push<void>(
-          WaxRoute.nowPlaying,
-          extra: NowPlayingArgs(item: mix.items.first),
-        ),
+      playback.play(
+        mix.items,
+        source: QueueSource(kind: QueueSourceKind.mix, label: 'Instant mix'),
       );
+      unawaited(router.push<void>(WaxRoute.nowPlaying));
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()

@@ -1,24 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/player/player_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 
 const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
-
-Widget _host(FakeRepository repo, FakeEngine engine, Widget home) =>
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(engine),
-      ],
-      child: MaterialApp(home: home),
-    );
 
 /// Steps the fake clock one second at a time so each delta registers as
 /// normal playback progress in the listen accounting.
@@ -48,10 +37,12 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testEpisode(episodePid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testEpisode(episodePid),
     );
-    await tester.pumpAndSettle();
 
     // Play up to the span: the fifth second lands inside it and the
     // session jumps forward to the span end.
@@ -65,6 +56,7 @@ void main() {
     // The jump happened once; playback continues normally afterwards.
     await _listen(tester, engine, 2);
     expect(engine.position, const Duration(seconds: 17));
+    await harness.endPlayback(tester);
   });
 
   testWidgets('the trim jump never distorts listen accounting', (tester) async {
@@ -72,17 +64,18 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testEpisode(episodePid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testEpisode(episodePid),
     );
-    await tester.pumpAndSettle();
 
     await _listen(tester, engine, 5); // jump to 15s fires on the 5th
     await tester.pump();
     await _listen(tester, engine, 3);
 
-    await tester.pumpWidget(_host(repo, engine, const SizedBox()));
-    await tester.pumpAndSettle();
+    await harness.endPlayback(tester);
 
     // 5 heard seconds before the jump, 3 after; the 10s jump itself is
     // a seek delta and never counts as listening.
@@ -95,14 +88,17 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testEpisode(episodePid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testEpisode(episodePid),
     );
-    await tester.pumpAndSettle();
 
     await _listen(tester, engine, 7);
     // No map: playback runs straight through the would-be span.
     expect(engine.position, const Duration(seconds: 7));
+    await harness.endPlayback(tester);
   });
 
   testWidgets('the player chip toggles trimming at runtime', (tester) async {
@@ -116,10 +112,12 @@ void main() {
     final engine = FakeEngine(
       mediaDuration: const Duration(milliseconds: 214000),
     );
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testEpisode(episodePid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testEpisode(episodePid),
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('player-trim')));
     await tester.pumpAndSettle();
@@ -127,5 +125,6 @@ void main() {
     await _listen(tester, engine, 5);
     await tester.pump();
     expect(engine.position, const Duration(seconds: 15));
+    await harness.endPlayback(tester);
   });
 }

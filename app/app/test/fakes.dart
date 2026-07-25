@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -66,6 +67,10 @@ class FakeRepository implements WaxDeckRepository {
 
   /// When set, play-info resolution fails with it.
   WaxDeckApiException? playInfoError;
+
+  /// When set, [getPlayInfo] waits on it before answering, so a test can
+  /// hold a resolution open and act while it is in flight.
+  Completer<void>? playInfoGate;
 
   /// When set, position checkpoints fail with it.
   WaxDeckApiException? putPlayStateError;
@@ -333,6 +338,7 @@ class FakeRepository implements WaxDeckRepository {
     final error = playInfoError;
     if (error != null) throw error;
     playInfoCalls.add((pid: pid, positionMs: positionMs));
+    await playInfoGate?.future;
     final episode = _findEpisode(pid);
     if (episode != null && !episode.downloaded) {
       throw const WaxDeckApiException(
@@ -361,12 +367,17 @@ class FakeRepository implements WaxDeckRepository {
       );
     }
     final span = playInfoSpans[pid];
+    final boosted = voiceBoostPids.contains(pid);
     return PlayInfo(
       pid: pid,
       url: '/media/stream?pid=$pid&mt=test-token',
       mimeType: 'audio/flac',
       durationMs: episode?.durationMs ?? 214000,
-      seekable: true,
+      // The server clears seekable for anything it cuts, voice boost
+      // included, so that flag is how a client tells a transcode from a
+      // passthrough.
+      seekable: !boosted && !transcodedPids.contains(pid),
+      voiceBoost: boosted,
       expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
       spanStartMs: span?.startMs,
       spanEndMs: span?.endMs,
@@ -376,6 +387,13 @@ class FakeRepository implements WaxDeckRepository {
   /// Span windows served by [getPlayInfo], keyed by pid: the direct
   /// playback shape for tracks carved out of a larger file.
   final Map<String, ({int startMs, int endMs})> playInfoSpans = {};
+
+  /// Pids the server cuts rather than passes through, so their play-info
+  /// answers unseekable.
+  final Set<String> transcodedPids = {};
+
+  /// Pids served with spoken-word loudness normalization applied.
+  final Set<String> voiceBoostPids = {};
 
   EpisodeSummary? _findEpisode(String pid) {
     for (final episodes in episodesByShow.values) {

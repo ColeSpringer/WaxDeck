@@ -5,6 +5,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../media_icons.dart';
+import '../player/now_playing_controller.dart';
+import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../sync/sync_providers.dart';
@@ -73,14 +75,25 @@ enum _CurationDestination {
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
 
-  void _openPlayer(BuildContext context, ItemSummary item) {
+  void _openPlayer(BuildContext context, WidgetRef ref, ItemSummary item) {
     // Audiobooks route through their detail screen (resume, chapters,
     // settings); music and downloaded podcast episodes play directly.
     if (item.mediaType == MediaType.audiobook) {
       context.push(WaxRoute.book(item.pid));
       return;
     }
-    context.push(WaxRoute.nowPlaying, extra: NowPlayingArgs(item: item));
+    // One item: this grid mixes media types and pages as it scrolls, so
+    // there is no list here worth calling a queue. The indexes that
+    // replace it queue their own.
+    ref.read(nowPlayingProvider.notifier).play(
+      [item],
+      source: QueueSource(
+        kind: QueueSourceKind.single,
+        label: item.title,
+        pid: item.pid,
+      ),
+    );
+    context.push(WaxRoute.nowPlaying);
   }
 
   @override
@@ -251,7 +264,7 @@ class LibraryScreen extends ConsumerWidget {
             if (resume != null)
               _ResumeBanner(
                 item: resume,
-                onTap: () => _openPlayer(context, resume),
+                onTap: () => _openPlayer(context, ref, resume),
               ),
             Expanded(
               child: switch (library) {
@@ -311,7 +324,10 @@ class LibraryScreen extends ConsumerWidget {
             return const Center(child: CircularProgressIndicator());
           }
           final item = state.items[index];
-          return _ItemCard(item: item, onTap: () => _openPlayer(context, item));
+          return _ItemCard(
+            item: item,
+            onTap: () => _openPlayer(context, ref, item),
+          );
         },
       ),
     );

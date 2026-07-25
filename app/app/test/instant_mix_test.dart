@@ -1,25 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/player/player_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 import 'routed_host.dart';
 
 const _seedPid = 'tr-01JZX5N8QW3F4V9T2B7KDSEED01';
 const _mixPid1 = 'tr-01JZX5N8QW3F4V9T2B7KDMIX001';
 const _mixPid2 = 'tr-01JZX5N8QW3F4V9T2B7KDMIX002';
-
-Widget _host(FakeRepository repo, FakeEngine engine) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    audioEngineProvider.overrideWithValue(engine),
-  ],
-  child: routedHost(PlayerScreen(item: testItem(_seedPid))),
-);
 
 void main() {
   testWidgets('the mix flow calls createInstantMix and plays the result', (
@@ -34,8 +24,13 @@ void main() {
         ],
       );
     final engine = FakeEngine();
-    await tester.pumpWidget(_host(repo, engine));
-    await tester.pumpAndSettle();
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(_seedPid),
+      host: routedHost,
+    );
 
     await tester.tap(find.byKey(const Key('player-discover')));
     await tester.pumpAndSettle();
@@ -68,6 +63,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Instant mix'), findsOneWidget);
     expect(find.byKey(const Key('mix-item-1')), findsOneWidget);
+    await harness.endPlayback(tester);
   });
 
   testWidgets('the chosen adventurousness is remembered for the next mix', (
@@ -79,8 +75,13 @@ void main() {
         items: [testItem(_mixPid1)],
       );
     final engine = FakeEngine();
-    await tester.pumpWidget(_host(repo, engine));
-    await tester.pumpAndSettle();
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(_seedPid),
+      host: routedHost,
+    );
 
     await tester.tap(find.byKey(const Key('player-discover')));
     await tester.pumpAndSettle();
@@ -108,6 +109,7 @@ void main() {
 
     expect(repo.instantMixCalls, hasLength(2));
     expect(repo.instantMixCalls.last.adventurousness, closeTo(1.0, 0.001));
+    await harness.endPlayback(tester);
   });
 
   testWidgets('an empty mix answers with a snackbar instead of a screen', (
@@ -115,8 +117,13 @@ void main() {
   ) async {
     final repo = FakeRepository(items: [testItem(_seedPid)]);
     final engine = FakeEngine();
-    await tester.pumpWidget(_host(repo, engine));
-    await tester.pumpAndSettle();
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(_seedPid),
+      host: routedHost,
+    );
 
     await tester.tap(find.byKey(const Key('player-discover')));
     await tester.pumpAndSettle();
@@ -127,5 +134,6 @@ void main() {
 
     expect(find.text('No mix available for this track'), findsOneWidget);
     expect(find.byKey(const Key('discovery-basis')), findsNothing);
+    await harness.endPlayback(tester);
   });
 }

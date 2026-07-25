@@ -22,6 +22,7 @@ import '../library/browse_screen.dart';
 import '../library/library_screen.dart';
 import '../metadata/metadata_screen.dart';
 import '../organize/organize_screen.dart';
+import '../player/now_playing_controller.dart';
 import '../player/player_screen.dart';
 import '../playlists/playlist_screen.dart';
 import '../playlists/playlists_screen.dart';
@@ -313,14 +314,7 @@ final signedInRoutes = <RouteBase>[
       ),
       GoRoute(
         path: 'now-playing',
-        redirect: _requires<NowPlayingArgs>(WaxRoute.home),
-        builder: (context, state) {
-          final args = state.extra! as NowPlayingArgs;
-          return PlayerScreen(
-            item: args.item,
-            initialPositionMs: args.initialPositionMs,
-          );
-        },
+        builder: (context, state) => const PlayerScreen(),
       ),
       GoRoute(
         path: 'remote',
@@ -429,6 +423,10 @@ class _SignedInScope extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(syncBinderProvider);
     ref.watch(queuePersistenceProvider);
+    // The notifier, not its state: playback has to be listening to the
+    // queue for the whole session, but what it is playing changes
+    // constantly and nothing under here should rebuild for that.
+    ref.watch(nowPlayingProvider.notifier);
     return ShareIntakeGate(child: child);
   }
 }

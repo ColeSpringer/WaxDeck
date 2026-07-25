@@ -1,25 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/player/player_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 
 const _trackPid = 'tr-01JZX5N8QW3F4V9T2B7KDSHARE1';
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const _episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
-
-Widget _host(FakeRepository repo, FakeEngine engine, Widget home) =>
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(engine),
-      ],
-      child: MaterialApp(home: home),
-    );
 
 /// Captures clipboard writes; the platform channel has no host in
 /// widget tests.
@@ -46,10 +35,12 @@ void main() {
     final repo = FakeRepository(items: [testItem(_trackPid)]);
     final engine = FakeEngine();
     final copied = _captureClipboard(tester);
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testItem(_trackPid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(_trackPid),
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('share-link')));
     await tester.pumpAndSettle();
@@ -75,6 +66,7 @@ void main() {
     ));
     expect(copied.single, 'http://localhost:4420/s/FAKESECRET0');
     expect(find.text('Link copied'), findsOneWidget);
+    await harness.endPlayback(tester);
   });
 
   testWidgets('an episode share can start at the current position', (
@@ -88,23 +80,31 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
     final copied = _captureClipboard(tester);
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testEpisode(_episodePid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testEpisode(_episodePid),
     );
-    await tester.pumpAndSettle();
+
+    // Play on a little: the offered start point is where the episode
+    // stands when the sheet opens, not where it was when it started.
+    engine.advance(const Duration(seconds: 5));
+    await tester.pump();
 
     await tester.tap(find.byKey(const Key('share-link')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Start at 1:30'), findsOneWidget);
+    expect(find.text('Start at 1:35'), findsOneWidget);
     await tester.tap(find.byKey(const Key('share-start-at')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('share-create')));
     await tester.pumpAndSettle();
 
     expect(repo.createShareCalls.single.pid, _episodePid);
-    expect(repo.createShareCalls.single.positionMs, 90000);
+    expect(repo.createShareCalls.single.positionMs, 95000);
     expect(repo.createShareCalls.single.expiresInHours, isNull);
     expect(copied, hasLength(1));
+    await harness.endPlayback(tester);
   });
 }

@@ -15,6 +15,7 @@ import 'package:waxdeck/src/library/browse_screen.dart';
 import 'package:waxdeck/src/library/library_screen.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
+import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
@@ -56,6 +57,9 @@ final _locations = <String, Type>{
   WaxRoute.episode('ep-1'): EpisodeScreen,
   WaxRoute.book('bk-1'): BookScreen,
   WaxRoute.radio: RadioScreen,
+  // A view of whatever is playing, so it carries no payload and a
+  // reload lands back on it.
+  WaxRoute.nowPlaying: PlayerScreen,
   WaxRoute.stats: StatsScreen,
   WaxRoute.listenLog: ListenLogScreen,
   WaxRoute.yearInReview: YearInReviewScreen,
@@ -83,7 +87,6 @@ final _locations = <String, Type>{
 /// them has to land somewhere real.
 final _payloadRoutes = <String, String>{
   WaxRoute.tracks: WaxRoute.home,
-  WaxRoute.nowPlaying: WaxRoute.home,
   WaxRoute.remote: WaxRoute.home,
   WaxRoute.browseItems: WaxRoute.browse,
   WaxRoute.playlistRules: WaxRoute.playlists,

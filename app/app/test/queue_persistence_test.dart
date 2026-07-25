@@ -8,6 +8,7 @@ import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
+import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
 
@@ -64,8 +65,14 @@ ProviderContainer _container(RecordingQueueStore store, {MirrorDatabase? db}) {
     overrides: [
       queueStoreProvider.overrideWithValue(store),
       queueSaveDebounceProvider.overrideWithValue(_tick),
-      repositoryProvider.overrideWithValue(FakeRepository()),
+      repositoryProvider.overrideWithValue(
+        FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]),
+      ),
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      // Accepting a restore offer hands the queue to playback, which
+      // reaches for the engine: without this the real one is built and
+      // asks for a platform binding no unit test has.
+      audioEngineProvider.overrideWithValue(FakeEngine()),
       if (db != null) mirrorDatabaseProvider.overrideWithValue(db),
     ],
   );

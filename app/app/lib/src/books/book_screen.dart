@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
+import '../player/now_playing_controller.dart';
 import '../podcasts/episode_screen.dart' show formatCueTimestamp;
 import '../podcasts/show_notes.dart';
 import '../providers.dart';
+import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../tools/tasks_screen.dart' show toolTasksProvider;
@@ -85,14 +87,21 @@ class _BookBody extends ConsumerWidget {
 
   final BookDetail book;
 
-  void _play(BuildContext context, {required int positionMs}) {
-    context.push(
-      WaxRoute.nowPlaying,
-      extra: NowPlayingArgs(
-        item: bookItemSummary(book),
-        initialPositionMs: positionMs,
-      ),
-    );
+  void _play(BuildContext context, WidgetRef ref, {required int positionMs}) {
+    // A book queues as itself: its parts roll inside the session, so
+    // there is nothing else in the queue for chapters to be.
+    ref
+        .read(nowPlayingProvider.notifier)
+        .play(
+          [bookItemSummary(book)],
+          source: QueueSource(
+            kind: QueueSourceKind.book,
+            label: book.title,
+            pid: book.pid,
+          ),
+          positionMs: positionMs,
+        );
+    context.push(WaxRoute.nowPlaying);
   }
 
   Future<void> _resume(BuildContext context, WidgetRef ref) async {
@@ -100,7 +109,7 @@ class _BookBody extends ConsumerWidget {
     try {
       final resume = await ref.read(repositoryProvider).getBookResume(book.pid);
       if (!context.mounted) return;
-      _play(context, positionMs: resume.positionMs);
+      _play(context, ref, positionMs: resume.positionMs);
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
@@ -213,7 +222,7 @@ class _BookBody extends ConsumerWidget {
                 dense: true,
                 leading: Text(formatCueTimestamp(chapter.startMs)),
                 title: Text(chapter.title ?? 'Chapter ${chapter.index + 1}'),
-                onTap: () => _play(context, positionMs: chapter.startMs),
+                onTap: () => _play(context, ref, positionMs: chapter.startMs),
               ),
             ),
         ],

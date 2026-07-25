@@ -37,8 +37,10 @@ enum QueueSourceKind {
   show('show'),
   book('book'),
 
-  /// One item tapped with no context around it: an episode, a book, a
-  /// track played from a search result row.
+  /// One item tapped with no context around it: an episode, a track
+  /// played from a grid or a search result row. A book started from its
+  /// own screen is [book] rather than this, since the entity it came
+  /// from is exactly what the queue surface should name.
   single('single'),
 
   /// A restored queue whose provenance predates this field, or one

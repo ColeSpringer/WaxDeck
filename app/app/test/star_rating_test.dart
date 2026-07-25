@@ -1,21 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/player/player_screen.dart';
-import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
-
-Widget _host(FakeRepository repo, FakeEngine engine, Widget home) =>
-    ProviderScope(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(engine),
-      ],
-      child: MaterialApp(home: home),
-    );
+import 'player_host.dart';
 
 void main() {
   const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
@@ -26,10 +15,12 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testItem(pid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
     );
-    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('star-button')), findsOneWidget);
     expect(find.byIcon(Icons.favorite_border), findsOneWidget);
@@ -43,6 +34,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.starredByPid[pid], isFalse);
     expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    await harness.endPlayback(tester);
   });
 
   testWidgets('rating stars map to the 0 to 100 scale and clear on repeat', (
@@ -53,10 +45,12 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testItem(pid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
     );
-    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('rating-3')));
     await tester.pumpAndSettle();
@@ -73,6 +67,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.ratingByPid[pid], isNull);
     expect(find.byIcon(Icons.star_border), findsNWidgets(5));
+    await harness.endPlayback(tester);
   });
 
   testWidgets('a stored rating renders on open', (tester) async {
@@ -83,13 +78,16 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testItem(pid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
     );
-    await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.favorite), findsOneWidget);
     expect(find.byIcon(Icons.star), findsNWidgets(2));
+    await harness.endPlayback(tester);
   });
 
   testWidgets('a failed star rolls back and tells the user', (tester) async {
@@ -98,10 +96,12 @@ void main() {
       mediaDuration: const Duration(milliseconds: 214000),
     );
 
-    await tester.pumpWidget(
-      _host(repo, engine, PlayerScreen(item: testItem(pid))),
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
     );
-    await tester.pumpAndSettle();
     expect(find.byIcon(Icons.favorite_border), findsOneWidget);
 
     // Arm the failure after load, so only the mutation trips it.
@@ -122,5 +122,6 @@ void main() {
     expect(find.byIcon(Icons.favorite_border), findsOneWidget);
     expect(repo.starredByPid[pid], isNull);
     expect(find.text('Could not save that change'), findsOneWidget);
+    await harness.endPlayback(tester);
   });
 }

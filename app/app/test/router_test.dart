@@ -154,7 +154,7 @@ void main() {
     expect(_location(container), WaxRoute.editingPrototype);
   });
 
-  testWidgets('a player route with no item in hand lands on the library', (
+  testWidgets('the player route stands on its own with nothing playing', (
     tester,
   ) async {
     final container = _container(_signedIn());
@@ -162,12 +162,15 @@ void main() {
     await tester.pumpWidget(_app(container));
     await tester.pumpAndSettle();
 
-    // What a reload of /now-playing looks like: the location survives,
-    // the in-memory item does not.
+    // What a reload of /now-playing looks like. The player is a view of
+    // whatever is playing, so the location needs nothing in memory to
+    // resolve, and with nothing playing it says so rather than bouncing
+    // the visitor somewhere else.
     container.read(routerProvider).go(WaxRoute.nowPlaying);
     await tester.pumpAndSettle();
 
-    expect(_location(container), WaxRoute.home);
+    expect(_location(container), WaxRoute.nowPlaying);
+    expect(find.byKey(const Key('player-idle')), findsOneWidget);
   });
 
   testWidgets('an unknown location renders the not-found screen', (

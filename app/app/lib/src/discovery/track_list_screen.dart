@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../media_icons.dart';
+import '../player/now_playing_controller.dart';
+import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 
@@ -54,7 +57,8 @@ class TrackListScreen extends StatelessWidget {
                     itemBuilder: (context, index) => _TrackRow(
                       idPrefix: idPrefix,
                       index: index,
-                      item: items[index],
+                      items: items,
+                      title: title,
                     ),
                   ),
           ),
@@ -64,19 +68,27 @@ class TrackListScreen extends StatelessWidget {
   }
 }
 
-class _TrackRow extends StatelessWidget {
+class _TrackRow extends ConsumerWidget {
   const _TrackRow({
     required this.idPrefix,
     required this.index,
-    required this.item,
+    required this.items,
+    required this.title,
   });
 
   final String idPrefix;
   final int index;
-  final ItemSummary item;
+
+  /// The whole answer, in the order it is shown: tapping a row plays it
+  /// from there, so the rest of the list is the queue.
+  final List<ItemSummary> items;
+
+  /// The list's own name, which is what the queue was built from.
+  final String title;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final item = items[index];
     final colorScheme = Theme.of(context).colorScheme;
     final artUrl = item.artUrl;
     final placeholder = ColoredBox(
@@ -112,10 +124,16 @@ class _TrackRow extends StatelessWidget {
         subtitle: item.artist == null
             ? null
             : Text(item.artist!, maxLines: 1, overflow: TextOverflow.ellipsis),
-        onTap: () => context.push(
-          WaxRoute.nowPlaying,
-          extra: NowPlayingArgs(item: item),
-        ),
+        onTap: () {
+          ref
+              .read(nowPlayingProvider.notifier)
+              .play(
+                items,
+                source: QueueSource(kind: QueueSourceKind.mix, label: title),
+                startIndex: index,
+              );
+          context.push(WaxRoute.nowPlaying);
+        },
       ),
     );
   }

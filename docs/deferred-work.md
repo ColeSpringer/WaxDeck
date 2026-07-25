@@ -56,6 +56,14 @@ here waits on upstream.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
+- `[roadmap]` **No wifi-only switch for gapless preloading.** Playback
+  prepares the next queue entry 30 seconds before the crossing whenever
+  the admission policy allows it (music to music, passthrough stream,
+  starts at its own head), with no way to hold that back on a metered
+  connection. The switch belongs in Settings, Playback on native and
+  needs the per-device client-settings store, which lands with the
+  settings rebuild; until then the cost is one track's worth of
+  buffering ahead. See ADR-0020.
 - `[in-repo]` **Offline artwork caching.** The offline grid shows placeholders;
   artwork is only fetched live. The `ArtworkPins` table it needs is in
   place (mirror schema v2); the store that fills and reads it is not.

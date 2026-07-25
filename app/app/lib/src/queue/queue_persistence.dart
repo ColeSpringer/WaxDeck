@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
+import '../player/now_playing_controller.dart';
 import '../sync/sync_providers.dart';
 import 'queue_controller.dart';
 import 'queue_state.dart';
@@ -184,12 +185,14 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
     );
   }
 
-  /// Puts the restored queue back in play. The playback layer picks the
-  /// current entry up from there, paused at its checkpoint.
+  /// Puts the restored queue back in play. Through the playback layer,
+  /// which loads the current entry paused at its checkpoint: accepting
+  /// the offer is "put it back", and the transport is right there for
+  /// the rest.
   void accept() {
     final offer = state.value;
     if (offer == null) return;
-    ref.read(queueControllerProvider.notifier).restore(offer.queue);
+    ref.read(nowPlayingProvider.notifier).restore(offer.queue);
     state = const AsyncData(null);
   }
 

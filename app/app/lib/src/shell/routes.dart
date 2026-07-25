@@ -53,9 +53,9 @@ abstract final class WaxRoute {
   /// A computed list of tracks (an instant mix, a similar-tracks answer).
   static const tracks = '/tracks';
 
-  /// The full player. Modal over whatever is underneath, and carried by
-  /// [NowPlayingArgs] rather than the URL: the item is in hand at every
-  /// call site, and a reload lands on the library instead of refetching.
+  /// The full player: a view of whatever is playing, so it needs no
+  /// payload and a reload lands back on it. Modal over whatever is
+  /// underneath.
   static const nowPlaying = '/now-playing';
 
   /// Controlling a Connect session on another endpoint.
@@ -96,16 +96,6 @@ abstract final class WaxRoute {
   static const backups = '$admin/backups';
   static const trash = '$admin/trash';
   static const migrate = '$admin/migrate';
-}
-
-/// What the full player needs beyond its URL.
-class NowPlayingArgs {
-  const NowPlayingArgs({required this.item, this.initialPositionMs});
-
-  final ItemSummary item;
-
-  /// Overrides the saved resume position (book resume, chapter start).
-  final int? initialPositionMs;
 }
 
 /// A computed track list, held in memory because the server does not

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../player/now_playing_controller.dart';
 import '../providers.dart';
+import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'credits.dart';
@@ -457,10 +459,17 @@ class _EpisodeRow extends ConsumerWidget {
         ),
         onTap: () {
           if (episode.downloaded) {
-            context.push(
-              WaxRoute.nowPlaying,
-              extra: NowPlayingArgs(item: episode),
+            // One episode, never the feed: an episode is a thing on its
+            // own, and a show is not an album.
+            ref.read(nowPlayingProvider.notifier).play(
+              [episode],
+              source: QueueSource(
+                kind: QueueSourceKind.single,
+                label: episode.title,
+                pid: episode.pid,
+              ),
             );
+            context.push(WaxRoute.nowPlaying);
           } else {
             _fetch(context, ref);
           }

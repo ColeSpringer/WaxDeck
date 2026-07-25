@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../media_icons.dart';
+import '../player/now_playing_controller.dart';
+import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'browse_controller.dart';
@@ -147,12 +149,23 @@ class BrowseItemsScreen extends ConsumerWidget {
   final BrowseDimension dimension;
   final FacetBucket bucket;
 
-  void _open(BuildContext context, ItemSummary item) {
+  void _open(BuildContext context, WidgetRef ref, ItemSummary item) {
     if (item.mediaType == MediaType.audiobook) {
       context.push(WaxRoute.book(item.pid));
       return;
     }
-    context.push(WaxRoute.nowPlaying, extra: NowPlayingArgs(item: item));
+    // One item, as on the grid: a bucket pages as it scrolls and holds
+    // whatever media type it holds, so the queue it would make is not
+    // one anybody asked for.
+    ref.read(nowPlayingProvider.notifier).play(
+      [item],
+      source: QueueSource(
+        kind: QueueSourceKind.single,
+        label: item.title,
+        pid: item.pid,
+      ),
+    );
+    context.push(WaxRoute.nowPlaying);
   }
 
   @override
@@ -246,7 +259,7 @@ class BrowseItemsScreen extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-              onTap: () => _open(context, item),
+              onTap: () => _open(context, ref, item),
             ),
           );
         },

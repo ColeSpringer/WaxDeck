@@ -7,7 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../player/now_playing_controller.dart';
 import '../providers.dart';
+import '../queue/queue_state.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -24,12 +26,32 @@ class PlaylistScreen extends ConsumerWidget {
 
   final String pid;
 
-  void _openItem(BuildContext context, ItemSummary item) {
+  void _openItem(
+    BuildContext context,
+    WidgetRef ref,
+    Playlist playlist,
+    List<PlaylistEntry> entries,
+    int index,
+  ) {
+    final item = entries[index].item;
     if (item.mediaType == MediaType.audiobook) {
       context.push(WaxRoute.book(item.pid));
       return;
     }
-    context.push(WaxRoute.nowPlaying, extra: NowPlayingArgs(item: item));
+    // A playlist is a list somebody put in an order: tapping a row plays
+    // from there and the rest of the list follows.
+    ref
+        .read(nowPlayingProvider.notifier)
+        .play(
+          [for (final entry in entries) entry.item],
+          source: QueueSource(
+            kind: QueueSourceKind.playlist,
+            label: playlist.name,
+            pid: playlist.pid,
+          ),
+          startIndex: index,
+        );
+    context.push(WaxRoute.nowPlaying);
   }
 
   Future<void> _editRule(
@@ -444,19 +466,13 @@ class PlaylistScreen extends ConsumerWidget {
                   ..showSnackBar(SnackBar(content: Text(e.message)));
               }
             },
-            itemBuilder: (context, index) => _row(
-              context,
-              ref,
-              playlist,
-              entries[index],
-              index,
-              draggable: true,
-            ),
+            itemBuilder: (context, index) =>
+                _row(context, ref, playlist, entries, index, draggable: true),
           )
         : ListView.builder(
             itemCount: entries.length,
             itemBuilder: (context, index) =>
-                _row(context, ref, playlist, entries[index], index),
+                _row(context, ref, playlist, entries, index),
           );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -471,10 +487,11 @@ class PlaylistScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     Playlist playlist,
-    PlaylistEntry entry,
+    List<PlaylistEntry> entries,
     int index, {
     bool draggable = false,
   }) {
+    final entry = entries[index];
     final item = entry.item;
     final position = entry.position;
     return Semantics(
@@ -508,7 +525,7 @@ class PlaylistScreen extends ConsumerWidget {
                 ),
               )
             : null,
-        onTap: () => _openItem(context, item),
+        onTap: () => _openItem(context, ref, playlist, entries, index),
       ),
     );
   }
