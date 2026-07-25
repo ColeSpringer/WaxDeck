@@ -302,6 +302,52 @@ class ItemDetail extends ItemSummary {
   final DateTime? addedAt;
 }
 
+/// One bucket of a browse dimension: a value the library groups by, with
+/// how many items carry it.
+class FacetBucket {
+  const FacetBucket({
+    required this.key,
+    required this.label,
+    required this.count,
+    this.entityPid,
+    this.unknown = false,
+  });
+
+  /// Stable handle to drill this bucket. Empty for [unknown].
+  final String key;
+
+  /// Display label. Genre labels are the server's canonical spelling.
+  final String label;
+
+  /// Items in this bucket, within the caller's libraries.
+  final int count;
+
+  /// The catalog entity behind the bucket, for the dimensions that have
+  /// one (`artist`, `album-artist`, `album`).
+  final String? entityPid;
+
+  /// True for the bucket holding items the dimension is absent from
+  /// (`[Non-Album]` and friends).
+  final bool unknown;
+}
+
+/// One page of a browse dimension's buckets.
+class FacetPage {
+  const FacetPage({
+    required this.dimension,
+    required this.buckets,
+    this.nextCursor,
+  });
+
+  final String dimension;
+  final List<FacetBucket> buckets;
+
+  /// Opaque cursor for the next page; null on the last page.
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+}
+
 /// One keyset-paginated page of items.
 class ItemPage {
   const ItemPage({required this.items, this.nextCursor, this.seed});

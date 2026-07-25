@@ -22,7 +22,7 @@ import (
 // writes below address.
 func fixtureTrackPID(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, title string) (string, model.PID) {
 	t.Helper()
-	page, err := svc.Items(ctx, uc, "music", "", 50)
+	page, err := svc.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 50)
 	if err != nil {
 		t.Fatalf("listing items: %v", err)
 	}

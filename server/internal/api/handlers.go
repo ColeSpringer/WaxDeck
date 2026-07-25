@@ -266,15 +266,21 @@ func (s *Server) ListItems(ctx context.Context, req ListItemsRequestObject) (Lis
 	if !ok {
 		return ListItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
 	}
-	mediaType := ""
+	filter := service.ItemFilter{}
 	if req.Params.MediaType != nil {
-		mediaType = string(*req.Params.MediaType)
+		filter.MediaType = string(*req.Params.MediaType)
+	}
+	if req.Params.Facet != nil {
+		// facetKey is legitimately empty (the unknown bucket), so the
+		// pair is keyed on facet alone; an absent key reads as that
+		// bucket rather than as "no filter".
+		filter.Facet, filter.FacetKey = string(*req.Params.Facet), deref(req.Params.FacetKey)
 	}
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.svc.Items(ctx, uc, mediaType, deref(req.Params.Cursor), limit)
+	page, err := s.svc.Items(ctx, uc, filter, deref(req.Params.Cursor), limit)
 	if err != nil {
 		if kind := service.KindOf(err); kind == service.KindInvalid {
 			return ListItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
@@ -282,6 +288,43 @@ func (s *Server) ListItems(ctx context.Context, req ListItemsRequestObject) (Lis
 		return nil, err
 	}
 	return ListItems200JSONResponse(pageJSON(page)), nil
+}
+
+func (s *Server) ListFacets(ctx context.Context, req ListFacetsRequestObject) (ListFacetsResponseObject, error) {
+	limit, ok := pageLimit(req.Params.Limit, 100, 500)
+	if !ok {
+		return ListFacets400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
+	}
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.svc.Facets(ctx, uc, string(req.Params.Dimension), deref(req.Params.Cursor), limit)
+	if err != nil {
+		if kind := service.KindOf(err); kind == service.KindInvalid {
+			return ListFacets400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	out := FacetPage{
+		Dimension: BrowseDimension(page.Dimension),
+		Buckets:   make([]FacetBucket, 0, len(page.Buckets)),
+	}
+	for _, b := range page.Buckets {
+		bucket := FacetBucket{Key: b.Key, Label: b.Label, Count: b.Count}
+		if b.EntityPID != "" {
+			bucket.EntityPid = &b.EntityPID
+		}
+		if b.Unknown {
+			unknown := true
+			bucket.Unknown = &unknown
+		}
+		out.Buckets = append(out.Buckets, bucket)
+	}
+	if page.Next != "" {
+		out.NextCursor = &page.Next
+	}
+	return ListFacets200JSONResponse(out), nil
 }
 
 func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (BrowseListResponseObject, error) {

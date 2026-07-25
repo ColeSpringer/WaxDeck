@@ -6,8 +6,8 @@ paths:
       summary: Browse library items
       description: >
         Keyset-paginated list of library items, optionally filtered by media
-        type. Ordering is stable (title, then pid) so cursors never skip or
-        duplicate.
+        type and by one bucket of a browse dimension. Ordering is stable
+        (title, then pid) so cursors never skip or duplicate.
       tags: [library]
       parameters:
         - name: mediaType
@@ -15,6 +15,24 @@ paths:
           description: Restrict results to one media type.
           schema:
             $ref: "#/components/schemas/MediaType"
+        - name: facet
+          in: query
+          description: >
+            Restrict results to one bucket of a browse dimension. Requires
+            `facetKey`, and takes the same dimension names
+            `/library/facets` enumerates. Composes with `mediaType`.
+          schema:
+            $ref: "#/components/schemas/BrowseDimension"
+        - name: facetKey
+          in: query
+          description: >
+            The bucket to drill, as returned in the enumeration's `key`.
+            Send it empty to select the dimension's unknown bucket (the
+            items the dimension is absent from, such as `[Non-Album]`);
+            `kind` and custom tag dimensions have no unknown bucket and
+            reject an empty key. Ignored without `facet`.
+          schema:
+            type: string
         - name: cursor
           in: query
           description: >
@@ -95,6 +113,72 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ItemPage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/facets:
+    get:
+      operationId: listFacets
+      summary: Enumerate a browse dimension
+      description: >
+        Keyset-paginated buckets of one browse dimension, each with the
+        number of matching items: the "all genres" and "all artists"
+        lists a browse tab is built from. Buckets come biggest first,
+        ties broken by label, so a tab leads with what is worth opening
+        and paging stays stable. Drill a bucket by passing its `key` back
+        as `listItems`' `facetKey` together with the same `facet`.
+
+        The `genre`, `artist`, `album-artist`, `album`, and `year`
+        dimensions each carry a bucket for the items the dimension is
+        absent from (`[No Genre]`, `[Unknown Artist]`, `[Non-Album]`,
+        `[Unknown Year]`), with an empty `key` and `unknown` true.
+        `kind` has none, because an item's kind is never absent, and a
+        custom tag dimension has none, because only items carrying the
+        key contribute at all; on those two, drilling an empty
+        `facetKey` is `invalid-request` rather than an empty page.
+        Podcast episodes are excluded from the music dimensions, which
+        they have no artist, album, genre, or year for; the `kind`
+        dimension counts them.
+
+        Counts are scoped to the libraries the caller may see. The
+        per-item rules the drill list also applies (podcast subscriptions,
+        content rules) are per-item decisions no aggregation can express,
+        so a bucket can read higher than the list it opens, the same way
+        any restricted listing can return a short page.
+      tags: [library]
+      parameters:
+        - name: dimension
+          in: query
+          required: true
+          description: Which browse dimension to enumerate.
+          schema:
+            $ref: "#/components/schemas/BrowseDimension"
+        - name: cursor
+          in: query
+          description: >
+            Opaque cursor from a previous page's `nextCursor`. Omit for
+            the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum buckets per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of buckets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacetPage"
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "401":
@@ -327,6 +411,68 @@ components:
         - random
         - starred
         - alphabetical
+
+    BrowseDimension:
+      type: string
+      description: >
+        A browse dimension: one of `genre`, `artist`, `album-artist`,
+        `album`, `year`, `kind`, or a custom tag dimension spelled
+        `tag.<KEY>` (for example `tag.MOOD`). The fixed set is stable;
+        which tag dimensions exist depends on the library's tags. Tag
+        keys are case-insensitive and canonicalize to upper case, so
+        `tag.mood` and `tag.MOOD` are one dimension; responses echo the
+        canonical spelling.
+      example: genre
+
+    FacetBucket:
+      type: object
+      description: One bucket of a browse dimension.
+      required: [key, label, count]
+      properties:
+        key:
+          type: string
+          description: >
+            The bucket's stable handle: pass it back as `listItems`'
+            `facetKey` to drill it. Empty for the unknown bucket.
+          example: 01JZX5N8QW3F4V9T2B7KD3M9R6
+        label:
+          type: string
+          description: >
+            Display label. Genre labels are the canonical spelling from
+            the server's genre tree, not whichever variant was scanned
+            first.
+          example: Hip Hop
+        count:
+          type: integer
+          description: Items in this bucket, within the caller's libraries.
+        entityPid:
+          type: string
+          description: >
+            The catalog entity behind the bucket, for the dimensions that
+            have one (`artist`, `album-artist`, `album`). Absent for the
+            unknown bucket and for dimensions that are not entities.
+          example: al-01JZX5N8QW3F4V9T2B7KD3M9R6
+        unknown:
+          type: boolean
+          description: >
+            True for the bucket holding items the dimension is absent
+            from. Its `label` is the canonical sentinel and its `key` is
+            empty.
+
+    FacetPage:
+      type: object
+      description: One keyset-paginated page of a browse dimension's buckets.
+      required: [dimension, buckets]
+      properties:
+        dimension:
+          $ref: "#/components/schemas/BrowseDimension"
+        buckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacetBucket"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page. Absent on the last page.
 
     SearchHit:
       type: object

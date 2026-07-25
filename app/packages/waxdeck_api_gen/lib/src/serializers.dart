@@ -85,10 +85,16 @@ import 'package:waxdeck_api_gen/src/model/episode.dart';
 import 'package:waxdeck_api_gen/src/model/episode_page.dart';
 import 'package:waxdeck_api_gen/src/model/episode_summary.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
+import 'package:waxdeck_api_gen/src/model/facet_bucket.dart';
+import 'package:waxdeck_api_gen/src/model/facet_page.dart';
 import 'package:waxdeck_api_gen/src/model/feed_person.dart';
 import 'package:waxdeck_api_gen/src/model/field_provenance.dart';
 import 'package:waxdeck_api_gen/src/model/file_diagnostic.dart';
 import 'package:waxdeck_api_gen/src/model/file_diagnostic_page.dart';
+import 'package:waxdeck_api_gen/src/model/genre_node.dart';
+import 'package:waxdeck_api_gen/src/model/genre_normalize_request.dart';
+import 'package:waxdeck_api_gen/src/model/genre_tree.dart';
+import 'package:waxdeck_api_gen/src/model/genre_tree_update.dart';
 import 'package:waxdeck_api_gen/src/model/health.dart';
 import 'package:waxdeck_api_gen/src/model/health_fix_request.dart';
 import 'package:waxdeck_api_gen/src/model/health_fix_result.dart';
@@ -396,10 +402,16 @@ part 'serializers.g.dart';
   EpisodePage,
   EpisodeSummary,$EpisodeSummary,
   Error,
+  FacetBucket,
+  FacetPage,
   FeedPerson,
   FieldProvenance,
   FileDiagnostic,
   FileDiagnosticPage,
+  GenreNode,
+  GenreNormalizeRequest,
+  GenreTree,
+  GenreTreeUpdate,
   Health,
   HealthFixRequest,
   HealthFixResult,

@@ -237,23 +237,58 @@ class FakeRepository implements WaxDeckRepository {
     return _signIn(token: 'oidc-token');
   }
 
+  /// Buckets [listFacets] answers, keyed by dimension.
+  final Map<String, List<FacetBucket>> facets = {};
+
+  /// Items keyed by "dimension key", served when a listing drills a
+  /// facet bucket. Missing keys answer an empty page.
+  final Map<String, List<ItemSummary>> facetItems = {};
+
+  /// Every (dimension, key) pair a listing drilled, in call order.
+  final List<(String, String)> facetDrills = [];
+
   @override
   Future<ItemPage> listItems({
     MediaType? mediaType,
+    String? facet,
+    String? facetKey,
     String? cursor,
     int? limit,
   }) async {
     final error = listError;
     if (error != null) throw error;
-    final filtered = mediaType == null
+    var filtered = mediaType == null
         ? libraryItems
         : libraryItems.where((i) => i.mediaType == mediaType).toList();
+    if (facet != null) {
+      facetDrills.add((facet, facetKey ?? ''));
+      filtered = facetItems['$facet ${facetKey ?? ''}'] ?? const [];
+    }
     final start = cursor == null ? 0 : int.parse(cursor);
     final pageSize = limit ?? 100;
     final end = (start + pageSize).clamp(0, filtered.length);
     return ItemPage(
       items: filtered.sublist(start.clamp(0, filtered.length), end),
       nextCursor: end < filtered.length ? '$end' : null,
+    );
+  }
+
+  @override
+  Future<FacetPage> listFacets(
+    String dimension, {
+    String? cursor,
+    int? limit,
+  }) async {
+    final error = listError;
+    if (error != null) throw error;
+    final all = facets[dimension] ?? const <FacetBucket>[];
+    final start = cursor == null ? 0 : int.parse(cursor);
+    final pageSize = limit ?? 100;
+    final end = (start + pageSize).clamp(0, all.length);
+    return FacetPage(
+      dimension: dimension,
+      buckets: all.sublist(start.clamp(0, all.length), end),
+      nextCursor: end < all.length ? '$end' : null,
     );
   }
 

@@ -525,6 +525,102 @@ func (s *Server) CreateMigration(ctx context.Context, req CreateMigrationRequest
 	return CreateMigration202JSONResponse(toolTaskJSON(task)), nil
 }
 
+// --- genre vocabulary --------------------------------------------------------------
+
+// genreTreeJSON renders the service's vocabulary DTO.
+func genreTreeJSON(d service.GenreTreeDTO) GenreTree {
+	out := GenreTree{
+		Source: GenreTreeSource(d.Source),
+		Genres: make([]GenreNode, 0, len(d.Genres)),
+	}
+	for _, n := range d.Genres {
+		node := GenreNode{Name: n.Name}
+		if n.Parent != "" {
+			node.Parent = ptr(n.Parent)
+		}
+		if len(n.Aliases) > 0 {
+			node.Aliases = ptr(append([]string{}, n.Aliases...))
+		}
+		out.Genres = append(out.Genres, node)
+	}
+	return out
+}
+
+func (s *Server) GetGenreTree(ctx context.Context, req GetGenreTreeRequestObject) (GetGenreTreeResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return GetGenreTree403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	tree, err := s.svc.GenreTreeFor(ctx, uc)
+	if err != nil {
+		if service.KindOf(err) == service.KindForbidden {
+			return GetGenreTree403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return GetGenreTree200JSONResponse(genreTreeJSON(tree)), nil
+}
+
+func (s *Server) PutGenreTree(ctx context.Context, req PutGenreTreeRequestObject) (PutGenreTreeResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return PutGenreTree403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if req.Body == nil {
+		return PutGenreTree400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	nodes := make([]service.GenreNodeDTO, 0, len(req.Body.Genres))
+	for _, n := range req.Body.Genres {
+		node := service.GenreNodeDTO{Name: n.Name, Parent: deref(n.Parent)}
+		if n.Aliases != nil {
+			node.Aliases = *n.Aliases
+		}
+		nodes = append(nodes, node)
+	}
+	tree, err := s.svc.PutGenreTree(ctx, uc, nodes)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return PutGenreTree400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return PutGenreTree403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return PutGenreTree200JSONResponse(genreTreeJSON(tree)), nil
+}
+
+func (s *Server) CreateGenreNormalization(ctx context.Context, req CreateGenreNormalizationRequestObject) (CreateGenreNormalizationResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return CreateGenreNormalization403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	dryRun := false
+	if req.Body != nil {
+		dryRun = derefBool(req.Body.DryRun)
+	}
+	task, err := s.svc.StartGenreNormalize(ctx, uc, dryRun)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return CreateGenreNormalization400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return CreateGenreNormalization403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return CreateGenreNormalization202JSONResponse(toolTaskJSON(task)), nil
+}
+
 // --- task event stream -------------------------------------------------------------
 
 // StreamToolTaskEvents serves one task's progress as server-sent

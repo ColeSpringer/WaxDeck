@@ -30,6 +30,26 @@ sidecar injection seam) all landed and are not repeated here.
   state it fetches), and one read per write is the more expensive
   alternative.
 
+- **Keyset pagination on `Library.Facet`.** Every other read surface
+  pages: `QueryPage` takes a cursor and a limit and answers a `read.Page`
+  with `HasMore`/`Next`, and `Browse` does the same. `Facet` does not --
+  it takes a query and a group-by and returns one `FacetResult` holding
+  every bucket, with no cursor and no bound. WaxDeck's first-party
+  browse-dimension endpoint is keyset-paged like the rest of its
+  contract, so it computes the whole enumeration, sorts it, and runs its
+  own keyset over that slice -- the cursor carries the last bucket's
+  (count, label, key) and the next page resumes strictly after it, since
+  counts are the leading sort term and an offset would skip or repeat
+  buckets whenever one moved (`server/internal/service/facets.go`). It
+  also caches the unfiltered full-visibility answer per dimension against
+  `CatalogTailSeq()` to keep a browse tab from recomputing every artist
+  in the library per page. An
+  artist or album dimension over a large catalog is exactly the case that
+  wants a cursor. A `FacetPage(ctx, q, groupBy, cursor, limit, userPID)`
+  beside the existing one, ordered by the same `sortExpr` the aggregation
+  already sorts on, would retire both the in-memory window and the cache;
+  the workaround is shipped and correct meanwhile.
+
 ## WaxFlow
 
 - **A `ReloadRoots` method on the Go client.** `client.Caps` exposes

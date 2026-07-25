@@ -139,17 +139,47 @@ reports per-file detail and surfaces as an out-of-sync diagnostic
 rather than failing the edit. Lyrics write-back writes the `.lrc`
 sidecar so corrections stay portable to every other player.
 
+## The genre vocabulary
+
+Genre tags are whatever the files say, which means one genre arrives
+under several names. WaxDeck normalizes them onto a canonical
+vocabulary: a two-level tree of top-level genres and the genres
+grouped under them, each with one display spelling and the aliases
+that resolve to it. Case, diacritics, and punctuation already fold in
+the catalog ("Hip-Hop" and "hip hop" are one genre there), so the
+aliases are for the synonyms folding cannot reach: "Rap" onto
+"Hip Hop", "DnB" onto "Drum & Bass", a run-together "HipHop". A genre
+the tree does not know is left exactly as it is, never guessed at.
+
+A background sweeper keeps the catalog folded onto the vocabulary
+continuously, following the catalog's change log, so a library
+scanned tomorrow normalizes shortly after it lands rather than
+waiting for anyone to press a button. A genre you locked in the
+editor is yours and is left alone. `POST /admin/genre-normalize`
+runs a full-catalog pass for a library older than the change log
+retains, or to apply a vocabulary edit at once; `dryRun` reports what
+would change first.
+
+WaxDeck ships a broad default tree. `GET /admin/genre-tree` reads
+whatever is in force and `PUT` replaces it wholesale (an empty list
+goes back to the shipped default). A tree that could not resolve one
+way is refused rather than stored, so an alias claimed by two genres
+or a genre nested three levels deep is a clear error, not a silent
+coin flip. The `genre-whitelist` health rule lists what is still
+off-tree, which is the list to work from when deciding what the
+vocabulary should learn next.
+
 ## Health dashboard
 
 The health sweep scores the library for completeness: missing or
 small artwork, missing identifiers, years, genres, lyrics, narrators
-and ASINs on books, files whose paths disagree with the organize
-template, files whose tags lag the catalog, legacy-only tag values,
-and corrupt audio. Items marked unofficial are exempt from the rules
-that assume a canonical release. Rules with an automated fix can be
-fixed in bulk; fixes run in the background at provider-etiquette
-pace. A fresh install shows a warming-up state with honest progress
-instead of a wall of red.
+and ASINs on books, genres outside the canonical tree, files whose
+paths disagree with the organize template, files whose tags lag the
+catalog, legacy-only tag values, and corrupt audio. Items marked
+unofficial are exempt from the rules that assume a canonical release.
+Rules with an automated fix can be fixed in bulk; fixes run in the
+background at provider-etiquette pace. A fresh install shows a
+warming-up state with honest progress instead of a wall of red.
 
 ## Duplicates and upgrades
 

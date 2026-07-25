@@ -755,6 +755,43 @@ func run() error {
 		}
 	})
 
+	// Genre normalization is continuous rather than an ingest hook:
+	// genres read from file tags are resolved and stored by the catalog's
+	// own scanner and never pass through WaxDeck, so a library scanned
+	// tomorrow would be unnormalized again. This follows the catalog's
+	// change log, so newly scanned items fold onto the canonical
+	// vocabulary shortly after they land; the full-catalog pass is a tool
+	// task for anything older than the log retains.
+	group.Go(ctx, "genre-normalize", func(ctx context.Context) error {
+		first := time.NewTimer(time.Minute)
+		defer first.Stop()
+		tick := time.NewTicker(2 * time.Minute)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-first.C:
+			case <-tick.C:
+			}
+			for {
+				rep, err := svc.SweepGenres(ctx)
+				if err != nil {
+					log.Warn("genre normalization sweep", "err", err)
+					break
+				}
+				if rep.Normalized > 0 || rep.Locked > 0 {
+					log.Info("genre normalization sweep",
+						"scanned", rep.Scanned, "normalized", rep.Normalized,
+						"locked", rep.Locked, "offTree", rep.Unmapped)
+				}
+				if !rep.More || ctx.Err() != nil {
+					break
+				}
+			}
+		}
+	})
+
 	var oidc *auth.OIDC
 	if *oidcIssuer != "" {
 		if *publicBase == "" {

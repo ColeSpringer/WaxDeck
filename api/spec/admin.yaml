@@ -315,6 +315,115 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /admin/genre-tree:
+    get:
+      operationId: getGenreTree
+      summary: Read the canonical genre vocabulary
+      description: >
+        The genre tree this instance normalizes onto: a two-level list of
+        top-level genres and the genres grouped under them, each with the
+        canonical display spelling and the aliases that resolve to it.
+        `source` says whether it is the tree WaxDeck ships or one this
+        instance stored.
+
+        Resolution folds case, diacritics, and punctuation the way the
+        catalog does, so a variant the catalog already collapses ("Hip-Hop"
+        onto "hip hop") needs no alias of its own. Aliases are for the
+        synonyms no folding reaches: "Rap" onto "Hip Hop", "DnB" onto
+        "Drum & Bass", a run-together "HipHop". Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: The vocabulary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenreTree"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: putGenreTree
+      summary: Replace the canonical genre vocabulary
+      description: >
+        Stores a vocabulary for this instance, replacing whatever was in
+        force. It is a replacement and never a delta: sending an empty
+        `genres` list clears the override and returns the instance to the
+        shipped default, which is the only way back.
+
+        The tree is validated before it is stored, so a vocabulary that
+        could not resolve one way is refused rather than persisted: two
+        genres that fold to the same name, an alias claimed by two
+        genres, an alias that collides with a genre's own name, a parent
+        that is not itself a top-level genre of the same tree, or a genre
+        nested more than two levels deep.
+
+        Changing the vocabulary changes both what the background
+        normalizer rewrites and what the `genre-whitelist` health rule
+        counts as off-tree, so the normalizer is rewound to re-check
+        everything the catalog's change log still retains. Anything older
+        wants a full pass (`/admin/genre-normalize`). Administrators
+        only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenreTreeUpdate"
+      responses:
+        "200":
+          description: The stored vocabulary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenreTree"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /admin/genre-normalize:
+    post:
+      operationId: createGenreNormalization
+      summary: Normalize every genre in the catalog
+      description: >
+        Starts a full-catalog normalization as a background task (type
+        `genre-normalize`; the finished task's `summary` reports what was
+        scanned, rewritten, skipped as locked, and left alone as
+        off-tree, with bounded examples of each). `dryRun` reports the
+        same numbers without writing.
+
+        This is the catch-up pass, not the normal mechanism: a
+        supervised sweeper folds newly scanned genres onto the
+        vocabulary continuously, driven off the catalog's change log.
+        The full pass is for a catalog older than that log still
+        retains, or for applying a vocabulary edit at once. A genre a
+        user locked is left alone and counted. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenreNormalizeRequest"
+      responses:
+        "202":
+          description: The normalization task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTask"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /admin/transcoding:
     get:
       operationId: getTranscodingLimits
@@ -1437,6 +1546,79 @@ components:
           type: integer
           format: int64
           description: Disk space reclaimed by purging the entry.
+
+    GenreNode:
+      type: object
+      description: One genre in the canonical vocabulary.
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          description: The canonical display spelling. Every surface shows this.
+          example: Hip Hop
+        parent:
+          type: string
+          maxLength: 128
+          description: >
+            The top-level genre this one groups under, by canonical name.
+            Absent or empty for a top-level genre. The tree is two levels
+            deep: a parent may not itself have one.
+          example: Metal
+        aliases:
+          type: array
+          maxItems: 64
+          description: >
+            The spellings that resolve to this genre. Case, diacritics,
+            and punctuation already fold, so list only what folding
+            cannot reach.
+          items:
+            type: string
+            maxLength: 128
+            example: Rap
+
+    GenreTree:
+      type: object
+      description: The canonical genre vocabulary in force.
+      required: [source, genres]
+      properties:
+        source:
+          type: string
+          enum: [default, custom]
+          description: >
+            `default` while the instance runs on the tree WaxDeck ships,
+            `custom` once one has been stored here.
+        genres:
+          type: array
+          description: >
+            The vocabulary in display order: each top-level genre
+            followed by the genres grouped under it, alphabetically
+            throughout.
+          items:
+            $ref: "#/components/schemas/GenreNode"
+
+    GenreTreeUpdate:
+      type: object
+      description: A replacement genre vocabulary.
+      required: [genres]
+      properties:
+        genres:
+          type: array
+          maxItems: 2000
+          description: >
+            The whole vocabulary. An empty list clears the override and
+            returns the instance to the shipped default.
+          items:
+            $ref: "#/components/schemas/GenreNode"
+
+    GenreNormalizeRequest:
+      type: object
+      description: A full-catalog genre normalization to start.
+      properties:
+        dryRun:
+          type: boolean
+          default: false
+          description: Report what would be rewritten without writing.
 
     MigrationCreate:
       type: object

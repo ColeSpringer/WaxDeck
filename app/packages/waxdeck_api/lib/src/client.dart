@@ -78,11 +78,22 @@ abstract interface class WaxDeckRepository {
 
   /// `GET /library/items`: keyset-paginated library listing, optionally
   /// filtered by media type.
+  /// [facet] and [facetKey] together drill one bucket of a browse
+  /// dimension, as enumerated by [listFacets]. [facetKey] is legitimately
+  /// empty for a dimension's unknown bucket, so pass both or neither.
   Future<ItemPage> listItems({
     MediaType? mediaType,
+    String? facet,
+    String? facetKey,
     String? cursor,
     int? limit,
   });
+
+  /// `GET /library/facets`: the buckets of one browse dimension
+  /// (`genre`, `artist`, `album-artist`, `album`, `year`, `kind`, or
+  /// `tag.<KEY>`) with counts, biggest first. Drill a bucket by passing
+  /// its `key` back to [listItems] as `facetKey`.
+  Future<FacetPage> listFacets(String dimension, {String? cursor, int? limit});
 
   /// `GET /library/browse`: keyset-paginated discovery lists. [seed] keeps
   /// paging through the random list stable.
@@ -1424,15 +1435,35 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<ItemPage> listItems({
     MediaType? mediaType,
+    String? facet,
+    String? facetKey,
     String? cursor,
     int? limit,
   }) => _guard(() async {
     final response = await _gen.getLibraryApi().listItems(
       mediaType: mediaType == null ? null : mediaTypeToGen(mediaType),
+      facet: facet,
+      // The server keys the pair on `facet`, so an unknown-bucket drill
+      // sends an empty key rather than omitting it.
+      facetKey: facet == null ? null : facetKey ?? '',
       cursor: cursor,
       limit: limit,
     );
     return itemPageFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<FacetPage> listFacets(
+    String dimension, {
+    String? cursor,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getLibraryApi().listFacets(
+      dimension: dimension,
+      cursor: cursor,
+      limit: limit,
+    );
+    return facetPageFromGen(_require(response.data));
   });
 
   @override

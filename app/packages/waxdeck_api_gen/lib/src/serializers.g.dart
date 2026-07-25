@@ -86,10 +86,17 @@ Serializers _$serializers =
           ..add(Episode.serializer)
           ..add(EpisodePage.serializer)
           ..add(Error.serializer)
+          ..add(FacetBucket.serializer)
+          ..add(FacetPage.serializer)
           ..add(FeedPerson.serializer)
           ..add(FieldProvenance.serializer)
           ..add(FileDiagnostic.serializer)
           ..add(FileDiagnosticPage.serializer)
+          ..add(GenreNode.serializer)
+          ..add(GenreNormalizeRequest.serializer)
+          ..add(GenreTree.serializer)
+          ..add(GenreTreeSource_Enum.serializer)
+          ..add(GenreTreeUpdate.serializer)
           ..add(Health.serializer)
           ..add(HealthFixRequest.serializer)
           ..add(HealthFixResult.serializer)
@@ -445,12 +452,24 @@ Serializers _$serializers =
             () => ListBuilder<EpisodeSummary>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(FacetBucket)]),
+            () => ListBuilder<FacetBucket>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(FeedPerson)]),
             () => ListBuilder<FeedPerson>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(FileDiagnostic)]),
             () => ListBuilder<FileDiagnostic>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(GenreNode)]),
+            () => ListBuilder<GenreNode>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(GenreNode)]),
+            () => ListBuilder<GenreNode>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(HealthIssue)]),
@@ -787,6 +806,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

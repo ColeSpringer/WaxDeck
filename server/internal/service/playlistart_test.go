@@ -36,7 +36,7 @@ func coverPNG(t *testing.T, shade uint8) []byte {
 // order, which is the order a playlist built from them holds.
 func fixtureItemPIDs(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) []string {
 	t.Helper()
-	page, err := svc.Items(ctx, uc, "", "", 50)
+	page, err := svc.Items(ctx, uc, ItemFilter{}, "", 50)
 	if err != nil {
 		t.Fatalf("listing items: %v", err)
 	}

@@ -13,6 +13,8 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
+
+	"github.com/colespringer/waxdeck/server/internal/genre"
 )
 
 // Per-item enrichment want names, shared by the API surface and the
@@ -430,12 +432,20 @@ func (l *Library) enrichGenres(ctx context.Context, it *model.ItemView, locked m
 		if cand == nil || len(cand.Genres) == 0 {
 			continue
 		}
-		genres := cand.Genres
+		// Normalize, then cap, then join. Two raw provider tags routinely
+		// name one genre ("Rap" and "Hip-Hop"), so capping first would
+		// spend slots on duplicates; normalizing first also keeps this
+		// path from writing a value the continuous sweeper would rewrite
+		// on its next pass.
+		genres := l.normalizeProviderGenres(ctx, cand.Genres)
+		if len(genres) == 0 {
+			continue
+		}
 		if len(genres) > enrichGenreCap {
 			genres = genres[:enrichGenreCap]
 		}
 		if err := l.lib.EditFields(ctx, it.PID,
-			map[string]string{"genre": strings.Join(genres, "; ")},
+			map[string]string{"genre": genre.Join(genres)},
 			waxbin.EditOptions{}); err != nil {
 			l.log.Warn("enrich: applying genres", "provider", p.Name(), "item", it.PID, "err", err)
 			continue

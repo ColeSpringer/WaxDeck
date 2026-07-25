@@ -87,7 +87,10 @@ WAXDECK_FLOW_API_KEY=devkey \
 - Library scan of the configured roots (FLAC, MP3, Opus, Vorbis, AAC,
   ALAC, WAV, AIFF, and more), with rescan at
   `POST /api/v1/library/rescan`.
-- Browse, discovery lists, and full-text search over the catalog.
+- Browse, discovery lists, and full-text search over the catalog,
+  including faceted browse: enumerate genres, artists, album artists,
+  albums, years, kinds, or any custom tag with item counts, then drill a
+  bucket into its items.
 - Playback in the web UI and over the API: play-info returns a
   short-lived tokenized stream URL playable by bare audio elements.
 - Resume: playback positions checkpoint to the server, so a killed
@@ -193,6 +196,7 @@ contract):
 | `GET/PUT /users/me/prefs` | Per-user preferences (timezone, locale, theme) |
 | `GET /library/items` | Page the library (`mediaType`, `cursor`, `limit`) |
 | `GET /library/browse?list=recently-added` | Discovery lists |
+| `GET /library/facets?dimension=genre` | Browse-dimension buckets with counts |
 | `GET /library/search?q=` | Grouped full-text search |
 | `GET /items/{pid}/play-info` | Resolve a playable stream URL |
 | `GET/PUT /items/{pid}/play-state` | Resume position |

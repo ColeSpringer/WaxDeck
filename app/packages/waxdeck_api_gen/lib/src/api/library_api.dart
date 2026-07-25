@@ -16,6 +16,7 @@ import 'package:waxdeck_api_gen/src/model/delete_items_request.dart';
 import 'package:waxdeck_api_gen/src/model/delete_items_result.dart';
 import 'package:waxdeck_api_gen/src/model/discovery_list.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
+import 'package:waxdeck_api_gen/src/model/facet_page.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
 import 'package:waxdeck_api_gen/src/model/lyrics.dart';
@@ -591,11 +592,110 @@ class LibraryApi {
     );
   }
 
+  /// Enumerate a browse dimension
+  /// Keyset-paginated buckets of one browse dimension, each with the number of matching items: the \&quot;all genres\&quot; and \&quot;all artists\&quot; lists a browse tab is built from. Buckets come biggest first, ties broken by label, so a tab leads with what is worth opening and paging stays stable. Drill a bucket by passing its &#x60;key&#x60; back as &#x60;listItems&#x60;&#39; &#x60;facetKey&#x60; together with the same &#x60;facet&#x60;. The &#x60;genre&#x60;, &#x60;artist&#x60;, &#x60;album-artist&#x60;, &#x60;album&#x60;, and &#x60;year&#x60; dimensions each carry a bucket for the items the dimension is absent from (&#x60;[No Genre]&#x60;, &#x60;[Unknown Artist]&#x60;, &#x60;[Non-Album]&#x60;, &#x60;[Unknown Year]&#x60;), with an empty &#x60;key&#x60; and &#x60;unknown&#x60; true. &#x60;kind&#x60; has none, because an item&#39;s kind is never absent, and a custom tag dimension has none, because only items carrying the key contribute at all; on those two, drilling an empty &#x60;facetKey&#x60; is &#x60;invalid-request&#x60; rather than an empty page. Podcast episodes are excluded from the music dimensions, which they have no artist, album, genre, or year for; the &#x60;kind&#x60; dimension counts them. Counts are scoped to the libraries the caller may see. The per-item rules the drill list also applies (podcast subscriptions, content rules) are per-item decisions no aggregation can express, so a bucket can read higher than the list it opens, the same way any restricted listing can return a short page. 
+  ///
+  /// Parameters:
+  /// * [dimension] - Which browse dimension to enumerate.
+  /// * [cursor] - Opaque cursor from a previous page's `nextCursor`. Omit for the first page. 
+  /// * [limit] - Maximum buckets per page.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [FacetPage] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<FacetPage>> listFacets({ 
+    required String dimension,
+    String? cursor,
+    int? limit = 100,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/library/facets';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      r'dimension': encodeQueryParameter(_serializers, dimension, const FullType(String)),
+      if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    FacetPage? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(FacetPage),
+      ) as FacetPage;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<FacetPage>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Browse library items
-  /// Keyset-paginated list of library items, optionally filtered by media type. Ordering is stable (title, then pid) so cursors never skip or duplicate. 
+  /// Keyset-paginated list of library items, optionally filtered by media type and by one bucket of a browse dimension. Ordering is stable (title, then pid) so cursors never skip or duplicate. 
   ///
   /// Parameters:
   /// * [mediaType] - Restrict results to one media type.
+  /// * [facet] - Restrict results to one bucket of a browse dimension. Requires `facetKey`, and takes the same dimension names `/library/facets` enumerates. Composes with `mediaType`. 
+  /// * [facetKey] - The bucket to drill, as returned in the enumeration's `key`. Send it empty to select the dimension's unknown bucket (the items the dimension is absent from, such as `[Non-Album]`); `kind` and custom tag dimensions have no unknown bucket and reject an empty key. Ignored without `facet`. 
   /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. 
   /// * [limit] - Maximum items per page.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -609,6 +709,8 @@ class LibraryApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<ItemPage>> listItems({ 
     MediaType? mediaType,
+    String? facet,
+    String? facetKey,
     String? cursor,
     int? limit = 100,
     CancelToken? cancelToken,
@@ -644,6 +746,8 @@ class LibraryApi {
 
     final _queryParameters = <String, dynamic>{
       if (mediaType != null) r'mediaType': encodeQueryParameter(_serializers, mediaType, const FullType(MediaType)),
+      if (facet != null) r'facet': encodeQueryParameter(_serializers, facet, const FullType(String)),
+      if (facetKey != null) r'facetKey': encodeQueryParameter(_serializers, facetKey, const FullType(String)),
       if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
       if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
     };

@@ -113,7 +113,7 @@ func run(library string, runs int) error {
 	}
 	fmt.Printf("perfgate: scan finished in %s\n", time.Since(scanStart).Round(time.Second))
 
-	first, err := svc.Items(ctx, uc, "", "", 100)
+	first, err := svc.Items(ctx, uc, service.ItemFilter{}, "", 100)
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func run(library string, runs int) error {
 	// seed user state so the A9 joins have rows to find.
 	deepCursor := first.Next
 	for i := 0; i < 200 && deepCursor != ""; i++ {
-		page, err := svc.Items(ctx, uc, "", deepCursor, 100)
+		page, err := svc.Items(ctx, uc, service.ItemFilter{}, deepCursor, 100)
 		if err != nil {
 			return err
 		}
@@ -166,11 +166,11 @@ func run(library string, runs int) error {
 		fn   func() error
 	}{
 		{"page-first", func() error {
-			_, err := svc.Items(ctx, uc, "", "", 100)
+			_, err := svc.Items(ctx, uc, service.ItemFilter{}, "", 100)
 			return err
 		}},
 		{"page-deep", func() error {
-			_, err := svc.Items(ctx, uc, "", deepCursor, 100)
+			_, err := svc.Items(ctx, uc, service.ItemFilter{}, deepCursor, 100)
 			return err
 		}},
 		{"browse-starred", func() error {

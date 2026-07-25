@@ -671,6 +671,21 @@ const baselineSchema = `
 		fingerprint   TEXT    NOT NULL DEFAULT '',
 		updated_at_ns INTEGER NOT NULL DEFAULT 0
 	);
+
+	-- The canonical genre vocabulary, when this instance replaced the
+	-- shipped default. Empty is the normal state and means "use the
+	-- embedded tree", so a default that improves keeps reaching
+	-- instances that never took ownership of their own; the admin edit
+	-- writes the whole document at once and clearing every row goes back
+	-- to the default. name is the canonical display spelling, parent
+	-- groups it under a top-level genre ('' for one of those), and
+	-- aliases is a JSON string array of the synonyms that resolve to it
+	-- (read whole, never queried into, like prefs and tag_rules).
+	CREATE TABLE genre_tree (
+		name    TEXT PRIMARY KEY,
+		parent  TEXT NOT NULL DEFAULT '',
+		aliases TEXT NOT NULL DEFAULT '[]'
+	);
 `
 
 // Open opens (creating if needed) the database at path and applies

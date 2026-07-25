@@ -276,6 +276,7 @@ Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
 [*AdminApi*](doc/AdminApi.md) | [**cancelStagedRestore**](doc/AdminApi.md#cancelstagedrestore) | **DELETE** /admin/backups/restore | Cancel the staged restore
 [*AdminApi*](doc/AdminApi.md) | [**createBackup**](doc/AdminApi.md#createbackup) | **POST** /admin/backups | Create a backup now
+[*AdminApi*](doc/AdminApi.md) | [**createGenreNormalization**](doc/AdminApi.md#creategenrenormalization) | **POST** /admin/genre-normalize | Normalize every genre in the catalog
 [*AdminApi*](doc/AdminApi.md) | [**createLibrary**](doc/AdminApi.md#createlibrary) | **POST** /libraries | Create a library at runtime
 [*AdminApi*](doc/AdminApi.md) | [**createMigration**](doc/AdminApi.md#createmigration) | **POST** /admin/migrations | Import listening state from another server
 [*AdminApi*](doc/AdminApi.md) | [**deleteBackup**](doc/AdminApi.md#deletebackup) | **DELETE** /admin/backups/{backupId} | Delete a backup archive
@@ -283,6 +284,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**emptyTrash**](doc/AdminApi.md#emptytrash) | **POST** /admin/trash/empty | Empty the trash
 [*AdminApi*](doc/AdminApi.md) | [**getAdminSettings**](doc/AdminApi.md#getadminsettings) | **GET** /admin/settings | Read the server&#39;s runtime settings
 [*AdminApi*](doc/AdminApi.md) | [**getBackup**](doc/AdminApi.md#getbackup) | **GET** /admin/backups/{backupId} | Inspect a backup
+[*AdminApi*](doc/AdminApi.md) | [**getGenreTree**](doc/AdminApi.md#getgenretree) | **GET** /admin/genre-tree | Read the canonical genre vocabulary
 [*AdminApi*](doc/AdminApi.md) | [**getJob**](doc/AdminApi.md#getjob) | **GET** /jobs/{pid} | Get one job&#39;s state
 [*AdminApi*](doc/AdminApi.md) | [**getLibraryReadOnly**](doc/AdminApi.md#getlibraryreadonly) | **GET** /libraries/{pid}/read-only | Read a library&#39;s read-only mode
 [*AdminApi*](doc/AdminApi.md) | [**getScrobblingConfig**](doc/AdminApi.md#getscrobblingconfig) | **GET** /admin/scrobbling | Read the server&#39;s scrobbling credentials state
@@ -297,6 +299,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**listTrash**](doc/AdminApi.md#listtrash) | **GET** /admin/trash | List the trash
 [*AdminApi*](doc/AdminApi.md) | [**purgeTrashEntry**](doc/AdminApi.md#purgetrashentry) | **DELETE** /admin/trash/{trashId} | Purge one trashed file
 [*AdminApi*](doc/AdminApi.md) | [**putAdminSettings**](doc/AdminApi.md#putadminsettings) | **PUT** /admin/settings | Replace the server&#39;s runtime settings
+[*AdminApi*](doc/AdminApi.md) | [**putGenreTree**](doc/AdminApi.md#putgenretree) | **PUT** /admin/genre-tree | Replace the canonical genre vocabulary
 [*AdminApi*](doc/AdminApi.md) | [**putSchedule**](doc/AdminApi.md#putschedule) | **PUT** /admin/schedules/{kind} | Set a scheduled job&#39;s cron and enabled state
 [*AdminApi*](doc/AdminApi.md) | [**putScrobblingConfig**](doc/AdminApi.md#putscrobblingconfig) | **PUT** /admin/scrobbling | Set the server&#39;s Last.fm API credentials
 [*AdminApi*](doc/AdminApi.md) | [**putTranscodingLimits**](doc/AdminApi.md#puttranscodinglimits) | **PUT** /admin/transcoding | Replace the transcoding limits
@@ -341,6 +344,7 @@ Class | Method | HTTP request | Description
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemArt**](doc/LibraryApi.md#getitemart) | **GET** /items/{pid}/art | Get artwork
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemArtRoles**](doc/LibraryApi.md#getitemartroles) | **GET** /items/{pid}/art-roles | List the artwork slots an entity holds
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemLyrics**](doc/LibraryApi.md#getitemlyrics) | **GET** /items/{pid}/lyrics | Get an item&#39;s lyrics
+[*LibraryApi*](doc/LibraryApi.md) | [**listFacets**](doc/LibraryApi.md#listfacets) | **GET** /library/facets | Enumerate a browse dimension
 [*LibraryApi*](doc/LibraryApi.md) | [**listItems**](doc/LibraryApi.md#listitems) | **GET** /library/items | Browse library items
 [*LibraryApi*](doc/LibraryApi.md) | [**search**](doc/LibraryApi.md#search) | **GET** /library/search | Search the library
 [*MetadataApi*](doc/MetadataApi.md) | [**bulkEditMetadata**](doc/MetadataApi.md#bulkeditmetadata) | **POST** /items/bulk-edit | Edit fields on many items
@@ -578,10 +582,16 @@ Class | Method | HTTP request | Description
  - [EpisodePage](doc/EpisodePage.md)
  - [EpisodeSummary](doc/EpisodeSummary.md)
  - [Error](doc/Error.md)
+ - [FacetBucket](doc/FacetBucket.md)
+ - [FacetPage](doc/FacetPage.md)
  - [FeedPerson](doc/FeedPerson.md)
  - [FieldProvenance](doc/FieldProvenance.md)
  - [FileDiagnostic](doc/FileDiagnostic.md)
  - [FileDiagnosticPage](doc/FileDiagnosticPage.md)
+ - [GenreNode](doc/GenreNode.md)
+ - [GenreNormalizeRequest](doc/GenreNormalizeRequest.md)
+ - [GenreTree](doc/GenreTree.md)
+ - [GenreTreeUpdate](doc/GenreTreeUpdate.md)
  - [Health](doc/Health.md)
  - [HealthFixRequest](doc/HealthFixRequest.md)
  - [HealthFixResult](doc/HealthFixResult.md)

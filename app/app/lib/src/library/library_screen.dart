@@ -25,6 +25,7 @@ import '../tools/tasks_screen.dart';
 import '../uploads/add_to_library.dart';
 import '../uploads/audio_drop_area.dart';
 import '../uploads/uploads_screen.dart';
+import 'browse_screen.dart';
 import 'library_controller.dart';
 
 /// Curation surfaces reachable from the app bar menu. Administrators
@@ -158,6 +159,17 @@ class LibraryScreen extends ConsumerWidget {
                       ),
                 ];
               },
+            ),
+          ),
+          Semantics(
+            identifier: 'browse-open',
+            child: IconButton(
+              key: const Key('browse-open'),
+              tooltip: 'Browse by genre, artist, album',
+              icon: const Icon(Icons.category_outlined),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const BrowseScreen()),
+              ),
             ),
           ),
           Semantics(

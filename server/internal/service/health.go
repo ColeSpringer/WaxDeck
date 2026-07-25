@@ -30,6 +30,7 @@ import (
 	"github.com/colespringer/waxbin/read"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/genre"
 )
 
 const (
@@ -68,6 +69,7 @@ const (
 	ruleSmallArt        = "small-art"
 	ruleMissingYear     = "missing-year"
 	ruleMissingGenre    = "missing-genre"
+	ruleGenreWhitelist  = "genre-whitelist"
 	ruleMissingLyrics   = "missing-lyrics"
 	ruleMissingNarrator = "missing-narrator"
 	ruleMissingASIN     = "missing-asin"
@@ -81,8 +83,8 @@ const (
 // ties.
 var healthRules = []string{
 	ruleCorruptAudio, ruleMissingArt, ruleSmallArt, ruleMissingGenre,
-	ruleMissingYear, ruleMissingLyrics, ruleMissingNarrator, ruleMissingASIN,
-	rulePathMismatch, ruleWriteUnsynced, ruleLegacyTags,
+	ruleGenreWhitelist, ruleMissingYear, ruleMissingLyrics, ruleMissingNarrator,
+	ruleMissingASIN, rulePathMismatch, ruleWriteUnsynced, ruleLegacyTags,
 }
 
 var healthRuleLabels = map[string]string{
@@ -90,6 +92,7 @@ var healthRuleLabels = map[string]string{
 	ruleSmallArt:        "Low-resolution cover art",
 	ruleMissingYear:     "Missing release year",
 	ruleMissingGenre:    "Missing genre",
+	ruleGenreWhitelist:  "Genre outside the canonical tree",
 	ruleMissingLyrics:   "Missing lyrics",
 	ruleMissingNarrator: "Missing narrator",
 	ruleMissingASIN:     "Missing ASIN",
@@ -104,6 +107,11 @@ var healthRuleLabels = map[string]string{
 // fields ride the whole-library enrichment pass), small-art would need
 // the force-overwrite the fill-when-empty enrichment path refuses, and
 // corrupt-audio plus legacy-tags have no automated fix at all.
+// genre-whitelist is deliberately absent: the normalization sweeper
+// already rewrites everything the vocabulary knows, continuously, so an
+// item still flagged carries a genre the tree does not cover. The fix is
+// an edit to the tree, not to the item, and a per-item button would only
+// queue no-op work.
 var healthFixable = map[string]bool{
 	ruleMissingArt: true, ruleMissingLyrics: true, ruleMissingGenre: true,
 	ruleMissingNarrator: true, ruleMissingASIN: true,
@@ -230,6 +238,14 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 		lyricsPresent = nil
 	}
 	moves := l.plannedMoves(ctx)
+	// The genre vocabulary is loaded once for the whole sweep. A failure
+	// leaves it nil, which skips genre-whitelist for this pass rather
+	// than aborting every other rule for every item.
+	norm, err := l.genreNormalizer(ctx)
+	if err != nil {
+		l.log.Warn("health: genre vocabulary unavailable; skipping genre-whitelist this sweep", "err", err)
+		norm = nil
+	}
 
 	var evaluated int
 	var failWeight float64
@@ -243,7 +259,7 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 			return classify(err)
 		}
 		for _, it := range page.Items {
-			rules := l.itemHealthRules(ctx, it, unofficial[it.PID], fileRules[it.DisplayPath], moves[it.PID], lyricsPresent)
+			rules := l.itemHealthRules(ctx, it, unofficial[it.PID], fileRules[it.DisplayPath], moves[it.PID], lyricsPresent, norm)
 			evaluated++
 			if len(rules) == 0 {
 				continue
@@ -306,7 +322,7 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 // itemHealthRules grades one item. Unofficial-marked items (and podcast
 // episodes, which are not canonical-release content either) answer only
 // for corrupt audio and unsynced tag writes.
-func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exempt bool, fileRules []string, planned bool, lyricsPresent map[model.PID]bool) []string {
+func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exempt bool, fileRules []string, planned bool, lyricsPresent map[model.PID]bool, norm *genre.Normalizer) []string {
 	var rules []string
 	for _, r := range fileRules {
 		if (exempt || it.Kind == model.KindEpisode) && r == ruleLegacyTags {
@@ -333,6 +349,13 @@ func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exemp
 		// A degraded art store never fails the item; the rule just
 		// skips this sweep.
 		l.log.Warn("health: resolving art", "item", it.PID, "err", err)
+	}
+
+	// Every genre-carrying kind is graded against the canonical
+	// vocabulary, books included: a book's genre rides the same scalar
+	// and the same browse dimension a track's does.
+	if len(offTreeGenres(norm, it.Genre)) > 0 {
+		rules = append(rules, ruleGenreWhitelist)
 	}
 
 	switch it.Kind {

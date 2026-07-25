@@ -13,8 +13,8 @@ Docker Compose stack and the fast single-binary path.
 - [Getting started](getting-started.md): run the stack, point it at
   your library, first login.
 - [Curation and metadata](curation-and-metadata.md): the matching
-  engine, the review queue, the editor, uploads, and acquiring from
-  URLs.
+  engine, the review queue, the editor, the genre vocabulary, uploads,
+  and acquiring from URLs.
 - [Podcasts and audiobooks](podcasts-and-audiobooks.md): per-user
   subscriptions, episode fetching, chapters, and resume.
 - [Playlists, radio, and integrations](playlists-radio-and-integrations.md):

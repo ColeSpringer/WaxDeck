@@ -15,6 +15,9 @@ import 'package:waxdeck_api_gen/src/model/audit_event_page.dart';
 import 'package:waxdeck_api_gen/src/model/backup.dart';
 import 'package:waxdeck_api_gen/src/model/backup_list.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
+import 'package:waxdeck_api_gen/src/model/genre_normalize_request.dart';
+import 'package:waxdeck_api_gen/src/model/genre_tree.dart';
+import 'package:waxdeck_api_gen/src/model/genre_tree_update.dart';
 import 'package:waxdeck_api_gen/src/model/job.dart';
 import 'package:waxdeck_api_gen/src/model/job_list.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
@@ -172,6 +175,112 @@ class AdminApi {
     }
 
     return Response<Backup>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Normalize every genre in the catalog
+  /// Starts a full-catalog normalization as a background task (type &#x60;genre-normalize&#x60;; the finished task&#39;s &#x60;summary&#x60; reports what was scanned, rewritten, skipped as locked, and left alone as off-tree, with bounded examples of each). &#x60;dryRun&#x60; reports the same numbers without writing. This is the catch-up pass, not the normal mechanism: a supervised sweeper folds newly scanned genres onto the vocabulary continuously, driven off the catalog&#39;s change log. The full pass is for a catalog older than that log still retains, or for applying a vocabulary edit at once. A genre a user locked is left alone and counted. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [genreNormalizeRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ToolTask] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ToolTask>> createGenreNormalization({ 
+    required GenreNormalizeRequest genreNormalizeRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/admin/genre-normalize';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(GenreNormalizeRequest);
+      _bodyData = _serializers.serialize(genreNormalizeRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ToolTask? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ToolTask),
+      ) as ToolTask;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ToolTask>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -780,6 +889,90 @@ class AdminApi {
     }
 
     return Response<Backup>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Read the canonical genre vocabulary
+  /// The genre tree this instance normalizes onto: a two-level list of top-level genres and the genres grouped under them, each with the canonical display spelling and the aliases that resolve to it. &#x60;source&#x60; says whether it is the tree WaxDeck ships or one this instance stored. Resolution folds case, diacritics, and punctuation the way the catalog does, so a variant the catalog already collapses (\&quot;Hip-Hop\&quot; onto \&quot;hip hop\&quot;) needs no alias of its own. Aliases are for the synonyms no folding reaches: \&quot;Rap\&quot; onto \&quot;Hip Hop\&quot;, \&quot;DnB\&quot; onto \&quot;Drum &amp; Bass\&quot;, a run-together \&quot;HipHop\&quot;. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [GenreTree] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<GenreTree>> getGenreTree({ 
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/admin/genre-tree';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    GenreTree? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(GenreTree),
+      ) as GenreTree;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<GenreTree>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -2041,6 +2234,112 @@ class AdminApi {
     }
 
     return Response<AdminSettings>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Replace the canonical genre vocabulary
+  /// Stores a vocabulary for this instance, replacing whatever was in force. It is a replacement and never a delta: sending an empty &#x60;genres&#x60; list clears the override and returns the instance to the shipped default, which is the only way back. The tree is validated before it is stored, so a vocabulary that could not resolve one way is refused rather than persisted: two genres that fold to the same name, an alias claimed by two genres, an alias that collides with a genre&#39;s own name, a parent that is not itself a top-level genre of the same tree, or a genre nested more than two levels deep. Changing the vocabulary changes both what the background normalizer rewrites and what the &#x60;genre-whitelist&#x60; health rule counts as off-tree, so the normalizer is rewound to re-check everything the catalog&#39;s change log still retains. Anything older wants a full pass (&#x60;/admin/genre-normalize&#x60;). Administrators only. 
+  ///
+  /// Parameters:
+  /// * [genreTreeUpdate] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [GenreTree] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<GenreTree>> putGenreTree({ 
+    required GenreTreeUpdate genreTreeUpdate,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/admin/genre-tree';
+    final _options = Options(
+      method: r'PUT',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(GenreTreeUpdate);
+      _bodyData = _serializers.serialize(genreTreeUpdate, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    GenreTree? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(GenreTree),
+      ) as GenreTree;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<GenreTree>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

@@ -338,6 +338,8 @@ func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 		results, err = l.runCueSplit(ctx, t, p)
 	case t.Type == taskTypeAcquire:
 		results, err = l.runAcquire(ctx, t, p)
+	case t.Type == taskTypeGenreNormalize:
+		err = l.runGenreNormalize(ctx, t)
 	case strings.HasPrefix(t.Type, taskTypeMigratePrefix):
 		err = l.runMigrationTask(ctx, t)
 	default:
@@ -1013,6 +1015,22 @@ func (l *Library) insertToolTask(ctx context.Context, uc *UserCtx, typ, itemPID 
 	}
 	l.notifyToolTask(ctx, t.ID)
 	return toolTaskDTO(t), nil
+}
+
+// taskUserCtx resolves a task's owner so a runner can audit under it.
+// Nil when the account is gone or disabled, in which case the run still
+// completes and only goes unaudited: the work is server maintenance, not
+// something the account's continued existence should gate.
+func (l *Library) taskUserCtx(ctx context.Context, userID string) *UserCtx {
+	user, err := l.db.UserByID(ctx, userID)
+	if err != nil || user.Disabled {
+		return nil
+	}
+	uc, err := l.UserCtx(ctx, user)
+	if err != nil {
+		return nil
+	}
+	return uc
 }
 
 // failToolTask records a terminal failure.

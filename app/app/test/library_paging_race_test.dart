@@ -15,15 +15,31 @@ class GatedRepository extends FakeRepository {
 
   Completer<void>? gate;
 
+  /// Thrown by the next paging fetch, once.
+  Object? failNextPage;
+
   @override
   Future<ItemPage> listItems({
     MediaType? mediaType,
+    String? facet,
+    String? facetKey,
     String? cursor,
     int? limit,
   }) async {
     final g = gate;
     if (g != null && cursor != null) await g.future;
-    return super.listItems(mediaType: mediaType, cursor: cursor, limit: limit);
+    final failure = failNextPage;
+    if (failure != null && cursor != null) {
+      failNextPage = null;
+      throw failure;
+    }
+    return super.listItems(
+      mediaType: mediaType,
+      facet: facet,
+      facetKey: facetKey,
+      cursor: cursor,
+      limit: limit,
+    );
   }
 }
 
@@ -67,6 +83,49 @@ void main() {
       after.items.every((i) => i.mediaType == MediaType.podcast),
       isTrue,
       reason: 'stale music page overwrote the podcast listing',
+    );
+  });
+
+  test('a non-API failure mid-page does not wedge paging', () async {
+    // loadingMore is the guard that keeps two fetches from racing, and
+    // the repository only converts transport errors into
+    // WaxDeckApiException: anything else (a socket error, a decode
+    // failure) reaches the controller as itself. Escaping with the guard
+    // still set would block every later page silently and permanently,
+    // since the listing keeps its items and loadMore early-returns.
+    final repo = GatedRepository(
+      items: [for (var i = 0; i < 130; i++) testItem('tr-music-$i')],
+    );
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+    final keepAlive = container.listen(libraryControllerProvider, (_, _) {});
+    addTearDown(keepAlive.close);
+
+    final first = await container.read(libraryControllerProvider.future);
+    expect(first.items, hasLength(LibraryController.pageSize));
+    expect(first.hasMore, isTrue);
+
+    repo.failNextPage = StateError('deserialization failed');
+    await expectLater(
+      container.read(libraryControllerProvider.notifier).loadMore(),
+      throwsA(isA<StateError>()),
+      reason: 'a defect must still reach the zone, not vanish in the catch',
+    );
+    final afterFailure = container.read(libraryControllerProvider).requireValue;
+    expect(afterFailure.items, hasLength(LibraryController.pageSize));
+    expect(
+      afterFailure.loadingMore,
+      isFalse,
+      reason: 'a failed page must release the paging guard',
+    );
+
+    // Scrolling again retries and appends the page that failed.
+    await container.read(libraryControllerProvider.notifier).loadMore();
+    expect(
+      container.read(libraryControllerProvider).requireValue.items,
+      hasLength(LibraryController.pageSize * 2),
     );
   });
 }

@@ -169,6 +169,10 @@ type Library struct {
 	appSecrets appSecretCache
 	// trackFacts caches the compatibility surface's track sweep.
 	trackFacts trackFactsCache
+	// genres holds the built genre vocabulary; facets caches the
+	// full-visibility browse-dimension enumerations.
+	genres genreVocabulary
+	facets facetCache
 	// podcastDir and podcastRootName locate the episode download
 	// library; defaultRetentionKeep is the unset-subscriber policy;
 	// retentionInUseWindow gates the sweep's in-use deferral.

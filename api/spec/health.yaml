@@ -13,9 +13,14 @@ paths:
         exempt from rules that assume a canonical release. Rule names
         are server-defined strings; the current set is `missing-art`,
         `small-art`, `missing-mbid`, `missing-year`, `missing-genre`,
-        `missing-lyrics`, `missing-narrator`, `missing-asin`,
-        `path-mismatch`, `write-unsynced`, `legacy-tags`, and
-        `corrupt-audio`.
+        `genre-whitelist`, `missing-lyrics`, `missing-narrator`,
+        `missing-asin`, `path-mismatch`, `write-unsynced`,
+        `legacy-tags`, and `corrupt-audio`. `genre-whitelist` flags an
+        item carrying a genre the server's genre tree does not know; it
+        is deliberately not bulk-fixable, because the background
+        normalizer already rewrites everything the tree does know, so
+        what remains is answered by editing the tree
+        (`/admin/genre-tree`), not the item.
       tags: [health]
       responses:
         "200":

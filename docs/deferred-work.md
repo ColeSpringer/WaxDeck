@@ -50,11 +50,13 @@ here waits on upstream.
   place, and the star and rating row (`EntityStarRatingRow`, backed by
   `EntityPlayStateController`, with the same optimistic-then-settle and
   offline-outbox behavior the item controls have) is built and tested.
-  What is missing is a screen to host it: the app has no artist or album
-  view, and nothing in it navigates to an entity pid, because the
-  browse surface that would list entities is the faceted-browse work
-  below. The Subsonic surface and the REST API carry entity stars today;
-  the first-party app picks them up when that browse lands.
+  What is still missing is a screen to host it. The browse surface that
+  blocked this now exists: the artist, album-artist, and album tabs
+  enumerate real entities and every bucket carries its `entityPid`, so
+  the navigation target is in hand. What the tabs do today is drill a
+  bucket into its item list; an entity screen (the entity's own artwork,
+  its releases or tracks, and the star and rating row) is the remaining
+  half, and it is now pure app work with nothing behind it.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
@@ -209,39 +211,6 @@ here waits on upstream.
   change feed consumer (debounce a scan's item additions into album
   units once the scan settles); until it lands, "identify my new
   files" is a rematch away.
-- `[in-repo]` **Genre normalization.** The canonical genre tree and
-  whitelist mapping (provider tags normalized through an editable
-  tree, with a shipped default) is specified but unbuilt; the health
-  dashboard consequently has no genre-whitelist rule yet.
-- `[in-repo]` **First-party faceted browse (genres, artists, albums,
-  years, and custom tags).** The app can list items (`listItems`,
-  media-type filter, fixed title/pid order) and page discovery lists
-  (`browseList`: newest, most played, random, starred, alphabetical),
-  but it cannot enumerate a browse dimension or filter by one: there is
-  no "all genres" or "all artists" list with counts, and no "items
-  where genre is Jazz" query on the first-party API. The engine already
-  has the facet groups (`read.GroupGenre`/`GroupArtist`/
-  `GroupAlbumArtist`/`GroupYear`/`GroupKind`), WaxDeck already calls the
-  `Facet` facade internally (enrichment buckets artists through it), and
-  the Subsonic adapter already answers `getGenres` (genres with counts)
-  and `getSongsByGenre` and builds an in-memory album index by display
-  key, so every piece is proven on the compatibility side. Net-new is
-  the first-party contract: a dimension-enumeration endpoint (bucket
-  plus count, keyset-paged) over genre, artist, album-artist, year,
-  kind, and every custom tag (all already browse dimensions), plus
-  either a dimension filter on `listItems` or a drill endpoint, then the
-  app tabs on top. All WaxDeck-side, and it would be the first
-  faceted-browse surface on the first-party API, so it sets the pattern
-  the others reuse. Two honest edges. Album is not a facet group, so an
-  album browse groups items by album display key the way the Subsonic
-  album index already does (fine for list-and-drill, but display-string
-  keyed, not entity-pid backed); binding any bucket (an artist, an
-  album) to its stable catalog entity for a rich entity page rides the
-  existing "Entity enumeration for the compatibility surface" ask in
-  upstream-requests.md, not a new one. And the genre dimension wants the
-  Genre normalization item above done first, or the genre tab lists raw
-  tag strings ("Hip-Hop", "Hip Hop", "hiphop") as separate buckets; the
-  other dimensions do not depend on it.
 - `[in-repo]` **Book and remaining metadata providers.** Hardcover
   (the ASIN to ISBN bridge), Google Books and Open Library fallbacks,
   and Discogs are not yet implemented as enrichment providers; Deezer,

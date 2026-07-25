@@ -10,17 +10,34 @@ import (
 	"github.com/colespringer/waxbin/read"
 )
 
-// Items pages the whole library (optionally one media type) in stable
-// (title, pid) order for the acting user. The cursor is WaxBin's opaque
-// keyset token, passed through untouched.
-func (l *Library) Items(ctx context.Context, uc *UserCtx, mediaType string, cursor string, limit int) (Page, error) {
+// ItemFilter narrows a library listing. Facet and FacetKey together
+// drill one bucket of a browse dimension (the enumeration answers both
+// values); FacetKey is legitimately empty for a dimension's unknown
+// bucket, so the pair is applied whenever Facet is set.
+type ItemFilter struct {
+	MediaType string
+	Facet     string
+	FacetKey  string
+}
+
+// Items pages the whole library (optionally one media type, optionally
+// one browse-dimension bucket) in stable (title, pid) order for the
+// acting user. The cursor is WaxBin's opaque keyset token, passed
+// through untouched.
+func (l *Library) Items(ctx context.Context, uc *UserCtx, filter ItemFilter, cursor string, limit int) (Page, error) {
 	b := query.New(query.EntityItems).OrderBy("title", false)
-	if mediaType != "" {
-		kind, ok := kindForMediaType(mediaType)
+	if filter.MediaType != "" {
+		kind, ok := kindForMediaType(filter.MediaType)
 		if !ok {
-			return Page{}, errInvalid("unknown mediaType " + mediaType)
+			return Page{}, errInvalid("unknown mediaType " + filter.MediaType)
 		}
 		b = b.Where("kind", query.OpIs, string(kind))
+	}
+	if filter.Facet != "" {
+		var err error
+		if b, err = applyFacetFilter(b, filter.Facet, filter.FacetKey); err != nil {
+			return Page{}, err
+		}
 	}
 	page, err := l.lib.QueryPage(ctx, b.Build(), read.Cursor(cursor), limit, false, model.PID(uc.CatalogPID))
 	if err != nil {

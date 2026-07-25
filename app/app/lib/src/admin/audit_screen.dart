@@ -80,8 +80,20 @@ class AuditController extends AsyncNotifier<AuditState> {
         ),
       );
     } on WaxDeckApiException {
+      // An expected transport or server error. Keep what we have;
+      // scrolling near the end again retries.
       if (generation != _generation) return;
       state = AsyncData(current.copyWith(loadingMore: false));
+    } catch (_) {
+      // Anything else is a defect, not a hiccup: a decode failure,
+      // a bad cast. Release the paging guard first — loadingMore is
+      // what keeps two fetches from racing, so leaving it set would
+      // wedge paging permanently and silently — then let the error
+      // reach the zone's handler instead of vanishing here.
+      if (generation == _generation) {
+        state = AsyncData(current.copyWith(loadingMore: false));
+      }
+      rethrow;
     }
   }
 }

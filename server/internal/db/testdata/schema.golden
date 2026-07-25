@@ -91,6 +91,11 @@ table fix_queue
   column next_at_ns|INTEGER|notnull=1|default=0|pk=0
   column rule|TEXT|notnull=1|default=<none>|pk=0
   autoindex u|unique=1|(item_pid,rule)
+table genre_tree
+  column aliases|TEXT|notnull=1|default='[]'|pk=0
+  column name|TEXT|notnull=0|default=<none>|pk=1
+  column parent|TEXT|notnull=1|default=''|pk=0
+  autoindex pk|unique=1|(name)
 table gpodder_actions
   column action_ts|TEXT|notnull=1|default=''|pk=0
   column action|TEXT|notnull=1|default=<none>|pk=0

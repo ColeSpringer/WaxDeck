@@ -106,10 +106,24 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
         ),
       );
     } on WaxDeckApiException {
+      // An expected transport or server error. Keep what we have;
+      // scrolling near the end again retries.
       if (generation != _generation) return;
       // Keep what we have and flag the failure; scrolling near the end again
       // retries, and the screen surfaces a transient notice on the flag.
       state = AsyncData(current.copyWith(loadingMore: false, loadError: true));
+    } catch (_) {
+      // Anything else is a defect, not a hiccup: a decode failure,
+      // a bad cast. Release the paging guard first — loadingMore is
+      // what keeps two fetches from racing, so leaving it set would
+      // wedge paging permanently and silently — then let the error
+      // reach the zone's handler instead of vanishing here.
+      if (generation == _generation) {
+        state = AsyncData(
+          current.copyWith(loadingMore: false, loadError: true),
+        );
+      }
+      rethrow;
     }
   }
 

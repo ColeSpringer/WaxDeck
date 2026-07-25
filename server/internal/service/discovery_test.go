@@ -230,7 +230,7 @@ func TestArtistMixHonorsExcludePids(t *testing.T) {
 	}
 	artistPID := res.Artists[0].PID
 
-	page, err := svc.Items(ctx, uc, "music", "", 10)
+	page, err := svc.Items(ctx, uc, ItemFilter{MediaType: "music"}, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

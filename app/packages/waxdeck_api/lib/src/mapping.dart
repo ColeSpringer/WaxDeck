@@ -150,6 +150,24 @@ ItemPage itemPageFromGen(gen.ItemPage page, {String baseUrl = ''}) {
   );
 }
 
+FacetPage facetPageFromGen(gen.FacetPage page) {
+  return FacetPage(
+    dimension: page.dimension,
+    buckets: page.buckets
+        .map(
+          (bucket) => FacetBucket(
+            key: bucket.key,
+            label: bucket.label,
+            count: bucket.count,
+            entityPid: bucket.entityPid,
+            unknown: bucket.unknown ?? false,
+          ),
+        )
+        .toList(),
+    nextCursor: page.nextCursor,
+  );
+}
+
 ItemDetail itemDetailFromGen(gen.Item item, {String baseUrl = ''}) {
   final artUrl = item.artUrl;
   return ItemDetail(
