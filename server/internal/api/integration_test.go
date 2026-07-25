@@ -16,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/colespringer/waxdeck/fixtures"
-
 	"github.com/colespringer/waxdeck/server/internal/adapter/subsonic"
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
@@ -72,12 +70,8 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 		log = slog.New(slog.NewTextHandler(os.Stderr, nil))
 	}
 
-	// The demo library: Alpha (flac), Bravo (mp3), Charlie (opus), and
-	// Delta (vorbis), all titled and tagged.
 	h.library = t.TempDir()
-	if _, err := fixtures.Generate(h.library, fixtures.DemoLibrary()...); err != nil {
-		t.Fatalf("generating fixtures: %v", err)
-	}
+	generateDemoLibrary(t, h.library)
 
 	dataDir := t.TempDir()
 	store, err := db.Open(ctx, filepath.Join(dataDir, "waxdeck.db"))

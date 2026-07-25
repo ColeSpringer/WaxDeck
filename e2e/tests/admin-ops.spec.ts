@@ -352,7 +352,7 @@ test('a library created at runtime reaches the streaming sidecar', async ({ requ
   const extra = pathMod.join(runDir, 'runtime-root');
   await fs.mkdir(extra, { recursive: true });
 
-  const created = await request.post('/api/v1/admin/libraries', {
+  const created = await request.post('/api/v1/libraries', {
     ...authed(token),
     data: { name: 'runtime', path: extra, media: 'music' },
   });
@@ -380,7 +380,7 @@ test('a library created at runtime reaches the streaming sidecar', async ({ requ
   // The name is the sidecar's addressing key, so one already mapped
   // there is refused even though it is not in the library table: the
   // podcast download root is exactly that case.
-  const clash = await request.post('/api/v1/admin/libraries', {
+  const clash = await request.post('/api/v1/libraries', {
     ...authed(token),
     data: { name: 'podcasts', path: pathMod.join(runDir, 'runtime-clash') },
   });
