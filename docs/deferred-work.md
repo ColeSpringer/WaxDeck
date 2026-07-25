@@ -36,10 +36,6 @@ here waits on upstream.
   resolution mirroring the server's, and advance-on-complete.
   Surfaced by the direct-playback audit; the offline span-clipping
   half of that audit's findings is fixed.
-- `[in-repo]` **Verify clip windows on the desktop engine backend.** Direct and
-  offline playback of carved tracks clip through just_audio's
-  ClippingAudioSource; the mpv bridge desktop builds use should be
-  verified to honor the window on a real desktop build (docs/adr/0007).
 - `[hardware]` **Android UnifiedPush distributor integration.** The server, API,
   and settings surface shipped; the client still needs the
   distributor plugin wrapped behind a WaxDeck-owned interface and a

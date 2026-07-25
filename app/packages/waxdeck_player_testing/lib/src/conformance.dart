@@ -24,6 +24,16 @@ abstract class AudioEngineHarness {
   /// positions between backend updates and need honest slack.
   Duration get tolerance => Duration.zero;
 
+  /// A second URL the engine can load, used as the preloaded item at a
+  /// boundary. The same media twice is fine: what the boundary cases
+  /// assert is the crossing, not which file is playing.
+  String get nextMediaUrl => mediaUrl;
+
+  /// Whether the engine actually preloads. The port lets an engine that
+  /// cannot degrade to load-on-advance, so a harness that says `false`
+  /// gets the degraded contract asserted instead of the gapless one.
+  bool get preloads => true;
+
   /// Advances playback by [amount] of media time and lets events settle.
   /// Fakes step a manual clock; a real-engine harness waits in wall
   /// time, seeking ahead first when the amount is large.
@@ -109,6 +119,48 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
       await sub.cancel();
     });
 
+    test('a clip window plays as if it were the whole media', () async {
+      await engine.load(
+        harness.mediaUrl,
+        clipStart: quarter,
+        clipEnd: threeQuarters,
+      );
+      expect(engine.duration, isNotNull);
+      expectNear(engine.duration!, threeQuarters - quarter, 'clipped duration');
+      expectNear(engine.position, Duration.zero, 'position at the window head');
+      // Window-relative to the caller: half way in is half way through
+      // the window, not through the file it was carved from.
+      final half = (threeQuarters - quarter) ~/ 2;
+      await engine.seek(half);
+      await harness.advance(engine, Duration.zero);
+      expectNear(engine.position, half, 'position after seeking in a window');
+    });
+
+    test('a window that names no start runs from the head', () async {
+      // The first track carved out of a rip: a window that ends early
+      // and starts where the file does.
+      await engine.load(harness.mediaUrl, clipEnd: threeQuarters);
+      expect(engine.duration, isNotNull);
+      expectNear(engine.duration!, threeQuarters, 'open-start clip duration');
+    });
+
+    test('a clipped item ends at the end of its window', () async {
+      await engine.load(
+        harness.mediaUrl,
+        clipStart: quarter,
+        clipEnd: threeQuarters,
+      );
+      await engine.play();
+      final done = engine.completed.first;
+      await harness.advance(
+        engine,
+        threeQuarters - quarter + const Duration(seconds: 1),
+      );
+      await done.timeout(const Duration(seconds: 5));
+      expect(engine.processingState, EngineProcessingState.completed);
+      expect(engine.playing, isFalse);
+    });
+
     test('completed fires when playback reaches the end', () async {
       await engine.load(harness.mediaUrl);
       await engine.play();
@@ -156,6 +208,265 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
       expect(engine.speed, closeTo(2.0, 0.001));
       await engine.play();
       expect(engine.speed, closeTo(2.0, 0.001));
+    });
+  });
+
+  group('$name gapless', () {
+    late AudioEnginePort engine;
+
+    setUp(() async {
+      engine = await harness.createEngine();
+    });
+
+    tearDown(() => harness.disposeEngine(engine));
+
+    /// Plays from wherever the engine sits off the end of the loaded
+    /// item, then lets the crossing (or the completion) reach its
+    /// listeners.
+    Future<void> playPastTheEnd() async {
+      await engine.play();
+      await harness.advance(
+        engine,
+        harness.mediaDuration + const Duration(seconds: 1),
+      );
+      await harness.advance(engine, Duration.zero);
+    }
+
+    if (!harness.preloads) {
+      test('an engine that cannot preload still ends the queue', () async {
+        await engine.load(harness.mediaUrl);
+        await engine.preloadNext(harness.nextMediaUrl);
+        var crossings = 0;
+        var queueEnded = 0;
+        final b = engine.itemBoundary.listen((_) => crossings++);
+        final c = engine.completed.listen((_) => queueEnded++);
+        await playPastTheEnd();
+        expect(crossings, 0, reason: 'a no-op preload has nothing to cross');
+        expect(
+          queueEnded,
+          1,
+          reason:
+              'the caller advances on completed, so degrading to '
+              'load-on-advance has to reach it',
+        );
+        expect(engine.processingState, EngineProcessingState.completed);
+        await b.cancel();
+        await c.cancel();
+      });
+      return;
+    }
+
+    test('an item ending into a preloaded one fires the boundary', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.preloadNext(harness.nextMediaUrl);
+      var crossings = 0;
+      var queueEnded = 0;
+      final b = engine.itemBoundary.listen((_) => crossings++);
+      final c = engine.completed.listen((_) => queueEnded++);
+      await playPastTheEnd();
+      expect(
+        crossings,
+        1,
+        reason: 'the engine crossed into the preloaded item',
+      );
+      expect(
+        queueEnded,
+        0,
+        reason:
+            'an item ending into a preloaded one is item-ended, '
+            'never queue-ended',
+      );
+      expect(engine.processingState, EngineProcessingState.ready);
+      expect(engine.playing, isTrue);
+      await b.cancel();
+      await c.cancel();
+    });
+
+    test('the boundary neither pauses nor reloads', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.preloadNext(harness.nextMediaUrl);
+      await engine.play();
+      // Subscribed after play, so what these collect is the crossing
+      // and nothing else. Sample adjacency itself is asserted where a
+      // manual clock makes it exact (the fake's own tests); across a
+      // real backend the honest statement is that playback never
+      // stopped and the media was never re-prepared.
+      final playing = <bool>[];
+      final states = <EngineProcessingState>[];
+      final p = engine.playingStream.listen(playing.add);
+      final s = engine.processingStateStream.listen(states.add);
+      await harness.advance(
+        engine,
+        harness.mediaDuration + const Duration(seconds: 1),
+      );
+      await harness.advance(engine, Duration.zero);
+      expect(
+        playing,
+        isNot(contains(false)),
+        reason: 'playback should not stop across the boundary',
+      );
+      expect(
+        states,
+        isNot(contains(EngineProcessingState.idle)),
+        reason: 'the media should not be released and re-prepared',
+      );
+      expect(states, isNot(contains(EngineProcessingState.completed)));
+      await p.cancel();
+      await s.cancel();
+    });
+
+    test('positions read against the item now playing', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.preloadNext(harness.nextMediaUrl);
+      await playPastTheEnd();
+      expect(
+        engine.position,
+        lessThan(harness.mediaDuration),
+        reason:
+            'the position should have restarted against the preloaded '
+            'item, not carried the finished one',
+      );
+      final before = engine.position;
+      await harness.advance(engine, const Duration(seconds: 1));
+      expect(
+        engine.position,
+        greaterThan(before),
+        reason: 'the new item should still be running',
+      );
+    });
+
+    test('a clip window is honored across the boundary', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.preloadNext(
+        harness.nextMediaUrl,
+        clipStart: quarter,
+        clipEnd: threeQuarters,
+      );
+      await playPastTheEnd();
+      expect(engine.duration, isNotNull);
+      expectNear(
+        engine.duration!,
+        threeQuarters - quarter,
+        'preloaded clip duration',
+      );
+    });
+
+    test('preloading again replaces what was waiting', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.preloadNext(
+        harness.nextMediaUrl,
+        clipStart: quarter,
+        clipEnd: threeQuarters,
+      );
+      await engine.preloadNext(harness.nextMediaUrl);
+      await playPastTheEnd();
+      expect(engine.duration, isNotNull);
+      expectNear(
+        engine.duration!,
+        harness.mediaDuration,
+        'duration after the replacing preload',
+      );
+    });
+
+    test('the item after a boundary ends the queue', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.preloadNext(harness.nextMediaUrl);
+      var queueEnded = 0;
+      final c = engine.completed.listen((_) => queueEnded++);
+      await playPastTheEnd();
+      expect(queueEnded, 0);
+      await playPastTheEnd();
+      expect(
+        queueEnded,
+        1,
+        reason: 'nothing was preloaded behind the second item',
+      );
+      expect(engine.processingState, EngineProcessingState.completed);
+      expect(engine.playing, isFalse);
+      await c.cancel();
+    });
+
+    test(
+      'clearPreload makes the end of the item the end of the queue',
+      () async {
+        await engine.load(harness.mediaUrl);
+        await engine.preloadNext(harness.nextMediaUrl);
+        await engine.clearPreload();
+        var crossings = 0;
+        var queueEnded = 0;
+        final b = engine.itemBoundary.listen((_) => crossings++);
+        final c = engine.completed.listen((_) => queueEnded++);
+        await playPastTheEnd();
+        expect(crossings, 0);
+        expect(queueEnded, 1);
+        await b.cancel();
+        await c.cancel();
+      },
+    );
+
+    test('loading clears a pending preload', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.preloadNext(harness.nextMediaUrl);
+      await engine.load(harness.mediaUrl);
+      var crossings = 0;
+      var queueEnded = 0;
+      final b = engine.itemBoundary.listen((_) => crossings++);
+      final c = engine.completed.listen((_) => queueEnded++);
+      await playPastTheEnd();
+      expect(
+        crossings,
+        0,
+        reason: 'a fresh load starts a fresh window, preload included',
+      );
+      expect(queueEnded, 1);
+      await b.cancel();
+      await c.cancel();
+    });
+
+    test('a load that interrupts a preload owns the window', () async {
+      await engine.load(harness.mediaUrl);
+      // The shape of a real queue jump, and the one that actually races:
+      // a preload that replaces a previous one has to drop the old
+      // source before adding the new one, and the load lands in between.
+      // What the load leaves behind has to be its own item and nothing
+      // else. An engine that lets the interrupted preload settle into
+      // the new window plays a track nobody queued, gaplessly.
+      await engine.preloadNext(harness.nextMediaUrl);
+      final preloading = engine.preloadNext(harness.nextMediaUrl);
+      await Future<void>.delayed(Duration.zero);
+      await engine.load(harness.mediaUrl);
+      await preloading;
+      var crossings = 0;
+      var queueEnded = 0;
+      final b = engine.itemBoundary.listen((_) => crossings++);
+      final c = engine.completed.listen((_) => queueEnded++);
+      await playPastTheEnd();
+      expect(
+        crossings,
+        0,
+        reason: 'the interrupted preload does not follow the loaded item',
+      );
+      expect(queueEnded, 1);
+      await b.cancel();
+      await c.cancel();
+    });
+
+    test('preloading before anything is loaded does nothing', () async {
+      await engine.preloadNext(harness.nextMediaUrl);
+      await engine.load(harness.mediaUrl);
+      var crossings = 0;
+      var queueEnded = 0;
+      final b = engine.itemBoundary.listen((_) => crossings++);
+      final c = engine.completed.listen((_) => queueEnded++);
+      await playPastTheEnd();
+      expect(
+        crossings,
+        0,
+        reason: 'there was no item for the preload to follow',
+      );
+      expect(queueEnded, 1);
+      await b.cancel();
+      await c.cancel();
     });
   });
 }

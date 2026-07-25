@@ -24,7 +24,12 @@ class RealEngineHarness extends AudioEngineHarness {
   @override
   Future<AudioEnginePort> createEngine() async {
     ensureAudioEngineInitialized();
-    return JustAudioEngine();
+    final engine = JustAudioEngine();
+    // Silent: this suite plays several minutes of a test tone through
+    // the machine's real audio output, and nothing here asserts on
+    // volume. Whoever is at the keyboard should not have to hear it.
+    await engine.setVolume(0);
+    return engine;
   }
 
   @override

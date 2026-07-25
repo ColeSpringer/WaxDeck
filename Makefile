@@ -1,5 +1,5 @@
 .PHONY: generate spec-bundle gen-go gen-dart gen-semantics lint spec-lint test test-server test-fixtures test-app \
-        web build run up down logs drift-check oasdiff e2e dist clean
+        web build run up down logs drift-check oasdiff e2e e2e-desktop dist clean
 
 SPEC        := api/openapi.yaml
 SPEC_SRC    := api/spec
@@ -55,7 +55,7 @@ lint: spec-lint
 	cd server && go vet ./... && test -z "$$(gofmt -l .)"
 	cd server && go run ./cmd/spawnlint ./...
 	cd fixtures && go vet ./... && test -z "$$(gofmt -l .)"
-	cd app && dart format --set-exit-if-changed app/lib app/test app/integration_test app/tool packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib packages/waxdeck_data/lib packages/waxdeck_data/test packages/waxdeck_ui/lib packages/waxdeck_ui/test packages/waxdeck_ui/example/lib packages/waxdeck_ui/example/test >/dev/null
+	cd app && dart format --set-exit-if-changed app/lib app/test app/integration_test app/tool packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib packages/waxdeck_player_testing/lib packages/waxdeck_player_testing/test packages/waxdeck_data/lib packages/waxdeck_data/test packages/waxdeck_ui/lib packages/waxdeck_ui/test packages/waxdeck_ui/example/lib packages/waxdeck_ui/example/test >/dev/null
 	cd app && flutter analyze --no-pub
 
 # Lints the committed bundle as-is (lint never mutates the tree);
@@ -184,6 +184,13 @@ logs:
 
 e2e:
 	cd e2e && npm ci --no-audit --no-fund && npx playwright test
+
+# The desktop app journey plus the engine conformance suite against the
+# real mpv backend, which is where clip windows and gapless crossings are
+# verified for real. Needs a display and an audio sink, so CI does not
+# run it; the runner says how to wrap it on a headless box.
+e2e-desktop:
+	bash e2e/run-desktop.sh
 
 dist:
 	docker build -f deploy/Dockerfile -t waxdeck:dev .

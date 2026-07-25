@@ -18,6 +18,11 @@ class WaxDeckAudioHandler extends BaseAudioHandler {
     engine.playingStream.listen(_publishState);
     engine.processingStateStream.listen((_) => _publishState(engine.playing));
     engine.speedStream.listen((_) => _publishState(engine.playing));
+    // A gapless crossing moves the position without changing any state
+    // the listeners above watch, and the OS extrapolates its progress
+    // from the last position published. Left alone, the lock screen
+    // would run the previous item's clock through the whole next one.
+    engine.itemBoundary.listen((_) => _publishState(engine.playing));
   }
 
   final AudioEnginePort engine;

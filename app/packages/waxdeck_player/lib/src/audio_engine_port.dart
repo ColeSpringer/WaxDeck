@@ -12,7 +12,12 @@ enum EngineProcessingState {
   /// Media is ready; play and seek work.
   ready,
 
-  /// Playback ran off the end of the media.
+  /// Playback ran off the end of everything the engine holds: the loaded
+  /// item finished with nothing preloaded behind it (queue-ended).
+  ///
+  /// An item finishing into an item [AudioEnginePort.preloadNext]
+  /// prepared is the other case (item-ended) and never reaches here: the
+  /// engine stays [ready] and fires [AudioEnginePort.itemBoundary].
   completed,
 }
 
@@ -38,6 +43,36 @@ abstract interface class AudioEnginePort {
     Duration? clipEnd,
   });
 
+  /// Prepares [url] to follow the loaded item with no reload between
+  /// them, so a queue plays gapless where the platform allows.
+  ///
+  /// The preloaded item starts at the beginning of its window
+  /// ([clipStart] and [clipEnd] carve it exactly as [load] does): an
+  /// item that has to start anywhere else is loaded on advance instead.
+  /// Calling this again replaces whatever was preloaded. Crossing into
+  /// the preloaded item fires [itemBoundary], and from that moment it is
+  /// the loaded item: [position], [duration], and [completed] are its
+  /// own, and nothing is preloaded until the next call.
+  ///
+  /// Preloading is best effort. An engine that cannot do it leaves this
+  /// a no-op and runs off the end normally, so a caller that advances on
+  /// [completed] keeps working, with an audible gap instead of a
+  /// gapless one. Preloading before the first [load] does nothing: there
+  /// is no item to follow.
+  Future<void> preloadNext(
+    String url, {
+    String? mimeType,
+    Duration? clipStart,
+    Duration? clipEnd,
+  });
+
+  /// Drops the preloaded item, so the loaded one ends the queue.
+  ///
+  /// Does nothing when nothing is preloaded. [load] and [stop] clear the
+  /// preload too: a fresh load starts a fresh window, and a stop
+  /// releases the whole one.
+  Future<void> clearPreload();
+
   /// Starts or resumes playback.
   Future<void> play();
 
@@ -48,6 +83,8 @@ abstract interface class AudioEnginePort {
   Future<void> seek(Duration position);
 
   /// Stops playback and releases the media, keeping the engine usable.
+  /// Anything [preloadNext] prepared goes with it, so playing again
+  /// resumes the loaded item and ends there.
   Future<void> stop();
 
   /// Releases the engine permanently. No calls are valid afterwards.
@@ -77,8 +114,20 @@ abstract interface class AudioEnginePort {
   /// Media lifecycle transitions.
   Stream<EngineProcessingState> get processingStateStream;
 
-  /// Fires once each time playback reaches the end of the media.
+  /// Fires once each time playback reaches the end of the loaded media
+  /// with nothing preloaded behind it: the engine has run out
+  /// (queue-ended). An item ending into a preloaded one fires
+  /// [itemBoundary] instead, never this.
   Stream<void> get completed;
+
+  /// Fires once each time playback crosses out of the loaded item and
+  /// into the one [preloadNext] prepared (item-ended).
+  ///
+  /// Playback does not stop across the boundary: the engine stays
+  /// [EngineProcessingState.ready] and playing, and by the time this
+  /// fires [duration] and [position] read against the new item. Callers
+  /// roll their own accounting over here; the engine needs nothing.
+  Stream<void> get itemBoundary;
 
   /// Sets the playback speed multiplier (1.0 is normal speed). The
   /// setting survives pause/play and loading new media.
