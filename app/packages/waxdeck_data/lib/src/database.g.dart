@@ -1826,6 +1826,17 @@ class $OutboxListensTable extends OutboxListens
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _skippedMsMeta = const VerificationMeta(
+    'skippedMs',
+  );
+  @override
+  late final GeneratedColumn<int> skippedMs = GeneratedColumn<int>(
+    'skipped_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     sessionId,
@@ -1834,6 +1845,7 @@ class $OutboxListensTable extends OutboxListens
     msPlayed,
     finished,
     client,
+    skippedMs,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1891,6 +1903,12 @@ class $OutboxListensTable extends OutboxListens
         client.isAcceptableOrUnknown(data['client']!, _clientMeta),
       );
     }
+    if (data.containsKey('skipped_ms')) {
+      context.handle(
+        _skippedMsMeta,
+        skippedMs.isAcceptableOrUnknown(data['skipped_ms']!, _skippedMsMeta),
+      );
+    }
     return context;
   }
 
@@ -1924,6 +1942,10 @@ class $OutboxListensTable extends OutboxListens
         DriftSqlType.string,
         data['${effectivePrefix}client'],
       )!,
+      skippedMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}skipped_ms'],
+      ),
     );
   }
 
@@ -1940,6 +1962,10 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
   final int msPlayed;
   final bool finished;
   final String client;
+
+  /// Time the listener did not sit through (silence trimming, speed
+  /// above 1x). Null when neither applied, matching the wire field.
+  final int? skippedMs;
   const OutboxListen({
     required this.sessionId,
     required this.pid,
@@ -1947,6 +1973,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
     required this.msPlayed,
     required this.finished,
     required this.client,
+    this.skippedMs,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1957,6 +1984,9 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
     map['ms_played'] = Variable<int>(msPlayed);
     map['finished'] = Variable<bool>(finished);
     map['client'] = Variable<String>(client);
+    if (!nullToAbsent || skippedMs != null) {
+      map['skipped_ms'] = Variable<int>(skippedMs);
+    }
     return map;
   }
 
@@ -1968,6 +1998,9 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
       msPlayed: Value(msPlayed),
       finished: Value(finished),
       client: Value(client),
+      skippedMs: skippedMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(skippedMs),
     );
   }
 
@@ -1983,6 +2016,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
       msPlayed: serializer.fromJson<int>(json['msPlayed']),
       finished: serializer.fromJson<bool>(json['finished']),
       client: serializer.fromJson<String>(json['client']),
+      skippedMs: serializer.fromJson<int?>(json['skippedMs']),
     );
   }
   @override
@@ -1995,6 +2029,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
       'msPlayed': serializer.toJson<int>(msPlayed),
       'finished': serializer.toJson<bool>(finished),
       'client': serializer.toJson<String>(client),
+      'skippedMs': serializer.toJson<int?>(skippedMs),
     };
   }
 
@@ -2005,6 +2040,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
     int? msPlayed,
     bool? finished,
     String? client,
+    Value<int?> skippedMs = const Value.absent(),
   }) => OutboxListen(
     sessionId: sessionId ?? this.sessionId,
     pid: pid ?? this.pid,
@@ -2012,6 +2048,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
     msPlayed: msPlayed ?? this.msPlayed,
     finished: finished ?? this.finished,
     client: client ?? this.client,
+    skippedMs: skippedMs.present ? skippedMs.value : this.skippedMs,
   );
   OutboxListen copyWithCompanion(OutboxListensCompanion data) {
     return OutboxListen(
@@ -2021,6 +2058,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
       msPlayed: data.msPlayed.present ? data.msPlayed.value : this.msPlayed,
       finished: data.finished.present ? data.finished.value : this.finished,
       client: data.client.present ? data.client.value : this.client,
+      skippedMs: data.skippedMs.present ? data.skippedMs.value : this.skippedMs,
     );
   }
 
@@ -2032,14 +2070,22 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
           ..write('startedAt: $startedAt, ')
           ..write('msPlayed: $msPlayed, ')
           ..write('finished: $finished, ')
-          ..write('client: $client')
+          ..write('client: $client, ')
+          ..write('skippedMs: $skippedMs')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(sessionId, pid, startedAt, msPlayed, finished, client);
+  int get hashCode => Object.hash(
+    sessionId,
+    pid,
+    startedAt,
+    msPlayed,
+    finished,
+    client,
+    skippedMs,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2049,7 +2095,8 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
           other.startedAt == this.startedAt &&
           other.msPlayed == this.msPlayed &&
           other.finished == this.finished &&
-          other.client == this.client);
+          other.client == this.client &&
+          other.skippedMs == this.skippedMs);
 }
 
 class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
@@ -2059,6 +2106,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
   final Value<int> msPlayed;
   final Value<bool> finished;
   final Value<String> client;
+  final Value<int?> skippedMs;
   final Value<int> rowid;
   const OutboxListensCompanion({
     this.sessionId = const Value.absent(),
@@ -2067,6 +2115,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
     this.msPlayed = const Value.absent(),
     this.finished = const Value.absent(),
     this.client = const Value.absent(),
+    this.skippedMs = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   OutboxListensCompanion.insert({
@@ -2076,6 +2125,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
     required int msPlayed,
     this.finished = const Value.absent(),
     this.client = const Value.absent(),
+    this.skippedMs = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : sessionId = Value(sessionId),
        pid = Value(pid),
@@ -2088,6 +2138,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
     Expression<int>? msPlayed,
     Expression<bool>? finished,
     Expression<String>? client,
+    Expression<int>? skippedMs,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2097,6 +2148,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
       if (msPlayed != null) 'ms_played': msPlayed,
       if (finished != null) 'finished': finished,
       if (client != null) 'client': client,
+      if (skippedMs != null) 'skipped_ms': skippedMs,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2108,6 +2160,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
     Value<int>? msPlayed,
     Value<bool>? finished,
     Value<String>? client,
+    Value<int?>? skippedMs,
     Value<int>? rowid,
   }) {
     return OutboxListensCompanion(
@@ -2117,6 +2170,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
       msPlayed: msPlayed ?? this.msPlayed,
       finished: finished ?? this.finished,
       client: client ?? this.client,
+      skippedMs: skippedMs ?? this.skippedMs,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2142,6 +2196,9 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
     if (client.present) {
       map['client'] = Variable<String>(client.value);
     }
+    if (skippedMs.present) {
+      map['skipped_ms'] = Variable<int>(skippedMs.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2157,6 +2214,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
           ..write('msPlayed: $msPlayed, ')
           ..write('finished: $finished, ')
           ..write('client: $client, ')
+          ..write('skippedMs: $skippedMs, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2785,6 +2843,1398 @@ class DownloadRecordsCompanion extends UpdateCompanion<DownloadRecord> {
   }
 }
 
+class $QueueEntriesTable extends QueueEntries
+    with TableInfo<$QueueEntriesTable, QueueEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $QueueEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _queueIdMeta = const VerificationMeta(
+    'queueId',
+  );
+  @override
+  late final GeneratedColumn<String> queueId = GeneratedColumn<String>(
+    'queue_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pidMeta = const VerificationMeta('pid');
+  @override
+  late final GeneratedColumn<String> pid = GeneratedColumn<String>(
+    'pid',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceRankMeta = const VerificationMeta(
+    'sourceRank',
+  );
+  @override
+  late final GeneratedColumn<int> sourceRank = GeneratedColumn<int>(
+    'source_rank',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [queueId, pid, position, sourceRank];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'queue_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<QueueEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('queue_id')) {
+      context.handle(
+        _queueIdMeta,
+        queueId.isAcceptableOrUnknown(data['queue_id']!, _queueIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_queueIdMeta);
+    }
+    if (data.containsKey('pid')) {
+      context.handle(
+        _pidMeta,
+        pid.isAcceptableOrUnknown(data['pid']!, _pidMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pidMeta);
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('source_rank')) {
+      context.handle(
+        _sourceRankMeta,
+        sourceRank.isAcceptableOrUnknown(data['source_rank']!, _sourceRankMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceRankMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {queueId};
+  @override
+  QueueEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return QueueEntry(
+      queueId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}queue_id'],
+      )!,
+      pid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pid'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position'],
+      )!,
+      sourceRank: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}source_rank'],
+      )!,
+    );
+  }
+
+  @override
+  $QueueEntriesTable createAlias(String alias) {
+    return $QueueEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class QueueEntry extends DataClass implements Insertable<QueueEntry> {
+  final String queueId;
+  final String pid;
+  final int position;
+  final int sourceRank;
+  const QueueEntry({
+    required this.queueId,
+    required this.pid,
+    required this.position,
+    required this.sourceRank,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['queue_id'] = Variable<String>(queueId);
+    map['pid'] = Variable<String>(pid);
+    map['position'] = Variable<int>(position);
+    map['source_rank'] = Variable<int>(sourceRank);
+    return map;
+  }
+
+  QueueEntriesCompanion toCompanion(bool nullToAbsent) {
+    return QueueEntriesCompanion(
+      queueId: Value(queueId),
+      pid: Value(pid),
+      position: Value(position),
+      sourceRank: Value(sourceRank),
+    );
+  }
+
+  factory QueueEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return QueueEntry(
+      queueId: serializer.fromJson<String>(json['queueId']),
+      pid: serializer.fromJson<String>(json['pid']),
+      position: serializer.fromJson<int>(json['position']),
+      sourceRank: serializer.fromJson<int>(json['sourceRank']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'queueId': serializer.toJson<String>(queueId),
+      'pid': serializer.toJson<String>(pid),
+      'position': serializer.toJson<int>(position),
+      'sourceRank': serializer.toJson<int>(sourceRank),
+    };
+  }
+
+  QueueEntry copyWith({
+    String? queueId,
+    String? pid,
+    int? position,
+    int? sourceRank,
+  }) => QueueEntry(
+    queueId: queueId ?? this.queueId,
+    pid: pid ?? this.pid,
+    position: position ?? this.position,
+    sourceRank: sourceRank ?? this.sourceRank,
+  );
+  QueueEntry copyWithCompanion(QueueEntriesCompanion data) {
+    return QueueEntry(
+      queueId: data.queueId.present ? data.queueId.value : this.queueId,
+      pid: data.pid.present ? data.pid.value : this.pid,
+      position: data.position.present ? data.position.value : this.position,
+      sourceRank: data.sourceRank.present
+          ? data.sourceRank.value
+          : this.sourceRank,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('QueueEntry(')
+          ..write('queueId: $queueId, ')
+          ..write('pid: $pid, ')
+          ..write('position: $position, ')
+          ..write('sourceRank: $sourceRank')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(queueId, pid, position, sourceRank);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is QueueEntry &&
+          other.queueId == this.queueId &&
+          other.pid == this.pid &&
+          other.position == this.position &&
+          other.sourceRank == this.sourceRank);
+}
+
+class QueueEntriesCompanion extends UpdateCompanion<QueueEntry> {
+  final Value<String> queueId;
+  final Value<String> pid;
+  final Value<int> position;
+  final Value<int> sourceRank;
+  final Value<int> rowid;
+  const QueueEntriesCompanion({
+    this.queueId = const Value.absent(),
+    this.pid = const Value.absent(),
+    this.position = const Value.absent(),
+    this.sourceRank = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  QueueEntriesCompanion.insert({
+    required String queueId,
+    required String pid,
+    required int position,
+    required int sourceRank,
+    this.rowid = const Value.absent(),
+  }) : queueId = Value(queueId),
+       pid = Value(pid),
+       position = Value(position),
+       sourceRank = Value(sourceRank);
+  static Insertable<QueueEntry> custom({
+    Expression<String>? queueId,
+    Expression<String>? pid,
+    Expression<int>? position,
+    Expression<int>? sourceRank,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (queueId != null) 'queue_id': queueId,
+      if (pid != null) 'pid': pid,
+      if (position != null) 'position': position,
+      if (sourceRank != null) 'source_rank': sourceRank,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  QueueEntriesCompanion copyWith({
+    Value<String>? queueId,
+    Value<String>? pid,
+    Value<int>? position,
+    Value<int>? sourceRank,
+    Value<int>? rowid,
+  }) {
+    return QueueEntriesCompanion(
+      queueId: queueId ?? this.queueId,
+      pid: pid ?? this.pid,
+      position: position ?? this.position,
+      sourceRank: sourceRank ?? this.sourceRank,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (queueId.present) {
+      map['queue_id'] = Variable<String>(queueId.value);
+    }
+    if (pid.present) {
+      map['pid'] = Variable<String>(pid.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<int>(position.value);
+    }
+    if (sourceRank.present) {
+      map['source_rank'] = Variable<int>(sourceRank.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('QueueEntriesCompanion(')
+          ..write('queueId: $queueId, ')
+          ..write('pid: $pid, ')
+          ..write('position: $position, ')
+          ..write('sourceRank: $sourceRank, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $QueueMetaTable extends QueueMeta
+    with TableInfo<$QueueMetaTable, QueueMetaData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $QueueMetaTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _currentIndexMeta = const VerificationMeta(
+    'currentIndex',
+  );
+  @override
+  late final GeneratedColumn<int> currentIndex = GeneratedColumn<int>(
+    'current_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shuffledMeta = const VerificationMeta(
+    'shuffled',
+  );
+  @override
+  late final GeneratedColumn<bool> shuffled = GeneratedColumn<bool>(
+    'shuffled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("shuffled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _repeatMeta = const VerificationMeta('repeat');
+  @override
+  late final GeneratedColumn<String> repeat = GeneratedColumn<String>(
+    'repeat',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('off'),
+  );
+  static const VerificationMeta _sourceKindMeta = const VerificationMeta(
+    'sourceKind',
+  );
+  @override
+  late final GeneratedColumn<String> sourceKind = GeneratedColumn<String>(
+    'source_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('unknown'),
+  );
+  static const VerificationMeta _sourceLabelMeta = const VerificationMeta(
+    'sourceLabel',
+  );
+  @override
+  late final GeneratedColumn<String> sourceLabel = GeneratedColumn<String>(
+    'source_label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _sourcePidMeta = const VerificationMeta(
+    'sourcePid',
+  );
+  @override
+  late final GeneratedColumn<String> sourcePid = GeneratedColumn<String>(
+    'source_pid',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sourceRollingMeta = const VerificationMeta(
+    'sourceRolling',
+  );
+  @override
+  late final GeneratedColumn<bool> sourceRolling = GeneratedColumn<bool>(
+    'source_rolling',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("source_rolling" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _nextQueueIdMeta = const VerificationMeta(
+    'nextQueueId',
+  );
+  @override
+  late final GeneratedColumn<int> nextQueueId = GeneratedColumn<int>(
+    'next_queue_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    currentIndex,
+    shuffled,
+    repeat,
+    sourceKind,
+    sourceLabel,
+    sourcePid,
+    sourceRolling,
+    nextQueueId,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'queue_meta';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<QueueMetaData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('current_index')) {
+      context.handle(
+        _currentIndexMeta,
+        currentIndex.isAcceptableOrUnknown(
+          data['current_index']!,
+          _currentIndexMeta,
+        ),
+      );
+    }
+    if (data.containsKey('shuffled')) {
+      context.handle(
+        _shuffledMeta,
+        shuffled.isAcceptableOrUnknown(data['shuffled']!, _shuffledMeta),
+      );
+    }
+    if (data.containsKey('repeat')) {
+      context.handle(
+        _repeatMeta,
+        repeat.isAcceptableOrUnknown(data['repeat']!, _repeatMeta),
+      );
+    }
+    if (data.containsKey('source_kind')) {
+      context.handle(
+        _sourceKindMeta,
+        sourceKind.isAcceptableOrUnknown(data['source_kind']!, _sourceKindMeta),
+      );
+    }
+    if (data.containsKey('source_label')) {
+      context.handle(
+        _sourceLabelMeta,
+        sourceLabel.isAcceptableOrUnknown(
+          data['source_label']!,
+          _sourceLabelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('source_pid')) {
+      context.handle(
+        _sourcePidMeta,
+        sourcePid.isAcceptableOrUnknown(data['source_pid']!, _sourcePidMeta),
+      );
+    }
+    if (data.containsKey('source_rolling')) {
+      context.handle(
+        _sourceRollingMeta,
+        sourceRolling.isAcceptableOrUnknown(
+          data['source_rolling']!,
+          _sourceRollingMeta,
+        ),
+      );
+    }
+    if (data.containsKey('next_queue_id')) {
+      context.handle(
+        _nextQueueIdMeta,
+        nextQueueId.isAcceptableOrUnknown(
+          data['next_queue_id']!,
+          _nextQueueIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  QueueMetaData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return QueueMetaData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      currentIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}current_index'],
+      )!,
+      shuffled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}shuffled'],
+      )!,
+      repeat: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}repeat'],
+      )!,
+      sourceKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_kind'],
+      )!,
+      sourceLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_label'],
+      )!,
+      sourcePid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_pid'],
+      ),
+      sourceRolling: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}source_rolling'],
+      )!,
+      nextQueueId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}next_queue_id'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $QueueMetaTable createAlias(String alias) {
+    return $QueueMetaTable(attachedDatabase, alias);
+  }
+}
+
+class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
+  final int id;
+  final int currentIndex;
+  final bool shuffled;
+
+  /// `off`, `all`, or `one`, matching the Connect command vocabulary.
+  final String repeat;
+
+  /// Provenance: what the queue was built from, for the "Playing from
+  /// [source]" line and the restore offer.
+  final String sourceKind;
+  final String sourceLabel;
+  final String? sourcePid;
+
+  /// True for a window over a scope larger than the queue cap (shuffle
+  /// all), which is refilled as it drains rather than being the whole
+  /// truth.
+  final bool sourceRolling;
+
+  /// The next value the queue-id counter will mint, so a restored queue
+  /// cannot hand an old id to a new entry.
+  final int nextQueueId;
+  final DateTime updatedAt;
+  const QueueMetaData({
+    required this.id,
+    required this.currentIndex,
+    required this.shuffled,
+    required this.repeat,
+    required this.sourceKind,
+    required this.sourceLabel,
+    this.sourcePid,
+    required this.sourceRolling,
+    required this.nextQueueId,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['current_index'] = Variable<int>(currentIndex);
+    map['shuffled'] = Variable<bool>(shuffled);
+    map['repeat'] = Variable<String>(repeat);
+    map['source_kind'] = Variable<String>(sourceKind);
+    map['source_label'] = Variable<String>(sourceLabel);
+    if (!nullToAbsent || sourcePid != null) {
+      map['source_pid'] = Variable<String>(sourcePid);
+    }
+    map['source_rolling'] = Variable<bool>(sourceRolling);
+    map['next_queue_id'] = Variable<int>(nextQueueId);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  QueueMetaCompanion toCompanion(bool nullToAbsent) {
+    return QueueMetaCompanion(
+      id: Value(id),
+      currentIndex: Value(currentIndex),
+      shuffled: Value(shuffled),
+      repeat: Value(repeat),
+      sourceKind: Value(sourceKind),
+      sourceLabel: Value(sourceLabel),
+      sourcePid: sourcePid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourcePid),
+      sourceRolling: Value(sourceRolling),
+      nextQueueId: Value(nextQueueId),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory QueueMetaData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return QueueMetaData(
+      id: serializer.fromJson<int>(json['id']),
+      currentIndex: serializer.fromJson<int>(json['currentIndex']),
+      shuffled: serializer.fromJson<bool>(json['shuffled']),
+      repeat: serializer.fromJson<String>(json['repeat']),
+      sourceKind: serializer.fromJson<String>(json['sourceKind']),
+      sourceLabel: serializer.fromJson<String>(json['sourceLabel']),
+      sourcePid: serializer.fromJson<String?>(json['sourcePid']),
+      sourceRolling: serializer.fromJson<bool>(json['sourceRolling']),
+      nextQueueId: serializer.fromJson<int>(json['nextQueueId']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'currentIndex': serializer.toJson<int>(currentIndex),
+      'shuffled': serializer.toJson<bool>(shuffled),
+      'repeat': serializer.toJson<String>(repeat),
+      'sourceKind': serializer.toJson<String>(sourceKind),
+      'sourceLabel': serializer.toJson<String>(sourceLabel),
+      'sourcePid': serializer.toJson<String?>(sourcePid),
+      'sourceRolling': serializer.toJson<bool>(sourceRolling),
+      'nextQueueId': serializer.toJson<int>(nextQueueId),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  QueueMetaData copyWith({
+    int? id,
+    int? currentIndex,
+    bool? shuffled,
+    String? repeat,
+    String? sourceKind,
+    String? sourceLabel,
+    Value<String?> sourcePid = const Value.absent(),
+    bool? sourceRolling,
+    int? nextQueueId,
+    DateTime? updatedAt,
+  }) => QueueMetaData(
+    id: id ?? this.id,
+    currentIndex: currentIndex ?? this.currentIndex,
+    shuffled: shuffled ?? this.shuffled,
+    repeat: repeat ?? this.repeat,
+    sourceKind: sourceKind ?? this.sourceKind,
+    sourceLabel: sourceLabel ?? this.sourceLabel,
+    sourcePid: sourcePid.present ? sourcePid.value : this.sourcePid,
+    sourceRolling: sourceRolling ?? this.sourceRolling,
+    nextQueueId: nextQueueId ?? this.nextQueueId,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  QueueMetaData copyWithCompanion(QueueMetaCompanion data) {
+    return QueueMetaData(
+      id: data.id.present ? data.id.value : this.id,
+      currentIndex: data.currentIndex.present
+          ? data.currentIndex.value
+          : this.currentIndex,
+      shuffled: data.shuffled.present ? data.shuffled.value : this.shuffled,
+      repeat: data.repeat.present ? data.repeat.value : this.repeat,
+      sourceKind: data.sourceKind.present
+          ? data.sourceKind.value
+          : this.sourceKind,
+      sourceLabel: data.sourceLabel.present
+          ? data.sourceLabel.value
+          : this.sourceLabel,
+      sourcePid: data.sourcePid.present ? data.sourcePid.value : this.sourcePid,
+      sourceRolling: data.sourceRolling.present
+          ? data.sourceRolling.value
+          : this.sourceRolling,
+      nextQueueId: data.nextQueueId.present
+          ? data.nextQueueId.value
+          : this.nextQueueId,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('QueueMetaData(')
+          ..write('id: $id, ')
+          ..write('currentIndex: $currentIndex, ')
+          ..write('shuffled: $shuffled, ')
+          ..write('repeat: $repeat, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('sourceLabel: $sourceLabel, ')
+          ..write('sourcePid: $sourcePid, ')
+          ..write('sourceRolling: $sourceRolling, ')
+          ..write('nextQueueId: $nextQueueId, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    currentIndex,
+    shuffled,
+    repeat,
+    sourceKind,
+    sourceLabel,
+    sourcePid,
+    sourceRolling,
+    nextQueueId,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is QueueMetaData &&
+          other.id == this.id &&
+          other.currentIndex == this.currentIndex &&
+          other.shuffled == this.shuffled &&
+          other.repeat == this.repeat &&
+          other.sourceKind == this.sourceKind &&
+          other.sourceLabel == this.sourceLabel &&
+          other.sourcePid == this.sourcePid &&
+          other.sourceRolling == this.sourceRolling &&
+          other.nextQueueId == this.nextQueueId &&
+          other.updatedAt == this.updatedAt);
+}
+
+class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
+  final Value<int> id;
+  final Value<int> currentIndex;
+  final Value<bool> shuffled;
+  final Value<String> repeat;
+  final Value<String> sourceKind;
+  final Value<String> sourceLabel;
+  final Value<String?> sourcePid;
+  final Value<bool> sourceRolling;
+  final Value<int> nextQueueId;
+  final Value<DateTime> updatedAt;
+  const QueueMetaCompanion({
+    this.id = const Value.absent(),
+    this.currentIndex = const Value.absent(),
+    this.shuffled = const Value.absent(),
+    this.repeat = const Value.absent(),
+    this.sourceKind = const Value.absent(),
+    this.sourceLabel = const Value.absent(),
+    this.sourcePid = const Value.absent(),
+    this.sourceRolling = const Value.absent(),
+    this.nextQueueId = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  QueueMetaCompanion.insert({
+    this.id = const Value.absent(),
+    this.currentIndex = const Value.absent(),
+    this.shuffled = const Value.absent(),
+    this.repeat = const Value.absent(),
+    this.sourceKind = const Value.absent(),
+    this.sourceLabel = const Value.absent(),
+    this.sourcePid = const Value.absent(),
+    this.sourceRolling = const Value.absent(),
+    this.nextQueueId = const Value.absent(),
+    required DateTime updatedAt,
+  }) : updatedAt = Value(updatedAt);
+  static Insertable<QueueMetaData> custom({
+    Expression<int>? id,
+    Expression<int>? currentIndex,
+    Expression<bool>? shuffled,
+    Expression<String>? repeat,
+    Expression<String>? sourceKind,
+    Expression<String>? sourceLabel,
+    Expression<String>? sourcePid,
+    Expression<bool>? sourceRolling,
+    Expression<int>? nextQueueId,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (currentIndex != null) 'current_index': currentIndex,
+      if (shuffled != null) 'shuffled': shuffled,
+      if (repeat != null) 'repeat': repeat,
+      if (sourceKind != null) 'source_kind': sourceKind,
+      if (sourceLabel != null) 'source_label': sourceLabel,
+      if (sourcePid != null) 'source_pid': sourcePid,
+      if (sourceRolling != null) 'source_rolling': sourceRolling,
+      if (nextQueueId != null) 'next_queue_id': nextQueueId,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  QueueMetaCompanion copyWith({
+    Value<int>? id,
+    Value<int>? currentIndex,
+    Value<bool>? shuffled,
+    Value<String>? repeat,
+    Value<String>? sourceKind,
+    Value<String>? sourceLabel,
+    Value<String?>? sourcePid,
+    Value<bool>? sourceRolling,
+    Value<int>? nextQueueId,
+    Value<DateTime>? updatedAt,
+  }) {
+    return QueueMetaCompanion(
+      id: id ?? this.id,
+      currentIndex: currentIndex ?? this.currentIndex,
+      shuffled: shuffled ?? this.shuffled,
+      repeat: repeat ?? this.repeat,
+      sourceKind: sourceKind ?? this.sourceKind,
+      sourceLabel: sourceLabel ?? this.sourceLabel,
+      sourcePid: sourcePid ?? this.sourcePid,
+      sourceRolling: sourceRolling ?? this.sourceRolling,
+      nextQueueId: nextQueueId ?? this.nextQueueId,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (currentIndex.present) {
+      map['current_index'] = Variable<int>(currentIndex.value);
+    }
+    if (shuffled.present) {
+      map['shuffled'] = Variable<bool>(shuffled.value);
+    }
+    if (repeat.present) {
+      map['repeat'] = Variable<String>(repeat.value);
+    }
+    if (sourceKind.present) {
+      map['source_kind'] = Variable<String>(sourceKind.value);
+    }
+    if (sourceLabel.present) {
+      map['source_label'] = Variable<String>(sourceLabel.value);
+    }
+    if (sourcePid.present) {
+      map['source_pid'] = Variable<String>(sourcePid.value);
+    }
+    if (sourceRolling.present) {
+      map['source_rolling'] = Variable<bool>(sourceRolling.value);
+    }
+    if (nextQueueId.present) {
+      map['next_queue_id'] = Variable<int>(nextQueueId.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('QueueMetaCompanion(')
+          ..write('id: $id, ')
+          ..write('currentIndex: $currentIndex, ')
+          ..write('shuffled: $shuffled, ')
+          ..write('repeat: $repeat, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('sourceLabel: $sourceLabel, ')
+          ..write('sourcePid: $sourcePid, ')
+          ..write('sourceRolling: $sourceRolling, ')
+          ..write('nextQueueId: $nextQueueId, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ArtworkPinsTable extends ArtworkPins
+    with TableInfo<$ArtworkPinsTable, ArtworkPin> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ArtworkPinsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _pidMeta = const VerificationMeta('pid');
+  @override
+  late final GeneratedColumn<String> pid = GeneratedColumn<String>(
+    'pid',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sizePxMeta = const VerificationMeta('sizePx');
+  @override
+  late final GeneratedColumn<int> sizePx = GeneratedColumn<int>(
+    'size_px',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _artUrlMeta = const VerificationMeta('artUrl');
+  @override
+  late final GeneratedColumn<String> artUrl = GeneratedColumn<String>(
+    'art_url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _etagMeta = const VerificationMeta('etag');
+  @override
+  late final GeneratedColumn<String> etag = GeneratedColumn<String>(
+    'etag',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localPathMeta = const VerificationMeta(
+    'localPath',
+  );
+  @override
+  late final GeneratedColumn<String> localPath = GeneratedColumn<String>(
+    'local_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sizeBytesMeta = const VerificationMeta(
+    'sizeBytes',
+  );
+  @override
+  late final GeneratedColumn<int> sizeBytes = GeneratedColumn<int>(
+    'size_bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pinnedAtMeta = const VerificationMeta(
+    'pinnedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> pinnedAt = GeneratedColumn<DateTime>(
+    'pinned_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    pid,
+    sizePx,
+    artUrl,
+    etag,
+    localPath,
+    sizeBytes,
+    pinnedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'artwork_pins';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ArtworkPin> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('pid')) {
+      context.handle(
+        _pidMeta,
+        pid.isAcceptableOrUnknown(data['pid']!, _pidMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pidMeta);
+    }
+    if (data.containsKey('size_px')) {
+      context.handle(
+        _sizePxMeta,
+        sizePx.isAcceptableOrUnknown(data['size_px']!, _sizePxMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sizePxMeta);
+    }
+    if (data.containsKey('art_url')) {
+      context.handle(
+        _artUrlMeta,
+        artUrl.isAcceptableOrUnknown(data['art_url']!, _artUrlMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_artUrlMeta);
+    }
+    if (data.containsKey('etag')) {
+      context.handle(
+        _etagMeta,
+        etag.isAcceptableOrUnknown(data['etag']!, _etagMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_etagMeta);
+    }
+    if (data.containsKey('local_path')) {
+      context.handle(
+        _localPathMeta,
+        localPath.isAcceptableOrUnknown(data['local_path']!, _localPathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_localPathMeta);
+    }
+    if (data.containsKey('size_bytes')) {
+      context.handle(
+        _sizeBytesMeta,
+        sizeBytes.isAcceptableOrUnknown(data['size_bytes']!, _sizeBytesMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sizeBytesMeta);
+    }
+    if (data.containsKey('pinned_at')) {
+      context.handle(
+        _pinnedAtMeta,
+        pinnedAt.isAcceptableOrUnknown(data['pinned_at']!, _pinnedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pinnedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {pid, sizePx};
+  @override
+  ArtworkPin map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ArtworkPin(
+      pid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pid'],
+      )!,
+      sizePx: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}size_px'],
+      )!,
+      artUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}art_url'],
+      )!,
+      etag: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}etag'],
+      )!,
+      localPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_path'],
+      )!,
+      sizeBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}size_bytes'],
+      )!,
+      pinnedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}pinned_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ArtworkPinsTable createAlias(String alias) {
+    return $ArtworkPinsTable(attachedDatabase, alias);
+  }
+}
+
+class ArtworkPin extends DataClass implements Insertable<ArtworkPin> {
+  final String pid;
+  final int sizePx;
+
+  /// The art URL the bytes came from, so a revalidation asks for the
+  /// same variant rather than whatever the item's front slot became.
+  final String artUrl;
+  final String etag;
+  final String localPath;
+  final int sizeBytes;
+  final DateTime pinnedAt;
+  const ArtworkPin({
+    required this.pid,
+    required this.sizePx,
+    required this.artUrl,
+    required this.etag,
+    required this.localPath,
+    required this.sizeBytes,
+    required this.pinnedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['pid'] = Variable<String>(pid);
+    map['size_px'] = Variable<int>(sizePx);
+    map['art_url'] = Variable<String>(artUrl);
+    map['etag'] = Variable<String>(etag);
+    map['local_path'] = Variable<String>(localPath);
+    map['size_bytes'] = Variable<int>(sizeBytes);
+    map['pinned_at'] = Variable<DateTime>(pinnedAt);
+    return map;
+  }
+
+  ArtworkPinsCompanion toCompanion(bool nullToAbsent) {
+    return ArtworkPinsCompanion(
+      pid: Value(pid),
+      sizePx: Value(sizePx),
+      artUrl: Value(artUrl),
+      etag: Value(etag),
+      localPath: Value(localPath),
+      sizeBytes: Value(sizeBytes),
+      pinnedAt: Value(pinnedAt),
+    );
+  }
+
+  factory ArtworkPin.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ArtworkPin(
+      pid: serializer.fromJson<String>(json['pid']),
+      sizePx: serializer.fromJson<int>(json['sizePx']),
+      artUrl: serializer.fromJson<String>(json['artUrl']),
+      etag: serializer.fromJson<String>(json['etag']),
+      localPath: serializer.fromJson<String>(json['localPath']),
+      sizeBytes: serializer.fromJson<int>(json['sizeBytes']),
+      pinnedAt: serializer.fromJson<DateTime>(json['pinnedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'pid': serializer.toJson<String>(pid),
+      'sizePx': serializer.toJson<int>(sizePx),
+      'artUrl': serializer.toJson<String>(artUrl),
+      'etag': serializer.toJson<String>(etag),
+      'localPath': serializer.toJson<String>(localPath),
+      'sizeBytes': serializer.toJson<int>(sizeBytes),
+      'pinnedAt': serializer.toJson<DateTime>(pinnedAt),
+    };
+  }
+
+  ArtworkPin copyWith({
+    String? pid,
+    int? sizePx,
+    String? artUrl,
+    String? etag,
+    String? localPath,
+    int? sizeBytes,
+    DateTime? pinnedAt,
+  }) => ArtworkPin(
+    pid: pid ?? this.pid,
+    sizePx: sizePx ?? this.sizePx,
+    artUrl: artUrl ?? this.artUrl,
+    etag: etag ?? this.etag,
+    localPath: localPath ?? this.localPath,
+    sizeBytes: sizeBytes ?? this.sizeBytes,
+    pinnedAt: pinnedAt ?? this.pinnedAt,
+  );
+  ArtworkPin copyWithCompanion(ArtworkPinsCompanion data) {
+    return ArtworkPin(
+      pid: data.pid.present ? data.pid.value : this.pid,
+      sizePx: data.sizePx.present ? data.sizePx.value : this.sizePx,
+      artUrl: data.artUrl.present ? data.artUrl.value : this.artUrl,
+      etag: data.etag.present ? data.etag.value : this.etag,
+      localPath: data.localPath.present ? data.localPath.value : this.localPath,
+      sizeBytes: data.sizeBytes.present ? data.sizeBytes.value : this.sizeBytes,
+      pinnedAt: data.pinnedAt.present ? data.pinnedAt.value : this.pinnedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ArtworkPin(')
+          ..write('pid: $pid, ')
+          ..write('sizePx: $sizePx, ')
+          ..write('artUrl: $artUrl, ')
+          ..write('etag: $etag, ')
+          ..write('localPath: $localPath, ')
+          ..write('sizeBytes: $sizeBytes, ')
+          ..write('pinnedAt: $pinnedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(pid, sizePx, artUrl, etag, localPath, sizeBytes, pinnedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ArtworkPin &&
+          other.pid == this.pid &&
+          other.sizePx == this.sizePx &&
+          other.artUrl == this.artUrl &&
+          other.etag == this.etag &&
+          other.localPath == this.localPath &&
+          other.sizeBytes == this.sizeBytes &&
+          other.pinnedAt == this.pinnedAt);
+}
+
+class ArtworkPinsCompanion extends UpdateCompanion<ArtworkPin> {
+  final Value<String> pid;
+  final Value<int> sizePx;
+  final Value<String> artUrl;
+  final Value<String> etag;
+  final Value<String> localPath;
+  final Value<int> sizeBytes;
+  final Value<DateTime> pinnedAt;
+  final Value<int> rowid;
+  const ArtworkPinsCompanion({
+    this.pid = const Value.absent(),
+    this.sizePx = const Value.absent(),
+    this.artUrl = const Value.absent(),
+    this.etag = const Value.absent(),
+    this.localPath = const Value.absent(),
+    this.sizeBytes = const Value.absent(),
+    this.pinnedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ArtworkPinsCompanion.insert({
+    required String pid,
+    required int sizePx,
+    required String artUrl,
+    required String etag,
+    required String localPath,
+    required int sizeBytes,
+    required DateTime pinnedAt,
+    this.rowid = const Value.absent(),
+  }) : pid = Value(pid),
+       sizePx = Value(sizePx),
+       artUrl = Value(artUrl),
+       etag = Value(etag),
+       localPath = Value(localPath),
+       sizeBytes = Value(sizeBytes),
+       pinnedAt = Value(pinnedAt);
+  static Insertable<ArtworkPin> custom({
+    Expression<String>? pid,
+    Expression<int>? sizePx,
+    Expression<String>? artUrl,
+    Expression<String>? etag,
+    Expression<String>? localPath,
+    Expression<int>? sizeBytes,
+    Expression<DateTime>? pinnedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (pid != null) 'pid': pid,
+      if (sizePx != null) 'size_px': sizePx,
+      if (artUrl != null) 'art_url': artUrl,
+      if (etag != null) 'etag': etag,
+      if (localPath != null) 'local_path': localPath,
+      if (sizeBytes != null) 'size_bytes': sizeBytes,
+      if (pinnedAt != null) 'pinned_at': pinnedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ArtworkPinsCompanion copyWith({
+    Value<String>? pid,
+    Value<int>? sizePx,
+    Value<String>? artUrl,
+    Value<String>? etag,
+    Value<String>? localPath,
+    Value<int>? sizeBytes,
+    Value<DateTime>? pinnedAt,
+    Value<int>? rowid,
+  }) {
+    return ArtworkPinsCompanion(
+      pid: pid ?? this.pid,
+      sizePx: sizePx ?? this.sizePx,
+      artUrl: artUrl ?? this.artUrl,
+      etag: etag ?? this.etag,
+      localPath: localPath ?? this.localPath,
+      sizeBytes: sizeBytes ?? this.sizeBytes,
+      pinnedAt: pinnedAt ?? this.pinnedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (pid.present) {
+      map['pid'] = Variable<String>(pid.value);
+    }
+    if (sizePx.present) {
+      map['size_px'] = Variable<int>(sizePx.value);
+    }
+    if (artUrl.present) {
+      map['art_url'] = Variable<String>(artUrl.value);
+    }
+    if (etag.present) {
+      map['etag'] = Variable<String>(etag.value);
+    }
+    if (localPath.present) {
+      map['local_path'] = Variable<String>(localPath.value);
+    }
+    if (sizeBytes.present) {
+      map['size_bytes'] = Variable<int>(sizeBytes.value);
+    }
+    if (pinnedAt.present) {
+      map['pinned_at'] = Variable<DateTime>(pinnedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ArtworkPinsCompanion(')
+          ..write('pid: $pid, ')
+          ..write('sizePx: $sizePx, ')
+          ..write('artUrl: $artUrl, ')
+          ..write('etag: $etag, ')
+          ..write('localPath: $localPath, ')
+          ..write('sizeBytes: $sizeBytes, ')
+          ..write('pinnedAt: $pinnedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$MirrorDatabase extends GeneratedDatabase {
   _$MirrorDatabase(QueryExecutor e) : super(e);
   $MirrorDatabaseManager get managers => $MirrorDatabaseManager(this);
@@ -2800,6 +4250,9 @@ abstract class _$MirrorDatabase extends GeneratedDatabase {
   late final $DownloadRecordsTable downloadRecords = $DownloadRecordsTable(
     this,
   );
+  late final $QueueEntriesTable queueEntries = $QueueEntriesTable(this);
+  late final $QueueMetaTable queueMeta = $QueueMetaTable(this);
+  late final $ArtworkPinsTable artworkPins = $ArtworkPinsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2811,6 +4264,9 @@ abstract class _$MirrorDatabase extends GeneratedDatabase {
     outboxMutations,
     outboxListens,
     downloadRecords,
+    queueEntries,
+    queueMeta,
+    artworkPins,
   ];
 }
 
@@ -3752,6 +5208,7 @@ typedef $$OutboxListensTableCreateCompanionBuilder =
       required int msPlayed,
       Value<bool> finished,
       Value<String> client,
+      Value<int?> skippedMs,
       Value<int> rowid,
     });
 typedef $$OutboxListensTableUpdateCompanionBuilder =
@@ -3762,6 +5219,7 @@ typedef $$OutboxListensTableUpdateCompanionBuilder =
       Value<int> msPlayed,
       Value<bool> finished,
       Value<String> client,
+      Value<int?> skippedMs,
       Value<int> rowid,
     });
 
@@ -3801,6 +5259,11 @@ class $$OutboxListensTableFilterComposer
 
   ColumnFilters<String> get client => $composableBuilder(
     column: $table.client,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get skippedMs => $composableBuilder(
+    column: $table.skippedMs,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3843,6 +5306,11 @@ class $$OutboxListensTableOrderingComposer
     column: $table.client,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get skippedMs => $composableBuilder(
+    column: $table.skippedMs,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$OutboxListensTableAnnotationComposer
@@ -3871,6 +5339,9 @@ class $$OutboxListensTableAnnotationComposer
 
   GeneratedColumn<String> get client =>
       $composableBuilder(column: $table.client, builder: (column) => column);
+
+  GeneratedColumn<int> get skippedMs =>
+      $composableBuilder(column: $table.skippedMs, builder: (column) => column);
 }
 
 class $$OutboxListensTableTableManager
@@ -3912,6 +5383,7 @@ class $$OutboxListensTableTableManager
                 Value<int> msPlayed = const Value.absent(),
                 Value<bool> finished = const Value.absent(),
                 Value<String> client = const Value.absent(),
+                Value<int?> skippedMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OutboxListensCompanion(
                 sessionId: sessionId,
@@ -3920,6 +5392,7 @@ class $$OutboxListensTableTableManager
                 msPlayed: msPlayed,
                 finished: finished,
                 client: client,
+                skippedMs: skippedMs,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3930,6 +5403,7 @@ class $$OutboxListensTableTableManager
                 required int msPlayed,
                 Value<bool> finished = const Value.absent(),
                 Value<String> client = const Value.absent(),
+                Value<int?> skippedMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OutboxListensCompanion.insert(
                 sessionId: sessionId,
@@ -3938,6 +5412,7 @@ class $$OutboxListensTableTableManager
                 msPlayed: msPlayed,
                 finished: finished,
                 client: client,
+                skippedMs: skippedMs,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -4270,6 +5745,726 @@ typedef $$DownloadRecordsTableProcessedTableManager =
       DownloadRecord,
       PrefetchHooks Function()
     >;
+typedef $$QueueEntriesTableCreateCompanionBuilder =
+    QueueEntriesCompanion Function({
+      required String queueId,
+      required String pid,
+      required int position,
+      required int sourceRank,
+      Value<int> rowid,
+    });
+typedef $$QueueEntriesTableUpdateCompanionBuilder =
+    QueueEntriesCompanion Function({
+      Value<String> queueId,
+      Value<String> pid,
+      Value<int> position,
+      Value<int> sourceRank,
+      Value<int> rowid,
+    });
+
+class $$QueueEntriesTableFilterComposer
+    extends Composer<_$MirrorDatabase, $QueueEntriesTable> {
+  $$QueueEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get queueId => $composableBuilder(
+    column: $table.queueId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pid => $composableBuilder(
+    column: $table.pid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sourceRank => $composableBuilder(
+    column: $table.sourceRank,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$QueueEntriesTableOrderingComposer
+    extends Composer<_$MirrorDatabase, $QueueEntriesTable> {
+  $$QueueEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get queueId => $composableBuilder(
+    column: $table.queueId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pid => $composableBuilder(
+    column: $table.pid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sourceRank => $composableBuilder(
+    column: $table.sourceRank,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$QueueEntriesTableAnnotationComposer
+    extends Composer<_$MirrorDatabase, $QueueEntriesTable> {
+  $$QueueEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get queueId =>
+      $composableBuilder(column: $table.queueId, builder: (column) => column);
+
+  GeneratedColumn<String> get pid =>
+      $composableBuilder(column: $table.pid, builder: (column) => column);
+
+  GeneratedColumn<int> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<int> get sourceRank => $composableBuilder(
+    column: $table.sourceRank,
+    builder: (column) => column,
+  );
+}
+
+class $$QueueEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$MirrorDatabase,
+          $QueueEntriesTable,
+          QueueEntry,
+          $$QueueEntriesTableFilterComposer,
+          $$QueueEntriesTableOrderingComposer,
+          $$QueueEntriesTableAnnotationComposer,
+          $$QueueEntriesTableCreateCompanionBuilder,
+          $$QueueEntriesTableUpdateCompanionBuilder,
+          (
+            QueueEntry,
+            BaseReferences<_$MirrorDatabase, $QueueEntriesTable, QueueEntry>,
+          ),
+          QueueEntry,
+          PrefetchHooks Function()
+        > {
+  $$QueueEntriesTableTableManager(_$MirrorDatabase db, $QueueEntriesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$QueueEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$QueueEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$QueueEntriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> queueId = const Value.absent(),
+                Value<String> pid = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<int> sourceRank = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => QueueEntriesCompanion(
+                queueId: queueId,
+                pid: pid,
+                position: position,
+                sourceRank: sourceRank,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String queueId,
+                required String pid,
+                required int position,
+                required int sourceRank,
+                Value<int> rowid = const Value.absent(),
+              }) => QueueEntriesCompanion.insert(
+                queueId: queueId,
+                pid: pid,
+                position: position,
+                sourceRank: sourceRank,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$QueueEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MirrorDatabase,
+      $QueueEntriesTable,
+      QueueEntry,
+      $$QueueEntriesTableFilterComposer,
+      $$QueueEntriesTableOrderingComposer,
+      $$QueueEntriesTableAnnotationComposer,
+      $$QueueEntriesTableCreateCompanionBuilder,
+      $$QueueEntriesTableUpdateCompanionBuilder,
+      (
+        QueueEntry,
+        BaseReferences<_$MirrorDatabase, $QueueEntriesTable, QueueEntry>,
+      ),
+      QueueEntry,
+      PrefetchHooks Function()
+    >;
+typedef $$QueueMetaTableCreateCompanionBuilder =
+    QueueMetaCompanion Function({
+      Value<int> id,
+      Value<int> currentIndex,
+      Value<bool> shuffled,
+      Value<String> repeat,
+      Value<String> sourceKind,
+      Value<String> sourceLabel,
+      Value<String?> sourcePid,
+      Value<bool> sourceRolling,
+      Value<int> nextQueueId,
+      required DateTime updatedAt,
+    });
+typedef $$QueueMetaTableUpdateCompanionBuilder =
+    QueueMetaCompanion Function({
+      Value<int> id,
+      Value<int> currentIndex,
+      Value<bool> shuffled,
+      Value<String> repeat,
+      Value<String> sourceKind,
+      Value<String> sourceLabel,
+      Value<String?> sourcePid,
+      Value<bool> sourceRolling,
+      Value<int> nextQueueId,
+      Value<DateTime> updatedAt,
+    });
+
+class $$QueueMetaTableFilterComposer
+    extends Composer<_$MirrorDatabase, $QueueMetaTable> {
+  $$QueueMetaTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get currentIndex => $composableBuilder(
+    column: $table.currentIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get shuffled => $composableBuilder(
+    column: $table.shuffled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get repeat => $composableBuilder(
+    column: $table.repeat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceLabel => $composableBuilder(
+    column: $table.sourceLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourcePid => $composableBuilder(
+    column: $table.sourcePid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get sourceRolling => $composableBuilder(
+    column: $table.sourceRolling,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get nextQueueId => $composableBuilder(
+    column: $table.nextQueueId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$QueueMetaTableOrderingComposer
+    extends Composer<_$MirrorDatabase, $QueueMetaTable> {
+  $$QueueMetaTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get currentIndex => $composableBuilder(
+    column: $table.currentIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get shuffled => $composableBuilder(
+    column: $table.shuffled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get repeat => $composableBuilder(
+    column: $table.repeat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceLabel => $composableBuilder(
+    column: $table.sourceLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourcePid => $composableBuilder(
+    column: $table.sourcePid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get sourceRolling => $composableBuilder(
+    column: $table.sourceRolling,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get nextQueueId => $composableBuilder(
+    column: $table.nextQueueId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$QueueMetaTableAnnotationComposer
+    extends Composer<_$MirrorDatabase, $QueueMetaTable> {
+  $$QueueMetaTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get currentIndex => $composableBuilder(
+    column: $table.currentIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get shuffled =>
+      $composableBuilder(column: $table.shuffled, builder: (column) => column);
+
+  GeneratedColumn<String> get repeat =>
+      $composableBuilder(column: $table.repeat, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceLabel => $composableBuilder(
+    column: $table.sourceLabel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourcePid =>
+      $composableBuilder(column: $table.sourcePid, builder: (column) => column);
+
+  GeneratedColumn<bool> get sourceRolling => $composableBuilder(
+    column: $table.sourceRolling,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get nextQueueId => $composableBuilder(
+    column: $table.nextQueueId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$QueueMetaTableTableManager
+    extends
+        RootTableManager<
+          _$MirrorDatabase,
+          $QueueMetaTable,
+          QueueMetaData,
+          $$QueueMetaTableFilterComposer,
+          $$QueueMetaTableOrderingComposer,
+          $$QueueMetaTableAnnotationComposer,
+          $$QueueMetaTableCreateCompanionBuilder,
+          $$QueueMetaTableUpdateCompanionBuilder,
+          (
+            QueueMetaData,
+            BaseReferences<_$MirrorDatabase, $QueueMetaTable, QueueMetaData>,
+          ),
+          QueueMetaData,
+          PrefetchHooks Function()
+        > {
+  $$QueueMetaTableTableManager(_$MirrorDatabase db, $QueueMetaTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$QueueMetaTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$QueueMetaTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$QueueMetaTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> currentIndex = const Value.absent(),
+                Value<bool> shuffled = const Value.absent(),
+                Value<String> repeat = const Value.absent(),
+                Value<String> sourceKind = const Value.absent(),
+                Value<String> sourceLabel = const Value.absent(),
+                Value<String?> sourcePid = const Value.absent(),
+                Value<bool> sourceRolling = const Value.absent(),
+                Value<int> nextQueueId = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => QueueMetaCompanion(
+                id: id,
+                currentIndex: currentIndex,
+                shuffled: shuffled,
+                repeat: repeat,
+                sourceKind: sourceKind,
+                sourceLabel: sourceLabel,
+                sourcePid: sourcePid,
+                sourceRolling: sourceRolling,
+                nextQueueId: nextQueueId,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> currentIndex = const Value.absent(),
+                Value<bool> shuffled = const Value.absent(),
+                Value<String> repeat = const Value.absent(),
+                Value<String> sourceKind = const Value.absent(),
+                Value<String> sourceLabel = const Value.absent(),
+                Value<String?> sourcePid = const Value.absent(),
+                Value<bool> sourceRolling = const Value.absent(),
+                Value<int> nextQueueId = const Value.absent(),
+                required DateTime updatedAt,
+              }) => QueueMetaCompanion.insert(
+                id: id,
+                currentIndex: currentIndex,
+                shuffled: shuffled,
+                repeat: repeat,
+                sourceKind: sourceKind,
+                sourceLabel: sourceLabel,
+                sourcePid: sourcePid,
+                sourceRolling: sourceRolling,
+                nextQueueId: nextQueueId,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$QueueMetaTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MirrorDatabase,
+      $QueueMetaTable,
+      QueueMetaData,
+      $$QueueMetaTableFilterComposer,
+      $$QueueMetaTableOrderingComposer,
+      $$QueueMetaTableAnnotationComposer,
+      $$QueueMetaTableCreateCompanionBuilder,
+      $$QueueMetaTableUpdateCompanionBuilder,
+      (
+        QueueMetaData,
+        BaseReferences<_$MirrorDatabase, $QueueMetaTable, QueueMetaData>,
+      ),
+      QueueMetaData,
+      PrefetchHooks Function()
+    >;
+typedef $$ArtworkPinsTableCreateCompanionBuilder =
+    ArtworkPinsCompanion Function({
+      required String pid,
+      required int sizePx,
+      required String artUrl,
+      required String etag,
+      required String localPath,
+      required int sizeBytes,
+      required DateTime pinnedAt,
+      Value<int> rowid,
+    });
+typedef $$ArtworkPinsTableUpdateCompanionBuilder =
+    ArtworkPinsCompanion Function({
+      Value<String> pid,
+      Value<int> sizePx,
+      Value<String> artUrl,
+      Value<String> etag,
+      Value<String> localPath,
+      Value<int> sizeBytes,
+      Value<DateTime> pinnedAt,
+      Value<int> rowid,
+    });
+
+class $$ArtworkPinsTableFilterComposer
+    extends Composer<_$MirrorDatabase, $ArtworkPinsTable> {
+  $$ArtworkPinsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get pid => $composableBuilder(
+    column: $table.pid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sizePx => $composableBuilder(
+    column: $table.sizePx,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get artUrl => $composableBuilder(
+    column: $table.artUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get etag => $composableBuilder(
+    column: $table.etag,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localPath => $composableBuilder(
+    column: $table.localPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sizeBytes => $composableBuilder(
+    column: $table.sizeBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get pinnedAt => $composableBuilder(
+    column: $table.pinnedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ArtworkPinsTableOrderingComposer
+    extends Composer<_$MirrorDatabase, $ArtworkPinsTable> {
+  $$ArtworkPinsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get pid => $composableBuilder(
+    column: $table.pid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sizePx => $composableBuilder(
+    column: $table.sizePx,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get artUrl => $composableBuilder(
+    column: $table.artUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get etag => $composableBuilder(
+    column: $table.etag,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localPath => $composableBuilder(
+    column: $table.localPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sizeBytes => $composableBuilder(
+    column: $table.sizeBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get pinnedAt => $composableBuilder(
+    column: $table.pinnedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ArtworkPinsTableAnnotationComposer
+    extends Composer<_$MirrorDatabase, $ArtworkPinsTable> {
+  $$ArtworkPinsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get pid =>
+      $composableBuilder(column: $table.pid, builder: (column) => column);
+
+  GeneratedColumn<int> get sizePx =>
+      $composableBuilder(column: $table.sizePx, builder: (column) => column);
+
+  GeneratedColumn<String> get artUrl =>
+      $composableBuilder(column: $table.artUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get etag =>
+      $composableBuilder(column: $table.etag, builder: (column) => column);
+
+  GeneratedColumn<String> get localPath =>
+      $composableBuilder(column: $table.localPath, builder: (column) => column);
+
+  GeneratedColumn<int> get sizeBytes =>
+      $composableBuilder(column: $table.sizeBytes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get pinnedAt =>
+      $composableBuilder(column: $table.pinnedAt, builder: (column) => column);
+}
+
+class $$ArtworkPinsTableTableManager
+    extends
+        RootTableManager<
+          _$MirrorDatabase,
+          $ArtworkPinsTable,
+          ArtworkPin,
+          $$ArtworkPinsTableFilterComposer,
+          $$ArtworkPinsTableOrderingComposer,
+          $$ArtworkPinsTableAnnotationComposer,
+          $$ArtworkPinsTableCreateCompanionBuilder,
+          $$ArtworkPinsTableUpdateCompanionBuilder,
+          (
+            ArtworkPin,
+            BaseReferences<_$MirrorDatabase, $ArtworkPinsTable, ArtworkPin>,
+          ),
+          ArtworkPin,
+          PrefetchHooks Function()
+        > {
+  $$ArtworkPinsTableTableManager(_$MirrorDatabase db, $ArtworkPinsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ArtworkPinsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ArtworkPinsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ArtworkPinsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> pid = const Value.absent(),
+                Value<int> sizePx = const Value.absent(),
+                Value<String> artUrl = const Value.absent(),
+                Value<String> etag = const Value.absent(),
+                Value<String> localPath = const Value.absent(),
+                Value<int> sizeBytes = const Value.absent(),
+                Value<DateTime> pinnedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ArtworkPinsCompanion(
+                pid: pid,
+                sizePx: sizePx,
+                artUrl: artUrl,
+                etag: etag,
+                localPath: localPath,
+                sizeBytes: sizeBytes,
+                pinnedAt: pinnedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String pid,
+                required int sizePx,
+                required String artUrl,
+                required String etag,
+                required String localPath,
+                required int sizeBytes,
+                required DateTime pinnedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ArtworkPinsCompanion.insert(
+                pid: pid,
+                sizePx: sizePx,
+                artUrl: artUrl,
+                etag: etag,
+                localPath: localPath,
+                sizeBytes: sizeBytes,
+                pinnedAt: pinnedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ArtworkPinsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MirrorDatabase,
+      $ArtworkPinsTable,
+      ArtworkPin,
+      $$ArtworkPinsTableFilterComposer,
+      $$ArtworkPinsTableOrderingComposer,
+      $$ArtworkPinsTableAnnotationComposer,
+      $$ArtworkPinsTableCreateCompanionBuilder,
+      $$ArtworkPinsTableUpdateCompanionBuilder,
+      (
+        ArtworkPin,
+        BaseReferences<_$MirrorDatabase, $ArtworkPinsTable, ArtworkPin>,
+      ),
+      ArtworkPin,
+      PrefetchHooks Function()
+    >;
 
 class $MirrorDatabaseManager {
   final _$MirrorDatabase _db;
@@ -4286,4 +6481,10 @@ class $MirrorDatabaseManager {
       $$OutboxListensTableTableManager(_db, _db.outboxListens);
   $$DownloadRecordsTableTableManager get downloadRecords =>
       $$DownloadRecordsTableTableManager(_db, _db.downloadRecords);
+  $$QueueEntriesTableTableManager get queueEntries =>
+      $$QueueEntriesTableTableManager(_db, _db.queueEntries);
+  $$QueueMetaTableTableManager get queueMeta =>
+      $$QueueMetaTableTableManager(_db, _db.queueMeta);
+  $$ArtworkPinsTableTableManager get artworkPins =>
+      $$ArtworkPinsTableTableManager(_db, _db.artworkPins);
 }

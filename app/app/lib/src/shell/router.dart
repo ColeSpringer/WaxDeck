@@ -30,6 +30,7 @@ import '../podcasts/episode_screen.dart';
 import '../podcasts/podcasts_screen.dart';
 import '../podcasts/show_screen.dart';
 import '../prototype/editing_prototype_screen.dart';
+import '../queue/queue_persistence.dart';
 import '../radio/radio_screen.dart';
 import '../review/review_entry_screen.dart';
 import '../review/review_screen.dart';
@@ -417,7 +418,8 @@ final signedInRoutes = <RouteBase>[
 ///
 /// The sync engine (or the web invalidation listener) starts when this
 /// mounts and stops when the auth redirect replaces it with the login
-/// screen; share-sheet payloads land here for the same reason.
+/// screen; share-sheet payloads and queue persistence land here for the
+/// same reason.
 class _SignedInScope extends ConsumerWidget {
   const _SignedInScope({required this.child});
 
@@ -426,6 +428,7 @@ class _SignedInScope extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(syncBinderProvider);
+    ref.watch(queuePersistenceProvider);
     return ShareIntakeGate(child: child);
   }
 }

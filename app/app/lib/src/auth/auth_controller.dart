@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../queue/queue_persistence.dart';
 import 'credential_store.dart';
 
 /// The pre-auth server probe: first-run setup state and whether open
@@ -158,6 +159,10 @@ class AuthController extends AsyncNotifier<SessionState> {
     if (!kIsWeb) {
       await ref.read(credentialStoreProvider).clearToken();
     }
+    // The queue is the one piece of local state a signed-out install
+    // would otherwise put back in front of whoever signs in next, since
+    // the next launch offers to resume it by name.
+    await forgetQueueOnSignOut(ref);
     state = const AsyncData(SessionState(authenticated: false));
   }
 }

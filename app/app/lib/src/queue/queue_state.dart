@@ -1,0 +1,305 @@
+import 'package:waxdeck_data/waxdeck_data.dart';
+
+/// The most items a local queue holds, mirroring the server's Connect
+/// session cap so a queue can always be handed to an endpoint whole.
+const int kQueueCap = 500;
+
+/// What happens at the end of an item.
+enum QueueRepeat {
+  off('off'),
+  all('all'),
+  one('one');
+
+  const QueueRepeat(this.wireName);
+
+  /// The vocabulary the Connect command bus speaks (`set-repeat`).
+  final String wireName;
+
+  static QueueRepeat fromWire(String value) {
+    for (final r in QueueRepeat.values) {
+      if (r.wireName == value) return r;
+    }
+    return QueueRepeat.off;
+  }
+}
+
+/// What a queue was built from, for the "Playing from" line, the queue
+/// screen's header, and the restore offer.
+enum QueueSourceKind {
+  album('album'),
+  artist('artist'),
+  playlist('playlist'),
+  genre('genre'),
+  mix('mix'),
+  shelf('shelf'),
+  search('search'),
+  library('library'),
+  show('show'),
+  book('book'),
+
+  /// One item tapped with no context around it: an episode, a book, a
+  /// track played from a search result row.
+  single('single'),
+
+  /// A restored queue whose provenance predates this field, or one
+  /// assembled by something that did not say.
+  unknown('unknown');
+
+  const QueueSourceKind(this.wireName);
+
+  final String wireName;
+
+  static QueueSourceKind fromWire(String value) {
+    for (final k in QueueSourceKind.values) {
+      if (k.wireName == value) return k;
+    }
+    return QueueSourceKind.unknown;
+  }
+}
+
+/// Where the queue came from. [label] is the display name as the source
+/// screen knows it ("Kind of Blue"); rendering it into a sentence is the
+/// UI's job, not this layer's.
+class QueueSource {
+  const QueueSource({
+    required this.kind,
+    required this.label,
+    this.pid,
+    this.rolling = false,
+  });
+
+  static const QueueSource none = QueueSource(
+    kind: QueueSourceKind.unknown,
+    label: '',
+  );
+
+  final QueueSourceKind kind;
+  final String label;
+
+  /// The entity the queue was built from, when there is one.
+  final String? pid;
+
+  /// True when the queue is a window over a scope larger than
+  /// [kQueueCap] (shuffle everything), refilled as it drains. The queue
+  /// screen says so, so the window is not mistaken for the whole scope.
+  final bool rolling;
+
+  @override
+  bool operator ==(Object other) =>
+      other is QueueSource &&
+      other.kind == kind &&
+      other.label == label &&
+      other.pid == pid &&
+      other.rolling == rolling;
+
+  @override
+  int get hashCode => Object.hash(kind, label, pid, rolling);
+
+  @override
+  String toString() => 'QueueSource(${kind.wireName}, $label, $pid)';
+}
+
+/// One place in the queue. [queueId] is stable for the entry's life, so
+/// a reorder moves an entry rather than replacing it, and the same pid
+/// may sit in the queue more than once.
+class QueueEntry {
+  const QueueEntry({required this.queueId, required this.pid});
+
+  final String queueId;
+  final String pid;
+
+  @override
+  String toString() => 'QueueEntry($queueId, $pid)';
+}
+
+/// The queue that [QueueController.undoReplace] would put back: what was
+/// playing before a tap replaced it, and where it stood.
+class QueueUndo {
+  const QueueUndo({required this.queue, required this.positionMs});
+
+  final QueueState queue;
+  final int positionMs;
+}
+
+/// The queue, as one immutable value.
+///
+/// [entries] is play order: what the queue screen renders top to bottom
+/// and what a Connect load serializes to. [sourceOrder] is the same
+/// entries by their queue ids in the order the queue was built in, which
+/// is what un-shuffling restores; while shuffle is off the two agree.
+///
+/// Deliberately no value equality: the lists would have to be compared
+/// element by element on every notification, and the controller only
+/// ever assigns a new state when something actually changed. Tests
+/// assert on fields rather than on whole states.
+class QueueState {
+  const QueueState({
+    required this.entries,
+    required this.sourceOrder,
+    required this.currentIndex,
+    required this.shuffled,
+    required this.repeat,
+    required this.source,
+    required this.nextQueueId,
+    this.undo,
+  });
+
+  static const QueueState empty = QueueState(
+    entries: [],
+    sourceOrder: [],
+    currentIndex: 0,
+    shuffled: false,
+    repeat: QueueRepeat.off,
+    source: QueueSource.none,
+    nextQueueId: 0,
+  );
+
+  final List<QueueEntry> entries;
+  final List<String> sourceOrder;
+  final int currentIndex;
+  final bool shuffled;
+  final QueueRepeat repeat;
+  final QueueSource source;
+
+  /// The next queue id to mint. Persisted, so a restored queue cannot
+  /// hand a live id to a new entry.
+  final int nextQueueId;
+
+  /// The queue a replacement displaced, for the Undo on the "Playing
+  /// from" toast. Never persisted: a relaunch is not an accident to
+  /// take back.
+  final QueueUndo? undo;
+
+  bool get isEmpty => entries.isEmpty;
+  bool get isNotEmpty => entries.isNotEmpty;
+  int get length => entries.length;
+
+  QueueEntry? get currentEntry =>
+      entries.isEmpty ? null : entries[currentIndex];
+
+  String? get currentPid => currentEntry?.pid;
+
+  /// Ordered pids, which is what `POST /player/sessions`, `set-queue`,
+  /// and a timeline mint all consume.
+  List<String> get pids => [for (final e in entries) e.pid];
+
+  /// The entry an advance would land on, or null when it would end the
+  /// queue or repeat the current item. This is what the engine may
+  /// preload, so it must answer without changing anything, and it must
+  /// never name the item already playing: a lone entry on repeat-all
+  /// wraps onto itself, which is a repeat and not something to preload.
+  QueueEntry? get nextEntry {
+    if (entries.isEmpty || repeat == QueueRepeat.one) return null;
+    if (currentIndex + 1 < entries.length) return entries[currentIndex + 1];
+    if (repeat == QueueRepeat.all && entries.length > 1) return entries.first;
+    return null;
+  }
+
+  QueueState copyWith({
+    List<QueueEntry>? entries,
+    List<String>? sourceOrder,
+    int? currentIndex,
+    bool? shuffled,
+    QueueRepeat? repeat,
+    QueueSource? source,
+    int? nextQueueId,
+    QueueUndo? undo,
+    bool clearUndo = false,
+  }) {
+    return QueueState(
+      entries: entries ?? this.entries,
+      sourceOrder: sourceOrder ?? this.sourceOrder,
+      currentIndex: currentIndex ?? this.currentIndex,
+      shuffled: shuffled ?? this.shuffled,
+      repeat: repeat ?? this.repeat,
+      source: source ?? this.source,
+      nextQueueId: nextQueueId ?? this.nextQueueId,
+      undo: clearUndo ? null : (undo ?? this.undo),
+    );
+  }
+
+  /// The persistable shape: ordered pids, where they stand, and what
+  /// they came from. [sourceOrder] rides as a rank per entry.
+  StoredQueue toStored({required DateTime updatedAt}) {
+    final ranks = {
+      for (var i = 0; i < sourceOrder.length; i++) sourceOrder[i]: i,
+    };
+    return StoredQueue(
+      entries: [
+        // An entry missing from the source order should be impossible
+        // (every edit writes both lists), so it falls back to its own
+        // play position rather than collapsing every orphan onto one
+        // rank, where they would come back in whatever order a sort
+        // happened to leave them.
+        for (var i = 0; i < entries.length; i++)
+          StoredQueueEntry(
+            queueId: entries[i].queueId,
+            pid: entries[i].pid,
+            sourceRank: ranks[entries[i].queueId] ?? sourceOrder.length + i,
+          ),
+      ],
+      currentIndex: currentIndex,
+      shuffled: shuffled,
+      repeat: repeat.wireName,
+      sourceKind: source.kind.wireName,
+      sourceLabel: source.label,
+      sourcePid: source.pid,
+      sourceRolling: source.rolling,
+      nextQueueId: nextQueueId,
+      updatedAt: updatedAt,
+    );
+  }
+
+  /// Rebuilds a queue from what was persisted. Entry ids and ranks come
+  /// back as written; a rank that repeats (an older build, a torn
+  /// write) breaks the tie on play position rather than on whatever
+  /// order an unstable sort leaves behind, which is what makes the
+  /// degradation to play order real rather than nominal.
+  factory QueueState.fromStored(StoredQueue stored) {
+    final byRank = [for (var i = 0; i < stored.entries.length; i++) i]
+      ..sort((a, b) {
+        final rank = stored.entries[a].sourceRank.compareTo(
+          stored.entries[b].sourceRank,
+        );
+        return rank != 0 ? rank : a.compareTo(b);
+      });
+    // The counter is written with the entries, but a torn write could
+    // leave it behind them; minting from it must still never collide
+    // with an id already in the queue.
+    var next = stored.nextQueueId;
+    for (final e in stored.entries) {
+      final n = queueIdOrdinal(e.queueId);
+      if (n != null && n >= next) next = n + 1;
+    }
+    return QueueState(
+      entries: [
+        for (final e in stored.entries)
+          QueueEntry(queueId: e.queueId, pid: e.pid),
+      ],
+      sourceOrder: [for (final i in byRank) stored.entries[i].queueId],
+      currentIndex: stored.entries.isEmpty
+          ? 0
+          : stored.currentIndex.clamp(0, stored.entries.length - 1),
+      shuffled: stored.shuffled,
+      repeat: QueueRepeat.fromWire(stored.repeat),
+      source: QueueSource(
+        kind: QueueSourceKind.fromWire(stored.sourceKind),
+        label: stored.sourceLabel,
+        pid: stored.sourcePid,
+        rolling: stored.sourceRolling,
+      ),
+      nextQueueId: next,
+    );
+  }
+}
+
+/// The counter value behind a minted queue id, or null when the id came
+/// from somewhere else.
+int? queueIdOrdinal(String queueId) {
+  if (!queueId.startsWith(kQueueIdPrefix)) return null;
+  return int.tryParse(queueId.substring(kQueueIdPrefix.length));
+}
+
+/// Queue ids are local and disposable; the prefix only keeps them from
+/// reading like pids in a log line.
+const String kQueueIdPrefix = 'q';

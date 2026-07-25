@@ -57,13 +57,8 @@ here waits on upstream.
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
 - `[in-repo]` **Offline artwork caching.** The offline grid shows placeholders;
-  artwork is only fetched live.
-- `[in-repo]` **Queued listen sessions drop skippedMs.** Live listen
-  reports carry the trimmed-time counter, but the offline outbox
-  table (waxdeck_data OutboxListens) has no column for it, so a
-  session that fails to report and replays from the queue loses its
-  time-saved contribution. Fixing it needs a drift schema bump with a
-  migration and a regenerated database.g.dart.
+  artwork is only fetched live. The `ArtworkPins` table it needs is in
+  place (mirror schema v2); the store that fills and reads it is not.
 - `[roadmap]` **Web loading and scrolling performance.** Parked for the larger UI
   and UX overhaul rather than spot-fixed. The recorded perf gate
   measured the virtualized grid without artwork; the suspected

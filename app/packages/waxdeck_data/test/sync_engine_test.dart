@@ -17,6 +17,10 @@ class ScriptedRepository implements WaxDeckRepository {
 
   final replayed = <String>[];
   final reportedSessions = <String>{};
+
+  /// What each reported session claimed it saved, so a replay from the
+  /// outbox can be checked for carrying the field at all.
+  final reportedSkippedMs = <String, int?>{};
   int duplicateListens = 0;
   int failNextMutations = 0;
 
@@ -114,6 +118,7 @@ class ScriptedRepository implements WaxDeckRepository {
   Future<ListenOutcome> reportListens(List<ListenSession> sessions) async {
     var accepted = 0;
     for (final s in sessions) {
+      reportedSkippedMs[s.sessionId] = s.skippedMs;
       if (!reportedSessions.add(s.sessionId)) {
         duplicateListens++;
       } else {

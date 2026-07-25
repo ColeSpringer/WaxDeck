@@ -542,6 +542,7 @@ class SyncEngine {
             msPlayed: session.msPlayed,
             finished: Value(session.finished),
             client: Value(session.client ?? ''),
+            skippedMs: Value(session.skippedMs),
           ),
           mode: InsertMode.insertOrIgnore,
         );
@@ -613,6 +614,7 @@ class SyncEngine {
               pid: l.pid,
               startedAt: l.startedAt,
               msPlayed: l.msPlayed,
+              skippedMs: l.skippedMs,
               finished: l.finished,
               client: l.client.isEmpty ? null : l.client,
             ),
