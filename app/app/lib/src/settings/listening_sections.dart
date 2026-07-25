@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
-import '../sharing/shares_screen.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'prefs_controller.dart';
 
@@ -70,9 +71,7 @@ class ListeningSection extends ConsumerWidget {
             title: const Text('Share links'),
             subtitle: const Text('Public links you have handed out'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const SharesScreen()),
-            ),
+            onTap: () => context.push(WaxRoute.shares),
           ),
         ),
       ],

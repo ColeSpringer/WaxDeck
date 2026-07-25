@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
 import '../review/review_controller.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'admin_providers.dart';
-import 'user_edit_screen.dart';
 
 /// Accumulated pages of accounts.
 class UsersState {
@@ -121,9 +122,10 @@ class _UsersTab extends ConsumerWidget {
     WidgetRef ref,
     UserAccount user,
   ) async {
-    final changed = await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => UserEditScreen(user: user)));
+    final changed = await context.push<bool>(
+      WaxRoute.userEdit,
+      extra: UserEditArgs(user: user),
+    );
     if (changed ?? false) ref.invalidate(adminUsersProvider);
   }
 
@@ -216,10 +218,9 @@ class _RequestsTab extends ConsumerWidget {
     WidgetRef ref,
     UserAccount user,
   ) async {
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => UserEditScreen(user: user, approve: true),
-      ),
+    final changed = await context.push<bool>(
+      WaxRoute.userEdit,
+      extra: UserEditArgs(user: user, approve: true),
     );
     if (changed ?? false) {
       ref.invalidate(signupRequestsProvider);

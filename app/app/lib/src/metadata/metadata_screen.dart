@@ -12,10 +12,6 @@ import 'metadata_controller.dart';
 class MetadataScreen extends ConsumerStatefulWidget {
   const MetadataScreen({super.key, required this.pid});
 
-  static const routePrefix = '/metadata/';
-
-  static String routeFor(String pid) => '$routePrefix$pid';
-
   final String pid;
 
   @override

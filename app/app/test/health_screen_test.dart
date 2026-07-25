@@ -7,6 +7,7 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 const _admin = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -19,7 +20,7 @@ Widget _host(FakeRepository repo) => ProviderScope(
     repositoryProvider.overrideWithValue(repo),
     credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
   ],
-  child: const MaterialApp(home: HealthScreen()),
+  child: routedHost(const HealthScreen()),
 );
 
 FakeRepository _repo() {

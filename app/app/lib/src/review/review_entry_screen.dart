@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-import '../metadata/metadata_screen.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'review_controller.dart';
 
@@ -496,11 +497,7 @@ class _TrackDiffRow extends StatelessWidget {
                         icon: const Icon(Icons.more_vert, size: 18),
                         onSelected: (action) {
                           if (action == 'edit') {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => MetadataScreen(pid: pid),
-                              ),
-                            );
+                            context.push(WaxRoute.metadata(pid));
                           }
                         },
                         itemBuilder: (_) => [

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../tools/tasks_screen.dart';
 import 'file_picker_port.dart';
@@ -96,7 +98,7 @@ Future<void> acquireFromUrl(
   String? initialUrl,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
-  final navigator = Navigator.of(context);
+  final router = GoRouter.of(context);
   final request =
       await showDialog<({String url, MediaType mediaType, String format})>(
         context: context,
@@ -127,9 +129,7 @@ Future<void> acquireFromUrl(
           duration: const Duration(seconds: 6),
           action: SnackBarAction(
             label: 'Tasks',
-            onPressed: () => navigator.push(
-              MaterialPageRoute<void>(builder: (_) => const TasksScreen()),
-            ),
+            onPressed: () => router.push<void>(WaxRoute.tasks),
           ),
         ),
       );

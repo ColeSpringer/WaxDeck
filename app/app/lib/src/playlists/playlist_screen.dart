@@ -4,18 +4,17 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-import '../books/book_screen.dart';
-import '../player/player_screen.dart';
 import '../providers.dart';
 import '../sharing/share_dialog.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/file_picker_port.dart';
 import 'name_dialog.dart';
 import 'playlist_cover.dart';
 import 'playlists_controller.dart';
-import 'rule_editor_screen.dart';
 
 /// One playlist: header, member list, and owner affordances. Manual
 /// playlists reorder by drag and remove per row; smart playlists show
@@ -27,14 +26,10 @@ class PlaylistScreen extends ConsumerWidget {
 
   void _openItem(BuildContext context, ItemSummary item) {
     if (item.mediaType == MediaType.audiobook) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => BookScreen(pid: item.pid)),
-      );
+      context.push(WaxRoute.book(item.pid));
       return;
     }
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => PlayerScreen(item: item)));
+    context.push(WaxRoute.nowPlaying, extra: NowPlayingArgs(item: item));
   }
 
   Future<void> _editRule(
@@ -42,18 +37,15 @@ class PlaylistScreen extends ConsumerWidget {
     WidgetRef ref,
     PlaylistView view,
   ) async {
-    final navigator = Navigator.of(context);
-    final next = await navigator.push<Playlist>(
-      MaterialPageRoute<Playlist>(
-        builder: (_) => RuleEditorScreen(editing: view.playlist),
-      ),
+    final router = GoRouter.of(context);
+    final next = await router.push<Playlist>(
+      WaxRoute.playlistEdit(pid),
+      extra: view.playlist,
     );
     // A rule replace reissued the pid; this screen's pid is retired, so
     // swap to the successor.
     if (next != null && next.pid != pid) {
-      navigator.pushReplacement(
-        MaterialPageRoute<void>(builder: (_) => PlaylistScreen(pid: next.pid)),
-      );
+      router.pushReplacement(WaxRoute.playlist(next.pid));
     }
   }
 
@@ -236,7 +228,7 @@ class PlaylistScreen extends ConsumerWidget {
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -260,7 +252,7 @@ class PlaylistScreen extends ConsumerWidget {
     );
     if (confirmed ?? false) {
       await ref.read(playlistDetailProvider(pid).notifier).delete();
-      navigator.pop();
+      router.leave(fallback: WaxRoute.playlists);
     }
   }
 

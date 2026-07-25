@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../media_icons.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'health_controller.dart';
 
@@ -194,11 +196,7 @@ class HealthScreen extends ConsumerWidget {
             _RuleRow(
               rule: rule,
               onFix: () => _fix(context, ref, rule.rule),
-              onOpen: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => HealthIssuesScreen(rule: rule.rule),
-                ),
-              ),
+              onOpen: () => context.push(WaxRoute.healthRule(rule.rule)),
             ),
           const SizedBox(height: 16),
           _DuplicatesSection(onMerge: (group) => _merge(context, ref, group)),

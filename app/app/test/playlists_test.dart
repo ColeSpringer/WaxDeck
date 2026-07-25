@@ -1,17 +1,21 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/playlists/playlist_cover.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/playlists/rule_editor_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 const _track = ItemSummary(
   pid: 'tr-01JZX5N8QW3F4V9T2B7KD3M9R6',
@@ -29,7 +33,9 @@ Widget _host(FakeRepository repo, Widget home, {FilePickerPort? picker}) =>
         // null hides every pick affordance, a fake proves one shows.
         filePickerProvider.overrideWithValue(picker),
       ],
-      child: MaterialApp(home: home),
+      // Every one of these screens is pushed in the app, and some pop
+      // themselves on save or delete.
+      child: routedHost(home, pushed: true),
     );
 
 /// A picker that resolves pickFile to one fixed image.
@@ -182,16 +188,15 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: MaterialApp(
-          home: Builder(
+        child: routedHost(
+          Builder(
             builder: (context) => Scaffold(
               body: Center(
                 child: ElevatedButton(
                   onPressed: () async {
-                    popped = await Navigator.of(context).push<Playlist>(
-                      MaterialPageRoute(
-                        builder: (_) => RuleEditorScreen(editing: created),
-                      ),
+                    popped = await context.push<Playlist>(
+                      WaxRoute.playlistEdit(created.pid),
+                      extra: created,
                     );
                   },
                   child: const Text('edit'),

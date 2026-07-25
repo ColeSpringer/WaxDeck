@@ -8,6 +8,7 @@ import 'package:waxdeck/src/uploads/share_intake.dart';
 import 'package:waxdeck/src/uploads/share_intake_gate.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 /// Hands out one queued payload, like MainActivity's share queue.
 class FakeShareIntake implements ShareIntakePort {
@@ -30,8 +31,8 @@ Widget _host(FakeRepository repo, FakeShareIntake port) => ProviderScope(
     repositoryProvider.overrideWithValue(repo),
     shareIntakeProvider.overrideWithValue(port),
   ],
-  child: const MaterialApp(
-    home: ShareIntakeGate(child: Scaffold(body: Text('library'))),
+  child: routedHost(
+    const ShareIntakeGate(child: Scaffold(body: Text('library'))),
   ),
 );
 

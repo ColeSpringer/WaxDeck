@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-import '../books/book_screen.dart';
 import '../media_icons.dart';
-import '../player/player_screen.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'browse_controller.dart';
 
@@ -124,11 +124,9 @@ class _BucketList extends ConsumerWidget {
                 '${bucket.count}',
                 style: Theme.of(context).textTheme.labelMedium,
               ),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      BrowseItemsScreen(dimension: dimension, bucket: bucket),
-                ),
+              onTap: () => context.push(
+                WaxRoute.browseItems,
+                extra: BrowseBucketArgs(dimension: dimension, bucket: bucket),
               ),
             ),
           );
@@ -151,14 +149,10 @@ class BrowseItemsScreen extends ConsumerWidget {
 
   void _open(BuildContext context, ItemSummary item) {
     if (item.mediaType == MediaType.audiobook) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => BookScreen(pid: item.pid)),
-      );
+      context.push(WaxRoute.book(item.pid));
       return;
     }
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => PlayerScreen(item: item)));
+    context.push(WaxRoute.nowPlaying, extra: NowPlayingArgs(item: item));
   }
 
   @override

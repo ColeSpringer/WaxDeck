@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
@@ -265,7 +266,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
   Future<void> _save() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final rule = _draftRule();
@@ -279,12 +280,12 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
               visibility: widget.createShared ? 'shared' : null,
               rule: rule,
             );
-        navigator.pop(created);
+        router.pop(created);
       } else {
         final next = await ref
             .read(playlistDetailProvider(editing.pid).notifier)
             .replaceRule(rule);
-        navigator.pop(next);
+        router.pop(next);
       }
     } on WaxDeckApiException catch (e) {
       messenger

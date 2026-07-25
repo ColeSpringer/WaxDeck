@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'podcasts_controller.dart';
-import 'show_screen.dart';
 
 /// The caller's podcast subscriptions, with an add-subscription dialog.
 class PodcastsScreen extends ConsumerWidget {
@@ -111,9 +112,7 @@ class _SubscriptionRow extends StatelessWidget {
         subtitle: show.author == null
             ? null
             : Text(show.author!, maxLines: 1, overflow: TextOverflow.ellipsis),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => ShowScreen(pid: show.pid)),
-        ),
+        onTap: () => context.push(WaxRoute.show(show.pid)),
       ),
     );
   }

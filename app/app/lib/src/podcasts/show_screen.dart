@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-import '../player/player_screen.dart';
 import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'credits.dart';
-import 'episode_screen.dart';
 import 'explicit_badge.dart';
 import 'podcasts_controller.dart';
 import 'show_notes.dart';
@@ -457,10 +457,9 @@ class _EpisodeRow extends ConsumerWidget {
         ),
         onTap: () {
           if (episode.downloaded) {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => PlayerScreen(item: episode),
-              ),
+            context.push(
+              WaxRoute.nowPlaying,
+              extra: NowPlayingArgs(item: episode),
             );
           } else {
             _fetch(context, ref);
@@ -471,9 +470,7 @@ class _EpisodeRow extends ConsumerWidget {
   }
 
   void _openInfo(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => EpisodeScreen(pid: episode.pid)),
-    );
+    context.push(WaxRoute.episode(episode.pid));
   }
 }
 

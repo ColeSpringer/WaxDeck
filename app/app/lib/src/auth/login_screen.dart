@@ -2,12 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'auth_controller.dart';
-import 'signup_screen.dart';
 
 /// Configured single-sign-on providers, for rendering login buttons. An
 /// unreachable server hides the buttons rather than erroring the form.
@@ -84,9 +85,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _openSignup() async {
-    final username = await Navigator.of(
-      context,
-    ).push<String>(MaterialPageRoute(builder: (_) => const SignupScreen()));
+    final username = await context.push<String>(WaxRoute.signup);
     if (username == null || !mounted) return;
     // The account is active already; prefill so signing in is one step.
     setState(() => _username.text = username);

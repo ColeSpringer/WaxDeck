@@ -212,6 +212,20 @@ here waits on upstream.
   brief re-layout when non-Latin metadata first appears; the call
   belongs with the bundle-size pass of the UI overhaul, which measures
   the whole picture.
+- `[roadmap]` **The web address bar does not follow in-app navigation.**
+  Every screen is addressable (a typed or shared location resolves to
+  it), but tapping into one pushes, and go_router keeps imperative
+  pushes out of the URL it reports: opening settings from the grid
+  leaves the bar at `/`, and a reload from there lands back on the grid.
+  The switch that would change this
+  (`GoRouter.optionURLReflectsImperativeAPIs`) is the wrong tool and the
+  package says so, because half of WaxDeck's pushed routes carry an
+  in-memory payload and their URLs resolve to something else on their
+  own. The right fix rides the adaptive shell, where destination changes
+  are `go` on a branch navigator and the payload-carrying screens become
+  overlays on the root navigator, so what lands in the bar is exactly
+  what can be shared. Browser back already steps through the pushed
+  stack, so this is about linkability, not navigation. See ADR-0017.
 - `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists.

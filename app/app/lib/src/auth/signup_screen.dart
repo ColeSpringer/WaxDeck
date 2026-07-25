@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 
 /// Requests an account: open signup queues the request for an
@@ -40,7 +42,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       _submitting = true;
       _error = null;
     });
-    final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
     final displayName = _displayName.text.trim();
     final inviteToken = _inviteToken.text.trim();
     try {
@@ -60,7 +62,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         });
       } else {
         // Active right away: back to the login form, prefilled.
-        navigator.pop(_username.text.trim());
+        router.leave(fallback: WaxRoute.login, result: _username.text.trim());
       }
     } on WaxDeckApiException catch (e) {
       if (!mounted) return;
@@ -104,7 +106,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         ),
                         const SizedBox(height: 24),
                         OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(),
+                          onPressed: () =>
+                              context.leave(fallback: WaxRoute.login),
                           child: const Text('Back to sign-in'),
                         ),
                       ],

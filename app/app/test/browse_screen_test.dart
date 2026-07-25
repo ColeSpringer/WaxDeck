@@ -9,10 +9,11 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: const MaterialApp(home: BrowseScreen()),
+  child: routedHost(const BrowseScreen()),
 );
 
 /// Serves one bucket per page (so paging happens at all under the

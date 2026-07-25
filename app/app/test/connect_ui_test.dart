@@ -10,6 +10,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 const _endpoint = PlayerEndpoint(
   id: 'pe-speaker',
@@ -73,7 +74,7 @@ void main() {
           repositoryProvider.overrideWithValue(repo),
           audioEngineProvider.overrideWithValue(FakeEngine()),
         ],
-        child: const MaterialApp(home: _PickerHost()),
+        child: routedHost(const _PickerHost()),
       ),
     );
     await tester.tap(find.text('open'));
@@ -119,7 +120,10 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(home: RemoteControlScreen(initial: _session())),
+        child: routedHost(
+          RemoteControlScreen(initial: _session()),
+          pushed: true,
+        ),
       ),
     );
     await tester.pump();

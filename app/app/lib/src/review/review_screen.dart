@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../media_icons.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shortcuts.dart';
 import 'review_controller.dart';
-import 'review_entry_screen.dart';
 
 /// The metadata review queue: filterable, cursor paged, keyboard-first.
 ///
@@ -141,11 +142,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   }
 
   void _open(ReviewEntry entry) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ReviewEntryScreen(entryId: entry.id),
-      ),
-    );
+    context.push(WaxRoute.reviewEntry(entry.id));
   }
 
   void _escape() {
@@ -156,7 +153,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       });
       return;
     }
-    Navigator.of(context).maybePop();
+    if (context.canPop()) context.pop();
   }
 
   void _toggleChecked(ReviewEntry entry) {

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-import 'listen_log_screen.dart';
 import 'stats_charts.dart';
 import 'stats_controller.dart';
-import 'year_in_review_screen.dart';
 
 /// The caller's listening statistics: headline totals with a range
 /// selector, the bucketed listening chart, the calendar heatmap with
@@ -104,11 +104,7 @@ class StatsScreen extends ConsumerWidget {
               title: const Text('Listen log'),
               subtitle: const Text('Every recorded listen session'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const ListenLogScreen(),
-                ),
-              ),
+              onTap: () => context.push(WaxRoute.listenLog),
             ),
           ),
           const SizedBox(height: 8),
@@ -127,11 +123,7 @@ class StatsScreen extends ConsumerWidget {
                 title: const Text('Year in review'),
                 subtitle: const Text('Your listening year, wrapped up'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const YearInReviewScreen(),
-                  ),
-                ),
+                onTap: () => context.push(WaxRoute.yearInReview),
               ),
             ),
           ),

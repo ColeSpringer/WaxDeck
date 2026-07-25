@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
 import '../review/review_controller.dart';
+import '../shell/routes.dart';
 
 /// Editor for one account's roles, access, and permissions. Serves two
 /// flows with one shape: editing an existing account, and approving a
@@ -78,7 +80,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
   Future<void> _save() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final repo = ref.read(repositoryProvider);
     final roles = [if (_admin) 'admin' else 'user'];
@@ -103,7 +105,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
           uploadQuotaBytes: _quotaBytes,
         );
       }
-      navigator.pop(true);
+      router.leave(fallback: WaxRoute.users, result: true);
     } on WaxDeckApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
       if (mounted) setState(() => _busy = false);
@@ -168,7 +170,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
   }
 
   Future<void> _deleteUser() async {
-    final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final confirmed = await _confirm(
       title: 'Delete account?',
@@ -180,7 +182,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
     if (!confirmed) return;
     try {
       await ref.read(repositoryProvider).deleteUser(widget.user.id);
-      navigator.pop(true);
+      router.leave(fallback: WaxRoute.users, result: true);
     } on WaxDeckApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }

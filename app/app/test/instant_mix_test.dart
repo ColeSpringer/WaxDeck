@@ -7,6 +7,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 const _seedPid = 'tr-01JZX5N8QW3F4V9T2B7KDSEED01';
 const _mixPid1 = 'tr-01JZX5N8QW3F4V9T2B7KDMIX001';
@@ -17,7 +18,7 @@ Widget _host(FakeRepository repo, FakeEngine engine) => ProviderScope(
     repositoryProvider.overrideWithValue(repo),
     audioEngineProvider.overrideWithValue(engine),
   ],
-  child: MaterialApp(home: PlayerScreen(item: testItem(_seedPid))),
+  child: routedHost(PlayerScreen(item: testItem(_seedPid))),
 );
 
 void main() {

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../media_icons.dart';
-import '../player/player_screen.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 
 /// A computed list of playable tracks (an instant mix or a
@@ -111,8 +112,9 @@ class _TrackRow extends StatelessWidget {
         subtitle: item.artist == null
             ? null
             : Text(item.artist!, maxLines: 1, overflow: TextOverflow.ellipsis),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => PlayerScreen(item: item)),
+        onTap: () => context.push(
+          WaxRoute.nowPlaying,
+          extra: NowPlayingArgs(item: item),
         ),
       ),
     );

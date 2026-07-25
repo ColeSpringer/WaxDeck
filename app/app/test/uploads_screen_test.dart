@@ -10,6 +10,7 @@ import 'package:waxdeck/src/uploads/uploads_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 /// A picker resolving to fixed reader-backed files, mirroring the web
 /// port's lazy-reference shape.
@@ -51,7 +52,7 @@ Widget _host(FakeRepository repo, {FilePickerPort? picker}) => ProviderScope(
     credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
     filePickerProvider.overrideWithValue(picker),
   ],
-  child: const MaterialApp(home: UploadsScreen()),
+  child: routedHost(const UploadsScreen()),
 );
 
 void main() {

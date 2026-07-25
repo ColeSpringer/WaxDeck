@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../tools/tasks_screen.dart';
 
@@ -64,7 +66,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
     try {
       await ref
           .read(repositoryProvider)
@@ -91,9 +93,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
             duration: const Duration(seconds: 6),
             action: SnackBarAction(
               label: 'Tasks',
-              onPressed: () => navigator.push(
-                MaterialPageRoute<void>(builder: (_) => const TasksScreen()),
-              ),
+              onPressed: () => router.push<void>(WaxRoute.tasks),
             ),
           ),
         );

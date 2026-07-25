@@ -2,13 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'playlist_cover.dart';
-import 'playlist_screen.dart';
 import 'playlists_controller.dart';
-import 'rule_editor_screen.dart';
 
 /// The caller's playlists plus every shared one, with a create dialog.
 class PlaylistsScreen extends ConsumerWidget {
@@ -119,11 +119,7 @@ class _PlaylistRow extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(details.join(' | ')),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => PlaylistScreen(pid: playlist.pid),
-          ),
-        ),
+        onTap: () => context.push(WaxRoute.playlist(playlist.pid)),
       ),
     );
   }
@@ -472,15 +468,14 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
     final name = _nameController.text.trim();
     if (name.isEmpty || _busy) return;
     final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
     if (_kind == 'smart') {
       // The rule editor owns smart creation: a smart playlist without a
       // rule cannot exist.
       navigator.pop();
-      await navigator.push(
-        MaterialPageRoute<void>(
-          builder: (_) =>
-              RuleEditorScreen(createName: name, createShared: _shared),
-        ),
+      await router.push<void>(
+        WaxRoute.playlistRules,
+        extra: RuleDraftArgs(name: name, shared: _shared),
       );
       return;
     }
@@ -495,11 +490,7 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
             visibility: _shared ? 'shared' : null,
           );
       navigator.pop();
-      await navigator.push(
-        MaterialPageRoute<void>(
-          builder: (_) => PlaylistScreen(pid: created.pid),
-        ),
-      );
+      await router.push<void>(WaxRoute.playlist(created.pid));
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()

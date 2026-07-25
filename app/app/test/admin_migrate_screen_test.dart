@@ -5,6 +5,7 @@ import 'package:waxdeck/src/admin/migrate_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 /// A viewport tall enough for the whole form, so no test scrolls.
 Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
@@ -14,7 +15,7 @@ Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [repositoryProvider.overrideWithValue(repo)],
-      child: const MaterialApp(home: MigrateScreen()),
+      child: routedHost(const MigrateScreen()),
     ),
   );
   await tester.pumpAndSettle();

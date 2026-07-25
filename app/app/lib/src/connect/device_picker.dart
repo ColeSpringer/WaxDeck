@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'connect_providers.dart';
-import 'remote_screen.dart';
 
 /// The device picker: every endpoint the caller can play to, plus the
 /// active sessions playing elsewhere. Tapping an endpoint moves the
@@ -129,10 +130,6 @@ class _DevicePickerSheet extends ConsumerWidget {
 
   void _openRemote(BuildContext context, PlaybackSessionInfo session) {
     Navigator.of(context).pop();
-    Navigator.of(hostRef.context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => RemoteControlScreen(initial: session),
-      ),
-    );
+    GoRouter.of(hostRef.context).push<void>(WaxRoute.remote, extra: session);
   }
 }

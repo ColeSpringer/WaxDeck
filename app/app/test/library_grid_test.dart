@@ -8,6 +8,7 @@ import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [
@@ -15,7 +16,7 @@ Widget _host(FakeRepository repo) => ProviderScope(
     credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
     filePickerProvider.overrideWithValue(null),
   ],
-  child: const MaterialApp(home: LibraryScreen()),
+  child: routedHost(const LibraryScreen()),
 );
 
 void main() {

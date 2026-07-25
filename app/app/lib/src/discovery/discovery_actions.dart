@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-import '../player/player_screen.dart';
 import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-import 'track_list_screen.dart';
 
 /// How large an instant mix is asked to be.
 const instantMixSize = 50;
@@ -53,9 +53,9 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
     setState(() => _busy = true);
     ref.read(mixAdventurousnessProvider.notifier).set(_adventurousness);
     // The sheet's own navigator closes the sheet; pushes go through
-    // the root navigator that outlives it.
+    // the router, whose stack outlives it.
     final navigator = Navigator.of(context);
-    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final router = GoRouter.of(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final mix = await ref
@@ -80,22 +80,20 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
       // on the list to keep going. Route futures resolve on pop, so
       // neither push is awaited.
       unawaited(
-        rootNavigator.push(
-          MaterialPageRoute<void>(
-            builder: (_) => TrackListScreen(
-              title: 'Instant mix',
-              basis: mix.basis,
-              items: mix.items,
-              idPrefix: 'mix',
-            ),
+        router.push<void>(
+          WaxRoute.tracks,
+          extra: TrackListArgs(
+            title: 'Instant mix',
+            basis: mix.basis,
+            items: mix.items,
+            idPrefix: 'mix',
           ),
         ),
       );
       unawaited(
-        rootNavigator.push(
-          MaterialPageRoute<void>(
-            builder: (_) => PlayerScreen(item: mix.items.first),
-          ),
+        router.push<void>(
+          WaxRoute.nowPlaying,
+          extra: NowPlayingArgs(item: mix.items.first),
         ),
       );
     } on WaxDeckApiException catch (e) {
@@ -167,20 +165,19 @@ Future<void> openSimilarTracks(
   WidgetRef ref,
   ItemSummary seed,
 ) async {
-  final navigator = Navigator.of(context);
+  final router = GoRouter.of(context);
   final messenger = ScaffoldMessenger.of(context);
   try {
     final similar = await ref
         .read(repositoryProvider)
         .getSimilarTracks(seed.pid, limit: instantMixSize);
-    await navigator.push(
-      MaterialPageRoute<void>(
-        builder: (_) => TrackListScreen(
-          title: 'Similar to ${seed.title}',
-          basis: similar.basis,
-          items: similar.items,
-          idPrefix: 'similar',
-        ),
+    await router.push<void>(
+      WaxRoute.tracks,
+      extra: TrackListArgs(
+        title: 'Similar to ${seed.title}',
+        basis: similar.basis,
+        items: similar.items,
+        idPrefix: 'similar',
       ),
     );
   } on WaxDeckApiException catch (e) {

@@ -8,6 +8,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 
@@ -17,7 +18,7 @@ Widget _host(FakeRepository repo, FakeEngine engine) => ProviderScope(
     audioEngineProvider.overrideWithValue(engine),
     credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
   ],
-  child: const MaterialApp(home: BookScreen(pid: bookPid)),
+  child: routedHost(const BookScreen(pid: bookPid)),
 );
 
 FakeRepository _repo() => FakeRepository()

@@ -25,6 +25,16 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- Stated rather than left to the framework default, which
+                 has moved: the app's own scheme is handed to the deep
+                 link port (app_links), not to the router. Letting
+                 Flutter turn waxdeck://auth?code=... into a location
+                 would route the sign-in return at the same time the
+                 port is consuming it. -->
+            <meta-data
+              android:name="flutter_deeplinking_enabled"
+              android:value="false"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>

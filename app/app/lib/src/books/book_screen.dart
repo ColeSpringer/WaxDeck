@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
-import '../player/player_screen.dart';
 import '../podcasts/episode_screen.dart' show formatCueTimestamp;
 import '../podcasts/show_notes.dart';
 import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-import '../tools/tasks_screen.dart';
+import '../tools/tasks_screen.dart' show toolTasksProvider;
 
 /// One audiobook's detail.
 final bookDetailProvider = FutureProvider.autoDispose
@@ -85,12 +86,11 @@ class _BookBody extends ConsumerWidget {
   final BookDetail book;
 
   void _play(BuildContext context, {required int positionMs}) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => PlayerScreen(
-          item: bookItemSummary(book),
-          initialPositionMs: positionMs,
-        ),
+    context.push(
+      WaxRoute.nowPlaying,
+      extra: NowPlayingArgs(
+        item: bookItemSummary(book),
+        initialPositionMs: positionMs,
       ),
     );
   }
@@ -359,7 +359,7 @@ class _BookToolsMenu extends ConsumerWidget {
     Future<ToolTask> Function() start,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
     try {
       await start();
       ref.invalidate(toolTasksProvider);
@@ -370,9 +370,7 @@ class _BookToolsMenu extends ConsumerWidget {
             content: const Text('Queued. Follow it in Tasks.'),
             action: SnackBarAction(
               label: 'Tasks',
-              onPressed: () => navigator.push(
-                MaterialPageRoute<void>(builder: (_) => const TasksScreen()),
-              ),
+              onPressed: () => router.push(WaxRoute.tasks),
             ),
           ),
         );

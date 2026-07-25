@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../format_bytes.dart';
 import '../media_icons.dart';
-import '../review/review_entry_screen.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'add_to_library.dart';
 import 'audio_drop_area.dart';
@@ -471,12 +472,8 @@ class _UploadRow extends StatelessWidget {
                     button: true,
                     child: TextButton(
                       key: ValueKey(SemanticsIds.uploadReview(upload.id)),
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) =>
-                              ReviewEntryScreen(entryId: reviewEntryId),
-                        ),
-                      ),
+                      onPressed: () =>
+                          context.push(WaxRoute.reviewEntry(reviewEntryId)),
                       child: const Text('Open review entry'),
                     ),
                   ),

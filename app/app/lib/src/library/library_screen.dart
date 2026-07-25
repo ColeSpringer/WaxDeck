@@ -1,32 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-import '../admin/audit_screen.dart';
-import '../admin/backups_screen.dart';
-import '../admin/migrate_screen.dart';
-import '../admin/trash_screen.dart';
-import '../admin/users_screen.dart';
 import '../auth/auth_controller.dart';
-import '../books/book_screen.dart';
-import '../health/diagnostics_screen.dart';
-import '../health/health_screen.dart';
 import '../media_icons.dart';
-import '../organize/organize_screen.dart';
-import '../player/player_screen.dart';
-import '../playlists/playlists_screen.dart';
-import '../podcasts/podcasts_screen.dart';
-import '../radio/radio_screen.dart';
-import '../review/review_screen.dart';
-import '../settings/settings_screen.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-import '../stats/stats_screen.dart';
 import '../sync/sync_providers.dart';
-import '../tools/tasks_screen.dart';
 import '../uploads/add_to_library.dart';
 import '../uploads/audio_drop_area.dart';
-import '../uploads/uploads_screen.dart';
-import 'browse_screen.dart';
 import 'library_controller.dart';
 
 /// Curation surfaces reachable from the app bar menu. Administrators
@@ -70,18 +53,18 @@ enum _CurationDestination {
   /// them).
   final bool needsUpload;
 
-  Widget screen() => switch (this) {
-    review => const ReviewScreen(),
-    uploads => const UploadsScreen(),
-    health => const HealthScreen(),
-    diagnostics => const DiagnosticsScreen(),
-    organize => const OrganizeScreen(),
-    tasks => const TasksScreen(),
-    users => const UsersScreen(),
-    audit => const AuditScreen(),
-    backups => const BackupsScreen(),
-    trash => const TrashScreen(),
-    migrate => const MigrateScreen(),
+  String get location => switch (this) {
+    review => WaxRoute.review,
+    uploads => WaxRoute.uploads,
+    health => WaxRoute.health,
+    diagnostics => WaxRoute.diagnostics,
+    organize => WaxRoute.organize,
+    tasks => WaxRoute.tasks,
+    users => WaxRoute.users,
+    audit => WaxRoute.audit,
+    backups => WaxRoute.backups,
+    trash => WaxRoute.trash,
+    migrate => WaxRoute.migrate,
   };
 }
 
@@ -94,14 +77,10 @@ class LibraryScreen extends ConsumerWidget {
     // Audiobooks route through their detail screen (resume, chapters,
     // settings); music and downloaded podcast episodes play directly.
     if (item.mediaType == MediaType.audiobook) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => BookScreen(pid: item.pid)),
-      );
+      context.push(WaxRoute.book(item.pid));
       return;
     }
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => PlayerScreen(item: item)));
+    context.push(WaxRoute.nowPlaying, extra: NowPlayingArgs(item: item));
   }
 
   @override
@@ -146,9 +125,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.curationMenu),
               tooltip: 'Curation',
               icon: const Icon(Icons.build_outlined),
-              onSelected: (destination) => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => destination.screen()),
-              ),
+              onSelected: (destination) => context.push(destination.location),
               itemBuilder: (context) {
                 final user = ref.read(authControllerProvider).value?.user;
                 final isAdmin = user?.roles.contains('admin') ?? false;
@@ -177,9 +154,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.browseOpen),
               tooltip: 'Browse by genre, artist, album',
               icon: const Icon(Icons.category_outlined),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const BrowseScreen()),
-              ),
+              onPressed: () => context.push(WaxRoute.browse),
             ),
           ),
           Semantics(
@@ -188,9 +163,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.openStats),
               tooltip: 'Listening stats',
               icon: const Icon(Icons.insights),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const StatsScreen()),
-              ),
+              onPressed: () => context.push(WaxRoute.stats),
             ),
           ),
           Semantics(
@@ -199,11 +172,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.playlistsOpen),
               tooltip: 'Playlists',
               icon: const Icon(Icons.queue_music),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const PlaylistsScreen(),
-                ),
-              ),
+              onPressed: () => context.push(WaxRoute.playlists),
             ),
           ),
           Semantics(
@@ -212,9 +181,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.radioOpen),
               tooltip: 'Radio',
               icon: const Icon(Icons.radio),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const RadioScreen()),
-              ),
+              onPressed: () => context.push(WaxRoute.radio),
             ),
           ),
           Semantics(
@@ -223,9 +190,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.podcastsOpen),
               tooltip: 'Podcasts',
               icon: const Icon(Icons.podcasts),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const PodcastsScreen()),
-              ),
+              onPressed: () => context.push(WaxRoute.podcasts),
             ),
           ),
           Semantics(
@@ -234,9 +199,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.settingsOpen),
               tooltip: 'Settings',
               icon: const Icon(Icons.settings_outlined),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-              ),
+              onPressed: () => context.push(WaxRoute.settings),
             ),
           ),
         ],

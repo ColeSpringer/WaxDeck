@@ -12,8 +12,6 @@ import '../shell/semantics_ids.dart';
 class EditingPrototypeScreen extends StatefulWidget {
   const EditingPrototypeScreen({super.key});
 
-  static const routeName = '/prototype/editing';
-
   @override
   State<EditingPrototypeScreen> createState() => _EditingPrototypeScreenState();
 }

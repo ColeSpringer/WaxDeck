@@ -5,10 +5,11 @@ import 'package:waxdeck/src/auth/login_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: const MaterialApp(home: LoginScreen()),
+  child: routedHost(const LoginScreen()),
 );
 
 void main() {

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
@@ -100,7 +101,7 @@ class _RemoteControlScreenState extends ConsumerState<RemoteControlScreen> {
   Future<void> _playHere() async {
     final ownEndpoint = ref.read(connectControllerProvider).endpointId.value;
     final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
+    final router = GoRouter.of(context);
     if (ownEndpoint == null) {
       messenger.showSnackBar(
         const SnackBar(content: Text('This device is not registered yet')),
@@ -111,7 +112,7 @@ class _RemoteControlScreenState extends ConsumerState<RemoteControlScreen> {
       await ref
           .read(repositoryProvider)
           .transferPlaybackSession(_session.id, ownEndpoint);
-      navigator.pop();
+      router.pop();
     } on WaxDeckApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }

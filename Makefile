@@ -34,6 +34,7 @@ gen-dart: spec-bundle
 # contract). Independent of the OpenAPI bundle.
 gen-semantics:
 	dart run tools/gen-semantics-ids.dart
+	dart format app/app/lib/src/shell/semantics_ids.dart >/dev/null
 
 # Assets that are generated but rarely regenerated: the bundled type,
 # the icon subsets, and the brand kit. Not part of `generate` (they hit

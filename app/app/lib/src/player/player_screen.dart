@@ -2,21 +2,22 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../connect/connect_controller.dart';
+import '../connect/connect_providers.dart';
+import '../connect/device_picker.dart';
 import '../discovery/discovery_actions.dart';
 import '../library/item_delete.dart';
 import '../media_icons.dart';
 import '../playlists/add_to_playlist_dialog.dart';
 import '../providers.dart';
-import '../sharing/share_dialog.dart';
 import '../radio/radio_controller.dart';
+import '../sharing/share_dialog.dart';
 import '../shell/semantics_ids.dart';
 import '../sync/sync_providers.dart';
 import 'play_state_controller.dart';
-import '../connect/connect_controller.dart';
-import '../connect/connect_providers.dart';
-import '../connect/device_picker.dart';
 import 'playback_session.dart';
 import 'session_registry.dart';
 import 'sleep_timer.dart';
@@ -204,10 +205,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               ),
             ),
           _DownloadButton(pid: item.pid),
-          ItemDeleteAction(
-            pid: item.pid,
-            onDeleted: () => Navigator.of(context).pop(),
-          ),
+          ItemDeleteAction(pid: item.pid, onDeleted: () => context.pop()),
         ],
       ),
       body: FutureBuilder<void>(

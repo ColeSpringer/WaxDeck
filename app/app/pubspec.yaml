@@ -21,10 +21,16 @@ dependencies:
   desktop_drop: 0.7.1
   file_selector: 1.1.0
   flutter_secure_storage: 10.3.1
+  # Routing. Published by flutter.dev and pure Dart, but pinned exact like
+  # every other dependency: the route table is the app's navigation
+  # contract and a minor bump has moved redirect semantics before.
+  go_router: 17.3.0
   url_launcher: 6.3.2
   web: 1.1.1
   waxdeck_api:
     path: ../packages/waxdeck_api
+  waxdeck_ui:
+    path: ../packages/waxdeck_ui
   waxdeck_data:
     path: ../packages/waxdeck_data
   waxdeck_player:

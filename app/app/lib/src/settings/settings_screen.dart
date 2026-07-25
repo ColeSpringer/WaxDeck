@@ -22,20 +22,16 @@ class SettingsScreen extends ConsumerWidget {
     ThemePref.oled => 'OLED black',
   };
 
-  Future<void> _signOut(BuildContext context, WidgetRef ref) async {
-    final navigator = Navigator.of(context);
-    await ref.read(authControllerProvider.notifier).logout();
-    // This screen sits above the root gate; unwind so the gate's login
-    // screen is what remains.
-    navigator.popUntil((route) => route.isFirst);
-  }
+  // Nothing to unwind by hand: dropping the session moves the auth
+  // redirect, which replaces the whole signed-in stack with login.
+  Future<void> _signOut(WidgetRef ref) =>
+      ref.read(authControllerProvider.notifier).logout();
 
   Future<void> _revoke(
     BuildContext context,
     WidgetRef ref,
     DeviceSession session,
   ) async {
-    final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
@@ -69,7 +65,6 @@ class SettingsScreen extends ConsumerWidget {
           .revoke(session.id);
       if (wasCurrent) {
         await ref.read(authControllerProvider.notifier).signOutLocally();
-        navigator.popUntil((route) => route.isFirst);
       }
     } on WaxDeckApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
@@ -166,7 +161,7 @@ class SettingsScreen extends ConsumerWidget {
             identifier: SemanticsIds.logoutButton,
             child: FilledButton.tonalIcon(
               key: const Key(SemanticsIds.logoutButton),
-              onPressed: () => _signOut(context, ref),
+              onPressed: () => _signOut(ref),
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
             ),
