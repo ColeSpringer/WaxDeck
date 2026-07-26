@@ -6,6 +6,7 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -214,6 +215,42 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_location(container), WaxRoute.login);
+  });
+
+  testWidgets('opening a screen from the grid puts it in the address bar', (
+    tester,
+  ) async {
+    // The deferred item this closes: a destination used to be pushed, and
+    // go_router keeps imperative pushes out of the URL it reports, so the
+    // bar stayed at home and a reload landed back on the grid.
+    final container = _container(_signedIn());
+    addTearDown(container.dispose);
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key(SemanticsIds.settingsOpen)));
+    await tester.pumpAndSettle();
+
+    expect(_location(container), WaxRoute.settings);
+    // And it is still a place with somewhere to go back to.
+    expect(container.read(routerProvider).canPop(), isTrue);
+  });
+
+  testWidgets('a screen that needs a payload stays out of the address bar', (
+    tester,
+  ) async {
+    // The other half of the rule. These locations resolve to something
+    // else on their own, so reporting them would hand out a link that
+    // lands somewhere the sender did not mean.
+    final container = _container(_signedIn());
+    addTearDown(container.dispose);
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    container.read(routerProvider).push<void>(WaxRoute.nowPlaying);
+    await tester.pumpAndSettle();
+
+    expect(_location(container), WaxRoute.home);
   });
 
   testWidgets('the preserved metadata deep link still resolves', (

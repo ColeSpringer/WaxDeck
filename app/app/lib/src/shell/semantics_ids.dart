@@ -280,6 +280,13 @@ abstract final class SemanticsIds {
   static const String timezoneEdit = 'timezone-edit';
   static const String timezoneSave = 'timezone-save';
 
+  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar.
+  static String navDestination(Object name) => 'nav-$name';
+  static String navGroup(Object name) => 'nav-group-$name';
+  static const String navOverflow = 'nav-overflow';
+  static const String navRegion = 'nav-region';
+  static const String navSidebarCollapse = 'nav-sidebar-collapse';
+
   // sharing: Shares and share links.
   static String shareCopy(Object pid) => 'share-copy-$pid';
   static const String shareCreate = 'share-create';

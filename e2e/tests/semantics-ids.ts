@@ -275,6 +275,13 @@ export const SemanticsIds = {
   timezoneEdit: 'timezone-edit',
   timezoneSave: 'timezone-save',
 
+  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar.
+  navDestination: (name: string | number) => `nav-${name}`,
+  navGroup: (name: string | number) => `nav-group-${name}`,
+  navOverflow: 'nav-overflow',
+  navRegion: 'nav-region',
+  navSidebarCollapse: 'nav-sidebar-collapse',
+
   // sharing: Shares and share links.
   shareCopy: (pid: string | number) => `share-copy-${pid}`,
   shareCreate: 'share-create',

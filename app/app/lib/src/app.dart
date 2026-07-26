@@ -8,30 +8,20 @@ import 'shell/router.dart';
 class WaxDeckApp extends ConsumerWidget {
   const WaxDeckApp({super.key});
 
-  static ThemeData _theme(Brightness brightness) => ThemeData(
-    brightness: brightness,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFFD9A648),
-      brightness: brightness,
-    ),
-    // The bundled type with the owned fallback chain. Without a named
-    // family, web text asks for Roboto from Google's CDN, and without
-    // the chain any non-Latin metadata does the same, which a LAN-only
-    // instance cannot answer; the design system's fonts serve both from
-    // WaxDeck's own origin (deferred faces load via warmFontsFor).
-    fontFamily: WaxFonts.uiQualified,
-    fontFamilyFallback: WaxFonts.fallbacksQualified,
-  );
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Dark-first per the UX blueprint; the synced theme preference can
-    // lift it. Art-driven dynamic theming lands with the richer player UI.
+    // lift it, and OLED is the dark build in true black rather than a
+    // third theme. Art-driven accent stays scoped to player subtrees.
+    final spec = ref.watch(waxThemeSpecProvider);
     return MaterialApp.router(
       title: 'WaxDeck',
-      theme: _theme(Brightness.light),
-      darkTheme: _theme(Brightness.dark),
-      themeMode: ref.watch(themeModeProvider),
+      theme: buildWaxTheme(
+        variant: WaxThemeVariant.light,
+        density: spec.density,
+      ),
+      darkTheme: buildWaxTheme(variant: spec.dark, density: spec.density),
+      themeMode: spec.mode,
       routerConfig: ref.watch(routerProvider),
       // The session probes decide which locations exist at all, so the
       // router does not get to run until they answer. Withholding the

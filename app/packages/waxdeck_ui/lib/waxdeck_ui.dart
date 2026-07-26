@@ -19,6 +19,7 @@ export 'src/components/controls.dart';
 export 'src/components/deck_bar.dart';
 export 'src/components/entity_header.dart';
 export 'src/components/indicators.dart';
+export 'src/components/navigation.dart';
 export 'src/components/player_scaffold.dart';
 export 'src/components/scaffold.dart';
 export 'src/components/semantics_slots.dart';

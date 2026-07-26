@@ -83,7 +83,11 @@ fill are subset by `tools/fetch-icons.sh` to exactly the codepoints
 `WaxIcons` names: 27 KB for both weights against the 950 KB the upstream
 pair would cost. `WaxIcon` wraps them, so call sites name a glyph and a
 state rather than a font family, and `test/icons_test.dart` fails if a
-named glyph is missing from the shipped subsets.
+named glyph is missing from the shipped subsets. (Amended by ADR-0022:
+`WaxIcons` carried `@staticIconProvider`, which hid its constants from
+the release build's icon tree-shaker and shipped 32 of the 57 as blank
+boxes. The annotation is gone and a source check keeps it gone; the
+subsets were already the curation it was trying to perform.)
 
 **The design system emits no semantics identifiers.** Identifiers are a
 contract between the app and the e2e suite, generated into both from

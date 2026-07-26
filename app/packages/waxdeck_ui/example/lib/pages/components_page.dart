@@ -19,6 +19,8 @@ class ComponentsPage extends StatefulWidget {
 class _ComponentsPageState extends State<ComponentsPage> {
   bool _starred = false;
   Duration _position = const Duration(minutes: 2, seconds: 41);
+  String _destination = 'Home';
+  bool _sidebarCollapsed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -240,8 +242,101 @@ class _ComponentsPageState extends State<ComponentsPage> {
         const SkeletonShapes(shape: SkeletonShape.shelf, count: 4),
         const SizedBox(height: WaxSpace.s12),
         const SkeletonShapes(shape: SkeletonShape.list, count: 3),
+        const SizedBox(height: WaxSpace.s24),
+
+        const SectionHeader(overline: 'Shell', title: 'Navigation chrome'),
+        // One piece of chrome per size class, all four side by side: the
+        // point of the frame is that a narrow desktop window behaves like
+        // a phone, and that is only judgeable next to the others.
+        SizedBox(
+          height: 380,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              for (final sizeClass in WaxSizeClass.values) ...<Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        sizeClass.name,
+                        style: WaxType.overline.copyWith(
+                          color: colors.textTertiary,
+                        ),
+                      ),
+                      const SizedBox(height: WaxSpace.s8),
+                      Expanded(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: WaxRadius.card,
+                            border: Border.all(color: colors.hairline),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: WaxRadius.card,
+                            child: WaxShellFrame(
+                              sizeClass: sizeClass,
+                              destinations: _catalogDestinations,
+                              secondary: _catalogSecondary,
+                              selected: _destination,
+                              collapsed: _sidebarCollapsed,
+                              onToggleCollapsed: () => setState(
+                                () => _sidebarCollapsed = !_sidebarCollapsed,
+                              ),
+                              onSelect: (name) =>
+                                  setState(() => _destination = name),
+                              sidebarHeader: const WaxWordmark(size: 18),
+                              content: Center(
+                                child: Text(
+                                  _destination,
+                                  style: WaxType.body.copyWith(
+                                    color: colors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (sizeClass != WaxSizeClass.values.last)
+                  const SizedBox(width: WaxSpace.s16),
+              ],
+            ],
+          ),
+        ),
         const SizedBox(height: WaxSpace.s32),
       ],
     );
   }
 }
+
+const _catalogDestinations = <WaxDestination>[
+  WaxDestination(name: 'Home', label: 'Home', glyph: WaxIcons.home),
+  WaxDestination(name: 'Music', label: 'Music', glyph: WaxIcons.music),
+  WaxDestination(name: 'Podcasts', label: 'Podcasts', glyph: WaxIcons.podcasts),
+  WaxDestination(name: 'Radio', label: 'Radio', glyph: WaxIcons.radio),
+];
+
+const _catalogSecondary = <WaxNavEntry>[
+  WaxNavLink(
+    WaxDestination(
+      name: 'Settings',
+      label: 'Settings',
+      glyph: WaxIcons.settings,
+    ),
+  ),
+  WaxNavGroup(
+    label: 'Curation',
+    glyph: WaxIcons.admin,
+    children: <WaxDestination>[
+      WaxDestination(
+        name: 'Review queue',
+        label: 'Review queue',
+        glyph: WaxIcons.admin,
+      ),
+      WaxDestination(name: 'Users', label: 'Users', glyph: WaxIcons.admin),
+    ],
+  ),
+];

@@ -119,7 +119,7 @@ class _PlaylistRow extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(details.join(' | ')),
-        onTap: () => context.push(WaxRoute.playlist(playlist.pid)),
+        onTap: () => context.go(WaxRoute.playlist(playlist.pid)),
       ),
     );
   }
@@ -490,7 +490,7 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
             visibility: _shared ? 'shared' : null,
           );
       navigator.pop();
-      await router.push<void>(WaxRoute.playlist(created.pid));
+      router.go(WaxRoute.playlist(created.pid));
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()

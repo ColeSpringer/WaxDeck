@@ -112,7 +112,7 @@ class _SubscriptionRow extends StatelessWidget {
         subtitle: show.author == null
             ? null
             : Text(show.author!, maxLines: 1, overflow: TextOverflow.ellipsis),
-        onTap: () => context.push(WaxRoute.show(show.pid)),
+        onTap: () => context.go(WaxRoute.show(show.pid)),
       ),
     );
   }

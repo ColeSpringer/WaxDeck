@@ -29,7 +29,15 @@ enum _CurationDestination {
   health(SemanticsIds.curationHealth, 'Health', adminOnly: true),
   diagnostics(SemanticsIds.curationDiagnostics, 'Diagnostics', adminOnly: true),
   organize(SemanticsIds.curationOrganize, 'Organize', adminOnly: true),
-  tasks(SemanticsIds.curationTasks, 'Tasks', adminOnly: true),
+  // Per-caller, not administrator-only: the endpoint serves an admin
+  // every task and everyone else their own, and starting one is what
+  // needs the upload right.
+  tasks(
+    SemanticsIds.curationTasks,
+    'Tasks',
+    adminOnly: false,
+    needsUpload: true,
+  ),
   users(SemanticsIds.curationUsers, 'Users', adminOnly: true),
   audit(SemanticsIds.curationAudit, 'Audit log', adminOnly: true),
   backups(SemanticsIds.curationBackups, 'Backups', adminOnly: true),
@@ -79,7 +87,7 @@ class LibraryScreen extends ConsumerWidget {
     // Audiobooks route through their detail screen (resume, chapters,
     // settings); music and downloaded podcast episodes play directly.
     if (item.mediaType == MediaType.audiobook) {
-      context.push(WaxRoute.book(item.pid));
+      context.go(WaxRoute.book(item.pid));
       return;
     }
     // One item: this grid mixes media types and pages as it scrolls, so
@@ -138,7 +146,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.curationMenu),
               tooltip: 'Curation',
               icon: const Icon(Icons.build_outlined),
-              onSelected: (destination) => context.push(destination.location),
+              onSelected: (destination) => context.go(destination.location),
               itemBuilder: (context) {
                 final user = ref.read(authControllerProvider).value?.user;
                 final isAdmin = user?.roles.contains('admin') ?? false;
@@ -167,7 +175,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.browseOpen),
               tooltip: 'Browse by genre, artist, album',
               icon: const Icon(Icons.category_outlined),
-              onPressed: () => context.push(WaxRoute.browse),
+              onPressed: () => context.go(WaxRoute.browse),
             ),
           ),
           Semantics(
@@ -176,7 +184,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.openStats),
               tooltip: 'Listening stats',
               icon: const Icon(Icons.insights),
-              onPressed: () => context.push(WaxRoute.stats),
+              onPressed: () => context.go(WaxRoute.stats),
             ),
           ),
           Semantics(
@@ -185,7 +193,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.playlistsOpen),
               tooltip: 'Playlists',
               icon: const Icon(Icons.queue_music),
-              onPressed: () => context.push(WaxRoute.playlists),
+              onPressed: () => context.go(WaxRoute.playlists),
             ),
           ),
           Semantics(
@@ -194,7 +202,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.radioOpen),
               tooltip: 'Radio',
               icon: const Icon(Icons.radio),
-              onPressed: () => context.push(WaxRoute.radio),
+              onPressed: () => context.go(WaxRoute.radio),
             ),
           ),
           Semantics(
@@ -203,7 +211,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.podcastsOpen),
               tooltip: 'Podcasts',
               icon: const Icon(Icons.podcasts),
-              onPressed: () => context.push(WaxRoute.podcasts),
+              onPressed: () => context.go(WaxRoute.podcasts),
             ),
           ),
           Semantics(
@@ -212,7 +220,7 @@ class LibraryScreen extends ConsumerWidget {
               key: const Key(SemanticsIds.settingsOpen),
               tooltip: 'Settings',
               icon: const Icon(Icons.settings_outlined),
-              onPressed: () => context.push(WaxRoute.settings),
+              onPressed: () => context.go(WaxRoute.settings),
             ),
           ),
         ],

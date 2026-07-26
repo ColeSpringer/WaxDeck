@@ -35,6 +35,8 @@ class PlaylistScreen extends ConsumerWidget {
   ) {
     final item = entries[index].item;
     if (item.mediaType == MediaType.audiobook) {
+      // Pushed for the same reason browse pushes: a book's declared
+      // parent is home, so `go` would drop this playlist.
       context.push(WaxRoute.book(item.pid));
       return;
     }
@@ -67,7 +69,7 @@ class PlaylistScreen extends ConsumerWidget {
     // A rule replace reissued the pid; this screen's pid is retired, so
     // swap to the successor.
     if (next != null && next.pid != pid) {
-      router.pushReplacement(WaxRoute.playlist(next.pid));
+      router.go(WaxRoute.playlist(next.pid));
     }
   }
 

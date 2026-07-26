@@ -56,6 +56,11 @@ here waits on upstream.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
+- `[roadmap]` **The sidebar's collapsed state does not persist.** The
+  toggle works and the shell remembers it for the session, but a
+  per-device preference needs the client-settings store, which lands with
+  the settings rebuild. Until then a desktop visitor who prefers the icon
+  rail collapses it again after each launch. See ADR-0022.
 - `[roadmap]` **No wifi-only switch for gapless preloading.** Playback
   prepares the next queue entry 30 seconds before the crossing whenever
   the admission policy allows it (music to music, passthrough stream,
@@ -214,20 +219,6 @@ here waits on upstream.
   entry and detection range in `WaxFonts` (emoji is the awkward one: a
   color-emoji face is its own multi-megabyte decision). Native builds
   keep using system fonts and are unaffected.
-- `[roadmap]` **The web address bar does not follow in-app navigation.**
-  Every screen is addressable (a typed or shared location resolves to
-  it), but tapping into one pushes, and go_router keeps imperative
-  pushes out of the URL it reports: opening settings from the grid
-  leaves the bar at `/`, and a reload from there lands back on the grid.
-  The switch that would change this
-  (`GoRouter.optionURLReflectsImperativeAPIs`) is the wrong tool and the
-  package says so, because half of WaxDeck's pushed routes carry an
-  in-memory payload and their URLs resolve to something else on their
-  own. The right fix rides the adaptive shell, where destination changes
-  are `go` on a branch navigator and the payload-carrying screens become
-  overlays on the root navigator, so what lands in the bar is exactly
-  what can be shared. Browser back already steps through the pushed
-  stack, so this is about linkability, not navigation. See ADR-0017.
 - `[in-repo]` **The e2e renderer hang is diagnosed: a memory race
   inside multi-threaded skwasm.** The old shape — one suite run in
   about four, a random spec stalls mid-step, page unresponsive,

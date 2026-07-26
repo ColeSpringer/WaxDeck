@@ -151,6 +151,10 @@ class BrowseItemsScreen extends ConsumerWidget {
 
   void _open(BuildContext context, WidgetRef ref, ItemSummary item) {
     if (item.mediaType == MediaType.audiobook) {
+      // Pushed, not gone to: a book is declared under home, and `go`
+      // would rebuild that ancestry and take this bucket — whose contents
+      // live in memory and cannot be rebuilt from a URL — with it. The
+      // home grid, where the ancestry does match, goes.
       context.push(WaxRoute.book(item.pid));
       return;
     }

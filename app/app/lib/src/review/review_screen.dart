@@ -142,7 +142,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   }
 
   void _open(ReviewEntry entry) {
-    context.push(WaxRoute.reviewEntry(entry.id));
+    context.go(WaxRoute.reviewEntry(entry.id));
   }
 
   void _escape() {

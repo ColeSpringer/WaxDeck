@@ -44,6 +44,7 @@ import '../sync/sync_providers.dart';
 import '../tools/tasks_screen.dart';
 import '../uploads/share_intake_gate.dart';
 import '../uploads/uploads_screen.dart';
+import 'adaptive_shell.dart';
 import 'routes.dart';
 
 /// The app's router, built once per provider container.
@@ -68,7 +69,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'signed-in'),
         builder: (context, state, child) => _SignedInScope(child: child),
-        routes: signedInRoutes,
+        routes: ref.read(newShellProvider) ? shellRoutes() : signedInRoutes,
       ),
     ],
   );
@@ -176,6 +177,35 @@ String? _redirect(Ref ref, GoRouterState state) {
 GoRouterRedirect _requires<T>(String fallback) =>
     (context, state) => state.extra is T ? null : fallback;
 
+// The screens that read a payload out of the route, written once because
+// both route tables declare them: the shell's table nests them
+// differently, but what they build from `extra` is the same either way.
+
+Widget _browseItems(BuildContext context, GoRouterState state) {
+  final args = state.extra! as BrowseBucketArgs;
+  return BrowseItemsScreen(dimension: args.dimension, bucket: args.bucket);
+}
+
+Widget _trackList(BuildContext context, GoRouterState state) {
+  final args = state.extra! as TrackListArgs;
+  return TrackListScreen(
+    title: args.title,
+    basis: args.basis,
+    items: args.items,
+    idPrefix: args.idPrefix,
+  );
+}
+
+Widget _ruleDraft(BuildContext context, GoRouterState state) {
+  final args = state.extra! as RuleDraftArgs;
+  return RuleEditorScreen(createName: args.name, createShared: args.shared);
+}
+
+Widget _userEdit(BuildContext context, GoRouterState state) {
+  final args = state.extra! as UserEditArgs;
+  return UserEditScreen(user: args.user, approve: args.approve);
+}
+
 /// Locations that do not need a session: the auth surfaces themselves,
 /// and the prototype harness.
 final publicRoutes = <RouteBase>[
@@ -220,13 +250,7 @@ final signedInRoutes = <RouteBase>[
           GoRoute(
             path: 'items',
             redirect: _requires<BrowseBucketArgs>(WaxRoute.browse),
-            builder: (context, state) {
-              final args = state.extra! as BrowseBucketArgs;
-              return BrowseItemsScreen(
-                dimension: args.dimension,
-                bucket: args.bucket,
-              );
-            },
+            builder: _browseItems,
           ),
         ],
       ),
@@ -238,13 +262,7 @@ final signedInRoutes = <RouteBase>[
           GoRoute(
             path: 'rules',
             redirect: _requires<RuleDraftArgs>(WaxRoute.playlists),
-            builder: (context, state) {
-              final args = state.extra! as RuleDraftArgs;
-              return RuleEditorScreen(
-                createName: args.name,
-                createShared: args.shared,
-              );
-            },
+            builder: _ruleDraft,
           ),
           GoRoute(
             path: ':pid',
@@ -302,15 +320,7 @@ final signedInRoutes = <RouteBase>[
       GoRoute(
         path: 'tracks',
         redirect: _requires<TrackListArgs>(WaxRoute.home),
-        builder: (context, state) {
-          final args = state.extra! as TrackListArgs;
-          return TrackListScreen(
-            title: args.title,
-            basis: args.basis,
-            items: args.items,
-            idPrefix: args.idPrefix,
-          );
-        },
+        builder: _trackList,
       ),
       GoRoute(
         path: 'now-playing',
@@ -380,10 +390,7 @@ final signedInRoutes = <RouteBase>[
           GoRoute(
             path: 'edit',
             redirect: _requires<UserEditArgs>(WaxRoute.users),
-            builder: (context, state) {
-              final args = state.extra! as UserEditArgs;
-              return UserEditScreen(user: args.user, approve: args.approve);
-            },
+            builder: _userEdit,
           ),
         ],
       ),
@@ -404,6 +411,242 @@ final signedInRoutes = <RouteBase>[
         builder: (context, state) => const MigrateScreen(),
       ),
     ],
+  ),
+];
+
+/// The same screens, arranged for the adaptive shell.
+///
+/// A function rather than a list: every branch mints a navigator key and
+/// the shell route holds state of its own, so a value held in a top-level
+/// final would hand one router's navigation state to the next.
+///
+/// The shape is what makes the address bar follow a destination. Each
+/// domain gets a branch, so its stack survives a trip to another one, and
+/// everything that is not a domain shares the last branch: a settings
+/// visit must not become what the Home tab restores. Locations that only
+/// make sense on top of what is already there — the player, a computed
+/// track list, a remote session — are declared outside the shell, on the
+/// signed-in navigator, so they cover the chrome and back closes them.
+///
+/// Two consequences worth knowing, both narrowed by later phases. A book
+/// lives in the home branch, because that is where books are reached from
+/// until there is a books hub, so opening one from Browse lights Home.
+/// And `/episodes/:pid` is a location of its own rather than a child of
+/// its show, which is what the route map calls for, so leaving an episode
+/// lands on the podcasts hub rather than the show.
+List<RouteBase> shellRoutes() => <RouteBase>[
+  StatefulShellRoute.indexedStack(
+    builder: (context, state, navigationShell) =>
+        AdaptiveShell(shell: navigationShell, location: state.uri.path),
+    branches: <StatefulShellBranch>[
+      // Home. Books hang off it: the library grid is where they are
+      // reached from until the audiobooks hub exists.
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: WaxRoute.home,
+            builder: (context, state) => const LibraryScreen(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: 'books/:pid',
+                builder: (context, state) =>
+                    BookScreen(pid: state.pathParameters['pid']!),
+              ),
+            ],
+          ),
+        ],
+      ),
+      // Music. Browse stands in for the hub the music phase builds.
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: WaxRoute.browse,
+            builder: (context, state) => const BrowseScreen(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: 'items',
+                redirect: _requires<BrowseBucketArgs>(WaxRoute.browse),
+                builder: _browseItems,
+              ),
+            ],
+          ),
+        ],
+      ),
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: WaxRoute.podcasts,
+            builder: (context, state) => const PodcastsScreen(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: ':pid',
+                builder: (context, state) =>
+                    ShowScreen(pid: state.pathParameters['pid']!),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: '/episodes/:pid',
+            builder: (context, state) =>
+                EpisodeScreen(pid: state.pathParameters['pid']!),
+          ),
+        ],
+      ),
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: WaxRoute.radio,
+            builder: (context, state) => const RadioScreen(),
+          ),
+        ],
+      ),
+      // Everything that is not a domain. Nothing calls `goBranch` on this
+      // one — its destinations are reached by location — so it needs no
+      // root of its own.
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: WaxRoute.playlists,
+            builder: (context, state) => const PlaylistsScreen(),
+            routes: <RouteBase>[
+              // Declared ahead of ':pid' so the literal wins the match.
+              GoRoute(
+                path: 'rules',
+                redirect: _requires<RuleDraftArgs>(WaxRoute.playlists),
+                builder: _ruleDraft,
+              ),
+              GoRoute(
+                path: ':pid',
+                builder: (context, state) =>
+                    PlaylistScreen(pid: state.pathParameters['pid']!),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: 'edit',
+                    redirect: (context, state) => state.extra is Playlist
+                        ? null
+                        : WaxRoute.playlist(state.pathParameters['pid']!),
+                    builder: (context, state) =>
+                        RuleEditorScreen(editing: state.extra! as Playlist),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          GoRoute(
+            path: WaxRoute.stats,
+            builder: (context, state) => const StatsScreen(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: 'log',
+                builder: (context, state) => const ListenLogScreen(),
+              ),
+              GoRoute(
+                path: 'year',
+                builder: (context, state) => const YearInReviewScreen(),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: WaxRoute.settings,
+            builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: WaxRoute.shares,
+            builder: (context, state) => const SharesScreen(),
+          ),
+          GoRoute(
+            path: WaxRoute.uploads,
+            builder: (context, state) => const UploadsScreen(),
+          ),
+          GoRoute(
+            path: WaxRoute.tasks,
+            builder: (context, state) => const TasksScreen(),
+          ),
+          GoRoute(
+            path: '/metadata/:pid',
+            builder: (context, state) =>
+                MetadataScreen(pid: state.pathParameters['pid']!),
+          ),
+          GoRoute(
+            path: WaxRoute.review,
+            builder: (context, state) => const ReviewScreen(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: ':entryId',
+                builder: (context, state) => ReviewEntryScreen(
+                  entryId: state.pathParameters['entryId']!,
+                ),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: WaxRoute.health,
+            builder: (context, state) => const HealthScreen(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: ':rule',
+                builder: (context, state) =>
+                    HealthIssuesScreen(rule: state.pathParameters['rule']!),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: WaxRoute.diagnostics,
+            builder: (context, state) => const DiagnosticsScreen(),
+          ),
+          GoRoute(
+            path: WaxRoute.organize,
+            builder: (context, state) => const OrganizeScreen(),
+          ),
+          GoRoute(
+            path: WaxRoute.users,
+            builder: (context, state) => const UsersScreen(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: 'edit',
+                redirect: _requires<UserEditArgs>(WaxRoute.users),
+                builder: _userEdit,
+              ),
+            ],
+          ),
+          GoRoute(
+            path: WaxRoute.audit,
+            builder: (context, state) => const AuditScreen(),
+          ),
+          GoRoute(
+            path: WaxRoute.backups,
+            builder: (context, state) => const BackupsScreen(),
+          ),
+          GoRoute(
+            path: WaxRoute.trash,
+            builder: (context, state) => const TrashScreen(),
+          ),
+          GoRoute(
+            path: WaxRoute.migrate,
+            builder: (context, state) => const MigrateScreen(),
+          ),
+        ],
+      ),
+    ],
+  ),
+  // Overlays. Pushed onto the signed-in navigator, so they sit over the
+  // chrome and over whichever branch is showing; each carries a payload
+  // or is a view of what is playing, so none of them belongs in the
+  // address bar and every one resolves to something real when typed.
+  GoRoute(
+    path: WaxRoute.nowPlaying,
+    builder: (context, state) => const PlayerScreen(),
+  ),
+  GoRoute(
+    path: WaxRoute.tracks,
+    redirect: _requires<TrackListArgs>(WaxRoute.home),
+    builder: _trackList,
+  ),
+  GoRoute(
+    path: WaxRoute.remote,
+    redirect: _requires<PlaybackSessionInfo>(WaxRoute.home),
+    builder: (context, state) =>
+        RemoteControlScreen(initial: state.extra! as PlaybackSessionInfo),
   ),
 ];
 

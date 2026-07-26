@@ -379,7 +379,7 @@ class _BookToolsMenu extends ConsumerWidget {
             content: const Text('Queued. Follow it in Tasks.'),
             action: SnackBarAction(
               label: 'Tasks',
-              onPressed: () => router.push(WaxRoute.tasks),
+              onPressed: () => router.push<void>(WaxRoute.tasks),
             ),
           ),
         );

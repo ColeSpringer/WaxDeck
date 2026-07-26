@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
+import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
 import 'player_host.dart';
+import 'routed_host.dart';
 
 const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
@@ -100,5 +102,51 @@ void main() {
 
     expect(engine.position, const Duration(seconds: 30));
     await harness.endPlayback(tester);
+  });
+
+  testWidgets('leaving an episode opened from a link lands on the hub', (
+    tester,
+  ) async {
+    // Nothing to pop, and `/episodes/:pid` names no show to return to, so
+    // the hub is the nearest real place. The ordinary path — pushed from a
+    // show — pops back to it, which the podcasts journey drives.
+    final repo = _repo();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+        ],
+        child: routedHost(const EpisodeScreen(pid: episodePid)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PodcastsScreen), findsOneWidget);
+  });
+
+  testWidgets('the same holds under the shell table', (tester) async {
+    // The two tables put `/podcasts` in different places — a child of home
+    // in one, a branch root in the other — so the fallback earns a run
+    // against both.
+    final repo = _repo();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+        ],
+        child: routedHost(const EpisodeScreen(pid: episodePid), newShell: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PodcastsScreen), findsOneWidget);
   });
 }

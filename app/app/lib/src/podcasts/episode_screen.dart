@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../player/session_registry.dart';
 import '../providers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'credits.dart';
 import 'explicit_badge.dart';
@@ -55,7 +56,18 @@ class EpisodeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(episodeDetailProvider(pid));
     return Scaffold(
-      appBar: AppBar(title: Text(detail.value?.title ?? 'Episode')),
+      appBar: AppBar(
+        title: Text(detail.value?.title ?? 'Episode'),
+        // Popped, so this button and the system gesture do the same thing:
+        // the show pushed this screen and is still underneath it. Opened
+        // from a link there is nothing to pop, and the hub is the nearest
+        // real place — the episode's own location names no show to return
+        // to, and the detail that would name one has not answered yet when
+        // the button is first there to press.
+        leading: BackButton(
+          onPressed: () => context.leave(fallback: WaxRoute.podcasts),
+        ),
+      ),
       body: switch (detail) {
         AsyncData(:final value) => _EpisodeBody(episode: value),
         AsyncError(:final error) => Center(

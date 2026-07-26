@@ -479,6 +479,9 @@ class _EpisodeRow extends ConsumerWidget {
   }
 
   void _openInfo(BuildContext context) {
+    // Pushed: `/episodes/:pid` names no show, so `go` would build nothing
+    // beneath it and leaving would land on the hub rather than here. The
+    // location still resolves for anyone who types or shares it.
     context.push(WaxRoute.episode(episode.pid));
   }
 }

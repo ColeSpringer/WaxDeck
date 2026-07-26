@@ -473,6 +473,9 @@ class _UploadRow extends StatelessWidget {
                     child: TextButton(
                       key: ValueKey(SemanticsIds.uploadReview(upload.id)),
                       onPressed: () =>
+                          // Pushed: an entry is declared under the review
+                          // queue, not under this list, so `go` would
+                          // leave the uploads behind.
                           context.push(WaxRoute.reviewEntry(reviewEntryId)),
                       child: const Text('Open review entry'),
                     ),

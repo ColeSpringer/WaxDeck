@@ -190,4 +190,31 @@ void main() {
       }
     });
   });
+
+  group('the theme font floor', () {
+    // The theme names a family so that a bare style — one written with no
+    // family at all, which old screens still contain — resolves to the
+    // bundled UI face rather than asking Google's CDN for Roboto. It must
+    // not do that by flattening the token faces: three faces carry three
+    // jobs, and a floor applied over the top would make them one.
+    test('leaves the token faces alone', () {
+      final theme = buildWaxTheme();
+      expect(
+        theme.textTheme.displayLarge?.fontFamily,
+        contains(WaxFonts.display),
+      );
+      expect(theme.textTheme.bodyMedium?.fontFamily, contains(WaxFonts.ui));
+      expect(WaxType.monoTime.fontFamily, contains(WaxFonts.mono));
+    });
+
+    test('carries the owned fallback chain', () {
+      // The package qualifies both the family and the chain, so what
+      // lands on a style is the asset-path form.
+      final theme = buildWaxTheme();
+      expect(
+        theme.textTheme.bodyMedium?.fontFamilyFallback,
+        containsAll(WaxFonts.fallbacksQualified),
+      );
+    });
+  });
 }

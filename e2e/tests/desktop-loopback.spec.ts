@@ -12,31 +12,71 @@ import { test, expect } from './fixtures';
 
 const APP_DIR = path.resolve(__dirname, '..', '..', 'app', 'app');
 
-function waitForMarker(child: ChildProcess, marker: string, timeoutMs: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let buffer = '';
-    const timer = setTimeout(
-      () => reject(new Error(`no ${marker} from probe within ${timeoutMs}ms; output so far: ${buffer.slice(-500)}`)),
-      timeoutMs,
-    );
-    const onData = (chunk: Buffer) => {
-      buffer += chunk.toString();
-      // dart run prefixes its own build chatter, so scan the whole
-      // buffer for the marker rather than anchoring to line starts.
-      const at = buffer.indexOf(marker + ' ');
-      if (at < 0) return;
-      const end = buffer.indexOf('\n', at);
-      if (end < 0) return;
-      clearTimeout(timer);
-      child.stdout!.off('data', onData);
-      resolve(buffer.slice(at + marker.length + 1, end).trim());
-    };
-    child.stdout!.on('data', onData);
-    child.on('exit', (code) => {
-      clearTimeout(timer);
-      reject(new Error(`probe exited ${code} before ${marker}; output: ${buffer.slice(-500)}`));
+/// Everything the probe has said, and a way to wait for the next thing.
+///
+/// One listener for the child's whole life, because a per-wait listener
+/// loses output: removing the last `data` listener does not pause a
+/// flowing stream in Node, so anything written while nobody is listening
+/// is discarded rather than buffered — and this spec spends half a minute
+/// driving a browser between the probe's two lines. That window is exactly
+/// where the answer arrives.
+class ProbeOutput {
+  private buffer = '';
+  private exit: number | null = null;
+  private wake: Array<() => void> = [];
+
+  constructor(child: ChildProcess) {
+    child.stdout!.setEncoding('utf8');
+    child.stdout!.on('data', (chunk: string) => {
+      this.buffer += chunk;
+      this.notify();
     });
-  });
+    child.on('close', (code) => {
+      this.exit = code ?? -1;
+      this.notify();
+    });
+  }
+
+  private notify(): void {
+    const waiters = this.wake;
+    this.wake = [];
+    for (const w of waiters) w();
+  }
+
+  // dart run prefixes its own build chatter, so scan the whole buffer for
+  // the marker rather than anchoring to line starts.
+  private find(marker: string): string | null {
+    const at = this.buffer.indexOf(marker + ' ');
+    if (at < 0) return null;
+    const end = this.buffer.indexOf('\n', at);
+    return end < 0 ? null : this.buffer.slice(at + marker.length + 1, end).trim();
+  }
+
+  async waitFor(marker: string, timeoutMs: number): Promise<string> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const found = this.find(marker);
+      if (found !== null) return found;
+      if (this.exit !== null) {
+        throw new Error(
+          `probe exited ${this.exit} before ${marker}; output: ${this.buffer.slice(-500)}`,
+        );
+      }
+      const left = deadline - Date.now();
+      if (left <= 0) {
+        throw new Error(
+          `no ${marker} from probe within ${timeoutMs}ms; output so far: ${this.buffer.slice(-500)}`,
+        );
+      }
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, Math.min(left, 250));
+        this.wake.push(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+  }
 }
 
 test('desktop loopback sign-on completes through a real browser', async ({ page, request, baseURL }) => {
@@ -44,9 +84,10 @@ test('desktop loopback sign-on completes through a real browser', async ({ page,
     cwd: APP_DIR,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  const output = new ProbeOutput(probe);
   try {
     // The probe binds its listener and asks for a browser.
-    const startUrl = await waitForMarker(probe, 'OPEN', 120_000);
+    const startUrl = await output.waitFor('OPEN', 120_000);
     expect(startUrl).toContain('/auth/oidc/start');
     expect(startUrl).toContain('mode=loopback');
     expect(startUrl).toContain('challenge=');
@@ -62,7 +103,7 @@ test('desktop loopback sign-on completes through a real browser', async ({ page,
 
     // The probe's real listener answered the browser and finished the
     // exchange with its verifier.
-    const result = JSON.parse(await waitForMarker(probe, 'RESULT', 60_000));
+    const result = JSON.parse(await output.waitFor('RESULT', 60_000));
     expect(result.username).toBe('gandalf');
 
     // The session it won is live and registered as a device.

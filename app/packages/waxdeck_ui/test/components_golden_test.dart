@@ -33,6 +33,34 @@ const _tile = MediaTileData(
   trailingText: '4:05',
 );
 
+const _destinations = <WaxDestination>[
+  WaxDestination(name: 'home', label: 'Home', glyph: WaxIcons.home),
+  WaxDestination(name: 'music', label: 'Music', glyph: WaxIcons.music),
+  WaxDestination(name: 'podcasts', label: 'Podcasts', glyph: WaxIcons.podcasts),
+  WaxDestination(name: 'radio', label: 'Radio', glyph: WaxIcons.radio),
+];
+
+const _secondaryEntries = <WaxNavEntry>[
+  WaxNavLink(
+    WaxDestination(
+      name: 'settings',
+      label: 'Settings',
+      glyph: WaxIcons.settings,
+    ),
+  ),
+  WaxNavGroup(
+    label: 'Curation',
+    glyph: WaxIcons.admin,
+    children: <WaxDestination>[
+      WaxDestination(
+        name: 'review',
+        label: 'Review queue',
+        glyph: WaxIcons.admin,
+      ),
+    ],
+  ),
+];
+
 void main() {
   group('components', () {
     goldenTest(
@@ -328,6 +356,60 @@ void main() {
                     const SizedBox(width: 8),
                     const DomainBadge(WaxDomain.podcasts),
                   ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'the shell wears one piece of chrome per size class',
+      fileName: 'shell_chrome',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final sizeClass in WaxSizeClass.values)
+            GoldenTestScenario(
+              name: sizeClass.name,
+              child: _themed(
+                WaxThemeVariant.dark,
+                SizedBox(
+                  width: switch (sizeClass) {
+                    WaxSizeClass.compact => 400,
+                    WaxSizeClass.medium => 640,
+                    WaxSizeClass.expanded => 760,
+                    WaxSizeClass.wide => 900,
+                  },
+                  height: 420,
+                  child: WaxShellFrame(
+                    sizeClass: sizeClass,
+                    destinations: _destinations,
+                    secondary: _secondaryEntries,
+                    selected: 'podcasts',
+                    onSelect: (_) {},
+                    sidebarHeader: const WaxWordmark(size: 20),
+                    onToggleCollapsed: () {},
+                    content: const Center(child: Text('content pane')),
+                  ),
+                ),
+              ),
+            ),
+          // Tabs at the scale where their labels give way to the glyphs
+          // alone, which is reflow rather than truncation.
+          for (final scale in <double>[1.0, 1.5, 2.0])
+            GoldenTestScenario.withTextScaleFactor(
+              name: 'tabs at $scale',
+              textScaler: TextScaler.linear(scale),
+              child: _themed(
+                WaxThemeVariant.dark,
+                SizedBox(
+                  width: 400,
+                  child: WaxNavBar(
+                    destinations: _destinations,
+                    selected: 'music',
+                    onSelect: (_) {},
+                  ),
                 ),
               ),
             ),

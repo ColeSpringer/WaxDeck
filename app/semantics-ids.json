@@ -1260,6 +1260,38 @@
       ]
     },
     {
+      "name": "shell",
+      "doc": "The adaptive shell's navigation chrome: tabs, icon rail, sidebar.",
+      "ids": [
+        {
+          "name": "navDestination",
+          "id": "nav-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "navGroup",
+          "id": "nav-group-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "navOverflow",
+          "id": "nav-overflow"
+        },
+        {
+          "name": "navRegion",
+          "id": "nav-region"
+        },
+        {
+          "name": "navSidebarCollapse",
+          "id": "nav-sidebar-collapse"
+        }
+      ]
+    },
+    {
       "name": "sharing",
       "doc": "Shares and share links.",
       "ids": [

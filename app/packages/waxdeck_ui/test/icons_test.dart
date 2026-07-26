@@ -44,6 +44,30 @@ void main() {
       expect(glyphsIn('PhosphorFill'), named);
     });
 
+    test('are not hidden from the release build by an annotation', () {
+      // `@staticIconProvider` tells the icon tree-shaker to ignore the
+      // constants declared in the annotated class, so a glyph then ships
+      // only where the shaker finds its constant materialized at a use
+      // site it walks — which a reference from another package's widget
+      // code is not. With it on, 32 of these names shipped as blank boxes
+      // in release builds while rendering in every debug run, golden, and
+      // widget test, which is why this is a source check rather than a
+      // rendering one: nothing a widget test can pump would see it.
+      // The applied form only: the doc comment above [WaxIcons] names the
+      // annotation to say why it is absent.
+      final applied = RegExp(r'^\s*@staticIconProvider', multiLine: true);
+      expect(
+        applied.hasMatch(
+          File('lib/src/icons/wax_icon.dart').readAsStringSync(),
+        ),
+        isFalse,
+        reason:
+            'WaxIcons must stay unannotated: the subsets are already '
+            'curated to exactly these 57 glyphs, and the annotation trades '
+            '16 KB for release-only blanks. See ADR-0022.',
+      );
+    });
+
     test('resolve to the vendored families, both weights', () {
       expect(WaxIcons.play.regular.fontFamily, 'PhosphorRegular');
       expect(WaxIcons.play.fill.fontFamily, 'PhosphorFill');

@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
 import '../providers.dart';
@@ -79,9 +79,47 @@ final themeModeProvider = Provider<ThemeMode>((ref) {
   return switch (prefs?.theme) {
     ThemePref.system => ThemeMode.system,
     ThemePref.light => ThemeMode.light,
-    ThemePref.dark => ThemeMode.dark,
-    // OLED maps to dark for now; a true-black theme variant comes later.
-    ThemePref.oled => ThemeMode.dark,
+    ThemePref.dark || ThemePref.oled => ThemeMode.dark,
     null => ThemeMode.dark,
   };
+});
+
+/// What the design system needs to build the app's themes.
+///
+/// OLED is a parameter of the dark build rather than a third theme, so a
+/// visitor who asked for true black gets it wherever the platform (or
+/// [themeModeProvider]) resolves to dark. Density is a per-device client
+/// setting and rides the store that lands with the settings phase.
+class WaxThemeSpec {
+  const WaxThemeSpec({
+    required this.mode,
+    required this.oled,
+    required this.density,
+  });
+
+  final ThemeMode mode;
+  final bool oled;
+  final WaxDensity density;
+
+  WaxThemeVariant get dark =>
+      oled ? WaxThemeVariant.oled : WaxThemeVariant.dark;
+
+  @override
+  bool operator ==(Object other) =>
+      other is WaxThemeSpec &&
+      other.mode == mode &&
+      other.oled == oled &&
+      other.density == density;
+
+  @override
+  int get hashCode => Object.hash(mode, oled, density);
+}
+
+final waxThemeSpecProvider = Provider<WaxThemeSpec>((ref) {
+  final prefs = ref.watch(prefsControllerProvider).value;
+  return WaxThemeSpec(
+    mode: ref.watch(themeModeProvider),
+    oled: prefs?.theme == ThemePref.oled,
+    density: WaxDensity.comfortable,
+  );
 });

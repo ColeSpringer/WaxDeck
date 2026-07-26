@@ -497,6 +497,10 @@ class _TrackDiffRow extends StatelessWidget {
                         icon: const Icon(Icons.more_vert, size: 18),
                         onSelected: (action) {
                           if (action == 'edit') {
+                            // An editor opened on one row, pushed so
+                            // closing it returns to the entry being
+                            // reviewed. The location still resolves for
+                            // anyone who types it.
                             context.push(WaxRoute.metadata(pid));
                           }
                         },

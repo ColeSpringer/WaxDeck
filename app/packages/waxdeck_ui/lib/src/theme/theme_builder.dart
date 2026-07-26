@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
+import '../fonts/wax_fonts.dart';
 import '../tokens/colors.dart';
 import '../tokens/density.dart';
 import '../tokens/radii.dart';
@@ -86,6 +87,13 @@ ThemeData buildWaxTheme({
     dividerColor: colors.hairline,
     textTheme: text,
     primaryTextTheme: text,
+    // The floor for any text style that names no family of its own.
+    // Without it, web text asks Google's CDN for Roboto and non-Latin
+    // metadata asks for a script face, which a LAN-only instance cannot
+    // answer. The tokens above name their own faces and win the merge,
+    // so this never flattens Archivo or the mono readout voice.
+    fontFamily: WaxFonts.uiQualified,
+    fontFamilyFallback: WaxFonts.fallbacksQualified,
     extensions: <ThemeExtension<dynamic>>[colors, layout],
     // Density is WaxDeck's own setting; Material's visual density stays
     // standard so its metrics do not compound with ours.

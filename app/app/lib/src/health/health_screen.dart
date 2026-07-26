@@ -196,7 +196,7 @@ class HealthScreen extends ConsumerWidget {
             _RuleRow(
               rule: rule,
               onFix: () => _fix(context, ref, rule.rule),
-              onOpen: () => context.push(WaxRoute.healthRule(rule.rule)),
+              onOpen: () => context.go(WaxRoute.healthRule(rule.rule)),
             ),
           const SizedBox(height: 16),
           _DuplicatesSection(onMerge: (group) => _merge(context, ref, group)),
