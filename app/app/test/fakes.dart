@@ -39,6 +39,9 @@ class FakeRepository implements WaxDeckRepository {
   /// Saved resume positions by pid.
   final Map<String, int> playPositions = {};
 
+  /// Pids whose saved play state reports the item finished.
+  final Set<String> finishedPids = {};
+
   /// Star and rating state by pid.
   final Map<String, bool> starredByPid = {};
   final Map<String, int?> ratingByPid = {};
@@ -408,9 +411,9 @@ class FakeRepository implements WaxDeckRepository {
   Future<PlayState> getPlayState(String pid) async => PlayState(
     pid: pid,
     positionMs: playPositions[pid] ?? 0,
-    played: false,
-    finished: false,
-    playCount: 0,
+    played: finishedPids.contains(pid),
+    finished: finishedPids.contains(pid),
+    playCount: finishedPids.contains(pid) ? 1 : 0,
     starred: starredByPid[pid] ?? false,
     rating: ratingByPid[pid],
   );

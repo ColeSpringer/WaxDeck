@@ -79,6 +79,10 @@ class NowPlayingController extends Notifier<NowPlaying> {
   PlaybackSession? _session;
   String? _sessionEntryId;
 
+  /// The start in flight, so a caller that has to answer for one can
+  /// wait on it.
+  Future<void>? _inFlight;
+
   StreamSubscription<void>? _boundarySub;
   StreamSubscription<void>? _completedSub;
   StreamSubscription<Duration>? _positionFeed;
@@ -140,16 +144,46 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // guarded on the token rather than on the session, which is not
       // set until a start is well underway.
       Future<void>.microtask(() {
-        if (ref.mounted && _startToken == 0) unawaited(_start(standing));
+        if (ref.mounted && _startToken == 0) _inFlight = _start(standing);
       });
     }
     ref.onDispose(() {
       unawaited(_boundarySub?.cancel());
       _release(_session, _Farewell.stop);
+      // Not through _setSession: the container is going away, and there
+      // is nothing left for Connect to report to.
       _session = null;
     });
     return NowPlaying.nothing;
   }
+
+  /// The session driving the engine, from the moment it is installed
+  /// rather than from the moment it settles.
+  ///
+  /// [NowPlaying.session] is the one to render: it appears once the item
+  /// is loaded and playing. This one is what owns the engine, which is
+  /// what Connect mirrors and what a command routed here while an item
+  /// is still loading belongs to.
+  PlaybackSession? get liveSession => _session;
+
+  /// Resolves when the start in flight has finished, or immediately when
+  /// none is.
+  ///
+  /// A failed start is recorded on the state rather than thrown (the
+  /// listener gets an error pane with a retry), so a caller that has to
+  /// answer for one reads [NowPlaying.error] after awaiting this.
+  Future<void> get settled => _inFlight ?? Future<void>.value();
+
+  /// Counts the starts this controller has begun.
+  ///
+  /// A caller that has to answer for one reads this before and after:
+  /// unchanged means nothing started (a skip at the front replays what
+  /// is loaded), so an error left on the state belongs to something
+  /// else. Comparing the errors themselves cannot tell those apart,
+  /// because a repeated failure is often the very same object: an API
+  /// exception is const-constructible, and a client that caches one
+  /// hands back the same instance every time.
+  int get startGeneration => _startToken;
 
   /// The one "play this" verb: builds the queue this gesture defines and
   /// starts the entry it lands on.
@@ -170,12 +204,40 @@ class NowPlayingController extends Notifier<NowPlaying> {
     for (final item in items) {
       _known[item.pid] = item;
     }
+    unawaited(
+      playPids(
+        [for (final item in items) item.pid],
+        source: source,
+        startIndex: startIndex,
+        shuffle: shuffle,
+        positionMs: positionMs,
+      ),
+    );
+  }
+
+  /// The same verb for a queue named by pid alone, which is what
+  /// arrives from outside the widget tree: a queue handed to this
+  /// endpoint by another device, or a browse leaf tapped on a head
+  /// unit. Summaries resolve as each entry starts.
+  ///
+  /// [autoplay] false loads the entry and stops there, for a queue put
+  /// back at its checkpoint. Resolves once the entry it lands on has
+  /// started or failed, so a caller that answers for the load can.
+  Future<void> playPids(
+    List<String> pids, {
+    required QueueSource source,
+    int startIndex = 0,
+    bool shuffle = false,
+    int? positionMs,
+    bool autoplay = true,
+  }) {
+    if (pids.isEmpty) return Future<void>.value();
     _pendingPositionMs = positionMs;
-    _pendingPaused = false;
+    _pendingPaused = !autoplay;
     ref
         .read(queueControllerProvider.notifier)
         .playNow(
-          [for (final item in items) item.pid],
+          pids,
           source: source,
           startIndex: startIndex,
           shuffle: shuffle,
@@ -184,6 +246,58 @@ class NowPlayingController extends Notifier<NowPlaying> {
           // replacement resumes at.
           replacedPositionMs: _session?.displayPosition.inMilliseconds ?? 0,
         );
+    // The queue notifies its listeners as it is assigned, so the start
+    // this landed on is already the one in flight.
+    return settled;
+  }
+
+  /// Steps to the next entry at someone's request. False when the queue
+  /// has nowhere to go, so the caller can say so rather than pretend.
+  ///
+  /// A skip while live radio has the engine does nothing. Radio never
+  /// queues, so there is nothing to step; stepping would take the
+  /// engine back from the station the listener chose, which no skip
+  /// button means.
+  Future<bool> next() async {
+    if (_radioOwnsEngine) return false;
+    switch (ref.read(queueControllerProvider.notifier).skipNext()) {
+      case QueueAdvance.advanced:
+        await settled;
+        return true;
+      // A lone entry wrapping onto itself under repeat all: nothing to
+      // load, so this is where it plays again.
+      case QueueAdvance.repeatedCurrent:
+        return _replayCurrent();
+      case QueueAdvance.ended:
+      case QueueAdvance.empty:
+        return false;
+    }
+  }
+
+  /// Steps back an entry, or starts the current one over when already
+  /// at the front, which is what a second press of previous means
+  /// everywhere else. False when nothing is queued, or when live radio
+  /// has the engine (see [next]).
+  Future<bool> previous() async {
+    if (_radioOwnsEngine) return false;
+    switch (ref.read(queueControllerProvider.notifier).retreat()) {
+      case QueueRetreat.moved:
+        await settled;
+        return true;
+      case QueueRetreat.atStart:
+        return _replayCurrent();
+      case QueueRetreat.empty:
+        return false;
+    }
+  }
+
+  Future<bool> _replayCurrent() async {
+    final session = _session;
+    if (session == null) return false;
+    // A skip is not a play command: pressing previous at the front of a
+    // paused queue puts it back at the start, it does not start it.
+    await session.replay(play: _engine.playing);
+    return true;
   }
 
   /// Starts the current entry over after a failure. The queue never
@@ -196,7 +310,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     final entry = ref.read(queueControllerProvider).currentEntry;
     if (entry == null) return;
     _pendingPositionMs = _entryPositionMs;
-    unawaited(_start(entry));
+    _inFlight = _start(entry);
   }
 
   /// Puts a queue found at launch back in play, paused at its
@@ -223,9 +337,9 @@ class NowPlayingController extends Notifier<NowPlaying> {
       final adopting = _adopting;
       _adopting = null;
       if (adopting != null && adopting.entry.queueId == entry.queueId) {
-        unawaited(_adopt(entry, adopting.info));
+        _inFlight = _adopt(entry, adopting.info);
       } else {
-        unawaited(_start(entry));
+        _inFlight = _start(entry);
       }
       return;
     }
@@ -273,7 +387,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // never loaded, and anything reaching for the live session finds
       // one that cannot drive the engine.
       _release(_session, _Farewell.stop);
-      _session = null;
+      _setSession(null);
       state = NowPlaying(entry: entry, item: _known[entry.pid], error: error);
     }
   }
@@ -312,7 +426,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
       if (_superseded(token)) return;
       debugPrint('playback rollover failed: $error');
       _release(_session, _Farewell.stop);
-      _session = null;
+      _setSession(null);
       state = NowPlaying(entry: entry, item: _known[entry.pid], error: error);
     }
   }
@@ -337,7 +451,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _adopting = null;
     unawaited(_dropPreload());
     _release(session, _Farewell.handOver);
-    _session = null;
+    _setSession(null);
     state = NowPlaying(entry: state.entry, item: state.item);
   }
 
@@ -348,7 +462,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _sessionEntryId = null;
     unawaited(_dropPreload());
     _release(_session, _Farewell.stop);
-    _session = null;
+    _setSession(null);
     state = NowPlaying.nothing;
   }
 
@@ -368,10 +482,9 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// runs on hang off it.
   void _install(PlaybackSession session, QueueEntry entry) {
     _release(_session, _Farewell.stop);
-    _session = session;
     _sessionEntryId = entry.queueId;
     _registry.register(session);
-    _connect.attachLocal(session, entry.pid);
+    _setSession(session);
     _completedSub = session.sessionCompleted.listen((_) => _onCompleted());
     // End-of-chapter sleep mode watches the display timeline; the
     // preload rides the same ticks, since when to prepare the next item
@@ -386,22 +499,35 @@ class NowPlayingController extends Notifier<NowPlaying> {
     });
   }
 
-  /// Lets go of [session]: the feeds stop, Connect and the registry
-  /// forget it, and it finalizes out of band so the last checkpoint and
-  /// listen report still ride while the next item loads.
+  /// Lets go of [session]: the feeds stop, the registry forgets it, and
+  /// it finalizes out of band so the last checkpoint and listen report
+  /// still ride while the next item loads.
+  ///
+  /// The caller names the session that replaces it (or none) through
+  /// [_setSession], which is the one place Connect hears about it: what
+  /// the endpoint mirrors is whichever session owns the engine, and
+  /// between these two calls that is nothing.
   void _release(PlaybackSession? session, _Farewell farewell) {
     unawaited(_completedSub?.cancel());
     unawaited(_positionFeed?.cancel());
     _completedSub = null;
     _positionFeed = null;
     if (session == null) return;
-    _connect.detachLocal(session);
     _registry.unregister(session);
     unawaited(switch (farewell) {
       _Farewell.stop => session.dispose(),
       _Farewell.boundary => session.finishAtBoundary(),
       _Farewell.handOver => session.handOver(),
     });
+  }
+
+  /// Points [liveSession] at [session] and tells Connect, whose reports
+  /// follow whatever owns the engine: a fresh session mirrors from here,
+  /// and none at all stops the reports rather than leaving an endpoint
+  /// claiming to play something it let go of.
+  void _setSession(PlaybackSession? session) {
+    _session = session;
+    _connect.onPlaybackChanged();
   }
 
   /// The item ended with nothing behind it in the engine: step the
@@ -440,14 +566,14 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // record of it.
       debugPrint('playback: crossed into an item the queue had let go');
       _release(_session, _Farewell.boundary);
-      _session = null;
+      _setSession(null);
       _recoverFromStray();
       return;
     }
     // The outgoing item is finalized at its own end, not at the engine's
     // position, which already belongs to the item now playing.
     _release(_session, _Farewell.boundary);
-    _session = null;
+    _setSession(null);
     _adopting = crossed;
     final queue = ref.read(queueControllerProvider);
     // By identity, never by index: the queue may have been edited since
@@ -462,7 +588,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // Already current (the queue was edited under the crossing), so
       // no state change is coming to react to.
       _adopting = null;
-      unawaited(_adopt(crossed.entry, crossed.info));
+      _inFlight = _adopt(crossed.entry, crossed.info);
     } else {
       notifier.jumpTo(index);
     }
@@ -483,7 +609,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
       // over it; this does.
       case QueueAdvance.repeatedCurrent:
         final entry = ref.read(queueControllerProvider).currentEntry;
-        if (entry != null) unawaited(_start(entry));
+        if (entry != null) _inFlight = _start(entry);
       case QueueAdvance.ended:
       case QueueAdvance.empty:
         unawaited(_engine.stop());
@@ -623,9 +749,28 @@ class NowPlayingController extends Notifier<NowPlaying> {
   Future<ItemSummary> _resolve(String pid) async {
     final known = _known[pid];
     if (known != null) return known;
-    final item = await ref.read(repositoryProvider).getItem(pid);
-    _known[pid] = item;
-    return item;
+    final repository = ref.read(repositoryProvider);
+    final item = await repository.getItem(pid);
+    if (item.mediaType != MediaType.podcast) {
+      _known[pid] = item;
+      return item;
+    }
+    // An episode reached by pid alone (a queue handed over by another
+    // device, a browse leaf on a head unit, a restored queue the mirror
+    // could not name) arrives from `GET /items/{pid}` as a plain item
+    // detail, which carries no show pid, and the per-show speed, trim,
+    // and skip settings all hang off that. The episode endpoint carries
+    // one, so it is worth the second round trip on the rare path that
+    // has no summary in hand.
+    try {
+      final episode = await repository.getEpisode(pid);
+      _known[pid] = episode;
+      return episode;
+    } on WaxDeckApiException {
+      // The show's settings are a refinement; the episode still plays.
+      _known[pid] = item;
+      return item;
+    }
   }
 
   /// Forgets summaries no queue needs any more. The cache is a

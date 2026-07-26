@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-import '../player/session_registry.dart';
 import '../providers.dart';
-import '../sync/sync_providers.dart';
+import '../queue/queue_controller.dart';
 import 'connect_bus.dart';
 import 'connect_controller.dart';
+import 'queue_gateway.dart';
 
 /// The bus sends through whichever transport the platform runs (the
 /// sync engine natively, the invalidations follower on web); the sync
@@ -31,14 +31,13 @@ final connectBusProvider = Provider<ConnectBus>((ref) {
 final connectControllerProvider = Provider<ConnectEndpointController>((ref) {
   final controller = ConnectEndpointController(
     bus: ref.watch(connectBusProvider),
-    repository: ref.watch(repositoryProvider),
     engine: ref.watch(audioEngineProvider),
-    registry: ref.watch(currentSessionRegistryProvider),
+    queue: ref.watch(queueGatewayProvider),
     deviceName: waxDeckDeviceName ?? 'WaxDeck client',
-    clientId: listenClientId,
-    sync: ref.watch(syncEngineProvider),
-    downloads: ref.watch(downloadManagerProvider),
   );
+  // What is queued is half of what a mirror session says, and it moves
+  // for reasons playback never hears about (a reorder, an add).
+  ref.listen(queueControllerProvider, (_, _) => controller.onQueueChanged());
   ref.onDispose(controller.dispose);
   return controller;
 });

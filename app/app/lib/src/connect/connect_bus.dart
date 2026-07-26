@@ -156,13 +156,20 @@ class ConnectBus {
     });
   }
 
-  /// Answers one routed endpoint command.
-  void sendCommandResult(String id, {required bool ok, String? message}) {
+  /// Answers one routed endpoint command. A refusal carries its own
+  /// code and message: the server hands both back to whoever sent the
+  /// command, and that is what they read.
+  void sendCommandResult(
+    String id, {
+    required bool ok,
+    String? code,
+    String? message,
+  }) {
     send({
       'type': 'cmd-result',
       'id': id,
       'ok': ok,
-      if (!ok) 'code': 'invalid-request',
+      if (!ok) 'code': code ?? 'invalid-request',
       if (!ok && message != null) 'message': message,
     });
   }
@@ -185,6 +192,8 @@ class ConnectBus {
     required int index,
     double? rate,
     double? volume,
+    String? repeat,
+    bool? shuffle,
     List<String>? itemPids,
     int? queueVersion,
   }) {
@@ -195,6 +204,8 @@ class ConnectBus {
       'index': index,
       'rate': ?rate,
       'volume': ?volume,
+      'repeat': ?repeat,
+      'shuffle': ?shuffle,
       'itemPids': ?itemPids,
       'queueVersion': ?queueVersion,
     });

@@ -44,6 +44,54 @@ void main() {
     await harness.endPlayback(tester);
   });
 
+  testWidgets('a finished item plays again from the top', (tester) async {
+    final repo = FakeRepository(items: [testItem(pid)])
+      // What a track played to the end leaves behind: a checkpoint at
+      // its own end, and the flag saying so.
+      ..playPositions[pid] = 214000
+      ..finishedPids.add(pid);
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+    );
+
+    // Not a resume point: playing a finished item means playing it. On
+    // web, loading media at the position it ends at fails the load
+    // outright, so this is the difference between the track and an
+    // error pane.
+    expect(engine.position, Duration.zero);
+    expect(engine.playing, isTrue);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a checkpoint past the end of the media starts over', (
+    tester,
+  ) async {
+    // No finished flag, so the length is what catches it: a file that
+    // was re-imported shorter, or a listen that rounded up.
+    final repo = FakeRepository(items: [testItem(pid)])
+      ..playPositions[pid] = 260000;
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+    );
+
+    expect(engine.position, Duration.zero);
+    await harness.endPlayback(tester);
+  });
+
   testWidgets('starts from the top when nothing is saved', (tester) async {
     final repo = FakeRepository(items: [testItem(pid)]);
     final engine = FakeEngine();

@@ -424,6 +424,28 @@ void main() {
     );
   });
 
+  group('resolving an entry', () {
+    test('an episode reached by pid alone still finds its show', () async {
+      final h = _harness(items: [testItem(_a), testEpisode(_episode)]);
+      h.repo
+        ..addSubscription(
+          testShow(_showPid),
+          settings: const SubscriptionSettings(speed: 1.5),
+        )
+        ..episodesByShow[_showPid] = [testEpisode(_episode)];
+
+      // No summary in hand, which is what a queue handed over by
+      // another device and a browse leaf on a head unit both look like.
+      await h.container.playback.playPids([_episode], source: QueueSource.none);
+      await pumpEventQueue();
+
+      expect(h.container.read(nowPlayingProvider).item, isA<EpisodeSummary>());
+      // The show's remembered speed is the visible half of it: without
+      // the show, an item detail plays every episode at 1.0.
+      expect(h.engine.speed, 1.5);
+    });
+  });
+
   group('crossing into the prepared item', () {
     // A guard on the decision, not on a bug: a crossing must not
     // publish a state with no session, because the item never stopped
@@ -554,6 +576,50 @@ void main() {
     // The stream ends (a dropped connection, a station going off air):
     // that is not the end of a queue entry.
     await _runOut(h.engine);
+
+    expect(h.container.queueState.currentPid, _a);
+    expect(h.engine.loadedUrl, contains('/media/radio/'));
+  });
+
+  test('previous at the front leaves a paused queue paused', () async {
+    final h = _harness();
+    h.container.playback.play([testItem(_a)], source: _album);
+    await pumpEventQueue();
+    await _play(h.engine, 4000);
+    await h.engine.pause();
+    await pumpEventQueue();
+
+    // A skip is not a play command: it puts the entry back at its
+    // start, it does not start it.
+    expect(await h.container.playback.previous(), isTrue);
+    await pumpEventQueue();
+    expect(h.engine.position, Duration.zero);
+    expect(h.engine.playing, isFalse);
+  });
+
+  test('a skip while radio has the engine does nothing', () async {
+    final h = _harness();
+    h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+    await pumpEventQueue();
+
+    await h.container
+        .read(radioPlaybackProvider.notifier)
+        .play(
+          RadioStation(
+            pid: 'st-1',
+            name: 'Prancing Pony FM',
+            streamUrl: 'https://pony.example/stream',
+            createdAt: DateTime.utc(2026, 7, 25),
+          ),
+        );
+    await pumpEventQueue();
+
+    // A head unit or a controller pressing next: there is no queue
+    // playing to step, and stepping would take the engine back from
+    // the station.
+    expect(await h.container.playback.next(), isFalse);
+    expect(await h.container.playback.previous(), isFalse);
+    await pumpEventQueue();
 
     expect(h.container.queueState.currentPid, _a);
     expect(h.engine.loadedUrl, contains('/media/radio/'));

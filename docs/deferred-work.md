@@ -131,6 +131,16 @@ here waits on upstream.
 - `[in-repo]` **Cast device displays show no artwork.** The art endpoint
   authenticates by session, which a cast device cannot present; media
   items are sent without an art URL. Needs a media-token art variant.
+- `[in-repo]` **A routed command's refusal loses its code.** A client
+  endpoint answers `cmd-result` with `ok`, `code`, and `message` per
+  the frame contract, and the routing layer decodes all three
+  (`routeResult`), but both consumers read the message alone and wrap
+  it in `InvalidError`, so every refusal reaches the controller as
+  `invalid-request` whatever the client said. The messages are
+  human-readable and render fine; a controller that wanted to branch
+  on the code (offering "play here" when an endpoint refuses a
+  multi-part book, say) cannot. Forwarding it means a typed error that
+  carries a code through to the wire.
 - `[in-repo]` **Session restore surface.** Ended sessions keep their final state
   in `playback_sessions` (pruned to the newest five per user), but no
   API or UI reads it back yet; the queue-restore history the sync
@@ -195,7 +205,7 @@ here waits on upstream.
   supplies the font.** The design system bundles Latin, Greek, Cyrillic,
   Arabic, Hebrew, and Thai, and `WaxFonts.ensureCjk()` loads a CJK face
   from WaxDeck's own origin when the locale or the metadata on screen
-  needs one — but no CJK asset ships, because a usable subset is an
+  needs one, but no CJK asset ships, because a usable subset is an
   order of magnitude larger than the whole rest of the chain. Native
   builds fall back to system fonts and are fine; a LAN-only web client
   with Han, kana, or hangul in its library is not, since Flutter web's
@@ -225,6 +235,30 @@ here waits on upstream.
   overlays on the root navigator, so what lands in the bar is exactly
   what can be shared. Browser back already steps through the pushed
   stack, so this is about linkability, not navigation. See ADR-0017.
+- `[in-repo]` **One e2e flake is left, and it is a renderer hang.**
+  Two of the three that made the suite unreliable are fixed. The
+  specs ran on `chrome-headless-shell`, which segfaults on the wasm
+  build (skwasm rasterizes in a dedicated worker; the kernel log
+  recorded signal 11 in `chrome-headless` and `DedicatedWorker`
+  threads) and surfaced as an unexplained "Page crashed" in whichever
+  spec was mid-login; the full Chromium in new headless mode ends it,
+  with zero segfaults across 22 suite runs where they had been
+  accumulating. And `a11y-audit` was landing on "Playback failed to
+  start" because it runs last, so the track it plays is one earlier
+  specs finished, and a finished item resumed at its own end fails
+  the load outright on web, a real bug fixed in the session's
+  resume path rather than in the spec. What remains is one failure
+  in roughly four suite runs, and it is always the same shape in a
+  different spec: the page stops answering, Playwright's own calls
+  stall against it, and whichever spec was mid-step wears a generic
+  timeout waiting for an element that never renders (seen in
+  `a11y-audit`, `ui`, `playlists`, `review-queue`, `uploads`). It is
+  not a crash, not memory (6 GB free at the low point), and not
+  concurrency: halving the workers did not move the rate, so that
+  mitigation was reverted rather than kept on a hunch. The hang is in
+  the wasm rendering path and wants a Flutter-side reproduction to go
+  further. Traces are retained on failure now, so the next occurrence
+  keeps its own evidence.
 - `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists.

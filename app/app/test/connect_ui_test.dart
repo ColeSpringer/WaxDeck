@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -92,6 +94,50 @@ void main() {
     expect(call.itemPids, ['tr-current']);
     expect(call.positionMs, 5000);
     expect(find.text('Playing on Kitchen speaker'), findsOneWidget);
+  });
+
+  testWidgets('the picker holds its rows across a refresh', (tester) async {
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = [_endpoint];
+    var listings = 0;
+    final refetch = Completer<void>();
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        audioEngineProvider.overrideWithValue(FakeEngine()),
+        // The second listing is held open, which is the window the
+        // sheet has to survive. A real one is a round trip wide.
+        playbackSessionsProvider.overrideWith((ref) async {
+          if (listings++ > 0) await refetch.future;
+          return [_session()];
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final row = find.byKey(const Key('session-ps-remote'));
+    expect(row, findsOneWidget);
+
+    // The player topic invalidates both lists whenever any session
+    // anywhere starts, ends, or changes its queue, which on a busy
+    // server is often. The rows stay put through it.
+    container.read(connectBinderProvider).onPlayerInvalidate();
+    await tester.pump();
+    expect(listings, 2);
+    expect(row, findsOneWidget);
+    expect(find.text('Kitchen speaker'), findsWidgets);
+
+    refetch.complete();
+    await tester.pumpAndSettle();
+    expect(row, findsOneWidget);
   });
 
   testWidgets('the remote screen sends commands and transfers here', (

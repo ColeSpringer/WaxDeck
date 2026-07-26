@@ -17,7 +17,20 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL,
-    trace: 'on-first-retry',
+    // Kept on failure rather than on first retry: local runs do not
+    // retry, so a flake that shows up once in a dozen runs would
+    // otherwise leave nothing behind to diagnose it with.
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    // The full Chromium in its new headless mode, not the old
+    // chrome-headless-shell that Playwright reaches for by default.
+    // The web build is wasm (skwasm rasterizes in a dedicated worker
+    // behind SharedArrayBuffer), and the shell segfaults on it: the
+    // kernel log records signal 11 in `chrome-headless` and
+    // `DedicatedWorker` threads, which surfaces as an unexplained
+    // "Page crashed" in whichever spec happened to be logging in. The
+    // full binary is also what people actually run.
+    channel: 'chromium',
   },
   projects: [
     // First-run setup runs alone before everything else: it drives the

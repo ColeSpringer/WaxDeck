@@ -70,61 +70,91 @@ class _DevicePickerSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Every watch belongs to this build, never to the nested builder
+    // below: a ref used from a descendant's build runs after this
+    // element has closed the dependencies it did not see re-read, so
+    // the subscriptions would be torn down and re-listened every time
+    // the sheet rebuilt.
     final endpoints = ref.watch(playerEndpointsProvider);
     final sessions = ref.watch(playbackSessionsProvider);
-    final ownEndpoint = ref.watch(connectControllerProvider).endpointId.value;
+    // This device's own endpoint id arrives with registration, which may
+    // land after the sheet opens: listened to rather than read once, or
+    // the picker offers to play here, on the device already playing.
     return SafeArea(
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          const ListTile(title: Text('Play on', style: TextStyle())),
-          ...switch (endpoints) {
-            AsyncData(:final value) => [
-              for (final ep in value.where((e) => e.id != ownEndpoint))
-                Semantics(
-                  identifier: SemanticsIds.endpoint(ep.id),
-                  label: ep.name,
-                  button: true,
-                  excludeSemantics: true,
-                  onTap: () => _playOn(context, ref, ep),
-                  child: ListTile(
-                    key: Key(SemanticsIds.endpoint(ep.id)),
-                    leading: Icon(switch (ep.kind) {
-                      'cast' => Icons.cast,
-                      'dlna' => Icons.speaker,
-                      'jukebox' => Icons.speaker_group,
-                      _ => Icons.devices,
-                    }),
-                    title: Text(ep.name),
-                    subtitle: ep.online ? null : const Text('Offline'),
-                    enabled: ep.online,
-                    onTap: () => _playOn(context, ref, ep),
-                  ),
-                ),
-            ],
-            AsyncError() => const [
-              ListTile(title: Text('Could not list devices')),
-            ],
-            _ => const [ListTile(title: Text('Looking for devices'))],
-          },
-          if (sessions case AsyncData(:final value))
-            for (final s in value.where((s) => s.endpointId != ownEndpoint))
+      child: ValueListenableBuilder<String?>(
+        valueListenable: ref.watch(connectControllerProvider).endpointId,
+        builder: (context, ownEndpoint, _) =>
+            _rows(context, ref, ownEndpoint, endpoints, sessions),
+      ),
+    );
+  }
+
+  Widget _rows(
+    BuildContext context,
+    WidgetRef ref,
+    String? ownEndpoint,
+    AsyncValue<List<PlayerEndpoint>> endpoints,
+    AsyncValue<List<PlaybackSessionInfo>> sessions,
+  ) {
+    // Whatever was listed last stays listed while a refetch runs: both
+    // lists are invalidated whenever any session anywhere starts, ends,
+    // or changes its queue, and a sheet that empties for the length of
+    // every one of those is one whose rows move under a finger already
+    // on the way to them. (Riverpod keeps the value across a refresh,
+    // so this is about the error case: stale devices beat none.)
+    final devices = endpoints.value;
+    final playing = sessions.value;
+    return ListView(
+      shrinkWrap: true,
+      children: [
+        const ListTile(title: Text('Play on', style: TextStyle())),
+        ...switch (devices) {
+          null when endpoints.hasError => const [
+            ListTile(title: Text('Could not list devices')),
+          ],
+          null => const [ListTile(title: Text('Looking for devices'))],
+          final value => [
+            for (final ep in value.where((e) => e.id != ownEndpoint))
               Semantics(
-                identifier: SemanticsIds.session(s.id),
-                label: 'Now playing on ${s.endpointName ?? s.endpointId}',
+                identifier: SemanticsIds.endpoint(ep.id),
+                label: ep.name,
                 button: true,
                 excludeSemantics: true,
-                onTap: () => _openRemote(context, s),
+                onTap: () => _playOn(context, ref, ep),
                 child: ListTile(
-                  key: Key(SemanticsIds.session(s.id)),
-                  leading: const Icon(Icons.play_circle_outline),
-                  title: Text(s.currentEntry?.title ?? 'Playing'),
-                  subtitle: Text('on ${s.endpointName ?? s.endpointId}'),
-                  onTap: () => _openRemote(context, s),
+                  key: Key(SemanticsIds.endpoint(ep.id)),
+                  leading: Icon(switch (ep.kind) {
+                    'cast' => Icons.cast,
+                    'dlna' => Icons.speaker,
+                    'jukebox' => Icons.speaker_group,
+                    _ => Icons.devices,
+                  }),
+                  title: Text(ep.name),
+                  subtitle: ep.online ? null : const Text('Offline'),
+                  enabled: ep.online,
+                  onTap: () => _playOn(context, ref, ep),
                 ),
               ),
-        ],
-      ),
+          ],
+        },
+        for (final s in (playing ?? const <PlaybackSessionInfo>[]).where(
+          (s) => s.endpointId != ownEndpoint,
+        ))
+          Semantics(
+            identifier: SemanticsIds.session(s.id),
+            label: 'Now playing on ${s.endpointName ?? s.endpointId}',
+            button: true,
+            excludeSemantics: true,
+            onTap: () => _openRemote(context, s),
+            child: ListTile(
+              key: Key(SemanticsIds.session(s.id)),
+              leading: const Icon(Icons.play_circle_outline),
+              title: Text(s.currentEntry?.title ?? 'Playing'),
+              subtitle: Text('on ${s.endpointName ?? s.endpointId}'),
+              onTap: () => _openRemote(context, s),
+            ),
+          ),
+      ],
     );
   }
 

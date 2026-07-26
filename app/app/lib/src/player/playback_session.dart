@@ -182,7 +182,13 @@ class PlaybackSession {
       var resumeMs = initialPositionMs;
       if (resumeMs == null) {
         final saved = await repository.getPlayState(item.pid);
-        resumeMs = saved.positionMs;
+        // A finished item has no resume point: its checkpoint sits at
+        // its own end, and playing it again means playing it. Loading
+        // media at the position it ends at also fails outright on web,
+        // where the element answers "no supported source" for a source
+        // it is asked to begin past, so this is the difference between
+        // starting over and an error pane.
+        resumeMs = saved.finished ? 0 : saved.positionMs;
       }
       // Let go while this was resolving: a tap on something else, or the
       // queue emptying. Loading here would put this item's media over
@@ -195,6 +201,11 @@ class PlaybackSession {
         if (_disposed) return;
         _playInfo = info;
         _applyOutroCutoff(info.durationMs);
+        // The same guard against a checkpoint the media outgrew: a
+        // position at or past the end is not a place to start, however
+        // it got there (a re-imported file, a listen that rounded up,
+        // a finished flag that never landed).
+        if (info.durationMs > 0 && resumeMs >= info.durationMs) resumeMs = 0;
         resumeMs = _applyIntroSkip(resumeMs);
         final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
         // A span means the URL carries the whole backing file (direct
@@ -220,7 +231,14 @@ class PlaybackSession {
       // The offline branch loads below; this is what keeps a session
       // already let go from doing so.
       if (_disposed) return;
-      var resumeMs = initialPositionMs ?? saved?.positionMs ?? 0;
+      // A finished item starts over here too: the mirror keeps the same
+      // checkpoint the server does, so a downloaded track listened to
+      // the end would load at its own end with no network to correct
+      // it.
+      var resumeMs = initialPositionMs ?? 0;
+      if (initialPositionMs == null && saved != null && !saved.finished) {
+        resumeMs = saved.positionMs;
+      }
       if (!_isBook) resumeMs = _applyIntroSkip(resumeMs);
       final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
       // Downloaded originals carry the same window; clipping here is
@@ -250,7 +268,7 @@ class PlaybackSession {
   /// Takes over media the engine is already playing: this item was
   /// preloaded behind the previous one and the engine has crossed into
   /// it. [info] is the play-info that preload was minted from, so
-  /// nothing is resolved, loaded, or seeked here — the stream never
+  /// nothing is resolved, loaded, or seeked here: the stream never
   /// stopped, and this session picks up accounting where it stands.
   ///
   /// Only ever called for an item the preload admission policy let
@@ -452,18 +470,28 @@ class PlaybackSession {
     }
   }
 
-  /// Plays this item again from the top, for repeat-one. The finished
+  /// Plays this item again from the top: repeat-one, or a transport
+  /// asking for the start of what is already loaded. The finished
   /// session was reported when it completed, so the next counted
   /// position mints a fresh listen session id and the second play is
   /// accounted as its own rather than extending the first.
-  Future<void> replay() async {
+  ///
+  /// [play] false leaves it where a paused listener put it. Repeat-one
+  /// passes true, because the engine stopped at the end of the item and
+  /// nothing else would start it; a press of previous passes whether
+  /// the item was playing, since a skip is not a play command.
+  Future<void> replay({bool play = true}) async {
     _outroFired = false;
     _lastJumpedSpan = -1;
     _finished = false;
+    // The end an outro cutoff recorded belonged to that play. Left
+    // standing, the next checkpoint would write the item's end rather
+    // than where this play actually stopped.
+    _endedAt = null;
     // Through the display timeline, so a book on repeat-one goes back to
     // its first part rather than to the top of the part it ended on.
     await seek(Duration.zero);
-    await engine.play();
+    if (play) await engine.play();
   }
 
   /// Stops playback, flushing a final checkpoint and the listen report.

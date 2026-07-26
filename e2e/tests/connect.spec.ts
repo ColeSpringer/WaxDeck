@@ -1,4 +1,11 @@
-import { test, expect, Page, BrowserContext, Browser } from '@playwright/test';
+import {
+  test,
+  expect,
+  Page,
+  BrowserContext,
+  Browser,
+  APIRequestContext,
+} from '@playwright/test';
 import { ensureAdmin, authed, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
@@ -7,16 +14,51 @@ import { SemanticsIds, sem } from './semantics-ids';
 // session to the server; B sees the session, remote-controls it, and
 // finally pulls the playback onto itself (the mid-track handoff).
 
+// This spec's own account. Sessions are visible to their owner alone
+// (or on a shared endpoint), so the two clients below see each other
+// and nobody else: the admin account is played by several specs at
+// once, and a session picked out of that list by the track it carries
+// can easily be another spec's, which then ends when its browser
+// closes.
+const CONNECT_USER = 'connect-e2e';
+const CONNECT_PASS = 'wax-e2e-connect';
+
+async function ensureConnectUser(request: APIRequestContext, token: string) {
+  const res = await request.post('/api/v1/users', {
+    ...authed(token),
+    data: {
+      username: CONNECT_USER,
+      password: CONNECT_PASS,
+      // Named rather than left to the default: this account has to see
+      // the fixture library to play anything from it.
+      libraryAccess: { mode: 'all' },
+    },
+  });
+  // Already there from an earlier run against the same stack.
+  if (!res.ok() && res.status() !== 409) {
+    throw new Error(`could not create the connect account: ${res.status()}`);
+  }
+}
+
 async function loginWeb(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto('/');
   const username = page.getByRole('textbox', { name: 'Username' });
   await username.waitFor({ timeout: 30_000 });
-  await typeInto(page, username, 'admin');
-  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
+  await typeInto(page, username, CONNECT_USER);
+  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), CONNECT_PASS);
   await page.getByRole('button', { name: 'Log in' }).click();
   return { context, page };
+}
+
+/// Signs in over the API as this spec's account, for the session and
+/// endpoint lists the two clients are asserted against.
+async function connectToken(request: APIRequestContext): Promise<string> {
+  const res = await request.post('/api/v1/auth/login', {
+    data: { username: CONNECT_USER, password: CONNECT_PASS },
+  });
+  return (await res.json()).token;
 }
 
 function locate(page: Page, id: string) {
@@ -27,8 +69,10 @@ test('a session mirrors to the server and relays remote control', async ({
   browser,
   request,
 }) => {
-  const token = await ensureAdmin(request);
-  await waitForLibrary(request, token);
+  const admin = await ensureAdmin(request);
+  await waitForLibrary(request, admin);
+  await ensureConnectUser(request, admin);
+  const token = await connectToken(request);
   const items = await (
     await request.get('/api/v1/library/items', authed(token))
   ).json();
@@ -44,9 +88,8 @@ test('a session mirrors to the server and relays remote control', async ({
   const toggle = locate(a.page, SemanticsIds.playerToggle);
   await toggle.waitFor({ timeout: 30_000 });
 
-  // A's playback reaches the server as a mirror session. Parallel
-  // specs play their own tracks under the same account, so A's
-  // session is found by its track, never assumed to be the first.
+  // A's playback reaches the server as a mirror session, and this
+  // account plays nothing else, so it is the only one listed.
   type MirrorSession = {
     id: string;
     authority: string;

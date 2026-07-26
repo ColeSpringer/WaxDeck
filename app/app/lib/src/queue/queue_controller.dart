@@ -247,10 +247,28 @@ class QueueController extends Notifier<QueueState> {
     state = state.copyWith(currentIndex: target);
   }
 
-  /// Steps to the next entry, applying repeat.
+  /// Steps to the next entry because the current one ended, applying
+  /// repeat.
   QueueAdvance advance() {
     if (state.isEmpty) return QueueAdvance.empty;
     if (state.repeat == QueueRepeat.one) return QueueAdvance.repeatedCurrent;
+    return _step();
+  }
+
+  /// Steps to the next entry because someone asked for it: a transport
+  /// button, a head unit, a controller on another device.
+  ///
+  /// Unlike [advance], repeat one does not hold the queue in place. It
+  /// holds an item against its own end, not against a skip: whoever
+  /// presses next means next.
+  QueueAdvance skipNext() {
+    if (state.isEmpty) return QueueAdvance.empty;
+    return _step();
+  }
+
+  /// The step both forward verbs share: on to the next entry, wrapping
+  /// under repeat all.
+  QueueAdvance _step() {
     if (state.currentIndex + 1 < state.length) {
       state = state.copyWith(currentIndex: state.currentIndex + 1);
       return QueueAdvance.advanced;

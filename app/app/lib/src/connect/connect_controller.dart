@@ -2,39 +2,36 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
-import '../player/playback_session.dart';
-import '../player/session_registry.dart';
+import '../queue/queue_state.dart';
 import 'connect_bus.dart';
+import 'queue_gateway.dart';
 
 /// This client's half of "every client is a controllable endpoint":
 /// registers over the command bus, executes routed commands against
-/// the local player, plays queues handed over by loads and transfers,
-/// and mirrors whatever plays locally back to the server as session
-/// reports (on state change plus a five second heartbeat while
-/// playing).
+/// the local queue, and mirrors whatever plays locally back to the
+/// server as session reports (on state change plus a five second
+/// heartbeat while playing).
+///
+/// It holds no queue of its own. A queue handed here by another device
+/// becomes the local queue, so the deck bar, the queue screen, and a
+/// head unit are all looking at the same one.
 class ConnectEndpointController {
   ConnectEndpointController({
     required this.bus,
-    required this.repository,
     required this.engine,
-    required this.registry,
+    required this.queue,
     required this.deviceName,
-    required this.clientId,
-    this.sync,
-    this.downloads,
   });
 
   final ConnectBus bus;
-  final WaxDeckRepository repository;
   final AudioEnginePort engine;
-  final CurrentSessionRegistry registry;
+
+  /// The local queue and the playback following it.
+  final QueueGateway queue;
+
   final String deviceName;
-  final String clientId;
-  final SyncEngine? sync;
-  final DownloadManagerPort? downloads;
 
   /// This client's endpoint id once registered; pickers use it to
   /// transfer sessions here and to hide this device from its own list.
@@ -45,15 +42,20 @@ class ConnectEndpointController {
   /// transfers this session for a position-keeping handoff.
   String? mirrorSessionId;
 
-  _ConnectQueue? _queue;
-  PlaybackSession? _localSession;
-  String? _localPid;
-  bool _queueDirty = false;
+  /// The queue as last reported, which is what a change is measured
+  /// against: `itemPids` rides only the reports where the queue itself
+  /// changed. Null means the next report carries it whatever it says.
+  QueueSnapshot? _reported;
   int _queueVersion = 0;
   Timer? _reportTimer;
+  Timer? _queueSettle;
   StreamSubscription<bool>? _playingSub;
   bool _lastPlaying = false;
   bool _disposed = false;
+
+  /// How long a queue edit waits before it is reported. A drag emits a
+  /// queue per frame and no frame of one is worth a socket write.
+  static const Duration _queueSettleDelay = Duration(milliseconds: 400);
 
   /// Wires the bus callbacks without registering (frames can arrive
   /// the moment the socket lives, before registration resolves).
@@ -75,35 +77,48 @@ class ConnectEndpointController {
       endpointId.value = await bus.registerEndpoint(name: deviceName);
       // A fresh connection means a fresh mirror session server-side;
       // the next report must carry the queue again.
-      _queueDirty = true;
-      _report(force: true);
+      _reported = null;
+      _report();
     } on Exception {
       // The socket dropped mid-registration; the reconnect hook runs
       // this again.
     }
   }
 
-  /// PlayerScreen attaches its live session so organic local playback
-  /// mirrors to the server and stays remotely controllable.
-  void attachLocal(PlaybackSession session, String pid) {
-    _queue?.stop();
-    _queue = null;
-    _localSession = session;
-    _localPid = pid;
-    _queueDirty = true;
-    _queueVersion++;
+  /// Playback changed hands: a session took the engine, or the last one
+  /// let go of it. Reports follow whatever owns it, so this is where
+  /// they start and stop.
+  void onPlaybackChanged() {
+    if (_disposed) return;
+    if (queue.snapshot() == null) {
+      _stopReporting(sessionOver: !queue.hasQueue);
+      return;
+    }
     _watchEngine();
-    _report(force: true);
+    _report();
   }
 
-  /// PlayerScreen detaches on dispose. Reports stop; the server ends
-  /// the mirror session when the socket drops or another load lands.
-  void detachLocal(PlaybackSession session) {
-    if (_localSession == session) {
-      _localSession = null;
-      _localPid = null;
-      _stopReporting();
-    }
+  /// The queue moved under playback: a reorder, an add, a removal, a
+  /// shuffle. The mirror carries it on the next report, which is
+  /// scheduled rather than sent: the edit that matters is where the
+  /// gesture leaves the queue, not where each frame of it does.
+  void onQueueChanged() {
+    if (_disposed) return;
+    final snapshot = queue.snapshot();
+    if (snapshot == null || _nothingNewToReport(snapshot)) return;
+    // Restarted on each edit, not held from the first: a drag that
+    // reported on a timer from its first frame would put every
+    // intermediate order on the wire and leave the last one to the
+    // heartbeat. What the gesture settles on is what the mirror wants.
+    _queueSettle?.cancel();
+    _queueSettle = Timer(_queueSettleDelay, () {
+      _queueSettle = null;
+      // Re-read rather than trusted from arming time: a queue edited
+      // and put back inside the window has nothing to say.
+      final settled = queue.snapshot();
+      if (settled == null || _nothingNewToReport(settled)) return;
+      _report();
+    });
   }
 
   void _watchEngine() {
@@ -112,13 +127,13 @@ class ConnectEndpointController {
       // only acts while some playback is attached: after a detach the
       // engine may keep flipping (radio, another surface) and neither
       // reports nor the heartbeat should follow it.
-      if (_currentState() == null) {
-        _stopReporting();
+      if (queue.snapshot() == null) {
+        _stopReporting(sessionOver: !queue.hasQueue);
         return;
       }
       if (playing != _lastPlaying) {
         _lastPlaying = playing;
-        _report(force: true);
+        _report();
       }
       _scheduleHeartbeat();
     });
@@ -132,53 +147,73 @@ class ConnectEndpointController {
     });
   }
 
-  void _stopReporting() {
+  /// Stops the heartbeat.
+  ///
+  /// [sessionOver] also forgets what was reported, because the next
+  /// report then creates a session and the server drops a creating
+  /// report that carries no queue: playing the same album twice in a
+  /// row must not come back as a queue that looks unchanged. False for
+  /// the gap between two items of one queue, where the mirror is the
+  /// same session throughout and re-sending its queue would have the
+  /// server re-hydrate every entry at every track.
+  void _stopReporting({bool sessionOver = true}) {
     _reportTimer?.cancel();
     _reportTimer = null;
+    if (sessionOver) _reported = null;
   }
 
-  ({List<String> pids, int index, int positionMs, bool playing})?
-  _currentState() {
-    final queue = _queue;
-    if (queue != null) {
-      return (
-        pids: queue.pids,
-        index: queue.index,
-        positionMs: queue.session?.displayPosition.inMilliseconds ?? 0,
-        playing: engine.playing,
-      );
-    }
-    final local = _localSession;
-    final pid = _localPid;
-    if (local != null && pid != null) {
-      return (
-        pids: [pid],
-        index: 0,
-        positionMs: local.displayPosition.inMilliseconds,
-        playing: engine.playing,
-      );
-    }
-    return null;
+  /// Whether [snapshot] says nothing a report has not already carried,
+  /// which is what decides whether one is worth scheduling. Wider than
+  /// [_queueChanged] on purpose: the toggles ride every report as
+  /// steady fields, while the queue itself rides only the reports where
+  /// it changed. The current index is in neither, because what moves it
+  /// is playback changing hands, which reports for itself.
+  bool _nothingNewToReport(QueueSnapshot snapshot) {
+    final reported = _reported;
+    return reported != null &&
+        reported.repeat == snapshot.repeat &&
+        reported.shuffled == snapshot.shuffled &&
+        !_queueChanged(snapshot);
   }
 
-  void _report({bool force = false}) {
+  /// Whether the queue itself moved since the last report, which is
+  /// what `itemPids` rides.
+  bool _queueChanged(QueueSnapshot snapshot) =>
+      !listEquals(_reported?.pids, snapshot.pids);
+
+  void _report() {
     if (_disposed) return;
-    final state = _currentState();
-    if (state == null) return;
-    final withQueue = _queueDirty;
-    _queueDirty = false;
+    final snapshot = queue.snapshot();
+    if (snapshot == null) return;
+    // Everything waiting to settle is in this frame.
+    _queueSettle?.cancel();
+    _queueSettle = null;
+    final withQueue = _queueChanged(snapshot);
+    if (withQueue) _queueVersion++;
+    _reported = snapshot;
     bus.sessionReport(
-      playing: state.playing,
-      positionMs: state.positionMs,
-      index: state.index,
+      playing: engine.playing,
+      positionMs: snapshot.positionMs,
+      index: snapshot.index,
       rate: engine.speed,
       volume: engine.volume,
-      itemPids: withQueue ? state.pids : null,
+      repeat: snapshot.repeat.wireName,
+      shuffle: snapshot.shuffled,
+      itemPids: withQueue ? snapshot.pids : null,
       queueVersion: withQueue ? _queueVersion : null,
     );
   }
 
   void _onSessionAnswer(PlaybackSessionInfo session) {
+    // Session frames arrive for anything this connection watches, not
+    // only for what it reports under: a controller screen following
+    // another device's playback receives that session here too. Taking
+    // it would make another endpoint's session this one's, so a later
+    // "play on the kitchen speaker" would transfer someone else's
+    // playback, and that session ending would stop the reports for
+    // playback still running here.
+    final own = endpointId.value;
+    if (own != null && session.endpointId != own) return;
     if (session.ended) {
       // The server ended what this client was reporting (a transfer
       // moved it, or a delete): stop treating local playback as that
@@ -197,29 +232,43 @@ class ConnectEndpointController {
     try {
       switch (verb) {
         case 'load':
-          final pids = (frame['itemPids'] as List<dynamic>? ?? const [])
-              .whereType<String>()
-              .toList(growable: false);
-          final index = (frame['index'] as num?)?.toInt() ?? 0;
-          final positionMs = (frame['positionMs'] as num?)?.toInt() ?? 0;
-          final play = frame['play'] as bool? ?? true;
-          await _load(pids, index, positionMs, play);
-          // The load names the session this playback now reports
+        case 'set-queue':
+          await queue.load(
+            _pids(frame),
+            index: (frame['index'] as num?)?.toInt() ?? 0,
+            positionMs: (frame['positionMs'] as num?)?.toInt() ?? 0,
+            // A set-queue is the controller replacing what plays here,
+            // never a queue parked in silence.
+            play: verb == 'set-queue' || (frame['play'] as bool? ?? true),
+          );
+          // The command names the session this playback now reports
           // under; adopting it here is what makes a later transfer
-          // from this device target the right session.
+          // from this device target the right session. Assigned rather
+          // than merged: the frame carries one by contract, and a queue
+          // loaded without one is not the session the last id named, so
+          // holding that id would aim a transfer at playback this
+          // client no longer drives. The next report re-establishes it.
           final sessionId = frame['sessionId'] as String?;
-          if (sessionId != null && sessionId.isNotEmpty) {
-            mirrorSessionId = sessionId;
-          }
+          mirrorSessionId = sessionId != null && sessionId.isNotEmpty
+              ? sessionId
+              : null;
         case 'play':
           await engine.play();
         case 'pause':
           await engine.pause();
         case 'stop':
-          _queue?.stop();
-          _queue = null;
+          queue.stop();
+          // The engine is silenced here rather than left to the
+          // session's teardown, which flushes a checkpoint and a listen
+          // report before it gets there: on a slow link that is two
+          // round trips of audio after the sender was told it stopped.
+          // The queue verb runs first, because the checkpoint it takes
+          // reads the engine's position and a stopped engine has none.
           await engine.stop();
-          _stopReporting();
+        case 'next':
+          if (!await queue.next()) throw _nowhereToGo(forward: true);
+        case 'previous':
+          if (!await queue.previous()) throw _nowhereToGo(forward: false);
         case 'seek':
           final positionMs = (frame['positionMs'] as num?)?.toInt() ?? 0;
           await _activeSeek(Duration(milliseconds: positionMs));
@@ -229,25 +278,60 @@ class ConnectEndpointController {
           );
         case 'set-rate':
           final rate = (frame['rate'] as num?)?.toDouble() ?? 1;
-          final session = _queue?.session ?? _localSession;
+          final session = queue.session;
           if (session != null) {
             await session.setSpeed(rate, persist: false);
           } else {
             await engine.setSpeed(rate);
           }
+        case 'set-repeat':
+          queue.setRepeat(
+            QueueRepeat.fromWire(frame['repeat'] as String? ?? 'off'),
+          );
+        case 'set-shuffle':
+          queue.setShuffle(frame['shuffle'] as bool? ?? false);
         default:
           bus.sendCommandResult(id, ok: false, message: 'unknown verb $verb');
           return;
       }
       bus.sendCommandResult(id, ok: true);
-      _report(force: true);
+      _report();
+    } on WaxDeckApiException catch (e) {
+      // The message is rendered by whoever sent the command, so it
+      // travels as itself rather than as a stringified exception.
+      bus.sendCommandResult(id, ok: false, code: e.code, message: e.message);
     } on Exception catch (e) {
       bus.sendCommandResult(id, ok: false, message: e.toString());
     }
   }
 
+  /// Why a skip moved nothing, in the sender's words. A refused skip
+  /// has two quite different causes and the message is rendered
+  /// verbatim on whoever asked: an end of the queue is one thing, and
+  /// no local playback at all (an empty queue, or live radio holding
+  /// the engine) is another.
+  WaxDeckApiException _nowhereToGo({required bool forward}) {
+    if (queue.snapshot() == null) {
+      return const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'nothing is playing on this device',
+      );
+    }
+    return WaxDeckApiException(
+      code: 'invalid-request',
+      message: forward
+          ? 'already at the end of the queue'
+          : 'already at the start of the queue',
+    );
+  }
+
+  List<String> _pids(Map<String, Object?> frame) =>
+      (frame['itemPids'] as List<dynamic>? ?? const [])
+          .whereType<String>()
+          .toList(growable: false);
+
   Future<void> _activeSeek(Duration position) async {
-    final session = _queue?.session ?? _localSession;
+    final session = queue.session;
     if (session != null) {
       await session.seek(position);
     } else {
@@ -255,131 +339,11 @@ class ConnectEndpointController {
     }
   }
 
-  Future<void> _load(
-    List<String> pids,
-    int index,
-    int positionMs,
-    bool play,
-  ) async {
-    if (pids.isEmpty) {
-      throw const WaxDeckApiException(
-        code: 'invalid-request',
-        message: 'load carried no items',
-      );
-    }
-    _localSession = null;
-    _localPid = null;
-    _queue?.stop();
-    final queue = _ConnectQueue(
-      controller: this,
-      pids: pids,
-      index: index.clamp(0, pids.length - 1),
-    );
-    _queue = queue;
-    _queueDirty = true;
-    _queueVersion++;
-    await queue.playCurrent(positionMs: positionMs, play: play);
-    _watchEngine();
-  }
-
-  /// Called by the queue when a track finishes; advances or ends.
-  Future<void> _onQueueTrackDone(_ConnectQueue queue) async {
-    if (_queue != queue) return;
-    if (queue.index + 1 < queue.pids.length) {
-      queue.index++;
-      await queue.playCurrent(positionMs: 0, play: true);
-      _report(force: true);
-    } else {
-      _report(force: true);
-    }
-  }
-
-  /// Steps the active queue forward (a head-unit or notification skip).
-  /// False when nothing queued or already at the end.
-  Future<bool> nextInQueue() async {
-    final queue = _queue;
-    if (queue == null || queue.index + 1 >= queue.pids.length) return false;
-    queue.index++;
-    await queue.playCurrent(positionMs: 0, play: true);
-    _report(force: true);
-    return true;
-  }
-
-  /// Steps the active queue back, or restarts the current entry when
-  /// already at the front.
-  Future<bool> previousInQueue() async {
-    final queue = _queue;
-    if (queue == null) return false;
-    if (queue.index > 0) queue.index--;
-    await queue.playCurrent(positionMs: 0, play: true);
-    _report(force: true);
-    return true;
-  }
-
   void dispose() {
     _disposed = true;
     _stopReporting();
+    _queueSettle?.cancel();
     _playingSub?.cancel();
-    _queue?.stop();
     endpointId.dispose();
-  }
-}
-
-/// A queue handed to this endpoint by a load: plays entries in order
-/// through headless playback sessions (checkpoints, listen accounting,
-/// and skip maps all ride along), advancing when the engine completes
-/// each item.
-class _ConnectQueue {
-  _ConnectQueue({
-    required this.controller,
-    required this.pids,
-    required this.index,
-  });
-
-  final ConnectEndpointController controller;
-  final List<String> pids;
-  int index;
-  PlaybackSession? session;
-  StreamSubscription<void>? _completedSub;
-  bool _stopped = false;
-
-  Future<void> playCurrent({
-    required int positionMs,
-    required bool play,
-  }) async {
-    await _completedSub?.cancel();
-    final old = session;
-    session = null;
-    if (old != null) await old.dispose();
-    if (_stopped) return;
-
-    final detail = await controller.repository.getItem(pids[index]);
-    final next = PlaybackSession(
-      repository: controller.repository,
-      engine: controller.engine,
-      item: detail,
-      clientId: controller.clientId,
-      sync: controller.sync,
-      downloads: controller.downloads,
-      initialPositionMs: positionMs > 0 ? positionMs : null,
-    );
-    session = next;
-    controller.registry.register(next);
-    await next.start();
-    if (!play) await controller.engine.pause();
-    _completedSub = controller.engine.completed.listen((_) {
-      controller._onQueueTrackDone(this);
-    });
-  }
-
-  void stop() {
-    _stopped = true;
-    _completedSub?.cancel();
-    final s = session;
-    session = null;
-    if (s != null) {
-      controller.registry.unregister(s);
-      unawaited(s.dispose());
-    }
   }
 }

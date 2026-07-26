@@ -27,6 +27,14 @@ compose-based harness comes later; it swaps the bare binaries for the
 full `waxdeck` + `waxflow` stack from `deploy/compose.yaml` with `dex`
 as the identity provider.
 
+Specs run against the full Chromium in its new headless mode
+(`channel: 'chromium'`), not the `chrome-headless-shell` Playwright
+reaches for by default. The web build is wasm, and skwasm rasterizes in
+a dedicated worker behind SharedArrayBuffer; the shell segfaults on
+that under load, which arrives as an unexplained "Page crashed" in
+whichever spec was mid-login. `npx playwright install chromium`
+provides both binaries, so nothing changes about setup.
+
 The first spec to run is the first-run setup wizard (the `setup`
 Playwright project); every other spec depends on it and reaches the
 shared administrator through `tests/helpers.ts`, which bootstraps or
