@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { ensureAdmin, authed, startJsonSink } from './helpers';
 
 // Notification delivery against the live stack: the administrator

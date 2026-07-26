@@ -1,9 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
 import 'auth/credential_store.dart';
+import 'fonts_warmup.dart';
 import 'auth/loopback/loopback.dart';
 import 'auth/oidc_flow.dart';
 import 'auth/oidc_ports.dart';
@@ -21,8 +23,16 @@ String get waxDeckBaseUrl =>
     _envBase.isNotEmpty ? _envBase : (kIsWeb ? '' : 'http://localhost:4420');
 
 /// The one API repository. Tests override this with a fake.
+///
+/// The transport carries the font-warmup interceptor: every response is
+/// where library metadata first arrives, so the deferred script faces
+/// (Arabic, Hebrew, Thai, CJK) start loading before any screen lays the
+/// text out, with no per-screen wiring to forget.
 final repositoryProvider = Provider<WaxDeckRepository>(
-  (ref) => WaxDeckClient(baseUrl: waxDeckBaseUrl),
+  (ref) => WaxDeckClient(
+    baseUrl: waxDeckBaseUrl,
+    dio: Dio()..interceptors.add(FontWarmupInterceptor()),
+  ),
 );
 
 /// Where the bearer token persists between launches. Web builds keep

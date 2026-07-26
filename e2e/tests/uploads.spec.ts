@@ -1,4 +1,4 @@
-import { test, expect, APIRequestContext, Page } from '@playwright/test';
+import { test, expect, APIRequestContext, Page } from './fixtures';
 import * as path from 'node:path';
 import {
   ADMIN_PASS,

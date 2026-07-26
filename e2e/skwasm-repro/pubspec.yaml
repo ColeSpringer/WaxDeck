@@ -1,0 +1,14 @@
+name: skwasm_repro
+description: Standalone reproduction of the multi-threaded skwasm memory race (see UPSTREAM.md).
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

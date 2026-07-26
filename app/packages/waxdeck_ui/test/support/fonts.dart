@@ -21,9 +21,13 @@ Future<void> loadWaxFonts() async {
     'Archivo': 'fonts/Archivo-Variable.ttf',
     'Inter': 'fonts/Inter-Variable.ttf',
     'SplineSansMono': 'fonts/SplineSansMono-Variable.ttf',
-    'NotoSansArabic': 'fonts/NotoSansArabic-Variable.ttf',
-    'NotoSansHebrew': 'fonts/NotoSansHebrew-Variable.ttf',
-    'NotoSansThai': 'fonts/NotoSansThai-Variable.ttf',
+    // The deferred faces load here unconditionally: tests prove the
+    // faces render, the on-demand gating is WaxFonts' own unit tests'
+    // concern.
+    'NotoSansArabic': 'assets/fonts/NotoSansArabic-Variable.ttf',
+    'NotoSansHebrew': 'assets/fonts/NotoSansHebrew-Variable.ttf',
+    'NotoSansThai': 'assets/fonts/NotoSansThai-Variable.ttf',
+    'NotoSansCJK': 'assets/fonts/NotoSansCJK.otf',
     // The icon subsets: without them every glyph renders as a notdef box
     // and a golden quietly stops proving anything about the icons.
     'PhosphorRegular': 'fonts/PhosphorRegular-Subset.ttf',

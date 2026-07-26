@@ -1,4 +1,4 @@
-import { test, expect, APIRequestContext } from '@playwright/test';
+import { test, expect, APIRequestContext } from './fixtures';
 import { authed, ensureAdmin, waitForLibrary } from './helpers';
 
 // Playback end to end over the real stack: the server scans a synthesized

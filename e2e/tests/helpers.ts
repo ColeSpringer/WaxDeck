@@ -48,6 +48,20 @@ export function authed(token: string) {
   return { headers: { Authorization: `Bearer ${token}` } };
 }
 
+// Drives the login form as the shared administrator and waits for
+// whatever the caller treats as proof the app is past it (specs settle
+// on different post-login markers). New specs use this; the older ones
+// still carry their own inlined copies from before it existed.
+export async function loginAsAdmin(page: Page, settledOn: Locator) {
+  await page.goto('/');
+  const username = page.getByRole('textbox', { name: 'Username' });
+  await username.waitFor({ timeout: 30_000 });
+  await typeInto(page, username, ADMIN_USER);
+  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await settledOn.waitFor({ timeout: 30_000 });
+}
+
 // Click a canvas-rendered control and wait for what it opens, as one
 // retried unit: flutter web can swallow a click while its handlers are
 // still attaching (the click cousin of the keystroke gap typeInto

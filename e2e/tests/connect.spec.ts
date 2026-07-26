@@ -5,7 +5,7 @@ import {
   BrowserContext,
   Browser,
   APIRequestContext,
-} from '@playwright/test';
+} from './fixtures';
 import { ensureAdmin, authed, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 

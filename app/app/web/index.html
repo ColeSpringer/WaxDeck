@@ -120,6 +120,37 @@
       }
     }, 20000);
   </script>
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    {{flutter_js}}
+    {{flutter_build_config}}
+
+    // The loader call is owned here rather than left to the generated
+    // one-line bootstrap, because two defaults are wrong for WaxDeck:
+    // the engine would load from Google's CDN (this page's header says
+    // nothing here may reach the network, and the server embeds the
+    // whole canvaskit directory), and multi-threaded skwasm corrupts
+    // its shared heap under concurrent text layout and rasterization,
+    // freezing the page at full CPU. Single-threaded until
+    // flutter/flutter#190039 is fixed; e2e can flip threading back on
+    // per run (WAXDECK_E2E_MT_SKWASM=1) to re-test a new engine, and
+    // e2e/skwasm-repro answers the same question in seconds.
+    _flutter.loader.load({
+      serviceWorkerSettings: {
+        serviceWorkerVersion: {{flutter_service_worker_version}},
+      },
+      config: {
+        canvasKitBaseUrl: "canvaskit",
+        forceSingleThreadedSkwasm: true,
+        // The engine's last-resort font machinery (its Roboto default
+        // and per-glyph Noto shards) downloads from fonts.gstatic.com
+        // by default. Pointing it at this origin keeps an air-gapped
+        // instance identical to an online one: the requests 404, the
+        // engine degrades, and the owned chain in waxdeck_ui is what
+        // actually renders. The path resolves under assets/ and is
+        // deliberately unrouted.
+        fontFallbackBaseUrl: "wax-font-fallback/",
+      },
+    });
+  </script>
 </body>
 </html>

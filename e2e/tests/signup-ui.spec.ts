@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { ensureAdmin, authed, typeInto, clickThrough } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 

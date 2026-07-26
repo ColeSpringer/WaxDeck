@@ -143,10 +143,18 @@ void main() {
 
   group('non-Latin metadata', () {
     test('renders from bundled faces rather than a fetched fallback', () {
-      // Arabic, Hebrew, and Thai artist names have to measure as real
+      // Arabic, Hebrew, Thai, and CJK metadata have to measure as real
       // glyphs. A missing face collapses to notdef boxes of a different
-      // width, or to zero-width nothing.
-      for (final sample in <String>['حسن', 'שלום', 'สวัสดี']) {
+      // width, or to zero-width nothing. Han, kana, and hangul all ride
+      // the one CJK face, so each is proved separately.
+      for (final sample in <String>[
+        'حسن',
+        'שלום',
+        'สวัสดี',
+        '漢字',
+        'かなカナ',
+        '한글',
+      ]) {
         expect(_widthOf(WaxType.titleItem, text: sample), greaterThan(8));
       }
     });

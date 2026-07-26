@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { ADMIN_USER, authed, ensureAdmin } from './helpers';
 
 // The gpodder compatibility journey, driven exactly like a third-party

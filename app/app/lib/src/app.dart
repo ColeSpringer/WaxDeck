@@ -14,6 +14,13 @@ class WaxDeckApp extends ConsumerWidget {
       seedColor: const Color(0xFFD9A648),
       brightness: brightness,
     ),
+    // The bundled type with the owned fallback chain. Without a named
+    // family, web text asks for Roboto from Google's CDN, and without
+    // the chain any non-Latin metadata does the same, which a LAN-only
+    // instance cannot answer; the design system's fonts serve both from
+    // WaxDeck's own origin (deferred faces load via warmFontsFor).
+    fontFamily: WaxFonts.uiQualified,
+    fontFamilyFallback: WaxFonts.fallbacksQualified,
   );
 
   @override

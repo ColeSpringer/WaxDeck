@@ -19,13 +19,27 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Two destinations, one distinction: fonts/ holds the faces pubspec
+# declares (loaded eagerly at startup), assets/fonts/ holds the faces
+# WaxFonts loads on demand when the text on screen needs their script
+# (Arabic, Hebrew, Thai, CJK). Startup pays only for the primary chain.
 OUT="$ROOT/app/packages/waxdeck_ui/fonts"
+OUT_DEFER="$ROOT/app/packages/waxdeck_ui/assets/fonts"
 CACHE="$ROOT/tools/.cache"
 VENV="$CACHE/fonttools"
 
 # google/fonts revision the bundled files come from (2026-07-24).
 FONTS_REV=7ff85c87f93ea6cca5f41c69f2e4edcb90240f26
 RAW="https://raw.githubusercontent.com/google/fonts/$FONTS_REV"
+
+# notofonts/noto-cjk commit for the CJK face (tag Sans2.004). The full
+# face, not a subset: a curated "common hanzi" core still renders boxes
+# for any name outside it, which is the exact failure this asset exists
+# to close. One regional face carries the whole pan-CJK repertoire (Han
+# with simplified defaults, kana, hangul); the variable and all-regions
+# builds are twice the bytes for glyph variants nobody is missing.
+NOTO_CJK_SHA=523d033d6cb47f4a80c58a35753646f5c3608a78
+NOTO_CJK_RAW="https://raw.githubusercontent.com/notofonts/noto-cjk/$NOTO_CJK_SHA"
 
 # Latin plus the scripts Inter covers natively: Latin Extended A/B and
 # Additional, combining marks, Greek, Cyrillic (with supplement),
@@ -57,18 +71,18 @@ if ! $report_only; then
 
   work="$(mktemp -d)"
   trap 'rm -rf "$work"' EXIT
-  mkdir -p "$OUT" "$OUT/licenses"
+  mkdir -p "$OUT" "$OUT/licenses" "$OUT_DEFER"
 
-  # family_dir  upstream_file  output_name  unicode_ranges
+  # family_dir  upstream_file  output_name  unicode_ranges  dest_dir
   fetch() {
-    local dir="$1" file="$2" out="$3" ranges="$4"
+    local dir="$1" file="$2" out="$3" ranges="$4" dest="$5"
     echo "fetch-fonts: $out" >&2
     curl -fsSL -o "$work/$out.src.ttf" "$RAW/ofl/$dir/$file"
     curl -fsSL -o "$OUT/licenses/$dir-OFL.txt" "$RAW/ofl/$dir/OFL.txt"
     # Keep layout features (kerning, ligatures, mark positioning) and the
     # variation tables; drop the glyphs outside the declared scripts.
     subset "$work/$out.src.ttf" \
-      --output-file="$OUT/$out" \
+      --output-file="$dest/$out" \
       --unicodes="$ranges" \
       --layout-features='*' \
       --name-IDs='*' --name-legacy --name-languages='*' \
@@ -76,16 +90,58 @@ if ! $report_only; then
       --drop-tables+=DSIG
   }
 
-  fetch archivo        'Archivo%5Bwdth,wght%5D.ttf'      Archivo-Variable.ttf        "$LATIN_PLUS"
-  fetch inter          'Inter%5Bopsz,wght%5D.ttf'        Inter-Variable.ttf          "$LATIN_PLUS"
-  fetch splinesansmono 'SplineSansMono%5Bwght%5D.ttf'    SplineSansMono-Variable.ttf "$LATIN_PLUS"
-  fetch notosansarabic 'NotoSansArabic%5Bwdth,wght%5D.ttf' NotoSansArabic-Variable.ttf "$ARABIC"
-  fetch notosanshebrew 'NotoSansHebrew%5Bwdth,wght%5D.ttf' NotoSansHebrew-Variable.ttf "$HEBREW"
-  fetch notosansthai   'NotoSansThai%5Bwdth,wght%5D.ttf'   NotoSansThai-Variable.ttf   "$THAI"
+  fetch archivo        'Archivo%5Bwdth,wght%5D.ttf'      Archivo-Variable.ttf        "$LATIN_PLUS" "$OUT"
+  fetch inter          'Inter%5Bopsz,wght%5D.ttf'        Inter-Variable.ttf          "$LATIN_PLUS" "$OUT"
+  fetch splinesansmono 'SplineSansMono%5Bwght%5D.ttf'    SplineSansMono-Variable.ttf "$LATIN_PLUS" "$OUT"
+  fetch notosansarabic 'NotoSansArabic%5Bwdth,wght%5D.ttf' NotoSansArabic-Variable.ttf "$ARABIC" "$OUT_DEFER"
+  fetch notosanshebrew 'NotoSansHebrew%5Bwdth,wght%5D.ttf' NotoSansHebrew-Variable.ttf "$HEBREW" "$OUT_DEFER"
+  fetch notosansthai   'NotoSansThai%5Bwdth,wght%5D.ttf'   NotoSansThai-Variable.ttf   "$THAI" "$OUT_DEFER"
+
+  # The CJK face ships verbatim: full coverage is its whole purpose.
+  echo "fetch-fonts: NotoSansCJK.otf (full face, no subsetting)" >&2
+  curl -fsSL -o "$OUT_DEFER/NotoSansCJK.otf" \
+    "$NOTO_CJK_RAW/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
+  curl -fsSL -o "$OUT/licenses/noto-cjk-OFL.txt" "$NOTO_CJK_RAW/LICENSE"
+
+  # Coverage gate: the point of shipping the full face is that Han, kana,
+  # and hangul all render. A wrong upstream file (a regional subset build
+  # slips in, say) must fail here, not as tofu on someone's library.
+  PYTHONPATH="$VENV" python3 - "$OUT_DEFER/NotoSansCJK.otf" <<'PYEOF'
+import sys
+from fontTools.ttLib import TTFont
+
+need = {
+    0x4E2D: 'han (URO)', 0x3400: 'han (ext A)', 0x9FA5: 'han (URO end)',
+    0x3042: 'hiragana', 0x30A2: 'katakana', 0xFF71: 'halfwidth katakana',
+    0xAC00: 'hangul first', 0xD7A3: 'hangul last', 0x1112: 'hangul jamo',
+    0x3001: 'cjk punctuation', 0xFF01: 'fullwidth forms',
+}
+cmap = TTFont(sys.argv[1]).getBestCmap()
+missing = [f'U+{cp:04X} {what}' for cp, what in need.items() if cp not in cmap]
+if missing:
+    sys.exit('fetch-fonts: CJK coverage gate failed, missing: ' + ', '.join(missing))
+print(f'fetch-fonts: CJK coverage gate ok ({len(cmap)} mapped codepoints)', file=sys.stderr)
+PYEOF
 fi
 
+# The report must survive a fresh checkout under set -euo pipefail: an
+# unmatched glob would make ls exit non-zero and kill the script, so
+# files are walked one by one and absent ones simply do not print.
+total_bytes=0
+report_dir() {
+  local label="$1" dir="$2" f size any=false
+  echo "$label ($dir):"
+  for f in "$dir"/*.ttf "$dir"/*.otf; do
+    [ -f "$f" ] || continue
+    any=true
+    size=$(wc -c <"$f")
+    total_bytes=$((total_bytes + size))
+    printf "  %-32s %7.1f KB\n" "$(basename "$f")" "$(echo "$size" | awk '{ print $1/1024 }')"
+  done
+  $any || echo "  (nothing fetched yet)"
+}
+
 echo
-echo "bundled fonts (app/packages/waxdeck_ui/fonts):"
-ls -l "$OUT"/*.ttf | awk '{ printf "  %-32s %7.1f KB\n", $NF, $5/1024 }' | sed "s|$OUT/||"
-total=$(du -ck "$OUT"/*.ttf | tail -1 | cut -f1)
-printf "  %-32s %7.1f KB\n" TOTAL "$total"
+report_dir "eager chain" "$OUT"
+report_dir "on-demand" "$OUT_DEFER"
+printf "  %-32s %7.1f KB\n" TOTAL "$(echo "$total_bytes" | awk '{ print $1/1024 }')"

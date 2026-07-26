@@ -201,26 +201,19 @@ here waits on upstream.
 
 ## Infrastructure
 
-- `[in-repo]` **CJK metadata renders as boxes on web unless someone
-  supplies the font.** The design system bundles Latin, Greek, Cyrillic,
-  Arabic, Hebrew, and Thai, and `WaxFonts.ensureCjk()` loads a CJK face
-  from WaxDeck's own origin when the locale or the metadata on screen
-  needs one, but no CJK asset ships, because a usable subset is an
-  order of magnitude larger than the whole rest of the chain. Native
-  builds fall back to system fonts and are fine; a LAN-only web client
-  with Han, kana, or hangul in its library is not, since Flutter web's
-  own fallback fetches Noto from Google's CDN and an air-gapped instance
-  cannot reach it. Closing it means choosing a subset (a common-hanzi
-  core is roughly 2 MB), adding it to `tools/fetch-fonts.sh`, and
-  dropping it in `waxdeck_ui/assets/fonts/`; the loader already handles
-  the rest. See ADR-0016.
-- `[in-repo]` **The Noto fallbacks load eagerly on web.** Arabic, Hebrew,
-  and Thai are declared fonts, so the engine fetches all three (about
-  750 KB) at startup even on an all-Latin library. Deferring them behind
-  the same on-demand loader CJK uses would trade a startup cost for a
-  brief re-layout when non-Latin metadata first appears; the call
-  belongs with the bundle-size pass of the UI overhaul, which measures
-  the whole picture.
+- `[in-repo]` **Scripts outside the owned font set render tofu on web,
+  online and off alike.** The owned chain covers Latin, Greek,
+  Cyrillic, Arabic, Hebrew, Thai, and CJK, and the engine's own CDN
+  fallback (its Roboto default and per-glyph Noto shards) is
+  deliberately pointed at an unrouted same-origin path, so an instance
+  behaves identically with and without internet: Devanagari, Tamil,
+  emoji, and anything else unbundled renders as boxes instead of
+  sometimes-working via Google. That trade is recorded in ADR-0016;
+  what remains is growing the set as real libraries need it, which is
+  one face per script in `tools/fetch-fonts.sh` plus a `WaxScript`
+  entry and detection range in `WaxFonts` (emoji is the awkward one: a
+  color-emoji face is its own multi-megabyte decision). Native builds
+  keep using system fonts and are unaffected.
 - `[roadmap]` **The web address bar does not follow in-app navigation.**
   Every screen is addressable (a typed or shared location resolves to
   it), but tapping into one pushes, and go_router keeps imperative
@@ -235,30 +228,48 @@ here waits on upstream.
   overlays on the root navigator, so what lands in the bar is exactly
   what can be shared. Browser back already steps through the pushed
   stack, so this is about linkability, not navigation. See ADR-0017.
-- `[in-repo]` **One e2e flake is left, and it is a renderer hang.**
-  Two of the three that made the suite unreliable are fixed. The
-  specs ran on `chrome-headless-shell`, which segfaults on the wasm
-  build (skwasm rasterizes in a dedicated worker; the kernel log
-  recorded signal 11 in `chrome-headless` and `DedicatedWorker`
-  threads) and surfaced as an unexplained "Page crashed" in whichever
-  spec was mid-login; the full Chromium in new headless mode ends it,
-  with zero segfaults across 22 suite runs where they had been
-  accumulating. And `a11y-audit` was landing on "Playback failed to
-  start" because it runs last, so the track it plays is one earlier
-  specs finished, and a finished item resumed at its own end fails
-  the load outright on web, a real bug fixed in the session's
-  resume path rather than in the spec. What remains is one failure
-  in roughly four suite runs, and it is always the same shape in a
-  different spec: the page stops answering, Playwright's own calls
-  stall against it, and whichever spec was mid-step wears a generic
-  timeout waiting for an element that never renders (seen in
-  `a11y-audit`, `ui`, `playlists`, `review-queue`, `uploads`). It is
-  not a crash, not memory (6 GB free at the low point), and not
-  concurrency: halving the workers did not move the rate, so that
-  mitigation was reverted rather than kept on a hunch. The hang is in
-  the wasm rendering path and wants a Flutter-side reproduction to go
-  further. Traces are retained on failure now, so the next occurrence
-  keeps its own evidence.
+- `[in-repo]` **The e2e renderer hang is diagnosed: a memory race
+  inside multi-threaded skwasm.** The old shape — one suite run in
+  about four, a random spec stalls mid-step, page unresponsive,
+  generic timeout — is the aftermath of a wasm fault. The page throws
+  `RuntimeError: memory access out of bounds` inside skwasm's
+  allocator on the paragraph-layout path (`ParagraphImpl::layout`,
+  `TArray<Block>` copy, `sk_malloc`, `emscripten_builtin_malloc`), and
+  from then on the renderer main thread and the skwasm render worker
+  both spin at full CPU forever, so evaluate, rAF, and even compositor
+  screenshot capture stall against it. Every spec now runs through
+  `tests/fixtures.ts`, whose page fixture buffers console and
+  pageerror from birth and, when a test fails or times out, races
+  responsiveness probes (main thread, CDP, compositor, each worker)
+  and snapshots every chromium thread twice — state, wait channel,
+  CPU delta — into `hang-evidence.json` beside the trace. The first
+  capture (audiobooks, second suite run of the night) showed exactly
+  that dual spin with everything else idle. `e2e/skwasm-repro/`
+  reproduces it with no WaxDeck code in three to five seconds: fresh
+  multi-span paragraphs laid out every frame while the worker
+  rasterizes the previous one. Captured stacks land in or under
+  `SkStrike`, Skia's shared glyph cache, from both the layout side
+  (`skhb_glyph_h_advances`) and the raster side
+  (`onDrawGlyphRunList`), in four flavors including unaligned atomics
+  on torn pointers. Forcing single-threaded skwasm — same build, the
+  `forceSingleThreadedSkwasm` engine flag, injected suite-wide through
+  a temporary knob during the investigation — ran the same hammer clean
+  to its cap
+  and ten suite runs without a hang (two of the ten failed on an
+  unrelated desktop-loopback child-process flake, page responsive per
+  the probe, under heavy background load). Engine revision
+  83675ed27633283e7fc296c8bca22e841224c096, Flutter 3.44. Filed as
+  flutter/flutter#190039, and the app now ships skwasm single-threaded
+  (`web/index.html` owns the loader call and passes
+  `forceSingleThreadedSkwasm` — the same block also sets
+  `canvasKitBaseUrl` so the engine loads from the embedded bundle
+  instead of Google's CDN, which the stock bootstrap reaches for and a
+  LAN-only instance cannot). What remains is the un-forcing: when the
+  issue closes or an engine upgrade lands, `e2e/skwasm-repro/` answers
+  in seconds whether the race is gone, `WAXDECK_E2E_MT_SKWASM=1` runs
+  the real suite multi-threaded to confirm, and the `perf-web` gate
+  against the 100k corpus prices whatever raster-thread difference
+  remains before the force is removed.
 - `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists.

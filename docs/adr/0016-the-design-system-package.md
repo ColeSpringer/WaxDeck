@@ -40,15 +40,43 @@ Material into the `material_ui` package is one export line rather than a
 sweep across every screen.
 
 **Type is bundled, subset, and owned.** Archivo (display), Inter (UI),
-and Spline Sans Mono (readouts) ship as variable fonts, with Noto Sans
-Arabic, Hebrew, and Thai in the fallback chain: about 2.0 MB in total,
-produced by `tools/fetch-fonts.sh` from a pinned upstream revision. The
-type tokens select weights through `FontVariation`, because the scale
-uses 460, 520, 560, 620, and 640 and Archivo's width axis, none of which
-`FontWeight`'s 100-step ladder can reach. CJK is an order of magnitude
-larger than everything else combined, so it is not in the eager chain:
-`WaxFonts.ensureCjk()` loads it from WaxDeck's own origin on demand, and
-degrades to the platform's own fallback when the asset is absent.
+and Spline Sans Mono (readouts) ship as variable fonts, about 1.3 MB of
+eager chain produced by `tools/fetch-fonts.sh` from pinned upstream
+revisions. The type tokens select weights through `FontVariation`,
+because the scale uses 460, 520, 560, 620, and 640 and Archivo's width
+axis, none of which `FontWeight`'s 100-step ladder can reach. The
+fallback scripts are all deferred: Noto Sans Arabic, Hebrew, and Thai
+subsets (750 KB together) plus the full Noto Sans CJK SC face (16 MB,
+deliberately unsubset so no name outside a curated core can render as
+boxes) live in `assets/fonts/`, and `WaxFonts.ensureFor(text)` loads
+each from WaxDeck's own origin the first time on-screen text needs its
+script, degrading to the platform's own fallback when an asset is
+absent. The full face costs one 16 MB fetch on the first CJK library
+and nothing on an all-Latin one, which is the right side of that trade
+for a self-hosted server; text that raced ahead of its face re-lays out
+when the loader lands.
+
+The web engine has two font paths of its own that ignore all of the
+above, and both are closed deliberately. Its hard-coded default family
+is Roboto, downloaded from Google's CDN regardless of what the theme
+names, so `web/index.html` sets `fontFallbackBaseUrl` to an unrouted
+same-origin path (the server reserves the SPA shell for document
+navigations and answers every subresource miss with an honest 404, so
+the engine's probes fail cleanly wherever they land). No bundled
+Roboto stands in for the default: the engine's check wants a family
+literally named Roboto, a package declaration registers under a
+`packages/waxdeck_ui/` prefix it never matches, and an app-level one
+would ship a duplicate face just to satisfy a name. The engine's one
+default-font probe 404s on this origin instead, and the theme's
+family plus fallback chain is what every style actually resolves
+through. The same redirect neutralizes the engine's per-glyph Noto
+shard downloads, which would otherwise race the deferred loader to the
+CDN the first time a non-Latin name appears. The consequence is owned:
+scripts outside the bundled set render tofu on web whether or not the
+instance can reach the internet, identically, and growing coverage
+means adding a face to `tools/fetch-fonts.sh`, not hoping a CDN is
+reachable. `e2e/tests/fonts.spec.ts` asserts the whole journey stays
+on-origin.
 
 **Icons are vendored as two subset fonts.** Phosphor (MIT) regular and
 fill are subset by `tools/fetch-icons.sh` to exactly the codepoints

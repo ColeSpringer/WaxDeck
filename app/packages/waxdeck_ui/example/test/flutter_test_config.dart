@@ -17,9 +17,10 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     'Archivo': '../fonts/Archivo-Variable.ttf',
     'Inter': '../fonts/Inter-Variable.ttf',
     'SplineSansMono': '../fonts/SplineSansMono-Variable.ttf',
-    'NotoSansArabic': '../fonts/NotoSansArabic-Variable.ttf',
-    'NotoSansHebrew': '../fonts/NotoSansHebrew-Variable.ttf',
-    'NotoSansThai': '../fonts/NotoSansThai-Variable.ttf',
+    'NotoSansArabic': '../assets/fonts/NotoSansArabic-Variable.ttf',
+    'NotoSansHebrew': '../assets/fonts/NotoSansHebrew-Variable.ttf',
+    'NotoSansThai': '../assets/fonts/NotoSansThai-Variable.ttf',
+    'NotoSansCJK': '../assets/fonts/NotoSansCJK.otf',
     'PhosphorRegular': '../fonts/PhosphorRegular-Subset.ttf',
     'PhosphorFill': '../fonts/PhosphorFill-Subset.ttf',
   };

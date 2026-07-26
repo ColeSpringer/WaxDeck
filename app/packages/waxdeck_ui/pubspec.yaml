@@ -44,19 +44,10 @@ flutter:
     - family: SplineSansMono
       fonts:
         - asset: fonts/SplineSansMono-Variable.ttf
-    # Fallback chain. Native platforms would resolve these per glyph from
-    # system fonts, but Flutter web fetches Noto fallbacks from Google's
-    # CDN, which an air-gapped instance cannot reach: an owned chain is
-    # the only way non-Latin metadata renders everywhere.
-    - family: NotoSansArabic
-      fonts:
-        - asset: fonts/NotoSansArabic-Variable.ttf
-    - family: NotoSansHebrew
-      fonts:
-        - asset: fonts/NotoSansHebrew-Variable.ttf
-    - family: NotoSansThai
-      fonts:
-        - asset: fonts/NotoSansThai-Variable.ttf
+    # The fallback scripts (Arabic, Hebrew, Thai, CJK) are deliberately
+    # not declared here: declared fonts load eagerly at web startup, so
+    # they live in assets/fonts/ and WaxFonts loads each from WaxDeck's
+    # own origin the first time text on screen needs its script.
     # Phosphor (MIT), subset to the glyphs WaxIcons names: regular is the
     # inactive weight, fill the active one. 27 KB for both, against the
     # 950 KB the upstream pair would cost.
