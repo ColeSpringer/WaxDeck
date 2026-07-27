@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { authed, ensureAdmin, loginAsAdmin, waitForLibrary } from './helpers';
+import { authed, ensureAdmin, loginAsAdmin, waitForLibrary, openMusicSection } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The owned-type contract, on the wire: WaxDeck serves every byte of its
@@ -28,7 +28,8 @@ test('CJK metadata pulls its face from this origin and nothing leaves it', async
   const requested: string[] = [];
   page.on('request', (r) => requested.push(r.url()));
   try {
-    await loginAsAdmin(page, page.locator(sem(SemanticsIds.navDestination('playlists'))));
+    await loginAsAdmin(page, page.locator(sem(SemanticsIds.navDestination('music'))));
+    await openMusicSection(page);
     await page.locator(sem(SemanticsIds.navDestination('playlists'))).click();
     await page.getByText(CJK_NAME).first().waitFor({ timeout: 30_000 });
 

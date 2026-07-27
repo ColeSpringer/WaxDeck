@@ -35,7 +35,7 @@ func settleCatalogFeed(t *testing.T, f genreFixture) int64 {
 // facetsOf reads every bucket of a dimension in one page.
 func facetsOf(t *testing.T, f genreFixture, dimension string) []FacetBucket {
 	t.Helper()
-	page, err := f.svc.Facets(f.ctx, f.uc, dimension, "", 500)
+	page, err := f.svc.Facets(f.ctx, f.uc, dimension, "", "", 500)
 	if err != nil {
 		t.Fatalf("enumerating %s: %v", dimension, err)
 	}
@@ -149,7 +149,7 @@ func TestFacetPagingIsStableAcrossTheCache(t *testing.T) {
 		if i > len(want)+2 {
 			t.Fatal("paging never reached the last page")
 		}
-		page, err := f.svc.Facets(f.ctx, f.uc, "genre", cursor, 1)
+		page, err := f.svc.Facets(f.ctx, f.uc, "genre", "", cursor, 1)
 		if err != nil {
 			t.Fatalf("paging genres: %v", err)
 		}
@@ -168,7 +168,7 @@ func TestFacetPagingIsStableAcrossTheCache(t *testing.T) {
 		}
 	}
 
-	if _, err := f.svc.Facets(f.ctx, f.uc, "genre", "not-a-cursor", 10); err == nil {
+	if _, err := f.svc.Facets(f.ctx, f.uc, "genre", "", "not-a-cursor", 10); err == nil {
 		t.Fatal("a malformed cursor was accepted")
 	} else if KindOf(err) != KindInvalid {
 		t.Fatalf("a malformed cursor answered %v", KindOf(err))
@@ -198,7 +198,7 @@ func TestRestrictedFacetsAreComputedLive(t *testing.T) {
 		ID: f.uc.ID, CatalogPID: f.uc.CatalogPID,
 		Libraries: map[string]bool{strings.TrimPrefix(empty.PID, PrefixLibrary+"-"): true},
 	}
-	page, err := f.svc.Facets(f.ctx, restricted, "artist", "", 100)
+	page, err := f.svc.Facets(f.ctx, restricted, "artist", "", "", 100)
 	if err != nil {
 		t.Fatalf("restricted enumeration: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestRestrictedFacetsAreComputedLive(t *testing.T) {
 	}
 
 	// A caller with no grant at all short-circuits to the same answer.
-	page, err = f.svc.Facets(f.ctx, &UserCtx{ID: f.uc.ID, CatalogPID: f.uc.CatalogPID}, "artist", "", 100)
+	page, err = f.svc.Facets(f.ctx, &UserCtx{ID: f.uc.ID, CatalogPID: f.uc.CatalogPID}, "artist", "", "", 100)
 	if err != nil {
 		t.Fatalf("ungranted enumeration: %v", err)
 	}
@@ -231,7 +231,7 @@ func servesFromCache(l *Library, dimension string) bool {
 	if l.facets.gen != gen {
 		return false
 	}
-	_, ok := l.facets.byDimension[dimension]
+	_, ok := l.facets.byDimension[facetCacheKey{dimension, FacetSortCount}]
 	return ok
 }
 
@@ -326,7 +326,7 @@ func TestStaleEnumerationCannotEvictACurrentOne(t *testing.T) {
 	}
 
 	// Now the slow reader publishes. It must be dropped on the floor.
-	f.svc.publishFacetBuckets(stale, "genre", staleBuckets)
+	f.svc.publishFacetBuckets(stale, "genre", FacetSortCount, staleBuckets)
 	if !servesFromCache(f.svc, "artist") {
 		t.Fatal("a superseded enumeration rolled the cache back and evicted a current one")
 	}
@@ -348,7 +348,7 @@ func TestFacetPagingSurvivesACountChange(t *testing.T) {
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
-	first, err := f.svc.Facets(f.ctx, f.uc, "genre", "", 1)
+	first, err := f.svc.Facets(f.ctx, f.uc, "genre", "", "", 1)
 	if err != nil {
 		t.Fatalf("first page: %v", err)
 	}
@@ -365,7 +365,7 @@ func TestFacetPagingSurvivesACountChange(t *testing.T) {
 		t.Fatalf("retagging: %v", err)
 	}
 
-	next, err := f.svc.Facets(f.ctx, f.uc, "genre", first.Next, 50)
+	next, err := f.svc.Facets(f.ctx, f.uc, "genre", "", first.Next, 50)
 	if err != nil {
 		t.Fatalf("second page: %v", err)
 	}
@@ -429,7 +429,7 @@ func TestTagDimensionsCanonicalize(t *testing.T) {
 	settleCatalogFeed(t, f)
 
 	for _, spelling := range []string{"tag.MOOD", "tag.mood", "tag.MoOd", "tag. mood "} {
-		page, err := f.svc.Facets(f.ctx, f.uc, spelling, "", 10)
+		page, err := f.svc.Facets(f.ctx, f.uc, spelling, "", "", 10)
 		if err != nil {
 			t.Fatalf("enumerating %q: %v", spelling, err)
 		}
@@ -444,12 +444,19 @@ func TestTagDimensionsCanonicalize(t *testing.T) {
 			t.Fatalf("%q did not populate the canonical cache entry", spelling)
 		}
 	}
-	// One cache entry, not four.
+	// One dimension in the cache, not four. It holds an entry per order —
+	// both come out of the one aggregation — so the thing to count is the
+	// dimensions, which is what a client could otherwise mint without
+	// bound.
 	f.svc.facets.mu.Lock()
-	entries := len(f.svc.facets.byDimension)
+	dimensions := map[string]bool{}
+	for key := range f.svc.facets.byDimension {
+		dimensions[key.dimension] = true
+	}
 	f.svc.facets.mu.Unlock()
-	if entries != 1 {
-		t.Fatalf("four spellings of one tag key minted %d cache entries", entries)
+	if len(dimensions) != 1 {
+		t.Fatalf("four spellings of one tag key minted %d cached dimensions: %v",
+			len(dimensions), dimensions)
 	}
 }
 
@@ -461,7 +468,7 @@ func TestFacetRejectsUnknownDimensions(t *testing.T) {
 	f := newGenreFixture(t)
 
 	for _, dimension := range []string{"", "artists", "tag.", "tag.BAD=KEY", "genre_pid"} {
-		if _, err := f.svc.Facets(f.ctx, f.uc, dimension, "", 10); err == nil {
+		if _, err := f.svc.Facets(f.ctx, f.uc, dimension, "", "", 10); err == nil {
 			t.Fatalf("dimension %q was enumerated", dimension)
 		} else if KindOf(err) != KindInvalid {
 			t.Fatalf("dimension %q answered %v", dimension, KindOf(err))
@@ -519,5 +526,126 @@ func TestFacetComposesWithMediaType(t *testing.T) {
 	}
 	if len(page.Items) != 0 {
 		t.Fatalf("a track bucket filtered to audiobooks returned %d items", len(page.Items))
+	}
+}
+
+// TestFacetLabelOrderIsAnAlphabet pins the three things the A-to-Z index
+// depends on and the byte order gets wrong: case is folded, so "abba"
+// does not sort behind "Zebra"; the unknown bucket sorts last whatever
+// its sentinel spells, so "[No Genre]" does not lead the list on its
+// bracket; and equal labels stay in a fixed order, so a keyset cursor
+// can resume on one.
+func TestFacetLabelOrderIsAnAlphabet(t *testing.T) {
+	buckets := []FacetBucket{
+		facetFolded(FacetBucket{Key: "u", Label: "[No Genre]", Count: 9, Unknown: true}),
+		facetFolded(FacetBucket{Key: "z", Label: "Zebra", Count: 1}),
+		facetFolded(FacetBucket{Key: "b", Label: "abba", Count: 2}),
+		facetFolded(FacetBucket{Key: "m2", Label: "mogwai", Count: 3}),
+		facetFolded(FacetBucket{Key: "m1", Label: "Mogwai", Count: 4}),
+	}
+	sortFacetBuckets(buckets, FacetSortLabel)
+
+	var got []string
+	for _, b := range buckets {
+		got = append(got, b.Label+"/"+b.Key)
+	}
+	want := []string{"abba/b", "Mogwai/m1", "mogwai/m2", "Zebra/z", "[No Genre]/u"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("label order = %v; want %v", got, want)
+		}
+	}
+
+	// And the default order is untouched by any of it: biggest first.
+	sortFacetBuckets(buckets, FacetSortCount)
+	if buckets[0].Label != "[No Genre]" || buckets[len(buckets)-1].Label != "Zebra" {
+		t.Fatalf("count order = %+v", buckets)
+	}
+}
+
+// TestFacetLabelOrderPagesTheWholeDimension: the label order is served
+// through the same in-memory keyset as the default one, so the thing to
+// prove is that paging it visits every bucket exactly once and hands
+// back the same set the other order does.
+func TestFacetLabelOrderPagesTheWholeDimension(t *testing.T) {
+	f := newGenreFixture(t)
+	f.sweepToQuiet(t)
+
+	byCount := facetsOf(t, f, "genre")
+	if len(byCount) < 3 {
+		t.Fatalf("the fixture enumerated %d genre buckets; this test needs several", len(byCount))
+	}
+
+	seen := map[string]int{}
+	var labels []string
+	cursor := ""
+	for pages := 0; ; pages++ {
+		if pages > len(byCount)+1 {
+			t.Fatal("label paging never reached the last page")
+		}
+		page, err := f.svc.Facets(f.ctx, f.uc, "genre", FacetSortLabel, cursor, 1)
+		if err != nil {
+			t.Fatalf("label page %d: %v", pages, err)
+		}
+		for _, b := range page.Buckets {
+			seen[b.Key]++
+			labels = append(labels, b.Label)
+		}
+		if page.Next == "" {
+			break
+		}
+		cursor = page.Next
+	}
+
+	if len(seen) != len(byCount) {
+		t.Fatalf("label order enumerated %d buckets, count order %d", len(seen), len(byCount))
+	}
+	for _, b := range byCount {
+		if seen[b.Key] != 1 {
+			t.Fatalf("bucket %q (%s) appeared %d times under label order", b.Label, b.Key, seen[b.Key])
+		}
+	}
+	for i := 1; i < len(labels); i++ {
+		if strings.ToLower(labels[i-1]) > strings.ToLower(labels[i]) {
+			t.Fatalf("label paging is out of order at %d: %v", i, labels)
+		}
+	}
+}
+
+// TestFacetCursorBelongsToItsOrder: the two orders interleave
+// differently, so a cursor carried across a sort toggle would silently
+// skip or repeat buckets. It is refused instead.
+func TestFacetCursorBelongsToItsOrder(t *testing.T) {
+	f := newGenreFixture(t)
+	f.sweepToQuiet(t)
+
+	byCount, err := f.svc.Facets(f.ctx, f.uc, "genre", "", "", 1)
+	if err != nil {
+		t.Fatalf("first count page: %v", err)
+	}
+	if byCount.Next == "" {
+		t.Fatal("the fixture fits one page; this test needs two")
+	}
+	if _, err := f.svc.Facets(f.ctx, f.uc, "genre", FacetSortLabel, byCount.Next, 10); err == nil {
+		t.Fatal("a count cursor was accepted under the label order")
+	} else if KindOf(err) != KindInvalid {
+		t.Fatalf("a mismatched cursor answered %v", KindOf(err))
+	}
+
+	byLabel, err := f.svc.Facets(f.ctx, f.uc, "genre", FacetSortLabel, "", 1)
+	if err != nil {
+		t.Fatalf("first label page: %v", err)
+	}
+	if _, err := f.svc.Facets(f.ctx, f.uc, "genre", "", byLabel.Next, 10); err == nil {
+		t.Fatal("a label cursor was accepted under the default order")
+	}
+
+	// An order nobody serves is a request error, not a silent default:
+	// answering biggest-first to a caller who asked for A to Z would put
+	// the wrong letters under the rail.
+	if _, err := f.svc.Facets(f.ctx, f.uc, "genre", FacetSort("popularity"), "", 10); err == nil {
+		t.Fatal("an unknown sort was accepted")
+	} else if KindOf(err) != KindInvalid {
+		t.Fatalf("an unknown sort answered %v", KindOf(err))
 	}
 }

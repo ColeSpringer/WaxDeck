@@ -41,14 +41,24 @@ sidecar injection seam) all landed and are not repeated here.
   (count, label, key) and the next page resumes strictly after it, since
   counts are the leading sort term and an offset would skip or repeat
   buckets whenever one moved (`server/internal/service/facets.go`). It
-  also caches the unfiltered full-visibility answer per dimension against
-  `CatalogTailSeq()` to keep a browse tab from recomputing every artist
-  in the library per page. An
+  also caches the unfiltered full-visibility answer per dimension and
+  order against `CatalogTailSeq()` to keep a browse index from
+  recomputing every artist in the library per page. An
   artist or album dimension over a large catalog is exactly the case that
-  wants a cursor. A `FacetPage(ctx, q, groupBy, cursor, limit, userPID)`
-  beside the existing one, ordered by the same `sortExpr` the aggregation
-  already sorts on, would retire both the in-memory window and the cache;
-  the workaround is shipped and correct meanwhile.
+  wants a cursor. A `FacetPage(ctx, q, groupBy, order, cursor, limit, userPID)`
+  beside the existing one would retire both the in-memory window and the
+  cache; the workaround is shipped and correct meanwhile.
+
+  The `order` in that signature is part of the ask, not a nicety. The
+  endpoint serves two orders now: biggest-first (the `sortExpr` the
+  aggregation already sorts on) and A-to-Z by display label, which is
+  what the artist and album index screens' alphabet rail scrolls. The
+  label order is case-folded and puts the unknown bucket last, neither
+  of which falls out of the count order's collation, and its cursor
+  carries the order it was issued under so the two cannot be crossed. A
+  paged `Facet` that could only walk the count order would leave the
+  A-to-Z half on the in-memory window, so the window and its cache would
+  survive the very change meant to retire them.
 
 ## WaxFlow
 

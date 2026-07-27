@@ -19,7 +19,7 @@ async function login(page: Page) {
   await typeInto(page, username, 'admin');
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
   await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem(SemanticsIds.navDestination('playlists'))).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.navDestination('music'))).waitFor({ timeout: 30_000 });
 }
 
 async function trackPid(

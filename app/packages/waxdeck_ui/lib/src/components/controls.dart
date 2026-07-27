@@ -35,19 +35,25 @@ class WaxFocusRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!focused) return child;
     final colors = WaxColors.of(context);
     final layout = WaxLayout.of(context);
     final inner = surface ?? colors.surface1;
+    // The CustomPaint is always here and only its painter comes and goes.
+    // Returning the bare child while unfocused would change the shape of
+    // the element tree the moment focus arrived, and a child whose parent
+    // changes type is rebuilt from scratch — which for a text field means
+    // losing its state and its input connection on the way in.
     return CustomPaint(
-      foregroundPainter: _FocusRingPainter(
-        radius: borderRadius,
-        inner: inner,
-        outer: colors.accent,
-        innerWidth: layout.focusRingInnerWidth,
-        outerWidth: layout.focusRingWidth,
-        offset: layout.focusRingOffset,
-      ),
+      foregroundPainter: focused
+          ? _FocusRingPainter(
+              radius: borderRadius,
+              inner: inner,
+              outer: colors.accent,
+              innerWidth: layout.focusRingInnerWidth,
+              outerWidth: layout.focusRingWidth,
+              offset: layout.focusRingOffset,
+            )
+          : null,
       child: child,
     );
   }
@@ -94,6 +100,107 @@ class _FocusRingPainter extends CustomPainter {
   @override
   bool shouldRepaint(_FocusRingPainter old) =>
       old.inner != inner || old.outer != outer;
+}
+
+/// The semantics, focus, and focus ring every tappable control needs,
+/// wrapped once.
+///
+/// Three things have to happen together and are easy to ship two of. The
+/// control announces itself once, which means excluding its subtree —
+/// and excluding a subtree drops the `focusable` flag the [Focus] inside
+/// would have contributed, which is what web turns into a `tabindex`, so
+/// the node has to declare it back or the control is unreachable from a
+/// keyboard while looking perfectly fine. Then, being reachable, it needs
+/// a visible focus ring, or it is reachable and invisible.
+///
+/// The chrome shipped without the flag once already and rendered a whole
+/// sidebar no keyboard could enter. This is that lesson as a widget, so
+/// the next control gets all three by composing rather than by
+/// remembering.
+///
+/// [child] keeps its own ink and its own tap handler; this adds no
+/// gesture of its own, so nothing fires twice.
+class WaxTappable extends StatefulWidget {
+  const WaxTappable({
+    required this.label,
+    required this.onPressed,
+    required this.child,
+    this.semanticsId,
+    this.selected,
+    this.borderRadius = WaxRadius.thumb,
+    this.surface,
+    super.key,
+  });
+
+  /// The accessible name. Stateful controls say what they will do.
+  final String label;
+
+  /// Null disables the control, which is reported as well as drawn.
+  final VoidCallback? onPressed;
+
+  final Widget child;
+  final String? semanticsId;
+
+  /// Set on controls that are one of a set, so the state is announced
+  /// rather than left to colour.
+  final bool? selected;
+
+  final BorderRadius borderRadius;
+
+  /// The colour immediately under the ring, for its inner stroke.
+  final Color? surface;
+
+  @override
+  State<WaxTappable> createState() => _WaxTappableState();
+}
+
+class _WaxTappableState extends State<WaxTappable> {
+  bool _focused = false;
+  final FocusNode _focus = FocusNode(debugLabel: 'wax-tappable');
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final enabled = widget.onPressed != null;
+    return Semantics(
+      identifier: widget.semanticsId,
+      button: true,
+      enabled: enabled,
+      selected: widget.selected,
+      label: widget.label,
+      excludeSemantics: true,
+      onTap: widget.onPressed,
+      focusable: enabled,
+      focused: _focused,
+      onFocus: _focus.requestFocus,
+      child: FocusableActionDetector(
+        enabled: enabled,
+        focusNode: _focus,
+        mouseCursor: SystemMouseCursors.click,
+        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onPressed?.call();
+              return null;
+            },
+          ),
+        },
+        child: WaxFocusRing(
+          focused: _focused,
+          borderRadius: widget.borderRadius,
+          surface: widget.surface ?? colors.canvas,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
 }
 
 /// How much weight a button carries.
@@ -277,13 +384,11 @@ class WaxIconButton extends StatelessWidget {
       );
     }
 
-    return Semantics(
-      identifier: semanticsId,
-      button: true,
-      enabled: enabled,
+    return WaxTappable(
       label: label,
-      excludeSemantics: true,
-      onTap: onPressed,
+      onPressed: onPressed,
+      semanticsId: semanticsId,
+      borderRadius: WaxRadius.pill,
       child: Tooltip(
         message: label,
         child: InkResponse(

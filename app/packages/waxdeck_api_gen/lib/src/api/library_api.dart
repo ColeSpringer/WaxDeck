@@ -17,6 +17,7 @@ import 'package:waxdeck_api_gen/src/model/delete_items_result.dart';
 import 'package:waxdeck_api_gen/src/model/discovery_list.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/facet_page.dart';
+import 'package:waxdeck_api_gen/src/model/facet_sort.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
 import 'package:waxdeck_api_gen/src/model/lyrics.dart';
@@ -596,11 +597,12 @@ class LibraryApi {
   }
 
   /// Enumerate a browse dimension
-  /// Keyset-paginated buckets of one browse dimension, each with the number of matching items: the \&quot;all genres\&quot; and \&quot;all artists\&quot; lists a browse tab is built from. Buckets come biggest first, ties broken by label, so a tab leads with what is worth opening and paging stays stable. Drill a bucket by passing its &#x60;key&#x60; back as &#x60;listItems&#x60;&#39; &#x60;facetKey&#x60; together with the same &#x60;facet&#x60;. The &#x60;genre&#x60;, &#x60;artist&#x60;, &#x60;album-artist&#x60;, &#x60;album&#x60;, and &#x60;year&#x60; dimensions each carry a bucket for the items the dimension is absent from (&#x60;[No Genre]&#x60;, &#x60;[Unknown Artist]&#x60;, &#x60;[Non-Album]&#x60;, &#x60;[Unknown Year]&#x60;), with an empty &#x60;key&#x60; and &#x60;unknown&#x60; true. &#x60;kind&#x60; has none, because an item&#39;s kind is never absent, and a custom tag dimension has none, because only items carrying the key contribute at all; on those two, drilling an empty &#x60;facetKey&#x60; is &#x60;invalid-request&#x60; rather than an empty page. Podcast episodes are excluded from the music dimensions, which they have no artist, album, genre, or year for; the &#x60;kind&#x60; dimension counts them. Counts are scoped to the libraries the caller may see. The per-item rules the drill list also applies (podcast subscriptions, content rules) are per-item decisions no aggregation can express, so a bucket can read higher than the list it opens, the same way any restricted listing can return a short page. 
+  /// Keyset-paginated buckets of one browse dimension, each with the number of matching items: the \&quot;all genres\&quot; and \&quot;all artists\&quot; lists a browse index is built from. Buckets come biggest first by default, ties broken by label, so the list leads with what is worth opening and paging stays stable; &#x60;sort&#x3D;label&#x60; orders them A to Z instead, for an index with an alphabet rail. Drill a bucket by passing its &#x60;key&#x60; back as &#x60;listItems&#x60;&#39; &#x60;facetKey&#x60; together with the same &#x60;facet&#x60;. A cursor is only valid for the &#x60;sort&#x60; it was issued under: the two orders interleave differently, so resuming one from the other&#39;s boundary would skip or repeat buckets. Sending a mismatched pair is &#x60;invalid-request&#x60; rather than a silently wrong page. The &#x60;genre&#x60;, &#x60;artist&#x60;, &#x60;album-artist&#x60;, &#x60;album&#x60;, and &#x60;year&#x60; dimensions each carry a bucket for the items the dimension is absent from (&#x60;[No Genre]&#x60;, &#x60;[Unknown Artist]&#x60;, &#x60;[Non-Album]&#x60;, &#x60;[Unknown Year]&#x60;), with an empty &#x60;key&#x60; and &#x60;unknown&#x60; true. &#x60;kind&#x60; has none, because an item&#39;s kind is never absent, and a custom tag dimension has none, because only items carrying the key contribute at all; on those two, drilling an empty &#x60;facetKey&#x60; is &#x60;invalid-request&#x60; rather than an empty page. Podcast episodes are excluded from the music dimensions, which they have no artist, album, genre, or year for; the &#x60;kind&#x60; dimension counts them. Counts are scoped to the libraries the caller may see. The per-item rules the drill list also applies (podcast subscriptions, content rules) are per-item decisions no aggregation can express, so a bucket can read higher than the list it opens, the same way any restricted listing can return a short page. 
   ///
   /// Parameters:
   /// * [dimension] - Which browse dimension to enumerate.
-  /// * [cursor] - Opaque cursor from a previous page's `nextCursor`. Omit for the first page. 
+  /// * [sort] - Bucket order. `count` (the default) is biggest first, ties broken by label then key. `label` is A to Z by the bucket's display label, ties broken by key; the unknown bucket sorts last under it, since a sentinel has no place in an alphabet. 
+  /// * [cursor] - Opaque cursor from a previous page's `nextCursor`. Omit for the first page. Valid only with the `sort` it was issued under. 
   /// * [limit] - Maximum buckets per page.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
@@ -613,6 +615,7 @@ class LibraryApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<FacetPage>> listFacets({ 
     required String dimension,
+    FacetSort? sort,
     String? cursor,
     int? limit = 100,
     CancelToken? cancelToken,
@@ -648,6 +651,7 @@ class LibraryApi {
 
     final _queryParameters = <String, dynamic>{
       r'dimension': encodeQueryParameter(_serializers, dimension, const FullType(String)),
+      if (sort != null) r'sort': encodeQueryParameter(_serializers, sort, const FullType(FacetSort)),
       if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
       if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
     };

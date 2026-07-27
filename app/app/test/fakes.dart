@@ -275,6 +275,10 @@ class FakeRepository implements WaxDeckRepository {
   /// Every (dimension, key) pair a listing drilled, in call order.
   final List<(String, String)> facetDrills = [];
 
+  /// Every sort [listFacets] was asked for, in call order, so a test can
+  /// tell an A-to-Z index from a biggest-first one.
+  final List<FacetSort?> facetSorts = [];
+
   @override
   Future<ItemPage> listItems({
     MediaType? mediaType,
@@ -304,12 +308,22 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<FacetPage> listFacets(
     String dimension, {
+    FacetSort? sort,
     String? cursor,
     int? limit,
   }) async {
     final error = listError;
     if (error != null) throw error;
-    final all = facets[dimension] ?? const <FacetBucket>[];
+    facetSorts.add(sort);
+    final all = <FacetBucket>[...?facets[dimension]];
+    // The server serves the A-to-Z order itself; the fake sorts here so
+    // a screen test sees the arrangement its rail is built on.
+    if (sort == FacetSort.label) {
+      all.sort((a, b) {
+        if (a.unknown != b.unknown) return a.unknown ? 1 : -1;
+        return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+      });
+    }
     final start = cursor == null ? 0 : int.parse(cursor);
     final pageSize = limit ?? 100;
     final end = (start + pageSize).clamp(0, all.length);
@@ -334,9 +348,22 @@ class FakeRepository implements WaxDeckRepository {
     return listItems(cursor: cursor, limit: limit);
   }
 
+  /// What [search] answers, keyed by query. An unlisted query answers an
+  /// empty result set, which is the "nothing matched" screen.
+  final Map<String, SearchResults> searchResults = {};
+
+  /// Every query [search] was asked for, in call order, so a test can see
+  /// what the debounce let through.
+  final List<String> searchCalls = [];
+
   @override
-  Future<SearchResults> search(String q, {int? limit}) async =>
-      SearchResults(query: q);
+  Future<SearchResults> search(String q, {int? limit}) async {
+    searchCalls.add(q);
+    return searchResults[q] ?? SearchResults(query: q);
+  }
+
+  @override
+  String artUrlFor(String pid) => '/api/v1/items/$pid/art';
 
   @override
   Future<ItemDetail> getItem(String pid) async {

@@ -160,7 +160,7 @@ func TestSweeperFoldsSynonymsOntoOneBucket(t *testing.T) {
 		}
 	}
 
-	page, err := f.svc.Facets(f.ctx, f.uc, "genre", "", 100)
+	page, err := f.svc.Facets(f.ctx, f.uc, "genre", "", "", 100)
 	if err != nil {
 		t.Fatalf("enumerating genres: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestCanonicalLabelBeatsScanOrder(t *testing.T) {
 		t.Fatalf("the catalog's genre row is named %q; the fixture meant it to keep the first-scanned spelling", stored)
 	}
 
-	page, err := f.svc.Facets(f.ctx, f.uc, "genre", "", 100)
+	page, err := f.svc.Facets(f.ctx, f.uc, "genre", "", "", 100)
 	if err != nil {
 		t.Fatalf("enumerating genres: %v", err)
 	}

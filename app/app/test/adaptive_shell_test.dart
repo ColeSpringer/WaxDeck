@@ -5,8 +5,8 @@ import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
-import 'package:waxdeck/src/library/browse_controller.dart';
-import 'package:waxdeck/src/library/browse_screen.dart';
+import 'package:waxdeck/src/music/listing_screen.dart';
+import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/library/library_screen.dart';
 import 'package:waxdeck/src/player/deck_bar_host.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
@@ -182,9 +182,12 @@ void main() {
     // Tall enough that the whole list is built: the sidebar scrolls, and
     // a lazily-built row that is off screen is not the thing under test.
     final container = await _pumpShell(tester, size: const Size(1000, 1400));
-    // The group starts closed, so its children are not built until it is
-    // opened; every one of them has to carry a handle once it is.
+    // Both sections start closed away from what they hold, so their
+    // children are not built until they are opened; every one of them has
+    // to carry a handle once they are.
     await tester.tap(find.text('Curation'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Expand Music'));
     await tester.pumpAndSettle();
 
     for (final target in WaxNavTarget.values) {
@@ -315,23 +318,15 @@ void main() {
     tester,
   ) async {
     // A book is declared under home, so `go` from anywhere else rebuilds
-    // that ancestry and takes the stack with it — including a bucket whose
-    // contents live in memory and cannot be rebuilt from a URL. Pushing is
-    // what makes the excursion an excursion.
+    // that ancestry and takes the stack with it — here, a drilled genre
+    // three levels into the music branch. Pushing is what makes the
+    // excursion an excursion.
     final container = await _pumpShell(tester);
     final router = container.read(routerProvider);
 
-    router.go(WaxRoute.browse);
+    router.go(WaxRoute.musicBucket(MusicDimension.genres, 'jazz'));
     await tester.pumpAndSettle();
-    router.push<void>(
-      WaxRoute.browseItems,
-      extra: const BrowseBucketArgs(
-        dimension: BrowseDimension.genre,
-        bucket: FacetBucket(key: 'jazz', label: 'Jazz', count: 3),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byType(BrowseItemsScreen), findsOneWidget);
+    expect(find.byType(MusicListingScreen), findsOneWidget);
 
     router.push<void>(WaxRoute.book('bk-1'));
     await tester.pumpAndSettle();
@@ -340,9 +335,9 @@ void main() {
     router.pop();
     await tester.pumpAndSettle();
     expect(
-      find.byType(BrowseItemsScreen),
+      find.byType(MusicListingScreen),
       findsOneWidget,
-      reason: 'the bucket cannot be rebuilt, so it has to survive',
+      reason: 'the excursion has to come back where it started',
     );
   });
 

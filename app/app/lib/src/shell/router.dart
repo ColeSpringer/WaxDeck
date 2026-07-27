@@ -18,9 +18,12 @@ import '../connect/remote_screen.dart';
 import '../discovery/track_list_screen.dart';
 import '../health/diagnostics_screen.dart';
 import '../health/health_screen.dart';
-import '../library/browse_screen.dart';
 import '../library/library_screen.dart';
 import '../metadata/metadata_screen.dart';
+import '../music/index_screen.dart';
+import '../music/listing_screen.dart';
+import '../music/music_controllers.dart';
+import '../music/music_hub_screen.dart';
 import '../organize/organize_screen.dart';
 import '../player/autoplay_gate.dart';
 import '../player/now_playing_controller.dart';
@@ -36,6 +39,7 @@ import '../queue/queue_persistence.dart';
 import '../radio/radio_screen.dart';
 import '../review/review_entry_screen.dart';
 import '../review/review_screen.dart';
+import '../search/search_screen.dart';
 import '../settings/settings_screen.dart';
 import '../sharing/shares_screen.dart';
 import '../stats/listen_log_screen.dart';
@@ -183,10 +187,30 @@ GoRouterRedirect _requires<T>(String fallback) =>
 // four lines of unpacking that would otherwise sit in the middle of the
 // branch it belongs to.
 
-Widget _browseItems(BuildContext context, GoRouterState state) {
-  final args = state.extra! as BrowseBucketArgs;
-  return BrowseItemsScreen(dimension: args.dimension, bucket: args.bucket);
-}
+/// One dimension's index, and beneath it the listing of any one of its
+/// buckets.
+///
+/// Built rather than typed out four times: the four dimensions differ in
+/// their wire name and their label and in nothing the router cares about,
+/// and a table with four near-identical branches is where the fifth one
+/// gets subtly wrong.
+GoRoute _musicIndexRoute(MusicDimension dimension) => GoRoute(
+  path: dimension.segment,
+  builder: (context, state) => MusicIndexScreen(dimension: dimension),
+  routes: <RouteBase>[
+    GoRoute(
+      path: ':key',
+      builder: (context, state) => MusicListingScreen(
+        dimension: dimension,
+        segment: state.pathParameters['key']!,
+        // A hint, never a dependency: `extra` is dropped by a reload and
+        // by a shared link, and the screen names itself from what it
+        // loads when it arrives without one.
+        label: state.extra is String ? state.extra! as String : null,
+      ),
+    ),
+  ],
+);
 
 Widget _trackList(BuildContext context, GoRouterState state) {
   final args = state.extra! as TrackListArgs;
@@ -272,18 +296,22 @@ List<RouteBase> shellRoutes() => <RouteBase>[
           ),
         ],
       ),
-      // Music. Browse stands in for the hub the music phase builds.
+      // Music: the hub, an index per dimension, and a listing per bucket.
+      // Every segment is a literal, so nothing here is ambiguous with
+      // `/music/tracks` and no route has to be declared before another to
+      // win a match.
       StatefulShellBranch(
         routes: <RouteBase>[
           GoRoute(
-            path: WaxRoute.browse,
-            builder: (context, state) => const BrowseScreen(),
+            path: WaxRoute.music,
+            builder: (context, state) => const MusicHubScreen(),
             routes: <RouteBase>[
               GoRoute(
-                path: 'items',
-                redirect: _requires<BrowseBucketArgs>(WaxRoute.browse),
-                builder: _browseItems,
+                path: 'tracks',
+                builder: (context, state) => const MusicListingScreen(),
               ),
+              for (final dimension in MusicDimension.values)
+                _musicIndexRoute(dimension),
             ],
           ),
         ],
@@ -321,6 +349,16 @@ List<RouteBase> shellRoutes() => <RouteBase>[
       // root of its own.
       StatefulShellBranch(
         routes: <RouteBase>[
+          // Search is here rather than in a domain because it is over all
+          // of them: leaving it must not rewrite the stack of whichever
+          // one the visitor came from.
+          GoRoute(
+            path: WaxRoute.search,
+            builder: (context, state) => SearchScreen(
+              initialQuery:
+                  state.uri.queryParameters[WaxRoute.searchParam] ?? '',
+            ),
+          ),
           GoRoute(
             path: WaxRoute.playlists,
             builder: (context, state) => const PlaylistsScreen(),

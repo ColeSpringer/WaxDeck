@@ -10,6 +10,7 @@ import '../artwork/artwork_precache.dart';
 import '../auth/auth_controller.dart';
 import '../media_icons.dart';
 import '../player/now_playing_controller.dart';
+import '../search/search_chrome.dart';
 import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -78,8 +79,14 @@ class LibraryScreen extends ConsumerWidget {
             ),
       // No navigation of its own: the shell's chrome owns where a visitor
       // can go at every width, and this row was the stand-in that held
-      // the compact case until the account menu existed.
-      appBar: AppBar(title: const Text('WaxDeck')),
+      // the compact case until the account menu existed. Search is the
+      // exception, because the shell owns no top app bar and the sidebar
+      // header it lives in is the widest layout's alone: below that width
+      // it belongs on a screen's own bar, and this is the landing one.
+      appBar: AppBar(
+        title: const Text('WaxDeck'),
+        actions: const <Widget>[SearchAction()],
+      ),
       body: AudioDropArea(
         enabled: canUpload,
         onDropped: (files) =>

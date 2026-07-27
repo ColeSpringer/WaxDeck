@@ -87,6 +87,7 @@ import 'package:waxdeck_api_gen/src/model/episode_summary.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/facet_bucket.dart';
 import 'package:waxdeck_api_gen/src/model/facet_page.dart';
+import 'package:waxdeck_api_gen/src/model/facet_sort.dart';
 import 'package:waxdeck_api_gen/src/model/feed_person.dart';
 import 'package:waxdeck_api_gen/src/model/field_provenance.dart';
 import 'package:waxdeck_api_gen/src/model/file_diagnostic.dart';
@@ -404,6 +405,7 @@ part 'serializers.g.dart';
   Error,
   FacetBucket,
   FacetPage,
+  FacetSort,
   FeedPerson,
   FieldProvenance,
   FileDiagnostic,

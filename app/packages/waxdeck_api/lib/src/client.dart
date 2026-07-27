@@ -91,9 +91,19 @@ abstract interface class WaxDeckRepository {
 
   /// `GET /library/facets`: the buckets of one browse dimension
   /// (`genre`, `artist`, `album-artist`, `album`, `year`, `kind`, or
-  /// `tag.<KEY>`) with counts, biggest first. Drill a bucket by passing
-  /// its `key` back to [listItems] as `facetKey`.
-  Future<FacetPage> listFacets(String dimension, {String? cursor, int? limit});
+  /// `tag.<KEY>`) with counts, biggest first, or A to Z under
+  /// [FacetSort.label]. Drill a bucket by passing its `key` back to
+  /// [listItems] as `facetKey`.
+  ///
+  /// A [cursor] belongs to the [sort] it was issued under: flipping the
+  /// order restarts the listing, and pairing the two is a request error
+  /// rather than a quietly wrong page.
+  Future<FacetPage> listFacets(
+    String dimension, {
+    FacetSort? sort,
+    String? cursor,
+    int? limit,
+  });
 
   /// `GET /library/browse`: keyset-paginated discovery lists. [seed] keeps
   /// paging through the random list stable.
@@ -106,6 +116,16 @@ abstract interface class WaxDeckRepository {
 
   /// `GET /library/search`: grouped full-text search.
   Future<SearchResults> search(String q, {int? limit});
+
+  /// The artwork endpoint for [pid], resolved the same way an
+  /// [ItemSummary]'s own `artUrl` is.
+  ///
+  /// The listings hand back a URL with every row, so screens showing
+  /// items never need this. Facet buckets do not: an artist or album
+  /// bucket carries the entity's pid and nothing else, and the endpoint
+  /// serves entity pids as readily as item ones. Building the path here
+  /// keeps it where the rest of the contract's paths live.
+  String artUrlFor(String pid);
 
   /// `GET /items/{pid}/similar`: tracks similar to a seed track, most
   /// similar first. The result names which engine answered (`sonic`
@@ -1455,11 +1475,13 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<FacetPage> listFacets(
     String dimension, {
+    FacetSort? sort,
     String? cursor,
     int? limit,
   }) => _guard(() async {
     final response = await _gen.getLibraryApi().listFacets(
       dimension: dimension,
+      sort: sort == null ? null : facetSortToGen(sort),
       cursor: cursor,
       limit: limit,
     );
@@ -1481,6 +1503,12 @@ class WaxDeckClient implements WaxDeckRepository {
     );
     return itemPageFromGen(_require(response.data), baseUrl: _baseUrl);
   });
+
+  @override
+  String artUrlFor(String pid) => resolveMediaUrl(
+    _baseUrl,
+    '/api/v1/items/${Uri.encodeComponent(pid)}/art',
+  );
 
   @override
   Future<SearchResults> search(String q, {int? limit}) => _guard(() async {

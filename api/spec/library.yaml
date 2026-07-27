@@ -127,10 +127,18 @@ paths:
       description: >
         Keyset-paginated buckets of one browse dimension, each with the
         number of matching items: the "all genres" and "all artists"
-        lists a browse tab is built from. Buckets come biggest first,
-        ties broken by label, so a tab leads with what is worth opening
-        and paging stays stable. Drill a bucket by passing its `key` back
-        as `listItems`' `facetKey` together with the same `facet`.
+        lists a browse index is built from. Buckets come biggest first
+        by default, ties broken by label, so the list leads with what is
+        worth opening and paging stays stable; `sort=label` orders them
+        A to Z instead, for an index with an alphabet rail. Drill a
+        bucket by passing its `key` back as `listItems`' `facetKey`
+        together with the same `facet`.
+
+        A cursor is only valid for the `sort` it was issued under: the
+        two orders interleave differently, so resuming one from the
+        other's boundary would skip or repeat buckets. Sending a
+        mismatched pair is `invalid-request` rather than a silently
+        wrong page.
 
         The `genre`, `artist`, `album-artist`, `album`, and `year`
         dimensions each carry a bucket for the items the dimension is
@@ -157,11 +165,21 @@ paths:
           description: Which browse dimension to enumerate.
           schema:
             $ref: "#/components/schemas/BrowseDimension"
+        - name: sort
+          in: query
+          description: >
+            Bucket order. `count` (the default) is biggest first, ties
+            broken by label then key. `label` is A to Z by the bucket's
+            display label, ties broken by key; the unknown bucket sorts
+            last under it, since a sentinel has no place in an alphabet.
+          schema:
+            $ref: "#/components/schemas/FacetSort"
         - name: cursor
           in: query
           description: >
             Opaque cursor from a previous page's `nextCursor`. Omit for
-            the first page.
+            the first page. Valid only with the `sort` it was issued
+            under.
           schema:
             type: string
         - name: limit
@@ -481,6 +499,18 @@ components:
         canonical spelling.
       example: genre
 
+    FacetSort:
+      type: string
+      description: >
+        How a browse dimension's buckets are ordered. `count` leads with
+        the biggest buckets, which is what a hub wants; `label` is the
+        A-to-Z order an index with an alphabet rail scrolls through.
+      enum:
+        - count
+        - label
+      default: count
+      example: label
+
     FacetBucket:
       type: object
       description: One bucket of a browse dimension.
@@ -508,6 +538,12 @@ components:
             The catalog entity behind the bucket, for the dimensions that
             have one (`artist`, `album-artist`, `album`). Absent for the
             unknown bucket and for dimensions that are not entities.
+
+            It is this bucket's `key` carried with the entity's API type
+            prefix, so a client holding one has the other: a screen
+            addressed by `al-<ulid>` drills with `facetKey=<ulid>`, and
+            the entity endpoints (`/albums/{pid}/play-state` and
+            friends) take the prefixed form.
           example: al-01JZX5N8QW3F4V9T2B7KD3M9R6
         unknown:
           type: boolean

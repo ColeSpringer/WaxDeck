@@ -24,6 +24,7 @@ class WaxScaffold extends StatelessWidget {
     this.largeTitle = true,
     this.bottom,
     this.floating,
+    this.controller,
     this.semanticsId,
     super.key,
   }) : assert(
@@ -59,7 +60,26 @@ class WaxScaffold extends StatelessWidget {
 
   final Widget? floating;
 
+  /// The page's scroll position, for the screens that move it themselves:
+  /// an index rail jumping to a letter, a restored offset. Screens that
+  /// only scroll by hand leave it null and let the scaffold own one.
+  final ScrollController? controller;
+
   final String? semanticsId;
+
+  /// How much of the top of the page the pinned bar occupies.
+  ///
+  /// For anything laid over the scaffold rather than inside it — an index
+  /// screen's alphabet rail is the one so far. Two things go into it and
+  /// both have been got wrong: the large title's expanded height, and the
+  /// window's top inset, which a `primary` [SliverAppBar] adds to itself
+  /// and which nothing here consumes (the shell puts its `SafeArea`
+  /// around its chrome, not around the content pane).
+  static double barHeight(BuildContext context, {bool largeTitle = true}) =>
+      MediaQuery.paddingOf(context).top +
+      (largeTitle ? _largeTitleHeight : kToolbarHeight);
+
+  static const double _largeTitleHeight = 112;
 
   @override
   Widget build(BuildContext context) {
@@ -74,10 +94,11 @@ class WaxScaffold extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: CustomScrollView(
+                controller: controller,
                 slivers: <Widget>[
                   SliverAppBar(
                     pinned: true,
-                    expandedHeight: largeTitle ? 112 : null,
+                    expandedHeight: largeTitle ? _largeTitleHeight : null,
                     backgroundColor: colors.canvas,
                     surfaceTintColor: Colors.transparent,
                     automaticallyImplyLeading: false,

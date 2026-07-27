@@ -15,6 +15,12 @@ enum WaxNavSection {
   /// A domain: a tab at every width.
   primary,
 
+  /// A way into a domain the sidebar lists beneath its hub. Not a tab and
+  /// not in the overflow: the hub itself offers every one of them, so
+  /// narrower chrome spends its room on destinations that are reachable
+  /// nowhere else.
+  domainIndex,
+
   /// Not a tab. Listed in the sidebar under a rule, and behind the icon
   /// rail's overflow.
   secondary,
@@ -34,8 +40,51 @@ enum WaxNavSection {
 enum WaxNavTarget {
   home('Home', WaxIcons.home, WaxRoute.home, WaxNavSection.primary),
 
-  /// Browse stands in until the music hub exists.
-  music('Music', WaxIcons.music, WaxRoute.browse, WaxNavSection.primary),
+  music('Music', WaxIcons.music, WaxRoute.music, WaxNavSection.primary),
+
+  // The ways into music, in the order the hub's tiles list them. They sit
+  // under Music in the sidebar; everywhere else the hub is the way to
+  // them, which is why they are not tabs and not in the rail's overflow.
+  artists(
+    'Artists',
+    WaxIcons.artists,
+    '${WaxRoute.music}/artists',
+    WaxNavSection.domainIndex,
+  ),
+  albums(
+    'Albums',
+    WaxIcons.albums,
+    '${WaxRoute.music}/albums',
+    WaxNavSection.domainIndex,
+  ),
+  tracks(
+    'Tracks',
+    WaxIcons.music,
+    WaxRoute.musicTracks,
+    WaxNavSection.domainIndex,
+  ),
+  genres(
+    'Genres',
+    WaxIcons.filter,
+    '${WaxRoute.music}/genres',
+    WaxNavSection.domainIndex,
+  ),
+  years(
+    'Years',
+    WaxIcons.recent,
+    '${WaxRoute.music}/years',
+    WaxNavSection.domainIndex,
+  ),
+  // Playlists moves under Music now that there is a group to hold it. It
+  // is a way into the collection like the others, and the hub lists it
+  // beside them.
+  playlists(
+    'Playlists',
+    WaxIcons.playlists,
+    WaxRoute.playlists,
+    WaxNavSection.domainIndex,
+  ),
+
   podcasts(
     'Podcasts',
     WaxIcons.podcasts,
@@ -44,12 +93,6 @@ enum WaxNavTarget {
   ),
   radio('Radio', WaxIcons.radio, WaxRoute.radio, WaxNavSection.primary),
 
-  playlists(
-    'Playlists',
-    WaxIcons.playlists,
-    WaxRoute.playlists,
-    WaxNavSection.secondary,
-  ),
   stats(
     'Listening stats',
     WaxIcons.stats,
@@ -174,11 +217,21 @@ enum WaxNavTarget {
     return true;
   }
 
+  /// The indexes the sidebar lists beneath this target, for the domains
+  /// that have any.
+  List<WaxNavTarget> get indexes => this == WaxNavTarget.music
+      ? WaxNavTarget.values
+            .where((t) => t.section == WaxNavSection.domainIndex)
+            .toList()
+      : const <WaxNavTarget>[];
+
   WaxDestination get destination => WaxDestination(
     name: name,
     label: label,
     glyph: glyph,
     semanticsId: SemanticsIds.navDestination(name),
+    discloseSemanticsId: SemanticsIds.navDisclose(name),
+    children: <WaxDestination>[for (final index in indexes) index.destination],
   );
 }
 
@@ -393,9 +446,14 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
         final verb = WaxAccountVerb.named(name);
         if (verb != null) _runAccountVerb(verb);
       },
-      // The brand today; the search field takes this slot when there is a
-      // search screen to drive.
-      sidebarHeader: const WaxWordmark(size: 20),
+      // The search field, where the layout system puts it. A launcher
+      // rather than a live field: the search screen owns the query and
+      // autofocuses its own field, and two fields holding one query is a
+      // synchronisation problem nobody asked for.
+      sidebarHeader: SearchField(
+        semanticsId: SemanticsIds.searchLauncher,
+        onTap: () => context.go(WaxRoute.search),
+      ),
       collapsed: ref.watch(sidebarCollapsedProvider),
       onToggleCollapsed: ref.read(sidebarCollapsedProvider.notifier).toggle,
       navSemanticsId: SemanticsIds.navRegion,

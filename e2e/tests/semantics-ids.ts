@@ -132,11 +132,8 @@ export const SemanticsIds = {
   upgradeGroup: (itemPid: string | number) => `upgrade-group-${itemPid}`,
   upgradeResolve: (itemPid: string | number) => `upgrade-resolve-${itemPid}`,
 
-  // library: Browse and the library grid, including the per-item cards the sync specs drive.
+  // library: The library grid and the per-item cards the sync specs drive.
   addToLibrary: 'add-to-library',
-  browseBucket: (dimension: string | number, index: string | number) => `browse-${dimension}-${index}`,
-  browseItem: (index: string | number) => `browse-item-${index}`,
-  browseTab: (wireName: string | number) => `browse-tab-${wireName}`,
   item: (pid: string | number) => `item-${pid}`,
   itemDelete: 'item-delete',
   itemDeleteConfirm: 'item-delete-confirm',
@@ -158,6 +155,15 @@ export const SemanticsIds = {
   tagAdd: 'tag-add',
   tagRemove: (key: string | number) => `tag-remove-${key}`,
   unofficialSwitch: 'unofficial-switch',
+
+  // music: The music hub, its indexes, and the buckets they drill.
+  indexBucket: (index: string | number) => `index-bucket-${index}`,
+  indexCount: 'index-count',
+  indexItem: (index: string | number) => `index-item-${index}`,
+  indexRail: 'index-rail',
+  indexRailLetter: (letter: string | number) => `index-rail-${letter}`,
+  indexSort: 'index-sort',
+  musicTile: (name: string | number) => `music-tile-${name}`,
 
   // organize: Organize: previews, duplicates, and upgrade groups.
   organizeApply: 'organize-apply',
@@ -263,6 +269,18 @@ export const SemanticsIds = {
   reviewUnofficial: 'review-unofficial',
   trackMenu: (pid: string | number) => `track-menu-${pid}`,
 
+  // search: The search screen, its filters, and the chrome that opens it.
+  searchAction: 'search-action',
+  searchClear: 'search-clear',
+  searchField: 'search-field',
+  searchFilter: (name: string | number) => `search-filter-${name}`,
+  searchHit: (kind: string | number, index: string | number) => `search-hit-${kind}-${index}`,
+  searchLauncher: 'search-launcher',
+  searchRecent: (index: string | number) => `search-recent-${index}`,
+  searchRecentRemove: (index: string | number) => `search-recent-remove-${index}`,
+  searchShowAll: (kind: string | number) => `search-show-all-${kind}`,
+  searchTruncated: 'search-truncated',
+
   // settings: Settings: account, devices, app passwords, notifications, scrobblers, appearance.
   appPasswordAdd: 'app-password-add',
   appPasswordRevoke: (id: string | number) => `app-password-revoke-${id}`,
@@ -285,22 +303,23 @@ export const SemanticsIds = {
   timezoneEdit: 'timezone-edit',
   timezoneSave: 'timezone-save',
 
-  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.
-  navAccount: 'nav-account',
-  navAccountAction: (name: string | number) => `nav-account-${name}`,
-  navDestination: (name: string | number) => `nav-${name}`,
-  navGroup: (name: string | number) => `nav-group-${name}`,
-  navOverflow: 'nav-overflow',
-  navRegion: 'nav-region',
-  navSidebarCollapse: 'nav-sidebar-collapse',
-  skipToContent: 'skip-to-content',
-
   // sharing: Shares and share links.
   shareCopy: (pid: string | number) => `share-copy-${pid}`,
   shareCreate: 'share-create',
   shareExpiry: 'share-expiry',
   shareRevoke: (pid: string | number) => `share-revoke-${pid}`,
   shareRow: (pid: string | number) => `share-row-${pid}`,
+
+  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.
+  navAccount: 'nav-account',
+  navAccountAction: (name: string | number) => `nav-account-${name}`,
+  navDestination: (name: string | number) => `nav-${name}`,
+  navDisclose: (name: string | number) => `nav-disclose-${name}`,
+  navGroup: (name: string | number) => `nav-group-${name}`,
+  navOverflow: 'nav-overflow',
+  navRegion: 'nav-region',
+  navSidebarCollapse: 'nav-sidebar-collapse',
+  skipToContent: 'skip-to-content',
 
   // stats: Listening stats and year in review.
   listenLogClientFilter: 'listen-log-client-filter',

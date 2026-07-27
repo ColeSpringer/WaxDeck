@@ -13,14 +13,17 @@ package service
 // a sorted slice using the same opaque offset cursor the smart-playlist
 // listings page with. Keyset pagination on Facet is filed upstream
 // (docs/upstream-requests.md); when it lands, this becomes a passthrough
-// like every other listing and the cache below can go.
+// like every other listing and the cache below can go. The ask names an
+// ordering parameter for the same reason this file has one: the A-to-Z
+// index depends on it, and an upstream Facet that only ever sorts by
+// count would not retire the window.
 //
 // Caching is narrow on purpose. Only the unfiltered enumeration, only
-// per dimension, only for full-visibility callers, keyed on the catalog
-// feed position — the same restriction TrackFacts applies, for the same
-// reason: Facet takes a user pid and a query, so a restricted caller's
-// answer is not a function of the tail alone. A restricted caller's
-// enumeration is computed live every time.
+// per dimension and order, only for full-visibility callers, keyed on
+// the catalog feed position — the same restriction TrackFacts applies,
+// for the same reason: Facet takes a user pid and a query, so a
+// restricted caller's answer is not a function of the tail alone. A
+// restricted caller's enumeration is computed live every time.
 //
 // Bucket counts are library-scoped, not fully visibility-scoped. The
 // enumeration narrows to the caller's granted libraries, which is the
@@ -83,6 +86,33 @@ const facetDimensionGenre = "genre"
 // facetDefaultLimit matches the spec's default page size.
 const facetDefaultLimit = 100
 
+// FacetSort is the order a dimension's buckets come back in.
+type FacetSort string
+
+const (
+	// FacetSortCount leads with the biggest buckets: what a hub wants.
+	FacetSortCount FacetSort = "count"
+	// FacetSortLabel is A to Z by display label: what an index with an
+	// alphabet rail scrolls through.
+	FacetSortLabel FacetSort = "label"
+)
+
+// ParseFacetSort validates a sort name, treating the empty string as the
+// default rather than as an error: the parameter is optional. Exported
+// so the handler parses at the edge and Facets takes the type, which is
+// what keeps a dimension, a sort, and a cursor from being three adjacent
+// strings a call site can transpose in silence.
+func ParseFacetSort(s string) (FacetSort, error) {
+	switch FacetSort(s) {
+	case "", FacetSortCount:
+		return FacetSortCount, nil
+	case FacetSortLabel:
+		return FacetSortLabel, nil
+	default:
+		return "", errInvalid("unknown facet sort " + s)
+	}
+}
+
 // facetNoEpisodes names the dimensions the catalog computes with podcast
 // episodes excluded (they carry no artist, album, genre, or year in the
 // music sense, so including them would pile every episode into one
@@ -117,6 +147,22 @@ type FacetBucket struct {
 	// neither do the year, kind, and tag dimensions.
 	EntityPID string
 	Unknown   bool
+	// fold is Label case-folded, held rather than recomputed because the
+	// A-to-Z sort compares it across every pair of a dimension's buckets.
+	fold string
+}
+
+// facetFolded returns a bucket with its case-folded sort key filled in.
+//
+// Folding is what makes the A-to-Z order read as an alphabet rather than
+// as ASCII: without it "Zebra" sorts ahead of "abba", and an index whose
+// rail says Z would be showing the a's. It is a fold and not a collation
+// — scripts outside ASCII still land after z, the same way the catalog's
+// own tie-break does — and a proper locale collation is a bigger change
+// than an index screen justifies.
+func facetFolded(b FacetBucket) FacetBucket {
+	b.fold = strings.ToLower(b.Label)
+	return b
 }
 
 // FacetPage is one keyset-paginated page of a dimension's buckets.
@@ -127,7 +173,7 @@ type FacetPage struct {
 }
 
 // facetCache holds the full-visibility enumerations, keyed by dimension
-// within one generation of the inputs they were computed from.
+// and order within one generation of the inputs they were computed from.
 //
 // The generation is the pair (catalog feed position, genre vocabulary
 // version), because a bucket list is a function of both: the catalog
@@ -138,7 +184,15 @@ type FacetPage struct {
 type facetCache struct {
 	mu          sync.Mutex
 	gen         facetGeneration
-	byDimension map[string][]FacetBucket
+	byDimension map[facetCacheKey][]FacetBucket
+}
+
+// facetCacheKey names one cached enumeration. The order is part of the
+// key rather than applied on read: paging walks a sorted slice, so the
+// slice has to already be in the order the cursor was issued for.
+type facetCacheKey struct {
+	dimension string
+	sort      FacetSort
 }
 
 // facetGeneration identifies the inputs an enumeration was computed
@@ -148,16 +202,33 @@ type facetGeneration struct {
 	vocab int64
 }
 
-// Facets enumerates one browse dimension's buckets, most items first
-// within the catalog's own collation order, paged.
-func (l *Library) Facets(ctx context.Context, uc *UserCtx, dimension, cursor string, limit int) (FacetPage, error) {
+// Facets enumerates one browse dimension's buckets, paged: most items
+// first by default, A to Z under FacetSortLabel.
+func (l *Library) Facets(ctx context.Context, uc *UserCtx, dimension string, order FacetSort, cursor string, limit int) (FacetPage, error) {
 	group, canonical, err := facetGroupFor(dimension)
+	if err != nil {
+		return FacetPage{}, err
+	}
+	// Validated here as well as at the edge: the type narrows what a call
+	// site can transpose, not what it can invent, and an order nothing
+	// serves must not fall through to the default — answering
+	// biggest-first to a caller who asked for A to Z puts the wrong
+	// letters under the rail.
+	order, err = ParseFacetSort(string(order))
 	if err != nil {
 		return FacetPage{}, err
 	}
 	after, err := decodeFacetCursor(cursor)
 	if err != nil {
 		return FacetPage{}, err
+	}
+	// The two orders interleave differently, so resuming one from the
+	// other's boundary would skip or repeat buckets rather than fail. A
+	// client that flips the sort toggle starts the listing over, which is
+	// what the toggle means; a mismatched pair is a bug, and saying so is
+	// cheaper than the page it would otherwise get.
+	if after != nil && after.order() != order {
+		return FacetPage{}, errInvalid("cursor was issued for sort " + string(after.order()))
 	}
 	if limit <= 0 {
 		// The handler bounds this, but a limit of zero would emit an empty
@@ -172,14 +243,14 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, dimension, cursor str
 		return FacetPage{Dimension: canonical, Buckets: []FacetBucket{}}, nil
 	}
 
-	buckets, err := l.facetBuckets(ctx, uc, canonical, group)
+	buckets, err := l.facetBuckets(ctx, uc, canonical, group, order)
 	if err != nil {
 		return FacetPage{}, err
 	}
 	out := FacetPage{Dimension: canonical, Buckets: []FacetBucket{}}
-	for i := facetSeek(buckets, after); i < len(buckets); i++ {
+	for i := facetSeek(buckets, after, order); i < len(buckets); i++ {
 		if len(out.Buckets) == limit {
-			out.Next = encodeFacetCursor(buckets[i-1])
+			out.Next = encodeFacetCursor(buckets[i-1], order)
 			break
 		}
 		out.Buckets = append(out.Buckets, buckets[i])
@@ -188,13 +259,13 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, dimension, cursor str
 }
 
 // facetBuckets computes (or serves from cache) a dimension's whole
-// bucket list for the caller.
-func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension string, group read.GroupBy) ([]FacetBucket, error) {
+// bucket list for the caller, in the requested order.
+func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension string, group read.GroupBy, order FacetSort) ([]FacetBucket, error) {
 	gen := l.facetGeneration()
 	if uc.AllLibraries {
 		l.facets.mu.Lock()
 		if l.facets.gen == gen {
-			if cached, ok := l.facets.byDimension[dimension]; ok {
+			if cached, ok := l.facets.byDimension[facetCacheKey{dimension, order}]; ok {
 				l.facets.mu.Unlock()
 				return cached, nil
 			}
@@ -238,13 +309,28 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 		if prefix := facetEntityPrefix(dimension); prefix != "" {
 			bucket.EntityPID = entityAPIPID(prefix, b.EntityPID)
 		}
-		out = append(out, bucket)
+		out = append(out, facetFolded(bucket))
 	}
-	sortFacetBuckets(out)
 
-	if uc.AllLibraries {
-		l.publishFacetBuckets(gen, dimension, out)
+	sortFacetBuckets(out, order)
+	if !uc.AllLibraries {
+		// Nothing a restricted caller computes is published, so the other
+		// order would be sorted for a cache it can never reach.
+		return out, nil
 	}
+	l.publishFacetBuckets(gen, dimension, order, out)
+
+	// Both orders come out of the one aggregation. The catalog call is the
+	// expensive half and the answers differ only in arrangement, so
+	// sorting a copy costs a fraction of a second aggregation and leaves
+	// the other order warm for the toggle that is about to ask for it.
+	other := FacetSortCount
+	if order == FacetSortCount {
+		other = FacetSortLabel
+	}
+	alternate := append([]FacetBucket(nil), out...)
+	sortFacetBuckets(alternate, other)
+	l.publishFacetBuckets(gen, dimension, other, alternate)
 	return out, nil
 }
 
@@ -267,43 +353,68 @@ func (l *Library) facetGeneration() facetGeneration {
 // A result from an older generation is dropped for the mirror-image
 // reason: letting it land would roll the cache back and evict a newer
 // dimension's entry, turning every later read into a miss.
-func (l *Library) publishFacetBuckets(gen facetGeneration, dimension string, buckets []FacetBucket) {
+func (l *Library) publishFacetBuckets(gen facetGeneration, dimension string, order FacetSort, buckets []FacetBucket) {
 	l.facets.mu.Lock()
 	defer l.facets.mu.Unlock()
 	if l.facetGeneration() != gen {
 		return
 	}
 	if l.facets.gen != gen || l.facets.byDimension == nil {
-		l.facets.gen, l.facets.byDimension = gen, map[string][]FacetBucket{}
+		l.facets.gen, l.facets.byDimension = gen, map[facetCacheKey][]FacetBucket{}
 	}
-	l.facets.byDimension[dimension] = buckets
+	l.facets.byDimension[facetCacheKey{dimension, order}] = buckets
 }
 
-// sortFacetBuckets orders buckets biggest first, ties broken by label
-// then key so paging is stable across the cache boundary: a browse tab
-// leads with the buckets worth opening, and equal-count buckets never
-// swap places between one page and the next.
-func sortFacetBuckets(buckets []FacetBucket) {
-	sort.SliceStable(buckets, func(i, j int) bool { return facetLess(buckets[i], buckets[j]) })
+// sortFacetBuckets arranges buckets in one of the two orders, stably, so
+// paging is reproducible across the cache boundary.
+func sortFacetBuckets(buckets []FacetBucket, order FacetSort) {
+	less := facetLess
+	if order == FacetSortLabel {
+		less = facetLabelLess
+	}
+	sort.SliceStable(buckets, func(i, j int) bool { return less(buckets[i], buckets[j]) })
 }
 
 // facetCursor is a page boundary: the sort position of the last bucket
-// of the previous page. Paging resumes strictly after it.
+// of the previous page, and the order that position was taken in.
+// Paging resumes strictly after it.
 //
 // This is a keyset over a computed slice, not an offset into one, for
 // the same reason every other listing here is keyset: bucket counts move
-// as the library changes, and counts are the leading sort term, so an
-// offset would skip or repeat buckets whenever a count shifted between
-// two pages. Resuming after a remembered position degrades to at worst
-// re-showing or missing the buckets that actually moved.
+// as the library changes, and counts are the leading sort term of the
+// default order, so an offset would skip or repeat buckets whenever a
+// count shifted between two pages. Resuming after a remembered position
+// degrades to at worst re-showing or missing the buckets that actually
+// moved.
 type facetCursor struct {
 	Count int    `json:"c"`
 	Label string `json:"l"`
 	Key   string `json:"k"`
+	// Unknown is part of the position because the label order sorts the
+	// sentinel bucket last rather than by its label; without it the
+	// boundary would be compared as an ordinary bucket and the seek would
+	// land in the wrong place at exactly that edge.
+	Unknown bool `json:"u,omitempty"`
+	// Sort is absent on a count-ordered cursor, which is the default, so
+	// the encoding of the order this endpoint has always served does not
+	// change.
+	Sort string `json:"s,omitempty"`
 }
 
-func encodeFacetCursor(b FacetBucket) string {
-	raw, err := json.Marshal(facetCursor{Count: b.Count, Label: b.Label, Key: b.Key})
+// order is the sort the cursor was issued under.
+func (c *facetCursor) order() FacetSort {
+	if c.Sort == "" {
+		return FacetSortCount
+	}
+	return FacetSort(c.Sort)
+}
+
+func encodeFacetCursor(b FacetBucket, order FacetSort) string {
+	cur := facetCursor{Count: b.Count, Label: b.Label, Key: b.Key, Unknown: b.Unknown}
+	if order != FacetSortCount {
+		cur.Sort = string(order)
+	}
+	raw, err := json.Marshal(cur)
 	if err != nil {
 		return ""
 	}
@@ -329,16 +440,48 @@ func decodeFacetCursor(c string) (*facetCursor, error) {
 }
 
 // facetSeek returns the index of the first bucket sorting strictly after
-// the cursor, or 0 for the first page. The slice is already in
-// facetLess order, so this is a binary search.
-func facetSeek(buckets []FacetBucket, after *facetCursor) int {
+// the cursor, or 0 for the first page. The slice is already in the
+// requested order, so this is a binary search.
+func facetSeek(buckets []FacetBucket, after *facetCursor, order FacetSort) int {
 	if after == nil {
 		return 0
 	}
-	boundary := FacetBucket{Count: after.Count, Label: after.Label, Key: after.Key}
-	return sort.Search(len(buckets), func(i int) bool {
-		return facetLess(boundary, buckets[i])
+	less := facetLess
+	if order == FacetSortLabel {
+		less = facetLabelLess
+	}
+	boundary := facetFolded(FacetBucket{
+		Count:   after.Count,
+		Label:   after.Label,
+		Key:     after.Key,
+		Unknown: after.Unknown,
 	})
+	return sort.Search(len(buckets), func(i int) bool {
+		return less(boundary, buckets[i])
+	})
+}
+
+// facetLabelLess is the A-to-Z order: by display label, ties broken by
+// key so equal-label buckets (two catalog rows that normalize to one
+// genre name) never swap places between one page and the next.
+//
+// The unknown bucket sorts last whatever its sentinel spells. "[No
+// Genre]" would otherwise lead every genre index on its bracket, which
+// puts the one bucket nobody is looking for where the A's belong.
+func facetLabelLess(a, b FacetBucket) bool {
+	if a.Unknown != b.Unknown {
+		return b.Unknown
+	}
+	if a.fold != b.fold {
+		return a.fold < b.fold
+	}
+	// Two labels differing only in case are one rail letter apart from
+	// nobody, but the order still has to be total for the keyset to
+	// resume on it.
+	if a.Label != b.Label {
+		return a.Label < b.Label
+	}
+	return a.Key < b.Key
 }
 
 // facetLess is the bucket sort order: biggest first, ties broken by

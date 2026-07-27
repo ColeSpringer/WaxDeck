@@ -46,13 +46,38 @@ here waits on upstream.
   place, and the star and rating row (`EntityStarRatingRow`, backed by
   `EntityPlayStateController`, with the same optimistic-then-settle and
   offline-outbox behavior the item controls have) is built and tested.
-  What is still missing is a screen to host it. The browse surface that
-  blocked this now exists: the artist, album-artist, and album tabs
-  enumerate real entities and every bucket carries its `entityPid`, so
-  the navigation target is in hand. What the tabs do today is drill a
-  bucket into its item list; an entity screen (the entity's own artwork,
-  its releases or tracks, and the star and rating row) is the remaining
-  half, and it is now pure app work with nothing behind it.
+  What is still missing is a screen to host it. Everything else is in
+  hand, including the location: `/music/artists/ar-…` and
+  `/music/albums/al-…` are declared, reachable from the indexes and from
+  search, and addressed by the entity's own pid — the contract states
+  that a bucket's `entityPid` is its `key` behind a type prefix, so one
+  location names the entity and filters the listing. What those locations
+  render today is the bucket's item list; an entity screen (the entity's
+  own artwork, its releases or tracks, and the star and rating row) is
+  the remaining half, it replaces the listing at the same URL, and it is
+  pure app work with nothing behind it.
+- `[roadmap]` **A queue windowed past its cap never refills.** The 500-item
+  cap windows a longer scope rather than refusing it, and then stops
+  there: starting a 5,000-track genre at its first track plays 500 and
+  ends, with the rest silently out of reach. ADR-0019 recorded that as
+  deliberate for the ordered case and anticipated the refill only for a
+  rolling shuffle; the ordered half is now rejected too (see that ADR's
+  status), so both draw orders want the same mechanism — a way back to
+  the scope the window was cut from, and a draw against it as the window
+  drains, in order for an ordered queue and at random for a shuffled one.
+
+  What it needs beyond the eviction rule that already exists: the source
+  has to travel with the state (a facet and its cursor, a playlist and
+  its cursor) and survive a restore, which is a drift-schema field and a
+  port that turns a `QueueSource` into more pids; Connect reports the
+  window, so what a controlling device sees has to stay coherent as it
+  moves; and `QueueSource.rolling` — declared, captioned by the queue
+  panel, set by nothing — is what says so on screen.
+
+  Rides the queue-UI slice, which is also where the first Shuffle button
+  that mints a shuffled window lands. Bucket listings page at the cap in
+  the meantime, so every bucket the queue can hold whole is queued whole
+  and only scopes past 500 are affected.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
@@ -449,6 +474,45 @@ here waits on upstream.
 - `[in-repo]` **Time and mood mixes.** Daylist-style rotating mixes
   with scheduled auto-names are a scheduler and a naming table over
   the instant-mix engine that shipped; nothing else blocks them.
+- `[roadmap]` **Search has no radio results.** The search screen's filter
+  chips cover what `GET /library/search` answers: music, podcasts, and
+  audiobooks. The layout gives it a Radio chip too, searching the station
+  directory and offering "Add station" per result — that is the radio
+  surface the radio slice rebuilds (logo proxy, add-station flow, the
+  hub), and building a second one now is work that slice redoes. The chip
+  lands with it.
+- `[roadmap]` **Search is one tap further away from a phone's non-music
+  domains.** The layout puts a search control in the top app bar below
+  sidebar width, and the shell owns no top app bar — every screen brings
+  its own — so the control lives on the screens rebuilt so far: the music
+  hub, its indexes and listings, and the library grid, which is the
+  compact landing screen. Podcasts, Radio, and the books screens get it
+  as they are rebuilt, the same way the avatar does; until then search
+  from one of them is Home and then the control.
+- `[in-repo]` **Artist and album index rows request artwork that mostly
+  is not there.** A `FacetBucket` carries no has-art signal, so a bucket
+  row builds an art URL for every entity and the ones with no artwork
+  404. Item rows never do this: the server omits `artUrl` when there is
+  nothing behind it, so a listing of art-less items sends no art requests
+  at all. Artist art in particular arrives only from enrichment, so an
+  index of 500 artists on a fresh library is 500 misses, and Flutter's
+  image cache does not retain a failure, so scrolling back repeats them.
+  Three ways out, none free: `artUrl` on `FacetBucket`, the shape that
+  matches items, which makes the enumeration resolve art per bucket —
+  that enumeration is cached per catalog generation, so the cost lands
+  on a scan rather than a scroll, but it wants measuring before it is
+  committed to; a negative cache in `ArtworkStore`, which needs a way for
+  a failed draw to report back and `WaxArtwork` is deliberately one-way;
+  or drawing monograms for buckets and dropping the covers, which is a
+  specced visual. Measure first.
+- `[upstream]` **The alphabet rail pages toward a letter rather than
+  seeking to one.** `GET /library/facets` has no seek-to-letter, so
+  tapping S on a long index asks for successive pages until an S-shaped
+  bucket is loaded. Pages are 500 buckets served from one cached
+  enumeration, so a long walk is a handful of cheap requests rather than
+  a slow one — but it is still O(pages) round trips where a `startsAt`
+  parameter (or the upstream `FacetPage` this endpoint's window is
+  waiting on) would be one.
 - `[in-repo]` **Share-card image export.** The year-in-review surface
   answers data; rendering shareable image cards from it (and clip
   cards for episode shares) is client work on top of the existing

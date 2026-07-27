@@ -88,6 +88,7 @@ Serializers _$serializers =
           ..add(Error.serializer)
           ..add(FacetBucket.serializer)
           ..add(FacetPage.serializer)
+          ..add(FacetSort.serializer)
           ..add(FeedPerson.serializer)
           ..add(FieldProvenance.serializer)
           ..add(FileDiagnostic.serializer)

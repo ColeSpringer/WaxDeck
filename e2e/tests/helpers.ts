@@ -1,4 +1,5 @@
 import { expect, APIRequestContext, Locator, Page } from '@playwright/test';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // Type into a flutter text field and verify every keystroke landed.
 // Clicking focuses the DOM input, but flutter attaches its editing
@@ -132,4 +133,16 @@ export async function startJsonSink(): Promise<{
     received: () => [...received],
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
+}
+
+// Playlists is one of the ways into music now, so the sidebar lists it
+// under the Music hub in a section that stays closed until it holds
+// where you are. Every spec that reaches playlists from the chrome opens
+// it first; clickThrough makes that idempotent, so calling this twice
+// costs nothing.
+export async function openMusicSection(page: Page) {
+  await clickThrough(
+    page.locator(sem(SemanticsIds.navDisclose('music'))),
+    page.locator(sem(SemanticsIds.navDestination('playlists'))),
+  );
 }

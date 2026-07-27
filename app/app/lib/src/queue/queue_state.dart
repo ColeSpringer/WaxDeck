@@ -30,6 +30,12 @@ enum QueueSourceKind {
   artist('artist'),
   playlist('playlist'),
   genre('genre'),
+
+  /// One year's worth of the library. Not [library]: a queue built from
+  /// the 1997 bucket captioned as the whole collection is a wrong answer
+  /// on the queue screen and a wrong scope for anything that refills
+  /// against the source.
+  year('year'),
   mix('mix'),
   shelf('shelf'),
   search('search'),

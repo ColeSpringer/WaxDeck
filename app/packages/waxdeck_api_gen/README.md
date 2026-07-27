@@ -584,6 +584,7 @@ Class | Method | HTTP request | Description
  - [Error](doc/Error.md)
  - [FacetBucket](doc/FacetBucket.md)
  - [FacetPage](doc/FacetPage.md)
+ - [FacetSort](doc/FacetSort.md)
  - [FeedPerson](doc/FeedPerson.md)
  - [FieldProvenance](doc/FieldProvenance.md)
  - [FileDiagnostic](doc/FileDiagnostic.md)

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -105,10 +106,36 @@ func TestFacetedBrowseOverHTTP(t *testing.T) {
 		}
 	}
 
+	// The A-to-Z order the index screen's alphabet rail scrolls: the same
+	// buckets, arranged by label, paging through the same keyset.
+	byLabel := facetPage(t, h, "?dimension=artist&sort=label")
+	if len(byLabel.Buckets) != len(page.Buckets) {
+		t.Fatalf("label order has %d buckets, count order %d", len(byLabel.Buckets), len(page.Buckets))
+	}
+	for i := 1; i < len(byLabel.Buckets); i++ {
+		if strings.ToLower(byLabel.Buckets[i-1].Label) > strings.ToLower(byLabel.Buckets[i].Label) {
+			t.Fatalf("label order is not alphabetical: %+v", byLabel.Buckets)
+		}
+	}
+	labelFirst := facetPage(t, h, "?dimension=artist&sort=label&limit=1")
+	if labelFirst.NextCursor == nil {
+		t.Fatal("a one-bucket label page carries no cursor")
+	}
+	labelNext := facetPage(t, h, "?dimension=artist&sort=label&limit=1&cursor="+*labelFirst.NextCursor)
+	if len(labelNext.Buckets) != 1 || labelNext.Buckets[0].Key != byLabel.Buckets[1].Key {
+		t.Fatalf("the second label page is %+v, want %+v", labelNext.Buckets, byLabel.Buckets[1])
+	}
+
 	// Fail-closed on both halves: an unknown dimension is a bad request
-	// wherever it appears, never a silently unfiltered listing.
+	// wherever it appears, never a silently unfiltered listing. A cursor
+	// carried across the sort toggle is the same kind of error: the two
+	// orders interleave differently, so honouring it would skip buckets.
 	resp := get(t, h.ts, "/api/v1/library/facets?dimension=artists", h.token)
 	wantStatus(t, resp, 400, "unknown dimension")
+	resp = get(t, h.ts, "/api/v1/library/facets?dimension=artist&sort=popularity", h.token)
+	wantStatus(t, resp, 400, "unknown sort")
+	resp = get(t, h.ts, "/api/v1/library/facets?dimension=artist&cursor="+*labelFirst.NextCursor, h.token)
+	wantStatus(t, resp, 400, "a label cursor under the default order")
 	resp = get(t, h.ts, "/api/v1/library/items?facet=artists&facetKey=x", h.token)
 	wantStatus(t, resp, 400, "unknown facet filter")
 	resp = get(t, h.ts, "/api/v1/library/facets?dimension=artist&cursor=nonsense", h.token)

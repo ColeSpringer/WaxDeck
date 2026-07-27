@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
+import 'package:flutter/rendering.dart';
 
 import '../icons/wax_icon.dart';
 import '../theme/wax_layout.dart';
@@ -26,6 +26,8 @@ class WaxDestination {
     required this.glyph,
     this.semanticsId,
     this.badge,
+    this.children = const <WaxDestination>[],
+    this.discloseSemanticsId,
   });
 
   /// Stable identity, supplied by the caller ('home', 'podcasts').
@@ -43,6 +45,41 @@ class WaxDestination {
 
   /// A count drawn on the glyph: queued downloads, unread notifications.
   final String? badge;
+
+  /// The destination's own sub-destinations: the indexes under a domain
+  /// hub. Only the sidebar draws them, indented beneath the parent row
+  /// with a disclosure control of its own.
+  ///
+  /// This is not a [WaxNavGroup]. A group's header row is a label that
+  /// only discloses, because its children are all there is; a parent
+  /// destination is somewhere you can go, and its children are shortcuts
+  /// into what is already on it. That is why the tabs, the rail, and a
+  /// collapsed sidebar draw the parent alone and drop the children: they
+  /// are one tap further on, not unreachable.
+  final List<WaxDestination> children;
+
+  /// The handle for the disclosure control beside a parent row. It is a
+  /// separate control from the row — the row navigates, the chevron
+  /// opens — so it takes a separate identifier.
+  final String? discloseSemanticsId;
+}
+
+/// Whether [destination] is the one to light for [selected].
+///
+/// A destination holds the selection when it is selected itself, and also
+/// when one of its sub-destinations is and that row is not on screen to
+/// light instead. Every form but an open sidebar section is in the second
+/// case: the tabs, the rail, and a collapsed sidebar draw a domain's hub
+/// and not its indexes, so an index has to light the hub it belongs to or
+/// a phone standing on Artists lights nothing at all.
+bool _holdsSelection(
+  WaxDestination destination,
+  String? selected, {
+  required bool childrenDrawn,
+}) {
+  if (destination.name == selected) return true;
+  if (childrenDrawn) return false;
+  return destination.children.any((child) => child.name == selected);
 }
 
 /// A secondary entry: a destination on its own, or a collapsible group of
@@ -460,7 +497,13 @@ class WaxNavBar extends StatelessWidget {
                       glyph: destination.glyph,
                       badge: destination.badge,
                       semanticsId: destination.semanticsId,
-                      selected: destination.name == selected,
+                      // A domain hub lights for its own indexes here: this form draws
+                      // the hub and not them.
+                      selected: _holdsSelection(
+                        destination,
+                        selected,
+                        childrenDrawn: false,
+                      ),
                       form: _NavForm.tab,
                       onTap: () => onSelect(destination.name),
                     ),
@@ -537,7 +580,13 @@ class WaxNavRail extends StatelessWidget {
                       glyph: destination.glyph,
                       badge: destination.badge,
                       semanticsId: destination.semanticsId,
-                      selected: destination.name == selected,
+                      // A domain hub lights for its own indexes here: this form draws
+                      // the hub and not them.
+                      selected: _holdsSelection(
+                        destination,
+                        selected,
+                        childrenDrawn: false,
+                      ),
                       form: _NavForm.rail,
                       onTap: () => onSelect(destination.name),
                     ),
@@ -895,6 +944,14 @@ class _WaxSidebarState extends State<WaxSidebar> {
       _disclosed[group.label] ??
       group.children.any((child) => child.name == widget.selected);
 
+  /// A parent destination opens on its own while it or one of its
+  /// children is where the visitor is, and closes when they leave — until
+  /// they say otherwise, after which their answer stands.
+  bool _isParentOpen(WaxDestination parent) =>
+      _disclosed[parent.name] ??
+      (parent.name == widget.selected ||
+          parent.children.any((child) => child.name == widget.selected));
+
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
@@ -943,7 +1000,7 @@ class _WaxSidebarState extends State<WaxSidebar> {
                     ),
                     children: <Widget>[
                       for (final destination in widget.destinations)
-                        _sidebarItem(destination, collapsed: collapsed),
+                        ..._destinationRows(destination, collapsed: collapsed),
                       if (widget.secondary.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(
@@ -1004,6 +1061,42 @@ class _WaxSidebarState extends State<WaxSidebar> {
     );
   }
 
+  /// One primary destination: a row, plus its sub-destinations when it
+  /// has any and the sidebar has room to indent them.
+  List<Widget> _destinationRows(
+    WaxDestination destination, {
+    required bool collapsed,
+  }) {
+    if (destination.children.isEmpty || collapsed) {
+      return <Widget>[_sidebarItem(destination, collapsed: collapsed)];
+    }
+    final open = _isParentOpen(destination);
+    return <Widget>[
+      Row(
+        children: <Widget>[
+          Expanded(child: _sidebarItem(destination, collapsed: false)),
+          // Beside the row rather than inside it. The row excludes its own
+          // subtree from semantics so it announces once, which would
+          // swallow a nested control whole; and the two do different
+          // things, so a screen reader should find two.
+          WaxIconButton(
+            glyph: open ? WaxIcons.collapse : WaxIcons.forward,
+            label: open
+                ? 'Collapse ${destination.label}'
+                : 'Expand ${destination.label}',
+            size: 16,
+            semanticsId: destination.discloseSemanticsId,
+            onPressed: () =>
+                setState(() => _disclosed[destination.name] = !open),
+          ),
+        ],
+      ),
+      if (open)
+        for (final child in destination.children)
+          _sidebarItem(child, collapsed: false, indent: true),
+    ];
+  }
+
   Widget _sidebarItem(
     WaxDestination destination, {
     required bool collapsed,
@@ -1015,7 +1108,13 @@ class _WaxSidebarState extends State<WaxSidebar> {
       glyph: destination.glyph,
       badge: destination.badge,
       semanticsId: destination.semanticsId,
-      selected: destination.name == widget.selected,
+      // The children are drawn only when this row is a disclosed parent
+      // in an expanded sidebar; anywhere else the parent lights for them.
+      selected: _holdsSelection(
+        destination,
+        widget.selected,
+        childrenDrawn: !collapsed && _isParentOpen(destination),
+      ),
       form: collapsed ? _NavForm.rail : _NavForm.row,
       indent: indent && !collapsed,
       onTap: () => widget.onSelect(destination.name),
@@ -1415,10 +1514,15 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
 /// The first thing in the reading order: a link past the navigation to
 /// the content.
 ///
-/// It occupies its space whether or not it is focused, and is drawn only
-/// when it is. Hiding it by shrinking it to nothing (or by clipping it
-/// away) is what takes a node out of the tab order and out of the
-/// semantics tree, which is the one thing this control cannot afford.
+/// Unfocused it is one pixel in the leading corner; focused it grows to
+/// its pill and is drawn. Not zero: a zero-size render object leaves the
+/// semantics tree, which takes the link out of the tab order, which is
+/// the one thing this control cannot afford. And not full-size either,
+/// which is what it used to be — on web the semantics tree is real DOM,
+/// and an element with a tap action takes the browser's click for its
+/// whole box whatever Flutter's own hit test says about it. At the
+/// leading corner that box is over the sidebar header, so a field there
+/// could be seen and could not be clicked.
 ///
 /// What it is first *for* is the reading order, which is where the
 /// chrome comes before the content. Framework tab traversal is the
@@ -1466,45 +1570,52 @@ class _SkipLinkState extends State<_SkipLink> {
       // is painted last in the frame's stack. Ignoring from inside left
       // roughly 140 by 48 of dead corner over the content pane — at rail
       // width that is exactly where a screen's back button sits.
+      //
+      // The clip is the other half of the same problem, for the platform
+      // that does not ask Flutter: the semantics element web renders for
+      // this node is sized to the box, so the box is what has to shrink.
       child: IgnorePointer(
         ignoring: !_focused,
-        child: FocusableActionDetector(
-          focusNode: _focus,
-          mouseCursor: SystemMouseCursors.click,
-          onShowFocusHighlight: (value) => setState(() => _focused = value),
-          actions: <Type, Action<Intent>>{
-            ActivateIntent: CallbackAction<ActivateIntent>(
-              onInvoke: (_) {
-                widget.onSkip();
-                return null;
-              },
-            ),
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(WaxSpace.s8),
-            child: WaxFocusRing(
-              focused: _focused,
-              borderRadius: WaxRadius.pill,
-              surface: colors.canvas,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: widget.onSkip,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: _focused ? colors.accentContainer : null,
-                    borderRadius: WaxRadius.pill,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: WaxSpace.s16,
-                      vertical: WaxSpace.s8,
+        child: _SkipLinkBox(
+          collapsed: !_focused,
+          child: FocusableActionDetector(
+            focusNode: _focus,
+            mouseCursor: SystemMouseCursors.click,
+            onShowFocusHighlight: (value) => setState(() => _focused = value),
+            actions: <Type, Action<Intent>>{
+              ActivateIntent: CallbackAction<ActivateIntent>(
+                onInvoke: (_) {
+                  widget.onSkip();
+                  return null;
+                },
+              ),
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(WaxSpace.s8),
+              child: WaxFocusRing(
+                focused: _focused,
+                borderRadius: WaxRadius.pill,
+                surface: colors.canvas,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onSkip,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: _focused ? colors.accentContainer : null,
+                      borderRadius: WaxRadius.pill,
                     ),
-                    child: Text(
-                      'Skip to content',
-                      style: WaxType.label.copyWith(
-                        color: _focused
-                            ? colors.onAccentContainer
-                            : Colors.transparent,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: WaxSpace.s16,
+                        vertical: WaxSpace.s8,
+                      ),
+                      child: Text(
+                        'Skip to content',
+                        style: WaxType.label.copyWith(
+                          color: _focused
+                              ? colors.onAccentContainer
+                              : Colors.transparent,
+                        ),
                       ),
                     ),
                   ),
@@ -1516,4 +1627,61 @@ class _SkipLinkState extends State<_SkipLink> {
       ),
     );
   }
+}
+
+/// Lays the skip link out at its natural size and reports one pixel
+/// while it is collapsed.
+///
+/// A plain `SizedBox` around it would lay the pill out at one pixel and
+/// wrap the label to nothing; this lets the child measure itself, paints
+/// it, and only lies about the size — which is what both the semantics
+/// rect and the parent's clip are read from. Focused, it is an ordinary
+/// pass-through.
+class _SkipLinkBox extends SingleChildRenderObjectWidget {
+  const _SkipLinkBox({required this.collapsed, required super.child});
+
+  final bool collapsed;
+
+  @override
+  _RenderSkipLinkBox createRenderObject(BuildContext context) =>
+      _RenderSkipLinkBox(collapsed);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderSkipLinkBox render) {
+    render.collapsed = collapsed;
+  }
+}
+
+class _RenderSkipLinkBox extends RenderProxyBox {
+  _RenderSkipLinkBox(this._collapsed);
+
+  bool _collapsed;
+
+  bool get collapsed => _collapsed;
+  set collapsed(bool value) {
+    if (_collapsed == value) return;
+    _collapsed = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void performLayout() {
+    // Loosened, so the pill lays out at the width it wants rather than
+    // at the one this box is about to report.
+    child!.layout(constraints.loosen(), parentUsesSize: true);
+    size = _collapsed ? const Size(1, 1) : child!.size;
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    // Drawn only when it is real. Collapsed it is a pixel, and painting
+    // a pill through a one-pixel box would leave a sliver of it visible
+    // in the corner of every screen.
+    if (_collapsed) return;
+    super.paint(context, offset);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      _collapsed ? false : super.hitTestChildren(result, position: position);
 }

@@ -109,6 +109,7 @@ export 'package:waxdeck_api_gen/src/model/episode_summary.dart';
 export 'package:waxdeck_api_gen/src/model/error.dart';
 export 'package:waxdeck_api_gen/src/model/facet_bucket.dart';
 export 'package:waxdeck_api_gen/src/model/facet_page.dart';
+export 'package:waxdeck_api_gen/src/model/facet_sort.dart';
 export 'package:waxdeck_api_gen/src/model/feed_person.dart';
 export 'package:waxdeck_api_gen/src/model/field_provenance.dart';
 export 'package:waxdeck_api_gen/src/model/file_diagnostic.dart';

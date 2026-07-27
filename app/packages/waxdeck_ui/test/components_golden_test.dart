@@ -495,6 +495,83 @@ void main() {
     );
 
     goldenTest(
+      'search, filters, and the rail read at both text scales',
+      fileName: 'index_chrome',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in <WaxThemeVariant>[
+            WaxThemeVariant.dark,
+            WaxThemeVariant.light,
+          ])
+            for (final scale in <double>[1, 1.5])
+              GoldenTestScenario(
+                name: '${variant.name} ${scale}x',
+                child: MediaQuery(
+                  data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+                  child: _themed(
+                    variant,
+                    SizedBox(
+                      width: 420,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                SearchField(
+                                  hint: 'Search your library',
+                                  onChanged: (_) {},
+                                ),
+                                const SizedBox(height: WaxSpace.s12),
+                                SearchField(onTap: () {}),
+                                const SizedBox(height: WaxSpace.s12),
+                                FilterChipRow(
+                                  chips: const <WaxFilterChip>[
+                                    WaxFilterChip(name: 'all', label: 'All'),
+                                    WaxFilterChip(
+                                      name: 'music',
+                                      label: 'Music',
+                                      glyph: WaxIcons.music,
+                                    ),
+                                    WaxFilterChip(
+                                      name: 'books',
+                                      label: 'Audiobooks',
+                                      glyph: WaxIcons.audiobooks,
+                                    ),
+                                  ],
+                                  selected: 'music',
+                                  onSelect: (_) {},
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: WaxSpace.s12),
+                          // 400 px letters every slice at 1x and decimates
+                          // to dots at 1.5x: the reflow is the thing worth
+                          // locking.
+                          SizedBox(
+                            height: 400,
+                            child: FastScrollRail(
+                              letters: fastScrollLetters,
+                              selected: 'M',
+                              available: const <String>{'A', 'M', 'N', 'S'},
+                              onLetter: (_) {},
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+
+    goldenTest(
       'the wordmark is drawn, not shipped as a picture',
       fileName: 'wordmark',
       builder: () => GoldenTestGroup(

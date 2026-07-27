@@ -68,6 +68,21 @@ enum DiscoveryList {
   final String wireName;
 }
 
+/// How a browse dimension's buckets are ordered.
+enum FacetSort {
+  /// Biggest buckets first: what a hub's shelves and tiles want.
+  count('count'),
+
+  /// A to Z by display label: what an index with an alphabet rail
+  /// scrolls through.
+  label('label');
+
+  const FacetSort(this.wireName);
+
+  /// Value as it appears on the wire.
+  final String wireName;
+}
+
 /// A WaxDeck account as visible to its owner.
 class WaxDeckUser {
   const WaxDeckUser({

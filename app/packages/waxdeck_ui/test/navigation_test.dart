@@ -5,7 +5,19 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 const _primary = <WaxDestination>[
   WaxDestination(name: 'home', label: 'Home', glyph: WaxIcons.home),
-  WaxDestination(name: 'music', label: 'Music', glyph: WaxIcons.music),
+  WaxDestination(
+    name: 'music',
+    label: 'Music',
+    glyph: WaxIcons.music,
+    children: <WaxDestination>[
+      WaxDestination(
+        name: 'artists',
+        label: 'Artists',
+        glyph: WaxIcons.artists,
+      ),
+      WaxDestination(name: 'albums', label: 'Albums', glyph: WaxIcons.albums),
+    ],
+  ),
   WaxDestination(name: 'podcasts', label: 'Podcasts', glyph: WaxIcons.podcasts),
   WaxDestination(name: 'radio', label: 'Radio', glyph: WaxIcons.radio),
 ];
@@ -379,6 +391,49 @@ void main() {
     });
   });
 
+  group('a hub holds the selection for its indexes', () {
+    // Every form but an open sidebar section draws the hub and not its
+    // indexes, so an index has to light the hub or the chrome lights
+    // nothing at all — which is what a phone standing on Artists did.
+    for (final entry in <String, Size>{
+      'tabs': const Size(400, 800),
+      'the rail': const Size(700, 900),
+    }.entries) {
+      testWidgets('${entry.key} light the hub', (tester) async {
+        final semantics = tester.ensureSemantics();
+        await _pumpFrame(tester, size: entry.value, selected: 'artists');
+
+        expect(
+          tester.getSemantics(find.bySemanticsLabel('Music')),
+          isSemantics(isSelected: true),
+        );
+        // And nothing else does.
+        expect(
+          tester.getSemantics(find.bySemanticsLabel('Home')),
+          isSemantics(isSelected: false),
+        );
+        semantics.dispose();
+      });
+    }
+
+    testWidgets('a collapsed sidebar lights the hub', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _pumpFrame(
+        tester,
+        size: const Size(1000, 900),
+        selected: 'artists',
+        collapsed: true,
+        onToggleCollapsed: () {},
+      );
+
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Music')),
+        isSemantics(isSelected: true),
+      );
+      semantics.dispose();
+    });
+  });
+
   group('sidebar', () {
     testWidgets('opens the group holding the active destination', (
       tester,
@@ -443,6 +498,80 @@ void main() {
     testWidgets('offers no collapse control without a handler', (tester) async {
       await _pumpFrame(tester, size: const Size(1000, 900));
       expect(find.bySemanticsLabel('Collapse sidebar'), findsNothing);
+    });
+
+    testWidgets('an open section lights the index, not the hub', (
+      tester,
+    ) async {
+      await _pumpFrame(tester, size: const Size(1000, 900), selected: 'albums');
+
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Albums')),
+        isSemantics(isSelected: true),
+      );
+      // Two lit rows for one location would read as two places.
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Music')),
+        isSemantics(isSelected: false),
+      );
+    });
+
+    testWidgets('a domain hub discloses its indexes and still navigates', (
+      tester,
+    ) async {
+      final selections = await _pumpFrame(
+        tester,
+        size: const Size(1000, 900),
+        selected: 'home',
+      );
+      expect(find.text('Artists'), findsNothing);
+
+      // The two controls do different things and are found separately:
+      // the chevron opens the section, the row goes to the hub.
+      await tester.tap(find.bySemanticsLabel('Expand Music'));
+      await tester.pumpAndSettle();
+      expect(find.text('Artists'), findsOneWidget);
+      expect(selections, isEmpty);
+
+      await tester.tap(find.text('Music'));
+      await tester.pumpAndSettle();
+      expect(selections, <String>['music']);
+
+      await tester.tap(find.text('Artists'));
+      await tester.pumpAndSettle();
+      expect(selections, <String>['music', 'artists']);
+    });
+
+    testWidgets('a hub opens itself when it or an index is where you are', (
+      tester,
+    ) async {
+      await _pumpFrame(tester, size: const Size(1000, 900), selected: 'albums');
+      // Arriving at an index by URL must not hide it inside a closed
+      // section.
+      expect(find.text('Albums'), findsOneWidget);
+
+      // And the auto-open is a default, not a floor.
+      await tester.tap(find.bySemanticsLabel('Collapse Music'));
+      await tester.pumpAndSettle();
+      expect(find.text('Albums'), findsNothing);
+    });
+
+    testWidgets('drops sub-destinations at rail width, not the hub', (
+      tester,
+    ) async {
+      await _pumpFrame(
+        tester,
+        size: const Size(1000, 900),
+        collapsed: true,
+        onToggleCollapsed: () {},
+      );
+
+      // Unlike a group's children, these are reachable one tap further
+      // on — the hub they belong to lists them — so the rail spends its
+      // icons on destinations that are reachable nowhere else.
+      expect(find.bySemanticsLabel('Music'), findsOneWidget);
+      expect(find.bySemanticsLabel('Artists'), findsNothing);
+      expect(find.bySemanticsLabel('Expand Music'), findsNothing);
     });
   });
 
@@ -725,6 +854,46 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(backs, 1);
+    });
+
+    testWidgets('reports one pixel while it is collapsed', (tester) async {
+      // The half of that problem Flutter's own hit test cannot answer.
+      // On web the semantics tree is real DOM, and an element carrying a
+      // tap action takes the browser's click for its whole rect whatever
+      // an IgnorePointer above it says — so the rect is what has to
+      // shrink. At the leading corner the old full-size box sat over the
+      // sidebar header, where the search field is: visible, and
+      // unclickable with a mouse.
+      final semantics = tester.ensureSemantics();
+      await _pumpFrame(tester, size: const Size(1000, 900));
+
+      final collapsed = tester.getRect(
+        find.bySemanticsLabel('Skip to content'),
+      );
+      expect(collapsed.size, const Size(1, 1));
+      // Not zero: a zero-size render object leaves the semantics tree,
+      // which takes the link out of the tab order.
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Skip to content')).rect,
+        isNot(Rect.zero),
+      );
+
+      // Tabbed to, it is a real control again, at a size somebody can
+      // read and click. This is the whole trade: the link is a pixel
+      // until a keyboard asks for it, and a pill from then on.
+      for (var press = 0; press < 12; press++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        if (tester.getRect(find.bySemanticsLabel('Skip to content')).width >
+            100) {
+          break;
+        }
+      }
+      expect(
+        tester.getRect(find.bySemanticsLabel('Skip to content')).width,
+        greaterThan(100),
+      );
+      semantics.dispose();
     });
 
     testWidgets('lands on the content region when the page has no controls', (

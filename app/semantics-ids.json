@@ -591,33 +591,11 @@
     },
     {
       "name": "library",
-      "doc": "Browse and the library grid, including the per-item cards the sync specs drive.",
+      "doc": "The library grid and the per-item cards the sync specs drive.",
       "ids": [
         {
           "name": "addToLibrary",
           "id": "add-to-library"
-        },
-        {
-          "name": "browseBucket",
-          "id": "browse-{dimension}-{index}",
-          "params": [
-            "dimension",
-            "index"
-          ]
-        },
-        {
-          "name": "browseItem",
-          "id": "browse-item-{index}",
-          "params": [
-            "index"
-          ]
-        },
-        {
-          "name": "browseTab",
-          "id": "browse-tab-{wireName}",
-          "params": [
-            "wireName"
-          ]
         },
         {
           "name": "item",
@@ -709,6 +687,52 @@
         {
           "name": "unofficialSwitch",
           "id": "unofficial-switch"
+        }
+      ]
+    },
+    {
+      "name": "music",
+      "doc": "The music hub, its indexes, and the buckets they drill.",
+      "ids": [
+        {
+          "name": "indexBucket",
+          "id": "index-bucket-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "indexCount",
+          "id": "index-count"
+        },
+        {
+          "name": "indexItem",
+          "id": "index-item-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "indexRail",
+          "id": "index-rail"
+        },
+        {
+          "name": "indexRailLetter",
+          "id": "index-rail-{letter}",
+          "params": [
+            "letter"
+          ]
+        },
+        {
+          "name": "indexSort",
+          "id": "index-sort"
+        },
+        {
+          "name": "musicTile",
+          "id": "music-tile-{name}",
+          "params": [
+            "name"
+          ]
         }
       ]
     },
@@ -1197,6 +1221,68 @@
       ]
     },
     {
+      "name": "search",
+      "doc": "The search screen, its filters, and the chrome that opens it.",
+      "ids": [
+        {
+          "name": "searchAction",
+          "id": "search-action"
+        },
+        {
+          "name": "searchClear",
+          "id": "search-clear"
+        },
+        {
+          "name": "searchField",
+          "id": "search-field"
+        },
+        {
+          "name": "searchFilter",
+          "id": "search-filter-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "searchHit",
+          "id": "search-hit-{kind}-{index}",
+          "params": [
+            "kind",
+            "index"
+          ]
+        },
+        {
+          "name": "searchLauncher",
+          "id": "search-launcher"
+        },
+        {
+          "name": "searchRecent",
+          "id": "search-recent-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "searchRecentRemove",
+          "id": "search-recent-remove-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "searchShowAll",
+          "id": "search-show-all-{kind}",
+          "params": [
+            "kind"
+          ]
+        },
+        {
+          "name": "searchTruncated",
+          "id": "search-truncated"
+        }
+      ]
+    },
+    {
       "name": "settings",
       "doc": "Settings: account, devices, app passwords, notifications, scrobblers, appearance.",
       "ids": [
@@ -1304,53 +1390,6 @@
       ]
     },
     {
-      "name": "shell",
-      "doc": "The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.",
-      "ids": [
-        {
-          "name": "navAccount",
-          "id": "nav-account"
-        },
-        {
-          "name": "navAccountAction",
-          "id": "nav-account-{name}",
-          "params": [
-            "name"
-          ]
-        },
-        {
-          "name": "navDestination",
-          "id": "nav-{name}",
-          "params": [
-            "name"
-          ]
-        },
-        {
-          "name": "navGroup",
-          "id": "nav-group-{name}",
-          "params": [
-            "name"
-          ]
-        },
-        {
-          "name": "navOverflow",
-          "id": "nav-overflow"
-        },
-        {
-          "name": "navRegion",
-          "id": "nav-region"
-        },
-        {
-          "name": "navSidebarCollapse",
-          "id": "nav-sidebar-collapse"
-        },
-        {
-          "name": "skipToContent",
-          "id": "skip-to-content"
-        }
-      ]
-    },
-    {
       "name": "sharing",
       "doc": "Shares and share links.",
       "ids": [
@@ -1382,6 +1421,60 @@
           "params": [
             "pid"
           ]
+        }
+      ]
+    },
+    {
+      "name": "shell",
+      "doc": "The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.",
+      "ids": [
+        {
+          "name": "navAccount",
+          "id": "nav-account"
+        },
+        {
+          "name": "navAccountAction",
+          "id": "nav-account-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "navDestination",
+          "id": "nav-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "navDisclose",
+          "id": "nav-disclose-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "navGroup",
+          "id": "nav-group-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "navOverflow",
+          "id": "nav-overflow"
+        },
+        {
+          "name": "navRegion",
+          "id": "nav-region"
+        },
+        {
+          "name": "navSidebarCollapse",
+          "id": "nav-sidebar-collapse"
+        },
+        {
+          "name": "skipToContent",
+          "id": "skip-to-content"
         }
       ]
     },

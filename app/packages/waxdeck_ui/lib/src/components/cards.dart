@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/material.dart';
 
@@ -306,6 +308,33 @@ class MediaListRow extends StatelessWidget {
   final bool playing;
   final bool selected;
   final double artSize;
+
+  /// How tall a row of [artSize] comes out, text scaling included.
+  ///
+  /// The same reason [MediaCard.heightFor] exists, from the other end: a
+  /// screen that scrolls to a row by index has to know the pitch before
+  /// the rows are built, and a guess drifts the moment the OS text scale
+  /// moves — a title and a caption at 1.5x are taller than the density's
+  /// row height, so an estimate made from that alone lands short by more
+  /// with every row it counts.
+  static double heightFor(
+    BuildContext context, {
+    double artSize = 40,
+    bool subtitle = true,
+  }) {
+    final scaler = MediaQuery.textScalerOf(context);
+    // Rounded up per line, the way the text painter lays one out: a
+    // fractional line height becomes a whole pixel on screen, and the
+    // difference compounds once a caller multiplies this by a row index.
+    double line(TextStyle style) =>
+        scaler.scale(style.height! * style.fontSize!).ceilToDouble();
+    final text =
+        line(WaxType.titleItem) + (subtitle ? line(WaxType.caption) : 0);
+    return math.max(
+      WaxLayout.of(context).rowHeight,
+      math.max(artSize, text) + WaxSpace.s8 * 2,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

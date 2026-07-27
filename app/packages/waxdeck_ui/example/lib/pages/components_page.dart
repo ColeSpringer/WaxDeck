@@ -21,6 +21,8 @@ class _ComponentsPageState extends State<ComponentsPage> {
   Duration _position = const Duration(minutes: 2, seconds: 41);
   String _destination = 'Home';
   bool _sidebarCollapsed = false;
+  String _filter = 'all';
+  String _letter = 'A';
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +67,71 @@ class _ComponentsPageState extends State<ComponentsPage> {
               badge: '12',
               active: true,
               onPressed: () {},
+            ),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
+        const SectionHeader(overline: 'Controls', title: 'Search and filters'),
+        // The two shapes side by side: the field the search screen drives,
+        // and the launcher the sidebar header holds.
+        SizedBox(
+          width: 360,
+          child: SearchField(hint: 'Search your library', onChanged: (_) {}),
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        SizedBox(width: 248, child: SearchField(onTap: () {})),
+        const SizedBox(height: WaxSpace.s12),
+        FilterChipRow(
+          chips: const <WaxFilterChip>[
+            WaxFilterChip(name: 'all', label: 'All'),
+            WaxFilterChip(name: 'music', label: 'Music', glyph: WaxIcons.music),
+            WaxFilterChip(
+              name: 'podcasts',
+              label: 'Podcasts',
+              glyph: WaxIcons.podcasts,
+            ),
+            WaxFilterChip(
+              name: 'books',
+              label: 'Audiobooks',
+              glyph: WaxIcons.audiobooks,
+            ),
+            WaxFilterChip(name: 'radio', label: 'Radio', glyph: WaxIcons.radio),
+          ],
+          selected: _filter,
+          onSelect: (name) => setState(() => _filter = name),
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
+        const SectionHeader(overline: 'Content', title: 'Fast-scroll rail'),
+        // Two heights: one with room to letter every slice, one short
+        // enough that the rail decimates to dots. Both must still reach
+        // every letter by drag.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            SizedBox(
+              height: 320,
+              child: FastScrollRail(
+                letters: fastScrollLetters,
+                selected: _letter,
+                available: const <String>{'A', 'B', 'M', 'S', 'T', 'Z'},
+                onLetter: (letter) => setState(() => _letter = letter),
+              ),
+            ),
+            const SizedBox(width: WaxSpace.s32),
+            SizedBox(
+              height: 160,
+              child: FastScrollRail(
+                letters: fastScrollLetters,
+                selected: _letter,
+                onLetter: (letter) => setState(() => _letter = letter),
+              ),
+            ),
+            const SizedBox(width: WaxSpace.s24),
+            Text(
+              'Jumped to $_letter',
+              style: WaxType.body.copyWith(color: colors.textSecondary),
             ),
           ],
         ),

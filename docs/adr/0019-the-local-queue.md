@@ -4,7 +4,18 @@ Date: 2026-07-25
 
 ## Status
 
-Accepted.
+Accepted, with one consequence since rejected.
+
+**The cap's windowing is not the final answer for an ordered list.** This
+ADR records that "play from track 700 of a 900-track playlist queues 500
+entries starting there" is the deliberate behaviour. It is not what the
+product wants: starting a 5,000-track genre at its first track queues 500
+and ends, with 4,500 tracks the visitor asked for silently out of reach —
+which is the truncation this decision meant to avoid, moved one screen
+later. The window stays; what is missing is the refill behind it, for the
+ordered draw as well as the shuffled one this ADR anticipated. Tracked in
+`docs/deferred-work.md` and scheduled with the queue UI; the ADR that
+builds it supersedes this paragraph.
 
 ## Context
 
@@ -162,7 +173,9 @@ keeps using.
   Widgets select the fields they care about.
 - The cap's windowing means "play from track 700 of a 900-track
   playlist" queues 500 entries starting there, not a refusal and not a
-  silent truncation to the first 500.
+  silent truncation to the first 500. **Rejected since** — see the
+  status above: a scope larger than the window needs the refill, not
+  just the window.
 - A failed write is swallowed and printed. Persistence is a cache with
   no other symptom: a queue that stopped being written looks exactly
   like one that was, until the next launch offers nothing, so the

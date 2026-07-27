@@ -2,7 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../library/browse_controller.dart';
+import '../music/music_controllers.dart';
 
 /// Every canonical location in the app, in one place.
 ///
@@ -27,8 +27,35 @@ abstract final class WaxRoute {
   /// for, so the deep link survives the trip through the login form.
   static const fromParam = 'from';
 
-  static const browse = '/browse';
-  static const browseItems = '$browse/items';
+  /// One search over everything the caller can see. The query is in the
+  /// URL, so a result set is a link.
+  static const search = '/search';
+  static const searchParam = 'q';
+
+  static String searchFor(String query) => Uri(
+    path: search,
+    queryParameters: query.isEmpty ? null : {searchParam: query},
+  ).toString();
+
+  /// The music domain: a hub, an index per dimension, and a listing per
+  /// bucket. Every one of them is a place a stranger can open.
+  static const music = '/music';
+  static const musicTracks = '$music/tracks';
+
+  static String musicIndex(MusicDimension dimension) =>
+      '$music/${dimension.segment}';
+
+  /// One bucket's listing. [segment] is the handle
+  /// [musicBucketSegment] mints: an `ar-`/`al-` pid where the bucket is
+  /// an entity, the bucket key otherwise, and [musicUnknownSegment] for
+  /// the bucket a dimension is absent from.
+  /// Encoded, though the four shipped dimensions never need it: their
+  /// handles are prefixed ULIDs, digits, and the unknown sentinel. The
+  /// endpoint enumerates `kind` and `tag.<KEY>` too, whose keys are free
+  /// text, and a helper that is safe only for its current callers is a
+  /// trap for the next one.
+  static String musicBucket(MusicDimension dimension, String segment) =>
+      '${musicIndex(dimension)}/${Uri.encodeComponent(segment)}';
 
   static const playlists = '/playlists';
 
@@ -112,15 +139,6 @@ class TrackListArgs {
   final MixBasis basis;
   final List<ItemSummary> items;
   final String idPrefix;
-}
-
-/// One bucket of one browse dimension. The bucket carries its label and
-/// count, which the key alone cannot rebuild.
-class BrowseBucketArgs {
-  const BrowseBucketArgs({required this.dimension, required this.bucket});
-
-  final BrowseDimension dimension;
-  final FacetBucket bucket;
 }
 
 /// The account an admin opened, plus whether this is an approval of a

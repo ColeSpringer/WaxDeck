@@ -1,6 +1,6 @@
 import { test, expect, APIRequestContext, Page } from './fixtures';
 import crypto from 'node:crypto';
-import { authed, clickThrough, ensureAdmin, typeInto, waitForLibrary } from './helpers';
+import { authed, clickThrough, ensureAdmin, openMusicSection, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The playlists slice over the real stack: the rule editor building a
@@ -16,7 +16,8 @@ async function login(page: Page) {
   await typeInto(page, username, 'admin');
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
   await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem(SemanticsIds.navDestination('playlists'))).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.navDestination('music'))).waitFor({ timeout: 30_000 });
+  await openMusicSection(page);
 }
 
 test('the rule editor builds, previews, and saves a smart playlist', async ({

@@ -299,7 +299,15 @@ func (s *Server) ListFacets(ctx context.Context, req ListFacetsRequestObject) (L
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.svc.Facets(ctx, uc, string(req.Params.Dimension), deref(req.Params.Cursor), limit)
+	sort := ""
+	if req.Params.Sort != nil {
+		sort = string(*req.Params.Sort)
+	}
+	order, err := service.ParseFacetSort(sort)
+	if err != nil {
+		return ListFacets400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+	}
+	page, err := s.svc.Facets(ctx, uc, string(req.Params.Dimension), order, deref(req.Params.Cursor), limit)
 	if err != nil {
 		if kind := service.KindOf(err); kind == service.KindInvalid {
 			return ListFacets400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil

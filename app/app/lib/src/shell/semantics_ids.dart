@@ -133,12 +133,8 @@ abstract final class SemanticsIds {
   static String upgradeGroup(Object itemPid) => 'upgrade-group-$itemPid';
   static String upgradeResolve(Object itemPid) => 'upgrade-resolve-$itemPid';
 
-  // library: Browse and the library grid, including the per-item cards the sync specs drive.
+  // library: The library grid and the per-item cards the sync specs drive.
   static const String addToLibrary = 'add-to-library';
-  static String browseBucket(Object dimension, Object index) =>
-      'browse-$dimension-$index';
-  static String browseItem(Object index) => 'browse-item-$index';
-  static String browseTab(Object wireName) => 'browse-tab-$wireName';
   static String item(Object pid) => 'item-$pid';
   static const String itemDelete = 'item-delete';
   static const String itemDeleteConfirm = 'item-delete-confirm';
@@ -160,6 +156,15 @@ abstract final class SemanticsIds {
   static const String tagAdd = 'tag-add';
   static String tagRemove(Object key) => 'tag-remove-$key';
   static const String unofficialSwitch = 'unofficial-switch';
+
+  // music: The music hub, its indexes, and the buckets they drill.
+  static String indexBucket(Object index) => 'index-bucket-$index';
+  static const String indexCount = 'index-count';
+  static String indexItem(Object index) => 'index-item-$index';
+  static const String indexRail = 'index-rail';
+  static String indexRailLetter(Object letter) => 'index-rail-$letter';
+  static const String indexSort = 'index-sort';
+  static String musicTile(Object name) => 'music-tile-$name';
 
   // organize: Organize: previews, duplicates, and upgrade groups.
   static const String organizeApply = 'organize-apply';
@@ -266,6 +271,20 @@ abstract final class SemanticsIds {
   static const String reviewUnofficial = 'review-unofficial';
   static String trackMenu(Object pid) => 'track-menu-$pid';
 
+  // search: The search screen, its filters, and the chrome that opens it.
+  static const String searchAction = 'search-action';
+  static const String searchClear = 'search-clear';
+  static const String searchField = 'search-field';
+  static String searchFilter(Object name) => 'search-filter-$name';
+  static String searchHit(Object kind, Object index) =>
+      'search-hit-$kind-$index';
+  static const String searchLauncher = 'search-launcher';
+  static String searchRecent(Object index) => 'search-recent-$index';
+  static String searchRecentRemove(Object index) =>
+      'search-recent-remove-$index';
+  static String searchShowAll(Object kind) => 'search-show-all-$kind';
+  static const String searchTruncated = 'search-truncated';
+
   // settings: Settings: account, devices, app passwords, notifications, scrobblers, appearance.
   static const String appPasswordAdd = 'app-password-add';
   static String appPasswordRevoke(Object id) => 'app-password-revoke-$id';
@@ -291,22 +310,23 @@ abstract final class SemanticsIds {
   static const String timezoneEdit = 'timezone-edit';
   static const String timezoneSave = 'timezone-save';
 
-  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.
-  static const String navAccount = 'nav-account';
-  static String navAccountAction(Object name) => 'nav-account-$name';
-  static String navDestination(Object name) => 'nav-$name';
-  static String navGroup(Object name) => 'nav-group-$name';
-  static const String navOverflow = 'nav-overflow';
-  static const String navRegion = 'nav-region';
-  static const String navSidebarCollapse = 'nav-sidebar-collapse';
-  static const String skipToContent = 'skip-to-content';
-
   // sharing: Shares and share links.
   static String shareCopy(Object pid) => 'share-copy-$pid';
   static const String shareCreate = 'share-create';
   static const String shareExpiry = 'share-expiry';
   static String shareRevoke(Object pid) => 'share-revoke-$pid';
   static String shareRow(Object pid) => 'share-row-$pid';
+
+  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.
+  static const String navAccount = 'nav-account';
+  static String navAccountAction(Object name) => 'nav-account-$name';
+  static String navDestination(Object name) => 'nav-$name';
+  static String navDisclose(Object name) => 'nav-disclose-$name';
+  static String navGroup(Object name) => 'nav-group-$name';
+  static const String navOverflow = 'nav-overflow';
+  static const String navRegion = 'nav-region';
+  static const String navSidebarCollapse = 'nav-sidebar-collapse';
+  static const String skipToContent = 'skip-to-content';
 
   // stats: Listening stats and year in review.
   static const String listenLogClientFilter = 'listen-log-client-filter';

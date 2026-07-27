@@ -11,8 +11,11 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/health/diagnostics_screen.dart';
 import 'package:waxdeck/src/health/health_screen.dart';
-import 'package:waxdeck/src/library/browse_screen.dart';
 import 'package:waxdeck/src/library/library_screen.dart';
+import 'package:waxdeck/src/music/index_screen.dart';
+import 'package:waxdeck/src/music/listing_screen.dart';
+import 'package:waxdeck/src/music/music_controllers.dart';
+import 'package:waxdeck/src/music/music_hub_screen.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
@@ -25,6 +28,7 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
 import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
+import 'package:waxdeck/src/search/search_screen.dart';
 import 'package:waxdeck/src/settings/settings_screen.dart';
 import 'package:waxdeck/src/sharing/shares_screen.dart';
 import 'package:waxdeck/src/shell/adaptive_shell.dart';
@@ -50,7 +54,17 @@ const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
 /// an exception).
 final _locations = <String, Type>{
   WaxRoute.home: LibraryScreen,
-  WaxRoute.browse: BrowseScreen,
+  WaxRoute.search: SearchScreen,
+  WaxRoute.searchFor('nightjar'): SearchScreen,
+  WaxRoute.music: MusicHubScreen,
+  WaxRoute.musicTracks: MusicListingScreen,
+  for (final dimension in MusicDimension.values) ...<String, Type>{
+    WaxRoute.musicIndex(dimension): MusicIndexScreen,
+    WaxRoute.musicBucket(dimension, 'key-1'): MusicListingScreen,
+    // The bucket a dimension is absent from: its key is empty, and an
+    // empty path segment is not a location, so it travels as a sentinel.
+    WaxRoute.musicBucket(dimension, musicUnknownSegment): MusicListingScreen,
+  },
   WaxRoute.playlists: PlaylistsScreen,
   WaxRoute.playlist('pl-1'): PlaylistScreen,
   WaxRoute.podcasts: PodcastsScreen,
@@ -89,7 +103,6 @@ final _locations = <String, Type>{
 final _payloadRoutes = <String, String>{
   WaxRoute.tracks: WaxRoute.home,
   WaxRoute.remote: WaxRoute.home,
-  WaxRoute.browseItems: WaxRoute.browse,
   WaxRoute.playlistRules: WaxRoute.playlists,
   WaxRoute.playlistEdit('pl-1'): WaxRoute.playlist('pl-1'),
   WaxRoute.userEdit: WaxRoute.users,
@@ -101,6 +114,12 @@ final _payloadRoutes = <String, String>{
 /// The rest are a branch's own top-level routes: a destination is not a
 /// stack, and a shell that offered "back" from one would be lying.
 final _stackedInShell = <String>{
+  WaxRoute.musicTracks,
+  for (final dimension in MusicDimension.values) ...<String>{
+    WaxRoute.musicIndex(dimension),
+    WaxRoute.musicBucket(dimension, 'key-1'),
+    WaxRoute.musicBucket(dimension, musicUnknownSegment),
+  },
   WaxRoute.book('bk-1'),
   WaxRoute.show('pc-1'),
   WaxRoute.playlist('pl-1'),

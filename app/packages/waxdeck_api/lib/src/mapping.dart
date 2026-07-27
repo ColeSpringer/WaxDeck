@@ -44,6 +44,13 @@ gen.DiscoveryList discoveryListToGen(DiscoveryList list) {
   };
 }
 
+gen.FacetSort facetSortToGen(FacetSort sort) {
+  return switch (sort) {
+    FacetSort.count => gen.FacetSort.count,
+    FacetSort.label => gen.FacetSort.label,
+  };
+}
+
 WaxDeckUser userFromGen(gen.User user) {
   return WaxDeckUser(
     id: user.id,
