@@ -361,19 +361,39 @@ here waits on upstream.
   `FilePickerPort` deliberately does not speak; the "Upload a folder"
   tile hides there (`canPickFolders`). Multi-select plus auto
   grouping covers the album case on Android meanwhile.
-- `[in-repo]` **Upload quota does not reclaim on library deletion.** The
-  quota charges every non-discarded session's declared size, imported
-  ones included, so it reads as a total-storage-contribution cap. But a
-  deleted library item never releases its upload row's bytes: there is no
-  library-item delete endpoint (deletion runs through the waxbin CLI or
-  the dedup/merge/health flows), so nothing links "this item is gone"
-  back to the upload session, and `DeleteUpload` refuses imported rows.
-  A user who fills a small quota and then has those items deleted stays
-  locked out. The clean fix depends on a product decision left open here:
-  either the quota means in-flight footprint (then stop counting
-  imported), or it means total contribution (then a delete path, or a
-  WaxBin deletion hook, must discard the linked upload row). Not changed
-  unilaterally because the two readings imply opposite behavior.
+- `[in-repo]` **Upload quota counts imported sessions, so a filled quota
+  never frees.** `UploadBytesInUse` sums every non-discarded session's
+  declared size, imported ones included, and `DeleteUpload` refuses
+  imported rows, so bytes that reached the library stay charged for
+  good. Deleting the item does not help: `POST /library/items/delete`
+  is shipped and permission-gated, but it never touches the uploads
+  table, though `uploads.item_pid` is the link it would need. A user who
+  fills a small quota stays locked out after following the refusal's own
+  advice ("delete the item there").
+
+  Decided: the quota means in-flight footprint, not total contribution.
+  It caps what may sit in staging awaiting review, so an import releases
+  the headroom it held. The fix is the accounting predicate (skip
+  imported alongside discarded) plus honest naming, since "upload quota"
+  reads as a storage-contribution cap to most people: the admin field
+  becomes a pending-upload limit, and its helper text says that
+  importing frees the space. The rejected reading, total contribution,
+  wanted release-on-delete accounting that had to stay correct across
+  trash, restore, purge, merge, dedup, and the health fixes, and it had
+  no answer for a restore that would re-charge a user already at their
+  cap.
+
+  Lands with the admin users screen, which is what first makes a quota
+  settable: every account runs uncapped today, so neither reading is
+  observable and the label is where the decision becomes visible.
+  Recorded because the setting is easily read as something it is not.
+  This is a byte ceiling checked when a session opens, and enforced
+  through the transfer (over-length bytes are truncated), not a rate
+  limit or a time window; the only rate limiter in the server counts
+  failed logins. It does not bound what a user adds to the library over
+  time, and no free-space guard exists anywhere, so protecting the disk
+  from a trusted but enthusiastic uploader is a separate unbuilt
+  mechanism.
 - `[in-repo]` **Acquired-track metadata is cleaned for matching, not for
   display.** For a loose track the matching engine reads an "Artist -
   Track" title and a channel-style artist tag into a clean recording
