@@ -311,7 +311,16 @@ here waits on upstream.
   in seconds whether the race is gone, `WAXDECK_E2E_MT_SKWASM=1` runs
   the real suite multi-threaded to confirm, and the `perf-web` gate
   against the 100k corpus prices whatever raster-thread difference
-  remains before the force is removed.
+  remains before the force is removed. Checked 2026-07-27: the issue is
+  still open and the pinned engine has not moved
+  (83675ed27633283e7fc296c8bca22e841224c096, Flutter 3.44.6), so the
+  repro was not re-run and the force stays. The report was triaged that
+  day, labeled for the web team and routed to it for evaluation, and a
+  candidate fix is open as flutter/flutter#190048, "Link multithreaded
+  skwasm in emscripten hybrid mode". That PR merging and an engine roll
+  carrying it is the specific trigger to re-check, sharper than "when
+  the issue closes": the issue can close on the PR alone, which changes
+  nothing here until the pinned engine ships it.
 - `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists.
@@ -324,6 +333,24 @@ here waits on upstream.
 
 ## Curation and metadata
 
+- `[in-repo]` **The catalog's analyze pass never runs, so stored loudness,
+  fingerprints, and waveform peaks are empty everywhere.** The pass itself
+  is built and public: `Library.Analyze` is the resumable, job-scoped, only
+  PCM-decoding pass, and it fills all three together, stamping an analysis
+  version so the work is not repeated until the essence or an algorithm
+  changes. Nothing in the server calls it. Library startup and the tools
+  surface call `StartScan` only, and scan hashes files and reads tags
+  without decoding them; `Library.Watch`, whose options carry the flag that
+  would drive the pass, is not used either. Three features rest on data that
+  is therefore never written: ReplayGain (the crossfade entry above assumes
+  stored album gain values exist to pass as the explicit dB, and they do
+  not), fingerprint dedup grouping, and the waveform seek bar, whose
+  endpoint is otherwise a pure read of `Library.Peaks` with no computation
+  on this side at all. What is missing is the trigger and its policy: a
+  scheduled or admin-invoked run, resumable and cancelable like the other
+  long passes, with a decision about whether it follows a scan
+  automatically. Sizing it needs a measurement, since this is a full decode
+  of every file in the library.
 - `[in-repo]` **Scan discoveries do not enqueue matching on their own.** The
   identify pipeline runs for uploads and for explicit rematch
   requests; a library scan that discovers new loose files does not
