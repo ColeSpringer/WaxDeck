@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../connect/device_picker.dart';
+import '../artwork/artwork_providers.dart';
 import '../media_view.dart';
 import '../playlists/add_to_playlist_dialog.dart';
 import '../providers.dart';
@@ -151,7 +152,7 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
           // disappears in between.
           title: item?.title ?? 'Loading…',
           subtitle: item?.artist,
-          artwork: waxArtwork(item?.artUrl),
+          artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),
           domain: waxDomainOf(item?.mediaType ?? MediaType.music),
           shape: waxShapeOf(item?.mediaType ?? MediaType.music),
           // The seed the ticking leaf starts from; the live value
@@ -263,7 +264,7 @@ class _RadioDeckBar extends ConsumerWidget {
         now: NowPlayingData(
           title: station.name,
           subtitle: playback.nowPlaying,
-          artwork: waxArtwork(station.logoUrl),
+          artwork: waxArtwork(ref.watch(artworkStoreProvider), station.logoUrl),
           domain: WaxDomain.radio,
           shape: ArtworkShape.circle,
           position: Duration.zero,
@@ -309,7 +310,7 @@ class _OfferDeckBar extends ConsumerWidget {
       // count is all there is to say — and it is enough to decide on.
       title: item?.title ?? '${offer.length} queued items',
       subtitle: item?.artist ?? 'Pick up where you left off',
-      artwork: waxArtwork(item?.artUrl),
+      artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),
       domain: waxDomainOf(item?.mediaType ?? MediaType.music),
       shape: waxShapeOf(item?.mediaType ?? MediaType.music),
       onResume: restore.accept,

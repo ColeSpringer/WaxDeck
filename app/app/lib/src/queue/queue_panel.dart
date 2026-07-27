@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/artwork_providers.dart';
 import '../media_view.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -208,7 +209,7 @@ class _QueueRow extends ConsumerWidget {
     final data = MediaTileData(
       title: item?.title ?? 'Loading…',
       subtitle: item?.artist,
-      artwork: waxArtwork(item?.artUrl),
+      artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),
       domain: waxDomainOf(item?.mediaType ?? MediaType.music),
       shape: waxShapeOf(item?.mediaType ?? MediaType.music),
       trailingText: item == null

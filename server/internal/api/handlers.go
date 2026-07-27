@@ -402,6 +402,21 @@ func (s *Server) GetItem(ctx context.Context, req GetItemRequestObject) (GetItem
 	return GetItem200JSONResponse(itemJSON(d)), nil
 }
 
+// Artwork is the one response worth caching hard: the bytes for a pid
+// and size never change without the ETag changing, and a grid asks for
+// two hundred of them at once. A day of freshness with a week of
+// stale-while-revalidate turns a warm grid from two hundred conditional
+// GETs into none. It stays private and varies by the credential
+// presented because artwork follows the item's visibility: this endpoint
+// takes a session cookie or a bearer token, and a cache shared by two of
+// either must not answer one from the other's copy. No immutable: the
+// URL names a pid and a size, not the bytes, so a replaced cover reuses
+// it (which is what the ignored `v` parameter is for).
+const (
+	artCacheControl = "private, max-age=86400, stale-while-revalidate=604800"
+	artVary         = "Cookie, Authorization"
+)
+
 func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (GetItemArtResponseObject, error) {
 	size := 0
 	if req.Params.Size != nil {
@@ -427,12 +442,24 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 	// The validator is the source image hash scoped by the requested
 	// size: same source, different thumbnail sizes, different bytes.
 	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", blob.SourceHash, size))
+	cacheControl, vary := artCacheControl, artVary
 	if req.Params.IfNoneMatch != nil && *req.Params.IfNoneMatch == etag {
-		return GetItemArt304Response{}, nil
+		// A 304 repeats the validator and the freshness the body would
+		// have carried; without them the cached copy stays as stale as
+		// it was and revalidates again on the next paint.
+		return GetItemArt304Response{Headers: GetItemArt304ResponseHeaders{
+			ETag:         &etag,
+			CacheControl: &cacheControl,
+			Vary:         &vary,
+		}}, nil
 	}
 	body := bytes.NewReader(blob.Bytes)
 	length := int64(len(blob.Bytes))
-	headers := GetItemArt200ResponseHeaders{ETag: &etag}
+	headers := GetItemArt200ResponseHeaders{
+		ETag:         &etag,
+		CacheControl: &cacheControl,
+		Vary:         &vary,
+	}
 	switch blob.MimeType {
 	case "image/png":
 		return GetItemArt200ImagepngResponse{Body: body, ContentLength: length, Headers: headers}, nil

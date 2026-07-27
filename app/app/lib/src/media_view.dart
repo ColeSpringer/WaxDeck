@@ -11,6 +11,8 @@ library;
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'artwork/artwork_store.dart';
+
 WaxDomain waxDomainOf(MediaType type) => switch (type) {
   MediaType.music => WaxDomain.music,
   MediaType.podcast => WaxDomain.podcasts,
@@ -30,9 +32,7 @@ ArtworkShape waxShapeOf(MediaType type) => switch (type) {
 /// there is none: the placeholder monogram is a real state, not a
 /// loading one.
 ///
-/// A plain network image for now. The artwork pipeline (sizing rungs,
-/// bounded cache, offline pins, and the header that makes native
-/// requests authenticate) is its own phase, and this is the one line it
-/// replaces.
-ImageProvider? waxArtwork(String? url) =>
-    url == null || url.isEmpty ? null : NetworkImage(url);
+/// The store decides what a URL costs — which size rung to ask the
+/// server for, whether the bytes come off the network at all, what the
+/// decode is bounded to. Screens only decide where the cover goes.
+WaxArtwork? waxArtwork(ArtworkStore store, String? url) => store.source(url);

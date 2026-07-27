@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_box.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'stats_charts.dart';
@@ -394,13 +395,7 @@ class TopEntryRow extends StatelessWidget {
             child: SizedBox(
               width: 40,
               height: 40,
-              child: artUrl == null
-                  ? placeholder
-                  : Image.network(
-                      artUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => placeholder,
-                    ),
+              child: ArtworkBox(artUrl: artUrl, placeholder: placeholder),
             ),
           ),
         ],

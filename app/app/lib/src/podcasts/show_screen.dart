@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_box.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
@@ -220,19 +221,13 @@ class _ShowHeader extends ConsumerWidget {
                 child: SizedBox(
                   width: 96,
                   height: 96,
-                  child: artUrl == null
-                      ? ColoredBox(
-                          color: colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.podcasts, size: 40),
-                        )
-                      : Image.network(
-                          artUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => ColoredBox(
-                            color: colorScheme.surfaceContainerHighest,
-                            child: const Icon(Icons.podcasts, size: 40),
-                          ),
-                        ),
+                  child: ArtworkBox(
+                    artUrl: artUrl,
+                    placeholder: ColoredBox(
+                      color: colorScheme.surfaceContainerHighest,
+                      child: const Icon(Icons.podcasts, size: 40),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 16),

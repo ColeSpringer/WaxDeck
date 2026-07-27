@@ -16,13 +16,16 @@ import 'view_data.dart';
 /// here and inherits the same fit rules, radius, fade-in, and monogram
 /// fallback.
 ///
-/// The image itself is supplied by the caller. Sizing discipline (rung
-/// buckets, `cacheWidth`, ETag caching, the auth header native builds
-/// need) belongs to the app's artwork store, not to the design system.
+/// This is also where the one thing only the widget knows is measured:
+/// how many physical pixels the artwork will actually occupy. It asks
+/// the caller's [WaxArtwork] for exactly that many, and what comes back
+/// is the app's business — which stored size to fetch, what to decode at,
+/// where the bytes are cached. A caller that animates [size] re-asks as
+/// it animates, so animate the box (a scale, a hero flight), not this.
 class ArtworkImage extends StatelessWidget {
   const ArtworkImage({
     required this.size,
-    this.image,
+    this.artwork,
     this.monogram,
     this.shape = ArtworkShape.square,
     this.domain = WaxDomain.music,
@@ -36,7 +39,7 @@ class ArtworkImage extends StatelessWidget {
   /// this size on a matte, so a mixed grid stays on one baseline.
   final double size;
 
-  final ImageProvider? image;
+  final WaxArtwork? artwork;
 
   /// Drawn when there is no artwork: the first letters of the title, over
   /// a domain-tinted tile. A missing cover is a real state, not a loading
@@ -64,6 +67,12 @@ class ArtworkImage extends StatelessWidget {
       ArtworkShape.square => size >= 160 ? WaxRadius.artHero : WaxRadius.r10,
     };
 
+    // The size the caller is asked for is the size that will be painted:
+    // logical extent times this display's pixel ratio, rounded up so a
+    // fractional grid extent never asks for less than it draws.
+    final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+    final image = artwork?.call((size * ratio).ceil());
+
     Widget content;
     if (image == null) {
       content = _Monogram(
@@ -74,7 +83,7 @@ class ArtworkImage extends StatelessWidget {
       );
     } else {
       content = Image(
-        image: image!,
+        image: image,
         fit: shape == ArtworkShape.portrait ? BoxFit.contain : BoxFit.cover,
         width: size,
         height: size,

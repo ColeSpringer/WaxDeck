@@ -39,7 +39,7 @@ class EntityHeader extends StatelessWidget {
   /// "1975 · 9 tracks · 41 min", set in the caption voice.
   final String? metadata;
 
-  final ImageProvider? artwork;
+  final WaxArtwork? artwork;
   final ArtworkShape shape;
   final WaxDomain domain;
   final WaxPalette? palette;
@@ -60,7 +60,7 @@ class EntityHeader extends StatelessWidget {
 
     final art = ArtworkImage(
       size: artSize,
-      image: artwork,
+      artwork: artwork,
       monogram: title,
       shape: shape,
       domain: domain,

@@ -144,7 +144,7 @@ class _MediaCardState extends State<MediaCard> {
       children: <Widget>[
         ArtworkImage(
           size: width,
-          image: data.artwork,
+          artwork: data.artwork,
           monogram: data.title,
           shape: data.shape,
           domain: data.domain,
@@ -359,7 +359,7 @@ class MediaListRow extends StatelessWidget {
                 else
                   ArtworkImage(
                     size: artSize,
-                    image: data.artwork,
+                    artwork: data.artwork,
                     monogram: data.title,
                     shape: data.shape,
                     domain: data.domain,

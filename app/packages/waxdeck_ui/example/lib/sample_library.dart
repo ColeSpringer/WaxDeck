@@ -270,7 +270,11 @@ class SampleArt {
 
   final Map<String, ImageProvider> _covers;
 
-  ImageProvider of(String seed) => _covers[seed] ?? _covers.values.first;
+  /// One cover at every size: the catalogue paints at 512 and the
+  /// components draw it down. The app's store is what varies the fetch
+  /// by size; there is nothing to fetch here.
+  WaxArtwork of(String seed) =>
+      fixedArtwork(_covers[seed] ?? _covers.values.first);
 
   static Future<SampleArt> generate(
     List<String> seeds, {

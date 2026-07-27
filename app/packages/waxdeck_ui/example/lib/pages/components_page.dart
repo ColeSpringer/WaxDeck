@@ -185,18 +185,18 @@ class _ComponentsPageState extends State<ComponentsPage> {
         const SectionHeader(overline: 'Content', title: 'Artwork shapes'),
         Row(
           children: <Widget>[
-            ArtworkImage(size: 96, image: art.of('Salt Harbour')),
+            ArtworkImage(size: 96, artwork: art.of('Salt Harbour')),
             const SizedBox(width: WaxSpace.s16),
             ArtworkImage(
               size: 96,
-              image: art.of('A History of Tides'),
+              artwork: art.of('A History of Tides'),
               shape: ArtworkShape.portrait,
               domain: WaxDomain.audiobooks,
             ),
             const SizedBox(width: WaxSpace.s16),
             ArtworkImage(
               size: 96,
-              image: art.of('Coastal FM'),
+              artwork: art.of('Coastal FM'),
               shape: ArtworkShape.circle,
               domain: WaxDomain.radio,
             ),
@@ -207,7 +207,11 @@ class _ComponentsPageState extends State<ComponentsPage> {
               domain: WaxDomain.podcasts,
             ),
             const SizedBox(width: WaxSpace.s16),
-            ArtworkImage(size: 96, image: art.of('Marginalia'), progress: 0.44),
+            ArtworkImage(
+              size: 96,
+              artwork: art.of('Marginalia'),
+              progress: 0.44,
+            ),
           ],
         ),
         const SizedBox(height: WaxSpace.s24),

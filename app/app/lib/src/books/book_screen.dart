@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_box.dart';
 import '../auth/auth_controller.dart';
 import '../player/now_playing_controller.dart';
 import '../podcasts/episode_screen.dart' show formatCueTimestamp;
@@ -138,19 +139,13 @@ class _BookBody extends ConsumerWidget {
               child: SizedBox(
                 width: 112,
                 height: 112,
-                child: artUrl == null
-                    ? ColoredBox(
-                        color: colorScheme.surfaceContainerHighest,
-                        child: const Icon(Icons.menu_book, size: 48),
-                      )
-                    : Image.network(
-                        artUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => ColoredBox(
-                          color: colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.menu_book, size: 48),
-                        ),
-                      ),
+                child: ArtworkBox(
+                  artUrl: artUrl,
+                  placeholder: ColoredBox(
+                    color: colorScheme.surfaceContainerHighest,
+                    child: const Icon(Icons.menu_book, size: 48),
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 16),

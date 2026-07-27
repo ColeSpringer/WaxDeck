@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -94,5 +95,62 @@ func TestArtworkRolesAndLevelScope(t *testing.T) {
 	}
 	if !backStill {
 		t.Fatalf("back slot lost when clearing front: %+v", after.Roles)
+	}
+}
+
+// TestArtCacheHeaders pins the caching contract the client grids are
+// built on. Before it, a warm two-hundred-cover grid spent a conditional
+// GET per cover because the response carried a validator and no
+// freshness at all. The 304 carries the same three headers as the body:
+// a revalidated copy that learns nothing about its own freshness
+// revalidates again on the next paint, which is the round trip this is
+// here to remove.
+func TestArtCacheHeaders(t *testing.T) {
+	h := newHarness(t)
+	page := h.items(t, "")
+	if len(page.Items) == 0 {
+		t.Fatal("no items in the demo library")
+	}
+	pid := page.Items[0].Pid
+	wantStatus(t, metadataPutBytes(t, h.ts, "/api/v1/items/"+pid+"/artwork", h.token, tinyPNG(t)),
+		200, "set front")
+
+	resp := getArt(t, h, "/api/v1/items/"+pid+"/art?size=256", "")
+	etag := resp.Header.Get("ETag")
+	cacheControl := resp.Header.Get("Cache-Control")
+	vary := resp.Header.Get("Vary")
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("art status = %d, want 200", resp.StatusCode)
+	}
+	if etag == "" {
+		t.Error("the art response carries no ETag")
+	}
+	if cacheControl != artCacheControl {
+		t.Errorf("Cache-Control = %q, want %q", cacheControl, artCacheControl)
+	}
+	// Artwork follows the item's visibility, so a cache shared by two
+	// accounts must key on the session and no shared cache may store it
+	// at all.
+	if vary != artVary {
+		t.Errorf("Vary = %q, want %q", vary, artVary)
+	}
+	if !strings.HasPrefix(cacheControl, "private,") {
+		t.Errorf("Cache-Control = %q, want it to start private", cacheControl)
+	}
+
+	again := getArt(t, h, "/api/v1/items/"+pid+"/art?size=256", etag)
+	again.Body.Close()
+	if again.StatusCode != 304 {
+		t.Fatalf("If-None-Match status = %d, want 304", again.StatusCode)
+	}
+	if got := again.Header.Get("ETag"); got != etag {
+		t.Errorf("304 ETag = %q, want the validator it was asked with (%q)", got, etag)
+	}
+	if got := again.Header.Get("Cache-Control"); got != artCacheControl {
+		t.Errorf("304 Cache-Control = %q, want %q", got, artCacheControl)
+	}
+	if got := again.Header.Get("Vary"); got != artVary {
+		t.Errorf("304 Vary = %q, want %q", got, artVary)
 	}
 }

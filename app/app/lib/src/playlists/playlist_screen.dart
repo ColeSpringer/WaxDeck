@@ -217,7 +217,7 @@ class PlaylistScreen extends ConsumerWidget {
       await ref
           .read(playlistDetailProvider(pid).notifier)
           .setCover(bytes.takeBytes());
-      await evictPlaylistCover(stale);
+      await evictPlaylistCover(ref, stale);
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
@@ -238,7 +238,7 @@ class PlaylistScreen extends ConsumerWidget {
     final stale = ref.read(playlistDetailProvider(pid)).value?.playlist.artUrl;
     try {
       await ref.read(playlistDetailProvider(pid).notifier).resetCover();
-      await evictPlaylistCover(stale);
+      await evictPlaylistCover(ref, stale);
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(

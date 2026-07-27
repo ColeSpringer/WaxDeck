@@ -324,12 +324,13 @@ class LibraryApi {
   }
 
   /// Get artwork
-  /// Artwork as image bytes: the original at full size, or a square-fit thumbnail when &#x60;size&#x60; is given. Besides item PIDs this endpoint also accepts album (&#x60;al-&#x60;), artist (&#x60;ar-&#x60;), podcast show (&#x60;pc-&#x60;), and playlist (&#x60;pl-&#x60;) PIDs, so search hits, subscription lists, and playlist grids can render artwork directly. A playlist answers its own cover, whether the owner uploaded one or the server built it from the members, and follows the same visibility rule as every other playlist read. Items without any artwork in their fallback chain return 404. Responses carry a content-addressed &#x60;ETag&#x60;; revalidate with &#x60;If-None-Match&#x60; instead of refetching. 
+  /// Artwork as image bytes: the original at full size, or a square-fit thumbnail when &#x60;size&#x60; is given. Besides item PIDs this endpoint also accepts album (&#x60;al-&#x60;), artist (&#x60;ar-&#x60;), podcast show (&#x60;pc-&#x60;), and playlist (&#x60;pl-&#x60;) PIDs, so search hits, subscription lists, and playlist grids can render artwork directly. A playlist answers its own cover, whether the owner uploaded one or the server built it from the members, and follows the same visibility rule as every other playlist read. Items without any artwork in their fallback chain return 404. Responses carry a content-addressed &#x60;ETag&#x60;; revalidate with &#x60;If-None-Match&#x60; instead of refetching.  Responses are cacheable for a day and reusable while revalidating for a week (&#x60;Cache-Control&#x60;), so a warm grid paints from the cache instead of spending a conditional GET per cover. The bytes are per-caller (artwork follows the item&#39;s visibility), so the directive is &#x60;private&#x60; and the response varies by the credential presented (&#x60;Cookie&#x60; or &#x60;Authorization&#x60;): a browser shared by two accounts must not answer one from the other&#39;s cache.  A URL names a PID and a size, not the bytes behind them, so a client that replaces an entity&#39;s artwork has to defeat its own caches: vary &#x60;v&#x60; to do it. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [role] - Which artwork slot to read. Only `front` (the default) walks the album/artist fallback chain; `back`, `disc`, `booklet`, and `background` resolve at the requested entity's own level and 404 when that entity holds no image in the slot. 
   /// * [size] - Longest-edge bound in pixels for a thumbnail. Omit for the original image. 
+  /// * [v] - Opaque cache-buster, ignored by the server. Artwork lives at one URL whatever it holds, and this response is cacheable for a day, so a client that has just replaced an entity's cover would otherwise keep painting the old bytes out of its own cache. Varying this asks for the same image under a name no cache has seen. 
   /// * [ifNoneMatch] - Previously returned `ETag`; a match answers 304 with no body.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
@@ -344,6 +345,7 @@ class LibraryApi {
     required String pid,
     ArtRole? role,
     int? size,
+    String? v,
     String? ifNoneMatch,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -381,6 +383,7 @@ class LibraryApi {
     final _queryParameters = <String, dynamic>{
       if (role != null) r'role': encodeQueryParameter(_serializers, role, const FullType(ArtRole)),
       if (size != null) r'size': encodeQueryParameter(_serializers, size, const FullType(int)),
+      if (v != null) r'v': encodeQueryParameter(_serializers, v, const FullType(String)),
     };
 
     final _response = await _dio.request<Object>(

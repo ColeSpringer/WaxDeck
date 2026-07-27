@@ -361,7 +361,7 @@ class PlayerScaffold extends StatelessWidget {
                 tag: 'deck-artwork',
                 child: ArtworkImage(
                   size: now.domain == WaxDomain.podcasts ? 200 : artSize,
-                  image: now.artwork,
+                  artwork: now.artwork,
                   monogram: now.title,
                   shape: now.shape,
                   domain: now.domain,
@@ -398,7 +398,7 @@ class PlayerScaffold extends StatelessWidget {
             tag: 'deck-artwork',
             child: ArtworkImage(
               size: (height - WaxSpace.s64).clamp(100.0, 260.0),
-              image: now.artwork,
+              artwork: now.artwork,
               monogram: now.title,
               shape: now.shape,
               domain: now.domain,

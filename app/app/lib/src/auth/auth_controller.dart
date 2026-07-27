@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_providers.dart';
 import '../providers.dart';
 import '../queue/queue_persistence.dart';
 import 'credential_store.dart';
@@ -163,6 +164,9 @@ class AuthController extends AsyncNotifier<SessionState> {
     // would otherwise put back in front of whoever signs in next, since
     // the next launch offers to resume it by name.
     await forgetQueueOnSignOut(ref);
+    // Artwork is the other: cached covers and the pins beside the
+    // downloads outlive the session that was allowed to see them.
+    await ref.read(artworkStoreProvider).forgetEverything();
     state = const AsyncData(SessionState(authenticated: false));
   }
 }

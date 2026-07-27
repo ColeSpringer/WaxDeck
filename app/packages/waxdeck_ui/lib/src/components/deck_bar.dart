@@ -380,7 +380,7 @@ class DeckBar extends StatelessWidget {
     children: <Widget>[
       ArtworkImage(
         size: size,
-        image: now.artwork,
+        artwork: now.artwork,
         monogram: now.title,
         shape: now.shape,
         domain: now.domain,
@@ -615,7 +615,7 @@ class DeckBarOffer extends StatelessWidget {
   /// count when the catalogue cannot name it (offline, never synced).
   final String title;
   final String? subtitle;
-  final ImageProvider? artwork;
+  final WaxArtwork? artwork;
   final WaxDomain domain;
   final ArtworkShape shape;
 
@@ -656,7 +656,7 @@ class DeckBarOffer extends StatelessWidget {
                 children: <Widget>[
                   ArtworkImage(
                     size: 48,
-                    image: artwork,
+                    artwork: artwork,
                     monogram: title,
                     shape: shape,
                     domain: domain,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_box.dart';
 import '../media_icons.dart';
 import '../player/now_playing_controller.dart';
 import '../queue/queue_state.dart';
@@ -111,13 +112,7 @@ class _TrackRow extends ConsumerWidget {
           child: SizedBox(
             width: 48,
             height: 48,
-            child: artUrl == null
-                ? placeholder
-                : Image.network(
-                    artUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => placeholder,
-                  ),
+            child: ArtworkBox(artUrl: artUrl, placeholder: placeholder),
           ),
         ),
         title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),

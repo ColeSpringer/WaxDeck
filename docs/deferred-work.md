@@ -83,14 +83,14 @@ here waits on upstream.
   Like the wifi-only preload switch above, the setting belongs in Settings,
   Playback and needs the per-device client-settings store, which lands with
   the settings rebuild. See ADR-0023.
-- `[in-repo]` **Offline artwork caching.** The offline grid shows placeholders;
-  artwork is only fetched live. The `ArtworkPins` table it needs is in
-  place (mirror schema v2); the store that fills and reads it is not.
 - `[roadmap]` **Web loading and scrolling performance.** Parked for the larger UI
   and UX overhaul rather than spot-fixed. The recorded perf gate
   measured the virtualized grid without artwork; the suspected
   aggravator is per-card artwork fetches at grid scale, so the
-  overhaul's measurement pass should use real content.
+  overhaul's measurement pass should use real content. The artwork
+  pipeline (ADR-0025) took the cheap levers — sized requests, bounded
+  decodes, a day of client-side freshness — and the measurement is
+  still owed.
 - `[in-repo]` **Discord rich presence from the desktop builds.** The
   Spotify-style "Listening to" status (track, artist, album art, a
   progress bar) while WaxDeck plays. Distinct from the Discord

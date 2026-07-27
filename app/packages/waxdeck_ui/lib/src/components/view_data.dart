@@ -21,6 +21,26 @@ enum ArtworkShape {
   circle,
 }
 
+/// How a component asks for the artwork it is about to draw.
+///
+/// The component is the only thing that knows how big the artwork will
+/// be on this screen (its extent times the device pixel ratio); the app
+/// is the only thing that knows how a URL becomes bytes — which stored
+/// size to ask the server for, the header a native request needs, the
+/// copy pinned for offline. So artwork crosses the boundary as a
+/// function of the size it will be drawn at, in physical pixels, and the
+/// app answers with a provider fetched and decoded for that size.
+///
+/// Answering null is a real state, not a loading one: an item with no
+/// cover draws the monogram.
+typedef WaxArtwork = ImageProvider? Function(int px);
+
+/// Artwork that is already decided at every size: assets, generated
+/// covers, test doubles. Anything drawn from a URL comes through the
+/// app's artwork store instead, which sizes the request to the draw.
+WaxArtwork fixedArtwork(ImageProvider provider) =>
+    (_) => provider;
+
 /// What a card or row needs to draw one item.
 ///
 /// Plain data on purpose: `waxdeck_ui` never imports the API package, so
@@ -46,9 +66,10 @@ class MediaTileData {
   final String title;
   final String? subtitle;
 
-  /// The artwork itself. Null renders the monogram placeholder, which is
-  /// a real state (fresh imports, feeds without art), not a loading one.
-  final ImageProvider? artwork;
+  /// The artwork, asked for at the size the card will draw it. Null
+  /// renders the monogram placeholder, which is a real state (fresh
+  /// imports, feeds without art), not a loading one.
+  final WaxArtwork? artwork;
 
   final WaxDomain domain;
   final ArtworkShape shape;
@@ -112,7 +133,7 @@ class NowPlayingData {
   /// line; nothing else reads it.
   final String? provenance;
 
-  final ImageProvider? artwork;
+  final WaxArtwork? artwork;
   final WaxDomain domain;
   final ArtworkShape shape;
 

@@ -1,8 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_box.dart';
+import '../artwork/artwork_precache.dart';
 import '../auth/auth_controller.dart';
 import '../media_icons.dart';
 import '../player/now_playing_controller.dart';
@@ -161,37 +165,93 @@ class LibraryScreen extends ConsumerWidget {
     if (state.items.isEmpty) {
       return const Center(child: Text('Nothing here yet'));
     }
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        final metrics = notification.metrics;
-        if (metrics.pixels >= metrics.maxScrollExtent - 400) {
-          ref.read(libraryControllerProvider.notifier).loadMore();
-        }
-        return false;
+    final precacher = ref.watch(artworkPrecacherProvider);
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        // The delegate's own arithmetic, including its clamp: a pane too
+        // narrow for one column still lays out one, and dividing by the
+        // zero column count a naive ceil gives would make every number
+        // after it infinite.
+        final pane = constraints.hasBoundedWidth
+            ? math.max(0.0, constraints.maxWidth - 32)
+            : _gridExtent;
+        final columns = math.max(
+          1,
+          (pane / (_gridExtent + _gridSpacing)).ceil(),
+        );
+        final cell = math.max(
+          1.0,
+          (pane - _gridSpacing * (columns - 1)) / columns,
+        );
+        final rowHeight = cell / _gridRatio + _gridSpacing;
+        final ratio = MediaQuery.devicePixelRatioOf(context);
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            final metrics = notification.metrics;
+            if (metrics.pixels >= metrics.maxScrollExtent - 400) {
+              ref.read(libraryControllerProvider.notifier).loadMore();
+            }
+            if (notification is ScrollEndNotification) {
+              // Where the viewport ends, from the same geometry the grid
+              // lays out with: the first row below the fold, and two
+              // screenfuls of it. A scroll fraction would have named a
+              // row inside the viewport, spending half the window on
+              // covers that are already painted.
+              final visibleRows = (metrics.viewportDimension / rowHeight)
+                  .ceil();
+              final firstBelow =
+                  ((metrics.pixels / rowHeight).floor() + visibleRows) *
+                  columns;
+              precacher.warmAhead(
+                urls: <String?>[
+                  for (final item
+                      in state.items
+                          .skip(firstBelow)
+                          .take(visibleRows * columns * 2))
+                    item.artUrl,
+                ],
+                // The cell's width: the card gives its artwork the full
+                // width and less than the full height, so the width is
+                // the edge [ArtworkBox] measures itself by.
+                px: (cell * ratio).ceil(),
+              );
+            }
+            return false;
+          },
+          child: GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: _gridExtent,
+              mainAxisSpacing: _gridSpacing,
+              crossAxisSpacing: _gridSpacing,
+              childAspectRatio: _gridRatio,
+            ),
+            // A grid cell holds no state worth keeping alive off screen,
+            // and keeping them alive holds their decoded artwork with
+            // them: the image cache is what remembers a scrolled-past
+            // cover, and it has bounds.
+            addAutomaticKeepAlives: false,
+            itemCount: state.items.length + (state.loadingMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index >= state.items.length) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final item = state.items[index];
+              return _ItemCard(
+                item: item,
+                onTap: () => _openPlayer(context, ref, item),
+              );
+            },
+          ),
+        );
       },
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 200,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 0.78,
-        ),
-        itemCount: state.items.length + (state.loadingMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= state.items.length) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final item = state.items[index];
-          return _ItemCard(
-            item: item,
-            onTap: () => _openPlayer(context, ref, item),
-          );
-        },
-      ),
     );
   }
 }
+
+const double _gridExtent = 200;
+const double _gridSpacing = 12;
+const double _gridRatio = 0.78;
 
 class _ResumeBanner extends StatelessWidget {
   const _ResumeBanner({required this.item, required this.onTap});
@@ -266,13 +326,7 @@ class _ItemCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: artUrl == null
-                    ? placeholder
-                    : Image.network(
-                        artUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => placeholder,
-                      ),
+                child: ArtworkBox(artUrl: artUrl, placeholder: placeholder),
               ),
               Padding(
                 padding: const EdgeInsets.all(8),

@@ -33,6 +33,15 @@ class DownloadProgress {
 /// media-token URLs, so no auth header plumbing reaches the plugin.
 abstract interface class DownloadManagerPort {
   Future<void> download(String pid);
+
+  /// Drops the item's local audio and the records pointing at it.
+  ///
+  /// Not the whole of un-downloading: the artwork store pins the item's
+  /// cover when it is downloaded, and that pin is kept by PID in a table
+  /// this package owns but this port knows nothing about. A caller that
+  /// removes the audio and leaves the cover behind leaves files nothing
+  /// short of a sign-out will reclaim, so remove them together
+  /// (`ArtworkStore.unpin`).
   Future<void> remove(String pid);
   Future<LocalPlayback?> localFor(String pid);
   Future<bool> isComplete(String pid);

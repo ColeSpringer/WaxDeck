@@ -20,7 +20,17 @@ dependencies:
   # File pickers behind FilePickerPort; drag-and-drop behind AudioDropArea.
   desktop_drop: 0.7.1
   file_selector: 1.1.0
+  # The native artwork cache, behind ArtworkStore. Promoted from a
+  # transitive dependency (audio_service already ships it) to a direct
+  # exact pin: it is load-bearing for every cover the app draws, and its
+  # disk-cache and ETag behaviour is what the store is built on.
+  flutter_cache_manager: 3.4.1
   flutter_secure_storage: 10.3.1
+  # Both already resolve transitively through waxdeck_data; direct here
+  # because the artwork store joins paths and finds the support
+  # directory itself.
+  path: 1.9.1
+  path_provider: 2.1.6
   # Routing. Published by flutter.dev and pure Dart, but pinned exact like
   # every other dependency: the route table is the app's navigation
   # contract and a minor bump has moved redirect semantics before.

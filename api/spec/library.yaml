@@ -262,6 +262,20 @@ paths:
         other playlist read. Items without any artwork in their fallback
         chain return 404. Responses carry a content-addressed `ETag`; revalidate with
         `If-None-Match` instead of refetching.
+
+
+        Responses are cacheable for a day and reusable while revalidating
+        for a week (`Cache-Control`), so a warm grid paints from the cache
+        instead of spending a conditional GET per cover. The bytes are
+        per-caller (artwork follows the item's visibility), so the
+        directive is `private` and the response varies by the credential
+        presented (`Cookie` or `Authorization`): a browser shared by two
+        accounts must not answer one from the other's cache.
+
+
+        A URL names a PID and a size, not the bytes behind them, so a
+        client that replaces an entity's artwork has to defeat its own
+        caches: vary `v` to do it.
       tags: [library]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -283,6 +297,17 @@ paths:
             type: integer
             minimum: 16
             maximum: 2048
+        - name: v
+          in: query
+          description: >
+            Opaque cache-buster, ignored by the server. Artwork lives at
+            one URL whatever it holds, and this response is cacheable for
+            a day, so a client that has just replaced an entity's cover
+            would otherwise keep painting the old bytes out of its own
+            cache. Varying this asks for the same image under a name no
+            cache has seen.
+          schema:
+            type: string
         - name: If-None-Match
           in: header
           description: Previously returned `ETag`; a match answers 304 with no body.
@@ -294,6 +319,21 @@ paths:
           headers:
             ETag:
               description: Content-addressed validator for the returned bytes.
+              schema:
+                type: string
+            Cache-Control:
+              description: >
+                `private, max-age=86400, stale-while-revalidate=604800`.
+                Not `immutable`: the URL names a pid and a size, not the
+                bytes, so replacing an item's cover reuses it.
+              schema:
+                type: string
+            Vary:
+              description: >
+                `Cookie, Authorization`: the credential is what decides
+                whether these bytes exist for a caller, so a cached copy
+                is never reused across sessions on a shared browser or
+                across tokens on a shared cache.
               schema:
                 type: string
           content:
@@ -314,7 +354,24 @@ paths:
                 type: string
                 format: binary
         "304":
-          description: The cached copy is still current.
+          description: >
+            The cached copy is still current. It carries the same
+            validator and freshness the body would have, so a
+            revalidation refreshes the cached copy rather than leaving it
+            stale enough to revalidate again on the next paint.
+          headers:
+            ETag:
+              description: Content-addressed validator for the cached bytes.
+              schema:
+                type: string
+            Cache-Control:
+              description: The same directive the 200 carries.
+              schema:
+                type: string
+            Vary:
+              description: The same credentials the 200 varies by.
+              schema:
+                type: string
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "401":

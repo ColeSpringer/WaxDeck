@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_box.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'podcasts_controller.dart';
@@ -93,19 +94,13 @@ class _SubscriptionRow extends StatelessWidget {
           child: SizedBox(
             width: 48,
             height: 48,
-            child: artUrl == null
-                ? ColoredBox(
-                    color: colorScheme.surfaceContainerHighest,
-                    child: const Icon(Icons.podcasts),
-                  )
-                : Image.network(
-                    artUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => ColoredBox(
-                      color: colorScheme.surfaceContainerHighest,
-                      child: const Icon(Icons.podcasts),
-                    ),
-                  ),
+            child: ArtworkBox(
+              artUrl: artUrl,
+              placeholder: ColoredBox(
+                color: colorScheme.surfaceContainerHighest,
+                child: const Icon(Icons.podcasts),
+              ),
+            ),
           ),
         ),
         title: Text(show.title, maxLines: 1, overflow: TextOverflow.ellipsis),

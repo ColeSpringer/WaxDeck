@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_box.dart';
+import '../artwork/artwork_providers.dart';
 import '../connect/device_picker.dart';
 import '../discovery/discovery_actions.dart';
 import '../library/item_delete.dart';
@@ -175,7 +177,7 @@ class PlayerScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
-                _DownloadButton(pid: item.pid),
+                _DownloadButton(pid: item.pid, artUrl: item.artUrl),
                 ItemDeleteAction(pid: item.pid, onDeleted: () => context.pop()),
               ],
       ),
@@ -258,13 +260,7 @@ class _PlayerBody extends ConsumerWidget {
                   aspectRatio: 1,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: artUrl == null
-                        ? placeholder
-                        : Image.network(
-                            artUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => placeholder,
-                          ),
+                    child: ArtworkBox(artUrl: artUrl, placeholder: placeholder),
                   ),
                 ),
               ),
@@ -743,9 +739,12 @@ class _StarRatingRow extends ConsumerWidget {
 /// platforms without a download manager (web). Three states: not
 /// downloaded, transferring, on disk.
 class _DownloadButton extends ConsumerStatefulWidget {
-  const _DownloadButton({required this.pid});
+  const _DownloadButton({required this.pid, required this.artUrl});
 
   final String pid;
+
+  /// The cover to pin beside the audio, when the item has one.
+  final String? artUrl;
 
   @override
   ConsumerState<_DownloadButton> createState() => _DownloadButtonState();
@@ -794,6 +793,17 @@ class _DownloadButtonState extends ConsumerState<_DownloadButton> {
         }
       } finally {
         await sub.cancel();
+      }
+      // The cover comes down with the audio. Downloading an item is a
+      // promise that it plays with the server unreachable, and an
+      // offline library of grey monograms does not keep it — but only
+      // once the audio is actually on disk: the wait above ends on a
+      // failed transfer too, and a pinned cover for an item that cannot
+      // play is a promise about nothing.
+      if (await port.isComplete(widget.pid)) {
+        await ref
+            .read(artworkStoreProvider)
+            .pinForOffline(widget.pid, widget.artUrl);
       }
     } finally {
       if (mounted) {

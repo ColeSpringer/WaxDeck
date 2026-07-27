@@ -4,10 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
 import 'src/app.dart';
+import 'src/artwork/artwork_providers.dart';
 import 'src/auto/media_session_init.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Before anything can decode a cover: this app draws grids of them,
+  // and the framework's defaults are sized for apps that draw a few.
+  applyArtworkImageCacheBounds();
   // Browser automation drives the web build through the semantics tree, so
   // semantics must be live from the first frame, not gated on a screen
   // reader announcing itself.

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
-/// Drops a playlist cover from the in-memory image cache. The cover
-/// lives at one stable URL whatever it holds, and the cache keys on that
-/// URL, so a client that just changed the cover would keep painting the
-/// old bytes until a restart. Call it after a cover write, with the URL
-/// the cover had before: that is the one already in the cache.
-Future<void> evictPlaylistCover(String? artUrl) async {
+import '../artwork/artwork_box.dart';
+import '../artwork/artwork_providers.dart';
+
+/// Drops a playlist cover from every cache holding it. The cover lives at
+/// one stable URL whatever it holds, and the caches key on that URL, so a
+/// client that just changed the cover would keep painting the old bytes
+/// until a restart. Call it after a cover write, with the URL the cover
+/// had before: that is the one already cached.
+Future<void> evictPlaylistCover(WidgetRef ref, String? artUrl) async {
   if (artUrl == null) return;
-  await NetworkImage(artUrl).evict();
+  await ref.read(artworkStoreProvider).evict(artUrl);
 }
 
 /// A playlist's cover: the owner's upload, or the mosaic the server
@@ -26,29 +30,24 @@ class PlaylistCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final artUrl = playlist.artUrl;
-    final placeholder = ColoredBox(
-      color: colorScheme.surfaceContainerHighest,
-      child: Center(
-        child: Icon(
-          playlist.isSmart ? Icons.auto_awesome : Icons.queue_music,
-          size: size * 0.5,
-          color: colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
     return SizedBox(
       width: size,
       height: size,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(size < 64 ? 4 : 12),
-        child: artUrl == null
-            ? placeholder
-            : Image.network(
-                artUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => placeholder,
+        child: ArtworkBox(
+          artUrl: playlist.artUrl,
+          placeholder: ColoredBox(
+            color: colorScheme.surfaceContainerHighest,
+            child: Center(
+              child: Icon(
+                playlist.isSmart ? Icons.auto_awesome : Icons.queue_music,
+                size: size * 0.5,
+                color: colorScheme.onSurfaceVariant,
               ),
+            ),
+          ),
+        ),
       ),
     );
   }
