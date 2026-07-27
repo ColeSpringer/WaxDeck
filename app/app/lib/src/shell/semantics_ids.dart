@@ -138,30 +138,12 @@ abstract final class SemanticsIds {
   static String browseBucket(Object dimension, Object index) =>
       'browse-$dimension-$index';
   static String browseItem(Object index) => 'browse-item-$index';
-  static const String browseOpen = 'browse-open';
   static String browseTab(Object wireName) => 'browse-tab-$wireName';
-  static const String curationAudit = 'curation-audit';
-  static const String curationBackups = 'curation-backups';
-  static const String curationDiagnostics = 'curation-diagnostics';
-  static const String curationHealth = 'curation-health';
-  static const String curationMenu = 'curation-menu';
-  static const String curationMigrate = 'curation-migrate';
-  static const String curationOrganize = 'curation-organize';
-  static const String curationReview = 'curation-review';
-  static const String curationTasks = 'curation-tasks';
-  static const String curationTrash = 'curation-trash';
-  static const String curationUploads = 'curation-uploads';
-  static const String curationUsers = 'curation-users';
   static String item(Object pid) => 'item-$pid';
   static const String itemDelete = 'item-delete';
   static const String itemDeleteConfirm = 'item-delete-confirm';
   static const String offlineBanner = 'offline-banner';
-  static const String openStats = 'open-stats';
-  static const String playlistsOpen = 'playlists-open';
-  static const String podcastsOpen = 'podcasts-open';
-  static const String radioOpen = 'radio-open';
   static const String resumeBanner = 'resume-banner';
-  static const String settingsOpen = 'settings-open';
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
   static const String creditsRole = 'credits-role';
@@ -309,12 +291,15 @@ abstract final class SemanticsIds {
   static const String timezoneEdit = 'timezone-edit';
   static const String timezoneSave = 'timezone-save';
 
-  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar.
+  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.
+  static const String navAccount = 'nav-account';
+  static String navAccountAction(Object name) => 'nav-account-$name';
   static String navDestination(Object name) => 'nav-$name';
   static String navGroup(Object name) => 'nav-group-$name';
   static const String navOverflow = 'nav-overflow';
   static const String navRegion = 'nav-region';
   static const String navSidebarCollapse = 'nav-sidebar-collapse';
+  static const String skipToContent = 'skip-to-content';
 
   // sharing: Shares and share links.
   static String shareCopy(Object pid) => 'share-copy-$pid';

@@ -284,6 +284,11 @@ class _ComponentsPageState extends State<ComponentsPage> {
                               ),
                               onSelect: (name) =>
                                   setState(() => _destination = name),
+                              account: _catalogAccount,
+                              // An action is not a destination, so it
+                              // does not move the highlight; the app
+                              // signs out here.
+                              onAccountAction: (_) {},
                               sidebarHeader: const WaxWordmark(size: 18),
                               content: Center(
                                 child: Text(
@@ -318,6 +323,16 @@ const _catalogDestinations = <WaxDestination>[
   WaxDestination(name: 'Podcasts', label: 'Podcasts', glyph: WaxIcons.podcasts),
   WaxDestination(name: 'Radio', label: 'Radio', glyph: WaxIcons.radio),
 ];
+
+// `name` is identity and `label` is what is drawn. The app mints the
+// identity from an enum; modelling it as the label here would teach the
+// opposite to whoever reads this as the usage example.
+const _catalogAccount = WaxAccount(
+  name: 'sam',
+  actions: <WaxAccountAction>[
+    WaxAccountAction(name: 'signOut', label: 'Sign out', glyph: WaxIcons.close),
+  ],
+);
 
 const _catalogSecondary = <WaxNavEntry>[
   WaxNavLink(

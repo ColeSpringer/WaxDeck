@@ -16,7 +16,7 @@ async function login(page: Page) {
   await typeInto(page, username, 'admin');
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
   await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem(SemanticsIds.playlistsOpen)).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.navDestination('playlists'))).waitFor({ timeout: 30_000 });
 }
 
 test('the rule editor builds, previews, and saves a smart playlist', async ({
@@ -31,7 +31,7 @@ test('the rule editor builds, previews, and saves a smart playlist', async ({
   // a playlist row's merged semantics ("Starred Live, Smart | ...")
   // would satisfy a bare 'Smart' before the dialog even opens.
   const smartSegment = page.getByRole('button', { name: 'Smart', exact: true });
-  await clickThrough(page.locator(sem(SemanticsIds.playlistsOpen)), page.locator(sem(SemanticsIds.playlistAdd)));
+  await clickThrough(page.locator(sem(SemanticsIds.navDestination('playlists'))), page.locator(sem(SemanticsIds.playlistAdd)));
   await clickThrough(page.locator(sem(SemanticsIds.playlistAdd)), smartSegment);
   await smartSegment.click();
   const nameField = page.getByRole('textbox', { name: 'Playlist name' });
@@ -116,7 +116,7 @@ test('a smart playlist with user-state rules live-updates', async ({
   try {
     await login(page);
     await clickThrough(
-      page.locator(sem(SemanticsIds.playlistsOpen)),
+      page.locator(sem(SemanticsIds.navDestination('playlists'))),
       page.locator(sem(SemanticsIds.playlist(created.pid))),
     );
     await clickThrough(

@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
+import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/library/browse_controller.dart';
@@ -39,11 +40,7 @@ const _admin = WaxDeckUser(
 );
 const _listener = WaxDeckUser(id: 'us-2', username: 'sam', roles: ['user']);
 
-/// Mounts the whole app with the shell in charge, at [size].
-///
-/// The size is what picks the chrome, and the shell is what the flag
-/// selects, so both are inputs here: nothing else about the app changes
-/// between the two navigations.
+/// Mounts the whole app at [size], which is what picks the chrome.
 Future<ProviderContainer> _pumpShell(
   WidgetTester tester, {
   Size size = const Size(1000, 900),
@@ -54,7 +51,6 @@ Future<ProviderContainer> _pumpShell(
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
     overrides: [
-      newShellProvider.overrideWithValue(true),
       repositoryProvider.overrideWithValue(
         FakeRepository(
           sessionState: SessionState(authenticated: true, user: user),
@@ -218,6 +214,8 @@ void main() {
         hasEnabledState: true,
         hasSelectedState: true,
         hasTapAction: true,
+        isFocusable: true,
+        hasFocusAction: true,
       ),
     );
 
@@ -364,6 +362,46 @@ void main() {
     await _systemBack(tester);
     expect(find.byType(PodcastsScreen), findsOneWidget);
     expect(_location(container), WaxRoute.podcasts);
+  });
+
+  testWidgets('compact reaches settings through the account menu', (
+    tester,
+  ) async {
+    // A phone's tab bar holds the domains and nothing else, and the
+    // screens' own navigation rows are gone, so this is the whole route
+    // to the secondary destinations there.
+    final container = await _pumpShell(tester, size: const Size(400, 800));
+
+    await tester.tap(find.bySemanticsLabel('Account'));
+    await tester.pumpAndSettle();
+    expect(find.text('admin'), findsOneWidget, reason: 'who is signed in');
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SettingsScreen), findsOneWidget);
+    expect(_location(container), WaxRoute.settings);
+  });
+
+  testWidgets('the account menu signs out', (tester) async {
+    final container = await _pumpShell(tester, size: const Size(400, 800));
+
+    await tester.tap(find.bySemanticsLabel('Account'));
+    await tester.pumpAndSettle();
+    // An administrator's menu is longer than a phone, so the last row is
+    // scrolled to rather than tapped where it is not.
+    await tester.ensureVisible(find.text('Sign out'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign out'));
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(authControllerProvider).value?.authenticated,
+      isFalse,
+    );
+    // Nothing unwinds the stack by hand: dropping the session moves the
+    // redirect, and the whole signed-in shell goes with it.
+    expect(_location(container), WaxRoute.login);
   });
 
   testWidgets('the curation group is hidden from an account without it', (

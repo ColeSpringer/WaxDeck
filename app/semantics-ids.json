@@ -613,63 +613,11 @@
           ]
         },
         {
-          "name": "browseOpen",
-          "id": "browse-open"
-        },
-        {
           "name": "browseTab",
           "id": "browse-tab-{wireName}",
           "params": [
             "wireName"
           ]
-        },
-        {
-          "name": "curationAudit",
-          "id": "curation-audit"
-        },
-        {
-          "name": "curationBackups",
-          "id": "curation-backups"
-        },
-        {
-          "name": "curationDiagnostics",
-          "id": "curation-diagnostics"
-        },
-        {
-          "name": "curationHealth",
-          "id": "curation-health"
-        },
-        {
-          "name": "curationMenu",
-          "id": "curation-menu"
-        },
-        {
-          "name": "curationMigrate",
-          "id": "curation-migrate"
-        },
-        {
-          "name": "curationOrganize",
-          "id": "curation-organize"
-        },
-        {
-          "name": "curationReview",
-          "id": "curation-review"
-        },
-        {
-          "name": "curationTasks",
-          "id": "curation-tasks"
-        },
-        {
-          "name": "curationTrash",
-          "id": "curation-trash"
-        },
-        {
-          "name": "curationUploads",
-          "id": "curation-uploads"
-        },
-        {
-          "name": "curationUsers",
-          "id": "curation-users"
         },
         {
           "name": "item",
@@ -691,28 +639,8 @@
           "id": "offline-banner"
         },
         {
-          "name": "openStats",
-          "id": "open-stats"
-        },
-        {
-          "name": "playlistsOpen",
-          "id": "playlists-open"
-        },
-        {
-          "name": "podcastsOpen",
-          "id": "podcasts-open"
-        },
-        {
-          "name": "radioOpen",
-          "id": "radio-open"
-        },
-        {
           "name": "resumeBanner",
           "id": "resume-banner"
-        },
-        {
-          "name": "settingsOpen",
-          "id": "settings-open"
         }
       ]
     },
@@ -1377,8 +1305,19 @@
     },
     {
       "name": "shell",
-      "doc": "The adaptive shell's navigation chrome: tabs, icon rail, sidebar.",
+      "doc": "The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.",
       "ids": [
+        {
+          "name": "navAccount",
+          "id": "nav-account"
+        },
+        {
+          "name": "navAccountAction",
+          "id": "nav-account-{name}",
+          "params": [
+            "name"
+          ]
+        },
         {
           "name": "navDestination",
           "id": "nav-{name}",
@@ -1404,6 +1343,10 @@
         {
           "name": "navSidebarCollapse",
           "id": "nav-sidebar-collapse"
+        },
+        {
+          "name": "skipToContent",
+          "id": "skip-to-content"
         }
       ]
     },

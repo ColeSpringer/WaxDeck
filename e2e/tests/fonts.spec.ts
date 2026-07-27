@@ -28,8 +28,8 @@ test('CJK metadata pulls its face from this origin and nothing leaves it', async
   const requested: string[] = [];
   page.on('request', (r) => requested.push(r.url()));
   try {
-    await loginAsAdmin(page, page.locator(sem(SemanticsIds.playlistsOpen)));
-    await page.locator(sem(SemanticsIds.playlistsOpen)).click();
+    await loginAsAdmin(page, page.locator(sem(SemanticsIds.navDestination('playlists'))));
+    await page.locator(sem(SemanticsIds.navDestination('playlists'))).click();
     await page.getByText(CJK_NAME).first().waitFor({ timeout: 30_000 });
 
     // The playlist listing carries a CJK name, so the deferred face must

@@ -125,7 +125,7 @@ test('single sign-on logs in through the identity provider', async ({ page, requ
   // The provider bounces through the server callback and the SPA loads
   // signed in as the provisioned account.
   await page.waitForURL(/localhost:4420/, { timeout: 30_000 });
-  await page.locator(sem(SemanticsIds.settingsOpen)).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.navDestination('settings'))).waitFor({ timeout: 30_000 });
 
   const session = await (await page.request.get('/api/v1/auth/session')).json();
   expect(session.authenticated).toBe(true);

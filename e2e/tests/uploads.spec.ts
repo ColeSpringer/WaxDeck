@@ -28,7 +28,12 @@ async function loginAs(page: Page, username: string, password: string) {
   await typeInto(page, user, username);
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem(SemanticsIds.curationMenu)).waitFor({ timeout: 30_000 });
+  // Settled on a destination every account has: this spec signs in as a
+  // viewer with no upload rights too, and the curation group is hidden
+  // from an account with nothing in it.
+  await page
+    .locator(sem(SemanticsIds.navDestination('settings')))
+    .waitFor({ timeout: 30_000 });
 }
 
 type UploadRow = {
@@ -95,11 +100,11 @@ test('two picked files group as one album and import through review', async ({
 
   // The uploads screen shows the quota header and the batch group.
   await clickThrough(
-    page.locator(sem(SemanticsIds.curationMenu)),
-    page.locator(sem(SemanticsIds.curationUploads)),
+    page.locator(sem(SemanticsIds.navGroup('curation'))),
+    page.locator(sem(SemanticsIds.navDestination('uploads'))),
   );
   await clickThrough(
-    page.locator(sem(SemanticsIds.curationUploads)),
+    page.locator(sem(SemanticsIds.navDestination('uploads'))),
     page.locator(sem(SemanticsIds.uploadQuota)),
   );
 
@@ -227,8 +232,9 @@ test('accounts without upload rights see no upload affordances', async ({
 
   await loginAs(page, `viewer-${suffix}`, 'viewer-pass-123');
 
-  // No add button, and the curation menu offers no uploads entry.
+  // No add button, and no way into uploads: an account with nothing in
+  // the curation group is not offered the group at all.
   await expect(page.locator(sem(SemanticsIds.addToLibrary))).toHaveCount(0);
-  await page.locator(sem(SemanticsIds.curationMenu)).click({ force: true });
-  await expect(page.locator(sem(SemanticsIds.curationUploads))).toHaveCount(0);
+  await expect(page.locator(sem(SemanticsIds.navGroup('curation')))).toHaveCount(0);
+  await expect(page.locator(sem(SemanticsIds.navDestination('uploads')))).toHaveCount(0);
 });

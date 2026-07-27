@@ -56,6 +56,14 @@ here waits on upstream.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
+- `[roadmap]` **The account menu is in the tab bar, not the app bar.** The
+  layout system puts the avatar in the top app bar at every width; the
+  shell owns no app bar, and the screens that do are the ones written
+  before the design system existed, so on compact the control takes a
+  fixed cell at the trailing end of the tab bar instead. It moves to the
+  bar's trailing slot as the screens are rebuilt on `WaxScaffold`, which
+  is also when the count question lands: a fifth domain tab plus an
+  account cell is six targets on a phone. See ADR-0024.
 - `[roadmap]` **The sidebar's collapsed state does not persist.** The
   toggle works and the shell remembers it for the session, but a
   per-device preference needs the client-settings store, which lands with

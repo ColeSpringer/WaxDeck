@@ -19,7 +19,7 @@ async function login(page: Page) {
   await typeInto(page, username, 'admin');
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
   await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem(SemanticsIds.playlistsOpen)).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.navDestination('playlists'))).waitFor({ timeout: 30_000 });
 }
 
 async function trackPid(
@@ -98,7 +98,7 @@ test('reported listens surface in stats and the year in review', async ({
   expect(outcome.accepted + outcome.duplicates).toBe(4);
 
   await login(page);
-  await clickThrough(page.locator(sem(SemanticsIds.openStats)), page.locator(sem(SemanticsIds.statsRange('7d'))));
+  await clickThrough(page.locator(sem(SemanticsIds.navDestination('stats'))), page.locator(sem(SemanticsIds.statsRange('7d'))));
 
   // The default 30d view includes the backdated two-hour session, so
   // the listened headline reads in hours. Other specs' live playback

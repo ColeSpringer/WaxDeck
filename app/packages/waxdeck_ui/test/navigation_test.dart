@@ -1,4 +1,5 @@
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -31,6 +32,13 @@ const _secondary = <WaxNavEntry>[
   ),
 ];
 
+const _account = WaxAccount(
+  name: 'sam',
+  actions: <WaxAccountAction>[
+    WaxAccountAction(name: 'signOut', label: 'Sign out', glyph: WaxIcons.close),
+  ],
+);
+
 /// Pumps the frame at [size], which is what picks the chrome: every
 /// adaptive decision keys off the window's own width.
 Future<List<String>> _pumpFrame(
@@ -40,6 +48,9 @@ Future<List<String>> _pumpFrame(
   double textScale = 1,
   bool collapsed = false,
   VoidCallback? onToggleCollapsed,
+  WaxAccount? account,
+  ValueChanged<String>? onAccountAction,
+  Widget content = const Center(child: Text('content pane')),
 }) async {
   final selections = <String>[];
   tester.view.physicalSize = size;
@@ -60,7 +71,9 @@ Future<List<String>> _pumpFrame(
         collapsed: collapsed,
         onToggleCollapsed: onToggleCollapsed,
         onSelect: selections.add,
-        content: const Center(child: Text('content pane')),
+        account: account,
+        onAccountAction: onAccountAction ?? (account == null ? null : (_) {}),
+        content: content,
       ),
     ),
   );
@@ -179,6 +192,10 @@ void main() {
             isSelected: true,
             hasSelectedState: true,
             hasTapAction: true,
+            // The chrome is keyboard-reachable, and on web this flag is
+            // what becomes a tabindex.
+            isFocusable: true,
+            hasFocusAction: true,
           ),
         );
         expect(
@@ -190,8 +207,44 @@ void main() {
             hasEnabledState: true,
             hasSelectedState: true,
             hasTapAction: true,
+            // The chrome is keyboard-reachable, and on web this flag is
+            // what becomes a tabindex.
+            isFocusable: true,
+            hasFocusAction: true,
           ),
         );
+        semantics.dispose();
+      });
+
+      testWidgets('${entry.key} take focus from the platform and activate', (
+        tester,
+      ) async {
+        // Web turns the node's `focusable` flag into a `tabindex` and
+        // asks the framework to focus it when the browser does; without
+        // the flag the whole chrome had no tabindex and no keyboard
+        // could reach it at all. Focus that does not lead to activation
+        // is only half of that, so both halves are pinned here.
+        final semantics = tester.ensureSemantics();
+        final selections = await _pumpFrame(tester, size: entry.value);
+
+        final node = tester.getSemantics(find.bySemanticsLabel('Radio'));
+        expect(
+          node.getSemanticsData().hasAction(SemanticsAction.focus),
+          isTrue,
+        );
+        tester.binding.performSemanticsAction(
+          SemanticsActionEvent(
+            type: SemanticsAction.focus,
+            nodeId: node.id,
+            viewId: tester.view.viewId,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+
+        expect(selections, <String>['radio']);
         semantics.dispose();
       });
 
@@ -390,6 +443,363 @@ void main() {
     testWidgets('offers no collapse control without a handler', (tester) async {
       await _pumpFrame(tester, size: const Size(1000, 900));
       expect(find.bySemanticsLabel('Collapse sidebar'), findsNothing);
+    });
+  });
+
+  group('account menu', () {
+    testWidgets('is the compact shell\'s only route to the rest', (
+      tester,
+    ) async {
+      // A phone's tab bar holds the domains and nothing else, so deleting
+      // the screens' own app-bar rows leaves this control as the way to
+      // settings and curation. It has to carry them.
+      final selections = await _pumpFrame(
+        tester,
+        size: const Size(400, 800),
+        account: _account,
+      );
+      expect(find.text('Settings'), findsNothing);
+
+      await tester.tap(find.bySemanticsLabel('Account'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('sam'), findsOneWidget, reason: 'who is signed in');
+      expect(find.text('Users'), findsOneWidget, reason: 'a grouped area');
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      expect(selections, <String>['settings']);
+    });
+
+    testWidgets('reports an action apart from a destination', (tester) async {
+      final actions = <String>[];
+      final selections = await _pumpFrame(
+        tester,
+        size: const Size(400, 800),
+        account: _account,
+        onAccountAction: actions.add,
+      );
+
+      await tester.tap(find.bySemanticsLabel('Account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+
+      expect(actions, <String>['signOut']);
+      expect(selections, isEmpty, reason: 'signing out is not a place');
+    });
+
+    for (final entry in <String, Size>{
+      'the rail': const Size(700, 900),
+      'the sidebar': const Size(1000, 900),
+    }.entries) {
+      // The count is what makes this real: naming a menu row by its
+      // widget type cannot work, because the entries are generic over a
+      // private type that no test can spell. So the assertion is that
+      // opening the menu adds no second copy of a destination the chrome
+      // is already responsible for — which fails the moment the frame
+      // starts handing it `secondary` at these widths.
+      final onChrome = entry.key == 'the sidebar' ? 1 : 0;
+      testWidgets('lists no destination beside ${entry.key}', (tester) async {
+        await _pumpFrame(tester, size: entry.value, account: _account);
+        expect(find.text('Settings'), findsExactly(onChrome));
+
+        await tester.tap(find.bySemanticsLabel('Account'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('sam'), findsOneWidget);
+        expect(find.text('Sign out'), findsOneWidget);
+        expect(
+          find.text('Settings'),
+          findsExactly(onChrome),
+          reason: 'the menu repeated a destination the chrome lists',
+        );
+        expect(find.text('Users'), findsNothing);
+      });
+    }
+
+    testWidgets('is absent when nobody is signed in', (tester) async {
+      await _pumpFrame(tester, size: const Size(400, 800));
+      expect(find.bySemanticsLabel('Account'), findsNothing);
+    });
+
+    testWidgets('draws a whole grapheme, and only a usable one', (
+      tester,
+    ) async {
+      // Three rules in one place. The initial is a grapheme cluster, not
+      // a code unit, so a combining mark survives; it is drawn only when
+      // it is a letter or a digit, the rule `ArtworkImage` already uses,
+      // so punctuation does not end up on the disc; and an emoji is not
+      // a letter, which matters twice over here because the app bundles
+      // no emoji face and would draw tofu.
+      for (final entry in <String, String?>{
+        'sam': 'S',
+        // Decomposed and spelled out: the cluster is the letter plus
+        // its combining acute, and a code unit would drop the accent.
+        'e\u0301lan': 'E\u0301',
+        '_sam': null,
+        '...': null,
+        '': null,
+        '\u{1F3B5} nightjar': null,
+      }.entries) {
+        await _pumpFrame(
+          tester,
+          size: const Size(400, 800),
+          account: WaxAccount(name: entry.key),
+          onAccountAction: (_) {},
+        );
+
+        // The cell draws its own "Account" label besides, so the glyph
+        // is what tells the two branches apart rather than the absence
+        // of text.
+        final glyph = find.descendant(
+          of: find.bySemanticsLabel('Account'),
+          matching: find.byType(WaxIcon),
+        );
+        final initial = entry.value;
+        if (initial == null) {
+          expect(
+            glyph,
+            findsOneWidget,
+            reason: '"${entry.key}" should fall back to the glyph',
+          );
+        } else {
+          expect(find.text(initial), findsOneWidget, reason: entry.key);
+          expect(glyph, findsNothing, reason: entry.key);
+        }
+        expect(tester.takeException(), isNull, reason: entry.key);
+      }
+    });
+
+    testWidgets('stays inside the system insets on a small phone', (
+      tester,
+    ) async {
+      // The trigger sits at the very bottom of the window, so the menu
+      // has to open upward and clear the gesture bar. Flutter's own
+      // layout deflates by MediaQuery.padding; this pins that the frame
+      // hands it a padding to work with rather than swallowing it.
+      const inset = EdgeInsets.only(top: 24, bottom: 48);
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewPadding = FakeViewPadding(
+        top: inset.top,
+        bottom: inset.bottom,
+      );
+      tester.view.padding = FakeViewPadding(
+        top: inset.top,
+        bottom: inset.bottom,
+      );
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(),
+          home: WaxShellFrame(
+            destinations: _primary,
+            secondary: _secondary,
+            selected: 'home',
+            onSelect: (_) {},
+            account: _account,
+            onAccountAction: (_) {},
+            content: const Center(child: Text('content pane')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Account'));
+      await tester.pumpAndSettle();
+
+      final menu = tester.getRect(find.byType(SingleChildScrollView).last);
+      expect(menu.top, greaterThanOrEqualTo(inset.top));
+      expect(menu.bottom, lessThanOrEqualTo(640 - inset.bottom));
+      // And the last row is still reachable inside what is left.
+      await tester.ensureVisible(find.text('Sign out'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('stacks with the collapse toggle at rail width', (
+      tester,
+    ) async {
+      // The footer pairs them side by side at full width and has one
+      // column to work with when collapsed.
+      await _pumpFrame(
+        tester,
+        size: const Size(1000, 900),
+        collapsed: true,
+        onToggleCollapsed: () {},
+        account: _account,
+      );
+
+      expect(find.bySemanticsLabel('Account'), findsOneWidget);
+      expect(find.bySemanticsLabel('Expand sidebar'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('skip link', () {
+    testWidgets('comes before the navigation for a screen reader', (
+      tester,
+    ) async {
+      // The point of the control: the chrome is painted first at these
+      // widths, so a screen reader walks every sidebar row before it
+      // reaches the page. Traversal order is what the browser's own tab
+      // order follows on web, and it is decided by geometry unless both
+      // siblings carry a sort key.
+      final semantics = tester.ensureSemantics();
+      await _pumpFrame(tester, size: const Size(1000, 900));
+
+      final tree = tester
+          .getSemantics(find.byType(WaxShellFrame))
+          .toStringDeep(childOrder: DebugSemanticsDumpOrder.traversalOrder);
+      expect(
+        tree.indexOf('Skip to content'),
+        lessThan(tree.indexOf('Main navigation')),
+        reason: 'the link has to be the first thing on the page',
+      );
+      semantics.dispose();
+    });
+
+    testWidgets('hands focus to the content', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final inContent = FocusNode(debugLabel: 'in-content');
+      addTearDown(inContent.dispose);
+      await _pumpFrame(
+        tester,
+        size: const Size(1000, 900),
+        content: Center(
+          child: Focus(
+            focusNode: inContent,
+            child: const SizedBox(width: 40, height: 40),
+          ),
+        ),
+      );
+      expect(inContent.hasFocus, isFalse);
+
+      final node = tester.getSemantics(
+        find.bySemanticsLabel('Skip to content'),
+      );
+      tester.binding.performSemanticsAction(
+        SemanticsActionEvent(
+          type: SemanticsAction.tap,
+          nodeId: node.id,
+          viewId: tester.view.viewId,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(inContent.hasFocus, isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets('lets the content take a tap under its unfocused box', (
+      tester,
+    ) async {
+      // The link is painted last and is roughly 140 by 48, which at rail
+      // width overhangs the content pane by half its width — exactly
+      // where a screen's back button sits. Ignoring pointers from inside
+      // the detector was not enough: its outermost render object is an
+      // opaque `MouseRegion`, which answers the hit test for the whole
+      // box whatever sits beneath it.
+      var backs = 0;
+      await _pumpFrame(
+        tester,
+        size: const Size(700, 900),
+        content: Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => backs++,
+            ),
+            title: const Text('a screen'),
+          ),
+          body: const Text('content pane'),
+        ),
+      );
+
+      final back = tester.getRect(find.byIcon(Icons.arrow_back));
+      final link = tester.getRect(find.byType(WaxShellFrame));
+      expect(back.left, lessThan(142), reason: 'the overlap under test');
+      expect(link.left, 0);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(backs, 1);
+    });
+
+    testWidgets('lands on the content region when the page has no controls', (
+      tester,
+    ) async {
+      // A page still loading its skeleton has nothing to focus. Focus
+      // goes to the region itself rather than nowhere, which is what a
+      // `<main tabindex="-1">` does on the web: the visitor is inside the
+      // content and the next tab starts there.
+      final semantics = tester.ensureSemantics();
+      await _pumpFrame(
+        tester,
+        size: const Size(1000, 900),
+        content: const Center(child: Text('loading')),
+      );
+
+      final node = tester.getSemantics(
+        find.bySemanticsLabel('Skip to content'),
+      );
+      tester.binding.performSemanticsAction(
+        SemanticsActionEvent(
+          type: SemanticsAction.tap,
+          nodeId: node.id,
+          viewId: tester.view.viewId,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final focused = FocusManager.instance.primaryFocus;
+      expect(focused?.debugLabel, 'shell-content');
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    });
+
+    testWidgets('leaves the chrome reachable by tab from the content', (
+      tester,
+    ) async {
+      // The content pane is a focus scope of its own so the link has
+      // somewhere to send focus, and a scope's default is a closed loop:
+      // left that way it would trap tab traversal inside the page and put
+      // the whole sidebar out of a keyboard's reach.
+      await _pumpFrame(
+        tester,
+        size: const Size(1000, 900),
+        content: Navigator(
+          onGenerateRoute: (_) => MaterialPageRoute<void>(
+            builder: (_) => Scaffold(
+              body: TextButton(onPressed: () {}, child: const Text('in page')),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      var reachedChrome = false;
+      for (var press = 0; press < 8 && !reachedChrome; press++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        FocusManager.instance.primaryFocus?.context?.visitAncestorElements((
+          element,
+        ) {
+          reachedChrome = element.widget is WaxSidebar;
+          return !reachedChrome;
+        });
+      }
+      expect(reachedChrome, isTrue, reason: 'tab never left the page');
+    });
+
+    testWidgets('is not drawn where the content already comes first', (
+      tester,
+    ) async {
+      // Compact paints the content, then the deck bar, then the tabs. A
+      // link that skips forward to what is already first is noise.
+      await _pumpFrame(tester, size: const Size(400, 800));
+      expect(find.text('Skip to content'), findsNothing);
     });
   });
 

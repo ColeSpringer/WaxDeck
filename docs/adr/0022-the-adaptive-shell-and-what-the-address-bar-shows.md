@@ -4,7 +4,9 @@ Date: 2026-07-26
 
 ## Status
 
-Accepted.
+Accepted. The compile-time flag, the old navigation, and the two open
+items below (the compact path to the secondary destinations, and the
+skip link) are settled by ADR-0024.
 
 ## Context
 

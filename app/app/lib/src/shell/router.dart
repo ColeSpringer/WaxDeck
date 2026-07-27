@@ -70,7 +70,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'signed-in'),
         builder: (context, state, child) => _SignedInScope(child: child),
-        routes: ref.read(newShellProvider) ? shellRoutes() : signedInRoutes,
+        routes: shellRoutes(),
       ),
     ],
   );
@@ -178,9 +178,10 @@ String? _redirect(Ref ref, GoRouterState state) {
 GoRouterRedirect _requires<T>(String fallback) =>
     (context, state) => state.extra is T ? null : fallback;
 
-// The screens that read a payload out of the route, written once because
-// both route tables declare them: the shell's table nests them
-// differently, but what they build from `extra` is the same either way.
+// The screens that read a payload out of the route. Named rather than
+// inlined so the table below reads as a table: each of these is three or
+// four lines of unpacking that would otherwise sit in the middle of the
+// branch it belongs to.
 
 Widget _browseItems(BuildContext context, GoRouterState state) {
   final args = state.extra! as BrowseBucketArgs;
@@ -228,194 +229,8 @@ final publicRoutes = <RouteBase>[
   ),
 ];
 
-/// Everything behind the session, listed apart from the shell that wraps
-/// it so widget tests can mount one screen over the same table.
-///
-/// Every screen is a child of home rather than a sibling of it. That is
-/// what makes an address work when it is the first thing a visitor
-/// opens: `go` builds each declared ancestor beneath the target, so a
-/// bookmarked book or the location handed back after a sign-in arrives
-/// with the library underneath it, a back arrow, and a system back that
-/// goes somewhere instead of out of the app. Pushing is unaffected,
-/// since a push appends only the branch's leaf to the stack already
-/// there.
-final signedInRoutes = <RouteBase>[
-  GoRoute(
-    path: WaxRoute.home,
-    builder: (context, state) => const LibraryScreen(),
-    routes: [
-      GoRoute(
-        path: 'browse',
-        builder: (context, state) => const BrowseScreen(),
-        routes: [
-          GoRoute(
-            path: 'items',
-            redirect: _requires<BrowseBucketArgs>(WaxRoute.browse),
-            builder: _browseItems,
-          ),
-        ],
-      ),
-      GoRoute(
-        path: 'playlists',
-        builder: (context, state) => const PlaylistsScreen(),
-        routes: [
-          // Declared ahead of ':pid' so the literal wins the match.
-          GoRoute(
-            path: 'rules',
-            redirect: _requires<RuleDraftArgs>(WaxRoute.playlists),
-            builder: _ruleDraft,
-          ),
-          GoRoute(
-            path: ':pid',
-            builder: (context, state) =>
-                PlaylistScreen(pid: state.pathParameters['pid']!),
-            routes: [
-              GoRoute(
-                path: 'edit',
-                redirect: (context, state) => state.extra is Playlist
-                    ? null
-                    : WaxRoute.playlist(state.pathParameters['pid']!),
-                builder: (context, state) =>
-                    RuleEditorScreen(editing: state.extra! as Playlist),
-              ),
-            ],
-          ),
-        ],
-      ),
-      GoRoute(
-        path: 'podcasts',
-        builder: (context, state) => const PodcastsScreen(),
-        routes: [
-          GoRoute(
-            path: ':pid',
-            builder: (context, state) =>
-                ShowScreen(pid: state.pathParameters['pid']!),
-          ),
-        ],
-      ),
-      GoRoute(
-        path: 'episodes/:pid',
-        builder: (context, state) =>
-            EpisodeScreen(pid: state.pathParameters['pid']!),
-      ),
-      GoRoute(
-        path: 'books/:pid',
-        builder: (context, state) =>
-            BookScreen(pid: state.pathParameters['pid']!),
-      ),
-      GoRoute(path: 'radio', builder: (context, state) => const RadioScreen()),
-      GoRoute(
-        path: 'stats',
-        builder: (context, state) => const StatsScreen(),
-        routes: [
-          GoRoute(
-            path: 'log',
-            builder: (context, state) => const ListenLogScreen(),
-          ),
-          GoRoute(
-            path: 'year',
-            builder: (context, state) => const YearInReviewScreen(),
-          ),
-        ],
-      ),
-      GoRoute(
-        path: 'tracks',
-        redirect: _requires<TrackListArgs>(WaxRoute.home),
-        builder: _trackList,
-      ),
-      GoRoute(
-        path: 'now-playing',
-        builder: (context, state) => const PlayerScreen(),
-      ),
-      GoRoute(
-        path: 'remote',
-        redirect: _requires<PlaybackSessionInfo>(WaxRoute.home),
-        builder: (context, state) =>
-            RemoteControlScreen(initial: state.extra! as PlaybackSessionInfo),
-      ),
-      GoRoute(
-        path: 'settings',
-        builder: (context, state) => const SettingsScreen(),
-      ),
-      GoRoute(
-        path: 'shares',
-        builder: (context, state) => const SharesScreen(),
-      ),
-      GoRoute(
-        path: 'uploads',
-        builder: (context, state) => const UploadsScreen(),
-      ),
-      // Not under /admin: anyone who can start a task (an upload, an
-      // acquisition) is offered this list from the snackbar that starts
-      // it, administrator or not.
-      GoRoute(path: 'tasks', builder: (context, state) => const TasksScreen()),
-      GoRoute(
-        path: 'metadata/:pid',
-        builder: (context, state) =>
-            MetadataScreen(pid: state.pathParameters['pid']!),
-      ),
-      GoRoute(
-        path: 'admin/review',
-        builder: (context, state) => const ReviewScreen(),
-        routes: [
-          GoRoute(
-            path: ':entryId',
-            builder: (context, state) =>
-                ReviewEntryScreen(entryId: state.pathParameters['entryId']!),
-          ),
-        ],
-      ),
-      GoRoute(
-        path: 'admin/health',
-        builder: (context, state) => const HealthScreen(),
-        routes: [
-          GoRoute(
-            path: ':rule',
-            builder: (context, state) =>
-                HealthIssuesScreen(rule: state.pathParameters['rule']!),
-          ),
-        ],
-      ),
-      GoRoute(
-        path: 'admin/diagnostics',
-        builder: (context, state) => const DiagnosticsScreen(),
-      ),
-      GoRoute(
-        path: 'admin/organize',
-        builder: (context, state) => const OrganizeScreen(),
-      ),
-      GoRoute(
-        path: 'admin/users',
-        builder: (context, state) => const UsersScreen(),
-        routes: [
-          GoRoute(
-            path: 'edit',
-            redirect: _requires<UserEditArgs>(WaxRoute.users),
-            builder: _userEdit,
-          ),
-        ],
-      ),
-      GoRoute(
-        path: 'admin/audit',
-        builder: (context, state) => const AuditScreen(),
-      ),
-      GoRoute(
-        path: 'admin/backups',
-        builder: (context, state) => const BackupsScreen(),
-      ),
-      GoRoute(
-        path: 'admin/trash',
-        builder: (context, state) => const TrashScreen(),
-      ),
-      GoRoute(
-        path: 'admin/migrate',
-        builder: (context, state) => const MigrateScreen(),
-      ),
-    ],
-  ),
-];
-
-/// The same screens, arranged for the adaptive shell.
+/// Everything behind the session, listed apart from the shell route that
+/// wraps it so widget tests can mount one screen over the same table.
 ///
 /// A function rather than a list: every branch mints a navigator key and
 /// the shell route holds state of its own, so a value held in a top-level

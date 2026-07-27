@@ -10,20 +10,6 @@ import 'routes.dart';
 import 'semantics_ids.dart';
 import 'side_panel.dart';
 
-/// Whether the adaptive shell is in charge of navigation.
-///
-/// Compile-time: `--dart-define=WAXDECK_NEW_SHELL=true` builds the new
-/// shell, and every other build keeps the navigation that is on the
-/// screens' own app bars. The flag exists only across the shell's
-/// development window — the flip commit turns it on, deletes it, and
-/// removes the old navigation with it — so no long-lived untested
-/// configuration accumulates.
-const bool waxNewShellDefault = bool.fromEnvironment('WAXDECK_NEW_SHELL');
-
-/// The flag as a provider, so a test can mount either shell without a
-/// second compilation of the app. Deleted with the flag.
-final newShellProvider = Provider<bool>((ref) => waxNewShellDefault);
-
 /// Where a target sits in the navigation chrome.
 enum WaxNavSection {
   /// A domain: a tab at every width.
@@ -262,13 +248,47 @@ final sidebarCollapsedProvider = NotifierProvider<SidebarCollapsed, bool>(
   SidebarCollapsed.new,
 );
 
+/// What the account menu can do, as opposed to where it can send you.
+///
+/// One entry today. It is an enum rather than a string so the shell's
+/// switch stays exhaustive as the menu grows.
+enum WaxAccountVerb {
+  signOut('Sign out', WaxIcons.close);
+
+  const WaxAccountVerb(this.label, this.glyph);
+
+  final String label;
+  final WaxGlyph glyph;
+
+  WaxAccountAction get action => WaxAccountAction(
+    name: name,
+    label: label,
+    glyph: glyph,
+    semanticsId: SemanticsIds.navAccountAction(name),
+  );
+
+  /// The verb the menu reported, or null if it named one this build does
+  /// not have.
+  ///
+  /// The menu can only report a name this enum minted — the design
+  /// system carries the actions it is handed and invents none — so a
+  /// miss is a programming error rather than input. It is looked up
+  /// rather than resolved by `byName` because the callback that runs it
+  /// is fired and forgotten from a menu, where a throw has no handler at
+  /// all; the assert is what makes it loud in development.
+  static WaxAccountVerb? named(String name) {
+    final verb = values.asNameMap()[name];
+    assert(verb != null, 'the account menu reported an unknown verb: $name');
+    return verb;
+  }
+}
+
 /// The shell: navigation chrome around the branch navigator that renders
 /// the active screen.
 ///
 /// It owns where a visitor can go and what is highlighted; the screens
 /// still own their own app bars, because the bar is contextual per screen.
-/// The deck bar and the side panel take their slots in the frame in the
-/// next phase.
+/// The deck bar and the side panel take their slots in the frame.
 class AdaptiveShell extends ConsumerStatefulWidget {
   const AdaptiveShell({required this.shell, required this.location, super.key});
 
@@ -297,6 +317,15 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       branch,
       initialLocation: branch == widget.shell.currentIndex,
     );
+  }
+
+  void _runAccountVerb(WaxAccountVerb verb) {
+    switch (verb) {
+      // Nothing to unwind by hand: dropping the session moves the auth
+      // redirect, which replaces the whole signed-in stack with login.
+      case WaxAccountVerb.signOut:
+        ref.read(authControllerProvider.notifier).logout();
+    }
   }
 
   @override
@@ -343,6 +372,27 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
         final target = byName[name];
         if (target != null) _select(target);
       },
+      // Who is signed in, and — on compact, where the tab bar has room
+      // for the domains and nothing else — the only way to everything
+      // that is not one.
+      //
+      // Never withheld for want of a name. `SessionInfo` requires only
+      // `authenticated`, so a session with no user payload is a legal
+      // answer, and the redirect that decides what is reachable gates on
+      // that flag alone. Hiding the menu there would leave a phone with
+      // no route to settings and no way to sign out, which is a worse
+      // answer than a disc with no initial on it.
+      account: WaxAccount(
+        name: user?.username ?? '',
+        actions: <WaxAccountAction>[
+          for (final verb in WaxAccountVerb.values) verb.action,
+        ],
+        semanticsId: SemanticsIds.navAccount,
+      ),
+      onAccountAction: (name) {
+        final verb = WaxAccountVerb.named(name);
+        if (verb != null) _runAccountVerb(verb);
+      },
       // The brand today; the search field takes this slot when there is a
       // search screen to drive.
       sidebarHeader: const WaxWordmark(size: 20),
@@ -351,6 +401,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       navSemanticsId: SemanticsIds.navRegion,
       collapseSemanticsId: SemanticsIds.navSidebarCollapse,
       overflowSemanticsId: SemanticsIds.navOverflow,
+      skipSemanticsId: SemanticsIds.skipToContent,
       // Playback's one home on every screen, outside the branch
       // navigators so it survives every navigation, and the panel it
       // opens beside the content where there is room for one.

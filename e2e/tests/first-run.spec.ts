@@ -25,7 +25,7 @@ test('first run creates the administrator through the setup screen', async ({ pa
 
   // Setup logs straight in: the library shell appears without a
   // separate login step.
-  await page.locator(sem(SemanticsIds.settingsOpen)).waitFor({ timeout: 30_000 });
+  await page.locator(sem(SemanticsIds.navDestination('settings'))).waitFor({ timeout: 30_000 });
 
   // The door is closed for good.
   await expect

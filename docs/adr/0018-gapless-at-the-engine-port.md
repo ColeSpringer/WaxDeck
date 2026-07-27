@@ -119,3 +119,12 @@ platform says.
   it the window still plays correctly, with the load gap the port
   allows, so the downside of it misbehaving is the behavior we would
   have had anyway.
+- **The engine's own window length is preferred over the platform's, and
+  that is not a staleness risk.** It reads like one, so it is recorded
+  here rather than re-derived: just_audio keys its duration to the
+  current index and caches one per source, so at a crossing it can never
+  answer with the finished item's length, and an idle player after
+  `stop()` reports the stopped item's cached duration. The engine's held
+  value is only ever the answer where a closed clip window is the sole
+  source of one, which is exactly the case that reported nothing at all
+  before.

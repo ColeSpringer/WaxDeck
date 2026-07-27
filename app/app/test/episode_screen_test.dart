@@ -127,26 +127,4 @@ void main() {
 
     expect(find.byType(PodcastsScreen), findsOneWidget);
   });
-
-  testWidgets('the same holds under the shell table', (tester) async {
-    // The two tables put `/podcasts` in different places — a child of home
-    // in one, a branch root in the other — so the fallback earns a run
-    // against both.
-    final repo = _repo();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
-        child: routedHost(const EpisodeScreen(pid: episodePid), newShell: true),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byType(BackButton));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(PodcastsScreen), findsOneWidget);
-  });
 }

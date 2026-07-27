@@ -390,6 +390,17 @@ void main() {
                     onSelect: (_) {},
                     sidebarHeader: const WaxWordmark(size: 20),
                     onToggleCollapsed: () {},
+                    account: const WaxAccount(
+                      name: 'sam',
+                      actions: <WaxAccountAction>[
+                        WaxAccountAction(
+                          name: 'signOut',
+                          label: 'Sign out',
+                          glyph: WaxIcons.close,
+                        ),
+                      ],
+                    ),
+                    onAccountAction: (_) {},
                     content: const Center(child: Text('content pane')),
                   ),
                 ),

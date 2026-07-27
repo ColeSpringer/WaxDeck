@@ -136,30 +136,12 @@ export const SemanticsIds = {
   addToLibrary: 'add-to-library',
   browseBucket: (dimension: string | number, index: string | number) => `browse-${dimension}-${index}`,
   browseItem: (index: string | number) => `browse-item-${index}`,
-  browseOpen: 'browse-open',
   browseTab: (wireName: string | number) => `browse-tab-${wireName}`,
-  curationAudit: 'curation-audit',
-  curationBackups: 'curation-backups',
-  curationDiagnostics: 'curation-diagnostics',
-  curationHealth: 'curation-health',
-  curationMenu: 'curation-menu',
-  curationMigrate: 'curation-migrate',
-  curationOrganize: 'curation-organize',
-  curationReview: 'curation-review',
-  curationTasks: 'curation-tasks',
-  curationTrash: 'curation-trash',
-  curationUploads: 'curation-uploads',
-  curationUsers: 'curation-users',
   item: (pid: string | number) => `item-${pid}`,
   itemDelete: 'item-delete',
   itemDeleteConfirm: 'item-delete-confirm',
   offlineBanner: 'offline-banner',
-  openStats: 'open-stats',
-  playlistsOpen: 'playlists-open',
-  podcastsOpen: 'podcasts-open',
-  radioOpen: 'radio-open',
   resumeBanner: 'resume-banner',
-  settingsOpen: 'settings-open',
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
   creditsRole: 'credits-role',
@@ -303,12 +285,15 @@ export const SemanticsIds = {
   timezoneEdit: 'timezone-edit',
   timezoneSave: 'timezone-save',
 
-  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar.
+  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.
+  navAccount: 'nav-account',
+  navAccountAction: (name: string | number) => `nav-account-${name}`,
   navDestination: (name: string | number) => `nav-${name}`,
   navGroup: (name: string | number) => `nav-group-${name}`,
   navOverflow: 'nav-overflow',
   navRegion: 'nav-region',
   navSidebarCollapse: 'nav-sidebar-collapse',
+  skipToContent: 'skip-to-content',
 
   // sharing: Shares and share links.
   shareCopy: (pid: string | number) => `share-copy-${pid}`,

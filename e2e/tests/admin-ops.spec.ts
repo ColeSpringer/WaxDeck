@@ -308,8 +308,8 @@ test('an exported archive imports back through the backups screen', async ({
   await typeInto(page, username, ADMIN_USER);
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await clickThrough(page.locator(sem(SemanticsIds.curationMenu)), page.locator(sem(SemanticsIds.curationBackups)));
-  await clickThrough(page.locator(sem(SemanticsIds.curationBackups)), page.locator(sem(SemanticsIds.backupImport)));
+  await clickThrough(page.locator(sem(SemanticsIds.navGroup('curation'))), page.locator(sem(SemanticsIds.navDestination('backups'))));
+  await clickThrough(page.locator(sem(SemanticsIds.navDestination('backups'))), page.locator(sem(SemanticsIds.backupImport)));
 
   const chooser = page.waitForEvent('filechooser');
   await page.locator(sem(SemanticsIds.backupImport)).click({ force: true });

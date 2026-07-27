@@ -95,13 +95,11 @@ final _payloadRoutes = <String, String>{
   WaxRoute.userEdit: WaxRoute.users,
 };
 
-/// Locations the shell's table declares beneath another one, and so the
-/// only ones that answer a back affordance there.
+/// Locations the table declares beneath another one, and so the only
+/// ones that answer a back affordance.
 ///
 /// The rest are a branch's own top-level routes: a destination is not a
-/// stack, and a shell that offered "back" from one would be lying. The old
-/// navigation declares everything under home instead, so there every
-/// location but home has something underneath.
+/// stack, and a shell that offered "back" from one would be lying.
 final _stackedInShell = <String>{
   WaxRoute.book('bk-1'),
   WaxRoute.show('pc-1'),
@@ -112,10 +110,9 @@ final _stackedInShell = <String>{
   WaxRoute.healthRule('missing-artwork'),
 };
 
-Future<GoRouter> _pumpApp(WidgetTester tester, {required bool newShell}) async {
+Future<GoRouter> _pumpApp(WidgetTester tester) async {
   final container = ProviderContainer(
     overrides: [
-      newShellProvider.overrideWithValue(newShell),
       repositoryProvider.overrideWithValue(
         FakeRepository(
           sessionState: const SessionState(authenticated: true, user: _user),
@@ -133,51 +130,40 @@ Future<GoRouter> _pumpApp(WidgetTester tester, {required bool newShell}) async {
 }
 
 void main() {
-  // Both tables carry every location, which is what keeps them from
-  // drifting apart while the flag exists. The old half goes with the flag.
-  for (final newShell in <bool>[false, true]) {
-    final table = newShell ? 'the shell' : 'the old navigation';
+  testWidgets('every declared location resolves to its screen', (tester) async {
+    final router = await _pumpApp(tester);
+    for (final entry in _locations.entries) {
+      router.go(entry.key);
+      await tester.pumpAndSettle();
 
-    testWidgets('every declared location resolves to its screen under $table', (
-      tester,
-    ) async {
-      final router = await _pumpApp(tester, newShell: newShell);
-      for (final entry in _locations.entries) {
-        router.go(entry.key);
-        await tester.pumpAndSettle();
+      expect(
+        find.byType(entry.value),
+        findsOneWidget,
+        reason: '${entry.key} should render ${entry.value}',
+      );
+      expect(
+        router.canPop(),
+        _stackedInShell.contains(entry.key),
+        reason: '${entry.key} back affordance',
+      );
+    }
+  });
 
-        expect(
-          find.byType(entry.value),
-          findsOneWidget,
-          reason: '${entry.key} should render ${entry.value}',
-        );
-        expect(
-          router.canPop(),
-          newShell
-              ? _stackedInShell.contains(entry.key)
-              : entry.key != WaxRoute.home,
-          reason: '${entry.key} back affordance under $table',
-        );
-      }
-    });
+  testWidgets('a payload route opened without one lands one level up', (
+    tester,
+  ) async {
+    final router = await _pumpApp(tester);
+    for (final entry in _payloadRoutes.entries) {
+      router.go(entry.key);
+      await tester.pumpAndSettle();
 
-    testWidgets(
-      'a payload route opened without one lands one level up under $table',
-      (tester) async {
-        final router = await _pumpApp(tester, newShell: newShell);
-        for (final entry in _payloadRoutes.entries) {
-          router.go(entry.key);
-          await tester.pumpAndSettle();
-
-          expect(
-            router.routerDelegate.currentConfiguration.uri.toString(),
-            entry.value,
-            reason: '${entry.key} without extra',
-          );
-        }
-      },
-    );
-  }
+      expect(
+        router.routerDelegate.currentConfiguration.uri.toString(),
+        entry.value,
+        reason: '${entry.key} without extra',
+      );
+    }
+  });
 
   test('the shell declares one branch per domain, in the chrome order', () {
     // `goBranch` takes a number, so the chrome's list and the router's

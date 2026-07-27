@@ -126,8 +126,10 @@ rather than a break.
   turns home into a tab that was going to be there anyway.
 - Widget tests that pump a screen and tap a row need a router: the
   `routedHost` helper mounts one screen over the same `publicRoutes` and
-  `signedInRoutes` the app declares, which is why those lists are named
-  and exported rather than inlined into the `GoRouter` call.
+  signed-in routes the app declares, which is why those lists are named
+  and exported rather than inlined into the `GoRouter` call. (The
+  signed-in half is `shellRoutes()` since ADR-0024; it was
+  `signedInRoutes` when this was written.)
 - `/admin/...` paths carry no role redirect. The menus that lead there
   already hide what an account cannot use and the server refuses the
   calls regardless; a role-aware console shell is the admin phase's job,

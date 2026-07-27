@@ -72,13 +72,13 @@ test('review a queued match with the keyboard', async ({ page, request }) => {
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
   await page.getByRole('button', { name: 'Log in' }).click();
 
-  // Open the review queue through the curation menu.
+  // Open the review queue through the sidebar's curation group.
   await clickThrough(
-    page.locator(sem(SemanticsIds.curationMenu)),
-    page.locator(sem(SemanticsIds.curationReview)),
+    page.locator(sem(SemanticsIds.navGroup('curation'))),
+    page.locator(sem(SemanticsIds.navDestination('review'))),
   );
   await clickThrough(
-    page.locator(sem(SemanticsIds.curationReview)),
+    page.locator(sem(SemanticsIds.navDestination('review'))),
     page.locator(sem(SemanticsIds.reviewRow(entryId))),
   );
 

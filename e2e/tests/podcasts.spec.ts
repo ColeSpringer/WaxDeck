@@ -51,7 +51,7 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   // swallowed while flutter's handlers are still attaching (the click
   // cousin of the keystroke gap typeInto retries around), and a
   // swallowed click here means the dialog never appears at all.
-  await page.locator(sem(SemanticsIds.podcastsOpen)).click();
+  await page.locator(sem(SemanticsIds.navDestination('podcasts'))).click();
   await expect(async () => {
     await page.locator(sem(SemanticsIds.podcastAdd)).click();
     await page

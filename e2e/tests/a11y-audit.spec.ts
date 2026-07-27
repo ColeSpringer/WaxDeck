@@ -24,6 +24,33 @@ test('login, browse, and play are completable through roles and names', async ({
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
   await page.getByRole('button', { name: 'Log in' }).click();
 
+  // The shell puts its navigation before the content, so the first
+  // thing in the page's reading order has to be the way past it. This
+  // is the whole claim of a skip link, and it is only true if the link
+  // really is first: assert it as the document's first button rather
+  // than merely present somewhere.
+  const skip = page.getByRole('button', { name: 'Skip to content' });
+  await skip.waitFor({ timeout: 30_000 });
+  await expect(page.getByRole('button').first()).toHaveAccessibleName(
+    'Skip to content',
+  );
+
+  // The navigation is the only way around the app now, so it has to be
+  // operable from a keyboard. This fails the moment the chrome stops
+  // declaring itself focusable: web turns that flag into a tabindex, and
+  // without one `focus()` is a silent no-op and the key goes nowhere.
+  // Space rather than Enter, which is the key a role=button takes here.
+  const settings = page.getByRole('button', { name: 'Settings', exact: true });
+  await settings.waitFor({ timeout: 30_000 });
+  await settings.focus();
+  await page.keyboard.press(' ');
+  // The destination itself is the assertion: settings is a long scroller
+  // whose rows build lazily, so any control on it is a race, and what is
+  // under test here is that a key press on a focused destination
+  // navigates at all.
+  await expect(page).toHaveURL(/settings/, { timeout: 15_000 });
+  await page.goBack();
+
   // Browse: the item is reachable by its accessible text, not a
   // test hook.
   const card = page.getByText('Alpha Song').first();

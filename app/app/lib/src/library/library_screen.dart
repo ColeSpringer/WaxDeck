@@ -14,70 +14,6 @@ import '../uploads/add_to_library.dart';
 import '../uploads/audio_drop_area.dart';
 import 'library_controller.dart';
 
-/// Curation surfaces reachable from the app bar menu. Administrators
-/// see all of them; everyone else only their own uploads — and only
-/// while they hold upload rights, without which the uploads screen is
-/// an empty list they can do nothing on.
-enum _CurationDestination {
-  review(SemanticsIds.curationReview, 'Review queue', adminOnly: true),
-  uploads(
-    SemanticsIds.curationUploads,
-    'Uploads',
-    adminOnly: false,
-    needsUpload: true,
-  ),
-  health(SemanticsIds.curationHealth, 'Health', adminOnly: true),
-  diagnostics(SemanticsIds.curationDiagnostics, 'Diagnostics', adminOnly: true),
-  organize(SemanticsIds.curationOrganize, 'Organize', adminOnly: true),
-  // Per-caller, not administrator-only: the endpoint serves an admin
-  // every task and everyone else their own, and starting one is what
-  // needs the upload right.
-  tasks(
-    SemanticsIds.curationTasks,
-    'Tasks',
-    adminOnly: false,
-    needsUpload: true,
-  ),
-  users(SemanticsIds.curationUsers, 'Users', adminOnly: true),
-  audit(SemanticsIds.curationAudit, 'Audit log', adminOnly: true),
-  backups(SemanticsIds.curationBackups, 'Backups', adminOnly: true),
-  trash(SemanticsIds.curationTrash, 'Trash', adminOnly: true),
-  migrate(
-    SemanticsIds.curationMigrate,
-    'Import from another server',
-    adminOnly: true,
-  );
-
-  const _CurationDestination(
-    this.id,
-    this.label, {
-    required this.adminOnly,
-    this.needsUpload = false,
-  });
-
-  final String id;
-  final String label;
-  final bool adminOnly;
-
-  /// Hidden without effective upload rights (admins always hold
-  /// them).
-  final bool needsUpload;
-
-  String get location => switch (this) {
-    review => WaxRoute.review,
-    uploads => WaxRoute.uploads,
-    health => WaxRoute.health,
-    diagnostics => WaxRoute.diagnostics,
-    organize => WaxRoute.organize,
-    tasks => WaxRoute.tasks,
-    users => WaxRoute.users,
-    audit => WaxRoute.audit,
-    backups => WaxRoute.backups,
-    trash => WaxRoute.trash,
-    migrate => WaxRoute.migrate,
-  };
-}
-
 /// Artwork grid over the whole library with a media-type filter, cursor
 /// paged with infinite scroll, plus a continue-listening banner.
 class LibraryScreen extends ConsumerWidget {
@@ -136,95 +72,10 @@ class LibraryScreen extends ConsumerWidget {
                 child: const Icon(Icons.add),
               ),
             ),
-      appBar: AppBar(
-        title: const Text('WaxDeck'),
-        actions: [
-          Semantics(
-            identifier: SemanticsIds.curationMenu,
-            label: 'Curation',
-            child: PopupMenuButton<_CurationDestination>(
-              key: const Key(SemanticsIds.curationMenu),
-              tooltip: 'Curation',
-              icon: const Icon(Icons.build_outlined),
-              onSelected: (destination) => context.go(destination.location),
-              itemBuilder: (context) {
-                final user = ref.read(authControllerProvider).value?.user;
-                final isAdmin = user?.roles.contains('admin') ?? false;
-                final uploads = user?.uploadEnabled ?? false;
-                return [
-                  for (final destination in _CurationDestination.values)
-                    if ((isAdmin || !destination.adminOnly) &&
-                        (uploads || !destination.needsUpload))
-                      PopupMenuItem(
-                        value: destination,
-                        child: Semantics(
-                          identifier: destination.id,
-                          child: Text(
-                            destination.label,
-                            key: ValueKey(destination.id),
-                          ),
-                        ),
-                      ),
-                ];
-              },
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.browseOpen,
-            child: IconButton(
-              key: const Key(SemanticsIds.browseOpen),
-              tooltip: 'Browse by genre, artist, album',
-              icon: const Icon(Icons.category_outlined),
-              onPressed: () => context.go(WaxRoute.browse),
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.openStats,
-            child: IconButton(
-              key: const Key(SemanticsIds.openStats),
-              tooltip: 'Listening stats',
-              icon: const Icon(Icons.insights),
-              onPressed: () => context.go(WaxRoute.stats),
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.playlistsOpen,
-            child: IconButton(
-              key: const Key(SemanticsIds.playlistsOpen),
-              tooltip: 'Playlists',
-              icon: const Icon(Icons.queue_music),
-              onPressed: () => context.go(WaxRoute.playlists),
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.radioOpen,
-            child: IconButton(
-              key: const Key(SemanticsIds.radioOpen),
-              tooltip: 'Radio',
-              icon: const Icon(Icons.radio),
-              onPressed: () => context.go(WaxRoute.radio),
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.podcastsOpen,
-            child: IconButton(
-              key: const Key(SemanticsIds.podcastsOpen),
-              tooltip: 'Podcasts',
-              icon: const Icon(Icons.podcasts),
-              onPressed: () => context.go(WaxRoute.podcasts),
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.settingsOpen,
-            child: IconButton(
-              key: const Key(SemanticsIds.settingsOpen),
-              tooltip: 'Settings',
-              icon: const Icon(Icons.settings_outlined),
-              onPressed: () => context.go(WaxRoute.settings),
-            ),
-          ),
-        ],
-      ),
+      // No navigation of its own: the shell's chrome owns where a visitor
+      // can go at every width, and this row was the stand-in that held
+      // the compact case until the account menu existed.
+      appBar: AppBar(title: const Text('WaxDeck')),
       body: AudioDropArea(
         enabled: canUpload,
         onDropped: (files) =>
