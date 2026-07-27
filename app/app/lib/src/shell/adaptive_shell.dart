@@ -4,8 +4,11 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
+import '../player/deck_bar_host.dart';
+import 'lifecycle_banners.dart';
 import 'routes.dart';
 import 'semantics_ids.dart';
+import 'side_panel.dart';
 
 /// Whether the adaptive shell is in charge of navigation.
 ///
@@ -348,6 +351,12 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
       navSemanticsId: SemanticsIds.navRegion,
       collapseSemanticsId: SemanticsIds.navSidebarCollapse,
       overflowSemanticsId: SemanticsIds.navOverflow,
+      // Playback's one home on every screen, outside the branch
+      // navigators so it survives every navigation, and the panel it
+      // opens beside the content where there is room for one.
+      bottom: const DeckBarHost(),
+      panel: shellSidePanel(ref),
+      banners: lifecycleBanners(ref),
       content: widget.shell,
     );
 

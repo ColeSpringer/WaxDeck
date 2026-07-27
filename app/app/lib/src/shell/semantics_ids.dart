@@ -86,6 +86,35 @@ abstract final class SemanticsIds {
   static const String remoteVolume = 'remote-volume';
   static String session(Object id) => 'session-$id';
 
+  // deck: The deck bar, the side panel it opens, and the shell's lifecycle banners.
+  static const String bannerReconnecting = 'banner-reconnecting';
+  static const String bannerUpdated = 'banner-updated';
+  static const String bannerUpdatedReload = 'banner-updated-reload';
+  static const String deckBar = 'deck-bar';
+  static const String deckCast = 'deck-cast';
+  static const String deckMore = 'deck-more';
+  static const String deckNext = 'deck-next';
+  static const String deckOffer = 'deck-offer';
+  static const String deckOfferDismiss = 'deck-offer-dismiss';
+  static const String deckOfferResume = 'deck-offer-resume';
+  static const String deckPlay = 'deck-play';
+  static const String deckPrevious = 'deck-previous';
+  static const String deckQueue = 'deck-queue';
+  static const String deckRepeat = 'deck-repeat';
+  static const String deckSeek = 'deck-seek';
+  static const String deckShuffle = 'deck-shuffle';
+  static const String deckSkipBack = 'deck-skip-back';
+  static const String deckSkipForward = 'deck-skip-forward';
+  static const String deckStar = 'deck-star';
+  static const String panel = 'panel';
+  static const String panelClose = 'panel-close';
+  static const String queueClear = 'queue-clear';
+  static String queueEntry(Object queueId) => 'queue-entry-$queueId';
+  static String queueEntryRemove(Object queueId) =>
+      'queue-entry-remove-$queueId';
+  static const String queueRepeat = 'queue-repeat';
+  static const String queueShuffle = 'queue-shuffle';
+
   // discovery: Instant mixes, similar tracks, and the track lists they open.
   static const String instantMixRun = 'instant-mix-run';
   static const String mixAdventurousness = 'mix-adventurousness';

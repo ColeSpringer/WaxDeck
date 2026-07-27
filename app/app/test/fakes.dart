@@ -65,6 +65,19 @@ class FakeRepository implements WaxDeckRepository {
   /// changes, to exercise the optimistic rollback path.
   WaxDeckApiException? playStateError;
 
+  /// What the health probe reports. Mutable so a test can restart the
+  /// server under a running client, which is what the shell's
+  /// server-updated banner watches for.
+  String serverVersion = 'test';
+  int apiVersion = 1;
+
+  /// Thrown by [health] when set. Deliberately an [Object] rather than
+  /// the structured API error: the client maps only transport failures
+  /// into that type, and a response a generated deserializer cannot
+  /// build throws something else entirely — which is the shape a probe
+  /// meets right after the server it is probing was replaced.
+  Object? serverHealthError;
+
   /// When set, listing calls fail with it (a dead network in tests).
   WaxDeckApiException? listError;
 
@@ -153,8 +166,15 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<ServerHealth> health() async =>
-      const ServerHealth(status: 'ok', version: 'test', apiVersion: 1);
+  Future<ServerHealth> health() async {
+    final failure = serverHealthError;
+    if (failure != null) throw failure;
+    return ServerHealth(
+      status: 'ok',
+      version: serverVersion,
+      apiVersion: apiVersion,
+    );
+  }
 
   @override
   Future<BootstrapStatus> bootstrapStatus() async => BootstrapStatus(

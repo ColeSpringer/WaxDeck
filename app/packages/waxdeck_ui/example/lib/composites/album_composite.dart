@@ -42,6 +42,12 @@ class AlbumComposite extends StatelessWidget {
                 onExpand: () {},
                 onSeek: (_) {},
                 onStar: (_) {},
+                // The composite shows the finished bar, so its right
+                // cluster is wired: an unwired control is not drawn.
+                onQueue: () {},
+                onLyrics: () {},
+                onCast: () {},
+                onMore: () {},
               ),
             ),
       body: Column(

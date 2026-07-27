@@ -22,6 +22,7 @@ import '../library/browse_screen.dart';
 import '../library/library_screen.dart';
 import '../metadata/metadata_screen.dart';
 import '../organize/organize_screen.dart';
+import '../player/autoplay_gate.dart';
 import '../player/now_playing_controller.dart';
 import '../player/player_screen.dart';
 import '../playlists/playlist_screen.dart';
@@ -668,8 +669,12 @@ class _SignedInScope extends ConsumerWidget {
     ref.watch(queuePersistenceProvider);
     // The notifier, not its state: playback has to be listening to the
     // queue for the whole session, but what it is playing changes
-    // constantly and nothing under here should rebuild for that.
+    // constantly and nothing under here should rebuild for that. The
+    // autoplay gate is here for the other half of that reason: it has to
+    // be listening before the refusal it exists to catch, and the deck
+    // bar it feeds is mounted only once there is something to show.
     ref.watch(nowPlayingProvider.notifier);
+    ref.watch(autoplayBlockedProvider.notifier);
     return ShareIntakeGate(child: child);
   }
 }

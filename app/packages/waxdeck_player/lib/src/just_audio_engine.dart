@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'audio_engine_port.dart';
@@ -24,6 +25,7 @@ class JustAudioEngine implements AudioEnginePort {
 
   final AudioPlayer _player;
   final _boundaries = StreamController<void>.broadcast();
+  final _refusals = StreamController<Object>.broadcast();
   late final StreamSubscription<int?> _indexSub;
   late final StreamSubscription<Duration?> _durationSub;
 
@@ -256,7 +258,41 @@ class JustAudioEngine implements AudioEnginePort {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    // just_audio's own `play()` resolves when playback *stops*, which is
+    // its documented contract ("completes when the playback completes or
+    // is paused or stopped") and not what this port promises. Returning
+    // it directly held every caller for the length of the item: a
+    // session published its transport only once the track had ended, and
+    // a live stream, which never ends, never published one at all. The
+    // request is raised synchronously inside that call, so issuing it
+    // and letting go is what "playback is running" amounts to here.
+    unawaited(_player.play().catchError(_refused));
+  }
+
+  /// The platform turned the request down (a browser's autoplay policy).
+  ///
+  /// just_audio raises its playing flag before it asks the platform and
+  /// leaves it raised when the answer is no, so the engine would report
+  /// itself playing over silence. The flag is put back first, so every
+  /// surface reads the truth, and the refusal is announced after.
+  /// Nothing here may throw: it is reached through `catchError` on a
+  /// request nobody awaits, so an error escaping it has no handler and
+  /// surfaces as an unhandled zone error. Disposal is the way to get
+  /// one — the flag is raised several awaits before the player is
+  /// actually released, and a pause issued into that window is talking
+  /// to a platform that is tearing down.
+  Future<void> _refused(Object error) async {
+    if (_disposed) return;
+    try {
+      await _player.pause();
+    } on Object catch (failure) {
+      // The flag stays raised, which is the lesser wrong: there is
+      // nothing left to report it to either.
+      debugPrint('could not put the playing flag back: $failure');
+    }
+    if (!_refusals.isClosed) _refusals.add(error);
+  }
 
   @override
   Future<void> pause() => _player.pause();
@@ -281,6 +317,7 @@ class JustAudioEngine implements AudioEnginePort {
     await _indexSub.cancel();
     await _durationSub.cancel();
     await _boundaries.close();
+    await _refusals.close();
     await _player.dispose();
   }
 
@@ -327,6 +364,9 @@ class JustAudioEngine implements AudioEnginePort {
 
   @override
   Stream<void> get itemBoundary => _boundaries.stream;
+
+  @override
+  Stream<Object> get playbackRefused => _refusals.stream;
 
   @override
   Future<void> setSpeed(double speed) => _player.setSpeed(speed);

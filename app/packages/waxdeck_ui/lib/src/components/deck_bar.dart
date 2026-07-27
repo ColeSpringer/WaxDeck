@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
@@ -25,7 +26,10 @@ class DeckBarActions {
     this.onPrevious,
     this.onSkipBack,
     this.onSkipForward,
+    this.skipBackBy = const Duration(seconds: 15),
+    this.skipForwardBy = const Duration(seconds: 30),
     this.onExpand,
+    this.onLongPress,
     this.onQueue,
     this.onLyrics,
     this.onCast,
@@ -48,7 +52,20 @@ class DeckBarActions {
   final VoidCallback? onSkipBack;
   final VoidCallback? onSkipForward;
 
+  /// How far those two jump, as data rather than as prose: the control
+  /// names its own interval, and a caller that changes one without the
+  /// other would have the screen reader announce a distance the button
+  /// does not travel.
+  final Duration skipBackBy;
+  final Duration skipForwardBy;
+
   final VoidCallback? onExpand;
+
+  /// The item's context menu, reached by holding the bar. Everything in
+  /// it is also reachable from the overflow control, so a gesture is
+  /// never the only way to any of it.
+  final VoidCallback? onLongPress;
+
   final VoidCallback? onQueue;
   final VoidCallback? onLyrics;
   final VoidCallback? onCast;
@@ -71,12 +88,24 @@ class DeckBar extends StatelessWidget {
     this.actions = const DeckBarActions(),
     this.ids = const DeckBarIds(),
     this.sizeClass,
+    this.positionTicker,
     this.autoplayBlocked = false,
     super.key,
   });
 
   final NowPlayingData now;
   final DeckBarActions actions;
+
+  /// The live position, when the caller has one to feed.
+  ///
+  /// The bar is on screen for the whole session and the position moves
+  /// several times a second, so the ticking part is a leaf of its own:
+  /// only the progress hairline and the seek cluster listen here, inside
+  /// a repaint boundary, and the rest of the bar rebuilds when the track
+  /// or the transport changes and not otherwise. Without one the bar
+  /// draws [NowPlayingData.position] and redraws when its caller does,
+  /// which is what a catalogue or a golden wants.
+  final ValueListenable<Duration>? positionTicker;
 
   /// The e2e handles for this bar's controls, supplied by the shell.
   final DeckBarIds ids;
@@ -106,15 +135,25 @@ class DeckBar extends StatelessWidget {
     return Semantics(
       identifier: ids.bar,
       container: true,
+      // Every control keeps a node of its own, and the loose text in the
+      // bar keeps none: without this the title, the artist, and both
+      // timecodes fold into this node's label, so the bar announced its
+      // own elapsed time and re-announced it at every tick.
+      explicitChildNodes: true,
       label: 'Now playing bar',
+      // What is playing and whether it is, but not where it stands: the
+      // position moves several times a second, and a container value
+      // that moved with it would both re-announce itself at every tick
+      // and rebuild the bar this widget is careful not to rebuild. The
+      // seek bar is the control that owns the position, and it announces
+      // it as a spoken time.
       value: <String?>[
         autoplayBlocked
             ? 'Paused by the browser'
             : (now.playing ? 'Playing' : 'Paused'),
+        if (now.live) 'Live',
         now.title,
         now.subtitle,
-        if (!now.live)
-          '${spellDuration(now.position)} of ${spellDuration(now.duration)}',
         if (now.remoteEndpoint != null) 'on ${now.remoteEndpoint}',
       ].nonNulls.join(', '),
       child: DecoratedBox(
@@ -126,9 +165,17 @@ class DeckBar extends StatelessWidget {
           height: compact
               ? WaxShellMetrics.deckBarCompactHeight
               : WaxShellMetrics.deckBarExpandedHeight,
-          child: compact
-              ? _compact(context, colors)
-              : _expanded(context, colors),
+          // Its own Material, inside the surface rather than around it:
+          // the bar is mounted straight into the shell's frame, where
+          // there is none, and the ink under the house controls has to
+          // land on top of the bar's own background rather than behind
+          // it.
+          child: Material(
+            type: MaterialType.transparency,
+            child: compact
+                ? _compact(context, colors)
+                : _expanded(context, colors),
+          ),
         ),
       ),
     );
@@ -141,15 +188,20 @@ class DeckBar extends StatelessWidget {
         // affordance at this size: a seek bar in a 64 px bar is a
         // mis-tap generator.
         if (!now.live)
-          LinearProgressIndicator(
-            value: now.fraction,
-            minHeight: 2,
-            backgroundColor: colors.hairline,
-            valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
+          _Ticking(
+            ticker: positionTicker,
+            fallback: now.position,
+            builder: (context, position) => LinearProgressIndicator(
+              value: now.fractionAt(position),
+              minHeight: 2,
+              backgroundColor: colors.hairline,
+              valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
+            ),
           ),
         Expanded(
           child: GestureDetector(
             onTap: actions.onExpand,
+            onLongPress: actions.onLongPress,
             onVerticalDragEnd: (details) {
               if ((details.primaryVelocity ?? 0) < -100) {
                 actions.onExpand?.call();
@@ -169,7 +221,11 @@ class DeckBar extends StatelessWidget {
                 children: <Widget>[
                   _artwork(48),
                   const SizedBox(width: WaxSpace.s12),
-                  Expanded(child: _titleBlock(colors, compact: true)),
+                  Expanded(
+                    child: ExcludeSemantics(
+                      child: _titleBlock(colors, compact: true),
+                    ),
+                  ),
                   ..._transport(context, colors, compact: true),
                 ],
               ),
@@ -190,11 +246,16 @@ class DeckBar extends StatelessWidget {
           Expanded(
             child: GestureDetector(
               onTap: actions.onExpand,
+              onLongPress: actions.onLongPress,
               child: Row(
                 children: <Widget>[
                   _artwork(56),
                   const SizedBox(width: WaxSpace.s12),
-                  Flexible(child: _titleBlock(colors, compact: false)),
+                  Flexible(
+                    child: ExcludeSemantics(
+                      child: _titleBlock(colors, compact: false),
+                    ),
+                  ),
                   const SizedBox(width: WaxSpace.s8),
                   StarButton(
                     starred: now.starred,
@@ -221,32 +282,40 @@ class DeckBar extends StatelessWidget {
                   children: _transport(context, colors, compact: false),
                 ),
                 if (!now.live)
-                  Row(
-                    children: <Widget>[
-                      Text(
-                        formatTimecode(now.position),
-                        style: WaxType.monoTime.copyWith(
-                          color: colors.textTertiary,
+                  _Ticking(
+                    ticker: positionTicker,
+                    fallback: now.position,
+                    builder: (context, position) => Row(
+                      children: <Widget>[
+                        ExcludeSemantics(
+                          child: Text(
+                            formatTimecode(position),
+                            style: WaxType.monoTime.copyWith(
+                              color: colors.textTertiary,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: WaxSpace.s8),
-                      Expanded(
-                        child: WaxSeekBar(
-                          position: now.position,
-                          duration: now.duration,
-                          buffered: now.buffered,
-                          onSeek: actions.onSeek,
-                          semanticsId: ids.seek,
+                        const SizedBox(width: WaxSpace.s8),
+                        Expanded(
+                          child: WaxSeekBar(
+                            position: position,
+                            duration: now.duration,
+                            buffered: now.buffered,
+                            onSeek: actions.onSeek,
+                            semanticsId: ids.seek,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: WaxSpace.s8),
-                      Text(
-                        formatTimecode(now.duration),
-                        style: WaxType.monoTime.copyWith(
-                          color: colors.textTertiary,
+                        const SizedBox(width: WaxSpace.s8),
+                        ExcludeSemantics(
+                          child: Text(
+                            formatTimecode(now.duration),
+                            style: WaxType.monoTime.copyWith(
+                              color: colors.textTertiary,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
               ],
             ),
@@ -256,39 +325,49 @@ class DeckBar extends StatelessWidget {
           // buttons and a speed chip do not fit in a quarter of an
           // 840 px window, and a flex would have them overflow instead
           // of taking the space they need.
+          // Each of these is drawn only where the caller wired it. A
+          // surface the app has not built yet would otherwise sit here
+          // as a permanently greyed button, which reads as broken rather
+          // than as absent; the transport is the opposite case and keeps
+          // its controls disabled, because a bar that loses its next
+          // button on the last track is a bar that moves under the hand.
           Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               if (now.speed != null) _speedChip(colors),
-              WaxIconButton(
-                glyph: WaxIcons.queue,
-                label: 'Queue',
-                size: 18,
-                onPressed: actions.onQueue,
-                semanticsId: ids.queue,
-              ),
-              WaxIconButton(
-                glyph: WaxIcons.lyrics,
-                label: 'Lyrics',
-                size: 18,
-                onPressed: actions.onLyrics,
-                semanticsId: ids.lyrics,
-              ),
-              WaxIconButton(
-                glyph: WaxIcons.cast,
-                label: 'Play on another device',
-                size: 18,
-                active: now.remoteEndpoint != null,
-                onPressed: actions.onCast,
-                semanticsId: ids.cast,
-              ),
-              WaxIconButton(
-                glyph: WaxIcons.more,
-                label: 'More',
-                size: 18,
-                onPressed: actions.onMore,
-                semanticsId: ids.more,
-              ),
+              if (actions.onQueue != null)
+                WaxIconButton(
+                  glyph: WaxIcons.queue,
+                  label: 'Queue',
+                  size: 18,
+                  onPressed: actions.onQueue,
+                  semanticsId: ids.queue,
+                ),
+              if (actions.onLyrics != null)
+                WaxIconButton(
+                  glyph: WaxIcons.lyrics,
+                  label: 'Lyrics',
+                  size: 18,
+                  onPressed: actions.onLyrics,
+                  semanticsId: ids.lyrics,
+                ),
+              if (actions.onCast != null)
+                WaxIconButton(
+                  glyph: WaxIcons.cast,
+                  label: 'Play on another device',
+                  size: 18,
+                  active: now.remoteEndpoint != null,
+                  onPressed: actions.onCast,
+                  semanticsId: ids.cast,
+                ),
+              if (actions.onMore != null)
+                WaxIconButton(
+                  glyph: WaxIcons.more,
+                  label: 'More',
+                  size: 18,
+                  onPressed: actions.onMore,
+                  semanticsId: ids.more,
+                ),
             ],
           ),
         ],
@@ -398,15 +477,19 @@ class DeckBar extends StatelessWidget {
       if (!compact)
         WaxIconButton(
           glyph: WaxIcons.shuffle,
-          label: 'Shuffle',
+          // A control that cycles says which state it is in, in its own
+          // name as well as its tint: greyscale and a screen reader both
+          // have to be able to tell.
+          label: now.shuffled ? 'Shuffle on' : 'Shuffle off',
           size: 18,
+          active: now.shuffled,
           onPressed: now.live ? null : actions.onShuffle,
           semanticsId: ids.shuffle,
         ),
       if (_spokenWord)
         WaxIconButton(
           glyph: WaxIcons.rewind,
-          label: 'Back 15 seconds',
+          label: 'Back ${spellDuration(actions.skipBackBy)}',
           size: compact ? 20 : 22,
           onPressed: actions.onSkipBack,
           semanticsId: ids.skipBack,
@@ -423,7 +506,7 @@ class DeckBar extends StatelessWidget {
       if (_spokenWord)
         WaxIconButton(
           glyph: WaxIcons.fastForward,
-          label: 'Forward 30 seconds',
+          label: 'Forward ${spellDuration(actions.skipForwardBy)}',
           size: compact ? 20 : 22,
           onPressed: actions.onSkipForward,
           semanticsId: ids.skipForward,
@@ -438,9 +521,16 @@ class DeckBar extends StatelessWidget {
         ),
       if (!compact)
         WaxIconButton(
-          glyph: WaxIcons.repeatAll,
-          label: 'Repeat',
+          glyph: now.repeat == WaxRepeat.one
+              ? WaxIcons.repeatOne
+              : WaxIcons.repeatAll,
+          label: switch (now.repeat) {
+            WaxRepeat.off => 'Repeat off',
+            WaxRepeat.all => 'Repeat all',
+            WaxRepeat.one => 'Repeat one',
+          },
           size: 18,
+          active: now.repeat != WaxRepeat.off,
           onPressed: now.live ? null : actions.onRepeat,
           semanticsId: ids.repeat,
         ),
@@ -492,6 +582,165 @@ class DeckBar extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The deck bar's other face: a queue found at launch, offered back.
+///
+/// It stands in the same slot at the same height, because it is the same
+/// promise — this is where what you are listening to lives — and because
+/// the bar appearing under the content on launch and then jumping as
+/// playback starts would move the page twice. The offer names what would
+/// come back, so accepting it is a decision rather than a guess, and it
+/// can be turned down: an offer that cannot be declined is a nag.
+class DeckBarOffer extends StatelessWidget {
+  const DeckBarOffer({
+    required this.title,
+    required this.onResume,
+    required this.onDismiss,
+    this.subtitle,
+    this.artwork,
+    this.domain = WaxDomain.music,
+    this.shape = ArtworkShape.square,
+    this.resumeLabel = 'Resume',
+    this.semanticsId,
+    this.resumeSemanticsId,
+    this.dismissSemanticsId,
+    super.key,
+  });
+
+  /// What would come back: the item the queue stands on, or a plain
+  /// count when the catalogue cannot name it (offline, never synced).
+  final String title;
+  final String? subtitle;
+  final ImageProvider? artwork;
+  final WaxDomain domain;
+  final ArtworkShape shape;
+
+  final String resumeLabel;
+  final VoidCallback onResume;
+  final VoidCallback onDismiss;
+
+  final String? semanticsId;
+  final String? resumeSemanticsId;
+  final String? dismissSemanticsId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Semantics(
+      identifier: semanticsId,
+      container: true,
+      explicitChildNodes: true,
+      label: <String?>[
+        'Pick up where you left off',
+        title,
+        subtitle,
+      ].nonNulls.join(', '),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface1,
+          border: Border(top: BorderSide(color: colors.hairline)),
+        ),
+        child: SizedBox(
+          height: WaxShellMetrics.deckBarCompactHeight,
+          // See [DeckBar]: the offer stands in the same slot, with the
+          // same lack of a Material around it.
+          child: Material(
+            type: MaterialType.transparency,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
+              child: Row(
+                children: <Widget>[
+                  ArtworkImage(
+                    size: 48,
+                    image: artwork,
+                    monogram: title,
+                    shape: shape,
+                    domain: domain,
+                  ),
+                  const SizedBox(width: WaxSpace.s12),
+                  Expanded(
+                    child: ExcludeSemantics(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.fade,
+                            softWrap: false,
+                            style: WaxType.titleItem.copyWith(
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            subtitle ?? 'Pick up where you left off',
+                            maxLines: 1,
+                            overflow: TextOverflow.fade,
+                            softWrap: false,
+                            style: WaxType.caption.copyWith(
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: WaxSpace.s8),
+                  WaxButton(
+                    label: resumeLabel,
+                    kind: WaxButtonKind.tonal,
+                    icon: WaxIcons.play,
+                    onPressed: onResume,
+                    semanticsId: resumeSemanticsId,
+                  ),
+                  WaxIconButton(
+                    glyph: WaxIcons.close,
+                    label: 'Not now',
+                    size: 18,
+                    onPressed: onDismiss,
+                    semanticsId: dismissSemanticsId,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The one part of the deck bar that moves while a track plays.
+///
+/// The bar outlives every screen, so its rebuilds are the app's most
+/// repeated frame work. Fed a ticker, the position lives in this leaf
+/// behind a repaint boundary and nothing above it rebuilds; fed none, it
+/// draws the caller's snapshot and rebuilds only when the caller does.
+class _Ticking extends StatelessWidget {
+  const _Ticking({
+    required this.ticker,
+    required this.fallback,
+    required this.builder,
+  });
+
+  final ValueListenable<Duration>? ticker;
+  final Duration fallback;
+  final Widget Function(BuildContext context, Duration position) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final ticker = this.ticker;
+    if (ticker == null) return builder(context, fallback);
+    return RepaintBoundary(
+      child: ValueListenableBuilder<Duration>(
+        valueListenable: ticker,
+        builder: (context, position, _) => builder(context, position),
       ),
     );
   }

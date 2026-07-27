@@ -7,10 +7,14 @@ import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/library/browse_controller.dart';
 import 'package:waxdeck/src/library/browse_screen.dart';
 import 'package:waxdeck/src/library/library_screen.dart';
+import 'package:waxdeck/src/player/deck_bar_host.dart';
+import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
 import 'package:waxdeck/src/settings/settings_screen.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
@@ -18,7 +22,9 @@ import 'package:waxdeck/src/shell/adaptive_shell.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/side_panel.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
@@ -55,11 +61,26 @@ Future<ProviderContainer> _pumpShell(
         )..addSubscription(testShow(_showPid)),
       ),
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      // The shell hosts the deck bar, so mounting it builds playback:
+      // the real engine wants platform channels no widget test has.
+      audioEngineProvider.overrideWithValue(FakeEngine()),
     ],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
-    UncontrolledProviderScope(container: container, child: const WaxDeckApp()),
+    UncontrolledProviderScope(
+      container: container,
+      // Animations off: the deck bar's VU needle repeats for as long as
+      // something is playing, which is the point of it and the end of
+      // `pumpAndSettle`. Built from the view, so the size class every
+      // one of these tests keys off is still the window's own.
+      child: MediaQuery(
+        data: MediaQueryData.fromView(
+          tester.view,
+        ).copyWith(disableAnimations: true),
+        child: const WaxDeckApp(),
+      ),
+    ),
   );
   await tester.pumpAndSettle();
   return container;
@@ -387,6 +408,60 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PlayerScreen), findsNothing);
     expect(find.byType(WaxSidebar), findsOneWidget);
+  });
+
+  testWidgets('playback keeps its slot across every destination', (
+    tester,
+  ) async {
+    // The deck bar is the shell's, not a screen's: it sits outside the
+    // branch navigators, so walking between domains never unmounts it
+    // and playback never loses its one home.
+    final container = await _pumpShell(tester);
+    container.read(nowPlayingProvider.notifier).play(
+      [testItem('tr-A', title: 'Salt Harbour')],
+      source: const QueueSource(
+        kind: QueueSourceKind.single,
+        label: 'Salt Harbour',
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final frame = tester.widget<WaxShellFrame>(find.byType(WaxShellFrame));
+    expect(frame.bottom, isA<DeckBarHost>());
+    expect(find.text('Salt Harbour'), findsOneWidget);
+
+    await _tapNav(tester, WaxNavTarget.radio.name);
+    expect(find.text('Salt Harbour'), findsOneWidget);
+
+    container.read(queueControllerProvider.notifier).clear();
+    // Long enough for the queue's own save debounce and Connect's report
+    // settle to fire: both are the app's, and the test outlives them.
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('the panel takes its slot only once something opens it', (
+    tester,
+  ) async {
+    final container = await _pumpShell(tester, size: const Size(1400, 900));
+    expect(
+      tester.widget<WaxShellFrame>(find.byType(WaxShellFrame)).panel,
+      isNull,
+      reason: 'an empty panel is a stripe of surface with a close button',
+    );
+
+    container.read(sidePanelProvider.notifier).toggle(WaxPanel.queue);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WaxSidePanel), findsOneWidget);
+    // Shell state, so it survives the destination that was showing when
+    // it opened.
+    await _tapNav(tester, WaxNavTarget.radio.name);
+    expect(find.byType(WaxSidePanel), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Close panel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(WaxSidePanel), findsNothing);
   });
 
   testWidgets('back steps from a domain to home once, then leaves', (

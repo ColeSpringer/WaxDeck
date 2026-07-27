@@ -106,6 +106,7 @@ class _CatalogShell extends StatelessWidget {
     'Player: audiobook',
     'Player: radio',
     'Deck bar',
+    'Shell surfaces',
   ];
 
   @override
@@ -213,7 +214,8 @@ class _CatalogShell extends StatelessWidget {
     5 => PlayerComposite(art: art, face: WaxDomain.podcasts),
     6 => PlayerComposite(art: art, face: WaxDomain.audiobooks),
     7 => PlayerComposite(art: art, face: WaxDomain.radio),
-    _ => _DeckBarGallery(art: art),
+    8 => _DeckBarGallery(art: art),
+    _ => _ShellSurfacesGallery(art: art),
   };
 }
 
@@ -285,6 +287,90 @@ class _DeckBarGallery extends StatelessWidget {
             sizeClass: WaxSizeClass.compact,
             autoplayBlocked: true,
             actions: DeckBarActions(onPlayPause: () {}, onExpand: () {}),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The pieces the shell frame holds around a screen: the banners it
+/// shows about the app's own state, the panel it opens beside the
+/// content, and the deck bar's other face.
+class _ShellSurfacesGallery extends StatelessWidget {
+  const _ShellSurfacesGallery({required this.art});
+
+  final SampleArt art;
+
+  @override
+  Widget build(BuildContext context) {
+    final music = SampleLibrary.nowPlayingMusic(art);
+    return ListView(
+      padding: const EdgeInsets.all(WaxSpace.s24),
+      children: <Widget>[
+        const SectionHeader(overline: 'Banners', title: 'Lifecycle'),
+        const WaxBanner(
+          message:
+              'Reconnecting to the server. Anything already playing '
+              'keeps playing.',
+          glyph: WaxIcons.offline,
+        ),
+        const SizedBox(height: WaxSpace.s8),
+        WaxBanner(
+          tone: WaxBannerTone.notice,
+          message: 'WaxDeck was updated. Reload to get the new version.',
+          actionLabel: 'Reload',
+          onAction: () {},
+        ),
+        const SizedBox(height: WaxSpace.s8),
+        WaxBanner(
+          tone: WaxBannerTone.caution,
+          message:
+              'The library is read-only. Nothing here can be changed '
+              'until the server says otherwise.',
+          onDismiss: () {},
+        ),
+        const SizedBox(height: WaxSpace.s24),
+        const SectionHeader(overline: 'Deck bar', title: 'Launch offer'),
+        SizedBox(
+          width: 480,
+          child: DeckBarOffer(
+            title: music.title,
+            subtitle: music.subtitle,
+            artwork: music.artwork,
+            onResume: () {},
+            onDismiss: () {},
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s24),
+        const SectionHeader(overline: 'Panel', title: 'Docked beside the page'),
+        SizedBox(
+          height: 320,
+          child: Row(
+            children: <Widget>[
+              const Expanded(child: Center(child: Text('content pane'))),
+              SizedBox(
+                width: WaxShellMetrics.rightPanelWidth,
+                child: WaxSidePanel(
+                  title: 'Queue',
+                  onClose: () {},
+                  actions: <Widget>[
+                    WaxIconButton(
+                      glyph: WaxIcons.delete,
+                      label: 'Clear queue',
+                      size: 18,
+                      onPressed: () {},
+                    ),
+                  ],
+                  child: ListView(
+                    children: <Widget>[
+                      for (final tile in SampleLibrary.albumTracks())
+                        MediaListRow(data: tile, onTap: () {}),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],

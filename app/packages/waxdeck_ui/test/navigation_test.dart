@@ -96,35 +96,54 @@ void main() {
       });
     }
 
-    testWidgets('the docked panel appears only where it fits', (tester) async {
-      for (final size in <Size>[
-        const Size(400, 800),
-        const Size(700, 900),
-        const Size(1000, 900),
-        const Size(1400, 900),
-      ]) {
-        tester.view.physicalSize = size;
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: buildWaxTheme(),
-            home: WaxShellFrame(
-              destinations: _primary,
-              selected: 'home',
-              onSelect: (_) {},
-              panel: const Text('queue panel'),
-              content: const Text('content pane'),
+    testWidgets(
+      'the panel docks where it fits and overlays where it does not',
+      (tester) async {
+        // Wide seats the panel beside the content; expanded lays it over
+        // the content's trailing edge, which still leaves a usable page
+        // underneath; narrower than that there is no room for either, and
+        // the frame drops it rather than squeezing the content to nothing.
+        for (final size in <Size>[
+          const Size(400, 800),
+          const Size(700, 900),
+          const Size(1000, 900),
+          const Size(1400, 900),
+        ]) {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: buildWaxTheme(),
+              home: WaxShellFrame(
+                destinations: _primary,
+                selected: 'home',
+                onSelect: (_) {},
+                panel: const Text('queue panel'),
+                content: const SizedBox.expand(
+                  key: Key('pane'),
+                  child: Text('content pane'),
+                ),
+              ),
             ),
-          ),
-        );
-        expect(
-          find.text('queue panel'),
-          size.width >= 1200 ? findsOneWidget : findsNothing,
-          reason: 'panel docks on wide only, not at ${size.width}',
-        );
-      }
-    });
+          );
+          expect(
+            find.text('queue panel'),
+            size.width >= 840 ? findsOneWidget : findsNothing,
+            reason: 'the panel needs a sidebar-width window, not ${size.width}',
+          );
+          if (size.width < 840) continue;
+          // Docked, the content pane stops where the panel starts; laid
+          // over, the pane still runs to the window's edge and the panel
+          // is on top of its last 360 px.
+          expect(
+            tester.getRect(find.byKey(const Key('pane'))).right,
+            size.width >= 1200 ? size.width - 360 : size.width,
+            reason: 'the pane is the wrong width at ${size.width}',
+          );
+        }
+      },
+    );
   });
 
   group('destinations', () {
@@ -237,6 +256,10 @@ void main() {
               secondary: _secondary,
               selected: 'home',
               onSelect: (_) {},
+              banners: const <Widget>[
+                WaxBanner(message: 'Reconnecting to the server.'),
+              ],
+              bottom: const Text('deck bar'),
               content: Navigator(
                 onGenerateRoute: (_) => MaterialPageRoute<void>(
                   builder: (_) => const Scaffold(body: Text('content pane')),
@@ -255,6 +278,19 @@ void main() {
             reason: '${destination.label} on ${entry.key}',
           );
         }
+        // Everything else the frame holds is in the same walk: a banner
+        // is painted before the pane, and it is the pane's own boundary
+        // that keeps the barriers inside it from erasing the banner.
+        expect(
+          find.bySemanticsLabel('Reconnecting to the server.'),
+          findsOneWidget,
+          reason: 'the banner on ${entry.key}',
+        );
+        expect(
+          find.bySemanticsLabel('deck bar'),
+          findsOneWidget,
+          reason: 'the deck bar slot on ${entry.key}',
+        );
         semantics.dispose();
       });
     }

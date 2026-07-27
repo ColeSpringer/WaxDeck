@@ -105,6 +105,17 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     await ref.read(audioEngineProvider).stop();
   }
 
+  /// Starts the loaded station's stream again after the platform turned
+  /// a programmatic start down.
+  ///
+  /// The station is still tuned and its media still loaded: only the
+  /// start was refused, so this is a play and not a re-tune, and the tap
+  /// that reaches it is the gesture the browser was waiting for.
+  Future<void> resume() async {
+    if (state.station == null) return;
+    await ref.read(audioEngineProvider).play();
+  }
+
   /// Clears radio state without touching the engine; the player screen
   /// calls this as it hands the engine to a new item session.
   void markInterrupted() {

@@ -418,6 +418,72 @@ void main() {
     );
 
     goldenTest(
+      'the shell says what the app is doing to itself',
+      fileName: 'shell_surfaces',
+      builder: () => GoldenTestGroup(
+        columns: 1,
+        children: <Widget>[
+          for (final variant in WaxThemeVariant.values)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                SizedBox(
+                  width: 560,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      const WaxBanner(
+                        message:
+                            'Reconnecting to the server. Anything '
+                            'already playing keeps playing.',
+                        glyph: WaxIcons.offline,
+                      ),
+                      WaxBanner(
+                        tone: WaxBannerTone.notice,
+                        message:
+                            'WaxDeck was updated. Reload to get the '
+                            'new version.',
+                        actionLabel: 'Reload',
+                        onAction: () {},
+                      ),
+                      WaxBanner(
+                        tone: WaxBannerTone.caution,
+                        message: 'The library is read-only.',
+                        onDismiss: () {},
+                      ),
+                      const SizedBox(height: 12),
+                      DeckBarOffer(
+                        title: 'Salt Harbour',
+                        subtitle: 'Nightjar',
+                        onResume: () {},
+                        onDismiss: () {},
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 180,
+                        child: WaxSidePanel(
+                          title: 'Queue',
+                          onClose: () {},
+                          child: ListView(
+                            children: const <Widget>[
+                              MediaListRow(data: _tile, playing: true),
+                              MediaListRow(data: _tile),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
       'the wordmark is drawn, not shipped as a picture',
       fileName: 'wordmark',
       builder: () => GoldenTestGroup(

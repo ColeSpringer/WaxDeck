@@ -197,7 +197,7 @@ class PlayerScreen extends ConsumerWidget {
               // stops until something rebuilds the queue.
               OutlinedButton(
                 key: const Key('player-retry'),
-                onPressed: ref.read(nowPlayingProvider.notifier).retry,
+                onPressed: ref.read(nowPlayingProvider.notifier).resume,
                 child: const Text('Try again'),
               ),
             ],

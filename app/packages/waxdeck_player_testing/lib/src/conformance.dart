@@ -92,6 +92,45 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
       await sub.cancel();
     });
 
+    test('play answers while the item is still playing', () async {
+      // The port's promise is that play resolves once the request has
+      // been taken, never when the item ends. Awaiting the end instead
+      // is what one backend did for a whole phase: a caller waiting on
+      // it published its transport only when the track finished, and a
+      // live stream, which never finishes, published none at all. This
+      // asks for the answer before the item can possibly be over.
+      await engine.load(harness.mediaUrl);
+      var answered = false;
+      final request = engine.play().then((_) => answered = true);
+      await harness.advance(engine, quarter);
+      expect(
+        answered,
+        isTrue,
+        reason:
+            'play should answer when the request is taken, '
+            'not when the item ends',
+      );
+      expect(engine.playing, isTrue);
+      await engine.pause();
+      await request;
+    });
+
+    test('a start that is taken reports no refusal', () async {
+      // The other half of that contract: a platform that turns a start
+      // down says so here rather than by throwing, so an engine that is
+      // playing must stay silent on this stream. A refusal itself
+      // cannot be provoked from a test — it takes a browser's autoplay
+      // policy — so the surfaces that read it are exercised against the
+      // fake instead.
+      final refusals = <Object>[];
+      final sub = engine.playbackRefused.listen(refusals.add);
+      await engine.load(harness.mediaUrl);
+      await engine.play();
+      await harness.advance(engine, quarter);
+      expect(refusals, isEmpty);
+      await sub.cancel();
+    });
+
     test('pause clears playing and keeps the position', () async {
       await engine.load(harness.mediaUrl);
       await engine.play();

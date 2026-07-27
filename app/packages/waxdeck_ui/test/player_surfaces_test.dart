@@ -81,8 +81,10 @@ void main() {
         size: const Size(1280, 600),
       );
 
-      await tester.tap(find.bySemanticsLabel('Shuffle'));
-      await tester.tap(find.bySemanticsLabel('Repeat'));
+      // Both name the state they are in, so pressing one is pressing a
+      // control that says what it will change.
+      await tester.tap(find.bySemanticsLabel('Shuffle off'));
+      await tester.tap(find.bySemanticsLabel('Repeat off'));
       await tester.pump();
 
       expect(shuffled, 1);

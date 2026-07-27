@@ -29,6 +29,12 @@ class LiveInvalidations {
   /// Fires after each successful (re)connect.
   void Function()? onConnected;
 
+  /// Fires whenever the socket comes up or goes down, so the shell can
+  /// say it is reconnecting rather than leaving a client that answers
+  /// nothing looking healthy. [onConnected] is the "and catch up" hook
+  /// and fires only on the way up; this one reports both directions.
+  void Function(bool connected)? onConnectionChanged;
+
   /// Sends one control frame on the live socket. False when offline.
   bool sendControl(Map<String, Object?> frame) {
     final channel = _channel;
@@ -67,6 +73,7 @@ class LiveInvalidations {
         .connect()
         .then((_) {
           _backoffSeconds = 1;
+          onConnectionChanged?.call(true);
           onConnected?.call();
           // The socket may have been down across changes; refresh once.
           onCatalog();
@@ -80,6 +87,7 @@ class LiveInvalidations {
   void _onDown() {
     if (!_running) return;
     _channel = null;
+    onConnectionChanged?.call(false);
     _reconnect?.cancel();
     final delay = Duration(seconds: _backoffSeconds);
     _backoffSeconds = math.min(_backoffSeconds * 2, 60);

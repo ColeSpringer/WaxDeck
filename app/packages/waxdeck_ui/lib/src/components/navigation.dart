@@ -801,6 +801,7 @@ class WaxShellFrame extends StatelessWidget {
     this.onToggleCollapsed,
     this.bottom,
     this.panel,
+    this.banners = const <Widget>[],
     this.navSemanticsId,
     this.collapseSemanticsId,
     this.overflowSemanticsId,
@@ -837,8 +838,16 @@ class WaxShellFrame extends StatelessWidget {
   /// it sits above the tabs.
   final Widget? bottom;
 
-  /// The right panel: docked beside the content on [WaxSizeClass.wide].
+  /// The right panel. Docked beside the content on [WaxSizeClass.wide]
+  /// and laid over its trailing edge on [WaxSizeClass.expanded]; below
+  /// that there is no room for one, and the frame ignores it rather than
+  /// squeezing the content pane down to nothing.
   final Widget? panel;
+
+  /// Standing messages about the app's own state, above the content and
+  /// below the chrome: they belong to the whole app, and a screen that
+  /// scrolls must not be able to scroll one out of sight.
+  final List<Widget> banners;
 
   final String? navSemanticsId;
   final String? collapseSemanticsId;
@@ -865,19 +874,53 @@ class WaxShellFrame extends StatelessWidget {
       child: ColoredBox(color: colors.canvas, child: child),
     );
 
+    // The banners ride with the content rather than above the whole
+    // frame: the chrome is where a visitor is going, and pushing the
+    // sidebar and the rail down every time the socket blinks would move
+    // the navigation under their cursor.
+    Widget withBanners(Widget content) => banners.isEmpty
+        ? content
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              ...banners,
+              Expanded(child: content),
+            ],
+          );
+
     // Traversal order is shell, then content, then deck bar, which is the
     // order the children are listed in below.
-    Widget pane = Expanded(child: region(content));
-    if (panel != null && sizeClass.docksPanel) {
-      pane = Expanded(
-        child: Row(
+    Widget middle = region(content);
+    if (panel != null) {
+      if (sizeClass.docksPanel) {
+        middle = Row(
           children: <Widget>[
-            Expanded(child: region(content)),
+            Expanded(child: middle),
             SizedBox(width: WaxShellMetrics.rightPanelWidth, child: panel),
           ],
-        ),
-      );
+        );
+      } else if (sizeClass.hasSidebar) {
+        // One step narrower there is not room for both at full width, so
+        // the panel lies over the content's trailing edge. No scrim: the
+        // page underneath stays readable and usable, which is the whole
+        // reason this is a panel and not a sheet. It is painted after the
+        // pane, so the modal barriers inside routed content cannot block
+        // its semantics.
+        middle = Stack(
+          children: <Widget>[
+            Positioned.fill(child: middle),
+            PositionedDirectional(
+              top: 0,
+              bottom: 0,
+              end: 0,
+              width: WaxShellMetrics.rightPanelWidth,
+              child: panel!,
+            ),
+          ],
+        );
+      }
     }
+    final pane = Expanded(child: withBanners(middle));
 
     final Widget body = switch (sizeClass) {
       WaxSizeClass.compact => Column(

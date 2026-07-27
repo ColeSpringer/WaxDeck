@@ -73,6 +73,13 @@ class MediaTileData {
   final String? semanticsId;
 }
 
+/// What happens at the end of the queue, as the transport draws it.
+///
+/// The design system's own copy of the queue's three modes: a control
+/// that cycles through states has to be able to show which one it is
+/// in, and `waxdeck_ui` cannot see the app's queue to ask.
+enum WaxRepeat { off, all, one }
+
 /// What the deck bar and the players need to draw the current item.
 @immutable
 class NowPlayingData {
@@ -89,6 +96,8 @@ class NowPlayingData {
     this.buffered,
     this.live = false,
     this.starred = false,
+    this.shuffled = false,
+    this.repeat = WaxRepeat.off,
     this.remoteEndpoint,
     this.speed,
   });
@@ -118,6 +127,11 @@ class NowPlayingData {
 
   final bool starred;
 
+  /// The queue's standing modes, so the two controls that cycle them can
+  /// show which state they are in. Radio draws neither.
+  final bool shuffled;
+  final WaxRepeat repeat;
+
   /// Set when playback is being controlled on another endpoint: the bar
   /// says so rather than pretending the sound is local.
   final String? remoteEndpoint;
@@ -125,10 +139,16 @@ class NowPlayingData {
   /// Playback rate for spoken word, shown as a compact chip.
   final double? speed;
 
-  double get fraction {
+  double get fraction => fractionAt(position);
+
+  /// How far through the item [at] is, for a surface reading the live
+  /// position from somewhere other than this snapshot: the deck bar
+  /// ticks in a leaf of its own so the rest of the bar does not rebuild
+  /// with it.
+  double fractionAt(Duration at) {
     final total = duration.inMilliseconds;
     if (total <= 0) return 0;
-    return (position.inMilliseconds / total).clamp(0, 1);
+    return (at.inMilliseconds / total).clamp(0, 1);
   }
 }
 

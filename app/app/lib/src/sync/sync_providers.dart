@@ -11,6 +11,7 @@ import '../podcasts/podcasts_controller.dart';
 import '../providers.dart';
 import '../review/review_controller.dart';
 import '../settings/prefs_controller.dart';
+import '../shell/lifecycle_banners.dart';
 import '../tools/tasks_screen.dart';
 import '../uploads/uploads_controller.dart';
 import '../connect/connect_providers.dart';
@@ -155,7 +156,21 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     );
     live.onConnected = connect.onConnected;
     live.onPlayer = connect.onPlayerInvalidate;
+    // The web listener has no status of its own to read, so it reports
+    // one: the shell's reconnecting banner is downstream of this.
+    live.onConnectionChanged = (connected) =>
+        ref.read(liveLinkProvider.notifier).report(connected: connected);
+    // Held, not read from the callback below: a disposal callback may
+    // not touch `ref` at all — the element is already marked disposed
+    // and the container swallows what that throws, so the reset would
+    // silently never happen and the banner would stand over the login
+    // screen of the next session.
+    final link = ref.read(liveLinkProvider.notifier);
     live.start();
-    ref.onDispose(live.stop);
+    ref.onDispose(() {
+      live.stop();
+      // A session that ended is not a client with a broken connection.
+      link.forget();
+    });
   }
 });

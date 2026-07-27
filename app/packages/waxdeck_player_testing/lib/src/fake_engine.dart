@@ -33,12 +33,19 @@ class FakeEngine implements AudioEnginePort {
   /// Whether [dispose] has run.
   bool disposed = false;
 
+  /// Refuses the next [play] the way a browser refuses a programmatic
+  /// resume: the request is dropped, nothing plays, and the reason
+  /// arrives on [playbackRefused]. Cleared as it fires, so the tap that
+  /// follows is allowed.
+  bool refuseNextPlay = false;
+
   final _positions = StreamController<Duration>.broadcast();
   final _durations = StreamController<Duration?>.broadcast();
   final _playings = StreamController<bool>.broadcast();
   final _states = StreamController<EngineProcessingState>.broadcast();
   final _completions = StreamController<void>.broadcast();
   final _boundaries = StreamController<void>.broadcast();
+  final _refusals = StreamController<Object>.broadcast();
   final _speeds = StreamController<double>.broadcast();
 
   Duration _position = Duration.zero;
@@ -82,6 +89,9 @@ class FakeEngine implements AudioEnginePort {
 
   @override
   Stream<void> get itemBoundary => _boundaries.stream;
+
+  @override
+  Stream<Object> get playbackRefused => _refusals.stream;
 
   @override
   double get speed => _speed;
@@ -162,6 +172,14 @@ class FakeEngine implements AudioEnginePort {
 
   @override
   Future<void> play() async {
+    if (refuseNextPlay) {
+      // The refusal is announced rather than thrown, which is the port's
+      // contract: it lands after the request has been dispatched, so
+      // nothing awaiting the start is waiting for it.
+      refuseNextPlay = false;
+      if (!_refusals.isClosed) _refusals.add(const _RefusedByPlatform());
+      return;
+    }
     if (_state == EngineProcessingState.completed) {
       // Match real engines: replay after completion restarts from the top.
       _setPosition(Duration.zero);
@@ -204,6 +222,7 @@ class FakeEngine implements AudioEnginePort {
     unawaited(_states.close());
     unawaited(_completions.close());
     unawaited(_boundaries.close());
+    unawaited(_refusals.close());
     unawaited(_speeds.close());
   }
 
@@ -275,4 +294,14 @@ class FakeEngine implements AudioEnginePort {
     _state = state;
     if (!_states.isClosed) _states.add(state);
   }
+}
+
+/// What [FakeEngine.refuseNextPlay] reports, standing in for the browser's
+/// "play() failed because the user didn't interact with the document
+/// first". Nothing reads its contents; the refusal itself is the signal.
+class _RefusedByPlatform implements Exception {
+  const _RefusedByPlatform();
+
+  @override
+  String toString() => 'the platform refused to start playback';
 }

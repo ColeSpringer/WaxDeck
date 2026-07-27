@@ -74,6 +74,16 @@ abstract interface class AudioEnginePort {
   Future<void> clearPreload();
 
   /// Starts or resumes playback.
+  ///
+  /// Resolves once the engine has taken the request and playback is
+  /// running, never when the item ends: a caller waits on this before
+  /// showing a transport, and an engine that answered at the end of the
+  /// track would leave a live stream's caller waiting for good.
+  ///
+  /// A platform that turns the request down answers on
+  /// [playbackRefused] rather than here: the refusal arrives after the
+  /// request has been dispatched, and waiting for one would mean
+  /// waiting on every start that is going to succeed.
   Future<void> play();
 
   /// Pauses playback, keeping the position.
@@ -119,6 +129,17 @@ abstract interface class AudioEnginePort {
   /// (queue-ended). An item ending into a preloaded one fires
   /// [itemBoundary] instead, never this.
   Stream<void> get completed;
+
+  /// Fires when the platform refused to start playback, carrying
+  /// whatever reason it gave.
+  ///
+  /// Browsers refuse a programmatic resume that no gesture led to (a
+  /// Connect handoff, a restored queue put back into play, a sleep timer
+  /// cancelled from a notification). The media stays loaded and where it
+  /// belongs; only the start was turned down, and [playing] reads false
+  /// by the time this fires, so a surface can offer the tap that would
+  /// be allowed rather than reporting a failure.
+  Stream<Object> get playbackRefused;
 
   /// Fires once each time playback crosses out of the loaded item and
   /// into the one [preloadNext] prepared (item-ended).

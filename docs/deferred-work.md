@@ -69,6 +69,12 @@ here waits on upstream.
   needs the per-device client-settings store, which lands with the
   settings rebuild; until then the cost is one track's worth of
   buffering ahead. See ADR-0020.
+- `[roadmap]` **Spoken-word skip intervals are not configurable.** The deck
+  bar's minus and plus controls jump 15 seconds back and 30 forward, which
+  are the defaults every client ships, and there is no way to change them.
+  Like the wifi-only preload switch above, the setting belongs in Settings,
+  Playback and needs the per-device client-settings store, which lands with
+  the settings rebuild. See ADR-0023.
 - `[in-repo]` **Offline artwork caching.** The offline grid shows placeholders;
   artwork is only fetched live. The `ArtworkPins` table it needs is in
   place (mirror schema v2); the store that fills and reads it is not.
@@ -109,6 +115,18 @@ here waits on upstream.
 
 ## Connect and casting
 
+- `[roadmap]` **The deck bar does not say when playback is somewhere else.**
+  The bar reads local playback alone, so handing a session to another
+  endpoint leaves it showing the item stopped rather than "on
+  [endpoint name]": the cast glyph over the artwork, the caption line,
+  and the volume slider that appears only for an endpoint reporting
+  `volumeControl` are all specified and none is wired
+  (`NowPlayingData.remoteEndpoint` is never set). It stayed out of the
+  deck bar's own phase because controlling another endpoint is a pushed
+  screen holding its own watch-frame state, and making the shell follow
+  it is a piece of the Connect UX rather than of the bar: the picker,
+  the disconnect triad, and the refusal explanations land together with
+  the cast phase. See ADR-0023.
 - `[in-repo]` **Web gapless over hls.js stayed a gated attempt and did not ship.**
   The engine port grew everything it needs (a fourth implementation
   slot behind the same conformance suite), and the server side is

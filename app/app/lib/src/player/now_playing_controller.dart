@@ -103,6 +103,13 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// loading over it.
   ({QueueEntry entry, PlayInfo info})? _adopting;
 
+  /// The token of the start that is still running, when one is. A start
+  /// occupies the state with an entry and no session for as long as it
+  /// takes to resolve and load, and that window is indistinguishable
+  /// from the one an engine hand-over leaves behind unless it is
+  /// recorded.
+  int? _starting;
+
   bool _arming = false;
 
   /// Set when the queue moves while an arm is in flight, so the arm runs
@@ -165,6 +172,14 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// what Connect mirrors and what a command routed here while an item
   /// is still loading belongs to.
   PlaybackSession? get liveSession => _session;
+
+  /// The summary behind [pid], when this layer already has one.
+  ///
+  /// Every queue built from a list on screen seeds these, and every
+  /// entry that plays resolves one, so a queue surface can name most of
+  /// what it shows without asking the server again. Null means nobody
+  /// has needed it yet, not that it does not exist.
+  ItemSummary? summaryFor(String pid) => _known[pid];
 
   /// Resolves when the start in flight has finished, or immediately when
   /// none is.
@@ -300,16 +315,32 @@ class NowPlayingController extends Notifier<NowPlaying> {
     return true;
   }
 
-  /// Starts the current entry over after a failure. The queue never
-  /// moved, so nothing else would try again: a stream that expired
-  /// under a sleeping phone, or a server that was down for a moment,
-  /// is one tap from playing rather than a queue that has to be
-  /// rebuilt.
-  void retry() {
-    if (state.error == null) return;
+  /// Starts the current entry again when nothing is driving it.
+  ///
+  /// Two states reach this, and the queue never moved in either, so
+  /// nothing else would ever try. A start that failed leaves the entry
+  /// sitting there: a stream that expired under a sleeping phone, or a
+  /// server that was down for a moment, is one tap from playing rather
+  /// than a queue that has to be rebuilt. And an item that let the
+  /// engine go to live radio keeps its place on every surface, so the
+  /// transport that is still showing it has to be able to take it back.
+  ///
+  /// Does nothing while a session is live: that session's own toggle is
+  /// the verb for playing and pausing. Nor while one is still starting,
+  /// which looks the same from the outside — the state carries an entry
+  /// and no session for the whole resolve-and-load window — but is
+  /// already on its way, and starting it again would supersede a load
+  /// in flight, re-mint its stream token and its listen session, and
+  /// drop the position it was asked to start at.
+  void resume() {
+    if (state.session != null || _starting != null) return;
     final entry = ref.read(queueControllerProvider).currentEntry;
     if (entry == null) return;
-    _pendingPositionMs = _entryPositionMs;
+    // A start that failed asks again for the position it was asked for.
+    // One that let go of the engine checkpointed where it stood on its
+    // way out, and that checkpoint is the truthful place to come back
+    // to; the original request is where it began, which is behind.
+    _pendingPositionMs = state.error != null ? _entryPositionMs : null;
     _inFlight = _start(entry);
   }
 
@@ -350,6 +381,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
 
   Future<void> _start(QueueEntry entry) async {
     final token = ++_startToken;
+    _starting = token;
     _sessionEntryId = entry.queueId;
     final positionMs = _pendingPositionMs;
     final paused = _pendingPaused;
@@ -389,6 +421,10 @@ class NowPlayingController extends Notifier<NowPlaying> {
       _release(_session, _Farewell.stop);
       _setSession(null);
       state = NowPlaying(entry: entry, item: _known[entry.pid], error: error);
+    } finally {
+      // Only if it is still this start's window: a newer one that
+      // superseded this has its own to close.
+      if (_starting == token) _starting = null;
     }
   }
 
@@ -396,6 +432,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// out of the previous item and into this one.
   Future<void> _adopt(QueueEntry entry, PlayInfo info) async {
     final token = ++_startToken;
+    _starting = token;
     _sessionEntryId = entry.queueId;
     try {
       var item = _known[entry.pid];
@@ -428,6 +465,8 @@ class NowPlayingController extends Notifier<NowPlaying> {
       _release(_session, _Farewell.stop);
       _setSession(null);
       state = NowPlaying(entry: entry, item: _known[entry.pid], error: error);
+    } finally {
+      if (_starting == token) _starting = null;
     }
   }
 

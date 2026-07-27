@@ -381,6 +381,122 @@
       ]
     },
     {
+      "name": "deck",
+      "doc": "The deck bar, the side panel it opens, and the shell's lifecycle banners.",
+      "ids": [
+        {
+          "name": "bannerReconnecting",
+          "id": "banner-reconnecting"
+        },
+        {
+          "name": "bannerUpdated",
+          "id": "banner-updated"
+        },
+        {
+          "name": "bannerUpdatedReload",
+          "id": "banner-updated-reload"
+        },
+        {
+          "name": "deckBar",
+          "id": "deck-bar"
+        },
+        {
+          "name": "deckCast",
+          "id": "deck-cast"
+        },
+        {
+          "name": "deckMore",
+          "id": "deck-more"
+        },
+        {
+          "name": "deckNext",
+          "id": "deck-next"
+        },
+        {
+          "name": "deckOffer",
+          "id": "deck-offer"
+        },
+        {
+          "name": "deckOfferDismiss",
+          "id": "deck-offer-dismiss"
+        },
+        {
+          "name": "deckOfferResume",
+          "id": "deck-offer-resume"
+        },
+        {
+          "name": "deckPlay",
+          "id": "deck-play"
+        },
+        {
+          "name": "deckPrevious",
+          "id": "deck-previous"
+        },
+        {
+          "name": "deckQueue",
+          "id": "deck-queue"
+        },
+        {
+          "name": "deckRepeat",
+          "id": "deck-repeat"
+        },
+        {
+          "name": "deckSeek",
+          "id": "deck-seek"
+        },
+        {
+          "name": "deckShuffle",
+          "id": "deck-shuffle"
+        },
+        {
+          "name": "deckSkipBack",
+          "id": "deck-skip-back"
+        },
+        {
+          "name": "deckSkipForward",
+          "id": "deck-skip-forward"
+        },
+        {
+          "name": "deckStar",
+          "id": "deck-star"
+        },
+        {
+          "name": "panel",
+          "id": "panel"
+        },
+        {
+          "name": "panelClose",
+          "id": "panel-close"
+        },
+        {
+          "name": "queueClear",
+          "id": "queue-clear"
+        },
+        {
+          "name": "queueEntry",
+          "id": "queue-entry-{queueId}",
+          "params": [
+            "queueId"
+          ]
+        },
+        {
+          "name": "queueEntryRemove",
+          "id": "queue-entry-remove-{queueId}",
+          "params": [
+            "queueId"
+          ]
+        },
+        {
+          "name": "queueRepeat",
+          "id": "queue-repeat"
+        },
+        {
+          "name": "queueShuffle",
+          "id": "queue-shuffle"
+        }
+      ]
+    },
+    {
       "name": "discovery",
       "doc": "Instant mixes, similar tracks, and the track lists they open.",
       "ids": [
