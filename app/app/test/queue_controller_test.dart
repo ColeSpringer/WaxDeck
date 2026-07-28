@@ -193,6 +193,180 @@ void main() {
     });
   });
 
+  group('the rolling window', () {
+    const paged = QueueSource(
+      kind: QueueSourceKind.genre,
+      label: 'Jazz',
+      pid: 'ge-1',
+      rolling: true,
+      cursor: 'c-500',
+    );
+
+    test('a window that took the whole list keeps its cursor', () {
+      queue.playNow(_tracks(kQueueCap), source: paged);
+
+      expect(get_().source.rolling, isTrue);
+      expect(get_().source.cursor, 'c-500');
+    });
+
+    test('an ordered window cut short of the list drops its cursor', () {
+      // The listing had 900 loaded and its cursor names item 900; the
+      // window ends at 500, so resuming there would step over 400.
+      queue.playNow(_tracks(900), source: paged);
+
+      expect(get_().source.rolling, isTrue);
+      expect(get_().source.cursor, isEmpty);
+      expect(get_().frontierPid, 'tr-${kQueueCap - 1}');
+    });
+
+    test('a list that fits under a source with more still rolls', () {
+      queue.playNow(_tracks(10), source: paged);
+
+      expect(get_().source.rolling, isTrue);
+      expect(get_().source.cursor, 'c-500');
+    });
+
+    test('a shuffled draw keeps the cursor: it sampled, it did not run', () {
+      queue.playNow(_tracks(900), source: paged, shuffle: true);
+
+      expect(get_().source.cursor, 'c-500');
+    });
+
+    test('a window over a list that fits and has no more does not roll', () {
+      queue.playNow(_tracks(10), source: _album);
+
+      expect(get_().source.rolling, isFalse);
+    });
+
+    test('the frontier is the last entry taken, not the last played', () {
+      queue.playNow(_tracks(5), source: paged);
+      queue.setShuffle(true);
+
+      expect(pids().last, isNot('tr-4'));
+      expect(get_().frontierPid, 'tr-4');
+    });
+
+    test('a draw never re-adds what the queue already holds', () {
+      // A hand reorder rewrites the source order, so the frontier a
+      // draw places itself by can sit one short of the window's real
+      // end, and the page it comes back with overlaps.
+      queue.playNow(_tracks(5), source: paged);
+      queue.appendWindow(['tr-3', 'tr-4', 'tr-5'], cursor: 'c', more: true);
+
+      expect(pids(), [..._tracks(5), 'tr-5']);
+    });
+
+    test('a draw appends and moves the cursor on', () {
+      queue.playNow(_tracks(5), source: paged);
+      queue.appendWindow(['tr-5', 'tr-6'], cursor: 'c-600', more: true);
+
+      expect(pids(), [..._tracks(5), 'tr-5', 'tr-6']);
+      expect(get_().source.cursor, 'c-600');
+      expect(get_().source.rolling, isTrue);
+      expect(get_().frontierPid, 'tr-6');
+    });
+
+    test('a draw onto a full queue evicts history and keeps playing', () {
+      queue.playNow(_tracks(kQueueCap), source: paged, startIndex: 400);
+      queue.appendWindow(['tr-a', 'tr-b'], cursor: 'c-600', more: true);
+
+      expect(get_().length, kQueueCap);
+      expect(get_().currentPid, 'tr-400');
+      expect(pids().first, 'tr-2');
+      expect(pids().last, 'tr-b');
+    });
+
+    test('the last draw seals the window', () {
+      queue.playNow(_tracks(5), source: paged);
+      queue.appendWindow(['tr-5'], cursor: '', more: false);
+
+      expect(get_().source.rolling, isFalse);
+      expect(pids().last, 'tr-5');
+    });
+
+    test('an empty page moves the cursor without touching the queue', () {
+      queue.playNow(_tracks(5), source: paged);
+      queue.appendWindow(const [], cursor: 'c-700', more: true);
+
+      expect(pids(), _tracks(5));
+      expect(get_().source.cursor, 'c-700');
+    });
+
+    test('sealing stops the claim without stopping the queue', () {
+      queue.playNow(_tracks(5), source: paged);
+      queue.sealWindow();
+
+      expect(get_().source.rolling, isFalse);
+      expect(pids(), _tracks(5));
+    });
+
+    test('a draw into a shuffled queue is shuffled among itself', () {
+      queue.playNow(_tracks(3), source: paged);
+      queue.setShuffle(true);
+      queue.appendWindow(
+        _tracks(20).map((p) => '$p-b').toList(),
+        cursor: 'c-600',
+        more: true,
+      );
+
+      final arrivals = pids().sublist(3);
+      expect(arrivals, isNot(orderedEquals(_tracks(20).map((p) => '$p-b'))));
+      expect(arrivals.toSet(), _tracks(20).map((p) => '$p-b').toSet());
+      // Un-shuffling puts the arrivals back the way the source sent
+      // them, so the draw's own order survives the toggle.
+      queue.setShuffle(false);
+      expect(pids().sublist(3), _tracks(20).map((p) => '$p-b'));
+    });
+
+    test('a draw needs a queue to be a window over', () {
+      queue.appendWindow(['tr-1'], cursor: 'c', more: true);
+
+      expect(get_().isEmpty, isTrue);
+    });
+
+    test('the cursor and its seed survive a restart together', () {
+      queue.playNow(
+        _tracks(3),
+        source: const QueueSource(
+          kind: QueueSourceKind.library,
+          label: 'All music',
+          rolling: true,
+          cursor: 'c-500',
+          seed: 4242,
+        ),
+      );
+      final restored = QueueState.fromStored(
+        get_().toStored(updatedAt: DateTime.utc(2026, 7, 28)),
+      );
+
+      expect(restored.source.cursor, 'c-500');
+      expect(restored.source.seed, 4242);
+      expect(restored.source.rolling, isTrue);
+    });
+
+    test('a stored cursor with no seed reads back as a plain cursor', () {
+      final restored = QueueState.fromStored(
+        StoredQueue(
+          entries: const [
+            StoredQueueEntry(queueId: 'q0', pid: 'tr-A', sourceRank: 0),
+          ],
+          currentIndex: 0,
+          shuffled: false,
+          repeat: 'off',
+          sourceKind: 'genre',
+          sourceLabel: 'Jazz',
+          sourceRolling: true,
+          sourceCursor: 'YmFzZTY0dXJs',
+          nextQueueId: 1,
+          updatedAt: DateTime.utc(2026, 7, 28),
+        ),
+      );
+
+      expect(restored.source.cursor, 'YmFzZTY0dXJs');
+      expect(restored.source.seed, isNull);
+    });
+  });
+
   group('adding without replacing', () {
     test('play next lands right after the current entry', () {
       queue.playNow(_tracks(4), source: _album, startIndex: 1);

@@ -19,12 +19,14 @@ part 'item.g.dart';
 /// * [title] - Display title.
 /// * [artist] - Primary display artist / author / show name.
 /// * [album] - Album / series / podcast title, when applicable.
+/// * [artistPid] - The artist entity behind `artist`, so a client can group and link by identity rather than by display text — two artists with the same name are two entities, and one artist spelled two ways is still one. Absent when the item has no artist entity. For an audiobook this is its author. 
+/// * [albumPid] - The album entity behind `album`, for the same reason. Tracks only: a podcast episode and an audiobook are not album members, and their `album` is a series or show title with no album entity behind it. Absent when the track belongs to no album. 
+/// * [trackNumber] - Track position within its disc (music). On the summary row rather than only on the detail because a listing is where it is needed: an album's items page arrives in the library's own stable order, and this plus `discNumber` is what a client sorts a release back into. Absent when the item carries none. 
+/// * [discNumber] - Disc number within a multi-disc release (music). Absent for a single-disc release and for anything that is not a track. 
 /// * [durationMs] - Duration in milliseconds. For a multi-file audiobook this is the total across all parts; for a not-yet-fetched podcast episode it is the feed-declared duration, or 0 when the feed declares none. 
 /// * [artUrl] - Origin-relative URL of the item's artwork endpoint. Always populated; the endpoint itself returns 404 for items with no artwork, so clients keep a placeholder ready. 
 /// * [genres] - Display genres.
 /// * [year] - Release / publication year.
-/// * [trackNumber] - Track position within its disc (music).
-/// * [discNumber] - Disc number within a multi-disc release (music).
 /// * [codec] - Source audio codec.
 /// * [container] - Source file container.
 /// * [sampleRate] - Source sample rate in Hz.
@@ -36,10 +38,6 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   @BuiltValueField(wireName: r'container')
   String? get container;
 
-  /// Disc number within a multi-disc release (music).
-  @BuiltValueField(wireName: r'discNumber')
-  int? get discNumber;
-
   /// Source audio codec.
   @BuiltValueField(wireName: r'codec')
   String? get codec;
@@ -47,10 +45,6 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   /// When the item entered the library.
   @BuiltValueField(wireName: r'addedAt')
   DateTime? get addedAt;
-
-  /// Track position within its disc (music).
-  @BuiltValueField(wireName: r'trackNumber')
-  int? get trackNumber;
 
   /// Release / publication year.
   @BuiltValueField(wireName: r'year')
@@ -162,10 +156,24 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
         specifiedType: const FullType(int),
       );
     }
+    if (object.albumPid != null) {
+      yield r'albumPid';
+      yield serializers.serialize(
+        object.albumPid,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.artUrl != null) {
       yield r'artUrl';
       yield serializers.serialize(
         object.artUrl,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.codec != null) {
+      yield r'codec';
+      yield serializers.serialize(
+        object.codec,
         specifiedType: const FullType(String),
       );
     }
@@ -176,18 +184,18 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
         specifiedType: const FullType(int),
       );
     }
-    if (object.codec != null) {
-      yield r'codec';
-      yield serializers.serialize(
-        object.codec,
-        specifiedType: const FullType(String),
-      );
-    }
     if (object.genres != null) {
       yield r'genres';
       yield serializers.serialize(
         object.genres,
         specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
+    if (object.artistPid != null) {
+      yield r'artistPid';
+      yield serializers.serialize(
+        object.artistPid,
+        specifiedType: const FullType(String),
       );
     }
     yield r'durationMs';
@@ -295,19 +303,19 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           ) as int;
           result.sampleRate = valueDes;
           break;
+        case r'albumPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.albumPid = valueDes;
+          break;
         case r'artUrl':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(String),
           ) as String;
           result.artUrl = valueDes;
-          break;
-        case r'discNumber':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(int),
-          ) as int;
-          result.discNumber = valueDes;
           break;
         case r'codec':
           final valueDes = serializers.deserialize(
@@ -316,12 +324,26 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           ) as String;
           result.codec = valueDes;
           break;
+        case r'discNumber':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.discNumber = valueDes;
+          break;
         case r'genres':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(BuiltList, [FullType(String)]),
           ) as BuiltList<String>;
           result.genres.replace(valueDes);
+          break;
+        case r'artistPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.artistPid = valueDes;
           break;
         case r'durationMs':
           final valueDes = serializers.deserialize(

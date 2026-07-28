@@ -42,6 +42,20 @@ abstract final class ClientSettingKeys {
 
   /// The recent search queries, newest first, as a JSON string list.
   static const recentSearches = 'waxdeck.search.recent';
+
+  /// When the most recently declined resume offer stopped, as an ISO
+  /// instant. A watermark rather than an id: the history is newest
+  /// first, so declining an offer declines everything at or before it —
+  /// storing one id instead would offer the next-oldest session at the
+  /// following launch, and the one after that at the one after, which is
+  /// the "comes back with no explanation" the offer is supposed to end.
+  /// A session that stops later is newer than the decision and is
+  /// offered.
+  ///
+  /// Per device rather than per account on purpose: declining on the
+  /// phone says nothing about what the desktop should offer, and the
+  /// server's history is the same list for both.
+  static const resumeDeclinedThrough = 'waxdeck.queue.resumeDeclinedThrough';
 }
 
 /// Per-device settings in the local mirror database (native builds).

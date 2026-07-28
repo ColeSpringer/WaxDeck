@@ -74,6 +74,8 @@ class QueueSource {
     required this.label,
     this.pid,
     this.rolling = false,
+    this.cursor = '',
+    this.seed,
   });
 
   static const QueueSource none = QueueSource(
@@ -87,10 +89,41 @@ class QueueSource {
   /// The entity the queue was built from, when there is one.
   final String? pid;
 
-  /// True when the queue is a window over a scope larger than
-  /// [kQueueCap] (shuffle everything), refilled as it drains. The queue
-  /// screen says so, so the window is not mistaken for the whole scope.
+  /// True when the queue is a window over a scope larger than it holds,
+  /// drawn from again as it drains. The queue surface says so, so the
+  /// window is not mistaken for the whole scope, and it goes false when
+  /// the scope runs out.
   final bool rolling;
+
+  /// Where the source's own listing stands at the queue's tail, so a
+  /// draw resumes rather than restarts. Opaque: the server shapes its
+  /// cursors and this only carries them.
+  ///
+  /// Empty means the frontier is not known — an ordered window cut short
+  /// of what its caller had loaded, or a restored queue whose cursor was
+  /// never written. A draw against an empty cursor finds its place from
+  /// the queue's last entry instead, which costs a page per cap's worth
+  /// of scope passed and is exact where a stale cursor would not be.
+  final String cursor;
+
+  /// The seed a random draw pages under, so later pages walk the same
+  /// permutation. Null for an ordered draw, and for the sources whose
+  /// listings have no random order to ask for.
+  final int? seed;
+
+  QueueSource copyWith({
+    bool? rolling,
+    String? cursor,
+    int? seed,
+    bool clearSeed = false,
+  }) => QueueSource(
+    kind: kind,
+    label: label,
+    pid: pid,
+    rolling: rolling ?? this.rolling,
+    cursor: cursor ?? this.cursor,
+    seed: clearSeed ? null : (seed ?? this.seed),
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -98,13 +131,42 @@ class QueueSource {
       other.kind == kind &&
       other.label == label &&
       other.pid == pid &&
-      other.rolling == rolling;
+      other.rolling == rolling &&
+      other.cursor == cursor &&
+      other.seed == seed;
 
   @override
-  int get hashCode => Object.hash(kind, label, pid, rolling);
+  int get hashCode => Object.hash(kind, label, pid, rolling, cursor, seed);
 
   @override
   String toString() => 'QueueSource(${kind.wireName}, $label, $pid)';
+}
+
+/// The separator between a seeded draw's seed and its cursor in the one
+/// stored string the two travel in.
+///
+/// Both halves are the same fact — where the source's listing stands —
+/// and a cursor issued under one seed is invalid under another, so they
+/// are stored together or not at all. Safe as a separator because a
+/// cursor is base64url and never contains one.
+const String _seedSeparator = '|';
+
+/// The stored form of a source's continuation: the cursor, with the
+/// seed in front of it when the draw has one.
+String encodeQueueCursor(QueueSource source) {
+  final seed = source.seed;
+  return seed == null ? source.cursor : '$seed$_seedSeparator${source.cursor}';
+}
+
+/// The reverse. A value that carries no seed reads back as a plain
+/// cursor, which is what everything written before seeded draws existed
+/// (and every unseeded draw since) looks like.
+({String cursor, int? seed}) decodeQueueCursor(String stored) {
+  final at = stored.indexOf(_seedSeparator);
+  if (at < 0) return (cursor: stored, seed: null);
+  final seed = int.tryParse(stored.substring(0, at));
+  if (seed == null) return (cursor: stored, seed: null);
+  return (cursor: stored.substring(at + 1), seed: seed);
 }
 
 /// One place in the queue. [queueId] is stable for the entry's life, so
@@ -191,6 +253,23 @@ class QueueState {
   /// and a timeline mint all consume.
   List<String> get pids => [for (final e in entries) e.pid];
 
+  /// How many entries have not played yet, which is what decides when a
+  /// rolling window draws again.
+  int get unplayed => entries.isEmpty ? 0 : entries.length - 1 - currentIndex;
+
+  /// The entry standing at the source's frontier: the last one taken
+  /// from the scope, in the order the scope handed them over rather
+  /// than the order they play in. A draw with no cursor finds its place
+  /// in the source by this.
+  String? get frontierPid {
+    if (sourceOrder.isEmpty) return null;
+    final id = sourceOrder.last;
+    for (final e in entries) {
+      if (e.queueId == id) return e.pid;
+    }
+    return null;
+  }
+
   /// The entry an advance would land on, or null when it would end the
   /// queue or repeat the current item. This is what the engine may
   /// preload, so it must answer without changing anything, and it must
@@ -253,6 +332,7 @@ class QueueState {
       sourceLabel: source.label,
       sourcePid: source.pid,
       sourceRolling: source.rolling,
+      sourceCursor: encodeQueueCursor(source),
       nextQueueId: nextQueueId,
       updatedAt: updatedAt,
     );
@@ -264,6 +344,7 @@ class QueueState {
   /// order an unstable sort leaves behind, which is what makes the
   /// degradation to play order real rather than nominal.
   factory QueueState.fromStored(StoredQueue stored) {
+    final continuation = decodeQueueCursor(stored.sourceCursor);
     final byRank = [for (var i = 0; i < stored.entries.length; i++) i]
       ..sort((a, b) {
         final rank = stored.entries[a].sourceRank.compareTo(
@@ -295,6 +376,8 @@ class QueueState {
         label: stored.sourceLabel,
         pid: stored.sourcePid,
         rolling: stored.sourceRolling,
+        cursor: continuation.cursor,
+        seed: continuation.seed,
       ),
       nextQueueId: next,
     );

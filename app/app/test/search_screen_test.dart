@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/music/listing_screen.dart';
+import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
@@ -318,8 +318,16 @@ void main() {
     await tester.pumpAndSettle();
 
     // An artist is somewhere to go, and where it goes is the same
-    // location the index would have sent them to.
-    expect(find.byType(MusicListingScreen), findsOneWidget);
+    // location the index would have sent them to: the artist's own
+    // screen, which drills the same bucket behind it.
+    expect(find.byType(ArtistScreen), findsOneWidget);
+
+    // Opened over the results rather than instead of them: an artist is
+    // declared under the artists index, so going there would rebuild
+    // that ancestry and throw the query away. Back is the results.
+    await tester.tap(find.bySemanticsLabel('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchScreen), findsOneWidget);
     expect(repository.facetDrills.last, ('artist', '01JZXNIGHTJAR'));
   });
 

@@ -814,6 +814,18 @@ func summaryJSON(it service.ItemSummary) ItemSummary {
 	if it.Album != "" {
 		s.Album = ptr(it.Album)
 	}
+	if it.ArtistPID != "" {
+		s.ArtistPid = ptr(it.ArtistPID)
+	}
+	if it.AlbumPID != "" {
+		s.AlbumPid = ptr(it.AlbumPID)
+	}
+	if it.TrackNo > 0 {
+		s.TrackNumber = ptr(it.TrackNo)
+	}
+	if it.DiscNo > 0 {
+		s.DiscNumber = ptr(it.DiscNo)
+	}
 	return s
 }
 
@@ -830,6 +842,12 @@ func itemJSON(d service.ItemDetail) Item {
 	}
 	if d.Album != "" {
 		it.Album = ptr(d.Album)
+	}
+	if d.ArtistPID != "" {
+		it.ArtistPid = ptr(d.ArtistPID)
+	}
+	if d.AlbumPID != "" {
+		it.AlbumPid = ptr(d.AlbumPID)
 	}
 	if len(d.Genres) > 0 {
 		it.Genres = &d.Genres

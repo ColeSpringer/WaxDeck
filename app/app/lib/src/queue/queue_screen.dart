@@ -1,41 +1,41 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../shell/semantics_ids.dart';
+import '../shell/routes.dart';
 import '../shell/side_panel.dart';
+import '../shell/semantics_ids.dart';
 import 'queue_controller.dart';
 import 'queue_view.dart';
 
-/// The queue, in the shell's right panel.
+/// The queue, full screen.
 ///
-/// The panel is the frame; [queueSlivers] is the queue, and they are the
-/// same slivers the full-screen route shows. Where there is room for a panel
-/// the queue sits beside what you are browsing; where there is not, it
-/// takes the screen.
-class QueuePanel extends ConsumerWidget {
-  const QueuePanel({super.key});
+/// What the side panel shows where there is room for one, and the only
+/// place it can be shown where there is not. Pushed rather than gone to,
+/// like the player: it is a view of live state with nothing of its own
+/// to address, and back closes it onto whatever was underneath.
+class QueueScreen extends ConsumerWidget {
+  const QueueScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final queued = ref.watch(
       queueControllerProvider.select((q) => q.isNotEmpty),
     );
-    return WaxSidePanel(
+    return WaxScaffold(
       title: WaxPanel.queue.title,
-      semanticsId: SemanticsIds.panel,
-      closeSemanticsId: SemanticsIds.panelClose,
-      onClose: ref.read(sidePanelProvider.notifier).close,
+      largeTitle: false,
+      onBack: () => context.leave(),
+      semanticsId: SemanticsIds.queueScreen,
       actions: <Widget>[
         if (queued)
           WaxIconButton(
             glyph: WaxIcons.delete,
             label: 'Clear queue',
-            size: 18,
             onPressed: ref.read(queueControllerProvider.notifier).clear,
             semanticsId: SemanticsIds.queueClear,
           ),
       ],
-      child: CustomScrollView(slivers: queueSlivers(context, ref)),
+      slivers: queueSlivers(context, ref),
     );
   }
 }

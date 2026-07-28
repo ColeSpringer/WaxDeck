@@ -635,12 +635,6 @@ components:
               type: integer
               description: Release / publication year.
               example: 2024
-            trackNumber:
-              type: integer
-              description: Track position within its disc (music).
-            discNumber:
-              type: integer
-              description: Disc number within a multi-disc release (music).
             codec:
               type: string
               description: Source audio codec.

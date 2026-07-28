@@ -334,6 +334,14 @@ class FakeRepository implements WaxDeckRepository {
     );
   }
 
+  /// The seed the server would pick for an unseeded random browse.
+  int randomSeed = 4242;
+
+  /// Every random browse this fake answered, as the (seed, cursor) pair
+  /// it was asked for: a rolling shuffle is only stable if later pages
+  /// carry the first page's seed, and this is what lets a test say so.
+  final List<({int? seed, String? cursor})> randomBrowses = [];
+
   @override
   Future<ItemPage> browse(
     DiscoveryList list, {
@@ -345,7 +353,14 @@ class FakeRepository implements WaxDeckRepository {
       final item = recentlyPlayed;
       return ItemPage(items: item == null ? const [] : [item]);
     }
-    return listItems(cursor: cursor, limit: limit);
+    final page = await listItems(cursor: cursor, limit: limit);
+    if (list != DiscoveryList.random) return page;
+    randomBrowses.add((seed: seed, cursor: cursor));
+    return ItemPage(
+      items: page.items,
+      nextCursor: page.nextCursor,
+      seed: seed ?? randomSeed,
+    );
   }
 
   /// What [search] answers, keyed by query. An unlisted query answers an
@@ -1260,6 +1275,21 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<List<PlaybackSessionInfo>> listPlaybackSessions() async {
     return List.of(playbackSessions);
+  }
+
+  /// The caller's ended sessions, newest first. Empty by default, which
+  /// is what a launch with nothing to resume looks like.
+  List<PlaybackSessionHistoryEntry> sessionHistory = [];
+
+  /// Thrown by [listPlaybackSessionHistory] when set: a launch offline,
+  /// or against a server too old to serve the surface at all.
+  Object? sessionHistoryError;
+
+  @override
+  Future<List<PlaybackSessionHistoryEntry>> listPlaybackSessionHistory() async {
+    final error = sessionHistoryError;
+    if (error != null) throw error;
+    return List.of(sessionHistory);
   }
 
   @override

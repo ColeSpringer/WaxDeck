@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -5,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../player/now_playing_controller.dart';
+import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../shell/routes.dart';
@@ -70,7 +73,31 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
         dimension.singular[0].toUpperCase() + dimension.singular.substring(1);
   }
 
-  void _play(List<ItemSummary> items, int index) {
+  /// What the queue this screen builds is a window over.
+  ///
+  /// A bucket listing pages at the queue's own cap, so a bucket that
+  /// fits is queued whole and one that does not is queued as far as it
+  /// goes, with the listing's cursor riding along so the queue can draw
+  /// the rest as it drains. The tracks index has no bucket to name, so
+  /// nothing it plays is a window over anything.
+  QueueSource _source(ItemPage page, List<ItemSummary> items) {
+    final dimension = widget.dimension!;
+    return QueueSource(
+      kind: switch (dimension) {
+        MusicDimension.artists => QueueSourceKind.artist,
+        MusicDimension.albums => QueueSourceKind.album,
+        MusicDimension.genres => QueueSourceKind.genre,
+        MusicDimension.years => QueueSourceKind.year,
+      },
+      label: _title(items),
+      pid: widget.segment,
+      rolling: page.hasMore,
+      cursor: page.nextCursor ?? '',
+    );
+  }
+
+  void _play(MusicItemsState state, int index) {
+    final items = state.items;
     final dimension = widget.dimension;
     // A bucket holds whatever carried the artist or the year it counts,
     // and a book is one of those. Books resume on their own screen —
@@ -112,19 +139,83 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
           .play(
             playable,
             startIndex: start,
-            source: QueueSource(
-              kind: switch (dimension) {
-                MusicDimension.artists => QueueSourceKind.artist,
-                MusicDimension.albums => QueueSourceKind.album,
-                MusicDimension.genres => QueueSourceKind.genre,
-                MusicDimension.years => QueueSourceKind.year,
-              },
-              label: _title(items),
-              pid: widget.segment,
+            source: _source(
+              ItemPage(items: const [], nextCursor: state.nextCursor),
+              items,
             ),
           );
     }
     context.push(WaxRoute.nowPlaying);
+  }
+
+  /// Shuffles what this screen lists.
+  ///
+  /// Draws its own page rather than shuffling what the screen happens to
+  /// have scrolled into memory. Two reasons, and the second is the one
+  /// that bites: a sample of a loaded list longer than the cap silently
+  /// drops whatever it did not sample, because the queue cannot hold it
+  /// and the cursor beside it points past all of it — so a visitor who
+  /// scrolled a 5,000-track genre before pressing this would lose
+  /// everything they scrolled past. A page is exactly one window's
+  /// worth, and the cursor that comes with it is the frontier of that
+  /// window, which is what the refill continues from.
+  ///
+  /// A bucket pages its own listing; the tracks index is every track in
+  /// the library, which has a random order of its own to ask for, so it
+  /// seeds from a random page and walks that permutation as it goes.
+  Future<void> _shuffle() async {
+    final dimension = widget.dimension;
+    final repository = ref.read(repositoryProvider);
+    final ItemPage page;
+    try {
+      page = dimension == null
+          ? await repository.browse(DiscoveryList.random, limit: kQueueCap)
+          : await repository.listItems(
+              facet: dimension.wireName,
+              facetKey: musicFacetKey(dimension, widget.segment),
+              limit: kQueueCap,
+            );
+    } on WaxDeckApiException catch (error) {
+      // A shuffle that fetched nothing has to say so: the button is
+      // fire-and-forget, so an unreported failure is a control that does
+      // nothing at all.
+      if (mounted) _report(error.message);
+      return;
+    }
+    if (!mounted) return;
+    final playable = <ItemSummary>[
+      for (final item in page.items)
+        if (dimension == null
+            ? item.mediaType == MediaType.music
+            : item.mediaType != MediaType.audiobook)
+          item,
+    ];
+    if (playable.isEmpty) {
+      _report('Nothing here plays in sequence.');
+      return;
+    }
+    ref
+        .read(nowPlayingProvider.notifier)
+        .play(
+          playable,
+          shuffle: true,
+          source: dimension == null
+              ? QueueSource(
+                  kind: QueueSourceKind.library,
+                  label: 'All music',
+                  rolling: page.hasMore,
+                  cursor: page.nextCursor ?? '',
+                  seed: page.seed,
+                )
+              : _source(page, playable),
+        );
+    context.push(WaxRoute.nowPlaying);
+  }
+
+  void _report(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -151,10 +242,27 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       child: WaxScaffold(
         title: _title(items),
         largeTitle: false,
-        onBack: () => context.go(
-          dimension == null ? WaxRoute.music : WaxRoute.musicIndex(dimension),
+        // Pops what is beneath, which is the screen this was opened
+        // from: an artist's own screen for their full track list, the
+        // dimension's index for a bucket. The fallback covers a
+        // location opened cold with nothing under it.
+        onBack: () => context.leave(
+          fallback: dimension == null
+              ? WaxRoute.music
+              : WaxRoute.musicIndex(dimension),
         ),
-        actions: const <Widget>[SearchAction()],
+        actions: <Widget>[
+          if (items.isNotEmpty)
+            WaxIconButton(
+              glyph: WaxIcons.shuffle,
+              label: dimension == null
+                  ? 'Shuffle all music'
+                  : 'Shuffle ${_title(items)}',
+              onPressed: () => unawaited(_shuffle()),
+              semanticsId: SemanticsIds.listingShuffle,
+            ),
+          const SearchAction(),
+        ],
         slivers: <Widget>[
           switch (state) {
             AsyncData(:final value) => _list(value),
@@ -214,7 +322,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
             ),
             semanticsId: SemanticsIds.indexItem(index),
           ),
-          onTap: () => _play(state.items, index),
+          onTap: () => _play(state, index),
         );
       },
     );

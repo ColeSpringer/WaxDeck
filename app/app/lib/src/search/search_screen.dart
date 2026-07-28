@@ -119,16 +119,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // pid's own prefix says which, because the search contract mints hits
     // with the same type-prefixed ids the rest of the API uses.
     switch (hit.kind) {
+      // Pushed, not gone to. Every one of these is declared under
+      // something that is not search — an artist and an album under
+      // their index, a book under home — so `go` would rebuild that
+      // ancestry and throw the results away: back from an artist would
+      // land on the artists index rather than on the query that found
+      // them (ADR-0022). Pushing across branches is sound; go_router
+      // renders the page in the branch that declares it and pops back
+      // to this one.
       case 'artist':
-        context.go(WaxRoute.musicBucket(MusicDimension.artists, hit.pid));
+        context.push(WaxRoute.musicBucket(MusicDimension.artists, hit.pid));
       case 'album':
-        context.go(WaxRoute.musicBucket(MusicDimension.albums, hit.pid));
+        context.push(WaxRoute.musicBucket(MusicDimension.albums, hit.pid));
       case 'book':
-        // Pushed, not gone to, and for the same reason the music
-        // listings push one: a book is declared under home, so `go`
-        // rebuilds that ancestry and discards the stack it was standing
-        // in. An artist or an episode is a domain switch, which is what
-        // `go` is for; a book from here is an excursion.
         context.push(WaxRoute.book(hit.pid));
       case 'episode':
         context.go(WaxRoute.episode(hit.pid));

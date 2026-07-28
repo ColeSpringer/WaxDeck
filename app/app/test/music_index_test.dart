@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/index_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
@@ -168,11 +169,101 @@ void main() {
     await tester.tap(find.text('Nightjar'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(MusicListingScreen), findsOneWidget);
-    // The URL carries the prefixed pid and the drill sends the bare key:
-    // the contract says the one is the other with a type prefix, which is
-    // what lets a location name an entity and still filter a listing.
+    // An artist bucket opens the artist, not a filtered list: same
+    // location either way, because a bucket's key is its entity pid
+    // without the type prefix, which is what lets one address name the
+    // entity and still drill the listing behind it.
+    expect(find.byType(ArtistScreen), findsOneWidget);
     expect(repository.facetDrills.last, ('artist', '01JZXNightjar'));
+  });
+
+  testWidgets('shuffling a bucket draws a page rather than what scrolled by', (
+    tester,
+  ) async {
+    // Sampling an accumulated list longer than the cap drops whatever it
+    // did not sample: the queue cannot hold it and the cursor beside it
+    // points past all of it. A page is one window's worth, and its
+    // cursor is that window's frontier.
+    final repository = FakeRepository()
+      ..facetItems['genre ge-1'] = <ItemSummary>[
+        for (var i = 0; i < 900; i++) _track('Track $i'),
+      ];
+    final container = await _pump(
+      tester,
+      const MusicListingScreen(
+        dimension: MusicDimension.genres,
+        segment: 'ge-1',
+      ),
+      repository,
+      engine: true,
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.listingShuffle));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final queue = container.read(queueControllerProvider);
+    expect(queue.shuffled, isTrue);
+    expect(queue.length, kQueueCap);
+    // The cursor is the page's, so the refill continues where the
+    // window ends rather than past everything the screen had loaded.
+    expect(queue.source.rolling, isTrue);
+    expect(queue.source.cursor, '$kQueueCap');
+    container.read(queueControllerProvider.notifier).clear();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('shuffling all music walks one seeded permutation', (
+    tester,
+  ) async {
+    final repository = FakeRepository(
+      items: <ItemSummary>[for (var i = 0; i < 900; i++) _track('Track $i')],
+    );
+    final container = await _pump(
+      tester,
+      const MusicListingScreen(),
+      repository,
+      engine: true,
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.listingShuffle));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final source = container.read(queueControllerProvider).source;
+    expect(source.kind, QueueSourceKind.library);
+    // The seed the first page came back with, which is what keeps the
+    // pages of a rolling shuffle from overlapping.
+    expect(source.seed, repository.randomSeed);
+    expect(source.rolling, isTrue);
+    container.read(queueControllerProvider.notifier).clear();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a shuffle the server refuses says so', (tester) async {
+    final repository = FakeRepository()
+      ..facetItems['genre ge-1'] = <ItemSummary>[_track('Track 0')];
+    final container = await _pump(
+      tester,
+      const MusicListingScreen(
+        dimension: MusicDimension.genres,
+        segment: 'ge-1',
+      ),
+      repository,
+    );
+    // The listing loaded; it is the shuffle's own fetch that fails.
+    repository.listError = const WaxDeckApiException(
+      code: 'internal',
+      message: 'the catalog is busy',
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.listingShuffle));
+    await tester.pumpAndSettle();
+
+    // The button is fire-and-forget, so a failure it swallowed would be
+    // a control that does nothing at all.
+    expect(find.text('the catalog is busy'), findsOneWidget);
+    expect(container.read(queueControllerProvider).isEmpty, isTrue);
   });
 
   testWidgets('the unknown bucket travels as a sentinel, not an empty path', (

@@ -353,6 +353,37 @@ class NowPlayingController extends Notifier<NowPlaying> {
     ref.read(queueControllerProvider.notifier).restore(queue);
   }
 
+  /// Takes back the replacement a tap made: the queue that was
+  /// displaced, at the position it stood at, playing.
+  ///
+  /// The queue layer keeps what was displaced and answers where it was;
+  /// resuming it there is this layer's half. Set before the queue moves,
+  /// because the queue notifies its listeners as it is assigned and the
+  /// start this lands on is already reading these.
+  ///
+  /// Playing rather than paused, unlike a restore: an undo answers an
+  /// accident that happened mid-listen, and silence would be the second
+  /// surprise rather than the end of the first.
+  void undoReplace() {
+    // Read before the queue moves, not from what the undo returns: the
+    // queue notifies its listeners as it is assigned, so the start this
+    // lands on has already read these by the time the call comes back.
+    final pending = ref.read(queueControllerProvider).undo;
+    if (pending == null) return;
+    _pendingPositionMs = pending.positionMs;
+    _pendingPaused = false;
+    ref.read(queueControllerProvider.notifier).undoReplace();
+    // The displaced queue was standing on the entry that is playing
+    // (a replacement that only changed what follows), so no start is
+    // coming to consume the position: seek to it here instead.
+    if (ref.read(queueControllerProvider).currentEntry?.queueId ==
+        _sessionEntryId) {
+      _pendingPositionMs = null;
+      _pendingPaused = false;
+      unawaited(_session?.seek(Duration(milliseconds: pending.positionMs)));
+    }
+  }
+
   void _onQueueChanged(QueueState? previous, QueueState next) {
     // Summaries accumulate as entries come and go, and a session can run
     // for days; the queue's own cap is the bound worth holding them to.

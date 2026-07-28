@@ -487,6 +487,14 @@ abstract interface class WaxDeckRepository {
   /// `GET /player/sessions`: visible active playback sessions.
   Future<List<PlaybackSessionInfo>> listPlaybackSessions();
 
+  /// `GET /player/sessions/history`: the caller's ended sessions, newest
+  /// first, each carrying the whole queue it stopped on. This is the
+  /// resume surface: putting one back is an ordinary
+  /// [createPlaybackSession] (or a local queue) from its entries, index,
+  /// and position. Short and unpaged by design — the server keeps a few
+  /// per user — and never includes anything still playing.
+  Future<List<PlaybackSessionHistoryEntry>> listPlaybackSessionHistory();
+
   /// `POST /player/sessions`: start playback on an endpoint.
   Future<PlaybackSessionInfo> createPlaybackSession({
     required String endpointId,
@@ -2247,6 +2255,15 @@ class WaxDeckClient implements WaxDeckRepository {
       response.data,
     ).sessions.map(playbackSessionFromGen).toList(growable: false);
   });
+
+  @override
+  Future<List<PlaybackSessionHistoryEntry>> listPlaybackSessionHistory() =>
+      _guard(() async {
+        final response = await _gen.getPlayerApi().listPlaybackSessionHistory();
+        return _require(
+          response.data,
+        ).sessions.map(playbackHistoryFromGen).toList(growable: false);
+      });
 
   @override
   Future<PlaybackSessionInfo> createPlaybackSession({

@@ -264,6 +264,10 @@ class ItemSummary {
     required this.durationMs,
     this.artist,
     this.album,
+    this.artistPid,
+    this.albumPid,
+    this.trackNumber,
+    this.discNumber,
     this.artUrl,
   });
 
@@ -277,6 +281,22 @@ class ItemSummary {
 
   /// Album, series, or podcast title, when applicable.
   final String? album;
+
+  /// The artist entity behind [artist], so rows group and link by
+  /// identity rather than by display text. Null when there is none.
+  final String? artistPid;
+
+  /// The album entity behind [album]. Tracks only: an episode's or a
+  /// book's [album] is a show or series title with no album entity
+  /// behind it.
+  final String? albumPid;
+
+  /// Track position within its disc, and the disc within the release.
+  /// On the summary because a listing is where they are needed: an
+  /// items page arrives in the catalog's own order, and these are what
+  /// sort a release back into itself. Null when the item carries none.
+  final int? trackNumber;
+  final int? discNumber;
 
   final int durationMs;
 
@@ -294,11 +314,13 @@ class ItemDetail extends ItemSummary {
     required super.durationMs,
     super.artist,
     super.album,
+    super.artistPid,
+    super.albumPid,
+    super.trackNumber,
+    super.discNumber,
     super.artUrl,
     this.genres = const [],
     this.year,
-    this.trackNumber,
-    this.discNumber,
     this.codec,
     this.container,
     this.sampleRate,
@@ -308,8 +330,6 @@ class ItemDetail extends ItemSummary {
 
   final List<String> genres;
   final int? year;
-  final int? trackNumber;
-  final int? discNumber;
   final String? codec;
   final String? container;
   final int? sampleRate;
@@ -1700,6 +1720,58 @@ class PlaybackSessionInfo {
   }
 
   /// The current entry, when the queue is known.
+  PlaybackSessionEntry? get currentEntry =>
+      index >= 0 && index < entries.length ? entries[index] : null;
+}
+
+/// One session that has stopped, as the state it stopped in.
+///
+/// Deliberately not a [PlaybackSessionInfo] carrying a flag: this has no
+/// live half. Nothing extrapolates, the position is final, and there is
+/// nothing to control — putting it back means starting a new session
+/// from this queue, this index, and this position.
+class PlaybackSessionHistoryEntry {
+  const PlaybackSessionHistoryEntry({
+    required this.id,
+    required this.endpointId,
+    required this.authority,
+    required this.index,
+    required this.positionMs,
+    required this.positionAt,
+    required this.rate,
+    required this.entries,
+    this.endpointName,
+    this.repeat,
+    this.shuffle = false,
+  });
+
+  /// The session's pid. It names a session that no longer exists; it is
+  /// here to correlate with what was seen live, and to remember which
+  /// offer a listener has already turned down.
+  final String id;
+
+  final String endpointId;
+
+  /// Absent for an endpoint that has since gone away, which a client
+  /// endpoint does on every sign-out.
+  final String? endpointName;
+
+  /// `remote` or `mirror`; open vocabulary.
+  final String authority;
+
+  final int index;
+  final int positionMs;
+
+  /// When the position was true. The list is newest first by this.
+  final DateTime positionAt;
+
+  final double rate;
+  final String? repeat;
+  final bool shuffle;
+
+  /// The queue as it stood, in play order.
+  final List<PlaybackSessionEntry> entries;
+
   PlaybackSessionEntry? get currentEntry =>
       index >= 0 && index < entries.length ? entries[index] : null;
 }

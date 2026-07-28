@@ -12,10 +12,11 @@ entries starting there" is the deliberate behaviour. It is not what the
 product wants: starting a 5,000-track genre at its first track queues 500
 and ends, with 4,500 tracks the visitor asked for silently out of reach —
 which is the truncation this decision meant to avoid, moved one screen
-later. The window stays; what is missing is the refill behind it, for the
-ordered draw as well as the shuffled one this ADR anticipated. Tracked in
-`docs/deferred-work.md` and scheduled with the queue UI; the ADR that
-builds it supersedes this paragraph.
+later. The window stays; what was missing is the refill behind it, for
+the ordered draw as well as the shuffled one this ADR anticipated.
+**Superseded by ADR-0028**, which builds it: the source and its cursor
+travel with the queue and survive a restore, and both draws refill
+against the eviction rule below.
 
 ## Context
 

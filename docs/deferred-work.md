@@ -40,44 +40,31 @@ here waits on upstream.
   and settings surface shipped; the client still needs the
   distributor plugin wrapped behind a WaxDeck-owned interface and a
   real device to verify against. Blocked on hardware access.
-- `[in-repo]` **No artist or album detail screen in the app.** Artists
-  and albums are real entities everywhere else now: they carry their own
-  stars and ratings, the endpoints and the repository wrapper are in
-  place, and the star and rating row (`EntityStarRatingRow`, backed by
-  `EntityPlayStateController`, with the same optimistic-then-settle and
-  offline-outbox behavior the item controls have) is built and tested.
-  What is still missing is a screen to host it. Everything else is in
-  hand, including the location: `/music/artists/ar-…` and
-  `/music/albums/al-…` are declared, reachable from the indexes and from
-  search, and addressed by the entity's own pid — the contract states
-  that a bucket's `entityPid` is its `key` behind a type prefix, so one
-  location names the entity and filters the listing. What those locations
-  render today is the bucket's item list; an entity screen (the entity's
-  own artwork, its releases or tracks, and the star and rating row) is
-  the remaining half, it replaces the listing at the same URL, and it is
-  pure app work with nothing behind it.
-- `[roadmap]` **A queue windowed past its cap never refills.** The 500-item
-  cap windows a longer scope rather than refusing it, and then stops
-  there: starting a 5,000-track genre at its first track plays 500 and
-  ends, with the rest silently out of reach. ADR-0019 recorded that as
-  deliberate for the ordered case and anticipated the refill only for a
-  rolling shuffle; the ordered half is now rejected too (see that ADR's
-  status), so both draw orders want the same mechanism — a way back to
-  the scope the window was cut from, and a draw against it as the window
-  drains, in order for an ordered queue and at random for a shuffled one.
-
-  What it needs beyond the eviction rule that already exists: the source
-  has to travel with the state (a facet and its cursor, a playlist and
-  its cursor) and survive a restore, which is a drift-schema field and a
-  port that turns a `QueueSource` into more pids; Connect reports the
-  window, so what a controlling device sees has to stay coherent as it
-  moves; and `QueueSource.rolling` — declared, captioned by the queue
-  panel, set by nothing — is what says so on screen.
-
-  Rides the queue-UI slice, which is also where the first Shuffle button
-  that mints a shuffled window lands. Bucket listings page at the cap in
-  the meantime, so every bucket the queue can hold whole is queued whole
-  and only scopes past 500 are affected.
+- `[in-repo]` **The queue surface has no multi-select.** Rows reorder by
+  drag (or by the move actions a screen reader gets), remove by swipe or
+  by their own button, and jump on tap — one at a time. Long-pressing to
+  select several and moving or dropping the set together is the half
+  that is not built, and neither is dragging a row out of a listing and
+  into the panel. Both are additions to `queueSlivers`, which is the one
+  body the panel and the `/queue` screen share, so either lands in both
+  at once. See ADR-0029.
+- `[in-repo]` **A tap that replaces the queue offers no undo except from
+  the session-history rows.** The queue layer records what a replacement
+  displaced and where it stood (`QueueUndo`), and playback can put it
+  back (`NowPlayingController.undoReplace`), but the "Playing from
+  [source]" toast the plan asks for on every replacing tap exists only
+  on the "EARLIER" rows of the queue surface, which is where a mis-tap
+  is most destructive. Every other play verb — a track row, an album's
+  Play, a Shuffle — replaces silently. The mechanism is built and
+  tested; what is missing is one toast, raised from wherever the play
+  verbs converge rather than added per call site.
+- `[in-repo]` **An artist screen has no "Appears on" and no biography.**
+  The screen shows the artist's own releases and tracks. Albums they are
+  credited on without being the album artist would need a credits-shaped
+  query the catalog does not expose as a facet, and the biography needs
+  an enrichment field nothing writes yet — the same provider gap that
+  keeps artist artwork from existing. Both are additive sections on a
+  screen that is otherwise complete.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
@@ -224,12 +211,6 @@ here waits on upstream.
 - `[in-repo]` **Cast device displays show no artwork.** The art endpoint
   authenticates by session, which a cast device cannot present; media
   items are sent without an art URL. Needs a media-token art variant.
-- `[in-repo]` **Nothing renders session history yet.** `GET
-  /player/sessions/history` answers the caller's ended sessions with
-  their queues, indexes, and final positions, but no screen reads it:
-  "pick up where you left off" is a server surface waiting on a
-  client one. The restore itself is an ordinary
-  `POST /player/sessions` from a history entry's queue.
 - `[in-repo]` **Timeline URLs do not survive a server restart.** The HLS proxy
   reconstructs signed upstream URLs from an in-memory stash; after a
   restart a live timeline fetch answers not-found and the client

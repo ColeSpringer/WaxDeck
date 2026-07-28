@@ -480,6 +480,13 @@
           ]
         },
         {
+          "name": "queueEntryDrag",
+          "id": "queue-entry-drag-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
           "name": "queueEntryRemove",
           "id": "queue-entry-remove-{queueId}",
           "params": [
@@ -487,8 +494,30 @@
           ]
         },
         {
+          "name": "queueHistory",
+          "id": "queue-history"
+        },
+        {
+          "name": "queueHistoryEntry",
+          "id": "queue-history-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
           "name": "queueRepeat",
           "id": "queue-repeat"
+        },
+        {
+          "name": "queueRestoreSession",
+          "id": "queue-restore-session-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "queueScreen",
+          "id": "queue-screen"
         },
         {
           "name": "queueShuffle",
@@ -695,6 +724,25 @@
       "doc": "The music hub, its indexes, and the buckets they drill.",
       "ids": [
         {
+          "name": "entityAlbum",
+          "id": "entity-album-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "entityAllTracks",
+          "id": "entity-all-tracks"
+        },
+        {
+          "name": "entityPlay",
+          "id": "entity-play"
+        },
+        {
+          "name": "entityShuffle",
+          "id": "entity-shuffle"
+        },
+        {
           "name": "indexBucket",
           "id": "index-bucket-{index}",
           "params": [
@@ -726,6 +774,10 @@
         {
           "name": "indexSort",
           "id": "index-sort"
+        },
+        {
+          "name": "listingShuffle",
+          "id": "listing-shuffle"
         },
         {
           "name": "musicTile",

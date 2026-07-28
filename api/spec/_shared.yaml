@@ -154,6 +154,38 @@ components:
         album:
           type: string
           description: Album / series / podcast title, when applicable.
+        artistPid:
+          type: string
+          description: >
+            The artist entity behind `artist`, so a client can group and
+            link by identity rather than by display text — two artists
+            with the same name are two entities, and one artist spelled
+            two ways is still one. Absent when the item has no artist
+            entity. For an audiobook this is its author.
+          example: ar-01JZX5N8QW3F4V9T2B7KD3M9R6
+        albumPid:
+          type: string
+          description: >
+            The album entity behind `album`, for the same reason. Tracks
+            only: a podcast episode and an audiobook are not album
+            members, and their `album` is a series or show title with no
+            album entity behind it. Absent when the track belongs to no
+            album.
+          example: al-01JZX5N8QW3F4V9T2B7KD3M9R6
+        trackNumber:
+          type: integer
+          description: >
+            Track position within its disc (music). On the summary row
+            rather than only on the detail because a listing is where it
+            is needed: an album's items page arrives in the library's
+            own stable order, and this plus `discNumber` is what a
+            client sorts a release back into. Absent when the item
+            carries none.
+        discNumber:
+          type: integer
+          description: >
+            Disc number within a multi-disc release (music). Absent for
+            a single-disc release and for anything that is not a track.
         durationMs:
           type: integer
           format: int64

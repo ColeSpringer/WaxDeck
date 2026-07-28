@@ -57,6 +57,13 @@ abstract final class WaxRoute {
   static String musicBucket(MusicDimension dimension, String segment) =>
       '${musicIndex(dimension)}/${Uri.encodeComponent(segment)}';
 
+  /// Everything one artist plays on, as a list rather than as a screen
+  /// about them. Its own location beneath the artist, because the
+  /// artist's own is their screen: a stranger opening this gets the
+  /// list, which is what the "Show all" above it promises.
+  static String artistTracks(String pid) =>
+      '${musicBucket(MusicDimension.artists, pid)}/tracks';
+
   static const playlists = '/playlists';
 
   /// Rule editor in create mode. Declared ahead of [playlist] so the
@@ -84,6 +91,11 @@ abstract final class WaxRoute {
   /// payload and a reload lands back on it. Modal over whatever is
   /// underneath.
   static const nowPlaying = '/now-playing';
+
+  /// The queue, full screen. A view of live state like the player, and
+  /// modal for the same reason: below sidebar width there is no panel to
+  /// put it in, and back closes it onto what was underneath.
+  static const queue = '/queue';
 
   /// Controlling a Connect session on another endpoint.
   static const remote = '/remote';

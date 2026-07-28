@@ -11,12 +11,28 @@ import "time"
 // carved out of a shared source file by a cue sheet: it plays a
 // window, and its original bytes are the whole backing rip, which
 // surfaces that serve originals must account for.
+//
+// ArtistPID and AlbumPID are the entity handles behind the display
+// text, so a client can group and link by identity: two artists with
+// the same name are two entities, and an album title alone is not a
+// location. Each is empty when the entity is absent, and AlbumPID is
+// track-only — an episode's or a book's Album is a show or series
+// title with no album entity behind it.
+//
+// TrackNo and DiscNo ride the summary rather than the detail because a
+// listing is where they are needed: an items page arrives in the
+// catalog's own stable order, and these are what sort a release back
+// into itself without a fetch per row.
 type ItemSummary struct {
 	PID        string
 	MediaType  string
 	Title      string
 	Artist     string
 	Album      string
+	ArtistPID  string
+	AlbumPID   string
+	TrackNo    int
+	DiscNo     int
 	DurationMS int64
 	Virtual    bool
 }
@@ -26,8 +42,6 @@ type ItemDetail struct {
 	ItemSummary
 	Genres     []string
 	Year       int
-	TrackNo    int
-	DiscNo     int
 	Codec      string
 	Container  string
 	SampleRate int

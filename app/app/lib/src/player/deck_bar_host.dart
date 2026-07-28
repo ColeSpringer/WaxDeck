@@ -11,7 +11,7 @@ import '../media_view.dart';
 import '../playlists/add_to_playlist_dialog.dart';
 import '../providers.dart';
 import '../queue/queue_controller.dart';
-import '../queue/queue_panel.dart';
+import '../queue/queue_view.dart';
 import '../queue/queue_persistence.dart';
 import '../queue/queue_state.dart';
 import '../radio/radio_controller.dart';
@@ -212,13 +212,11 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
           onMore: item == null
               ? null
               : () => unawaited(_showActions(context, ref, item, session)),
-          // Only where a panel can open: the queue's own screen is the
-          // compact answer and does not exist yet, and a control that
-          // opens nothing is worse than one that is not there.
-          onQueue: wide
-              ? () =>
-                    ref.read(sidePanelProvider.notifier).toggle(WaxPanel.queue)
-              : null,
+          // The panel where there is room for one, the queue's own
+          // screen where there is not. The same queue either way.
+          onQueue: () => wide
+              ? ref.read(sidePanelProvider.notifier).toggle(WaxPanel.queue)
+              : context.push(WaxRoute.queue),
           onCast: item == null
               ? null
               : () => unawaited(

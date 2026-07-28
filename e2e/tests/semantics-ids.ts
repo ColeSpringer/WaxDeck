@@ -110,8 +110,13 @@ export const SemanticsIds = {
   panelClose: 'panel-close',
   queueClear: 'queue-clear',
   queueEntry: (queueId: string | number) => `queue-entry-${queueId}`,
+  queueEntryDrag: (id: string | number) => `queue-entry-drag-${id}`,
   queueEntryRemove: (queueId: string | number) => `queue-entry-remove-${queueId}`,
+  queueHistory: 'queue-history',
+  queueHistoryEntry: (id: string | number) => `queue-history-${id}`,
   queueRepeat: 'queue-repeat',
+  queueRestoreSession: (id: string | number) => `queue-restore-session-${id}`,
+  queueScreen: 'queue-screen',
   queueShuffle: 'queue-shuffle',
 
   // discovery: Instant mixes, similar tracks, and the track lists they open.
@@ -157,12 +162,17 @@ export const SemanticsIds = {
   unofficialSwitch: 'unofficial-switch',
 
   // music: The music hub, its indexes, and the buckets they drill.
+  entityAlbum: (pid: string | number) => `entity-album-${pid}`,
+  entityAllTracks: 'entity-all-tracks',
+  entityPlay: 'entity-play',
+  entityShuffle: 'entity-shuffle',
   indexBucket: (index: string | number) => `index-bucket-${index}`,
   indexCount: 'index-count',
   indexItem: (index: string | number) => `index-item-${index}`,
   indexRail: 'index-rail',
   indexRailLetter: (letter: string | number) => `index-rail-${letter}`,
   indexSort: 'index-sort',
+  listingShuffle: 'listing-shuffle',
   musicTile: (name: string | number) => `music-tile-${name}`,
 
   // organize: Organize: previews, duplicates, and upgrade groups.

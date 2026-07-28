@@ -110,9 +110,14 @@ abstract final class SemanticsIds {
   static const String panelClose = 'panel-close';
   static const String queueClear = 'queue-clear';
   static String queueEntry(Object queueId) => 'queue-entry-$queueId';
+  static String queueEntryDrag(Object id) => 'queue-entry-drag-$id';
   static String queueEntryRemove(Object queueId) =>
       'queue-entry-remove-$queueId';
+  static const String queueHistory = 'queue-history';
+  static String queueHistoryEntry(Object id) => 'queue-history-$id';
   static const String queueRepeat = 'queue-repeat';
+  static String queueRestoreSession(Object id) => 'queue-restore-session-$id';
+  static const String queueScreen = 'queue-screen';
   static const String queueShuffle = 'queue-shuffle';
 
   // discovery: Instant mixes, similar tracks, and the track lists they open.
@@ -158,12 +163,17 @@ abstract final class SemanticsIds {
   static const String unofficialSwitch = 'unofficial-switch';
 
   // music: The music hub, its indexes, and the buckets they drill.
+  static String entityAlbum(Object pid) => 'entity-album-$pid';
+  static const String entityAllTracks = 'entity-all-tracks';
+  static const String entityPlay = 'entity-play';
+  static const String entityShuffle = 'entity-shuffle';
   static String indexBucket(Object index) => 'index-bucket-$index';
   static const String indexCount = 'index-count';
   static String indexItem(Object index) => 'index-item-$index';
   static const String indexRail = 'index-rail';
   static String indexRailLetter(Object letter) => 'index-rail-$letter';
   static const String indexSort = 'index-sort';
+  static const String listingShuffle = 'listing-shuffle';
   static String musicTile(Object name) => 'music-tile-$name';
 
   // organize: Organize: previews, duplicates, and upgrade groups.

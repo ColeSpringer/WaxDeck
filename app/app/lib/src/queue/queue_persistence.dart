@@ -3,9 +3,14 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_data/waxdeck_data.dart';
+// The mirror's own generated `QueueEntry` row class collides with the
+// queue's; this file speaks about both, and the queue's is the one it
+// builds.
+import 'package:waxdeck_data/waxdeck_data.dart' hide QueueEntry;
 
 import '../player/now_playing_controller.dart';
+import '../providers.dart';
+import '../settings/client_settings_providers.dart';
 import '../sync/sync_providers.dart';
 import 'queue_controller.dart';
 import 'queue_state.dart';
@@ -130,6 +135,7 @@ class RestorableQueue {
     required this.queue,
     required this.savedAt,
     this.currentItem,
+    this.sessionId,
   });
 
   final QueueState queue;
@@ -140,7 +146,46 @@ class RestorableQueue {
   /// title on the offer, not a reason to withhold it.
   final ItemSummary? currentItem;
 
+  /// The ended server session this came from, when it did not come off
+  /// the disk. What declining it has to remember, since there is no
+  /// local snapshot to clear.
+  final String? sessionId;
+
   int get length => queue.length;
+}
+
+/// What kind of thing an API pid names, from its type prefix.
+///
+/// Music is the fallback rather than an error: an unknown prefix is a
+/// newer server, and drawing a square cover for it is a better answer
+/// than refusing to draw the row.
+MediaType mediaTypeOfPid(String pid) => switch (pid.split('-').first) {
+  'ep' => MediaType.podcast,
+  'bk' => MediaType.audiobook,
+  _ => MediaType.music,
+};
+
+/// Builds a local queue out of an ended server session.
+///
+/// The provenance stays unknown: the server records what was playing,
+/// not what it was built from, and captioning a restored queue with an
+/// endpoint name would answer a different question than "playing from".
+QueueState queueFromSession(PlaybackSessionHistoryEntry session) {
+  final entries = <QueueEntry>[
+    for (var i = 0; i < session.entries.length; i++)
+      QueueEntry(queueId: '$kQueueIdPrefix$i', pid: session.entries[i].pid),
+  ];
+  return QueueState(
+    entries: entries,
+    sourceOrder: [for (final e in entries) e.queueId],
+    currentIndex: entries.isEmpty
+        ? 0
+        : session.index.clamp(0, entries.length - 1),
+    shuffled: session.shuffle,
+    repeat: QueueRepeat.fromWire(session.repeat ?? ''),
+    source: QueueSource.none,
+    nextQueueId: entries.length,
+  );
 }
 
 /// What a launch found to resume, or null when there is nothing to
@@ -168,21 +213,86 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
     });
 
     final stored = await store.load();
-    if (stored == null || stored.entries.isEmpty) return null;
+    final offer = stored == null || stored.entries.isEmpty
+        ? await _fromServer()
+        : await _fromDisk(stored, db);
+    // Checked again on the way out: a queue that started while the disk
+    // and the server were being read would have its retirement
+    // overwritten by the offer this build is about to return.
+    if (ref.read(queueControllerProvider).isNotEmpty) return null;
+    return offer;
+  }
+
+  Future<RestorableQueue> _fromDisk(
+    StoredQueue stored,
+    MirrorDatabase? db,
+  ) async {
     final queue = QueueState.fromStored(stored);
     final pid = queue.currentPid;
     final item = db == null || pid == null
         ? null
         : await mirrorItemByPid(db, pid);
-    // Checked again on the way out: a queue that started while the disk
-    // was being read would have its retirement overwritten by the offer
-    // this build is about to return.
-    if (ref.read(queueControllerProvider).isNotEmpty) return null;
     return RestorableQueue(
       queue: queue,
       savedAt: stored.updatedAt,
       currentItem: item,
     );
+  }
+
+  /// What the account was last playing anywhere, for the launches with
+  /// nothing on the disk: the web build, which keeps no mirror, and a
+  /// fresh install of a native one. The server keeps a few ended
+  /// sessions per user and this offers the newest.
+  ///
+  /// Never throws. A launch offline, or against a server that does not
+  /// serve this yet, is a launch with nothing to offer — not a failed
+  /// one, and certainly not a deck bar stuck on an error.
+  Future<RestorableQueue?> _fromServer() async {
+    final List<PlaybackSessionHistoryEntry> sessions;
+    try {
+      sessions = await ref
+          .read(repositoryProvider)
+          .listPlaybackSessionHistory();
+    } on Object catch (error) {
+      debugPrint('session history unavailable: $error');
+      return null;
+    }
+    // The store promises never to throw and this does not rely on being
+    // lucky about it: the whole cost of losing here is an offer that
+    // comes back after it was declined, which is not worth failing a
+    // launch for.
+    final declined = DateTime.tryParse(
+      await ref
+              .read(clientSettingsStoreProvider)
+              .read(ClientSettingKeys.resumeDeclinedThrough)
+              .catchError((Object _) => null) ??
+          '',
+    );
+    for (final session in sessions) {
+      if (session.entries.isEmpty) continue;
+      if (declined != null && !session.positionAt.isAfter(declined)) continue;
+      final current = session.currentEntry;
+      return RestorableQueue(
+        queue: queueFromSession(session),
+        savedAt: session.positionAt,
+        sessionId: session.id,
+        currentItem: current == null
+            ? null
+            : ItemSummary(
+                pid: current.pid,
+                // A session entry carries no media type; the pid says
+                // it, since every API pid is a type prefix in front of a
+                // ULID. It decides the offer's artwork shape and glyph,
+                // so a book offered as a track would be the wrong shape
+                // on the bar.
+                mediaType: mediaTypeOfPid(current.pid),
+                title: current.title,
+                artist: current.artist,
+                durationMs: current.durationMs ?? 0,
+              ),
+      );
+    }
+    return null;
   }
 
   /// Puts the restored queue back in play. Through the playback layer,
@@ -199,15 +309,36 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
   /// Turns the offer down, and forgets the queue so it is not offered
   /// again at every launch.
   ///
+  /// Two things to forget, because the offer comes from two places. A
+  /// queue off the disk is cleared. A session off the server is not
+  /// this client's to delete — it is the account's history, and another
+  /// device may still want it — so declining it is recorded here
+  /// instead, per device, which is the scope the decision has.
+  ///
   /// The forgetting is attempted first, so a failure to write is a
   /// logged failure rather than an offer that looks declined and comes
   /// back next launch with no explanation. It never throws: this hangs
   /// off a button.
   Future<void> dismiss() async {
-    await ref
-        .read(queueStoreProvider)
-        .clear()
-        .catchError(QueuePersister._writeFailed);
+    final offer = state.value;
+    if (offer?.sessionId == null) {
+      await ref
+          .read(queueStoreProvider)
+          .clear()
+          .catchError(QueuePersister._writeFailed);
+    } else {
+      await ref
+          .read(clientSettingsStoreProvider)
+          .write(
+            ClientSettingKeys.resumeDeclinedThrough,
+            offer!.savedAt.toUtc().toIso8601String(),
+          )
+          // Guarded like the disk branch, and for the same reason: this
+          // hangs off a button, and a write that threw would skip the
+          // retirement below and leave the offer standing with an
+          // uncaught error behind it.
+          .catchError(QueuePersister._writeFailed);
+    }
     state = const AsyncData(null);
   }
 }

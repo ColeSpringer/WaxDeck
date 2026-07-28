@@ -24,6 +24,18 @@ abstract mixin class ItemSummaryBuilder {
   String? get album;
   set album(String? album);
 
+  String? get artistPid;
+  set artistPid(String? artistPid);
+
+  String? get albumPid;
+  set albumPid(String? albumPid);
+
+  int? get trackNumber;
+  set trackNumber(int? trackNumber);
+
+  int? get discNumber;
+  set discNumber(int? discNumber);
+
   int? get durationMs;
   set durationMs(int? durationMs);
 
@@ -43,6 +55,14 @@ class _$$ItemSummary extends $ItemSummary {
   @override
   final String? album;
   @override
+  final String? artistPid;
+  @override
+  final String? albumPid;
+  @override
+  final int? trackNumber;
+  @override
+  final int? discNumber;
+  @override
   final int durationMs;
   @override
   final String? artUrl;
@@ -56,6 +76,10 @@ class _$$ItemSummary extends $ItemSummary {
     required this.title,
     this.artist,
     this.album,
+    this.artistPid,
+    this.albumPid,
+    this.trackNumber,
+    this.discNumber,
     required this.durationMs,
     this.artUrl,
   }) : super._();
@@ -75,6 +99,10 @@ class _$$ItemSummary extends $ItemSummary {
         title == other.title &&
         artist == other.artist &&
         album == other.album &&
+        artistPid == other.artistPid &&
+        albumPid == other.albumPid &&
+        trackNumber == other.trackNumber &&
+        discNumber == other.discNumber &&
         durationMs == other.durationMs &&
         artUrl == other.artUrl;
   }
@@ -87,6 +115,10 @@ class _$$ItemSummary extends $ItemSummary {
     _$hash = $jc(_$hash, title.hashCode);
     _$hash = $jc(_$hash, artist.hashCode);
     _$hash = $jc(_$hash, album.hashCode);
+    _$hash = $jc(_$hash, artistPid.hashCode);
+    _$hash = $jc(_$hash, albumPid.hashCode);
+    _$hash = $jc(_$hash, trackNumber.hashCode);
+    _$hash = $jc(_$hash, discNumber.hashCode);
     _$hash = $jc(_$hash, durationMs.hashCode);
     _$hash = $jc(_$hash, artUrl.hashCode);
     _$hash = $jf(_$hash);
@@ -101,6 +133,10 @@ class _$$ItemSummary extends $ItemSummary {
           ..add('title', title)
           ..add('artist', artist)
           ..add('album', album)
+          ..add('artistPid', artistPid)
+          ..add('albumPid', albumPid)
+          ..add('trackNumber', trackNumber)
+          ..add('discNumber', discNumber)
           ..add('durationMs', durationMs)
           ..add('artUrl', artUrl))
         .toString();
@@ -132,6 +168,23 @@ class $ItemSummaryBuilder
   String? get album => _$this._album;
   set album(covariant String? album) => _$this._album = album;
 
+  String? _artistPid;
+  String? get artistPid => _$this._artistPid;
+  set artistPid(covariant String? artistPid) => _$this._artistPid = artistPid;
+
+  String? _albumPid;
+  String? get albumPid => _$this._albumPid;
+  set albumPid(covariant String? albumPid) => _$this._albumPid = albumPid;
+
+  int? _trackNumber;
+  int? get trackNumber => _$this._trackNumber;
+  set trackNumber(covariant int? trackNumber) =>
+      _$this._trackNumber = trackNumber;
+
+  int? _discNumber;
+  int? get discNumber => _$this._discNumber;
+  set discNumber(covariant int? discNumber) => _$this._discNumber = discNumber;
+
   int? _durationMs;
   int? get durationMs => _$this._durationMs;
   set durationMs(covariant int? durationMs) => _$this._durationMs = durationMs;
@@ -152,6 +205,10 @@ class $ItemSummaryBuilder
       _title = $v.title;
       _artist = $v.artist;
       _album = $v.album;
+      _artistPid = $v.artistPid;
+      _albumPid = $v.albumPid;
+      _trackNumber = $v.trackNumber;
+      _discNumber = $v.discNumber;
       _durationMs = $v.durationMs;
       _artUrl = $v.artUrl;
       _$v = null;
@@ -193,6 +250,10 @@ class $ItemSummaryBuilder
           ),
           artist: artist,
           album: album,
+          artistPid: artistPid,
+          albumPid: albumPid,
+          trackNumber: trackNumber,
+          discNumber: discNumber,
           durationMs: BuiltValueNullFieldError.checkNotNull(
             durationMs,
             r'$ItemSummary',

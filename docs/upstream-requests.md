@@ -60,6 +60,23 @@ sidecar injection seam) all landed and are not repeated here.
   A-to-Z half on the in-memory window, so the window and its cache would
   survive the very change meant to retire them.
 
+- **A filter on `Browse`.** `read.BrowseOptions` carries a user, a seed,
+  a cursor, and a limit, and the two list-shaped fields `ListByYear` and
+  `ListByGenre` need. It takes no query, so the random list is over the
+  whole catalog and nothing else. WaxDeck's queue windows any scope
+  larger than 500 entries and draws more as it drains (ADR-0028); for a
+  shuffled window that draw wants a random order over the *scope*, which
+  is usually one facet bucket — a giant artist, a giant genre. A
+  `Query query.Query` field on `BrowseOptions`, applied the way
+  `QueryPage` applies one, would give every discovery list a scope and
+  make this exact. The shipped workaround: a shuffled window over the
+  whole music library uses `ListRandom` and is a real shuffle, and a
+  shuffled window over a bucket pages that bucket's own listing and
+  shuffles each arriving page among itself — so a shuffled 5,000-track
+  genre hears a shuffle of its first 500 before a shuffle of its second
+  500. Complete coverage, no repeats, an order that is more local than
+  it should be.
+
 ## WaxFlow
 
 - **A `ReloadRoots` method on the Go client.** `client.Caps` exposes

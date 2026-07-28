@@ -22,6 +22,10 @@ part 'episode.g.dart';
 /// * [title] - Display title.
 /// * [artist] - Primary display artist / author / show name.
 /// * [album] - Album / series / podcast title, when applicable.
+/// * [artistPid] - The artist entity behind `artist`, so a client can group and link by identity rather than by display text — two artists with the same name are two entities, and one artist spelled two ways is still one. Absent when the item has no artist entity. For an audiobook this is its author. 
+/// * [albumPid] - The album entity behind `album`, for the same reason. Tracks only: a podcast episode and an audiobook are not album members, and their `album` is a series or show title with no album entity behind it. Absent when the track belongs to no album. 
+/// * [trackNumber] - Track position within its disc (music). On the summary row rather than only on the detail because a listing is where it is needed: an album's items page arrives in the library's own stable order, and this plus `discNumber` is what a client sorts a release back into. Absent when the item carries none. 
+/// * [discNumber] - Disc number within a multi-disc release (music). Absent for a single-disc release and for anything that is not a track. 
 /// * [durationMs] - Duration in milliseconds. For a multi-file audiobook this is the total across all parts; for a not-yet-fetched podcast episode it is the feed-declared duration, or 0 when the feed declares none. 
 /// * [artUrl] - Origin-relative URL of the item's artwork endpoint. Always populated; the endpoint itself returns 404 for items with no artwork, so clients keep a placeholder ready. 
 /// * [showPid] - The show this episode belongs to.
@@ -84,20 +88,6 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
     Episode object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
-    if (object.fetchError != null) {
-      yield r'fetchError';
-      yield serializers.serialize(
-        object.fetchError,
-        specifiedType: const FullType(String),
-      );
-    }
-    if (object.fetchState != null) {
-      yield r'fetchState';
-      yield serializers.serialize(
-        object.fetchState,
-        specifiedType: const FullType(String),
-      );
-    }
     if (object.chapters != null) {
       yield r'chapters';
       yield serializers.serialize(
@@ -109,18 +99,6 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
       yield r'artist';
       yield serializers.serialize(
         object.artist,
-        specifiedType: const FullType(String),
-      );
-    }
-    yield r'publishedAt';
-    yield serializers.serialize(
-      object.publishedAt,
-      specifiedType: const FullType(DateTime),
-    );
-    if (object.album != null) {
-      yield r'album';
-      yield serializers.serialize(
-        object.album,
         specifiedType: const FullType(String),
       );
     }
@@ -136,16 +114,18 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
       object.pid,
       specifiedType: const FullType(String),
     );
-    yield r'mediaType';
-    yield serializers.serialize(
-      object.mediaType,
-      specifiedType: const FullType(MediaType),
-    );
     yield r'title';
     yield serializers.serialize(
       object.title,
       specifiedType: const FullType(String),
     );
+    if (object.albumPid != null) {
+      yield r'albumPid';
+      yield serializers.serialize(
+        object.albumPid,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.episodeNumber != null) {
       yield r'episodeNumber';
       yield serializers.serialize(
@@ -153,11 +133,6 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         specifiedType: const FullType(int),
       );
     }
-    yield r'downloaded';
-    yield serializers.serialize(
-      object.downloaded,
-      specifiedType: const FullType(bool),
-    );
     if (object.artUrl != null) {
       yield r'artUrl';
       yield serializers.serialize(
@@ -172,6 +147,70 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         specifiedType: const FullType(bool),
       );
     }
+    if (object.discNumber != null) {
+      yield r'discNumber';
+      yield serializers.serialize(
+        object.discNumber,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.episodeType != null) {
+      yield r'episodeType';
+      yield serializers.serialize(
+        object.episodeType,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.season != null) {
+      yield r'season';
+      yield serializers.serialize(
+        object.season,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.fetchError != null) {
+      yield r'fetchError';
+      yield serializers.serialize(
+        object.fetchError,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.trackNumber != null) {
+      yield r'trackNumber';
+      yield serializers.serialize(
+        object.trackNumber,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.fetchState != null) {
+      yield r'fetchState';
+      yield serializers.serialize(
+        object.fetchState,
+        specifiedType: const FullType(String),
+      );
+    }
+    yield r'publishedAt';
+    yield serializers.serialize(
+      object.publishedAt,
+      specifiedType: const FullType(DateTime),
+    );
+    if (object.album != null) {
+      yield r'album';
+      yield serializers.serialize(
+        object.album,
+        specifiedType: const FullType(String),
+      );
+    }
+    yield r'mediaType';
+    yield serializers.serialize(
+      object.mediaType,
+      specifiedType: const FullType(MediaType),
+    );
+    yield r'downloaded';
+    yield serializers.serialize(
+      object.downloaded,
+      specifiedType: const FullType(bool),
+    );
     if (object.soundbites != null) {
       yield r'soundbites';
       yield serializers.serialize(
@@ -193,29 +232,22 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         specifiedType: const FullType(BuiltList, [FullType(FeedPerson)]),
       );
     }
-    if (object.episodeType != null) {
-      yield r'episodeType';
-      yield serializers.serialize(
-        object.episodeType,
-        specifiedType: const FullType(String),
-      );
-    }
     yield r'showPid';
     yield serializers.serialize(
       object.showPid,
       specifiedType: const FullType(String),
     );
-    if (object.season != null) {
-      yield r'season';
-      yield serializers.serialize(
-        object.season,
-        specifiedType: const FullType(int),
-      );
-    }
     if (object.descriptionHtml != null) {
       yield r'descriptionHtml';
       yield serializers.serialize(
         object.descriptionHtml,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.artistPid != null) {
+      yield r'artistPid';
+      yield serializers.serialize(
+        object.artistPid,
         specifiedType: const FullType(String),
       );
     }
@@ -247,20 +279,6 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
       final key = serializedList[i] as String;
       final value = serializedList[i + 1];
       switch (key) {
-        case r'fetchError':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(String),
-          ) as String;
-          result.fetchError = valueDes;
-          break;
-        case r'fetchState':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(String),
-          ) as String;
-          result.fetchState = valueDes;
-          break;
         case r'chapters':
           final valueDes = serializers.deserialize(
             value,
@@ -274,20 +292,6 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
             specifiedType: const FullType(String),
           ) as String;
           result.artist = valueDes;
-          break;
-        case r'publishedAt':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
-          result.publishedAt = valueDes;
-          break;
-        case r'album':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(String),
-          ) as String;
-          result.album = valueDes;
           break;
         case r'link':
           final valueDes = serializers.deserialize(
@@ -303,13 +307,6 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
           ) as String;
           result.pid = valueDes;
           break;
-        case r'mediaType':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(MediaType),
-          ) as MediaType;
-          result.mediaType = valueDes;
-          break;
         case r'title':
           final valueDes = serializers.deserialize(
             value,
@@ -317,19 +314,19 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
           ) as String;
           result.title = valueDes;
           break;
+        case r'albumPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.albumPid = valueDes;
+          break;
         case r'episodeNumber':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(int),
           ) as int;
           result.episodeNumber = valueDes;
-          break;
-        case r'downloaded':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(bool),
-          ) as bool;
-          result.downloaded = valueDes;
           break;
         case r'artUrl':
           final valueDes = serializers.deserialize(
@@ -344,6 +341,76 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.hasTranscript = valueDes;
+          break;
+        case r'discNumber':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.discNumber = valueDes;
+          break;
+        case r'episodeType':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.episodeType = valueDes;
+          break;
+        case r'season':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.season = valueDes;
+          break;
+        case r'fetchError':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.fetchError = valueDes;
+          break;
+        case r'trackNumber':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.trackNumber = valueDes;
+          break;
+        case r'fetchState':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.fetchState = valueDes;
+          break;
+        case r'publishedAt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(DateTime),
+          ) as DateTime;
+          result.publishedAt = valueDes;
+          break;
+        case r'album':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.album = valueDes;
+          break;
+        case r'mediaType':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(MediaType),
+          ) as MediaType;
+          result.mediaType = valueDes;
+          break;
+        case r'downloaded':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.downloaded = valueDes;
           break;
         case r'soundbites':
           final valueDes = serializers.deserialize(
@@ -366,13 +433,6 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
           ) as BuiltList<FeedPerson>;
           result.persons.replace(valueDes);
           break;
-        case r'episodeType':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(String),
-          ) as String;
-          result.episodeType = valueDes;
-          break;
         case r'showPid':
           final valueDes = serializers.deserialize(
             value,
@@ -380,19 +440,19 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
           ) as String;
           result.showPid = valueDes;
           break;
-        case r'season':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(int),
-          ) as int;
-          result.season = valueDes;
-          break;
         case r'descriptionHtml':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(String),
           ) as String;
           result.descriptionHtml = valueDes;
+          break;
+        case r'artistPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.artistPid = valueDes;
           break;
         case r'durationMs':
           final valueDes = serializers.deserialize(

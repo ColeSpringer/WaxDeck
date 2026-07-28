@@ -124,10 +124,113 @@ class QueueController extends Notifier<QueueState> {
       currentIndex: index,
       shuffled: shuffled,
       repeat: state.repeat,
-      source: source,
+      source: _windowed(source, pids.length, order, shuffle),
       nextQueueId: nextId,
       undo: displaced,
     );
+  }
+
+  /// What the source says about its own frontier once the cap has had
+  /// its say.
+  ///
+  /// The caller's cursor names where its listing stands, which is the
+  /// queue's frontier only when the queue took everything the caller
+  /// had. Two windows leave it somewhere else:
+  ///
+  /// An ordered window is a contiguous run, and one cut short of the
+  /// caller's last item ends inside the list rather than at its end.
+  /// Resuming from the caller's cursor would step over everything
+  /// between, so the cursor is dropped and the draw finds its place by
+  /// the entry at the frontier instead — and it is rolling whatever the
+  /// caller declared, because there demonstrably is more.
+  ///
+  /// A shuffled window is a sample of the whole list rather than a run,
+  /// so it has no frontier inside the list at all: the caller's cursor
+  /// is exactly the right place to draw from next, and whether the
+  /// source can be drawn from is the pager's answer, not this layer's.
+  QueueSource _windowed(
+    QueueSource source,
+    int available,
+    List<int> order,
+    bool shuffle,
+  ) {
+    if (shuffle || order.length == available) return source;
+    return source.copyWith(rolling: true, cursor: '');
+  }
+
+  /// Appends more of the scope this queue is a window over, and records
+  /// where the source stands after it.
+  ///
+  /// [more] false seals the window: the scope ran out, the caption goes,
+  /// and nothing draws again. An empty [pids] with [more] true is a page
+  /// that landed empty and says nothing either way — everything visible
+  /// was filtered out of it, say — so the cursor moves on and the next
+  /// drain tries again.
+  ///
+  void appendWindow(
+    List<String> pids, {
+    required String cursor,
+    required bool more,
+    int? seed,
+  }) {
+    // A window is over the queue that was cut from the scope; without
+    // one there is nothing to append to and no provenance to keep.
+    if (state.isEmpty) return;
+    // A draw is machinery, not a gesture: it places itself in the source
+    // by an entry or a cursor, and either can land it on ground the
+    // queue already covers — a reorder that moved the frontier entry, a
+    // cursor issued before an edit. Whatever it already holds is not
+    // drawn again. A listener adding the same track twice by hand is a
+    // different verb and still gets two of them.
+    final held = state.pids.toSet();
+    final arrivals = <String>[
+      for (final pid in pids)
+        if (held.add(pid)) pid,
+    ];
+    if (arrivals.isNotEmpty) {
+      final currentId = state.currentEntry!.queueId;
+      var nextId = state.nextQueueId;
+      final added = [
+        for (final pid in arrivals.take(kQueueCap))
+          QueueEntry(queueId: '$kQueueIdPrefix${nextId++}', pid: pid),
+      ];
+      // Appended at the end of both orders, unlike a hand-placed
+      // insert: these came after everything else in the scope, so that
+      // is where turning shuffle off puts them back.
+      final entries = [...state.entries, ...added];
+      // A shuffled queue shuffles what arrives among itself rather than
+      // through the tail already on screen: the window grows at its end,
+      // which is what the queue surface shows and what a listener
+      // watching it expects.
+      if (state.shuffled) {
+        _shuffleRange(entries, state.length, entries.length);
+      }
+      state = _capped(
+        state.copyWith(
+          entries: entries,
+          sourceOrder: [...state.sourceOrder, for (final e in added) e.queueId],
+          nextQueueId: nextId,
+        ),
+        currentId,
+        {for (final e in added) e.queueId},
+      );
+    }
+    state = state.copyWith(
+      source: state.source.copyWith(
+        rolling: more,
+        cursor: cursor,
+        seed: seed,
+        clearSeed: seed == null,
+      ),
+    );
+  }
+
+  /// Stops the window drawing again: the scope ran out, or nothing here
+  /// can say where in it the queue stands. The queue keeps playing what
+  /// it holds; it just stops claiming there is more behind it.
+  void sealWindow() {
+    if (!state.source.rolling) return;
+    state = state.copyWith(source: state.source.copyWith(rolling: false));
   }
 
   /// Inserts [pids] right after the current entry.
@@ -211,9 +314,10 @@ class QueueController extends Notifier<QueueState> {
   /// Moves the entry at [from] so it lands at [to] in play order.
   ///
   /// Plain list semantics: the entry is removed and re-inserted, so [to]
-  /// is an index into the queue without it. `ReorderableListView` hands
-  /// out a `newIndex` that assumes the entry is still there, so callers
-  /// subtract one when moving an entry down.
+  /// is an index into the queue without it. That is what
+  /// `SliverReorderableList.onReorderItem` hands out — it adjusts for
+  /// the removal itself — so a surface using the older `onReorder`
+  /// would have to subtract one when moving an entry down.
   void reorder(int from, int to) {
     if (from < 0 || from >= state.length) return;
     final target = to.clamp(0, state.length - 1);

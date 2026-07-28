@@ -489,6 +489,10 @@ func summary(it *model.ItemView) ItemSummary {
 		Title:      it.Title,
 		Artist:     it.Artist,
 		Album:      it.Album,
+		ArtistPID:  entityAPIPID(PrefixArtist, it.ArtistPID),
+		AlbumPID:   entityAPIPID(PrefixAlbum, it.AlbumPID),
+		TrackNo:    it.TrackNo,
+		DiscNo:     it.DiscNo,
 		DurationMS: it.DurationMS,
 		Virtual:    it.Virtual,
 	}

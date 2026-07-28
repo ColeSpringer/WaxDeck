@@ -142,6 +142,10 @@ ItemSummary itemSummaryFromGen(gen.ItemSummary item, {String baseUrl = ''}) {
     title: item.title,
     artist: item.artist,
     album: item.album,
+    artistPid: item.artistPid,
+    albumPid: item.albumPid,
+    trackNumber: item.trackNumber,
+    discNumber: item.discNumber,
     durationMs: item.durationMs,
     artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
   );
@@ -183,12 +187,14 @@ ItemDetail itemDetailFromGen(gen.Item item, {String baseUrl = ''}) {
     title: item.title,
     artist: item.artist,
     album: item.album,
+    artistPid: item.artistPid,
+    albumPid: item.albumPid,
+    trackNumber: item.trackNumber,
+    discNumber: item.discNumber,
     durationMs: item.durationMs,
     artUrl: artUrl == null ? null : resolveMediaUrl(baseUrl, artUrl),
     genres: item.genres?.toList() ?? const [],
     year: item.year,
-    trackNumber: item.trackNumber,
-    discNumber: item.discNumber,
     codec: item.codec,
     container: item.container,
     sampleRate: item.sampleRate,
@@ -1508,6 +1514,33 @@ UserPage userPageFromGen(gen.UserPage page) {
 
 ListBuilder<gen.Role>? rolesToGen(List<String>? roles) =>
     roles == null ? null : ListBuilder<gen.Role>(roles.map(gen.Role.valueOf));
+
+PlaybackSessionHistoryEntry playbackHistoryFromGen(
+  gen.PlaybackSessionHistoryEntry s,
+) {
+  return PlaybackSessionHistoryEntry(
+    id: s.id,
+    endpointId: s.endpointId,
+    endpointName: s.endpointName,
+    authority: s.authority,
+    index: s.index,
+    positionMs: s.positionMs,
+    positionAt: s.positionAt.toUtc(),
+    rate: s.rate,
+    repeat: s.repeat,
+    shuffle: s.shuffle ?? false,
+    entries: s.entries
+        .map(
+          (e) => PlaybackSessionEntry(
+            pid: e.pid,
+            title: e.title,
+            artist: e.artist,
+            durationMs: e.durationMs,
+          ),
+        )
+        .toList(growable: false),
+  );
+}
 
 PlaybackSessionInfo playbackSessionFromGen(gen.PlaybackSession s) {
   return PlaybackSessionInfo(

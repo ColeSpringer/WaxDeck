@@ -146,6 +146,61 @@ func TestFacetedBrowseOverHTTP(t *testing.T) {
 	wantStatus(t, resp, 401, "unauthenticated enumeration")
 }
 
+// TestItemEntityHandlesOverHTTP checks that a list row names the same
+// entities the facet dimensions do. A client groups an artist's tracks
+// into albums and links each one to its own screen, and it can only do
+// that if the pid on the row is the pid the bucket carries: display text
+// collides, and an album title is not a location.
+func TestItemEntityHandlesOverHTTP(t *testing.T) {
+	h := newHarness(t)
+
+	byArtist := map[string]string{}
+	for _, b := range facetPage(t, h, "?dimension=artist").Buckets {
+		if b.EntityPid == nil {
+			t.Fatalf("artist bucket %q carries no entityPid", b.Label)
+		}
+		byArtist[b.Label] = *b.EntityPid
+	}
+	byAlbum := map[string]string{}
+	for _, b := range facetPage(t, h, "?dimension=album").Buckets {
+		if b.EntityPid == nil {
+			t.Fatalf("album bucket %q carries no entityPid", b.Label)
+		}
+		byAlbum[b.Label] = *b.EntityPid
+	}
+
+	page := h.items(t, "?mediaType=music")
+	if len(page.Items) == 0 {
+		t.Fatal("the demo library listed no music")
+	}
+	for _, it := range page.Items {
+		if it.Artist == nil || it.ArtistPid == nil {
+			t.Fatalf("item %q has artist %v and artistPid %v", it.Title, it.Artist, it.ArtistPid)
+		}
+		if want := byArtist[*it.Artist]; *it.ArtistPid != want {
+			t.Fatalf("item %q names artist %q, the dimension names %q", it.Title, *it.ArtistPid, want)
+		}
+		if it.Album == nil || it.AlbumPid == nil {
+			t.Fatalf("item %q has album %v and albumPid %v", it.Title, it.Album, it.AlbumPid)
+		}
+		if want := byAlbum[*it.Album]; *it.AlbumPid != want {
+			t.Fatalf("item %q names album %q, the dimension names %q", it.Title, *it.AlbumPid, want)
+		}
+		// The handle drills its own bucket: the contract states a bucket
+		// key is its entity pid without the type prefix, which is what
+		// lets one location name the entity and filter the listing.
+		key := strings.TrimPrefix(*it.AlbumPid, "al-")
+		drilled := h.items(t, "?facet=album&facetKey="+key)
+		found := false
+		for _, member := range drilled.Items {
+			found = found || member.Pid == it.Pid
+		}
+		if !found {
+			t.Fatalf("item %q is not in the album its albumPid names", it.Title)
+		}
+	}
+}
+
 // TestGenreTreeAdminOverHTTP covers the vocabulary surface: reading the
 // shipped default, refusing a tree that could not resolve one way,
 // storing one, and clearing back to the default.

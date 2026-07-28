@@ -12,6 +12,8 @@ import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/health/diagnostics_screen.dart';
 import 'package:waxdeck/src/health/health_screen.dart';
 import 'package:waxdeck/src/library/library_screen.dart';
+import 'package:waxdeck/src/music/album_screen.dart';
+import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/index_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
@@ -45,6 +47,12 @@ import 'fakes.dart';
 
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
 
+/// A bucket handle of the shape [dimension] mints for a bucket that has
+/// an entity behind it: the entity's pid for the two that are entities,
+/// a bare key for the two that are not.
+String _entityHandle(MusicDimension dimension) =>
+    dimension.entityPrefix == null ? 'key-1' : '${dimension.entityPrefix}1';
+
 /// Every location a caller can build, and the screen it must land on.
 ///
 /// The table declares its paths as relative segments and `WaxRoute`
@@ -60,11 +68,29 @@ final _locations = <String, Type>{
   WaxRoute.musicTracks: MusicListingScreen,
   for (final dimension in MusicDimension.values) ...<String, Type>{
     WaxRoute.musicIndex(dimension): MusicIndexScreen,
-    WaxRoute.musicBucket(dimension, 'key-1'): MusicListingScreen,
+    // A bucket of an entity dimension opens the entity itself; the two
+    // that are not entities open the filtered listing. The handle is
+    // what says which: it is a prefixed pid only when the bucket carried
+    // an entity.
+    WaxRoute.musicBucket(
+      dimension,
+      _entityHandle(dimension),
+    ): switch (dimension) {
+      MusicDimension.artists => ArtistScreen,
+      MusicDimension.albums => AlbumScreen,
+      MusicDimension.genres || MusicDimension.years => MusicListingScreen,
+    },
+    // A bucket with no entity behind it travels as its bare key, even on
+    // a dimension whose buckets usually are entities, and an entity
+    // screen handed one of those would ask the artwork and star
+    // endpoints for something that is not a pid.
+    WaxRoute.musicBucket(dimension, 'plain-key'): MusicListingScreen,
     // The bucket a dimension is absent from: its key is empty, and an
     // empty path segment is not a location, so it travels as a sentinel.
+    // There is no entity behind it either way, so it is always a listing.
     WaxRoute.musicBucket(dimension, musicUnknownSegment): MusicListingScreen,
   },
+  WaxRoute.artistTracks('ar-1'): MusicListingScreen,
   WaxRoute.playlists: PlaylistsScreen,
   WaxRoute.playlist('pl-1'): PlaylistScreen,
   WaxRoute.podcasts: PodcastsScreen,
@@ -117,9 +143,11 @@ final _stackedInShell = <String>{
   WaxRoute.musicTracks,
   for (final dimension in MusicDimension.values) ...<String>{
     WaxRoute.musicIndex(dimension),
-    WaxRoute.musicBucket(dimension, 'key-1'),
+    WaxRoute.musicBucket(dimension, _entityHandle(dimension)),
+    WaxRoute.musicBucket(dimension, 'plain-key'),
     WaxRoute.musicBucket(dimension, musicUnknownSegment),
   },
+  WaxRoute.artistTracks('ar-1'),
   WaxRoute.book('bk-1'),
   WaxRoute.show('pc-1'),
   WaxRoute.playlist('pl-1'),

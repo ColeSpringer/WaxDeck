@@ -286,8 +286,6 @@ func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (Ite
 	d := ItemDetail{
 		ItemSummary: summary(it),
 		Year:        it.Year,
-		TrackNo:     it.TrackNo,
-		DiscNo:      it.DiscNo,
 		Codec:       it.Codec,
 		Container:   it.Container,
 		SampleRate:  it.SampleRate,

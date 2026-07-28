@@ -20,6 +20,8 @@ import '../health/diagnostics_screen.dart';
 import '../health/health_screen.dart';
 import '../library/library_screen.dart';
 import '../metadata/metadata_screen.dart';
+import '../music/album_screen.dart';
+import '../music/artist_screen.dart';
 import '../music/index_screen.dart';
 import '../music/listing_screen.dart';
 import '../music/music_controllers.dart';
@@ -36,6 +38,8 @@ import '../podcasts/podcasts_screen.dart';
 import '../podcasts/show_screen.dart';
 import '../prototype/editing_prototype_screen.dart';
 import '../queue/queue_persistence.dart';
+import '../queue/queue_refiller.dart';
+import '../queue/queue_screen.dart';
 import '../radio/radio_screen.dart';
 import '../review/review_entry_screen.dart';
 import '../review/review_screen.dart';
@@ -187,30 +191,73 @@ GoRouterRedirect _requires<T>(String fallback) =>
 // four lines of unpacking that would otherwise sit in the middle of the
 // branch it belongs to.
 
-/// One dimension's index, and beneath it the listing of any one of its
-/// buckets.
+/// One dimension's index, and beneath it whatever one of its buckets
+/// opens onto.
 ///
 /// Built rather than typed out four times: the four dimensions differ in
 /// their wire name and their label and in nothing the router cares about,
 /// and a table with four near-identical branches is where the fifth one
 /// gets subtly wrong.
+///
+/// The two entity dimensions open onto the entity itself rather than
+/// onto its filtered listing. Same location either way — the contract
+/// makes a bucket's key its entity pid behind a type prefix, so one
+/// address names the artist and filters the list — but an artist is a
+/// screen about an artist, not a list of their tracks, and the list
+/// still has a location one level down.
 GoRoute _musicIndexRoute(MusicDimension dimension) => GoRoute(
   path: dimension.segment,
   builder: (context, state) => MusicIndexScreen(dimension: dimension),
   routes: <RouteBase>[
     GoRoute(
       path: ':key',
-      builder: (context, state) => MusicListingScreen(
-        dimension: dimension,
-        segment: state.pathParameters['key']!,
-        // A hint, never a dependency: `extra` is dropped by a reload and
-        // by a shared link, and the screen names itself from what it
-        // loads when it arrives without one.
-        label: state.extra is String ? state.extra! as String : null,
-      ),
+      builder: (context, state) => _bucketScreen(dimension, state),
+      routes: <RouteBase>[
+        if (dimension == MusicDimension.artists)
+          GoRoute(
+            path: 'tracks',
+            builder: (context, state) => MusicListingScreen(
+              dimension: dimension,
+              segment: state.pathParameters['key']!,
+              label: state.extra is String ? state.extra! as String : null,
+            ),
+          ),
+      ],
     ),
   ],
 );
+
+/// What one bucket of [dimension] opens onto. `extra` carries the label
+/// the caller had: a hint, never a dependency, since a reload and a
+/// shared link both drop it and every one of these screens names itself
+/// from what it loads.
+Widget _bucketScreen(MusicDimension dimension, GoRouterState state) {
+  final segment = state.pathParameters['key']!;
+  final label = state.extra is String ? state.extra! as String : null;
+  // An entity screen wants an entity pid, and the handle in the location
+  // is only one when the bucket carried an `entityPid`: a bucket without
+  // one travels as its bare key, and the bucket a dimension is absent
+  // from travels as a sentinel. The prefix is the test, and it is the
+  // same one `musicFacetKey` keys on to turn a handle back into a facet
+  // key — so the two cannot disagree about what the segment is.
+  final prefix = dimension.entityPrefix;
+  if (prefix != null && segment.startsWith(prefix)) {
+    switch (dimension) {
+      case MusicDimension.artists:
+        return ArtistScreen(pid: segment, label: label);
+      case MusicDimension.albums:
+        return AlbumScreen(pid: segment, label: label);
+      case MusicDimension.genres:
+      case MusicDimension.years:
+        break;
+    }
+  }
+  return MusicListingScreen(
+    dimension: dimension,
+    segment: segment,
+    label: label,
+  );
+}
 
 Widget _trackList(BuildContext context, GoRouterState state) {
   final args = state.extra! as TrackListArgs;
@@ -492,6 +539,10 @@ List<RouteBase> shellRoutes() => <RouteBase>[
     builder: (context, state) => const PlayerScreen(),
   ),
   GoRoute(
+    path: WaxRoute.queue,
+    builder: (context, state) => const QueueScreen(),
+  ),
+  GoRoute(
     path: WaxRoute.tracks,
     redirect: _requires<TrackListArgs>(WaxRoute.home),
     builder: _trackList,
@@ -520,6 +571,7 @@ class _SignedInScope extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(syncBinderProvider);
     ref.watch(queuePersistenceProvider);
+    ref.watch(queueRefillProvider);
     // The notifier, not its state: playback has to be listening to the
     // queue for the whole session, but what it is playing changes
     // constantly and nothing under here should rebuild for that. The
