@@ -171,6 +171,8 @@ face instead of asking Google's CDN for Roboto.
   flip commit's to build when the old row goes away.
 - The sidebar's collapsed state is in memory. It is a per-device client
   setting and the store that persists those rides the settings phase.
+  *Since built: it persists, on native and in the browser both. See
+  ADR-0027.*
 - **`@staticIconProvider` came off `WaxIcons`** (amending ADR-0016). The
   annotation tells the release build's icon tree-shaker to ignore the
   constants declared in the annotated class, so a glyph ships only where

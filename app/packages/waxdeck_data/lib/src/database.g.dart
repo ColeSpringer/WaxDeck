@@ -3284,6 +3284,18 @@ class $QueueMetaTable extends QueueMeta
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _sourceCursorMeta = const VerificationMeta(
+    'sourceCursor',
+  );
+  @override
+  late final GeneratedColumn<String> sourceCursor = GeneratedColumn<String>(
+    'source_cursor',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3296,6 +3308,7 @@ class $QueueMetaTable extends QueueMeta
     sourceRolling,
     nextQueueId,
     updatedAt,
+    sourceCursor,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3380,6 +3393,15 @@ class $QueueMetaTable extends QueueMeta
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('source_cursor')) {
+      context.handle(
+        _sourceCursorMeta,
+        sourceCursor.isAcceptableOrUnknown(
+          data['source_cursor']!,
+          _sourceCursorMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3429,6 +3451,10 @@ class $QueueMetaTable extends QueueMeta
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      sourceCursor: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_cursor'],
+      )!,
     );
   }
 
@@ -3461,6 +3487,22 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
   /// cannot hand an old id to a new entry.
   final int nextQueueId;
   final DateTime updatedAt;
+
+  /// Where the source's own listing stood when the window was cut, so a
+  /// restored rolling queue can draw the next page instead of ending at
+  /// the cap. Opaque: keyset cursors are the server's to shape, and the
+  /// empty string means "no more was ever asked for".
+  ///
+  /// Read and written by [StoredQueue] already; what does not fill it
+  /// yet is `QueueState.toStored`, since nothing on the queue side pages
+  /// a source. That is the one remaining step, and it is a queue-UI one.
+  ///
+  /// Out of reading order, and deliberately: `ALTER TABLE ADD COLUMN`
+  /// appends, so a column added after a table shipped goes last here too
+  /// or an upgraded database and a fresh one differ in column order.
+  /// (`skippedMs` on the listen outbox is the same, for the same
+  /// reason.)
+  final String sourceCursor;
   const QueueMetaData({
     required this.id,
     required this.currentIndex,
@@ -3472,6 +3514,7 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
     required this.sourceRolling,
     required this.nextQueueId,
     required this.updatedAt,
+    required this.sourceCursor,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3488,6 +3531,7 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
     map['source_rolling'] = Variable<bool>(sourceRolling);
     map['next_queue_id'] = Variable<int>(nextQueueId);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['source_cursor'] = Variable<String>(sourceCursor);
     return map;
   }
 
@@ -3505,6 +3549,7 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
       sourceRolling: Value(sourceRolling),
       nextQueueId: Value(nextQueueId),
       updatedAt: Value(updatedAt),
+      sourceCursor: Value(sourceCursor),
     );
   }
 
@@ -3524,6 +3569,7 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
       sourceRolling: serializer.fromJson<bool>(json['sourceRolling']),
       nextQueueId: serializer.fromJson<int>(json['nextQueueId']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      sourceCursor: serializer.fromJson<String>(json['sourceCursor']),
     );
   }
   @override
@@ -3540,6 +3586,7 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
       'sourceRolling': serializer.toJson<bool>(sourceRolling),
       'nextQueueId': serializer.toJson<int>(nextQueueId),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'sourceCursor': serializer.toJson<String>(sourceCursor),
     };
   }
 
@@ -3554,6 +3601,7 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
     bool? sourceRolling,
     int? nextQueueId,
     DateTime? updatedAt,
+    String? sourceCursor,
   }) => QueueMetaData(
     id: id ?? this.id,
     currentIndex: currentIndex ?? this.currentIndex,
@@ -3565,6 +3613,7 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
     sourceRolling: sourceRolling ?? this.sourceRolling,
     nextQueueId: nextQueueId ?? this.nextQueueId,
     updatedAt: updatedAt ?? this.updatedAt,
+    sourceCursor: sourceCursor ?? this.sourceCursor,
   );
   QueueMetaData copyWithCompanion(QueueMetaCompanion data) {
     return QueueMetaData(
@@ -3588,6 +3637,9 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
           ? data.nextQueueId.value
           : this.nextQueueId,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      sourceCursor: data.sourceCursor.present
+          ? data.sourceCursor.value
+          : this.sourceCursor,
     );
   }
 
@@ -3603,7 +3655,8 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
           ..write('sourcePid: $sourcePid, ')
           ..write('sourceRolling: $sourceRolling, ')
           ..write('nextQueueId: $nextQueueId, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('sourceCursor: $sourceCursor')
           ..write(')'))
         .toString();
   }
@@ -3620,6 +3673,7 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
     sourceRolling,
     nextQueueId,
     updatedAt,
+    sourceCursor,
   );
   @override
   bool operator ==(Object other) =>
@@ -3634,7 +3688,8 @@ class QueueMetaData extends DataClass implements Insertable<QueueMetaData> {
           other.sourcePid == this.sourcePid &&
           other.sourceRolling == this.sourceRolling &&
           other.nextQueueId == this.nextQueueId &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.sourceCursor == this.sourceCursor);
 }
 
 class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
@@ -3648,6 +3703,7 @@ class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
   final Value<bool> sourceRolling;
   final Value<int> nextQueueId;
   final Value<DateTime> updatedAt;
+  final Value<String> sourceCursor;
   const QueueMetaCompanion({
     this.id = const Value.absent(),
     this.currentIndex = const Value.absent(),
@@ -3659,6 +3715,7 @@ class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
     this.sourceRolling = const Value.absent(),
     this.nextQueueId = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.sourceCursor = const Value.absent(),
   });
   QueueMetaCompanion.insert({
     this.id = const Value.absent(),
@@ -3671,6 +3728,7 @@ class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
     this.sourceRolling = const Value.absent(),
     this.nextQueueId = const Value.absent(),
     required DateTime updatedAt,
+    this.sourceCursor = const Value.absent(),
   }) : updatedAt = Value(updatedAt);
   static Insertable<QueueMetaData> custom({
     Expression<int>? id,
@@ -3683,6 +3741,7 @@ class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
     Expression<bool>? sourceRolling,
     Expression<int>? nextQueueId,
     Expression<DateTime>? updatedAt,
+    Expression<String>? sourceCursor,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3695,6 +3754,7 @@ class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
       if (sourceRolling != null) 'source_rolling': sourceRolling,
       if (nextQueueId != null) 'next_queue_id': nextQueueId,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (sourceCursor != null) 'source_cursor': sourceCursor,
     });
   }
 
@@ -3709,6 +3769,7 @@ class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
     Value<bool>? sourceRolling,
     Value<int>? nextQueueId,
     Value<DateTime>? updatedAt,
+    Value<String>? sourceCursor,
   }) {
     return QueueMetaCompanion(
       id: id ?? this.id,
@@ -3721,6 +3782,7 @@ class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
       sourceRolling: sourceRolling ?? this.sourceRolling,
       nextQueueId: nextQueueId ?? this.nextQueueId,
       updatedAt: updatedAt ?? this.updatedAt,
+      sourceCursor: sourceCursor ?? this.sourceCursor,
     );
   }
 
@@ -3757,6 +3819,9 @@ class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (sourceCursor.present) {
+      map['source_cursor'] = Variable<String>(sourceCursor.value);
+    }
     return map;
   }
 
@@ -3772,7 +3837,8 @@ class QueueMetaCompanion extends UpdateCompanion<QueueMetaData> {
           ..write('sourcePid: $sourcePid, ')
           ..write('sourceRolling: $sourceRolling, ')
           ..write('nextQueueId: $nextQueueId, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('sourceCursor: $sourceCursor')
           ..write(')'))
         .toString();
   }
@@ -4235,6 +4301,214 @@ class ArtworkPinsCompanion extends UpdateCompanion<ArtworkPin> {
   }
 }
 
+class $ClientSettingsTable extends ClientSettings
+    with TableInfo<$ClientSettingsTable, ClientSetting> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ClientSettingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _keyMeta = const VerificationMeta('key');
+  @override
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [key, value];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'client_settings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ClientSetting> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('key')) {
+      context.handle(
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_keyMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {key};
+  @override
+  ClientSetting map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ClientSetting(
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+    );
+  }
+
+  @override
+  $ClientSettingsTable createAlias(String alias) {
+    return $ClientSettingsTable(attachedDatabase, alias);
+  }
+}
+
+class ClientSetting extends DataClass implements Insertable<ClientSetting> {
+  final String key;
+  final String value;
+  const ClientSetting({required this.key, required this.value});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['key'] = Variable<String>(key);
+    map['value'] = Variable<String>(value);
+    return map;
+  }
+
+  ClientSettingsCompanion toCompanion(bool nullToAbsent) {
+    return ClientSettingsCompanion(key: Value(key), value: Value(value));
+  }
+
+  factory ClientSetting.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ClientSetting(
+      key: serializer.fromJson<String>(json['key']),
+      value: serializer.fromJson<String>(json['value']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'key': serializer.toJson<String>(key),
+      'value': serializer.toJson<String>(value),
+    };
+  }
+
+  ClientSetting copyWith({String? key, String? value}) =>
+      ClientSetting(key: key ?? this.key, value: value ?? this.value);
+  ClientSetting copyWithCompanion(ClientSettingsCompanion data) {
+    return ClientSetting(
+      key: data.key.present ? data.key.value : this.key,
+      value: data.value.present ? data.value.value : this.value,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ClientSetting(')
+          ..write('key: $key, ')
+          ..write('value: $value')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(key, value);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ClientSetting &&
+          other.key == this.key &&
+          other.value == this.value);
+}
+
+class ClientSettingsCompanion extends UpdateCompanion<ClientSetting> {
+  final Value<String> key;
+  final Value<String> value;
+  final Value<int> rowid;
+  const ClientSettingsCompanion({
+    this.key = const Value.absent(),
+    this.value = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ClientSettingsCompanion.insert({
+    required String key,
+    required String value,
+    this.rowid = const Value.absent(),
+  }) : key = Value(key),
+       value = Value(value);
+  static Insertable<ClientSetting> custom({
+    Expression<String>? key,
+    Expression<String>? value,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (key != null) 'key': key,
+      if (value != null) 'value': value,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ClientSettingsCompanion copyWith({
+    Value<String>? key,
+    Value<String>? value,
+    Value<int>? rowid,
+  }) {
+    return ClientSettingsCompanion(
+      key: key ?? this.key,
+      value: value ?? this.value,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (key.present) {
+      map['key'] = Variable<String>(key.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ClientSettingsCompanion(')
+          ..write('key: $key, ')
+          ..write('value: $value, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$MirrorDatabase extends GeneratedDatabase {
   _$MirrorDatabase(QueryExecutor e) : super(e);
   $MirrorDatabaseManager get managers => $MirrorDatabaseManager(this);
@@ -4253,6 +4527,7 @@ abstract class _$MirrorDatabase extends GeneratedDatabase {
   late final $QueueEntriesTable queueEntries = $QueueEntriesTable(this);
   late final $QueueMetaTable queueMeta = $QueueMetaTable(this);
   late final $ArtworkPinsTable artworkPins = $ArtworkPinsTable(this);
+  late final $ClientSettingsTable clientSettings = $ClientSettingsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4267,6 +4542,7 @@ abstract class _$MirrorDatabase extends GeneratedDatabase {
     queueEntries,
     queueMeta,
     artworkPins,
+    clientSettings,
   ];
 }
 
@@ -5940,6 +6216,7 @@ typedef $$QueueMetaTableCreateCompanionBuilder =
       Value<bool> sourceRolling,
       Value<int> nextQueueId,
       required DateTime updatedAt,
+      Value<String> sourceCursor,
     });
 typedef $$QueueMetaTableUpdateCompanionBuilder =
     QueueMetaCompanion Function({
@@ -5953,6 +6230,7 @@ typedef $$QueueMetaTableUpdateCompanionBuilder =
       Value<bool> sourceRolling,
       Value<int> nextQueueId,
       Value<DateTime> updatedAt,
+      Value<String> sourceCursor,
     });
 
 class $$QueueMetaTableFilterComposer
@@ -6011,6 +6289,11 @@ class $$QueueMetaTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceCursor => $composableBuilder(
+    column: $table.sourceCursor,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6073,6 +6356,11 @@ class $$QueueMetaTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get sourceCursor => $composableBuilder(
+    column: $table.sourceCursor,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$QueueMetaTableAnnotationComposer
@@ -6123,6 +6411,11 @@ class $$QueueMetaTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceCursor => $composableBuilder(
+    column: $table.sourceCursor,
+    builder: (column) => column,
+  );
 }
 
 class $$QueueMetaTableTableManager
@@ -6166,6 +6459,7 @@ class $$QueueMetaTableTableManager
                 Value<bool> sourceRolling = const Value.absent(),
                 Value<int> nextQueueId = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String> sourceCursor = const Value.absent(),
               }) => QueueMetaCompanion(
                 id: id,
                 currentIndex: currentIndex,
@@ -6177,6 +6471,7 @@ class $$QueueMetaTableTableManager
                 sourceRolling: sourceRolling,
                 nextQueueId: nextQueueId,
                 updatedAt: updatedAt,
+                sourceCursor: sourceCursor,
               ),
           createCompanionCallback:
               ({
@@ -6190,6 +6485,7 @@ class $$QueueMetaTableTableManager
                 Value<bool> sourceRolling = const Value.absent(),
                 Value<int> nextQueueId = const Value.absent(),
                 required DateTime updatedAt,
+                Value<String> sourceCursor = const Value.absent(),
               }) => QueueMetaCompanion.insert(
                 id: id,
                 currentIndex: currentIndex,
@@ -6201,6 +6497,7 @@ class $$QueueMetaTableTableManager
                 sourceRolling: sourceRolling,
                 nextQueueId: nextQueueId,
                 updatedAt: updatedAt,
+                sourceCursor: sourceCursor,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -6465,6 +6762,152 @@ typedef $$ArtworkPinsTableProcessedTableManager =
       ArtworkPin,
       PrefetchHooks Function()
     >;
+typedef $$ClientSettingsTableCreateCompanionBuilder =
+    ClientSettingsCompanion Function({
+      required String key,
+      required String value,
+      Value<int> rowid,
+    });
+typedef $$ClientSettingsTableUpdateCompanionBuilder =
+    ClientSettingsCompanion Function({
+      Value<String> key,
+      Value<String> value,
+      Value<int> rowid,
+    });
+
+class $$ClientSettingsTableFilterComposer
+    extends Composer<_$MirrorDatabase, $ClientSettingsTable> {
+  $$ClientSettingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ClientSettingsTableOrderingComposer
+    extends Composer<_$MirrorDatabase, $ClientSettingsTable> {
+  $$ClientSettingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ClientSettingsTableAnnotationComposer
+    extends Composer<_$MirrorDatabase, $ClientSettingsTable> {
+  $$ClientSettingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get key =>
+      $composableBuilder(column: $table.key, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+}
+
+class $$ClientSettingsTableTableManager
+    extends
+        RootTableManager<
+          _$MirrorDatabase,
+          $ClientSettingsTable,
+          ClientSetting,
+          $$ClientSettingsTableFilterComposer,
+          $$ClientSettingsTableOrderingComposer,
+          $$ClientSettingsTableAnnotationComposer,
+          $$ClientSettingsTableCreateCompanionBuilder,
+          $$ClientSettingsTableUpdateCompanionBuilder,
+          (
+            ClientSetting,
+            BaseReferences<
+              _$MirrorDatabase,
+              $ClientSettingsTable,
+              ClientSetting
+            >,
+          ),
+          ClientSetting,
+          PrefetchHooks Function()
+        > {
+  $$ClientSettingsTableTableManager(
+    _$MirrorDatabase db,
+    $ClientSettingsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ClientSettingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ClientSettingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ClientSettingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> key = const Value.absent(),
+                Value<String> value = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) =>
+                  ClientSettingsCompanion(key: key, value: value, rowid: rowid),
+          createCompanionCallback:
+              ({
+                required String key,
+                required String value,
+                Value<int> rowid = const Value.absent(),
+              }) => ClientSettingsCompanion.insert(
+                key: key,
+                value: value,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ClientSettingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MirrorDatabase,
+      $ClientSettingsTable,
+      ClientSetting,
+      $$ClientSettingsTableFilterComposer,
+      $$ClientSettingsTableOrderingComposer,
+      $$ClientSettingsTableAnnotationComposer,
+      $$ClientSettingsTableCreateCompanionBuilder,
+      $$ClientSettingsTableUpdateCompanionBuilder,
+      (
+        ClientSetting,
+        BaseReferences<_$MirrorDatabase, $ClientSettingsTable, ClientSetting>,
+      ),
+      ClientSetting,
+      PrefetchHooks Function()
+    >;
 
 class $MirrorDatabaseManager {
   final _$MirrorDatabase _db;
@@ -6487,4 +6930,6 @@ class $MirrorDatabaseManager {
       $$QueueMetaTableTableManager(_db, _db.queueMeta);
   $$ArtworkPinsTableTableManager get artworkPins =>
       $$ArtworkPinsTableTableManager(_db, _db.artworkPins);
+  $$ClientSettingsTableTableManager get clientSettings =>
+      $$ClientSettingsTableTableManager(_db, _db.clientSettings);
 }

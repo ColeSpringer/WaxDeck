@@ -32,6 +32,7 @@ class StoredQueue {
     required this.updatedAt,
     this.sourcePid,
     this.sourceRolling = false,
+    this.sourceCursor = '',
   });
 
   final List<StoredQueueEntry> entries;
@@ -42,6 +43,19 @@ class StoredQueue {
   final String sourceLabel;
   final String? sourcePid;
   final bool sourceRolling;
+
+  /// Where the source's own listing stood when this window was cut, so a
+  /// window that drains can ask for more instead of ending at the cap.
+  /// Opaque — the server shapes its cursors and this only carries them.
+  ///
+  /// Round-tripped here but not yet filled: nothing on the queue side
+  /// pages a source, so [QueueState] has no cursor to hand over and the
+  /// empty string is the honest answer. The plumbing is what stops the
+  /// column from being a trap for whoever builds the refill — a `save`
+  /// that omitted it would quietly reset the stored cursor on every
+  /// write, and no test would have said so.
+  final String sourceCursor;
+
   final int nextQueueId;
   final DateTime updatedAt;
 }
@@ -92,6 +106,7 @@ class DriftQueueStore implements QueueStore {
       sourceLabel: meta.sourceLabel,
       sourcePid: meta.sourcePid,
       sourceRolling: meta.sourceRolling,
+      sourceCursor: meta.sourceCursor,
       nextQueueId: meta.nextQueueId,
       updatedAt: meta.updatedAt,
     );
@@ -126,6 +141,7 @@ class DriftQueueStore implements QueueStore {
               sourceLabel: Value(queue.sourceLabel),
               sourcePid: Value(queue.sourcePid),
               sourceRolling: Value(queue.sourceRolling),
+              sourceCursor: Value(queue.sourceCursor),
               nextQueueId: Value(queue.nextQueueId),
               updatedAt: queue.updatedAt,
             ),

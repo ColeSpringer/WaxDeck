@@ -5,6 +5,19 @@
 // the same query, pagination, and location machinery real rips do.
 //
 //	corpusgen -out /tmp/corpus -items 100000
+//
+// One directory per album, each holding its audio, its cue sheet, and
+// its own cover — the layout a real library has and the one folder art
+// requires. Pass -covers=false for a run that measures the grid without
+// artwork, which is the comparison the web perf gate's open question
+// wants.
+//
+// Budget the disk: covers dominate. A cover is about 400 KB against
+// 86 KB for the album's audio, so the documented 100k-item run is
+// roughly 400 MB of PNG on top of 86 MB of FLAC — call it half a
+// gigabyte, where the same corpus without covers is under a tenth of
+// that. The size is the grain doing its job (see cover.go); the point
+// of saying so here is that it is a deliberate cost and not a surprise.
 package main
 
 import (
@@ -21,15 +34,16 @@ func main() {
 	out := flag.String("out", "corpus", "output directory")
 	items := flag.Int("items", 100000, "total virtual tracks to produce")
 	perFile := flag.Int("perfile", 100, "tracks per audio file")
+	covers := flag.Bool("covers", true, "synthesize a cover per album")
 	flag.Parse()
 
-	if err := run(*out, *items, *perFile); err != nil {
+	if err := run(*out, *items, *perFile, *covers); err != nil {
 		fmt.Fprintln(os.Stderr, "corpusgen:", err)
 		os.Exit(1)
 	}
 }
 
-func run(out string, items, perFile int) error {
+func run(out string, items, perFile int, covers bool) error {
 	if perFile < 1 || perFile > 100 {
 		return fmt.Errorf("perfile must be 1..100 (tracks must start inside the audio)")
 	}
@@ -42,10 +56,17 @@ func run(out string, items, perFile int) error {
 	made := 0
 	for f := 0; f < files; f++ {
 		name := fmt.Sprintf("album%05d", f)
+		// Each album gets a directory of its own. Flat was fine while a
+		// corpus was audio and cue sheets, but folder art is per
+		// directory: one cover beside a thousand albums would be one
+		// cover for all of them, and since artwork is addressed by
+		// content hash, every thumbnail request in the house would hit
+		// the same cache entry.
+		dir := filepath.Join(out, name)
 		// Distinct durations keep essences distinct, so fingerprint
 		// dedup never merges corpus files into one item.
 		dur := 3000*time.Millisecond + time.Duration(f%1000)*time.Millisecond
-		if _, err := fixtures.Generate(out, fixtures.Spec{
+		if _, err := fixtures.Generate(dir, fixtures.Spec{
 			Name:     name,
 			Codec:    fixtures.CodecFLAC,
 			Duration: dur,
@@ -53,15 +74,20 @@ func run(out string, items, perFile int) error {
 			return fmt.Errorf("file %d: %w", f, err)
 		}
 		n := min(perFile, items-made)
-		if err := writeCue(filepath.Join(out, name+".cue"), name+".flac", f, n, genres); err != nil {
+		if err := writeCue(filepath.Join(dir, name+".cue"), name+".flac", f, n, genres); err != nil {
 			return err
+		}
+		if covers {
+			if err := writeCover(dir, f); err != nil {
+				return fmt.Errorf("cover %d: %w", f, err)
+			}
 		}
 		made += n
 		if f%100 == 99 {
-			fmt.Printf("corpusgen: %d/%d files (%d items) in %s\n", f+1, files, made, time.Since(start).Round(time.Second))
+			fmt.Printf("corpusgen: %d/%d albums (%d items) in %s\n", f+1, files, made, time.Since(start).Round(time.Second))
 		}
 	}
-	fmt.Printf("corpusgen: wrote %d files carrying %d items in %s\n", files, made, time.Since(start).Round(time.Second))
+	fmt.Printf("corpusgen: wrote %d albums carrying %d items in %s\n", files, made, time.Since(start).Round(time.Second))
 	return nil
 }
 

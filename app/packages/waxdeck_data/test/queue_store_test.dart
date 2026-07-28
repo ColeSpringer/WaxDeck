@@ -28,6 +28,22 @@ StoredQueue _queue(
   );
 }
 
+/// The queue as the store round-trips it, with every field set to
+/// something distinguishable from its default.
+StoredQueue _fullQueue() => StoredQueue(
+  entries: const [StoredQueueEntry(queueId: 'q0', pid: 'tr-A', sourceRank: 0)],
+  currentIndex: 0,
+  shuffled: true,
+  repeat: 'all',
+  sourceKind: 'genre',
+  sourceLabel: 'Ambient',
+  sourcePid: 'ge-1',
+  sourceRolling: true,
+  sourceCursor: 'eyJhZnRlciI6IjUwMCJ9',
+  nextQueueId: 1,
+  updatedAt: DateTime.utc(2026, 7, 28),
+);
+
 void main() {
   late MirrorDatabase db;
   late DriftQueueStore store;
@@ -126,5 +142,26 @@ void main() {
     expect(await store.load(), isNull);
     expect(await db.select(db.queueEntries).get(), isEmpty);
     expect(await db.select(db.queueMeta).get(), isEmpty);
+  });
+
+  test('every field of the meta row survives a save and a load', () async {
+    // A save replaces the whole row, so a field the companion omits is
+    // not left alone — it is reset to its column default on every write.
+    // That failure is silent, which is why this asserts the whole record
+    // rather than the fields a given change happened to touch.
+    await store.save(_fullQueue());
+    final restored = (await store.load())!;
+
+    expect(restored.shuffled, isTrue);
+    expect(restored.repeat, 'all');
+    expect(restored.sourceKind, 'genre');
+    expect(restored.sourceLabel, 'Ambient');
+    expect(restored.sourcePid, 'ge-1');
+    expect(restored.sourceRolling, isTrue);
+    expect(restored.sourceCursor, 'eyJhZnRlciI6IjUwMCJ9');
+    expect(restored.nextQueueId, 1);
+    // Drift stores a DateTime as a Unix timestamp and hands it back in
+    // local time, so the instant is what round-trips, not the zone.
+    expect(restored.updatedAt.toUtc(), DateTime.utc(2026, 7, 28));
   });
 }

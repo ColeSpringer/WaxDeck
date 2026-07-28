@@ -161,6 +161,22 @@ class QueueMeta extends Table {
   IntColumn get nextQueueId => integer().withDefault(const Constant(0))();
   DateTimeColumn get updatedAt => dateTime()();
 
+  /// Where the source's own listing stood when the window was cut, so a
+  /// restored rolling queue can draw the next page instead of ending at
+  /// the cap. Opaque: keyset cursors are the server's to shape, and the
+  /// empty string means "no more was ever asked for".
+  ///
+  /// Read and written by [StoredQueue] already; what does not fill it
+  /// yet is `QueueState.toStored`, since nothing on the queue side pages
+  /// a source. That is the one remaining step, and it is a queue-UI one.
+  ///
+  /// Out of reading order, and deliberately: `ALTER TABLE ADD COLUMN`
+  /// appends, so a column added after a table shipped goes last here too
+  /// or an upgraded database and a fresh one differ in column order.
+  /// (`skippedMs` on the listen outbox is the same, for the same
+  /// reason.)
+  TextColumn get sourceCursor => text().withDefault(const Constant(''))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -184,6 +200,22 @@ class ArtworkPins extends Table {
   Set<Column> get primaryKey => {pid, sizePx};
 }
 
+/// Per-device preferences, as opaque key/value pairs.
+///
+/// Deliberately not typed columns. The settings surface names ten of
+/// these already and every phase adds more, and a typed column means a
+/// schema migration per preference; the controller that reads a key is
+/// the one place that knows what its value means, so that is where the
+/// typing lives. Nothing synced belongs here — the server-side
+/// preference document is a different store with a different scope.
+class ClientSettings extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {key};
+}
+
 /// The client-side database behind the sync engine and downloads.
 @DriftDatabase(
   tables: [
@@ -196,13 +228,14 @@ class ArtworkPins extends Table {
     QueueEntries,
     QueueMeta,
     ArtworkPins,
+    ClientSettings,
   ],
 )
 class MirrorDatabase extends _$MirrorDatabase {
   MirrorDatabase(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -212,6 +245,20 @@ class MirrorDatabase extends _$MirrorDatabase {
         await m.createTable(queueEntries);
         await m.createTable(queueMeta);
         await m.createTable(artworkPins);
+      }
+      if (from < 3) {
+        await m.createTable(clientSettings);
+        // Only for a database that already had the table. Guards are
+        // cumulative, and `createTable` above builds today's shape, not
+        // the shape v2 shipped — so a v1 install has just been given a
+        // queue_meta that carries this column already, and adding it
+        // again is a duplicate-column error rather than a no-op. Every
+        // later step that adds a column to a table an earlier step
+        // creates has to say which versions it means; the fresh-install
+        // equivalence test is what catches forgetting to.
+        if (from >= 2) {
+          await m.addColumn(queueMeta, queueMeta.sourceCursor);
+        }
       }
     },
   );

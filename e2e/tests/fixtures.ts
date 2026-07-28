@@ -18,12 +18,22 @@ export * from '@playwright/test';
 // there.
 const forceMtSkwasm = !!process.env.WAXDECK_E2E_MT_SKWASM;
 
+const isPerfSpec = (file: string) =>
+  /^perf-.*\.spec\.ts$/.test(file.split(/[\\/]/).pop() ?? '');
+
 export const test = base.extend({
   page: async ({ page }, use, testInfo) => {
-    // Not in the perf spec: a self-rescheduling rAF loop requests a
+    // Not in the perf specs: a self-rescheduling rAF loop requests a
     // frame every frame, defeating idle throttling and adding a
-    // callback to each frame whose pacing that spec exists to measure.
-    if (!testInfo.file.endsWith('perf-web.spec.ts')) {
+    // callback to each frame whose pacing those specs exist to measure.
+    //
+    // Belt to the perf specs' braces rather than the thing that saves
+    // them: they build their own contexts off `browser` and never
+    // request this fixture, so nothing here runs for them today. This
+    // catches the perf spec that does take a `page` — matched on the
+    // basename by prefix, so a new one inherits it, and split on either
+    // separator because `testInfo.file` is an absolute platform path.
+    if (!isPerfSpec(testInfo.file)) {
       await page.addInitScript(HEARTBEAT_INIT);
     }
     if (forceMtSkwasm) {

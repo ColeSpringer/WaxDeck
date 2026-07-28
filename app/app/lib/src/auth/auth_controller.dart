@@ -7,6 +7,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../artwork/artwork_providers.dart';
 import '../providers.dart';
 import '../queue/queue_persistence.dart';
+import '../search/search_controller.dart';
 import 'credential_store.dart';
 
 /// The pre-auth server probe: first-run setup state and whether open
@@ -167,6 +168,15 @@ class AuthController extends AsyncNotifier<SessionState> {
     // Artwork is the other: cached covers and the pins beside the
     // downloads outlive the session that was allowed to see them.
     await ref.read(artworkStoreProvider).forgetEverything();
+    // And the recent searches, which are the same kind of thing: strings
+    // the departing listener typed, naming things in their library, in a
+    // browser store the next account on this machine can read back.
+    await forgetSearchesOnSignOut(ref);
+    // The rest of the per-device settings deliberately stand. A
+    // collapsed sidebar describes the machine rather than the account,
+    // and wiping it would make signing out a factory reset of a shared
+    // desktop. Which side of that line a preference falls on is a
+    // question each one answers for itself; see ADR-0027.
     state = const AsyncData(SessionState(authenticated: false));
   }
 }

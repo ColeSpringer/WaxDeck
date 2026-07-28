@@ -134,7 +134,9 @@ does not move under a cursor every time a socket blinks.
   started would move the page twice.
 - **Two per-device knobs are still hard-coded**: the spoken-word skip
   intervals (15 back, 30 forward) and, from ADR-0020, wifi-only preloading.
-  Both want the client-settings store and ride the settings phase.
+  Both want the client-settings store and ride the settings phase. *The
+  store landed early (ADR-0027); what these two still want is a control
+  in Settings, and wifi-only a connectivity port besides.*
 - **A sheet opened from the bar does not belong to the bar.** The bar is
   replaced by whatever playback does next — clearing the queue, a station
   taking the engine — and its overflow menu stays up across that. The

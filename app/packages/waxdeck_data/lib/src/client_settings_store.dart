@@ -1,0 +1,118 @@
+import 'database.dart';
+
+/// Where a preference that belongs to this device — not to the account —
+/// lives between launches.
+///
+/// The scope is the whole point. Theme, locale, and the shared-stats
+/// opt-out are the account's and ride the server's preference document,
+/// so they follow a listener to a new phone. A collapsed sidebar, a skip
+/// interval sized for these headphones, a wifi-only switch about this
+/// connection: those describe the device in front of the listener and
+/// would be wrong on the next one. Nothing here ever syncs, and a
+/// sign-out leaves it standing (see [ClientSettingKeys]).
+///
+/// Values are opaque strings. A caller that wants a bool or a list
+/// encodes one, because the store has no way to be right about which is
+/// which and a typed column per preference would mean a schema
+/// migration per preference.
+///
+/// Implementations never throw. Persistence here is a convenience: the
+/// worst failure is a preference that does not survive the launch, which
+/// is not worth taking a screen down for.
+abstract class ClientSettingsStore {
+  /// The stored value for [key], or null when nothing was written.
+  Future<String?> read(String key);
+
+  /// Stores [value] under [key], replacing whatever was there.
+  Future<void> write(String key, String value);
+
+  /// Forgets [key], so the next read answers null and the caller falls
+  /// back to its default.
+  Future<void> remove(String key);
+}
+
+/// The keys in use, so the two implementations and their readers agree
+/// on spelling and a grep finds every preference at once.
+///
+/// Namespaced because the web store shares `localStorage` with whatever
+/// else the origin holds.
+abstract final class ClientSettingKeys {
+  /// Whether the desktop sidebar is collapsed to an icon rail.
+  static const sidebarCollapsed = 'waxdeck.shell.sidebarCollapsed';
+
+  /// The recent search queries, newest first, as a JSON string list.
+  static const recentSearches = 'waxdeck.search.recent';
+}
+
+/// Per-device settings in the local mirror database (native builds).
+///
+/// Every call swallows database failures, because the port promises the
+/// caller it will. A closed database, a locked file, a full disk: the
+/// visible cost is a preference that does not survive the launch, and a
+/// store that threw instead would take down a shell reading it during
+/// startup. This is the same trade the queue store's caller makes for
+/// the queue and the credential store makes for the token; the
+/// difference is that here it lives in the store, so both
+/// implementations of this port behave alike rather than only one of
+/// them honoring the contract.
+class DriftClientSettingsStore implements ClientSettingsStore {
+  DriftClientSettingsStore(this.db);
+
+  final MirrorDatabase db;
+
+  @override
+  Future<String?> read(String key) async {
+    try {
+      final row = await (db.select(
+        db.clientSettings,
+      )..where((t) => t.key.equals(key))).getSingleOrNull();
+      return row?.value;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> write(String key, String value) async {
+    try {
+      await db
+          .into(db.clientSettings)
+          .insertOnConflictUpdate(
+            ClientSettingsCompanion.insert(key: key, value: value),
+          );
+    } catch (_) {
+      // The preference holds in memory for this session either way; the
+      // notifier that set it does not read back through here.
+    }
+  }
+
+  @override
+  Future<void> remove(String key) async {
+    try {
+      await (db.delete(
+        db.clientSettings,
+      )..where((t) => t.key.equals(key))).go();
+    } catch (_) {
+      // A key that will not delete is a stale preference at the next
+      // launch, not a reason to throw at this one.
+    }
+  }
+}
+
+/// Settings that live only as long as the process.
+///
+/// Used by tests, and by the web store when the browser will not hold a
+/// value — a preference set in a private window is then good for the
+/// session rather than being an error the caller has to handle.
+class MemoryClientSettingsStore implements ClientSettingsStore {
+  final Map<String, String> _values = {};
+
+  @override
+  Future<String?> read(String key) async => _values[key];
+
+  @override
+  Future<void> write(String key, String value) async => _values[key] = value;
+
+  @override
+  Future<void> remove(String key) async => _values.remove(key);
+}

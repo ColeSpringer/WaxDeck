@@ -1,6 +1,7 @@
-import { test, expect } from './fixtures';
-import { typeInto } from './helpers';
-import { SemanticsIds } from './semantics-ids';
+import { test, expect, APIRequestContext, Browser, Locator, Page } from './fixtures';
+import { clickThrough, typeInto } from './helpers';
+import { measureScrollPacing, reportScrollPacing, ScrollPacing } from './scroll-pacing';
+import { SemanticsIds, sem } from './semantics-ids';
 
 // The web half of the large-library gate, run on demand against a
 // server holding the synthesized 100k-item corpus:
@@ -9,9 +10,16 @@ import { SemanticsIds } from './semantics-ids';
 //
 // Measures cold and warm time-to-interactive (the login form is the
 // first interactive surface), time from login to a populated grid over
-// 100k items, and frame pacing while scrolling the grid through
-// load-more churn. Budgets are the pre-agreed gate criteria; measured
-// values print for the record either way.
+// 100k items, and frame pacing while scrolling — the library grid, the
+// music indexes and a bucket listing, and the grid again with a track
+// playing. Budgets are the pre-agreed gate criteria; measured values
+// print for the record either way.
+//
+// The corpus must be built with covers, which is corpusgen's default.
+// The indexes and the grid are artwork surfaces, and measuring them over
+// a library with no art is what made the first recorded run
+// unrepresentative. `corpusgen -covers=false` builds the other half of
+// that comparison when one is wanted.
 const base = process.env.PERF_BASE_URL ?? '';
 
 const budgets = {
@@ -22,26 +30,31 @@ const budgets = {
   maxLongFrameShare: 0.05,
 };
 
-test.describe('large-library web gate', () => {
-  test.skip(!base, 'set PERF_BASE_URL to run the perf gate');
-  test.setTimeout(600_000);
+const CORPUS_USER = 'admin';
+const CORPUS_PASS = 'wax-e2e-pass';
 
-  test('cold TTI, warm TTI, grid time, and scroll pacing', async ({
-    browser,
-    playwright,
-  }) => {
-    // The corpus scan is asynchronous on a fresh stack; wait until a
-    // deep corpus track is searchable before measuring anything.
-    const api = await playwright.request.newContext({ baseURL: base });
+// Any item tile, whichever the grid drew first.
+const anyItemTile = (page: Page): Locator =>
+  page.locator(`[flt-semantics-identifier^="${SemanticsIds.item('')}"]`).first();
+
+// The corpus scan is asynchronous on a fresh stack; nothing is worth
+// measuring until a deep corpus track is searchable. Takes the factory
+// rather than a live context so it owns what it opens: a scenario cannot
+// leak the one it polls through.
+async function waitForCorpus(
+  newContext: () => Promise<APIRequestContext>,
+): Promise<void> {
+  const api = await newContext();
+  try {
     const boot = await api.post('/api/v1/auth/bootstrap', {
-      data: { username: 'admin', password: 'wax-e2e-pass' },
+      data: { username: CORPUS_USER, password: CORPUS_PASS },
     });
     let token: string;
     if (boot.ok()) {
       token = (await boot.json()).token;
     } else {
       const login = await api.post('/api/v1/auth/login', {
-        data: { username: 'admin', password: 'wax-e2e-pass' },
+        data: { username: CORPUS_USER, password: CORPUS_PASS },
       });
       expect(login.ok()).toBeTruthy();
       token = (await login.json()).token;
@@ -58,81 +71,165 @@ test.describe('large-library web gate', () => {
         { timeout: 300_000, intervals: [2_000] },
       )
       .toBeGreaterThan(0);
+  } finally {
+    await api.dispose();
+  }
+}
 
-    // Cold: a pristine context, nothing cached.
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    const coldStart = Date.now();
-    await page.goto(base + '/');
-    const username = page.getByRole('textbox', { name: 'Username' });
-    await username.waitFor({ timeout: 60_000 });
-    const coldTti = Date.now() - coldStart;
-
-    // Warm: same context, assets in cache.
-    const warmStart = Date.now();
-    await page.reload();
-    await page
-      .getByRole('textbox', { name: 'Username' })
-      .waitFor({ timeout: 60_000 });
-    const warmTti = Date.now() - warmStart;
-
-    // Login, then time to a populated grid over the 100k catalog.
-    await typeInto(page, page.getByRole('textbox', { name: 'Username' }), 'admin');
-    await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
-    const gridStart = Date.now();
-    await page.getByRole('button', { name: 'Log in' }).click();
-    await page
-      .locator(`[flt-semantics-identifier^="${SemanticsIds.item('')}"]`)
-      .first()
-      .waitFor({ timeout: 60_000 });
-    const gridMs = Date.now() - gridStart;
-
-    // Scroll pacing: collect frame deltas while wheeling through the
-    // grid (which pages more items in as it goes).
-    await page.evaluate(() => {
-      const w = window as unknown as { __frames: number[]; __stop: boolean };
-      w.__frames = [];
-      w.__stop = false;
-      let last = performance.now();
-      const tick = (now: number) => {
-        w.__frames.push(now - last);
-        last = now;
-        if (!w.__stop) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    });
-    const viewport = page.viewportSize()!;
-    await page.mouse.move(viewport.width / 2, viewport.height / 2);
-    for (let i = 0; i < 120; i++) {
-      await page.mouse.wheel(0, 600);
-      await page.waitForTimeout(100);
-    }
-    const frames: number[] = await page.evaluate(() => {
-      const w = window as unknown as { __frames: number[]; __stop: boolean };
-      w.__stop = true;
-      return w.__frames;
-    });
-
-    const settled = frames.slice(5); // discard collector warm-up
-    const meanMs = settled.reduce((a, b) => a + b, 0) / settled.length;
-    const sorted = [...settled].sort((a, b) => a - b);
-    const p95 = sorted[Math.floor(sorted.length * 0.95)];
-    const longShare = settled.filter((f) => f > 50).length / settled.length;
-
-    console.log(`perf-web verdicts against ${base}`);
-    console.log(`  cold TTI        ${coldTti}ms (budget ${budgets.coldTtiMs}ms)`);
-    console.log(`  warm TTI        ${warmTti}ms (budget ${budgets.warmTtiMs}ms)`);
-    console.log(`  login->grid     ${gridMs}ms (budget ${budgets.gridMs}ms)`);
-    console.log(
-      `  scroll frames   mean ${meanMs.toFixed(1)}ms (${(1000 / meanMs).toFixed(0)}fps), p95 ${p95.toFixed(1)}ms, >50ms share ${(longShare * 100).toFixed(1)}%`,
-    );
-
-    expect(coldTti).toBeLessThanOrEqual(budgets.coldTtiMs);
-    expect(warmTti).toBeLessThanOrEqual(budgets.warmTtiMs);
-    expect(gridMs).toBeLessThanOrEqual(budgets.gridMs);
-    expect(1000 / meanMs).toBeGreaterThanOrEqual(budgets.minMeanFps);
-    expect(longShare).toBeLessThanOrEqual(budgets.maxLongFrameShare);
-
+// Runs [body] against a pristine page and closes its context however it
+// ends. A failing assertion would otherwise leak a browser context —
+// invisible with one scenario in the file, three plus retries less so.
+async function measuring(
+  browser: Browser,
+  body: (page: Page) => Promise<void>,
+): Promise<void> {
+  const context = await browser.newContext();
+  try {
+    await body(await context.newPage());
+  } finally {
     await context.close();
+  }
+}
+
+async function login(page: Page) {
+  await page.goto(base + '/');
+  const username = page.getByRole('textbox', { name: 'Username' });
+  await username.waitFor({ timeout: 60_000 });
+  await typeInto(page, username, CORPUS_USER);
+  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), CORPUS_PASS);
+  await page.getByRole('button', { name: 'Log in' }).click();
+}
+
+function expectPacing(label: string, pacing: ScrollPacing) {
+  expect(pacing.fps, `${label}: mean fps`).toBeGreaterThanOrEqual(budgets.minMeanFps);
+  expect(pacing.longFrameShare, `${label}: long-frame share`).toBeLessThanOrEqual(
+    budgets.maxLongFrameShare,
+  );
+}
+
+test.describe('large-library web gate', () => {
+  test.skip(!base, 'set PERF_BASE_URL to run the perf gate');
+  test.setTimeout(600_000);
+  // The config is fullyParallel with four workers, which distributes
+  // tests within a file. Three scenarios each wheel-scrolling a 100k
+  // library for a quarter minute, run at once on one machine against one
+  // server, would report the contention between them rather than the
+  // app — and these numbers become the gate's recorded baseline. Default
+  // mode runs them in order in one worker. Not serial mode: a scenario
+  // that misses its budget must not skip the two after it, because which
+  // surface missed is exactly what the miss policy turns on.
+  test.describe.configure({ mode: 'default' });
+
+  test('cold TTI, warm TTI, grid time, and scroll pacing', async ({
+    browser,
+    playwright,
+  }) => {
+    await waitForCorpus(() => playwright.request.newContext({ baseURL: base }));
+    await measuring(browser, async (page) => {
+      // Cold: a pristine context, nothing cached.
+      const coldStart = Date.now();
+      await page.goto(base + '/');
+      await page.getByRole('textbox', { name: 'Username' }).waitFor({ timeout: 60_000 });
+      const coldTti = Date.now() - coldStart;
+
+      // Warm: same context, assets in cache.
+      const warmStart = Date.now();
+      await page.reload();
+      await page.getByRole('textbox', { name: 'Username' }).waitFor({ timeout: 60_000 });
+      const warmTti = Date.now() - warmStart;
+
+      // Login, then time to a populated grid over the 100k catalog.
+      await typeInto(page, page.getByRole('textbox', { name: 'Username' }), CORPUS_USER);
+      await typeInto(page, page.getByRole('textbox', { name: 'Password' }), CORPUS_PASS);
+      const gridStart = Date.now();
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await anyItemTile(page).waitFor({ timeout: 60_000 });
+      const gridMs = Date.now() - gridStart;
+
+      // Scroll pacing over the grid, which pages more items in as it goes.
+      const pacing = await measureScrollPacing(page);
+
+      console.log(`perf-web verdicts against ${base}`);
+      console.log(`  cold TTI        ${coldTti}ms (budget ${budgets.coldTtiMs}ms)`);
+      console.log(`  warm TTI        ${warmTti}ms (budget ${budgets.warmTtiMs}ms)`);
+      console.log(`  login->grid     ${gridMs}ms (budget ${budgets.gridMs}ms)`);
+      reportScrollPacing('grid scroll', pacing);
+
+      expect(coldTti).toBeLessThanOrEqual(budgets.coldTtiMs);
+      expect(warmTti).toBeLessThanOrEqual(budgets.warmTtiMs);
+      expect(gridMs).toBeLessThanOrEqual(budgets.gridMs);
+      expectPacing('grid scroll', pacing);
+    });
+  });
+
+  test('index and bucket scroll pacing', async ({ browser, playwright }) => {
+    // The music surfaces, which the first recorded run never visited and
+    // which the artwork negative cache changed. Artists first because it
+    // is the index that draws no artwork by design: it is the cheap
+    // case, and a miss there is not an artwork number.
+    await waitForCorpus(() => playwright.request.newContext({ baseURL: base }));
+    await measuring(browser, async (page) => {
+      await login(page);
+      await page.locator(sem(SemanticsIds.navDestination('music'))).waitFor({ timeout: 60_000 });
+
+      console.log(`perf-web index verdicts against ${base}`);
+
+      await page.goto(base + '/#/music/artists');
+      await page.locator(sem(SemanticsIds.indexBucket(0))).waitFor({ timeout: 60_000 });
+      const artists = await measureScrollPacing(page);
+      reportScrollPacing('artist index', artists);
+
+      // Albums are the same list shape carrying the artwork load the
+      // artist index does not.
+      await page.goto(base + '/#/music/albums');
+      await page.locator(sem(SemanticsIds.indexBucket(0))).waitFor({ timeout: 60_000 });
+      const albums = await measureScrollPacing(page);
+      reportScrollPacing('album index', albums);
+
+      // And a bucket listing: the drill-in from an index, which is a list
+      // of items rather than of buckets.
+      await clickThrough(
+        page.locator(sem(SemanticsIds.indexBucket(0))),
+        page.locator(sem(SemanticsIds.indexItem(0))),
+      );
+      const bucket = await measureScrollPacing(page);
+      reportScrollPacing('bucket listing', bucket);
+
+      expectPacing('artist index', artists);
+      expectPacing('album index', albums);
+      expectPacing('bucket listing', bucket);
+    });
+  });
+
+  test('grid scroll pacing with a track playing', async ({
+    browser,
+    playwright,
+  }) => {
+    // Section 10.1 asks for the scroll scenario with playback running,
+    // and it is not a redundant repeat: the deck bar repaints its
+    // progress every frame the scroll is competing for, and on the web
+    // build both land on the same raster thread.
+    await waitForCorpus(() => playwright.request.newContext({ baseURL: base }));
+    await measuring(browser, async (page) => {
+      await login(page);
+      await anyItemTile(page).waitFor({ timeout: 60_000 });
+
+      // Opening an item plays it and raises the deck bar.
+      await clickThrough(anyItemTile(page), page.locator(sem(SemanticsIds.playerToggle)));
+
+      // Back to the grid the player screen covered, through the chrome
+      // rather than by URL: a goto here would reload the client and take
+      // the playback this scenario exists to measure with it.
+      await clickThrough(
+        page.locator(sem(SemanticsIds.navDestination('home'))),
+        anyItemTile(page),
+      );
+      await expect(page.locator(sem(SemanticsIds.deckBar))).toBeVisible({ timeout: 30_000 });
+
+      const pacing = await measureScrollPacing(page);
+      console.log(`perf-web playing-scroll verdict against ${base}`);
+      reportScrollPacing('grid + deck bar', pacing);
+      expectPacing('grid + deck bar', pacing);
+    });
   });
 });

@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart' show ClientSettingKeys;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
 import '../player/deck_bar_host.dart';
+import '../settings/client_settings_providers.dart';
 import 'lifecycle_banners.dart';
 import 'routes.dart';
 import 'semantics_ids.dart';
@@ -288,13 +290,32 @@ WaxNavTarget? activeNavTarget(
 
 /// Whether the sidebar is collapsed to an icon rail.
 ///
-/// In memory for now: this is a per-device client setting, and the store
-/// that persists those lands with the settings phase.
-class SidebarCollapsed extends Notifier<bool> {
+/// A per-device preference: a rail is a choice about this screen and
+/// this pointer, not something to carry to a listener's phone. Stored
+/// where those go (ADR-0027), so the first frame is drawn expanded and
+/// collapses once the read lands — a launch does not wait on a disk to
+/// lay itself out.
+class SidebarCollapsed extends Notifier<bool> with StoredSetting<bool> {
   @override
-  bool build() => false;
+  String get settingKey => ClientSettingKeys.sidebarCollapsed;
 
-  void toggle() => state = !state;
+  @override
+  bool get defaultValue => false;
+
+  @override
+  bool? decode(String raw) => switch (raw) {
+    'true' => true,
+    'false' => false,
+    _ => null,
+  };
+
+  @override
+  String encode(bool value) => '$value';
+
+  @override
+  bool build() => hydrate();
+
+  void toggle() => put(!state);
 }
 
 final sidebarCollapsedProvider = NotifierProvider<SidebarCollapsed, bool>(

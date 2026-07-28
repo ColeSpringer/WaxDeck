@@ -381,4 +381,18 @@ void main() {
       hasLength(RecentSearches.limit - 1),
     );
   });
+
+  test('forgetting a query matches it the way remembering does', () {
+    // The list holds one casing of a query because remember dedups
+    // case-insensitively, so forget has to mean that one. Every caller
+    // today passes a string read off the list; a screen that forgot what
+    // was typed rather than what was drawn would not.
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final recents = container.read(recentSearchesProvider.notifier);
+
+    recents.remember('Nightjar');
+    recents.forget('  nightjar ');
+    expect(container.read(recentSearchesProvider), isEmpty);
+  });
 }

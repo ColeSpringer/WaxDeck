@@ -89,33 +89,67 @@ here waits on upstream.
   bar's trailing slot as the screens are rebuilt on `WaxScaffold`, which
   is also when the count question lands: a fifth domain tab plus an
   account cell is six targets on a phone. See ADR-0024.
-- `[roadmap]` **The sidebar's collapsed state does not persist.** The
-  toggle works and the shell remembers it for the session, but a
-  per-device preference needs the client-settings store, which lands with
-  the settings rebuild. Until then a desktop visitor who prefers the icon
-  rail collapses it again after each launch. See ADR-0022.
 - `[roadmap]` **No wifi-only switch for gapless preloading.** Playback
   prepares the next queue entry 30 seconds before the crossing whenever
   the admission policy allows it (music to music, passthrough stream,
   starts at its own head), with no way to hold that back on a metered
-  connection. The switch belongs in Settings, Playback on native and
-  needs the per-device client-settings store, which lands with the
-  settings rebuild; until then the cost is one track's worth of
-  buffering ahead. See ADR-0020.
+  connection. The per-device store it would be written to now exists
+  (ADR-0027); what is still missing is the control in Settings, Playback
+  and — the larger half — a connectivity port to tell metered from not,
+  since no connectivity plugin is pinned anywhere and wrapping one is its
+  own decision. Until then the cost is one track's worth of buffering
+  ahead. See ADR-0020.
 - `[roadmap]` **Spoken-word skip intervals are not configurable.** The deck
   bar's minus and plus controls jump 15 seconds back and 30 forward, which
   are the defaults every client ships, and there is no way to change them.
-  Like the wifi-only preload switch above, the setting belongs in Settings,
-  Playback and needs the per-device client-settings store, which lands with
-  the settings rebuild. See ADR-0023.
-- `[roadmap]` **Web loading and scrolling performance.** Parked for the larger UI
-  and UX overhaul rather than spot-fixed. The recorded perf gate
-  measured the virtualized grid without artwork; the suspected
-  aggravator is per-card artwork fetches at grid scale, so the
-  overhaul's measurement pass should use real content. The artwork
-  pipeline (ADR-0025) took the cheap levers — sized requests, bounded
-  decodes, a day of client-side freshness — and the measurement is
-  still owed.
+  The per-device store exists now (ADR-0027); the setting still needs its
+  control in Settings, Playback, which is all that is left. See ADR-0023.
+- `[in-repo]` **The web build's per-device settings binding is not covered
+  by an automated test.** `BrowserClientSettingsStore` — the probe, the
+  fallback to memory, the write-through shadow, the key semantics — is
+  tested on the VM against a fake `BrowserStorage`, including a throwing
+  one. What no test touches is `_LocalStorage`, the ten lines that hand
+  over the real `window.localStorage`. Nothing in this repo runs under a
+  browser: there is no `@TestOn` anywhere, `make test-app` runs
+  `flutter test` on the VM per package, and `waxdeck_data`'s tests import
+  `drift/native`, so `--platform chrome` cannot simply be switched on for
+  the workspace. Adding Chrome to CI is an infrastructure decision that
+  was deliberately kept off ADR-0027's change rather than smuggled in
+  with it. Verified by hand in the meantime: collapse the sidebar in the
+  web build, reload, still collapsed. Whoever adds a browser test target
+  should take this with it.
+- `[in-repo]` **The web perf gate's measurement run is still owed.** Parked
+  for the larger UI and UX overhaul rather than spot-fixed, and the code
+  the run needs has now landed: the corpus writes one directory per album
+  with its own synthesized cover (`corpusgen`, `-covers=false` for the
+  comparison without art), the rAF collector and wheel loop are a
+  reusable helper (`e2e/tests/scroll-pacing.ts`), and `perf-web.spec.ts`
+  measures the music indexes, a bucket listing, and the grid with a track
+  playing alongside the original grid scenario. What is left is running
+  it and recording the numbers.
+
+  Two things to know before starting it. The corpus with covers is about
+  half a gigabyte on disk (covers are roughly 400 KB each against 86 KB
+  of audio per album), against well under a tenth of that without them.
+  And the three scenarios are declared `mode: 'default'` so they run in
+  one worker in order — running them at once would price the contention
+  between them rather than the app, which is the opposite of the point.
+
+  The reason it was split off rather than run inline: by the skwasm
+  entry's own words the gate prices whatever raster-thread difference
+  remains before the single-threaded force is removed, so while that
+  entry stands the number has to be taken twice regardless.
+
+  **The miss policy, named before the run so a red number is a decision
+  and not an argument.** A miss on cold TTI, warm TTI, or login-to-grid
+  is a hardening item and goes on the performance slice. A miss on scroll
+  FPS or long-frame share on the *index* scenarios reopens the artwork
+  negative cache's approach then and there, since those are the surfaces
+  it just changed. The artwork pipeline (ADR-0025) already took the cheap
+  levers — sized requests, bounded decodes, a day of client-side
+  freshness — so a miss on the grid is a signal about the virtualized
+  list rather than about artwork, and `-covers=false` is the run that
+  tells the two apart.
 - `[in-repo]` **Discord rich presence from the desktop builds.** The
   Spotify-style "Listening to" status (track, artist, album art, a
   progress bar) while WaxDeck plays. Distinct from the Discord
@@ -238,6 +272,22 @@ here waits on upstream.
   exists.
 - `[in-repo]` **PodPing update notifications.** Polling is the only feed refresh
   trigger.
+- `[in-repo]` **`podcasts.spec.ts` fails intermittently on the unfetch
+  step.** Seen once on 2026-07-28: `DELETE /episodes/{pid}/fetch`
+  answered 409 rather than 204, and the run before and after it were
+  green. The refusal is real and correct — `RemoveEpisodeDownload` will
+  not archive a file someone reads as listening to, which
+  `stateReadsInUse` decides from a play state that is recent, past
+  position zero, and unfinished. The spec plays the show's *first*
+  episode through the UI and then fetches and unfetches the *second*,
+  so the likely mechanism is playback advancing into that second episode
+  and leaving exactly such a state behind, which makes it a race between
+  the transport and the API calls that follow. Not confirmed: the
+  evidence is the status code, and nobody has caught the play state in
+  the act. Worth pinning down rather than retrying past, because the
+  same window is what a listener would hit for real. Whoever picks it up
+  should either stop the transport before the unfetch or assert the
+  episode is idle first.
 
 ## Compatibility
 
