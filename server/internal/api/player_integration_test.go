@@ -145,6 +145,30 @@ func (c *wsClient) pumpEndpoint(t *testing.T, state *endpointState) {
 	}()
 }
 
+// pumpRefusing answers routed endpoint commands the way a client that
+// cannot do what was asked does: `ok: false` carrying a code and a
+// message of its own. `load` is acked when ackLoad is set, so a
+// session exists for the refusals that follow.
+func (c *wsClient) pumpRefusing(t *testing.T, ackLoad bool, code, message string) {
+	t.Helper()
+	go func() {
+		for f := range c.recv {
+			if f["type"] != "endpoint-cmd" {
+				continue
+			}
+			id, _ := f["id"].(string)
+			if ackLoad && f["verb"] == "load" {
+				c.send(map[string]any{"type": "cmd-result", "id": id, "ok": true})
+				continue
+			}
+			c.send(map[string]any{
+				"type": "cmd-result", "id": id, "ok": false,
+				"code": code, "message": message,
+			})
+		}
+	}()
+}
+
 type endpointState struct {
 	lock       chan struct{}
 	pids       []string
@@ -299,6 +323,217 @@ func TestConnectPlayOnClientEndpointAndRelay(t *testing.T) {
 		if !boolField(session, "playing") && int64Field(session, "positionMs") == 1750 {
 			return
 		}
+	}
+}
+
+// A refusal from the endpoint driving a session keeps its code out to
+// whoever sent the command, over both seams: REST for the session
+// verbs, and the socket for the control verbs the app actually uses.
+func TestConnectRefusalKeepsItsCode(t *testing.T) {
+	h := newHarness(t)
+	items := h.items(t, "")
+	pidA := items.Items[0].Pid
+	pidB := items.Items[1].Pid
+
+	controllerToken := loginAs(t, h.ts, "admin", testPassword).Token
+	controller := dialWS(t, h, controllerToken)
+
+	t.Run("REST: a refused load answers with the client's code", func(t *testing.T) {
+		player := dialWS(t, h, loginAs(t, h.ts, "admin", testPassword).Token)
+		endpointID := player.register("Laptop that says no")
+		player.pumpRefusing(t, false, "feature-unavailable", "this build has no audiobook engine")
+
+		var errBody struct{ Code, Message string }
+		pPost(t, h, "/api/v1/player/sessions", controllerToken, map[string]any{
+			"endpointId": endpointID,
+			"itemPids":   []string{pidA, pidB},
+		}, http.StatusNotImplemented, &errBody)
+		if errBody.Code != "feature-unavailable" {
+			t.Errorf("code %q, want feature-unavailable", errBody.Code)
+		}
+		if !strings.Contains(errBody.Message, "this build has no audiobook engine") {
+			t.Errorf("message %q lost the refusal's own words", errBody.Message)
+		}
+	})
+
+	t.Run("REST: an undocumented code degrades but keeps its message", func(t *testing.T) {
+		player := dialWS(t, h, loginAs(t, h.ts, "admin", testPassword).Token)
+		endpointID := player.register("Laptop with opinions")
+		player.pumpRefusing(t, false, "mercury-retrograde", "the stars are wrong")
+
+		var errBody struct{ Code, Message string }
+		pPost(t, h, "/api/v1/player/sessions", controllerToken, map[string]any{
+			"endpointId": endpointID,
+			"itemPids":   []string{pidA},
+		}, http.StatusBadRequest, &errBody)
+		if errBody.Code != "invalid-request" {
+			t.Errorf("code %q, want invalid-request", errBody.Code)
+		}
+		if !strings.Contains(errBody.Message, "the stars are wrong") {
+			t.Errorf("message %q lost the refusal's own words", errBody.Message)
+		}
+	})
+
+	// The socket is the seam that mattered: every control verb the app
+	// sends comes back through it, and it used to flatten all of them.
+	t.Run("socket: a refused control verb answers with the client's code", func(t *testing.T) {
+		player := dialWS(t, h, loginAs(t, h.ts, "admin", testPassword).Token)
+		endpointID := player.register("Laptop mid-download")
+		player.pumpRefusing(t, true, "conflict", "that track is still downloading")
+
+		var sess struct{ Id string }
+		pPost(t, h, "/api/v1/player/sessions", controllerToken, map[string]any{
+			"endpointId": endpointID,
+			"itemPids":   []string{pidA, pidB},
+		}, http.StatusCreated, &sess)
+
+		controller.send(map[string]any{"type": "cmd", "id": "r1", "sessionId": sess.Id, "verb": "next"})
+		frame := controller.expect("error")
+		if frame["code"] != "conflict" {
+			t.Errorf("frame code %v, want conflict", frame["code"])
+		}
+		msg, _ := frame["message"].(string)
+		if !strings.Contains(msg, "that track is still downloading") {
+			t.Errorf("frame message %q lost the refusal's own words", msg)
+		}
+	})
+
+	t.Run("socket: an undocumented code degrades but keeps its message", func(t *testing.T) {
+		player := dialWS(t, h, loginAs(t, h.ts, "admin", testPassword).Token)
+		endpointID := player.register("Laptop with a theory")
+		player.pumpRefusing(t, true, "vibes-off", "not right now")
+
+		var sess struct{ Id string }
+		pPost(t, h, "/api/v1/player/sessions", controllerToken, map[string]any{
+			"endpointId": endpointID,
+			"itemPids":   []string{pidA, pidB},
+		}, http.StatusCreated, &sess)
+
+		controller.send(map[string]any{"type": "cmd", "id": "r2", "sessionId": sess.Id, "verb": "pause"})
+		frame := controller.expect("error")
+		if frame["code"] != "invalid-request" {
+			t.Errorf("frame code %v, want invalid-request", frame["code"])
+		}
+		msg, _ := frame["message"].(string)
+		if !strings.Contains(msg, "not right now") {
+			t.Errorf("frame message %q lost the refusal's own words", msg)
+		}
+	})
+}
+
+// An ended session keeps its queue where a restore surface can read
+// it, and leaves the live list alone.
+func TestPlaybackSessionHistory(t *testing.T) {
+	h := newHarness(t)
+	items := h.items(t, "")
+	pidA := items.Items[0].Pid
+	pidB := items.Items[1].Pid
+
+	controllerToken := loginAs(t, h.ts, "admin", testPassword).Token
+	player := dialWS(t, h, loginAs(t, h.ts, "admin", testPassword).Token)
+	endpointID := player.register("Kitchen laptop")
+	st := newEndpointState()
+	player.pumpEndpoint(t, st)
+
+	type historyEntry struct {
+		Id, EndpointId, EndpointName, Authority string
+		Index                                   int
+		PositionMs                              int64
+		PositionAt                              time.Time
+		Rate                                    float64
+		Entries                                 []struct{ Pid, Title string }
+	}
+	history := func(token string) []historyEntry {
+		t.Helper()
+		var out struct{ Sessions []historyEntry }
+		pGet(t, h, "/api/v1/player/sessions/history", token, &out)
+		return out.Sessions
+	}
+
+	if got := history(controllerToken); len(got) != 0 {
+		t.Fatalf("history before anything played: %+v", got)
+	}
+
+	var sess struct{ Id string }
+	pPost(t, h, "/api/v1/player/sessions", controllerToken, map[string]any{
+		"endpointId": endpointID,
+		"itemPids":   []string{pidA, pidB},
+		"index":      1,
+		"positionMs": 1000,
+		// Loaded paused, so the final position is the one we set
+		// rather than that plus however long the test took: ending a
+		// playing session extrapolates it forward first.
+		"play": false,
+	}, http.StatusCreated, &sess)
+
+	// A live session is not history.
+	if got := history(controllerToken); len(got) != 0 {
+		t.Fatalf("a live session showed up in history: %+v", got)
+	}
+
+	before := time.Now()
+	req, _ := http.NewRequest(http.MethodDelete, h.ts.URL+"/api/v1/player/sessions/"+sess.Id, nil)
+	req.Header.Set("Authorization", "Bearer "+controllerToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("ending the session: status %d", resp.StatusCode)
+	}
+
+	// Read straight back, with no poll: ending a session through the
+	// REST call writes the row before answering, so a controller that
+	// stops playback and offers to resume it does not race a teardown
+	// goroutine. (Sessions that end other ways still persist from the
+	// teardown, and the spec says so.)
+	got := history(controllerToken)
+
+	if len(got) != 1 {
+		t.Fatalf("history %+v", got)
+	}
+	e := got[0]
+	if e.Id != sess.Id || e.EndpointId != endpointID {
+		t.Errorf("history entry identity %+v", e)
+	}
+	if e.EndpointName != "Kitchen laptop" {
+		t.Errorf("endpointName %q, want the live endpoint's name", e.EndpointName)
+	}
+	if e.Authority != "mirror" {
+		t.Errorf("authority %q, want mirror", e.Authority)
+	}
+	if len(e.Entries) != 2 || e.Entries[0].Pid != pidA || e.Entries[1].Pid != pidB {
+		t.Errorf("the queue did not survive: %+v", e.Entries)
+	}
+	if e.Index != 1 || e.PositionMs != 1000 {
+		t.Errorf("index/position %d/%d, want 1/1000", e.Index, e.PositionMs)
+	}
+	if e.Rate <= 0 {
+		t.Errorf("rate %v, want a real rate", e.Rate)
+	}
+	if e.PositionAt.Before(before.Add(-time.Second)) || e.PositionAt.After(time.Now().Add(time.Second)) {
+		t.Errorf("positionAt %v is not the instant the session ended (~%v)", e.PositionAt, before)
+	}
+
+	// The live list keeps its invariant: history is not in it.
+	var live struct{ Sessions []struct{ Id string } }
+	pGet(t, h, "/api/v1/player/sessions", controllerToken, &live)
+	for _, s := range live.Sessions {
+		if s.Id == sess.Id {
+			t.Fatalf("the ended session is still in the live list: %+v", live)
+		}
+	}
+
+	// History is the caller's own, whatever it played on: another
+	// account sees none of it.
+	resp = h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "listener", "password": "long-enough-pw",
+	})
+	wantStatus(t, resp, 201, "create second user")
+	otherToken := loginAs(t, h.ts, "listener", "long-enough-pw").Token
+	if other := history(otherToken); len(other) != 0 {
+		t.Errorf("another user reads this history: %+v", other)
 	}
 }
 

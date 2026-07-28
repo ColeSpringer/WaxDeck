@@ -2,6 +2,7 @@ package connect
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"sync"
@@ -490,6 +491,63 @@ func TestMirrorSessionLifecycle(t *testing.T) {
 	svc.OnDisconnect(ctx, link)
 	if _, err := svc.Session("us-alice", snap.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatal("mirror session survived disconnect")
+	}
+}
+
+// A mirror session's row has to keep up with what the client is
+// playing, because a crash or a restart never runs the teardown that
+// would otherwise write the final position. Without a checkpoint, the
+// history entry says whatever the last queue change said — the first
+// track at zero — and resuming it starts the album over.
+func TestMirrorSessionsCheckpointWhilePlaying(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+
+	link := NewClientLink("us-alice", "Alice", "se-phone", "Phone", func(any) bool { return true })
+	svc.HandleRegister(link, "Alice's phone", true, true)
+	snap, _ := svc.HandleSessionReport(ctx, link, SessionReport{
+		Playing: true, Index: 0, ItemPids: []string{"tr-one", "tr-two"},
+	})
+	if snap == nil {
+		t.Fatal("creating report unanswered")
+	}
+
+	// Two tracks in, well past what the creating report persisted. A
+	// steady report carries no itemPids, so nothing writes the row.
+	svc.HandleSessionReport(ctx, link, SessionReport{Playing: true, PositionMS: 42000, Index: 1})
+
+	// The session is live, so its row is active and history is empty;
+	// read the checkpoint straight out of the table.
+	position := func() (int64, int) {
+		t.Helper()
+		var state string
+		if err := svc.cfg.Store.Reader().QueryRow(
+			`SELECT state FROM playback_sessions WHERE id = ?`, snap.ID).Scan(&state); err != nil {
+			t.Fatal(err)
+		}
+		var ps persistedState
+		if err := json.Unmarshal([]byte(state), &ps); err != nil {
+			t.Fatal(err)
+		}
+		return ps.PositionMS, ps.Index
+	}
+
+	if pos, idx := position(); pos != 0 || idx != 0 {
+		t.Fatalf("before a checkpoint the row is the creating report's, got %d/%d", pos, idx)
+	}
+
+	svc.checkpointPlaying(ctx)
+
+	if pos, idx := position(); pos != 42000 || idx != 1 {
+		t.Errorf("checkpointed position %d/%d, want 42000/1", pos, idx)
+	}
+
+	// A paused session is not checkpointed: nothing is moving, and its
+	// row was written by whatever stopped it.
+	svc.HandleSessionReport(ctx, link, SessionReport{Playing: false, PositionMS: 51000, Index: 1})
+	svc.checkpointPlaying(ctx)
+	if pos, _ := position(); pos != 42000 {
+		t.Errorf("a paused session was checkpointed: %d", pos)
 	}
 }
 

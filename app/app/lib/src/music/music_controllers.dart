@@ -79,8 +79,28 @@ enum MusicDimension {
   /// the shape signal the design language uses for a person.
   final ArtworkShape shape;
 
+  /// Whether a bucket of this dimension is a catalog entity, and so
+  /// travels in a location as its pid rather than its key.
+  bool get isEntity => entityPrefix != null;
+
   /// The dimensions whose buckets have artwork worth fetching.
-  bool get hasArtwork => entityPrefix != null;
+  ///
+  /// Albums, and only albums. Genres and years are not entities and have
+  /// no art endpoint to ask. Artists are entities and do have one, but
+  /// nothing automatic ever writes artist-level artwork: every
+  /// art-bearing enrichment provider targets the release group, and the
+  /// one way an artist gets a cover is an admin setting it by hand. So
+  /// an artist index asks once per row for an answer that is statically
+  /// known, and pays a round trip per row to draw the monogram it would
+  /// have drawn immediately. The cost of not asking is that a
+  /// hand-set artist cover stops appearing on the index row; it still
+  /// appears on the artist's own screen, which reads the entity's art
+  /// directly rather than through a bucket.
+  ///
+  /// When artist art starts existing — the provider chain filling
+  /// auxiliary slots is its own deferred item — this is where it
+  /// becomes a question worth asking the server again.
+  bool get hasArtwork => this == MusicDimension.albums;
 
   static MusicDimension? bySegment(String segment) =>
       MusicDimension.values.where((d) => d.segment == segment).firstOrNull;
@@ -103,7 +123,7 @@ const musicUnknownSegment = 'unknown';
 String musicBucketSegment(MusicDimension dimension, FacetBucket bucket) {
   if (bucket.unknown || bucket.key.isEmpty) return musicUnknownSegment;
   final entityPid = bucket.entityPid;
-  return dimension.hasArtwork && entityPid != null && entityPid.isNotEmpty
+  return dimension.isEntity && entityPid != null && entityPid.isNotEmpty
       ? entityPid
       : bucket.key;
 }

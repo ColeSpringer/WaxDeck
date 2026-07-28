@@ -185,6 +185,8 @@ import 'package:waxdeck_api_gen/src/model/play_state_update.dart';
 import 'package:waxdeck_api_gen/src/model/playback_session.dart';
 import 'package:waxdeck_api_gen/src/model/playback_session_create.dart';
 import 'package:waxdeck_api_gen/src/model/playback_session_entry.dart';
+import 'package:waxdeck_api_gen/src/model/playback_session_history_entry.dart';
+import 'package:waxdeck_api_gen/src/model/playback_session_history_list.dart';
 import 'package:waxdeck_api_gen/src/model/playback_session_list.dart';
 import 'package:waxdeck_api_gen/src/model/playback_session_transfer.dart';
 import 'package:waxdeck_api_gen/src/model/player_endpoint.dart';
@@ -503,6 +505,8 @@ part 'serializers.g.dart';
   PlaybackSession,
   PlaybackSessionCreate,
   PlaybackSessionEntry,
+  PlaybackSessionHistoryEntry,
+  PlaybackSessionHistoryList,
   PlaybackSessionList,
   PlaybackSessionTransfer,
   PlayerEndpoint,

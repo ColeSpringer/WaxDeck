@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -261,6 +262,173 @@ void main() {
       await store.pinForOffline('tr-1', _art);
       await store.unpin('tr-1');
     });
+
+    test('a cover the server says is missing is asked for once, not once '
+        'per draw', () async {
+      // Every item carries an art URL whether or not there is anything
+      // behind it, so an index of art-less rows asks per row and asks
+      // again on every scroll back. Once the server has answered, the
+      // monogram is the first thing drawn rather than the thing drawn
+      // after a failed round trip.
+      final absent = NetworkArtworkStore(
+        baseUrl: _base,
+        client: _fakeDio(<String, _Reply>{
+          '$_art?size=128': const _Reply(status: 404),
+        }),
+      );
+      addTearDown(absent.dispose);
+
+      expect(absent.imageFor(_art, 128), isNotNull, reason: 'the first draw');
+      expect(await absent.bytesFor(_art, 128), isNull);
+
+      // Every size, not just the one that answered: the item has no
+      // artwork at any rung.
+      expect(absent.imageFor(_art, 128), isNull);
+      expect(absent.imageFor(_art, 512), isNull);
+      expect(absent.source(_art)!(128), isNull);
+
+      // Another cover is not caught up in it.
+      expect(absent.imageFor(_station, 96), isNotNull);
+    });
+
+    test('a cover appearing outlives the absence that was cached', () async {
+      final absent = NetworkArtworkStore(
+        baseUrl: _base,
+        client: _fakeDio(<String, _Reply>{
+          '$_art?size=128': const _Reply(status: 404),
+          // A replaced cover is asked for under a name no cache has
+          // seen, and this one is still not there either.
+          '$_art?size=128&v=1': const _Reply(status: 404),
+        }),
+      );
+      addTearDown(absent.dispose);
+      expect(await absent.bytesFor(_art, 128), isNull);
+      expect(absent.imageFor(_art, 128), isNull);
+
+      // The invalidation that drops the old bytes drops this with them.
+      await absent.evict(_art);
+      expect(absent.imageFor(_art, 128), isNotNull);
+
+      // As does signing out.
+      expect(await absent.bytesFor(_art, 128), isNull);
+      expect(absent.imageFor(_art, 128), isNull);
+      await absent.forgetEverything();
+      expect(absent.imageFor(_art, 128), isNotNull);
+
+      // And so does the catalog changing, which is how a cover
+      // normally appears: a scan reading embedded art, enrichment
+      // landing, another device writing one. None of those routes
+      // through evict, so this is the call the sync binder makes.
+      expect(await absent.bytesFor(_art, 128), isNull);
+      expect(absent.imageFor(_art, 128), isNull);
+      absent.forgetAbsences();
+      expect(absent.imageFor(_art, 128), isNotNull);
+    });
+
+    test('the absences remembered are bounded, and re-learning one pushes '
+        'nothing out', () {
+      // A library's art-less items are unbounded in principle, so the
+      // set has a ceiling. Re-learning one already known has to be free:
+      // several providers for the same cover at different sizes can be
+      // in flight at once, and each 404 arrives on its own.
+      final probe = _AbsenceProbe();
+      probe.note('oldest');
+      var filled = 0;
+      while (probe.knows('oldest')) {
+        probe.note('fill-${filled++}');
+        if (filled > 1 << 20) fail('the absence set grows without bound');
+      }
+
+      // A fresh one filled to exactly the ceiling, keeping the oldest.
+      final steady = _AbsenceProbe();
+      steady.note('oldest');
+      for (var i = 0; i < filled - 1; i++) {
+        steady.note('fill-$i');
+      }
+      expect(steady.knows('oldest'), isTrue, reason: 'exactly full');
+
+      // Told the same absence over and over, it displaces nothing: a
+      // duplicate is not a new thing to remember.
+      for (var i = 0; i < 100; i++) {
+        steady.note('fill-0');
+      }
+      expect(steady.knows('oldest'), isTrue);
+    });
+
+    // The draw is the path this whole mechanism exists for: an index
+    // row painting a cover, not anything calling bytesFor. It runs
+    // through the provider the store hands out, so that is what these
+    // resolve.
+    group('learning from the draw itself', () {
+      tearDown(() {
+        debugNetworkImageHttpClientProvider = null;
+        PaintingBinding.instance.imageCache.clear();
+      });
+
+      Future<void> draw(ArtworkStore store, String artUrl, int px) {
+        final done = Completer<void>();
+        void finish(Object? _, [Object? ignored]) {
+          if (!done.isCompleted) done.complete();
+        }
+
+        store
+            .imageFor(artUrl, px)!
+            .resolve(ImageConfiguration.empty)
+            .addListener(ImageStreamListener(finish, onError: finish));
+        return done.future;
+      }
+
+      test('a 404 on the draw is what teaches the store', () async {
+        final client = _StubHttpClient(status: 404);
+        debugNetworkImageHttpClientProvider = () => client;
+        final store = NetworkArtworkStore(baseUrl: _base);
+        addTearDown(store.dispose);
+
+        await draw(store, _art, 128);
+        expect(client.requests, 1);
+
+        // The next row drawing the same cover gets the monogram with no
+        // provider at all, so there is nothing left to ask with.
+        expect(store.imageFor(_art, 128), isNull);
+        expect(store.imageFor(_art, 512), isNull);
+        expect(client.requests, 1);
+      });
+
+      test('a server that cannot answer teaches it nothing', () async {
+        // An outage arrives at the same listener as a 404 and must not
+        // be mistaken for one, or the monogram outlives the outage.
+        final client = _StubHttpClient(throws: true);
+        debugNetworkImageHttpClientProvider = () => client;
+        final store = NetworkArtworkStore(baseUrl: _base);
+        addTearDown(store.dispose);
+
+        await draw(store, _art, 128);
+        expect(client.requests, 1);
+        expect(store.imageFor(_art, 128), isNotNull);
+      });
+
+      test('a 500 is not an absent cover either', () async {
+        final client = _StubHttpClient(status: 500);
+        debugNetworkImageHttpClientProvider = () => client;
+        final store = NetworkArtworkStore(baseUrl: _base);
+        addTearDown(store.dispose);
+
+        await draw(store, _art, 128);
+        expect(store.imageFor(_art, 128), isNotNull);
+      });
+    });
+
+    test('a server that cannot answer is not an item with no cover', () async {
+      // An outage must not be remembered as an absence, or the monogram
+      // outlives it.
+      final offline = NetworkArtworkStore(
+        baseUrl: _base,
+        client: _fakeDio(const <String, _Reply>{}),
+      );
+      addTearDown(offline.dispose);
+      expect(await offline.bytesFor(_art, 128), isNull);
+      expect(offline.imageFor(_art, 128), isNotNull);
+    });
   });
 
   group('warming a scroll ahead', () {
@@ -369,6 +537,105 @@ void main() {
       expect(await fetchArtwork(dio, '$_art?size=256'), isNull);
     });
   });
+}
+
+/// Answers every image request with one status, or refuses to answer at
+/// all, so a draw can be made to fail the way a real one does.
+///
+/// Through noSuchMethod because `HttpClient` is a wide interface and the
+/// image loader touches four of it: `getUrl`, the request's headers and
+/// `close`, and the response's `statusCode` and `drain`.
+class _StubHttpClient implements HttpClient {
+  _StubHttpClient({this.status = 200, this.throws = false});
+
+  final int status;
+  final bool throws;
+  int requests = 0;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #getUrl) {
+      requests++;
+      if (throws) {
+        return Future<HttpClientRequest>.error(
+          const SocketException('no route to host'),
+        );
+      }
+      return Future<HttpClientRequest>.value(_StubRequest(status));
+    }
+    return super.noSuchMethod(invocation);
+  }
+}
+
+class _StubRequest implements HttpClientRequest {
+  _StubRequest(this.status);
+
+  final int status;
+
+  @override
+  HttpHeaders get headers => _StubHeaders();
+
+  @override
+  Future<HttpClientResponse> close() async => _StubResponse(status);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _StubHeaders implements HttpHeaders {
+  @override
+  void add(String name, Object value, {bool preserveHeaderCase = false}) {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _StubResponse implements HttpClientResponse {
+  _StubResponse(this.statusCode);
+
+  @override
+  final int statusCode;
+
+  @override
+  Future<E> drain<E>([E? futureValue]) async => futureValue as E;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Reaches the base store's absence bookkeeping, which is protected
+/// because only a store implementation has any business recording one.
+class _AbsenceProbe extends ArtworkStore {
+  @override
+  String get baseUrl => '';
+
+  void note(String artUrl) => noteAbsent(artUrl);
+
+  bool knows(String artUrl) => knownAbsent(artUrl);
+
+  @override
+  ImageProvider? imageFor(String? artUrl, int px) => null;
+
+  @override
+  Future<Uint8List?> bytesFor(String artUrl, int px) async => null;
+
+  @override
+  Future<void> warm(String artUrl, int px) async {}
+
+  @override
+  Future<void> pinForOffline(String pid, String? artUrl) async {}
+
+  @override
+  Future<void> unpin(String pid) async {}
+
+  @override
+  Future<void> evict(String artUrl) async {}
+
+  @override
+  Future<void> forgetEverything() async {}
+
+  @override
+  void dispose() {}
 }
 
 /// A store that records what it was asked to warm, and can be made to

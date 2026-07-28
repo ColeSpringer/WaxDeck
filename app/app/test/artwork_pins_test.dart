@@ -261,6 +261,45 @@ void main() {
     expect(counting.lookups, 0);
   });
 
+  test('a cover the server says is missing is asked for once, not once '
+      'per draw', () async {
+    // The other half of the same 404: an index of art-less rows asked
+    // per row, and asked again every time it was scrolled back over.
+    final cache = _NotFoundCache();
+    final store404 = CachedArtworkStore(
+      baseUrl: _base,
+      pins: pins,
+      client: Dio()..httpClientAdapter = server,
+      pinDirectory: temp,
+      cache: cache,
+    );
+    addTearDown(store404.dispose);
+
+    expect(store404.imageFor(_art, 128), isNotNull, reason: 'the first draw');
+    expect(await store404.bytesFor(_art, 128), isNull);
+    expect(cache.fetches, 1);
+
+    // Now the monogram is the first thing drawn rather than the thing
+    // drawn after a round trip, at every size, and nothing else asks.
+    expect(store404.imageFor(_art, 128), isNull);
+    expect(store404.imageFor(_art, 512), isNull);
+    expect(store404.source(_art)!(128), isNull);
+    expect(await store404.bytesFor(_art, 256), isNull);
+    await store404.warm(_art, 256);
+    expect(cache.fetches, 1);
+
+    // A cover appearing outlives the absence: the invalidation that
+    // drops the old bytes drops this too.
+    await store404.evict(_art);
+    expect(store404.imageFor(_art, 128), isNotNull);
+    expect(await store404.bytesFor(_art, 128), isNull);
+    expect(cache.fetches, 2);
+
+    // As does signing out.
+    await store404.forgetEverything();
+    expect(store404.imageFor(_art, 128), isNotNull);
+  });
+
   test(
     'replacing a cover re-pins it, so offline gets the new one too',
     () async {
@@ -303,15 +342,25 @@ class _UnreachableCache implements CacheManager {
 /// A cache that answers every request the way the server answers a
 /// request for an item with no artwork.
 class _NotFoundCache implements CacheManager {
+  /// How many times the server was actually asked, which is the whole
+  /// point of the negative cache.
+  int fetches = 0;
+
   // Through noSuchMethod rather than an override: the manager's files
   // are package:file's, which this package has no business naming.
-  // Anything but the fetch is a call this test says must not happen.
+  // Anything but the fetch is a call these tests say must not happen —
+  // bar the two an invalidation makes.
   @override
   dynamic noSuchMethod(Invocation invocation) {
     if (invocation.memberName == #getSingleFile) {
+      fetches++;
       throw const HttpExceptionWithStatus(404, 'no artwork');
     }
-    if (invocation.memberName == #dispose) return Future<void>.value();
+    if (invocation.memberName == #removeFile ||
+        invocation.memberName == #emptyCache ||
+        invocation.memberName == #dispose) {
+      return Future<void>.value();
+    }
     return super.noSuchMethod(invocation);
   }
 }

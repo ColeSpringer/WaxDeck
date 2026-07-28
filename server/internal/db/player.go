@@ -128,6 +128,33 @@ func (d *DB) DeactivatePlaybackSessions(ctx context.Context) error {
 	return nil
 }
 
+// EndedPlaybackSessions returns one user's inactive session rows,
+// most recently ended first. The predicate is the caller's own user
+// id alone: shared-endpoint visibility governs live sessions, and
+// history is private to whoever played it. Served whole by
+// playback_sessions_user (user_id, active, updated_at_ns).
+func (d *DB) EndedPlaybackSessions(ctx context.Context, userID string, limit int) ([]PlaybackSessionRow, error) {
+	rows, err := d.r.QueryContext(ctx, `
+		SELECT id, user_id, endpoint_id, authority, state, created_at_ns, updated_at_ns
+		FROM playback_sessions
+		WHERE user_id = ? AND active = 0
+		ORDER BY updated_at_ns DESC LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing ended playback sessions: %w", err)
+	}
+	defer rows.Close()
+	var out []PlaybackSessionRow
+	for rows.Next() {
+		var row PlaybackSessionRow
+		if err := rows.Scan(&row.ID, &row.UserID, &row.EndpointID, &row.Authority,
+			&row.State, &row.CreatedAtNS, &row.UpdatedAtNS); err != nil {
+			return nil, fmt.Errorf("db: scanning ended playback session: %w", err)
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 // PrunePlaybackSessions keeps the newest keepPerUser inactive rows per
 // user and deletes the rest.
 func (d *DB) PrunePlaybackSessions(ctx context.Context, keepPerUser int) error {

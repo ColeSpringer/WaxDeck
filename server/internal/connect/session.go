@@ -97,6 +97,25 @@ type Session struct {
 	UpdatedAt    time.Time
 }
 
+// EndedSession is one session's final state, read back from the
+// history rows: the live map holds nothing once a session ends. It
+// has no live half by construction — no `playing`, nothing to
+// extrapolate, no queue version — because restoring one means
+// starting a new session from this queue, not reviving this one.
+type EndedSession struct {
+	ID           string
+	EndpointID   string
+	EndpointName string
+	Authority    string
+	Index        int
+	PositionMS   int64
+	PositionAt   time.Time
+	Rate         float64
+	Repeat       string
+	Shuffle      bool
+	Entries      []QueueEntry
+}
+
 // extrapolate returns the position the observation implies at now.
 func (q *queueState) extrapolate(now time.Time) int64 {
 	if !q.Playing || q.PositionAt.IsZero() {

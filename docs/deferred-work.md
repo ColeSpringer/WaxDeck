@@ -178,8 +178,11 @@ here waits on upstream.
 - `[in-repo]` **Multi-part audiobooks refuse device endpoints.** Casting a
   multi-part book to a cast, DLNA, or jukebox endpoint answers a
   clear error instead of playing file one and losing the reader's
-  place mid-book. Client endpoints handle books fully. Needs
-  part-aware loading and part-advance in the session manager.
+  place mid-book. The refusal carries code `feature-unavailable`
+  naming the pid, so a picker can offer "play here instead" rather
+  than a dead end (P14's refusal explanations); client endpoints
+  handle books fully. Needs part-aware loading and part-advance in
+  the session manager.
 - `[in-repo]` **DLNA format negotiation stops at the floor.** Every DLNA item is
   delivered as mp3 (or passthrough for mp3/wav sources) regardless of
   the renderer's ProtocolInfo. The SOAP client already parses the
@@ -187,20 +190,12 @@ here waits on upstream.
 - `[in-repo]` **Cast device displays show no artwork.** The art endpoint
   authenticates by session, which a cast device cannot present; media
   items are sent without an art URL. Needs a media-token art variant.
-- `[in-repo]` **A routed command's refusal loses its code.** A client
-  endpoint answers `cmd-result` with `ok`, `code`, and `message` per
-  the frame contract, and the routing layer decodes all three
-  (`routeResult`), but both consumers read the message alone and wrap
-  it in `InvalidError`, so every refusal reaches the controller as
-  `invalid-request` whatever the client said. The messages are
-  human-readable and render fine; a controller that wanted to branch
-  on the code (offering "play here" when an endpoint refuses a
-  multi-part book, say) cannot. Forwarding it means a typed error that
-  carries a code through to the wire.
-- `[in-repo]` **Session restore surface.** Ended sessions keep their final state
-  in `playback_sessions` (pruned to the newest five per user), but no
-  API or UI reads it back yet; the queue-restore history the sync
-  design names is data-complete and surface-absent.
+- `[in-repo]` **Nothing renders session history yet.** `GET
+  /player/sessions/history` answers the caller's ended sessions with
+  their queues, indexes, and final positions, but no screen reads it:
+  "pick up where you left off" is a server surface waiting on a
+  client one. The restore itself is an ordinary
+  `POST /player/sessions` from a history entry's queue.
 - `[in-repo]` **Timeline URLs do not survive a server restart.** The HLS proxy
   reconstructs signed upstream URLs from an in-memory stash; after a
   restart a live timeline fetch answers not-found and the client
@@ -330,6 +325,24 @@ here waits on upstream.
   "never verified" blocker is cleared for manual runs. What remains is
   running it in CI as an acceptance gate (build both images, up, smoke
   the origin, down) rather than only by hand.
+- `[in-repo]` **`sync_providers.dart` imports the features it
+  invalidates, and two of them import it back.** The file holds two
+  unrelated things: the low-level declarations (`mirrorDatabaseProvider`,
+  `syncEngineProvider`, `syncStatusProvider`, `offlineProvider`), which
+  eight files across the app depend on, and `syncBinderProvider`, whose
+  `invalidateCatalog`/`invalidateUserState` reach up into every feature
+  controller. Where a feature needs the mirror as well, that is a
+  two-way import: `library_controller.dart` has been one since the
+  offline path landed, and `artwork_providers.dart` joined it when the
+  artwork store's absence cache needed the catalog signal. Dart is fine
+  with it — providers initialize lazily and nothing reads across at
+  declaration time — so this is legibility, not correctness: neither
+  file can be read or moved without the other, and the dependency
+  direction is ambiguous. The fix is a split, not an indirection: the
+  declarations into their own file that imports nothing upward, the
+  binder keeping the fan-out. Roughly one new file, fifty-odd lines
+  moved, and nine import lines. Left alone because it is pre-existing
+  structure rather than anything a feature change should be carrying.
 
 ## Curation and metadata
 
@@ -536,22 +549,54 @@ here waits on upstream.
   compact landing screen. Podcasts, Radio, and the books screens get it
   as they are rebuilt, the same way the avatar does; until then search
   from one of them is Home and then the control.
-- `[in-repo]` **Artist and album index rows request artwork that mostly
-  is not there.** A `FacetBucket` carries no has-art signal, so a bucket
-  row builds an art URL for every entity and the ones with no artwork
-  404. Item rows never do this: the server omits `artUrl` when there is
-  nothing behind it, so a listing of art-less items sends no art requests
-  at all. Artist art in particular arrives only from enrichment, so an
-  index of 500 artists on a fresh library is 500 misses, and Flutter's
-  image cache does not retain a failure, so scrolling back repeats them.
-  Three ways out, none free: `artUrl` on `FacetBucket`, the shape that
-  matches items, which makes the enumeration resolve art per bucket —
-  that enumeration is cached per catalog generation, so the cost lands
-  on a scan rather than a scroll, but it wants measuring before it is
-  committed to; a negative cache in `ArtworkStore`, which needs a way for
-  a failed draw to report back and `WaxArtwork` is deliberately one-way;
-  or drawing monograms for buckets and dropping the covers, which is a
-  specced visual. Measure first.
+- `[in-repo]` **A has-art signal on `FacetBucket`, once artist art
+  exists.** The repeated-404 half of this is fixed — `ArtworkStore`
+  keeps a negative cache, so a cover the server has answered 404 for is
+  asked about once and drawn as a monogram from then on, and the artist
+  dimension no longer asks at all — but the entry is kept because the
+  reasoning behind those two choices is what the next agent tempted by a
+  `hasArt` field needs, and because there is a real case left.
+
+  **The premise the entry was written on was wrong.** It said item rows
+  never 404 because the server omits `artUrl` when there is nothing
+  behind it. They do: `summaryJSON` sets `ArtUrl` unconditionally, and
+  `_shared.yaml` says so — "Always populated; the endpoint itself returns
+  404 for items with no artwork." So this was never a bucket-only
+  problem, which is why the fix is in the store, where it covers item
+  rows too.
+
+  **Two candidate probes were ruled out on evidence, and both would have
+  shipped a regression.** A `hasArt` boolean computed from `ArtRoles`
+  reports only the entity's own `art_map` rows, while scans store cover
+  art at track level and album art is derived on read
+  (`store/sqlite/art.go`: "Album art is derived on read from current
+  track maps, so a re-cover, retag, or delete cannot leave a stale album
+  mapping behind"). For a normally scanned album `/art` answers 200 and
+  `ArtRoles(al-…)` is empty, so gating on it would have turned the album
+  index into a wall of monograms. `ResolveArt(ref, front, 0)` is not the
+  escape either: the `size <= 0` early return does skip the thumbnail,
+  but it fires *after* the full source blob is loaded, so a 100-bucket
+  page becomes 100 whole-image reads.
+
+  **What is left.** Not asking for artist art is right because the answer
+  is statically known: all three art-bearing enrichment providers gate on
+  `enrich.TargetReleaseGroup`, and `SetEntityArtwork` is admin-only and
+  human-driven, so nothing automatic ever writes artist-level art. The
+  cost is that a hand-set artist cover stops appearing on the index row
+  (it still appears on the artist's own screen, which reads the entity's
+  art directly), and nothing in the UI explains the difference — the
+  person most likely to hit it is the admin who set the cover. A contract
+  field whose value is knowable statically is not worth the spec surface
+  — so `hasArt` on `FacetBucket` becomes worth building when artist art
+  starts existing, which is the provider chain filling auxiliary slots.
+  Sequence it there, and the index row's silence closes with it.
+
+  **The negative cache's own limit, for whoever touches it next.** It is
+  cleared by a catalog invalidation, by a cover editor's `evict`, and by
+  sign-out. Nothing else — so a cover that appears while the app is open
+  and the sync channel is down stays a monogram until the channel
+  reconnects and invalidates. That is the same window every other cached
+  view has, and it closes the same way.
 - `[upstream]` **The alphabet rail pages toward a letter rather than
   seeking to one.** `GET /library/facets` has no seek-to-letter, so
   tapping S on a long index asks for successive pages until an S-shaped

@@ -106,10 +106,13 @@ Conventions:
   is not accepted by this server), `read-only` (the target
   library, or the whole server, is in read-only mode: uploads,
   organizing, file write-back, deletion, and the file tools are
-  refused while reads and playback keep working), and
+  refused while reads and playback keep working),
   `transcode-limited` (the server's or the caller's concurrent
   transcode session limit is reached; retry when a session ends,
-  or play a direct-play format).
+  or play a direct-play format), and `timeout` (a command routed to
+  a player endpoint got no answer within the routing deadline; the
+  endpoint is still connected, unlike `endpoint-offline`, so
+  retrying is more useful than refreshing the endpoint list).
   New codes may appear; clients must treat unknown codes as opaque.
 - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
   server origin, the same origin that serves this API and the web UI.
@@ -406,6 +409,7 @@ Class | Method | HTTP request | Description
 [*PlayerApi*](doc/PlayerApi.md) | [**deletePlaybackSession**](doc/PlayerApi.md#deleteplaybacksession) | **DELETE** /player/sessions/{sessionId} | End a playback session
 [*PlayerApi*](doc/PlayerApi.md) | [**getCastPreflight**](doc/PlayerApi.md#getcastpreflight) | **GET** /player/cast/preflight | Check cast reachability
 [*PlayerApi*](doc/PlayerApi.md) | [**getPlaybackSession**](doc/PlayerApi.md#getplaybacksession) | **GET** /player/sessions/{sessionId} | Get one playback session
+[*PlayerApi*](doc/PlayerApi.md) | [**listPlaybackSessionHistory**](doc/PlayerApi.md#listplaybacksessionhistory) | **GET** /player/sessions/history | List the caller&#39;s ended playback sessions
 [*PlayerApi*](doc/PlayerApi.md) | [**listPlaybackSessions**](doc/PlayerApi.md#listplaybacksessions) | **GET** /player/sessions | List playback sessions
 [*PlayerApi*](doc/PlayerApi.md) | [**listPlayerEndpoints**](doc/PlayerApi.md#listplayerendpoints) | **GET** /player/endpoints | List player endpoints
 [*PlayerApi*](doc/PlayerApi.md) | [**transferPlaybackSession**](doc/PlayerApi.md#transferplaybacksession) | **POST** /player/sessions/{sessionId}/transfer | Transfer a session to another endpoint
@@ -682,6 +686,8 @@ Class | Method | HTTP request | Description
  - [PlaybackSession](doc/PlaybackSession.md)
  - [PlaybackSessionCreate](doc/PlaybackSessionCreate.md)
  - [PlaybackSessionEntry](doc/PlaybackSessionEntry.md)
+ - [PlaybackSessionHistoryEntry](doc/PlaybackSessionHistoryEntry.md)
+ - [PlaybackSessionHistoryList](doc/PlaybackSessionHistoryList.md)
  - [PlaybackSessionList](doc/PlaybackSessionList.md)
  - [PlaybackSessionTransfer](doc/PlaybackSessionTransfer.md)
  - [PlayerEndpoint](doc/PlayerEndpoint.md)

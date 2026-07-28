@@ -8,7 +8,7 @@ import 'package:built_value/serializer.dart';
 
 part 'ws_error_frame.g.dart';
 
-/// Server answer to a failed client frame, echoing its `id` when one was readable. `code` draws from the API error vocabulary plus `timeout` (a routed command's target did not answer within the routing deadline). 
+/// Server answer to a failed client frame, echoing its `id` when one was readable. `code` draws from the API error vocabulary. A `cmd` refused by the endpoint driving the session carries that endpoint's own code out to whoever sent the command; codes outside the documented vocabulary arrive as `invalid-request` with the refusal's own message. 
 ///
 /// Properties:
 /// * [type] - Always `error`.

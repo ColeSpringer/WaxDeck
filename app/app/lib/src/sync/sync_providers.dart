@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
+import '../artwork/artwork_providers.dart';
 import '../library/library_controller.dart';
 import '../metadata/metadata_controller.dart';
 import '../player/entity_play_state_controller.dart';
@@ -79,6 +80,14 @@ final offlineProvider = Provider.autoDispose<bool>((ref) {
 /// invalidation listener straight off the event channel.
 final syncBinderProvider = Provider.autoDispose<void>((ref) {
   void invalidateCatalog() {
+    // Covers appear as part of the catalog changing — a scan reading
+    // embedded art, enrichment landing, another device writing one —
+    // and the store has been remembering which ones answered 404 so it
+    // can draw the monogram without asking again. Those answers are
+    // exactly what a catalog change can falsify, and this is the only
+    // signal that sees it: the cover editors call `evict`, and nothing
+    // else does.
+    ref.read(artworkStoreProvider).forgetAbsences();
     ref.invalidate(libraryControllerProvider);
     ref.invalidate(continueListeningProvider);
     // Shows and episodes are catalog entities too: a server-side fetch

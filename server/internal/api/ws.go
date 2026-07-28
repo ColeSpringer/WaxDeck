@@ -338,8 +338,11 @@ func indexOrZero(v *int) int {
 	return *v
 }
 
-// wsErrorCode maps connect errors onto the wire vocabulary.
+// wsErrorCode maps connect errors onto the wire vocabulary. This is
+// the seam the app's own control verbs come back through, so a
+// refusal that arrived carrying a code leaves carrying the same one.
 func wsErrorCode(err error) string {
+	var inv connect.InvalidError
 	switch {
 	case errors.Is(err, connect.ErrNotFound):
 		return "not-found"
@@ -349,6 +352,9 @@ func wsErrorCode(err error) string {
 		return "forbidden"
 	case errors.Is(err, connect.ErrTimeout):
 		return "timeout"
+	case errors.As(err, &inv):
+		_, code := refusalStatus(inv.Code)
+		return code
 	default:
 		return "invalid-request"
 	}

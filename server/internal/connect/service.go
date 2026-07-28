@@ -3,6 +3,7 @@ package connect
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"sync"
@@ -337,6 +338,58 @@ func (s *Service) Sessions(userID string) []Session {
 	return out
 }
 
+// SessionHistory reads back the caller's ended sessions, newest
+// first, as the state each stopped in.
+//
+// Scoped by user id alone: the shared-endpoint visibility that lets
+// housemates see each other's live sessions has no counterpart here,
+// and reusing it would hand someone else's finished queue to whoever
+// happens to be near the speaker.
+func (s *Service) SessionHistory(ctx context.Context, userID string) ([]EndedSession, error) {
+	rows, err := s.cfg.Store.EndedPlaybackSessions(ctx, userID, sessionKeepPerUser)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]EndedSession, 0, len(rows))
+	for _, row := range rows {
+		var ps persistedState
+		if err := json.Unmarshal([]byte(row.State), &ps); err != nil {
+			// One undecodable checkpoint is one lost resume, not a
+			// reason to answer nothing for the other four.
+			s.cfg.Logger.Warn("decoding ended playback session", "session", row.ID, "err", err)
+			continue
+		}
+		e := EndedSession{
+			ID:         row.ID,
+			EndpointID: row.EndpointID,
+			Authority:  row.Authority,
+			Index:      ps.Index,
+			PositionMS: ps.PositionMS,
+			// endSessionLocked sets q.PositionAt and updatedAt from
+			// one instant, and the row's timestamp is that write, so
+			// updated_at_ns is faithfully when the final position was
+			// true. persistedState carries no timestamp of its own.
+			PositionAt: time.Unix(0, row.UpdatedAtNS),
+			Rate:       ps.Rate,
+			Repeat:     ps.Repeat,
+			Shuffle:    ps.Shuffle,
+		}
+		if e.Rate <= 0 {
+			e.Rate = 1
+		}
+		// The endpoint may be long gone — a client endpoint goes with
+		// its connection — so the name is absent rather than an error.
+		if ep, ok := s.reg.Lookup(userID, row.EndpointID); ok {
+			e.EndpointName = ep.Name
+		}
+		for _, pe := range ps.Entries {
+			e.Entries = append(e.Entries, QueueEntry(pe))
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
 // Session returns one visible session.
 func (s *Service) Session(userID, sessionID string) (Session, error) {
 	s.mu.Lock()
@@ -611,7 +664,10 @@ func (s *Service) loadOnClient(ctx context.Context, sessionID string, pids []str
 		return err
 	}
 	if !res.ok {
-		return InvalidError{Msg: fmt.Sprintf("client endpoint refused the load: %s", res.message)}
+		return InvalidError{
+			Msg:  fmt.Sprintf("client endpoint refused the load: %s", res.message),
+			Code: res.code,
+		}
 	}
 	return nil
 }
@@ -810,6 +866,14 @@ func (s *Service) End(ctx context.Context, userID, sessionID string) error {
 	}
 	s.endSessionLocked(ctx, sess, true)
 	s.mu.Unlock()
+	// The teardown persists too, but from a supervised goroutine, and
+	// the session leaves the live map synchronously — so between the
+	// two it is in neither list. A caller that ends a session and reads
+	// history back would race that window, and a process stopping
+	// inside it would leave the row active with a stale position.
+	// Writing here is what makes this call's own answer true; the
+	// teardown's write lands on top with the same state.
+	s.persist(ctx, sess, false)
 	s.cfg.InvalidatePlayer()
 	return nil
 }

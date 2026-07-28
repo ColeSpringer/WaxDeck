@@ -172,7 +172,9 @@ func (s *Service) routeCommandToClient(ctx context.Context, sessionID, endpointI
 		if msg == "" {
 			msg = "the client rejected the command"
 		}
-		return InvalidError{Msg: msg}
+		// The client's own code travels with its message; the
+		// transport whitelists it before it reaches the wire.
+		return InvalidError{Msg: msg, Code: res.code}
 	}
 	return nil
 }
@@ -664,8 +666,19 @@ func (s *Service) pushPlayingToWatchers() {
 	}
 }
 
-// checkpointPlaying persists remote playing sessions and writes their
-// positions through to per-user playback state.
+// checkpointPlaying persists every playing session, and writes the
+// positions of the ones the server drives through to per-user playback
+// state.
+//
+// The two halves have different scopes on purpose. Progress accounting
+// stays remote-only, as it always has: a mirror session's position
+// arrives in reports the playing client sends, and the server counting
+// it as well would count it twice. The checkpoint covers both, because
+// a session only ever ends gracefully through endSessionLocked, and
+// nothing writes a mirror session's row between queue changes — so a
+// crash or restart mid-album used to leave its history entry at
+// whatever the last queue change said, which is usually the first
+// track at zero.
 func (s *Service) checkpointPlaying(ctx context.Context) {
 	s.mu.Lock()
 	type cp struct {
@@ -675,11 +688,16 @@ func (s *Service) checkpointPlaying(ctx context.Context) {
 	}
 	var cps []cp
 	for _, sess := range s.sessions {
-		if sess.authority != AuthorityRemote || !sess.q.Playing {
+		if !sess.q.Playing {
 			continue
 		}
-		snap := s.snapshotLocked(sess)
-		cps = append(cps, cp{sess: sess, pid: currentPID(snap), pos: snap.PositionMS})
+		c := cp{sess: sess}
+		if sess.authority == AuthorityRemote {
+			snap := s.snapshotLocked(sess)
+			c.pid = currentPID(snap)
+			c.pos = snap.PositionMS
+		}
+		cps = append(cps, c)
 	}
 	s.mu.Unlock()
 	for _, c := range cps {

@@ -62,7 +62,14 @@ paths:
         caller's own client endpoints is loaded onto that client and
         then mirrors the client's local playback. Conflict with code
         `endpoint-offline` means the target endpoint is not connected
-        right now.
+        right now, and `timeout` means it is connected but did not
+        answer in time. A queue the target cannot play answers
+        `feature-unavailable` naming the pid — a multi-part audiobook
+        or a windowed track sent to a device endpoint, say — which a
+        controller can turn into an offer to play it somewhere that
+        can, rather than a bare failure. When the target is a client
+        endpoint, that client's own refusal code and message are what
+        arrive here.
       tags: [player]
       requestBody:
         required: true
@@ -81,10 +88,55 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/EndpointOffline"
+          $ref: "#/components/responses/PlaybackConflict"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
+
+  /player/sessions/history:
+    get:
+      operationId: listPlaybackSessionHistory
+      summary: List the caller's ended playback sessions
+      description: >
+        What was playing, where, and how far in — for the sessions
+        that have stopped. This is the queue-restore surface: an
+        entry carries the whole queue with its index and position, so
+        "pick up where I left off" needs no second call. Distinct from
+        `/player/sessions`, which lists what is playing now and never
+        includes these rows.
+
+        Only the caller's own sessions appear, whatever they played
+        on: a shared speaker's sessions are visible to housemates
+        while they are live, and become private history when they
+        end. The server retains a small number of recent sessions per
+        user (five at present) and prunes the rest, so this list is
+        short and unpaged by design; it is a resume affordance, not a
+        listening log. Ended sessions are also what a restart leaves
+        behind, since playback never resumes by itself: the session
+        interrupted by a server restart is a history entry too, and
+        resuming it is the caller's choice.
+
+        A session ended through `DELETE /player/sessions/{sessionId}`
+        appears here as soon as that call answers. One that ends any
+        other way — a playing client disconnecting, a device leaving
+        the network, a server restart — appears shortly after, and its
+        position is the last one checkpointed rather than the last one
+        played. Checkpoints run every few seconds while a session is
+        playing, so the gap is small, but it is a gap.
+      tags: [player]
+      responses:
+        "200":
+          description: The caller's ended sessions, most recent first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackSessionHistoryList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
 
   /player/sessions/{sessionId}:
     get:
@@ -150,7 +202,15 @@ paths:
         someone's queue onto your private device would take it out of
         their sight). Transferring a session to the endpoint it is
         already on is a no-op answering 200. Conflict with code
-        `endpoint-offline` means the target endpoint is not connected.
+        `endpoint-offline` means the target endpoint is not connected,
+        and `timeout` means it is connected but did not answer in time.
+        A queue the target cannot play answers `feature-unavailable`
+        naming the pid, on the same terms as starting a session there;
+        when the target is a client endpoint, that client's own refusal
+        code and message are what arrive here. The tightening above is
+        a `forbidden`, not a `not-found`: the session is one the caller
+        can see and control, and it is the target endpoint that is out
+        of bounds.
       tags: [player]
       parameters:
         - $ref: "#/components/parameters/PlaybackSessionId"
@@ -171,10 +231,14 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/EndpointOffline"
+          $ref: "#/components/responses/PlaybackConflict"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
 
   /player/timeline:
     post:
@@ -279,11 +343,18 @@ components:
         type: string
         pattern: "^ps-[0-9A-HJKMNP-TV-Z]{26}$"
   responses:
-    EndpointOffline:
+    PlaybackConflict:
       description: >
-        The target player endpoint is not currently connected (code
-        `endpoint-offline`). Refresh the endpoint list; the device may
-        have left the network or the client may have disconnected.
+        The command could not be completed on the target player
+        endpoint. Read `code` rather than the status: this answer
+        carries three, and they call for different things.
+        `endpoint-offline` means the endpoint is not connected — refresh
+        the endpoint list; the device may have left the network or the
+        client may have disconnected. `timeout` means it is connected
+        but did not answer within the routing deadline, so retrying
+        beats refreshing. `conflict` is the endpoint itself refusing
+        because of something it is in the middle of, and the message
+        says what.
       content:
         application/json:
           schema:
@@ -495,6 +566,91 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PlaybackSession"
+
+    PlaybackSessionHistoryEntry:
+      type: object
+      description: >
+        One ended playback session, as the state it stopped in. It has
+        no live half: nothing extrapolates, `positionMs` is final, and
+        the session cannot be controlled or resumed in place — restore
+        means starting a new session from this queue, index, and
+        position. Deliberately not a `PlaybackSession` with a flag: a
+        row here is history, while that schema's `ended` marks a live
+        session's last frame, and one type meaning both would make
+        callers ask which transport an object arrived on.
+      required: [id, endpointId, authority, index, positionMs, positionAt, rate, entries]
+      properties:
+        id:
+          type: string
+          description: >
+            The session's PID. It names a session that no longer
+            exists; the id is here to correlate with what the caller
+            may have seen live, not to address anything.
+          example: ps-01JZX5N8QW3F4V9T2B7KD3M9R6
+        endpointId:
+          type: string
+          description: The endpoint the session was playing on.
+          example: pe-01JZX5N8QW3F4V9T2B7KD3M9R6
+        endpointName:
+          type: string
+          description: >
+            The endpoint's display name, when it is still known.
+            Absent for an endpoint that has since gone away, which a
+            client endpoint does on every sign-out; render the entry
+            without it rather than treating that as an error.
+        authority:
+          type: string
+          description: >
+            How the session was driven: `remote` (the server drove a
+            cast, DLNA, or jukebox endpoint) or `mirror` (a client
+            played it and reported here). Open string.
+          example: mirror
+        index:
+          type: integer
+          description: Zero-based index of the entry it stopped on.
+        positionMs:
+          type: integer
+          format: int64
+          description: Final position within that entry.
+        positionAt:
+          type: string
+          format: date-time
+          description: >
+            Server-clock instant `positionMs` was true. For a session
+            ended deliberately that is the instant it ended; for one
+            interrupted by a disconnect or a restart it is the last
+            checkpoint before the interruption, a few seconds earlier.
+            This is the sort key: the list is newest first.
+        rate:
+          type: number
+          format: double
+          minimum: 0.25
+          maximum: 5
+          description: The rate it was playing at. 1.0 is normal speed.
+        repeat:
+          type: string
+          description: "`off`, `all`, or `one` (open string)."
+          example: "off"
+        shuffle:
+          type: boolean
+          description: >
+            Whether shuffle was on. `entries` is the play order as it
+            stood, already shuffled.
+        entries:
+          type: array
+          description: The queue as it stood, in play order.
+          items:
+            $ref: "#/components/schemas/PlaybackSessionEntry"
+
+    PlaybackSessionHistoryList:
+      type: object
+      description: The caller's ended sessions, most recently ended first.
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlaybackSessionHistoryEntry"
 
     PlaybackSessionCreate:
       type: object

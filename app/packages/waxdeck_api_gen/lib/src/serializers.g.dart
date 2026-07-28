@@ -193,6 +193,8 @@ Serializers _$serializers =
           ..add(PlaybackSession.serializer)
           ..add(PlaybackSessionCreate.serializer)
           ..add(PlaybackSessionEntry.serializer)
+          ..add(PlaybackSessionHistoryEntry.serializer)
+          ..add(PlaybackSessionHistoryList.serializer)
           ..add(PlaybackSessionList.serializer)
           ..add(PlaybackSessionTransfer.serializer)
           ..add(PlayerEndpoint.serializer)
@@ -621,6 +623,18 @@ Serializers _$serializers =
               const FullType(PlaybackSessionEntry),
             ]),
             () => ListBuilder<PlaybackSessionEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(PlaybackSessionEntry),
+            ]),
+            () => ListBuilder<PlaybackSessionEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(PlaybackSessionHistoryEntry),
+            ]),
+            () => ListBuilder<PlaybackSessionHistoryEntry>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(PlayerEndpoint)]),

@@ -23,6 +23,13 @@ FacetBucket _artist(String name, {int count = 3}) => FacetBucket(
   entityPid: 'ar-01JZX$name',
 );
 
+FacetBucket _album(String name, {int count = 9}) => FacetBucket(
+  key: '01JZX$name',
+  label: name,
+  count: count,
+  entityPid: 'al-01JZX$name',
+);
+
 ItemSummary _track(String title, {String artist = 'Nightjar'}) => ItemSummary(
   pid: 'tr-$title',
   mediaType: MediaType.music,
@@ -83,6 +90,41 @@ void main() {
       'Mogwai',
       'Zebra',
     ]);
+  });
+
+  testWidgets('an artist row draws its monogram without asking, and an '
+      'album row still asks', (tester) async {
+    // Nothing automatic writes artist-level artwork — every art-bearing
+    // enrichment provider targets the release group, and the one way an
+    // artist gets a cover is an admin setting it by hand — so a
+    // five-hundred-artist index would fire five hundred requests for an
+    // answer that is statically known. Albums are the opposite case and
+    // must keep their covers.
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[_artist('Nightjar')]
+      ..facets['album'] = <FacetBucket>[_album('Gullwing')];
+
+    await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+    );
+    expect(
+      tester.widget<MediaListRow>(find.byType(MediaListRow)).data.artwork,
+      isNull,
+      reason: 'an artist bucket row asks for no artwork at all',
+    );
+
+    await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.albums),
+      repository,
+    );
+    expect(
+      tester.widget<MediaListRow>(find.byType(MediaListRow)).data.artwork,
+      isNotNull,
+      reason: 'the album index keeps its covers',
+    );
   });
 
   testWidgets('the sort toggle restarts the listing in the other order', (

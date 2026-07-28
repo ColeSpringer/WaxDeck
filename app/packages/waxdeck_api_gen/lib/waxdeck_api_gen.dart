@@ -207,6 +207,8 @@ export 'package:waxdeck_api_gen/src/model/play_state_update.dart';
 export 'package:waxdeck_api_gen/src/model/playback_session.dart';
 export 'package:waxdeck_api_gen/src/model/playback_session_create.dart';
 export 'package:waxdeck_api_gen/src/model/playback_session_entry.dart';
+export 'package:waxdeck_api_gen/src/model/playback_session_history_entry.dart';
+export 'package:waxdeck_api_gen/src/model/playback_session_history_list.dart';
 export 'package:waxdeck_api_gen/src/model/playback_session_list.dart';
 export 'package:waxdeck_api_gen/src/model/playback_session_transfer.dart';
 export 'package:waxdeck_api_gen/src/model/player_endpoint.dart';

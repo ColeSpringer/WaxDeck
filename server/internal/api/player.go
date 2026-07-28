@@ -62,7 +62,13 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 			return nil, err
 		}
 		if part.MultiPart {
-			return nil, connect.InvalidError{Msg: "multi-part audiobooks cannot play on this endpoint yet: " + e.PID}
+			// Coded so a controller can offer "play here instead"
+			// rather than rendering a dead end: client endpoints
+			// handle books fully, and this is the only thing wrong.
+			return nil, connect.InvalidError{
+				Msg:  "multi-part audiobooks cannot play on this endpoint yet: " + e.PID,
+				Code: "feature-unavailable",
+			}
 		}
 		// No ArtURL yet: the art endpoint authenticates by session,
 		// which a cast device cannot present. A tokenized art URL is
@@ -93,7 +99,10 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 				return nil, err
 			}
 			if res.HasSpan {
-				return nil, connect.InvalidError{Msg: "this track is a window into a larger file and needs the streaming engine to cast: " + e.PID}
+				return nil, connect.InvalidError{
+					Msg:  "this track is a window into a larger file and needs the streaming engine to cast: " + e.PID,
+					Code: "feature-unavailable",
+				}
 			}
 			token, _ := r.Media.MintFor(userID, e.PID, ttl)
 			item.URL = base + "/media/download?pid=" + url.QueryEscape(e.PID) +
@@ -227,8 +236,14 @@ func sessionJSON(userID string, snap connect.Session) PlaybackSession {
 		v := true
 		out.Shuffle = &v
 	}
-	entries := make([]PlaybackSessionEntry, 0, len(snap.Entries))
-	for _, e := range snap.Entries {
+	entries := queueEntriesJSON(snap.Entries)
+	out.Entries = &entries
+	return out
+}
+
+func queueEntriesJSON(in []connect.QueueEntry) []PlaybackSessionEntry {
+	out := make([]PlaybackSessionEntry, 0, len(in))
+	for _, e := range in {
 		entry := PlaybackSessionEntry{Pid: e.PID, Title: e.Title}
 		if e.Artist != "" {
 			a := e.Artist
@@ -238,9 +253,35 @@ func sessionJSON(userID string, snap connect.Session) PlaybackSession {
 			d := e.DurationMS
 			entry.DurationMs = &d
 		}
-		entries = append(entries, entry)
+		out = append(out, entry)
 	}
-	out.Entries = &entries
+	return out
+}
+
+// endedSessionJSON converts one history row. Nothing here is a live
+// value: no `mine` (the list is the caller's own by construction), no
+// `playing`, no queue version.
+func endedSessionJSON(e connect.EndedSession) PlaybackSessionHistoryEntry {
+	out := PlaybackSessionHistoryEntry{
+		Id:         e.ID,
+		EndpointId: e.EndpointID,
+		Authority:  e.Authority,
+		Index:      e.Index,
+		PositionMs: e.PositionMS,
+		PositionAt: e.PositionAt,
+		Rate:       e.Rate,
+		Entries:    queueEntriesJSON(e.Entries),
+	}
+	if e.EndpointName != "" {
+		out.EndpointName = &e.EndpointName
+	}
+	if e.Repeat != "" {
+		out.Repeat = &e.Repeat
+	}
+	if e.Shuffle {
+		v := true
+		out.Shuffle = &v
+	}
 	return out
 }
 
@@ -256,9 +297,14 @@ func connectHTTP(err error) (status int, code, msg string, ok bool) {
 	case errors.Is(err, connect.ErrForbidden):
 		return http.StatusForbidden, "forbidden", err.Error(), true
 	case errors.Is(err, connect.ErrTimeout):
-		return http.StatusConflict, "endpoint-offline", "the endpoint did not answer in time", true
+		// `timeout`, not `endpoint-offline`: the endpoint is connected
+		// and silent, and telling a controller to refresh the endpoint
+		// list would send it looking for a departure that did not
+		// happen. The socket has always said `timeout` here.
+		return http.StatusConflict, "timeout", "the endpoint did not answer in time", true
 	case errors.As(err, &inv):
-		return http.StatusBadRequest, "invalid-request", inv.Msg, true
+		status, code := refusalStatus(inv.Code)
+		return status, code, inv.Msg, true
 	}
 	if service.KindOf(err) == service.KindNotFound {
 		return http.StatusNotFound, "not-found", err.Error(), true
@@ -301,6 +347,25 @@ func (s *Server) ListPlaybackSessions(ctx context.Context, _ ListPlaybackSession
 	return ListPlaybackSessions200JSONResponse{Sessions: out}, nil
 }
 
+func (s *Server) ListPlaybackSessionHistory(ctx context.Context, _ ListPlaybackSessionHistoryRequestObject) (ListPlaybackSessionHistoryResponseObject, error) {
+	_, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.connect == nil {
+		return ListPlaybackSessionHistory200JSONResponse{Sessions: []PlaybackSessionHistoryEntry{}}, nil
+	}
+	ended, err := s.connect.SessionHistory(ctx, p.User.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PlaybackSessionHistoryEntry, 0, len(ended))
+	for _, e := range ended {
+		out = append(out, endedSessionJSON(e))
+	}
+	return ListPlaybackSessionHistory200JSONResponse{Sessions: out}, nil
+}
+
 func (s *Server) CreatePlaybackSession(ctx context.Context, req CreatePlaybackSessionRequestObject) (CreatePlaybackSessionResponseObject, error) {
 	_, p, err := s.requireUserCtx(ctx)
 	if err != nil {
@@ -329,9 +394,13 @@ func (s *Server) CreatePlaybackSession(ctx context.Context, req CreatePlaybackSe
 			case http.StatusNotFound:
 				return CreatePlaybackSession404JSONResponse{NotFoundJSONResponse(errObj(code, msg))}, nil
 			case http.StatusConflict:
-				return CreatePlaybackSession409JSONResponse{EndpointOfflineJSONResponse(errObj(code, msg))}, nil
+				return CreatePlaybackSession409JSONResponse{PlaybackConflictJSONResponse(errObj(code, msg))}, nil
 			case http.StatusBadRequest:
 				return CreatePlaybackSession400JSONResponse{InvalidRequestJSONResponse(errObj(code, msg))}, nil
+			case http.StatusForbidden:
+				return CreatePlaybackSession403JSONResponse{ForbiddenJSONResponse(errObj(code, msg))}, nil
+			case http.StatusNotImplemented:
+				return CreatePlaybackSession501JSONResponse{FeatureUnavailableJSONResponse(errObj(code, msg))}, nil
 			}
 		}
 		return nil, err
@@ -383,11 +452,17 @@ func (s *Server) TransferPlaybackSession(ctx context.Context, req TransferPlayba
 			case http.StatusNotFound:
 				return TransferPlaybackSession404JSONResponse{NotFoundJSONResponse(errObj(code, msg))}, nil
 			case http.StatusConflict:
-				return TransferPlaybackSession409JSONResponse{EndpointOfflineJSONResponse(errObj(code, msg))}, nil
+				return TransferPlaybackSession409JSONResponse{PlaybackConflictJSONResponse(errObj(code, msg))}, nil
 			case http.StatusBadRequest:
 				return TransferPlaybackSession400JSONResponse{InvalidRequestJSONResponse(errObj(code, msg))}, nil
 			case http.StatusForbidden:
-				return TransferPlaybackSession404JSONResponse{NotFoundJSONResponse(errObj(code, msg))}, nil
+				// A 403, not a 404 wearing a `forbidden` code: both
+				// refusals here are about the target endpoint, and the
+				// session the caller named is one they can see and
+				// drive.
+				return TransferPlaybackSession403JSONResponse{ForbiddenJSONResponse(errObj(code, msg))}, nil
+			case http.StatusNotImplemented:
+				return TransferPlaybackSession501JSONResponse{FeatureUnavailableJSONResponse(errObj(code, msg))}, nil
 			}
 		}
 		return nil, err

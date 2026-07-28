@@ -157,6 +157,29 @@ abstract class ArtworkStore {
   final Map<String, int> _replaced = <String, int>{};
   int _replacements = 0;
 
+  /// Covers the server has answered 404 for.
+  ///
+  /// Every item carries an art URL whether or not there is anything
+  /// behind it — the contract says so, and the endpoint 404s for the
+  /// ones there is not — so an index of art-less rows asks once per row
+  /// and asks again every time it is scrolled back over. Remembering
+  /// the answer turns that into one request per cover for the life of
+  /// the session, and turns the monogram into the first thing drawn
+  /// rather than the thing drawn after a failed round trip.
+  ///
+  /// Keyed on the art URL rather than the sized request, because the
+  /// answer does not vary by size: an item with no artwork has none at
+  /// any rung.
+  final Set<String> _absent = <String>{};
+
+  /// How many absences are worth remembering. A library's art-less
+  /// items are unbounded in principle, and each entry is a short
+  /// string, so this is a ceiling on a leak rather than a working-set
+  /// estimate: past it the oldest are dropped and, if they are drawn
+  /// again, asked for again. Comfortably more than a screen and its
+  /// scroll-back either way.
+  static const int _maxAbsent = 4096;
+
   /// Where to fetch [artUrl] for a draw of [px] physical pixels: ours
   /// asks for the rung that covers it, a stranger's is asked for exactly
   /// as it was given, and either carries the tag of a replacement this
@@ -168,9 +191,49 @@ abstract class ArtworkStore {
   }
 
   /// Records that the bytes behind [artUrl] have changed, so everything
-  /// asked for afterwards is asked for under a new name.
+  /// asked for afterwards is asked for under a new name — and that
+  /// whatever this store knew about the old bytes no longer holds,
+  /// including their absence.
   @protected
-  void noteReplaced(String artUrl) => _replaced[artUrl] = ++_replacements;
+  void noteReplaced(String artUrl) {
+    _replaced[artUrl] = ++_replacements;
+    _absent.remove(artUrl);
+  }
+
+  /// Records that the server has no artwork at [artUrl].
+  ///
+  /// Re-recording one already known must cost nothing, because it is
+  /// routine: several providers for the same cover at different sizes
+  /// can be in flight at once, and each 404 arrives separately.
+  @protected
+  void noteAbsent(String artUrl) {
+    if (!_absent.add(artUrl)) return;
+    if (_absent.length > _maxAbsent) {
+      // Insertion-ordered, so this is the least recently learned.
+      _absent.remove(_absent.first);
+    }
+  }
+
+  /// Whether the server has already said there is nothing at [artUrl].
+  @protected
+  bool knownAbsent(String artUrl) => _absent.contains(artUrl);
+
+  /// Forgets which covers are missing, so they are asked for again.
+  ///
+  /// Public because the important caller is outside: artwork mostly
+  /// appears without anything here being told. A scan picks up embedded
+  /// art, enrichment finishes, another device writes a cover — none of
+  /// those routes through [evict], which only the cover editors call.
+  /// Without this the monogram cached during a browse of a fresh
+  /// library would outlast the enrichment that filled it in, for the
+  /// rest of the session. Anything that invalidates the catalog calls
+  /// this; sign-out does too.
+  void forgetAbsences() => _absent.clear();
+
+  /// Forgets that one cover was missing. For an invalidation that names
+  /// the URL it is about.
+  @protected
+  void forgetAbsent(String artUrl) => _absent.remove(artUrl);
 
   /// The artwork at [artUrl] ready to paint at [px] physical pixels, or
   /// null when there is no artwork. Null is a real state (fresh imports,
@@ -246,8 +309,9 @@ class NetworkArtworkStore extends ArtworkStore {
   @override
   ImageProvider? imageFor(String? artUrl, int px) {
     if (artUrl == null || artUrl.isEmpty) return null;
+    if (knownAbsent(artUrl)) return null;
     final draw = artworkDrawSize(px);
-    return ResizeImage(
+    return _WatchedArtwork(
       NetworkImage(
         requestUrl(artUrl, draw),
         // Empty wherever the browser is attaching a cookie for us, which
@@ -257,6 +321,8 @@ class NetworkArtworkStore extends ArtworkStore {
         // the whole pipeline exists to have got rid of.
         headers: authHeadersFor(artUrl, baseUrl, token),
       ),
+      store: this,
+      artUrl: artUrl,
       width: draw,
       height: draw,
       // Fit, not exact: a portrait book cover bounded on its width alone
@@ -268,10 +334,12 @@ class NetworkArtworkStore extends ArtworkStore {
 
   @override
   Future<Uint8List?> bytesFor(String artUrl, int px) async {
+    if (knownAbsent(artUrl)) return null;
     final fetched = await fetchArtwork(
       _dio,
       requestUrl(artUrl, px),
       headers: authHeadersFor(artUrl, baseUrl, token),
+      onAbsent: () => noteAbsent(artUrl),
     );
     return fetched?.bytes;
   }
@@ -291,6 +359,12 @@ class NetworkArtworkStore extends ArtworkStore {
 
   @override
   Future<void> evict(String artUrl) async {
+    // The absence goes first, because the ladder below is built by
+    // asking for providers and a known-absent URL answers null for
+    // every one of them — which would walk away from real decoded
+    // bytes when a cover is deleted server-side and only then answers
+    // 404.
+    forgetAbsent(artUrl);
     // The whole ladder, because that is the whole set of keys a cover
     // can be held under. Nothing has to be remembered to be dropped.
     // Built before the replacement is noted, since these are the keys
@@ -307,10 +381,72 @@ class NetworkArtworkStore extends ArtworkStore {
   @override
   Future<void> forgetEverything() async {
     dropDecodedArtwork();
+    forgetAbsences();
   }
 
   @override
   void dispose() => _dio.close(force: true);
+}
+
+/// The sized cover the web store hands out, which tells its store when
+/// the server answers that there is no artwork at this URL.
+///
+/// The store hands out providers rather than drawing, so this is where a
+/// failed draw can be seen: [WaxArtwork] is a one-way function from a
+/// size to a provider and cannot report anything back, but the store
+/// builds the provider, so it can watch the load it just handed out.
+///
+/// A [ResizeImage] subclass rather than a wrapper around one, so the
+/// shape a caller sees is unchanged: still a resize of a [NetworkImage],
+/// still keyed and cached identically.
+///
+/// Only a 404 counts. Being offline, or a server that is down, must not
+/// be remembered as "this item has no cover" — the next attempt would
+/// find one, and the monogram would outlive the outage.
+class _WatchedArtwork extends ResizeImage {
+  const _WatchedArtwork(
+    super.imageProvider, {
+    required this.store,
+    required this.artUrl,
+    super.width,
+    super.height,
+    super.policy,
+    super.allowUpscaling,
+  });
+
+  final ArtworkStore store;
+
+  /// The unsized URL the absence is recorded against: what the server is
+  /// answering about is the item, not the rung.
+  final String artUrl;
+
+  @override
+  ImageStreamCompleter loadImage(
+    ResizeImageKey key,
+    ImageDecoderCallback decode,
+  ) {
+    final completer = super.loadImage(key, decode);
+    // Ephemeral: it removes itself after the first error or image, and
+    // by contract affects neither the completer's listener count nor its
+    // disposal, so watching costs the image cache nothing.
+    completer.addEphemeralErrorListener((Object error, StackTrace? stack) {
+      if (error is NetworkImageLoadException && error.statusCode == 404) {
+        store.noteAbsent(artUrl);
+      }
+    });
+    return completer;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _WatchedArtwork &&
+      super == other &&
+      other.artUrl == artUrl &&
+      identical(other.store, store);
+
+  @override
+  int get hashCode =>
+      Object.hash(super.hashCode, artUrl, identityHashCode(store));
 }
 
 /// Drops every decoded copy from Flutter's own image cache.
@@ -344,11 +480,16 @@ Map<String, String> authHeadersFor(
 /// One artwork GET. Answers null for a 304 (the caller already has these
 /// bytes) and for any failure, which is always drawable: a missing cover
 /// is a monogram, not an error dialog.
+///
+/// [onAbsent] fires only for a 404 — the server saying there is nothing
+/// here, as opposed to being unable to say — so a caller can stop
+/// asking without confusing an outage for an empty cover.
 Future<ArtworkBytes?> fetchArtwork(
   Dio dio,
   String url, {
   Map<String, String> headers = const <String, String>{},
   String? ifNoneMatch,
+  void Function()? onAbsent,
 }) async {
   try {
     final response = await dio.get<List<int>>(
@@ -360,9 +501,14 @@ Future<ArtworkBytes?> fetchArtwork(
           if (ifNoneMatch != null && ifNoneMatch.isNotEmpty)
             'If-None-Match': ifNoneMatch,
         },
-        validateStatus: (int? status) => status == 200 || status == 304,
+        validateStatus: (int? status) =>
+            status == 200 || status == 304 || status == 404,
       ),
     );
+    if (response.statusCode == 404) {
+      onAbsent?.call();
+      return null;
+    }
     final body = response.data;
     if (response.statusCode != 200 || body == null || body.isEmpty) return null;
     return ArtworkBytes(
