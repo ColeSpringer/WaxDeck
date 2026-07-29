@@ -951,11 +951,17 @@ class Subscription {
     required this.show,
     required this.settings,
     required this.subscribedAt,
+    this.unplayedCount,
   });
 
   final PodcastShow show;
   final SubscriptionSettings settings;
   final DateTime subscribedAt;
+
+  /// How many of the show's episodes the caller has not crossed the
+  /// played threshold on: the whole backlog, not a window over it, so
+  /// a tile can say it. Null from a server that predates the field.
+  final int? unplayedCount;
 }
 
 /// Show detail with the caller's subscription state.
@@ -1034,6 +1040,29 @@ class EpisodeSummary extends ItemSummary {
   /// [downloaded] false is the one episode that cannot play at all, so
   /// read this rather than [downloaded] before offering play.
   final bool hasEnclosure;
+}
+
+/// Which episodes a cross-show listing keeps, and with it the order:
+/// [latest] and [unplayed] are newest published first, [inProgress] is
+/// most recently played first.
+enum SubscribedEpisodes {
+  latest('latest'),
+  unplayed('unplayed'),
+  inProgress('in-progress');
+
+  const SubscribedEpisodes(this.wireName);
+
+  /// Value as it appears on the wire.
+  final String wireName;
+}
+
+/// What a manual feed refresh turned up.
+class RefreshResult {
+  const RefreshResult({required this.newEpisodes});
+
+  /// Episodes that appeared in this refresh. Zero is the ordinary
+  /// answer for a show that has published nothing since the last one.
+  final int newEpisodes;
 }
 
 /// One keyset-paginated page of episodes.

@@ -59,6 +59,7 @@ class MediaTileData {
     this.trailingText,
     this.starred = false,
     this.downloaded = false,
+    this.unplayed = false,
     this.unavailableOffline = false,
     this.semanticsId,
   });
@@ -83,6 +84,12 @@ class MediaTileData {
 
   final bool starred;
   final bool downloaded;
+
+  /// Never played to the medium's threshold: a dot before the title, the
+  /// mark every podcast client uses for "you have not heard this". It is
+  /// a state of its own rather than the absence of [progress], which an
+  /// episode started and abandoned also has.
+  final bool unplayed;
 
   /// Dimmed and answered with an explanation rather than dying silently
   /// when tapped offline.

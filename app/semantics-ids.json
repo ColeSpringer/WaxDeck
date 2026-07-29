@@ -1026,10 +1026,55 @@
           ]
         },
         {
+          "name": "episodeMarkPlayed",
+          "id": "episode-mark-played"
+        },
+        {
+          "name": "episodeQueue",
+          "id": "episode-queue"
+        },
+        {
+          "name": "episodePlay",
+          "id": "episode-play"
+        },
+        {
           "name": "episodeRemove",
           "id": "episode-remove-{pid}",
           "params": [
             "pid"
+          ]
+        },
+        {
+          "name": "episodeSection",
+          "id": "episode-section-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "episodeSelect",
+          "id": "episode-select-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "episodeShare",
+          "id": "episode-share"
+        },
+        {
+          "name": "markOlderPlayed",
+          "id": "mark-older-played"
+        },
+        {
+          "name": "markOlderConfirm",
+          "id": "mark-older-confirm"
+        },
+        {
+          "name": "markOlderPreset",
+          "id": "mark-older-preset-{name}",
+          "params": [
+            "name"
           ]
         },
         {
@@ -1051,6 +1096,33 @@
           "id": "podcast-add"
         },
         {
+          "name": "podcastFolder",
+          "id": "podcast-folder-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "podcastOpmlExport",
+          "id": "podcast-opml-export"
+        },
+        {
+          "name": "podcastOpmlImport",
+          "id": "podcast-opml-import"
+        },
+        {
+          "name": "podcastOverflow",
+          "id": "podcast-overflow"
+        },
+        {
+          "name": "podcastSettingsExclude",
+          "id": "podcast-settings-exclude"
+        },
+        {
+          "name": "podcastSettingsInclude",
+          "id": "podcast-settings-include"
+        },
+        {
           "name": "podcastSettingsOpen",
           "id": "podcast-settings-open"
         },
@@ -1067,6 +1139,13 @@
           "id": "podcast-settings-speed"
         },
         {
+          "name": "podcastSort",
+          "id": "podcast-sort-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
           "name": "podcastSubscribe",
           "id": "podcast-subscribe"
         },
@@ -1077,6 +1156,37 @@
         {
           "name": "podcastUnsubscribe",
           "id": "podcast-unsubscribe"
+        },
+        {
+          "name": "selectionClear",
+          "id": "selection-clear"
+        },
+        {
+          "name": "selectionDownload",
+          "id": "selection-download"
+        },
+        {
+          "name": "selectionMarkPlayed",
+          "id": "selection-mark-played"
+        },
+        {
+          "name": "selectionQueue",
+          "id": "selection-queue"
+        },
+        {
+          "name": "showEpisodeFilter",
+          "id": "show-episode-filter-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "showEpisodeSearch",
+          "id": "show-episode-search"
+        },
+        {
+          "name": "showOverflow",
+          "id": "show-overflow"
         },
         {
           "name": "transcriptCue",

@@ -106,6 +106,86 @@ void main() {
     );
 
     goldenTest(
+      'a row that resumes says where it is and what it can do',
+      fileName: 'list_rows_progress',
+      pumpBeforeTest: _pumpAnimated,
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in <WaxThemeVariant>[
+            WaxThemeVariant.dark,
+            WaxThemeVariant.light,
+          ])
+            for (final scale in <double>[1, 1.5])
+              GoldenTestScenario(
+                name: '${variant.name} ${scale}x',
+                child: MediaQuery(
+                  data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+                  child: _themed(
+                    variant,
+                    SizedBox(
+                      width: 460,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          // Never heard: the dot, and the date where an
+                          // index would be a lie.
+                          MediaListRow(
+                            data: const MediaTileData(
+                              title: 'The Mailbag, part four',
+                              subtitle: 'S2 E11',
+                              domain: WaxDomain.podcasts,
+                              trailingText: '48m',
+                              unplayed: true,
+                            ),
+                            leadingText: 'Jul 12',
+                            actions: <Widget>[
+                              WaxIconButton(
+                                glyph: WaxIcons.downloads,
+                                label: 'Fetch',
+                                size: 18,
+                                onPressed: () {},
+                              ),
+                            ],
+                            onTap: () {},
+                          ),
+                          // Half heard, and held locally.
+                          MediaListRow(
+                            data: const MediaTileData(
+                              title: 'Pipeweed economics',
+                              subtitle: 'S2 E10',
+                              domain: WaxDomain.podcasts,
+                              trailingText: '22m left',
+                              progress: 0.62,
+                              downloaded: true,
+                            ),
+                            leadingText: 'Jul 05',
+                            onTap: () {},
+                          ),
+                          // In a batch.
+                          MediaListRow(
+                            data: const MediaTileData(
+                              title: 'Barliman answers his post',
+                              subtitle: 'S2 E09',
+                              domain: WaxDomain.podcasts,
+                              trailingText: '61m',
+                            ),
+                            leadingText: 'Jun 28',
+                            selected: true,
+                            onSelect: (_) {},
+                            onTap: () {},
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+
+    goldenTest(
       'list rows carry state without relying on colour',
       fileName: 'list_rows',
       pumpBeforeTest: _pumpAnimated,

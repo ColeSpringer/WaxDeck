@@ -243,7 +243,19 @@ func (l *Library) markSpokenWordProgress(ctx context.Context, uc *UserCtx, it *m
 // item. Non-spoken-word items never cross here.
 func (l *Library) spokenWordCrossing(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64) (crossed, finished bool, err error) {
 	mt := mediaTypeForKind(it.Kind)
-	if (mt != "podcast" && mt != "audiobook") || it.DurationMS <= 0 {
+	if mt != "podcast" && mt != "audiobook" {
+		return false, false, nil
+	}
+	// The catalog's duration already covers an episode nobody has
+	// fetched: the item is fileless, and the view coalesces to the
+	// length the feed declared, which is the same number every listing
+	// reports. So a backlog is markable without a fetch, which is what
+	// "mark older episodes as played" needs, since a fresh
+	// subscription's episodes are all in exactly that state, and this
+	// needs no lookup of its own. Passthrough makes streaming an
+	// unfetched episode ordinary, and a checkpoint arrives every few
+	// seconds while one plays, so a read here would be a read per tick.
+	if it.DurationMS <= 0 {
 		return false, false, nil
 	}
 	frac := podcastFraction

@@ -246,16 +246,15 @@ here waits on upstream.
 
 - `[in-repo]` **PodPing update notifications.** Polling is the only feed refresh
   trigger.
-- `[in-repo]` **The client half of enclosure passthrough and keyword
-  filters.** Both landed server-side (ADR-0030) and the API package
-  carries `hasEnclosure` and `autoDownloadFilter`, but nothing in the UI
-  reads either yet: `show_screen.dart`'s episode tap still branches on
-  `downloaded`, so tapping an unfetched episode queues a fetch where it
-  could now play, and the per-show settings sheet has no filter control.
-  Both are P12's, which is the phase these landed ahead of. The data-loss
-  hazard the API package would otherwise have carried is already closed:
-  the settings PUT is a full replace, so the mapping round-trips the
-  filter rather than dropping it.
+- `[upstream]` **`unplayedCount` costs a walk per subscription.** The
+  count on a subscription row loads the show's episodes and batch-reads
+  their play states, so listing subscriptions is two queries per show
+  (ADR-0032). It is opt-in per caller, so the Subsonic adapter does not
+  pay it, and a listener follows tens of shows rather than thousands.
+  but the durable shape is a counting query upstream, which would want a
+  `podcast_pid` field on WaxBin's item query surface (there is a
+  `podcast` field, and it is the show's title). Filed in
+  `docs/upstream-requests.md`; the walk is correct meanwhile.
 - `[in-repo]` **No concurrency or byte bound on the media relays.**
   `/s/{token}` caps concurrent anonymous streams; `/media/enclosure` and
   `/media/radio/{pid}` cap nothing, and both deliberately carry no

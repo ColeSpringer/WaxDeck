@@ -181,6 +181,20 @@ class _MediaCardState extends State<MediaCard> {
               active: true,
             ),
           ),
+        if (data.unplayed)
+          Positioned(
+            right: WaxSpace.s8,
+            top: WaxSpace.s8,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: colors.accent,
+                shape: BoxShape.circle,
+                border: Border.all(color: colors.scrim, width: 2),
+              ),
+            ),
+          ),
         if (widget.onPlay != null)
           Positioned.fill(
             child: IgnorePointer(
@@ -212,6 +226,7 @@ class _MediaCardState extends State<MediaCard> {
       identifier: data.semanticsId,
       button: widget.onTap != null,
       label: <String?>[
+        if (data.unplayed) 'Unplayed',
         data.title,
         data.subtitle,
         if (data.progress != null)
@@ -291,7 +306,12 @@ class MediaListRow extends StatelessWidget {
     required this.data,
     this.onTap,
     this.onMore,
+    this.onLongPress,
+    this.onSelect,
+    this.selectSemanticsId,
     this.leadingIndex,
+    this.leadingText,
+    this.actions = const <Widget>[],
     this.playing = false,
     this.selected = false,
     this.artSize = 40,
@@ -300,10 +320,39 @@ class MediaListRow extends StatelessWidget {
 
   final MediaTileData data;
   final VoidCallback? onTap;
+
+  /// The row's overflow: draws a button, and is what a long press and a
+  /// right click open.
   final VoidCallback? onMore;
+
+  /// A long press with no menu behind it. Starting a multi-select is
+  /// the one so far. Kept apart from [onMore] because that one draws a
+  /// control, and a button announcing "More for [title]" whose only
+  /// action is to start selecting is a lie about what it opens.
+  /// [onMore] wins where a row wants both.
+  final VoidCallback? onLongPress;
+
+  /// Set on rows that can join a multi-select. A checkbox takes the
+  /// leading slot and reports the state the row is moving to; the row's
+  /// own [onTap] stays whatever the screen made it, so a selection mode
+  /// is the screen's business rather than this component's.
+  final ValueChanged<bool>? onSelect;
+
+  /// The checkbox's own handle. It is a control of its own, beside the
+  /// row rather than inside it, so it gets an identifier of its own.
+  final String? selectSemanticsId;
 
   /// Track numbers on an album, positions in a queue.
   final int? leadingIndex;
+
+  /// A short leading readout where an index would be a lie: a publication
+  /// date on an episode, which is what orders the list it is in. Mutually
+  /// exclusive with [leadingIndex] and drawn in the same slot.
+  final String? leadingText;
+
+  /// Per-row controls before the overflow: fetch, remove, the things a
+  /// row can do without opening.
+  final List<Widget> actions;
 
   final bool playing;
   final bool selected;
@@ -317,6 +366,10 @@ class MediaListRow extends StatelessWidget {
   /// moves — a title and a caption at 1.5x are taller than the density's
   /// row height, so an estimate made from that alone lands short by more
   /// with every row it counts.
+  ///
+  /// Rows carrying a resume sliver are a few pixels taller than this.
+  /// Nothing measures those: the surfaces that scroll by index are the
+  /// music indexes, whose rows have no position to draw.
   static double heightFor(
     BuildContext context, {
     double artSize = 40,
@@ -341,112 +394,207 @@ class MediaListRow extends StatelessWidget {
     final colors = WaxColors.of(context);
     final layout = WaxLayout.of(context);
 
-    return Semantics(
+    final title = Text(
+      data.title,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: WaxType.titleItem.copyWith(
+        color: playing ? colors.accent : colors.textPrimary,
+      ),
+    );
+
+    final leading = switch (leadingIndex ?? leadingText) {
+      null => null,
+      // A number needs a column of digits; a date needs the room for
+      // one, and neither should push the title around as the rows
+      // scroll. Scaled with the text, because the slot is holding text:
+      // a fixed one clips "Jul 12" to "Jul..." the moment the OS setting
+      // moves, which is the whole readout gone.
+      final Object value => SizedBox(
+        width: MediaQuery.textScalerOf(
+          context,
+        ).scale(leadingIndex != null ? 28 : 52).ceilToDouble(),
+        child: playing
+            ? PlayingIndicator(
+                playing: true,
+                form: PlayingIndicatorForm.bars,
+                size: 14,
+              )
+            : Text(
+                '$value',
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: WaxType.monoData.copyWith(color: colors.textTertiary),
+              ),
+      ),
+    };
+
+    // The row's own identity goes on the content region rather than on
+    // the whole row, and that placement is load-bearing: the label is
+    // built with `excludeSemantics`, which drops every node beneath it,
+    // and a row that hosts controls of its own (a fetch button, a
+    // checkbox) would take them down with it: reachable by neither a
+    // screen reader nor the suite, while looking perfectly fine.
+    final content = Semantics(
       identifier: data.semanticsId,
       button: onTap != null,
       selected: selected,
       label: <String?>[
         if (playing) 'Playing',
+        if (data.unplayed) 'Unplayed',
         data.title,
         data.subtitle,
         data.trailingText,
       ].nonNulls.join(', '),
       excludeSemantics: true,
       onTap: onTap,
-      onLongPress: onMore,
-      child: Material(
-        color: selected ? colors.surface2 : Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          onSecondaryTap: onMore,
-          onLongPress: onMore,
-          child: Container(
-            constraints: BoxConstraints(minHeight: layout.rowHeight),
-            padding: const EdgeInsets.symmetric(
-              horizontal: WaxSpace.s8,
-              vertical: WaxSpace.s8,
+      onLongPress: onMore ?? onLongPress,
+      child: Row(
+        children: <Widget>[
+          if (leading != null)
+            leading
+          else if (onSelect == null)
+            ArtworkImage(
+              size: artSize,
+              artwork: data.artwork,
+              monogram: data.title,
+              shape: data.shape,
+              domain: data.domain,
+              dimmed: data.unavailableOffline,
             ),
-            child: Row(
+          const SizedBox(width: WaxSpace.s12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                if (leadingIndex != null)
-                  SizedBox(
-                    width: 28,
-                    child: playing
-                        ? PlayingIndicator(
-                            playing: true,
-                            form: PlayingIndicatorForm.bars,
-                            size: 14,
-                          )
-                        : Text(
-                            '$leadingIndex',
-                            textAlign: TextAlign.center,
-                            style: WaxType.monoData.copyWith(
-                              color: colors.textTertiary,
-                            ),
-                          ),
-                  )
-                else
-                  ArtworkImage(
-                    size: artSize,
-                    artwork: data.artwork,
-                    monogram: data.title,
-                    shape: data.shape,
-                    domain: data.domain,
-                    dimmed: data.unavailableOffline,
-                  ),
-                const SizedBox(width: WaxSpace.s12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
+                // The dot rides beside the title, and only where there
+                // is one: an Expanded title inside a Row lays out to the
+                // full width rather than to its own, which every row in
+                // the app would then be measured at.
+                if (data.unplayed)
+                  Row(
                     children: <Widget>[
-                      Text(
-                        data.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: WaxType.titleItem.copyWith(
-                          color: playing ? colors.accent : colors.textPrimary,
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: colors.accent,
+                          shape: BoxShape.circle,
                         ),
                       ),
-                      if (data.subtitle != null)
-                        Text(
-                          data.subtitle!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: WaxType.caption.copyWith(
-                            color: colors.textSecondary,
-                          ),
-                        ),
+                      const SizedBox(width: WaxSpace.s8),
+                      Expanded(child: title),
                     ],
-                  ),
-                ),
-                if (data.starred)
-                  Padding(
-                    padding: const EdgeInsets.only(right: WaxSpace.s8),
-                    child: WaxIcon(
-                      WaxIcons.star,
-                      size: 14,
-                      active: true,
-                      color: colors.accent,
-                    ),
-                  ),
-                if (data.trailingText != null)
+                  )
+                else
+                  title,
+                if (data.subtitle != null)
                   Text(
-                    data.trailingText!,
-                    style: WaxType.monoTime.copyWith(
-                      color: colors.textTertiary,
+                    data.subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: WaxType.caption.copyWith(
+                      color: colors.textSecondary,
                     ),
-                  ),
-                if (onMore != null)
-                  WaxIconButton(
-                    glyph: WaxIcons.more,
-                    label: 'More for ${data.title}',
-                    size: 18,
-                    onPressed: onMore,
                   ),
               ],
             ),
           ),
+          if (data.starred)
+            Padding(
+              padding: const EdgeInsets.only(right: WaxSpace.s8),
+              child: WaxIcon(
+                WaxIcons.star,
+                size: 14,
+                active: true,
+                color: colors.accent,
+              ),
+            ),
+          if (data.downloaded)
+            Padding(
+              padding: const EdgeInsets.only(right: WaxSpace.s8),
+              child: WaxIcon(
+                WaxIcons.downloads,
+                size: 14,
+                active: true,
+                color: colors.textSecondary,
+              ),
+            ),
+          if (data.trailingText != null)
+            Text(
+              data.trailingText!,
+              style: WaxType.monoTime.copyWith(color: colors.textTertiary),
+            ),
+        ],
+      ),
+    );
+
+    final row = Row(
+      children: <Widget>[
+        if (onSelect != null)
+          Semantics(
+            identifier: selectSemanticsId,
+            label: selected ? 'Deselect ${data.title}' : 'Select ${data.title}',
+            child: Checkbox(
+              value: selected,
+              onChanged: (value) => onSelect!(value ?? false),
+            ),
+          ),
+        Expanded(child: content),
+        ...actions,
+        if (onMore != null)
+          WaxIconButton(
+            glyph: WaxIcons.more,
+            label: 'More for ${data.title}',
+            size: 18,
+            onPressed: onMore,
+          ),
+      ],
+    );
+
+    return Material(
+      color: selected ? colors.surface2 : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        onSecondaryTap: onMore,
+        onLongPress: onMore ?? onLongPress,
+        child: Container(
+          constraints: BoxConstraints(minHeight: layout.rowHeight),
+          padding: const EdgeInsets.symmetric(
+            horizontal: WaxSpace.s8,
+            vertical: WaxSpace.s8,
+          ),
+          // The row is the child on its own wherever there is no
+          // position to draw, so a surface that never had one lays out
+          // exactly as it did: a Column around it would take the row's
+          // vertical centring in the min-height box away from every list
+          // in the app to serve the one that resumes.
+          child: data.progress == null
+              ? row
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    row,
+                    // The resume sliver: how far in this row is, drawn
+                    // under it rather than as a ring, because a list row
+                    // has width and no artwork corner to spare.
+                    Padding(
+                      padding: const EdgeInsets.only(top: WaxSpace.s4),
+                      child: ClipRRect(
+                        borderRadius: WaxRadius.chip,
+                        child: LinearProgressIndicator(
+                          value: data.progress!.clamp(0.0, 1.0),
+                          minHeight: 2,
+                          backgroundColor: colors.surface2,
+                          color: colors.accent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );

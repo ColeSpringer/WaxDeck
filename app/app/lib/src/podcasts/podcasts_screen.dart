@@ -1,113 +1,592 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../artwork/artwork_box.dart';
+import '../artwork/artwork_providers.dart';
+import '../providers.dart';
+import '../search/search_chrome.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../uploads/file_picker_port.dart';
+import 'episode_actions.dart';
+import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
 
-/// The caller's podcast subscriptions, with an add-subscription dialog.
+/// The podcast domain's front door: what is half-listened-to, what is
+/// new, and every show being followed.
 class PodcastsScreen extends ConsumerWidget {
   const PodcastsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final subscriptions = ref.watch(subscriptionsProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Podcasts')),
-      floatingActionButton: Semantics(
-        identifier: SemanticsIds.podcastAdd,
-        label: 'Add subscription',
-        button: true,
-        child: FloatingActionButton(
-          key: const Key(SemanticsIds.podcastAdd),
-          tooltip: 'Add subscription',
+    final sort = ref.watch(subscriptionSortProvider);
+
+    return WaxScaffold(
+      title: 'Podcasts',
+      actions: <Widget>[
+        WaxIconButton(
+          glyph: WaxIcons.add,
+          label: 'Add subscription',
+          semanticsId: SemanticsIds.podcastAdd,
           onPressed: () => showDialog<void>(
             context: context,
-            builder: (_) => const _SubscribeDialog(),
+            builder: (_) => const SubscribeDialog(),
           ),
-          child: const Icon(Icons.add),
         ),
+        const _HubOverflow(),
+        const SearchAction(),
+      ],
+      slivers: <Widget>[
+        const SliverToBoxAdapter(child: _UpNextShelf()),
+        switch (subscriptions) {
+          AsyncData(:final value) when value.isEmpty => SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              title: 'No shows yet',
+              message:
+                  'Follow a show and its new episodes turn up here as the '
+                  'feed publishes them.',
+              glyph: WaxIcons.podcasts,
+              actionLabel: 'Add a show',
+              onAction: () => showDialog<void>(
+                context: context,
+                builder: (_) => const SubscribeDialog(),
+              ),
+            ),
+          ),
+          AsyncData(:final value) => _Subscriptions(
+            subscriptions: sortSubscriptions(value, sort),
+          ),
+          AsyncError(:final error) => SliverFillRemaining(
+            hasScrollBody: false,
+            child: ErrorState(
+              title: 'Could not load your shows',
+              message: error is WaxDeckApiException
+                  ? error.message
+                  : 'The server did not answer.',
+              onRetry: () => ref.invalidate(subscriptionsProvider),
+            ),
+          ),
+          _ => const SliverToBoxAdapter(
+            child: SkeletonShapes(shape: SkeletonShape.grid),
+          ),
+        },
+        const SliverToBoxAdapter(child: _LatestEpisodes()),
+      ],
+    );
+  }
+}
+
+/// Sort and the OPML doors. In an overflow rather than on the bar: they
+/// are the things a listener reaches for twice a year, and the bar's room
+/// belongs to adding a show and to search.
+class _HubOverflow extends ConsumerWidget {
+  const _HubOverflow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sort = ref.watch(subscriptionSortProvider);
+    final picker = ref.watch(filePickerProvider);
+    return WaxMenuButton<String>(
+      glyph: WaxIcons.more,
+      label: 'More',
+      semanticsId: SemanticsIds.podcastOverflow,
+      items: <WaxMenuItem<String>>[
+        for (final choice in SubscriptionSort.values)
+          WaxMenuItem<String>(
+            value: 'sort:${choice.name}',
+            label: 'Sort by ${choice.label.toLowerCase()}',
+            selected: choice == sort,
+            semanticsId: SemanticsIds.podcastSort(choice.name),
+          ),
+        const WaxMenuItem<String>(
+          value: 'export',
+          label: 'Export OPML',
+          semanticsId: SemanticsIds.podcastOpmlExport,
+        ),
+        // Hidden without a picker, the contract every pick affordance in
+        // this app follows: a platform with no file dialog would
+        // otherwise offer an import that cannot open one.
+        if (picker != null)
+          const WaxMenuItem<String>(
+            value: 'import',
+            label: 'Import OPML',
+            semanticsId: SemanticsIds.podcastOpmlImport,
+          ),
+      ],
+      onSelected: (choice) {
+        if (choice.startsWith('sort:')) {
+          final name = choice.substring('sort:'.length);
+          final chosen = SubscriptionSort.values.firstWhere(
+            (s) => s.name == name,
+            orElse: () => SubscriptionSort.recent,
+          );
+          ref.read(subscriptionSortProvider.notifier).select(chosen);
+          return;
+        }
+        switch (choice) {
+          case 'export':
+            unawaited(_exportOpml(context, ref));
+          case 'import':
+            unawaited(_importOpml(context, ref));
+        }
+      },
+    );
+  }
+
+  /// Fetches the OPML and offers it for copying.
+  ///
+  /// The same answer the playlist export gives, for the same reason: the
+  /// web build has no file-save surface, and an OPML document on the
+  /// clipboard pastes into every other podcast client's import box.
+  static Future<void> _exportOpml(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final String opml;
+    try {
+      opml = await ref.read(repositoryProvider).exportOpml();
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    }
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Export OPML'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              opml,
+              key: const Key('opml-export-content'),
+              style: WaxType.monoData,
+            ),
+          ),
+        ),
+        actions: <Widget>[
+          WaxButton(
+            label: 'Close',
+            kind: WaxButtonKind.text,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          WaxButton(
+            label: 'Copy',
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: opml));
+              messenger
+                ..hideCurrentSnackBar()
+                ..showSnackBar(
+                  const SnackBar(content: Text('Subscriptions copied as OPML')),
+                );
+            },
+          ),
+        ],
       ),
-      body: switch (subscriptions) {
-        AsyncData(:final value) => RefreshIndicator(
-          onRefresh: () => ref.refresh(subscriptionsProvider.future),
-          child: value.isEmpty
-              ? ListView(
-                  children: const [
-                    Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: Text('No subscriptions yet')),
-                    ),
-                  ],
-                )
-              : ListView.builder(
-                  itemCount: value.length,
-                  itemBuilder: (context, index) =>
-                      _SubscriptionRow(subscription: value[index]),
+    );
+  }
+
+  static const _opmlExtensions = {'opml', 'xml'};
+
+  static Future<void> _importOpml(BuildContext context, WidgetRef ref) async {
+    final picker = ref.read(filePickerProvider);
+    if (picker == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final file = await picker.pickFile(
+        extensions: _opmlExtensions,
+        label: 'OPML',
+      );
+      final openRead = file?.openRead;
+      if (file == null || openRead == null) return;
+      final bytes = BytesBuilder(copy: false);
+      await for (final chunk in openRead()) {
+        bytes.add(chunk);
+      }
+      await ref
+          .read(subscriptionsProvider.notifier)
+          .importOpml(utf8.decode(bytes.takeBytes(), allowMalformed: true));
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('Subscriptions imported')));
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+    } on Exception catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('Could not read that file: $e')));
+    }
+  }
+}
+
+/// What the caller started and has not finished. Hidden when there is
+/// nothing half-heard, so the hub leads with shows on a fresh account.
+class _UpNextShelf extends ConsumerWidget {
+  const _UpNextShelf();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rows =
+        ref.watch(upNextEpisodesProvider).value ?? const <ShelfEpisode>[];
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final store = ref.watch(artworkStoreProvider);
+    final tiles = <MediaTileData>[
+      for (final row in rows)
+        MediaTileData(
+          title: row.episode.title,
+          subtitle: row.showTitle,
+          artwork: store.source(row.episode.artUrl),
+          domain: WaxDomain.podcasts,
+          progress: row.progress.fractionOf(row.episode.durationMs),
+          trailingText: _remaining(row),
+          downloaded: row.episode.downloaded,
+          semanticsId: SemanticsIds.episode(row.episode.pid),
+        ),
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(top: WaxSpace.s8, bottom: WaxSpace.s16),
+      child: ShelfRow(
+        title: 'Up next',
+        overline: 'Half heard',
+        items: tiles,
+        // By position, not by title: two shows can publish an episode
+        // under one name, and a tile carries no value equality, so this
+        // is identity.
+        onTapItem: (tile) {
+          final at = tiles.indexOf(tile);
+          if (at < 0) return;
+          _resume(context, ref, rows[at]);
+        },
+      ),
+    );
+  }
+
+  static String? _remaining(ShelfEpisode row) {
+    final left = row.episode.durationMs - row.progress.positionMs;
+    if (left <= 0) return null;
+    return '${formatTimecode(Duration(milliseconds: left))} left';
+  }
+
+  /// Resumes where the listener stopped, through the same verb every
+  /// other surface plays an episode with, so an episode whose feed
+  /// stopped naming audio between then and now says so rather than
+  /// failing inside the player.
+  static void _resume(BuildContext context, WidgetRef ref, ShelfEpisode row) {
+    unawaited(
+      EpisodeActions(
+        ref: ref,
+        showPid: row.episode.showPid,
+      ).play(context, row.episode, positionMs: row.progress.positionMs),
+    );
+  }
+}
+
+/// The shows being followed, grouped by folder when any subscription
+/// declares one.
+class _Subscriptions extends ConsumerWidget {
+  const _Subscriptions({required this.subscriptions});
+
+  final List<Subscription> subscriptions;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sizeClass = WaxSizeClass.of(context);
+    final groups = groupByFolder(subscriptions);
+    final folders = groups.keys.where((name) => name.isNotEmpty).toList()
+      ..sort();
+    final loose = groups[''] ?? const <Subscription>[];
+
+    // No folders: one grid, and no section header over it either. The
+    // screen's own title already says what these are.
+    if (folders.isEmpty) {
+      return SliverPadding(
+        padding: sizeClass.gutter,
+        sliver: _ShowGrid(subscriptions: loose),
+      );
+    }
+    return SliverList.list(
+      children: <Widget>[
+        for (final folder in folders)
+          _FolderGroup(name: folder, subscriptions: groups[folder]!),
+        if (loose.isNotEmpty)
+          _FolderGroup(name: '', subscriptions: loose, expandable: false),
+      ],
+    );
+  }
+}
+
+/// One folder of shows, collapsible.
+class _FolderGroup extends StatefulWidget {
+  const _FolderGroup({
+    required this.name,
+    required this.subscriptions,
+    this.expandable = true,
+  });
+
+  final String name;
+  final List<Subscription> subscriptions;
+  final bool expandable;
+
+  @override
+  State<_FolderGroup> createState() => _FolderGroupState();
+}
+
+class _FolderGroupState extends State<_FolderGroup> {
+  var _open = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final sizeClass = WaxSizeClass.of(context);
+    final count = widget.subscriptions.length;
+    return Padding(
+      padding: sizeClass.gutter,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          if (widget.expandable)
+            WaxTappable(
+              semanticsId: SemanticsIds.podcastFolder(widget.name),
+              label:
+                  '${widget.name}, $count '
+                  '${count == 1 ? 'show' : 'shows'}',
+              selected: _open,
+              onPressed: () => setState(() => _open = !_open),
+              // WaxTappable adds semantics, focus, and a ring, and no
+              // gesture of its own, so the row carries the tap.
+              child: InkWell(
+                onTap: () => setState(() => _open = !_open),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
+                  child: Row(
+                    children: <Widget>[
+                      WaxIcon(
+                        _open ? WaxIcons.collapse : WaxIcons.expand,
+                        size: 16,
+                        color: WaxColors.of(context).textSecondary,
+                      ),
+                      const SizedBox(width: WaxSpace.s8),
+                      Expanded(
+                        child: Text(
+                          widget.name,
+                          style: WaxType.headline.copyWith(
+                            color: WaxColors.of(context).textPrimary,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '$count',
+                        style: WaxType.monoData.copyWith(
+                          color: WaxColors.of(context).textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-        ),
-        AsyncError(:final error) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                error is WaxDeckApiException
-                    ? error.message
-                    : 'Could not load subscriptions',
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => ref.invalidate(subscriptionsProvider),
-                child: const Text('Retry'),
-              ),
-            ],
+            )
+          else
+            const SectionHeader(title: 'Other shows'),
+          if (_open || !widget.expandable)
+            _ShowGridBox(subscriptions: widget.subscriptions),
+        ],
+      ),
+    );
+  }
+}
+
+/// The grid of show tiles, as a sliver.
+/// How wide a tile actually gets, and how many fit, for [available].
+///
+/// Measured rather than assumed. A max-cross-axis-extent delegate is
+/// told the widest a cell may be and then divides the room evenly, so
+/// the cell is usually *narrower* than the number it was given, and a
+/// card sized to that number inside it draws artwork taller than the
+/// height budget computed from the same number, which overflows by
+/// however much the two disagree. Deciding the count here makes the
+/// width the card draws at and the height the grid reserves for it the
+/// same measurement.
+({int columns, double width}) _tileGrid(double available) {
+  const gap = WaxShellMetrics.gridGap;
+  final columns = ((available + gap) / (kShowTileExtent + gap)).ceil().clamp(
+    1,
+    12,
+  );
+  return (columns: columns, width: (available - gap * (columns - 1)) / columns);
+}
+
+/// The widest a show tile is allowed to be.
+const double kShowTileExtent = 180;
+
+class _ShowGrid extends ConsumerWidget {
+  const _ShowGrid({required this.subscriptions});
+
+  final List<Subscription> subscriptions;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        final grid = _tileGrid(constraints.crossAxisExtent);
+        return SliverGrid.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: grid.columns,
+            mainAxisSpacing: WaxShellMetrics.gridGap,
+            crossAxisSpacing: WaxShellMetrics.gridGap,
+            mainAxisExtent: MediaCard.heightFor(context, width: grid.width),
           ),
-        ),
-        _ => const Center(child: CircularProgressIndicator()),
+          itemCount: subscriptions.length,
+          itemBuilder: (context, index) =>
+              _ShowTile(subscription: subscriptions[index], width: grid.width),
+        );
       },
     );
   }
 }
 
-class _SubscriptionRow extends StatelessWidget {
-  const _SubscriptionRow({required this.subscription});
+/// The same grid inside a box, for the folder groups, which are list
+/// children rather than slivers.
+class _ShowGridBox extends ConsumerWidget {
+  const _ShowGridBox({required this.subscriptions});
+
+  final List<Subscription> subscriptions;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final grid = _tileGrid(constraints.maxWidth);
+        return GridView.builder(
+          shrinkWrap: true,
+          // Inside the page's own scroll view: a folder holds a handful
+          // of shows, so building them all costs less than a nested
+          // scroller that eats the drag.
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: WaxSpace.s16),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: grid.columns,
+            mainAxisSpacing: WaxShellMetrics.gridGap,
+            crossAxisSpacing: WaxShellMetrics.gridGap,
+            mainAxisExtent: MediaCard.heightFor(context, width: grid.width),
+          ),
+          itemCount: subscriptions.length,
+          itemBuilder: (context, index) =>
+              _ShowTile(subscription: subscriptions[index], width: grid.width),
+        );
+      },
+    );
+  }
+}
+
+class _ShowTile extends ConsumerWidget {
+  const _ShowTile({required this.subscription, required this.width});
 
   final Subscription subscription;
 
+  /// The cell's own width, so the artwork the card draws and the height
+  /// the grid reserved for it are the same measurement.
+  final double width;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final show = subscription.show;
-    final artUrl = show.artUrl;
-    final colorScheme = Theme.of(context).colorScheme;
-    return Semantics(
-      identifier: SemanticsIds.podcast(show.pid),
-      label: show.title,
-      button: true,
-      child: ListTile(
-        key: ValueKey(SemanticsIds.podcast(show.pid)),
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: SizedBox(
-            width: 48,
-            height: 48,
-            child: ArtworkBox(
-              artUrl: artUrl,
-              placeholder: ColoredBox(
-                color: colorScheme.surfaceContainerHighest,
-                child: const Icon(Icons.podcasts),
+    final unplayed = subscription.unplayedCount;
+    final count = show.episodeCount;
+    return MediaCard(
+      data: MediaTileData(
+        title: show.title,
+        subtitle: show.author,
+        artwork: ref.watch(artworkStoreProvider).source(show.artUrl),
+        domain: WaxDomain.podcasts,
+        // What is waiting, which is the number a listener opens a show
+        // for. The episode count is the fallback for a server that
+        // predates the field, and for a show with nothing waiting.
+        trailingText: switch ((unplayed, count)) {
+          (final int n, _) when n > 0 => '$n unplayed',
+          (_, final int n) => '$n ${n == 1 ? 'episode' : 'episodes'}',
+          _ => null,
+        },
+        unplayed: (unplayed ?? 0) > 0,
+        semanticsId: SemanticsIds.podcast(show.pid),
+      ),
+      width: width,
+      // A show is declared under this hub, so it is where it says it is
+      // and the address bar follows.
+      onTap: () => context.go(WaxRoute.show(show.pid)),
+    );
+  }
+}
+
+/// The newest episodes across every show being followed.
+class _LatestEpisodes extends ConsumerWidget {
+  const _LatestEpisodes();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final latest =
+        ref.watch(latestEpisodesProvider).value ?? const <ShelfEpisode>[];
+    if (latest.isEmpty) return const SizedBox(height: WaxSpace.s32);
+    final sizeClass = WaxSizeClass.of(context);
+    final store = ref.watch(artworkStoreProvider);
+    return Padding(
+      padding: sizeClass.gutter,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          const SizedBox(height: WaxSpace.s16),
+          const SectionHeader(title: 'Latest episodes', overline: 'New'),
+          for (final row in latest)
+            MediaListRow(
+              data: MediaTileData(
+                title: row.episode.title,
+                subtitle: row.showTitle,
+                artwork: store.source(row.episode.artUrl),
+                domain: WaxDomain.podcasts,
+                trailingText: formatTimecode(
+                  Duration(milliseconds: row.episode.durationMs),
+                ),
+                downloaded: row.episode.downloaded,
+                unplayed: true,
+                semanticsId: SemanticsIds.episode(row.episode.pid),
+              ),
+              actions: <Widget>[
+                WaxIconButton(
+                  glyph: WaxIcons.info,
+                  label: 'Details for ${row.episode.title}',
+                  size: 18,
+                  semanticsId: SemanticsIds.episodeInfo(row.episode.pid),
+                  // Pushed: the episode's declared parent is its show,
+                  // and this is the hub, so `go` would rebuild the show
+                  // beneath it and back would land there rather than
+                  // here.
+                  onPressed: () => context.push(
+                    WaxRoute.showEpisode(row.episode.showPid, row.episode.pid),
+                  ),
+                ),
+              ],
+              // The row plays, which is what a list of new episodes is
+              // for. It can: these are real episode rows, so the same
+              // `hasEnclosure` rule the show's list follows applies here
+              // too, and an episode with no audio in its feed falls back
+              // to the fetch rather than failing in the player.
+              onTap: () => unawaited(
+                EpisodeActions(
+                  ref: ref,
+                  showPid: row.episode.showPid,
+                ).play(context, row.episode),
               ),
             ),
-          ),
-        ),
-        title: Text(show.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: show.author == null
-            ? null
-            : Text(show.author!, maxLines: 1, overflow: TextOverflow.ellipsis),
-        onTap: () => context.go(WaxRoute.show(show.pid)),
+          const SizedBox(height: WaxSpace.s32),
+        ],
       ),
     );
   }
@@ -115,14 +594,14 @@ class _SubscriptionRow extends StatelessWidget {
 
 /// URL entry plus a source-type toggle; the subscribe call surfaces
 /// server errors (feed-unreachable and friends) as a SnackBar.
-class _SubscribeDialog extends ConsumerStatefulWidget {
-  const _SubscribeDialog();
+class SubscribeDialog extends ConsumerStatefulWidget {
+  const SubscribeDialog({super.key});
 
   @override
-  ConsumerState<_SubscribeDialog> createState() => _SubscribeDialogState();
+  ConsumerState<SubscribeDialog> createState() => _SubscribeDialogState();
 }
 
-class _SubscribeDialogState extends ConsumerState<_SubscribeDialog> {
+class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
   final _urlController = TextEditingController();
   var _sourceType = 'rss';
   var _busy = false;
@@ -159,7 +638,7 @@ class _SubscribeDialogState extends ConsumerState<_SubscribeDialog> {
       title: const Text('Add subscription'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
-        children: [
+        children: <Widget>[
           // No Semantics identifier wrapper: on the web it would mint a
           // second, disabled text-field node beside the real input.
           // Tests locate the field by its label, like the login form.
@@ -170,32 +649,28 @@ class _SubscribeDialogState extends ConsumerState<_SubscribeDialog> {
             keyboardType: TextInputType.url,
             autofocus: true,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: WaxSpace.s12),
           SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'rss', label: Text('RSS')),
-              ButtonSegment(value: 'youtube', label: Text('YouTube')),
+            segments: const <ButtonSegment<String>>[
+              ButtonSegment<String>(value: 'rss', label: Text('RSS')),
+              ButtonSegment<String>(value: 'youtube', label: Text('YouTube')),
             ],
-            selected: {_sourceType},
+            selected: <String>{_sourceType},
             onSelectionChanged: (selection) =>
                 setState(() => _sourceType = selection.first),
           ),
         ],
       ),
-      actions: [
-        TextButton(
+      actions: <Widget>[
+        WaxButton(
+          label: 'Cancel',
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
-        Semantics(
-          identifier: SemanticsIds.podcastSubscribeConfirm,
+        WaxButton(
           label: 'Subscribe',
-          button: true,
-          child: FilledButton(
-            key: const Key(SemanticsIds.podcastSubscribeConfirm),
-            onPressed: _busy ? null : _subscribe,
-            child: const Text('Subscribe'),
-          ),
+          semanticsId: SemanticsIds.podcastSubscribeConfirm,
+          onPressed: _busy ? null : _subscribe,
         ),
       ],
     );

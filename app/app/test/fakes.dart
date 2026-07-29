@@ -405,7 +405,10 @@ class FakeRepository implements WaxDeckRepository {
     playInfoCalls.add((pid: pid, positionMs: positionMs));
     await playInfoGate?.future;
     final episode = _findEpisode(pid);
-    if (episode != null && !episode.downloaded) {
+    // Enclosure passthrough (ADR-0030): an unfetched episode still
+    // resolves, relayed from the feed's own host, and the conflict is
+    // now for the one episode whose feed named no audio at all.
+    if (episode != null && !episode.downloaded && !episode.hasEnclosure) {
       throw const WaxDeckApiException(
         code: 'conflict',
         message: 'episode audio not fetched yet',
@@ -480,12 +483,17 @@ class FakeRepository implements WaxDeckRepository {
     rating: ratingByPid[pid],
   );
 
+  /// Holds every checkpoint until completed, so a test can stand a
+  /// write up mid-flight and act around it.
+  Completer<void>? putPlayStateGate;
+
   @override
   Future<void> putPlayState(
     String pid,
     int positionMs, {
     DateTime? recordedAt,
   }) async {
+    await putPlayStateGate?.future;
     final error = putPlayStateError;
     if (error != null) throw error;
     putPlayStateCalls.add((pid: pid, positionMs: positionMs));
@@ -523,8 +531,13 @@ class FakeRepository implements WaxDeckRepository {
     return getPlayState(pid);
   }
 
+  /// The pid sets each batched play-state read covered, in call order,
+  /// so a test can see what a page cost.
+  final List<List<String>> playStateBatches = [];
+
   @override
   Future<List<PlayState>> listPlayStates(List<String> pids) async {
+    playStateBatches.add(List<String>.of(pids));
     return [for (final pid in pids) await getPlayState(pid)];
   }
 
@@ -680,6 +693,10 @@ class FakeRepository implements WaxDeckRepository {
     return prefs = next;
   }
 
+  /// The unplayed backlog each show reports, by show pid. Absent means
+  /// the field is absent, which is what an older server answers.
+  final Map<String, int> unplayedCounts = {};
+
   /// Registers a show and subscribes the test user to it.
   void addSubscription(
     PodcastShow show, {
@@ -715,6 +732,7 @@ class FakeRepository implements WaxDeckRepository {
               downloaded: true,
               explicit: e.explicit,
               hasTranscript: e.hasTranscript,
+              hasEnclosure: e.hasEnclosure,
             )
           else
             e,
@@ -729,9 +747,59 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     final error = listError;
     if (error != null) throw error;
-    final items = subscriptions.values.toList()
-      ..sort((a, b) => a.show.title.compareTo(b.show.title));
+    // Applied on read rather than at registration, so a test can set a
+    // count in the same cascade that adds the subscription.
+    //
+    // All three of the tile's numbers together, because the listing
+    // computes them from one walk of the show's episodes: a
+    // subscription row carrying a backlog and no size, or a size and no
+    // publication date, is a shape the endpoint never sends, and a test
+    // built on one would be testing nothing.
+    final items = <Subscription>[
+      for (final sub in subscriptions.values)
+        Subscription(
+          show: _countedShow(sub.show),
+          settings: sub.settings,
+          subscribedAt: sub.subscribedAt,
+          unplayedCount:
+              unplayedCounts[sub.show.pid] ?? _unplayed(sub.show.pid),
+        ),
+    ]..sort((a, b) => a.show.title.compareTo(b.show.title));
     return SubscriptionPage(items: items);
+  }
+
+  /// The show as a subscription row carries it: with the size and the
+  /// newest publication that the counting walk fills in.
+  PodcastShow _countedShow(PodcastShow show) {
+    final eps = episodesByShow[show.pid] ?? const <EpisodeSummary>[];
+    if (eps.isEmpty) return show;
+    var latest = eps.first.publishedAt;
+    for (final ep in eps) {
+      if (ep.publishedAt.isAfter(latest)) latest = ep.publishedAt;
+    }
+    return PodcastShow(
+      pid: show.pid,
+      title: show.title,
+      author: show.author,
+      descriptionHtml: show.descriptionHtml,
+      feedUrl: show.feedUrl,
+      link: show.link,
+      sourceType: show.sourceType,
+      artUrl: show.artUrl,
+      episodeCount: show.episodeCount ?? eps.length,
+      lastPublishedAt: show.lastPublishedAt ?? latest,
+      refreshDisabled: show.refreshDisabled,
+      explicit: show.explicit,
+      funding: show.funding,
+      medium: show.medium,
+      persons: show.persons,
+    );
+  }
+
+  int? _unplayed(String showPid) {
+    final eps = episodesByShow[showPid];
+    if (eps == null) return null;
+    return eps.where((e) => !finishedPids.contains(e.pid)).length;
   }
 
   @override
@@ -865,6 +933,7 @@ class FakeRepository implements WaxDeckRepository {
       fetchError: summary.fetchError,
       explicit: summary.explicit,
       hasTranscript: summary.hasTranscript,
+      hasEnclosure: summary.hasEnclosure,
     );
   }
 
@@ -913,6 +982,7 @@ class FakeRepository implements WaxDeckRepository {
               downloaded: false,
               explicit: e.explicit,
               hasTranscript: e.hasTranscript,
+              hasEnclosure: e.hasEnclosure,
             )
           else
             e,
@@ -923,6 +993,49 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<void> fetchEpisode(String pid) async {
     fetchEpisodeCalls.add(pid);
+  }
+
+  /// How many new episodes a feed refresh reports, by show pid.
+  final Map<String, int> refreshNewEpisodes = {};
+  final List<String> refreshPodcastCalls = [];
+
+  final List<SubscribedEpisodes> subscribedEpisodeCalls = [];
+
+  @override
+  Future<EpisodePage> listSubscribedEpisodes({
+    SubscribedEpisodes filter = SubscribedEpisodes.latest,
+    String? cursor,
+    int? limit,
+  }) async {
+    subscribedEpisodeCalls.add(filter);
+    final error = listError;
+    if (error != null) throw error;
+    // Every episode of every subscribed show, filtered and ordered the
+    // way the endpoint documents, so a test that sets a position sees
+    // the strip the real server would answer.
+    final all = <EpisodeSummary>[
+      for (final entry in episodesByShow.entries)
+        if (subscriptions.containsKey(entry.key)) ...entry.value,
+    ];
+    final kept = <EpisodeSummary>[
+      for (final episode in all)
+        if (switch (filter) {
+          SubscribedEpisodes.latest => true,
+          SubscribedEpisodes.unplayed => !finishedPids.contains(episode.pid),
+          SubscribedEpisodes.inProgress =>
+            (playPositions[episode.pid] ?? 0) > 0 &&
+                !finishedPids.contains(episode.pid),
+        })
+          episode,
+    ]..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+    final end = (limit ?? 100).clamp(0, kept.length);
+    return EpisodePage(items: kept.sublist(0, end));
+  }
+
+  @override
+  Future<RefreshResult> refreshPodcast(String pid) async {
+    refreshPodcastCalls.add(pid);
+    return RefreshResult(newEpisodes: refreshNewEpisodes[pid] ?? 0);
   }
 
   @override
@@ -3887,6 +4000,7 @@ PodcastShow testShow(
   String? feedUrl = 'https://pony.example/feed.xml',
   String? descriptionHtml,
   bool explicit = false,
+  int? episodeCount,
 }) => PodcastShow(
   pid: pid,
   title: title,
@@ -3895,9 +4009,15 @@ PodcastShow testShow(
   descriptionHtml: descriptionHtml,
   sourceType: 'rss',
   explicit: explicit,
+  episodeCount: episodeCount,
 );
 
 /// Handy episode factory for tests.
+///
+/// [hasEnclosure] defaults true because that is the ordinary feed: an
+/// episode whose feed named audio, which this server can relay whether or
+/// not it has fetched it. The false case is the one episode that cannot
+/// play at all, and a test about it says so.
 EpisodeSummary testEpisode(
   String pid, {
   String showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01',
@@ -3909,6 +4029,9 @@ EpisodeSummary testEpisode(
   String? fetchState,
   bool hasTranscript = false,
   bool explicit = false,
+  bool hasEnclosure = true,
+  int? season,
+  int? episodeNumber,
 }) => EpisodeSummary(
   pid: pid,
   mediaType: MediaType.podcast,
@@ -3916,11 +4039,14 @@ EpisodeSummary testEpisode(
   artist: artist,
   durationMs: durationMs,
   showPid: showPid,
+  season: season,
+  episodeNumber: episodeNumber,
   publishedAt: publishedAt ?? DateTime.utc(2026, 7, 10, 6),
   downloaded: downloaded,
   fetchState: fetchState,
   hasTranscript: hasTranscript,
   explicit: explicit,
+  hasEnclosure: hasEnclosure,
 );
 
 /// Handy review-entry factory for tests.

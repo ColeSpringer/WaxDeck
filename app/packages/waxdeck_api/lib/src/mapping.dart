@@ -492,6 +492,7 @@ Subscription subscriptionFromGen(gen.Subscription sub, {String baseUrl = ''}) {
     show: podcastShowFromGen(sub.show_, baseUrl: baseUrl),
     settings: subscriptionSettingsFromGen(sub.settings),
     subscribedAt: sub.subscribedAt,
+    unplayedCount: sub.unplayedCount,
   );
 }
 

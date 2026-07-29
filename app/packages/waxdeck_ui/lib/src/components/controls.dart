@@ -405,6 +405,132 @@ class WaxIconButton extends StatelessWidget {
   }
 }
 
+/// One row of a [WaxMenuButton].
+@immutable
+class WaxMenuItem<T> {
+  const WaxMenuItem({
+    required this.value,
+    required this.label,
+    this.glyph,
+    this.selected = false,
+    this.destructive = false,
+    this.enabled = true,
+    this.semanticsId,
+  });
+
+  /// What the button reports when this row is chosen.
+  final T value;
+
+  final String label;
+  final WaxGlyph? glyph;
+
+  /// Drawn checked, for the rows that are a standing choice (a sort
+  /// order) rather than a verb.
+  final bool selected;
+
+  /// Deletes and revokes, in the error colour.
+  final bool destructive;
+
+  final bool enabled;
+
+  /// This row's own handle. A menu row is a control, so it gets one of
+  /// its own rather than being found by its text.
+  final String? semanticsId;
+}
+
+/// An overflow menu behind one icon button.
+///
+/// The trigger is the house icon button rather than a [PopupMenuButton],
+/// for the reason the chrome's own overflow already follows: a
+/// PopupMenuButton draws a second semantics node for the same control,
+/// and the suite steers by one handle per control.
+class WaxMenuButton<T> extends StatelessWidget {
+  const WaxMenuButton({
+    required this.items,
+    required this.onSelected,
+    this.glyph = WaxIcons.more,
+    this.label = 'More',
+    this.semanticsId,
+    this.size = 20,
+    super.key,
+  });
+
+  final List<WaxMenuItem<T>> items;
+  final ValueChanged<T> onSelected;
+  final WaxGlyph glyph;
+  final String label;
+  final String? semanticsId;
+  final double size;
+
+  Future<void> _open(BuildContext context) async {
+    final colors = WaxColors.of(context);
+    final trigger = context.findRenderObject()! as RenderBox;
+    final overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final origin = trigger.localToGlobal(Offset.zero, ancestor: overlay);
+    final chosen = await showMenu<T>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        origin.dx,
+        origin.dy + trigger.size.height,
+        overlay.size.width - origin.dx - trigger.size.width,
+        overlay.size.height - origin.dy,
+      ),
+      items: <PopupMenuEntry<T>>[
+        for (final item in items)
+          PopupMenuItem<T>(
+            value: item.value,
+            enabled: item.enabled,
+            child: Semantics(
+              identifier: item.semanticsId,
+              selected: item.selected,
+              child: Row(
+                children: <Widget>[
+                  if (item.glyph != null) ...<Widget>[
+                    WaxIcon(
+                      item.glyph!,
+                      size: 16,
+                      color: item.destructive
+                          ? colors.error
+                          : colors.textSecondary,
+                    ),
+                    const SizedBox(width: WaxSpace.s12),
+                  ],
+                  Expanded(
+                    child: Text(
+                      item.label,
+                      style: WaxType.body.copyWith(
+                        color: item.destructive
+                            ? colors.error
+                            : colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  if (item.selected)
+                    WaxIcon(WaxIcons.check, size: 16, color: colors.accent),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+    if (chosen != null) onSelected(chosen);
+  }
+
+  @override
+  Widget build(BuildContext context) => Builder(
+    // Its own context, so the menu positions against this button rather
+    // than against whatever laid the bar out.
+    builder: (context) => WaxIconButton(
+      glyph: glyph,
+      label: label,
+      size: size,
+      semanticsId: semanticsId,
+      onPressed: items.isEmpty ? null : () => _open(context),
+    ),
+  );
+}
+
 /// The star toggle, with the pop the design language asks for.
 ///
 /// Optimistic state belongs to the app's controllers; this draws whatever

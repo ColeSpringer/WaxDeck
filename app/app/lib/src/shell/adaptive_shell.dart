@@ -266,12 +266,13 @@ bool _isUnder(String location, String base) =>
 /// Home is the only target that claims a location by being home; every
 /// other match is a prefix, which is the stronger signal. So a location
 /// only home would claim goes to whichever branch [branchIndex] names —
-/// `/episodes/:pid` is a podcasts location whose path cannot sit under
-/// `/podcasts` (it names no show), and lighting Home while the podcasts
-/// branch is on screen would have the chrome contradict the router. The
-/// shared branch names no destination, so a location nothing there claims
-/// lights nothing, which is honest: Home would be a lie about where the
-/// visitor is.
+/// the show-less `/episodes/:pid`, which a search hit opens because it
+/// has no show to name, is a podcasts location whose path cannot sit
+/// under `/podcasts`, and lighting Home while the podcasts branch is on
+/// screen would have the chrome contradict the router. The shared branch
+/// names no destination, so a location nothing there claims lights
+/// nothing, which is honest: Home would be a lie about where the visitor
+/// is.
 WaxNavTarget? activeNavTarget(
   String location,
   Iterable<WaxNavTarget> targets, {

@@ -62,8 +62,15 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   await page.locator(sem(SemanticsIds.podcastSubscribeConfirm)).click();
 
   const showPid = await subscribedShowPid(request, token);
-  const showRow = page.locator(sem(SemanticsIds.podcast(showPid)));
-  await showRow.waitFor({ timeout: 30_000 });
+  const showTile = page.locator(sem(SemanticsIds.podcast(showPid)));
+  await showTile.waitFor({ timeout: 30_000 });
+
+  // The tile says what is waiting, which is a count only the server can
+  // answer: a client holding one page of episodes would be reporting a
+  // window as the backlog. A fresh subscription's whole feed is unplayed.
+  await expect(showTile).toHaveAccessibleName(/3 unplayed/, { timeout: 30_000 });
+  // The show screen is on screen once its follow control is: the header
+  // draws it, and it is the one control the hub does not have.
   const episodeList = () => page.locator(sem(SemanticsIds.podcastUnsubscribe));
 
   // Silence trimming is a per-subscription setting; flip it before
@@ -74,7 +81,7 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   });
   expect(put.ok()).toBeTruthy();
 
-  await clickThrough(showRow, episodeList());
+  await clickThrough(showTile, episodeList());
 
   // Three episodes from the generated feed, none fetched yet.
   const eps = await request.get(`/api/v1/podcasts/${showPid}/episodes`, authed(token));
@@ -118,8 +125,8 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   // travels through the app's own button: browser history against
   // flutter's navigator is handled asynchronously, and a deferred
   // popstate can pop the very screen the test just re-entered.
-  await clickThrough(page.getByRole('button', { name: 'Back' }).first(), showRow);
-  await clickThrough(showRow, page.locator(sem(SemanticsIds.episode(episode.pid))));
+  await clickThrough(page.getByRole('button', { name: 'Back' }).first(), showTile);
+  await clickThrough(showTile, page.locator(sem(SemanticsIds.episode(episode.pid))));
 
   // Play it. The trim chip reports time actually saved once the
   // session seeks over the lead silence, which is the observable proof
@@ -152,6 +159,16 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   await clickThrough(
     page.locator(sem(SemanticsIds.episodeInfo(episode.pid))),
     page.getByText(/pilot episode/).first(),
+  );
+
+  // The episode's location carries its show, which is what lets it be
+  // gone to rather than pushed: the address bar follows the hop, and the
+  // link a listener copies here opens the episode with its show under
+  // it. Leaving lands back on the show for the same reason.
+  await expect(page).toHaveURL(new RegExp(`/podcasts/${showPid}/episodes/${episode.pid}$`));
+  await clickThrough(
+    page.getByRole('button', { name: 'Back' }).first(),
+    page.locator(sem(SemanticsIds.podcastUnsubscribe)),
   );
 
   // The fetch's inverse: a second episode fetches, removes (archive,
@@ -209,6 +226,32 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   const ranged = await request.get(passthrough, { headers: { Range: 'bytes=0-99' } });
   expect(ranged.status(), 'the relay forwards the range upstream').toBe(206);
   expect((await ranged.body()).length).toBe(100);
+
+  // The client half of passthrough: an episode this server holds no
+  // bytes for plays from the row rather than queueing a fetch. The
+  // third episode has never been fetched, so nothing but the relay can
+  // be answering. The show list is stale about the removal above, so it
+  // is reloaded first.
+  const third = items[2];
+  await clickThrough(
+    page.getByRole('button', { name: 'Back' }).first(),
+    showTile,
+  );
+  await clickThrough(showTile, page.locator(sem(SemanticsIds.episode(third.pid))));
+  await clickThrough(
+    page.locator(sem(SemanticsIds.episode(third.pid))),
+    page.locator(sem(SemanticsIds.playerToggle)),
+  );
+  const relayed = await request.get(`/api/v1/items/${third.pid}/play-info`, authed(token));
+  expect(relayed.status(), 'a never-fetched episode still mints a URL').toBe(200);
+  expect((await relayed.json()).url as string).toContain('/media/enclosure?');
+  // It is really playing, which is the part the row's tap is about: the
+  // fetch-wait path would have left the player empty and queued a
+  // download instead.
+  await expect(page.locator(sem(SemanticsIds.playerToggle))).toHaveAccessibleName(
+    /Pause/,
+    { timeout: 30_000 },
+  );
 
   // Unsubscribing while an episode sits fetched asks about the server
   // files; keeping them ends the subscription and leaves the download

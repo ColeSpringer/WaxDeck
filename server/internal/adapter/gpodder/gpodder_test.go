@@ -503,7 +503,7 @@ func TestEpisodeActions(t *testing.T) {
 	}
 
 	// The play position wrote through to WaxDeck playback state.
-	subs, _, err := e.svc.Subscriptions(e.ctx, e.uc, "", 10)
+	subs, _, err := e.svc.Subscriptions(e.ctx, e.uc, "", 10, false)
 	if err != nil || len(subs) != 1 {
 		t.Fatalf("subscriptions = %d (%v), want 1", len(subs), err)
 	}

@@ -30,6 +30,26 @@ sidecar injection seam) all landed and are not repeated here.
   state it fetches), and one read per write is the more expensive
   alternative.
 
+- **A `podcast_pid` item query field, so an episode count can be a
+  count.** The item field map carries `podcast`, which is the show's
+  *title* (`COALESCE(pod.title, '')`), and no handle for the show
+  itself. Every other entity dimension has one (`artist_pid`,
+  `album_pid`, `genre_pid`). So WaxDeck cannot express "how many of this
+  show's episodes has this user not played" as a `CountItems` over
+  `kind is episode AND podcast_pid is <pid> AND played is 0`, which is
+  what the query surface is otherwise shaped for. Instead it walks the
+  show's episodes and batch-reads their play states, two queries per
+  subscription, to answer `unplayedCount` on a subscription row
+  (`server/internal/service/podcasts.go`, ADR-0032). The same gap makes
+  `GET /podcasts/episodes`, episodes across everything the caller
+  follows, assemble every subscribed show's episodes in Go, sort them,
+  and page the slice, per request; with a pid field it would be one
+  keyset query over an indexed join, which is what every other listing
+  in this contract already is. A listener follows tens of shows, so both
+  are correct and affordable today, and both are the wrong layer for a
+  power user's OPML import. The workaround is shipped and correct
+  meanwhile.
+
 - **Keyset pagination on `Library.Facet`.** Every other read surface
   pages: `QueryPage` takes a cursor and a limit and answers a `read.Page`
   with `HasMore`/`Next`, and `Browse` does the same. `Facet` does not --

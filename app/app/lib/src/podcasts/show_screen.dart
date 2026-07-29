@@ -1,24 +1,41 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../artwork/artwork_box.dart';
+import '../artwork/artwork_providers.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
-import '../queue/queue_state.dart';
+import '../search/search_chrome.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'credits.dart';
-import 'explicit_badge.dart';
+import 'episode_actions.dart';
+import 'mark_older_played_dialog.dart';
+import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
 import 'show_notes.dart';
+import 'subscription_settings_sheet.dart';
 
 String formatEpisodeDate(DateTime when) {
   final local = when.toLocal();
   final month = local.month.toString().padLeft(2, '0');
   final day = local.day.toString().padLeft(2, '0');
   return '${local.year}-$month-$day';
+}
+
+/// The publication date as a row's leading readout: month and day, since
+/// a show's episodes are read in the order they arrived and the year is
+/// the same for almost all of them.
+String formatEpisodeDayMonth(DateTime when) {
+  final local = when.toLocal();
+  const months = <String>[
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return '${months[local.month - 1]} ${local.day}';
 }
 
 String formatEpisodeDuration(int durationMs) {
@@ -29,91 +46,546 @@ String formatEpisodeDuration(int durationMs) {
   return '${m}m';
 }
 
-/// One podcast show: header with subscribe and settings, then the paged
-/// episode list.
-class ShowScreen extends ConsumerWidget {
+/// Which episodes the list is showing.
+enum EpisodeFilterChoice {
+  all('all', 'All'),
+  unplayed('unplayed', 'Unplayed'),
+  downloaded('downloaded', 'Downloaded');
+
+  const EpisodeFilterChoice(this.name, this.label);
+
+  final String name;
+  final String label;
+}
+
+/// One podcast show: what it is, what it does automatically, and its
+/// episodes.
+class ShowScreen extends ConsumerStatefulWidget {
   const ShowScreen({super.key, required this.pid});
 
   final String pid;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final detail = ref.watch(podcastDetailProvider(pid));
-    final episodes = ref.watch(episodesProvider(pid));
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(detail.value?.show.title ?? 'Show'),
-        actions: [
+  ConsumerState<ShowScreen> createState() => _ShowScreenState();
+}
+
+class _ShowScreenState extends ConsumerState<ShowScreen> {
+  var _filter = EpisodeFilterChoice.all;
+
+  /// The chosen season, or null for every season. Only offered on a show
+  /// whose feed numbers its seasons.
+  int? _season;
+
+  /// The search-within-show query, matched against the pages already
+  /// loaded. Client-side on purpose: there is no per-show search on the
+  /// wire, and narrowing what is on screen is what the field promises.
+  var _query = '';
+
+  /// The episodes picked for a batch action. Empty means no selection
+  /// mode; the row taps go back to playing the moment it empties.
+  final Set<String> _selected = <String>{};
+
+  bool get _selecting => _selected.isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = ref.watch(podcastDetailProvider(widget.pid));
+    final episodes = ref.watch(episodesProvider(widget.pid));
+    final loaded = episodes.value?.items ?? const <EpisodeSummary>[];
+    // One read per window of loaded rows rather than one over all of
+    // them: paging then costs the page it just loaded instead of every
+    // page before it.
+    final positions = <String, EpisodeProgress>{};
+    for (final key in episodeProgressKeys(loaded)) {
+      positions.addAll(
+        ref.watch(episodeProgressProvider(key)).value ??
+            const <String, EpisodeProgress>{},
+      );
+    }
+    final view = EpisodeProgressView(positions);
+    final visible = _visible(loaded, view);
+    final title = detail.value?.show.title ?? 'Show';
+
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        final metrics = notification.metrics;
+        // Vertical only: a horizontal scroller inside the page sits at
+        // pixel zero of a short extent, which reads as "near the end".
+        if (metrics.axis != Axis.vertical) return false;
+        if (metrics.pixels >= metrics.maxScrollExtent - 600) {
+          ref.read(episodesProvider(widget.pid).notifier).loadMore();
+        }
+        return false;
+      },
+      child: WaxScaffold(
+        title: title,
+        largeTitle: false,
+        onBack: () => context.leave(fallback: WaxRoute.podcasts),
+        actions: <Widget>[
           if (detail.value?.subscribed ?? false)
-            Semantics(
-              identifier: SemanticsIds.podcastSettingsOpen,
+            WaxIconButton(
+              glyph: WaxIcons.settings,
               label: 'Subscription settings',
-              button: true,
-              child: IconButton(
-                key: const Key(SemanticsIds.podcastSettingsOpen),
-                tooltip: 'Subscription settings',
-                icon: const Icon(Icons.tune),
-                onPressed: () => _openSettings(context, ref),
+              semanticsId: SemanticsIds.podcastSettingsOpen,
+              onPressed: () => _openSettings(context),
+            ),
+          _ShowOverflow(pid: widget.pid, episodes: loaded),
+          const SearchAction(),
+        ],
+        slivers: <Widget>[
+          switch (detail) {
+            AsyncData(:final value) => SliverToBoxAdapter(
+              child: _ShowHeader(pid: widget.pid, detail: value),
+            ),
+            AsyncError(:final error) => SliverFillRemaining(
+              hasScrollBody: false,
+              child: ErrorState(
+                title: 'Could not load the show',
+                message: error is WaxDeckApiException
+                    ? error.message
+                    : 'The server did not answer.',
+                onRetry: () =>
+                    ref.invalidate(podcastDetailProvider(widget.pid)),
               ),
             ),
+            _ => const SliverToBoxAdapter(
+              child: SkeletonShapes(shape: SkeletonShape.detail),
+            ),
+          },
+          if (detail.hasValue) ...<Widget>[
+            SliverToBoxAdapter(child: _toolbar(loaded)),
+            _list(episodes, visible, view),
+          ],
         ],
       ),
-      body: switch (detail) {
-        AsyncData(:final value) => _body(context, ref, value, episodes),
-        AsyncError(:final error) => Center(
-          child: Text(
-            error is WaxDeckApiException
-                ? error.message
-                : 'Could not load the show',
-            textAlign: TextAlign.center,
-          ),
-        ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
     );
   }
 
-  void _openSettings(BuildContext context, WidgetRef ref) {
+  /// What the filters, the season, and the query leave standing.
+  List<EpisodeSummary> _visible(
+    List<EpisodeSummary> loaded,
+    EpisodeProgressView progress,
+  ) {
+    final needle = _query.trim().toLowerCase();
+    return <EpisodeSummary>[
+      for (final episode in loaded)
+        if (switch (_filter) {
+              EpisodeFilterChoice.all => true,
+              EpisodeFilterChoice.unplayed => !progress[episode.pid].played,
+              EpisodeFilterChoice.downloaded => episode.downloaded,
+            } &&
+            (_season == null || episode.season == _season) &&
+            (needle.isEmpty || episode.title.toLowerCase().contains(needle)))
+          episode,
+    ];
+  }
+
+  Widget _toolbar(List<EpisodeSummary> loaded) {
+    final sizeClass = WaxSizeClass.of(context);
+    final seasons = <int>{
+      for (final episode in loaded)
+        if (episode.season != null) episode.season!,
+    }.toList()..sort();
+
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: sizeClass.gutter.horizontal / 2,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          SearchField(
+            label: 'Search this show',
+            hint: 'Search this show',
+            semanticsId: SemanticsIds.showEpisodeSearch,
+            onChanged: (value) => setState(() => _query = value),
+          ),
+          const SizedBox(height: WaxSpace.s12),
+          FilterChipRow(
+            chips: <WaxFilterChip>[
+              for (final choice in EpisodeFilterChoice.values)
+                WaxFilterChip(
+                  name: choice.name,
+                  label: choice.label,
+                  semanticsId: SemanticsIds.showEpisodeFilter(choice.name),
+                ),
+              // Seasons join the same row rather than getting a control
+              // of their own: they are the same question (which of these
+              // episodes), and a feed that numbers none offers none.
+              for (final season in seasons)
+                WaxFilterChip(
+                  name: 'season-$season',
+                  label: 'Season $season',
+                  semanticsId: SemanticsIds.showEpisodeFilter('season-$season'),
+                ),
+            ],
+            selected: _season != null ? 'season-$_season' : _filter.name,
+            onSelect: (name) => setState(() {
+              if (name.startsWith('season-')) {
+                final chosen = int.tryParse(name.substring('season-'.length));
+                // Tapping the season you are in leaves it, which is what
+                // a single-select row of two questions can offer without
+                // a second control.
+                _season = _season == chosen ? null : chosen;
+                return;
+              }
+              _season = null;
+              _filter = EpisodeFilterChoice.values.firstWhere(
+                (choice) => choice.name == name,
+                orElse: () => EpisodeFilterChoice.all,
+              );
+            }),
+          ),
+          if (_selecting) _selectionBar(loaded),
+          const SizedBox(height: WaxSpace.s8),
+        ],
+      ),
+    );
+  }
+
+  Widget _selectionBar(List<EpisodeSummary> loaded) {
+    final chosen = <EpisodeSummary>[
+      for (final episode in loaded)
+        if (_selected.contains(episode.pid)) episode,
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(top: WaxSpace.s12),
+      child: Wrap(
+        spacing: WaxSpace.s8,
+        runSpacing: WaxSpace.s8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: <Widget>[
+          Text(
+            '${chosen.length} selected',
+            style: WaxType.label.copyWith(
+              color: WaxColors.of(context).textSecondary,
+            ),
+          ),
+          WaxButton(
+            label: 'Add to queue',
+            kind: WaxButtonKind.tonal,
+            icon: WaxIcons.addToQueue,
+            semanticsId: SemanticsIds.selectionQueue,
+            onPressed: chosen.isEmpty ? null : () => _queueSelected(chosen),
+          ),
+          WaxButton(
+            label: 'Download',
+            kind: WaxButtonKind.tonal,
+            icon: WaxIcons.downloads,
+            semanticsId: SemanticsIds.selectionDownload,
+            onPressed: chosen.isEmpty
+                ? null
+                : () => unawaited(_fetchSelected(chosen)),
+          ),
+          WaxButton(
+            label: 'Mark played',
+            kind: WaxButtonKind.tonal,
+            icon: WaxIcons.check,
+            semanticsId: SemanticsIds.selectionMarkPlayed,
+            onPressed: chosen.isEmpty
+                ? null
+                : () => unawaited(_markSelectedPlayed(chosen)),
+          ),
+          WaxButton(
+            label: 'Clear',
+            kind: WaxButtonKind.text,
+            semanticsId: SemanticsIds.selectionClear,
+            onPressed: () => setState(_selected.clear),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _list(
+    AsyncValue<EpisodeListState> episodes,
+    List<EpisodeSummary> visible,
+    EpisodeProgressView progress,
+  ) {
+    final loadingMore = episodes.value?.loadingMore ?? false;
+    return switch (episodes) {
+      AsyncError(:final error) => SliverFillRemaining(
+        hasScrollBody: false,
+        child: ErrorState(
+          title: 'Could not load the episodes',
+          message: error is WaxDeckApiException
+              ? error.message
+              : 'The server did not answer.',
+          onRetry: () => ref.invalidate(episodesProvider(widget.pid)),
+        ),
+      ),
+      // Narrowed to nothing, with more pages behind it. The filters run
+      // over what is loaded, so a show whose first page is all played
+      // has an empty Unplayed list and, this being the trap, nothing to
+      // scroll, so the notification that pages the next one can never
+      // fire. The way out is a control rather than a gesture.
+      AsyncData(:final value) when visible.isEmpty && (value.hasMore) =>
+        SliverToBoxAdapter(
+          child: EmptyState(
+            title: 'Nothing matches yet',
+            message:
+                'The filter runs over the episodes loaded so far, and this '
+                'show has more.',
+            glyph: WaxIcons.podcasts,
+            actionLabel: loadingMore ? 'Loading...' : 'Load more episodes',
+            onAction: loadingMore
+                ? null
+                : () => ref
+                      .read(episodesProvider(widget.pid).notifier)
+                      .loadMore(),
+          ),
+        ),
+      AsyncData() when visible.isEmpty => SliverToBoxAdapter(
+        child: EmptyState(
+          title: _query.isNotEmpty || _filter != EpisodeFilterChoice.all
+              ? 'Nothing matches'
+              : 'No episodes yet',
+          message: _query.isNotEmpty || _filter != EpisodeFilterChoice.all
+              ? 'Widen the filter, or clear the search, to see the rest.'
+              : 'This feed has published nothing this server can see.',
+          glyph: WaxIcons.podcasts,
+        ),
+      ),
+      AsyncData() => _rows(visible, progress, loadingMore),
+      _ => const SliverToBoxAdapter(
+        child: SkeletonShapes(shape: SkeletonShape.list),
+      ),
+    };
+  }
+
+  Widget _rows(
+    List<EpisodeSummary> visible,
+    EpisodeProgressView progress,
+    bool loadingMore,
+  ) {
+    final sizeClass = WaxSizeClass.of(context);
+    return SliverPadding(
+      padding: EdgeInsets.symmetric(
+        horizontal: sizeClass.gutter.horizontal / 2,
+      ),
+      sliver: SliverList.builder(
+        itemCount: visible.length + (loadingMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index >= visible.length) {
+            return const Padding(
+              padding: EdgeInsets.all(WaxSpace.s16),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final episode = visible[index];
+          return _EpisodeRow(
+            showPid: widget.pid,
+            episode: episode,
+            progress: progress[episode.pid],
+            selecting: _selecting,
+            selected: _selected.contains(episode.pid),
+            onSelect: (value) => setState(() {
+              if (value) {
+                _selected.add(episode.pid);
+              } else {
+                _selected.remove(episode.pid);
+              }
+            }),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openSettings(BuildContext context) {
     final settings =
-        ref.read(podcastDetailProvider(pid)).value?.settings ??
+        ref.read(podcastDetailProvider(widget.pid)).value?.settings ??
         const SubscriptionSettings();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _SubscriptionSettingsSheet(pid: pid, initial: settings),
+      builder: (_) =>
+          SubscriptionSettingsSheet(pid: widget.pid, initial: settings),
     );
   }
 
-  Widget _body(
-    BuildContext context,
-    WidgetRef ref,
-    PodcastDetail detail,
-    AsyncValue<EpisodeListState> episodes,
-  ) {
-    final list = episodes.value;
-    final items = list?.items ?? const <EpisodeSummary>[];
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        final metrics = notification.metrics;
-        if (metrics.pixels >= metrics.maxScrollExtent - 400) {
-          ref.read(episodesProvider(pid).notifier).loadMore();
-        }
-        return false;
-      },
-      child: ListView.builder(
-        itemCount: 1 + items.length + ((list?.loadingMore ?? false) ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == 0) return _ShowHeader(pid: pid, detail: detail);
-          if (index > items.length) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+  void _queueSelected(List<EpisodeSummary> chosen) {
+    // Appended, not played. "Add to queue" is the one verb on this
+    // screen that promises not to interrupt anything, and `play`
+    // replaces the whole queue and starts the first entry, which on a
+    // batch of six is the opposite of what was asked, and destroys
+    // whatever was playing.
+    final playable = <EpisodeSummary>[
+      for (final episode in chosen)
+        if (EpisodeActions.playable(episode)) episode,
+    ];
+    final refused = chosen.length - playable.length;
+    if (playable.isNotEmpty) {
+      ref.read(nowPlayingProvider.notifier).enqueue(playable);
+    }
+    setState(_selected.clear);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            <String>[
+              if (playable.isNotEmpty) '${playable.length} added to the queue',
+              // An episode whose feed named no audio cannot play, so
+              // queueing it would drop an entry that dies on arrival.
+              if (refused > 0) '$refused had no audio in the feed',
+            ].join('; '),
+          ),
+        ),
+      );
+  }
+
+  Future<void> _fetchSelected(List<EpisodeSummary> chosen) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final notifier = ref.read(episodesProvider(widget.pid).notifier);
+    var queued = 0;
+    String? failure;
+    for (final episode in chosen) {
+      if (episode.downloaded || episode.fetchState == 'queued') continue;
+      try {
+        await notifier.fetchEpisode(episode.pid);
+        queued++;
+      } on WaxDeckApiException catch (e) {
+        // One refusal does not abandon the rest: a batch is a list of
+        // independent requests, and stopping on the first would leave
+        // the selection half done with nothing said about which half.
+        failure ??= e.message;
+      }
+    }
+    if (!mounted) return;
+    setState(_selected.clear);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            failure == null
+                ? '$queued queued for download'
+                : '$queued queued; $failure',
+          ),
+        ),
+      );
+  }
+
+  Future<void> _markSelectedPlayed(List<EpisodeSummary> chosen) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final repository = ref.read(repositoryProvider);
+    var marked = 0;
+    var skipped = 0;
+    String? failure;
+    for (final episode in chosen) {
+      // A feed that declared no duration leaves no position that means
+      // finished, so there is nothing to write for it.
+      if (episode.durationMs <= 0) {
+        skipped++;
+        continue;
+      }
+      try {
+        await repository.putPlayState(episode.pid, episode.durationMs);
+        marked++;
+      } on WaxDeckApiException catch (e) {
+        failure ??= e.message;
+      }
+    }
+    if (marked > 0) {
+      // The family rather than one key: a selection spans windows, and
+      // the hub's tile draws the backlog this just changed.
+      ref.invalidate(episodeProgressProvider);
+      ref.invalidate(subscriptionsProvider);
+      ref.invalidate(upNextEpisodesProvider);
+      ref.invalidate(latestEpisodesProvider);
+    }
+    if (!mounted) return;
+    setState(_selected.clear);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            failure ??
+                <String>[
+                  '$marked marked played',
+                  if (skipped > 0) '$skipped had no duration to finish',
+                ].join('; '),
+          ),
+        ),
+      );
+  }
+}
+
+/// The show's own actions, past the ones the bar has room for.
+class _ShowOverflow extends ConsumerWidget {
+  const _ShowOverflow({required this.pid, required this.episodes});
+
+  final String pid;
+  final List<EpisodeSummary> episodes;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final subscribed =
+        ref.watch(podcastDetailProvider(pid)).value?.subscribed ?? false;
+    return WaxMenuButton<String>(
+      glyph: WaxIcons.more,
+      label: 'More for this show',
+      semanticsId: SemanticsIds.showOverflow,
+      items: <WaxMenuItem<String>>[
+        const WaxMenuItem<String>(
+          value: 'refresh',
+          label: 'Check for new episodes',
+          glyph: WaxIcons.refresh,
+        ),
+        if (subscribed)
+          const WaxMenuItem<String>(
+            value: 'mark-older',
+            label: 'Mark older episodes as played',
+            glyph: WaxIcons.check,
+            semanticsId: SemanticsIds.markOlderPlayed,
+          ),
+      ],
+      onSelected: (choice) {
+        switch (choice) {
+          case 'refresh':
+            unawaited(_refresh(context, ref));
+          case 'mark-older':
+            unawaited(
+              showDialog<void>(
+                context: context,
+                builder: (_) => MarkOlderPlayedDialog(pid: pid),
+              ),
             );
-          }
-          return _EpisodeRow(showPid: pid, episode: items[index - 1]);
-        },
-      ),
+        }
+      },
     );
+  }
+
+  Future<void> _refresh(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref.read(repositoryProvider).refreshPodcast(pid);
+      ref.invalidate(episodesProvider(pid));
+      ref.invalidate(podcastDetailProvider(pid));
+      // New episodes change what the hub's tile and shelves say, and
+      // the count a tile draws lives on the subscription row.
+      ref.invalidate(subscriptionsProvider);
+      ref.invalidate(upNextEpisodesProvider);
+      ref.invalidate(latestEpisodesProvider);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              result.newEpisodes == 0
+                  ? 'No new episodes'
+                  : '${result.newEpisodes} new '
+                        '${result.newEpisodes == 1 ? 'episode' : 'episodes'}',
+            ),
+          ),
+        );
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 }
 
@@ -125,6 +597,7 @@ class _ShowHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final show = detail.show;
     final notifier = ref.read(podcastDetailProvider(pid).notifier);
 
     Future<void> guarded(Future<void> Function() action) async {
@@ -138,7 +611,84 @@ class _ShowHeader extends ConsumerWidget {
       }
     }
 
-    return _buildHeader(context, ref, notifier, guarded);
+    final count = show.episodeCount;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        EntityHeader(
+          title: show.title,
+          subtitle: show.author,
+          domain: WaxDomain.podcasts,
+          metadata: <String>[
+            if (count != null) '$count ${count == 1 ? 'episode' : 'episodes'}',
+            if (show.lastPublishedAt != null)
+              'Latest ${formatEpisodeDate(show.lastPublishedAt!)}',
+            if (show.explicit) 'Explicit',
+          ].join(' · '),
+          artwork: ref.watch(artworkStoreProvider).source(show.artUrl),
+          actions: <Widget>[
+            if (detail.subscribed)
+              WaxButton(
+                label: 'Following',
+                kind: WaxButtonKind.tonal,
+                icon: WaxIcons.check,
+                semanticsId: SemanticsIds.podcastUnsubscribe,
+                onPressed: () => unawaited(_unsubscribe(context, ref, guarded)),
+              )
+            else
+              WaxButton(
+                label: 'Follow',
+                icon: WaxIcons.add,
+                semanticsId: SemanticsIds.podcastSubscribe,
+                onPressed: () => unawaited(guarded(notifier.subscribe)),
+              ),
+            if (show.funding != null)
+              WaxButton(
+                label: show.funding!.message?.isNotEmpty ?? false
+                    ? show.funding!.message!
+                    : 'Support this show',
+                kind: WaxButtonKind.text,
+                icon: WaxIcons.star,
+                onPressed: () =>
+                    ref.read(urlOpenerProvider).open(show.funding!.url),
+              ),
+          ],
+        ),
+        if (show.refreshDisabled)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              WaxSizeClass.of(context).gutter.horizontal / 2,
+              WaxSpace.s12,
+              WaxSizeClass.of(context).gutter.horizontal / 2,
+              0,
+            ),
+            child: const WaxBanner(
+              tone: WaxBannerTone.caution,
+              message:
+                  'Scheduled refresh is paused for this feed after repeated '
+                  'failures. Checking for new episodes turns it back on.',
+            ),
+          ),
+        if (show.descriptionHtml != null && show.descriptionHtml!.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: WaxSizeClass.of(context).gutter.horizontal / 2,
+              vertical: WaxSpace.s16,
+            ),
+            child: CollapsibleNotes(html: show.descriptionHtml!),
+          ),
+        if (show.persons.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: WaxSizeClass.of(context).gutter.horizontal / 2,
+            ),
+            child: PodcastCredits(
+              persons: show.persons,
+              onOpenLink: ref.read(urlOpenerProvider).open,
+            ),
+          ),
+      ],
+    );
   }
 
   // The unsubscribe itself never destroys anything, so it needs no
@@ -161,33 +711,25 @@ class _ShowHeader extends ConsumerWidget {
     final removeFiles = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Unsubscribe'),
+        title: const Text('Unfollow'),
         content: const Text(
           'Some episodes are downloaded on the server. Remove those '
           'files too? Removed files go to the trash, and your listening '
           'progress is kept either way. If someone else subscribes to '
           'this show, the files stay regardless.',
         ),
-        actions: [
-          Semantics(
-            identifier: SemanticsIds.unsubscribeKeepFiles,
+        actions: <Widget>[
+          WaxButton(
             label: 'Keep files',
-            button: true,
-            child: TextButton(
-              key: const Key(SemanticsIds.unsubscribeKeepFiles),
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Keep files'),
-            ),
+            kind: WaxButtonKind.text,
+            semanticsId: SemanticsIds.unsubscribeKeepFiles,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
           ),
-          Semantics(
-            identifier: SemanticsIds.unsubscribeRemoveFiles,
+          WaxButton(
             label: 'Remove files',
-            button: true,
-            child: TextButton(
-              key: const Key(SemanticsIds.unsubscribeRemoveFiles),
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Remove files'),
-            ),
+            kind: WaxButtonKind.destructive,
+            semanticsId: SemanticsIds.unsubscribeRemoveFiles,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
           ),
         ],
       ),
@@ -195,444 +737,159 @@ class _ShowHeader extends ConsumerWidget {
     if (removeFiles == null) return;
     await guarded(() => notifier.unsubscribe(removeDownloads: removeFiles));
   }
-
-  Widget _buildHeader(
-    BuildContext context,
-    WidgetRef ref,
-    PodcastDetailController notifier,
-    Future<void> Function(Future<void> Function()) guarded,
-  ) {
-    final show = detail.show;
-    final artUrl = show.artUrl;
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    final descriptionHtml = show.descriptionHtml;
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 96,
-                  height: 96,
-                  child: ArtworkBox(
-                    artUrl: artUrl,
-                    placeholder: ColoredBox(
-                      color: colorScheme.surfaceContainerHighest,
-                      child: const Icon(Icons.podcasts, size: 40),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (show.explicit)
-                          ExplicitBadge(key: ValueKey('show-explicit-$pid')),
-                        Expanded(
-                          child: Text(show.title, style: textTheme.titleLarge),
-                        ),
-                      ],
-                    ),
-                    if (show.author != null)
-                      Text(
-                        show.author!,
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    if (detail.subscribed)
-                      Semantics(
-                        identifier: SemanticsIds.podcastUnsubscribe,
-                        label: 'Unsubscribe',
-                        button: true,
-                        child: OutlinedButton(
-                          key: const Key(SemanticsIds.podcastUnsubscribe),
-                          onPressed: () => _unsubscribe(context, ref, guarded),
-                          child: const Text('Unsubscribe'),
-                        ),
-                      )
-                    else
-                      Semantics(
-                        identifier: SemanticsIds.podcastSubscribe,
-                        label: 'Subscribe',
-                        button: true,
-                        child: FilledButton(
-                          key: const Key(SemanticsIds.podcastSubscribe),
-                          onPressed: () => guarded(notifier.subscribe),
-                          child: const Text('Subscribe'),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (show.funding != null) ...[
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: () =>
-                    ref.read(urlOpenerProvider).open(show.funding!.url),
-                icon: const Icon(Icons.favorite_outline, size: 18),
-                label: Text(
-                  show.funding!.message?.isNotEmpty ?? false
-                      ? show.funding!.message!
-                      : 'Support this show',
-                ),
-              ),
-            ),
-          ],
-          if (descriptionHtml != null && descriptionHtml.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            ShowNotesView(
-              html: descriptionHtml,
-              onOpenLink: ref.read(urlOpenerProvider).open,
-            ),
-          ],
-          if (show.persons.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            PodcastCredits(
-              persons: show.persons,
-              onOpenLink: ref.read(urlOpenerProvider).open,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 }
 
-class _EpisodeRow extends ConsumerWidget {
-  const _EpisodeRow({required this.showPid, required this.episode});
+/// Show notes, clamped until asked for. A feed's description runs from
+/// one line to a page, and a page of it above the episode list buries
+/// the thing the screen is for.
+class CollapsibleNotes extends ConsumerStatefulWidget {
+  const CollapsibleNotes({
+    super.key,
+    required this.html,
+    this.collapsedTo = 120,
+  });
 
-  final String showPid;
-  final EpisodeSummary episode;
+  final String html;
 
-  Future<void> _fetch(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref
-          .read(episodesProvider(showPid).notifier)
-          .fetchEpisode(episode.pid);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Fetching to server')));
-    } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
-    }
-  }
-
-  Future<void> _removeDownload(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref
-          .read(episodesProvider(showPid).notifier)
-          .removeEpisodeDownload(episode.pid);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('Removed from server; your progress is kept'),
-          ),
-        );
-    } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
-    }
-  }
+  /// How much shows while collapsed. In pixels rather than lines: the
+  /// notes are arbitrary HTML, so there is no line count to clamp.
+  final double collapsedTo;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final subtitleParts = [
-      formatEpisodeDate(episode.publishedAt),
-      if (episode.durationMs > 0) formatEpisodeDuration(episode.durationMs),
-    ];
-    final chip = episode.downloaded
-        ? const Chip(
-            label: Text('Downloaded'),
-            visualDensity: VisualDensity.compact,
-          )
-        : switch (episode.fetchState) {
-            'failed' => const Chip(
-              label: Text('Failed'),
-              visualDensity: VisualDensity.compact,
-            ),
-            null => null,
-            // Open set: anything pending-ish reads as queued.
-            _ => const Chip(
-              label: Text('Queued'),
-              visualDensity: VisualDensity.compact,
-            ),
-          };
-    final showFetchButton =
-        !episode.downloaded &&
-        (episode.fetchState == null || episode.fetchState == 'failed');
-
-    return Semantics(
-      identifier: SemanticsIds.episode(episode.pid),
-      label: episode.title,
-      button: true,
-      child: ListTile(
-        key: ValueKey(SemanticsIds.episode(episode.pid)),
-        title: Row(
-          children: [
-            if (episode.explicit)
-              ExplicitBadge(key: ValueKey('episode-explicit-${episode.pid}')),
-            Expanded(
-              child: Text(
-                episode.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        subtitle: Text(subtitleParts.join(' | ')),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ?chip,
-            if (showFetchButton)
-              Semantics(
-                identifier: SemanticsIds.episodeFetch(episode.pid),
-                label: 'Fetch episode',
-                button: true,
-                excludeSemantics: true,
-                onTap: () => _fetch(context, ref),
-                child: IconButton(
-                  key: ValueKey(SemanticsIds.episodeFetch(episode.pid)),
-                  tooltip: 'Fetch to server',
-                  icon: const Icon(Icons.cloud_download_outlined),
-                  onPressed: () => _fetch(context, ref),
-                ),
-              ),
-            if (episode.downloaded)
-              Semantics(
-                identifier: SemanticsIds.episodeRemove(episode.pid),
-                label: 'Remove download',
-                button: true,
-                excludeSemantics: true,
-                onTap: () => _removeDownload(context, ref),
-                child: IconButton(
-                  key: ValueKey(SemanticsIds.episodeRemove(episode.pid)),
-                  tooltip: 'Remove from server',
-                  icon: const Icon(Icons.cloud_off_outlined),
-                  onPressed: () => _removeDownload(context, ref),
-                ),
-              ),
-            Semantics(
-              identifier: SemanticsIds.episodeInfo(episode.pid),
-              label: 'Episode details',
-              button: true,
-              excludeSemantics: true,
-              onTap: () => _openInfo(context),
-              child: IconButton(
-                key: ValueKey(SemanticsIds.episodeInfo(episode.pid)),
-                tooltip: 'Episode details',
-                icon: const Icon(Icons.info_outline),
-                onPressed: () => _openInfo(context),
-              ),
-            ),
-          ],
-        ),
-        onTap: () {
-          if (episode.downloaded) {
-            // One episode, never the feed: an episode is a thing on its
-            // own, and a show is not an album.
-            ref.read(nowPlayingProvider.notifier).play(
-              [episode],
-              source: QueueSource(
-                kind: QueueSourceKind.single,
-                label: episode.title,
-                pid: episode.pid,
-              ),
-            );
-            context.push(WaxRoute.nowPlaying);
-          } else {
-            _fetch(context, ref);
-          }
-        },
-      ),
-    );
-  }
-
-  void _openInfo(BuildContext context) {
-    // Pushed: `/episodes/:pid` names no show, so `go` would build nothing
-    // beneath it and leaving would land on the hub rather than here. The
-    // location still resolves for anyone who types or shares it.
-    context.push(WaxRoute.episode(episode.pid));
-  }
+  ConsumerState<CollapsibleNotes> createState() => _CollapsibleNotesState();
 }
 
-/// Per-subscription settings editor; Save PUTs the complete object.
-class _SubscriptionSettingsSheet extends ConsumerStatefulWidget {
-  const _SubscriptionSettingsSheet({required this.pid, required this.initial});
-
-  final String pid;
-  final SubscriptionSettings initial;
-
-  @override
-  ConsumerState<_SubscriptionSettingsSheet> createState() =>
-      _SubscriptionSettingsSheetState();
-}
-
-class _SubscriptionSettingsSheetState
-    extends ConsumerState<_SubscriptionSettingsSheet> {
-  late double _speed;
-  late bool _trimSilence;
-  late bool _voiceBoost;
-  late bool _autoDownload;
-  late final TextEditingController _retention;
-  var _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _speed = widget.initial.speed ?? 1.0;
-    _trimSilence = widget.initial.trimSilence ?? false;
-    _voiceBoost = widget.initial.voiceBoost ?? false;
-    _autoDownload = widget.initial.autoDownload;
-    _retention = TextEditingController(
-      text: widget.initial.retentionKeep?.toString() ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _retention.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-    final retentionText = _retention.text.trim();
-    final settings = SubscriptionSettings(
-      retentionKeep: retentionText.isEmpty ? null : int.tryParse(retentionText),
-      autoDownload: _autoDownload,
-      folder: widget.initial.folder,
-      private: widget.initial.private,
-      speed: _speed,
-      trimSilence: _trimSilence,
-      voiceBoost: _voiceBoost,
-      skipIntroSeconds: widget.initial.skipIntroSeconds,
-      skipOutroSeconds: widget.initial.skipOutroSeconds,
-    );
-    try {
-      await ref
-          .read(podcastDetailProvider(widget.pid).notifier)
-          .saveSettings(settings);
-      navigator.pop();
-    } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
+class _CollapsibleNotesState extends ConsumerState<CollapsibleNotes> {
+  var _open = false;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: _open ? double.infinity : widget.collapsedTo,
+          ),
+          child: ClipRect(
+            child: ShowNotesView(
+              html: widget.html,
+              onOpenLink: ref.read(urlOpenerProvider).open,
+            ),
+          ),
+        ),
+        WaxButton(
+          label: _open ? 'Show less' : 'Show more',
+          kind: WaxButtonKind.text,
+          onPressed: () => setState(() => _open = !_open),
+        ),
+      ],
+    );
+  }
+}
+
+/// One episode in a show's list.
+class _EpisodeRow extends ConsumerWidget {
+  const _EpisodeRow({
+    required this.showPid,
+    required this.episode,
+    required this.progress,
+    required this.selecting,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final String showPid;
+  final EpisodeSummary episode;
+  final EpisodeProgress progress;
+  final bool selecting;
+  final bool selected;
+  final ValueChanged<bool> onSelect;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final actions = EpisodeActions(ref: ref, showPid: showPid);
+    final remaining = episode.durationMs - progress.positionMs;
+    final trailing = progress.inProgress && remaining > 0
+        ? '${formatEpisodeDuration(remaining)} left'
+        : formatEpisodeDuration(episode.durationMs);
+
+    final facts = <String>[
+      if (episode.season != null && episode.episodeNumber != null)
+        'S${episode.season} E${episode.episodeNumber}'
+      else if (episode.episodeNumber != null)
+        'E${episode.episodeNumber}',
+      if (episode.explicit) 'Explicit',
+      if (episode.fetchState == 'failed')
+        'Download failed'
+      else if (episode.fetchState != null && !episode.downloaded)
+        'Queued for download'
+      // Said on the row rather than left to the tap: an episode this
+      // server holds no bytes for still plays, relayed from the feed's
+      // own host, and the one that cannot play at all is the one whose
+      // feed named no audio.
+      else if (!episode.downloaded && !episode.hasEnclosure)
+        'No audio in the feed',
+    ];
+
+    return MediaListRow(
+      data: MediaTileData(
+        title: episode.title,
+        subtitle: facts.isEmpty ? null : facts.join(' · '),
+        domain: WaxDomain.podcasts,
+        progress: progress.fractionOf(episode.durationMs),
+        trailingText: trailing,
+        downloaded: episode.downloaded,
+        unplayed: !progress.played && progress.positionMs == 0,
+        semanticsId: SemanticsIds.episode(episode.pid),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Subscription settings',
-            style: Theme.of(context).textTheme.titleMedium,
+      leadingText: formatEpisodeDayMonth(episode.publishedAt),
+      onSelect: selecting ? onSelect : null,
+      selectSemanticsId: SemanticsIds.episodeSelect(episode.pid),
+      selected: selected,
+      actions: <Widget>[
+        if (!episode.downloaded &&
+            (episode.fetchState == null || episode.fetchState == 'failed'))
+          WaxIconButton(
+            glyph: WaxIcons.downloads,
+            label: 'Fetch ${episode.title} to the server',
+            size: 18,
+            semanticsId: SemanticsIds.episodeFetch(episode.pid),
+            onPressed: () => unawaited(actions.fetch(context, episode.pid)),
           ),
-          const SizedBox(height: 8),
-          Text('Speed ${_speed.toStringAsFixed(2)}x'),
-          Semantics(
-            identifier: SemanticsIds.podcastSettingsSpeed,
-            label: 'Playback speed',
-            child: Slider(
-              key: const Key(SemanticsIds.podcastSettingsSpeed),
-              value: _speed,
-              min: 0.5,
-              max: 3.5,
-              divisions: 60,
-              label: _speed.toStringAsFixed(2),
-              onChanged: (v) => setState(() => _speed = v),
+        if (episode.downloaded)
+          WaxIconButton(
+            glyph: WaxIcons.offline,
+            label: 'Remove ${episode.title} from the server',
+            size: 18,
+            semanticsId: SemanticsIds.episodeRemove(episode.pid),
+            onPressed: () =>
+                unawaited(actions.removeDownload(context, episode.pid)),
+          ),
+        WaxIconButton(
+          glyph: WaxIcons.info,
+          label: 'Details for ${episode.title}',
+          size: 18,
+          semanticsId: SemanticsIds.episodeInfo(episode.pid),
+          // Gone to, not pushed: the episode is declared beneath this
+          // show, so this location is the one it says it is and leaving
+          // it lands back here whether the visitor tapped in or opened
+          // the link cold.
+          onPressed: () =>
+              context.go(WaxRoute.showEpisode(showPid, episode.pid)),
+        ),
+      ],
+      // Long-press starts a selection, which is how a batch begins on
+      // touch. Not `onMore`, which would draw an overflow button
+      // announcing itself as "More for [title]" whose only action is to
+      // start selecting, and which would then vanish once one was
+      // running. `MediaListRow` takes the gesture without the control.
+      onLongPress: selecting ? null : () => onSelect(true),
+      onTap: () => selecting
+          ? onSelect(!selected)
+          : unawaited(
+              actions.play(context, episode, positionMs: progress.positionMs),
             ),
-          ),
-          SwitchListTile(
-            key: const Key('podcast-settings-trim'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Trim silence'),
-            value: _trimSilence,
-            onChanged: (v) => setState(() => _trimSilence = v),
-          ),
-          SwitchListTile(
-            key: const Key('podcast-settings-boost'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Voice boost'),
-            value: _voiceBoost,
-            onChanged: (v) => setState(() => _voiceBoost = v),
-          ),
-          SwitchListTile(
-            key: const Key('podcast-settings-autodownload'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Auto-download new episodes'),
-            value: _autoDownload,
-            onChanged: (v) => setState(() => _autoDownload = v),
-          ),
-          Semantics(
-            identifier: SemanticsIds.podcastSettingsRetention,
-            textField: true,
-            child: TextField(
-              key: const Key(SemanticsIds.podcastSettingsRetention),
-              controller: _retention,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Episodes to keep',
-                helperText: 'Empty uses the server default; 0 keeps all',
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Semantics(
-              identifier: SemanticsIds.podcastSettingsSave,
-              label: 'Save settings',
-              button: true,
-              child: FilledButton(
-                key: const Key(SemanticsIds.podcastSettingsSave),
-                onPressed: _busy ? null : _save,
-                child: const Text('Save'),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

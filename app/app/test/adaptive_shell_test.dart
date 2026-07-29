@@ -31,6 +31,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
+const _episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
 
 const _admin = WaxDeckUser(
   id: 'us-1',
@@ -53,8 +54,15 @@ Future<ProviderContainer> _pumpShell(
     overrides: [
       repositoryProvider.overrideWithValue(
         FakeRepository(
-          sessionState: SessionState(authenticated: true, user: user),
-        )..addSubscription(testShow(_showPid)),
+            sessionState: SessionState(authenticated: true, user: user),
+          )
+          ..addSubscription(testShow(_showPid))
+          // The show's episodes, so the drill-in assertions render a
+          // screen rather than a not-found: a chrome test is about what
+          // the chrome highlights, not about a failed fetch.
+          ..episodesByShow[_showPid] = <EpisodeSummary>[
+            testEpisode(_episodePid),
+          ],
       ),
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
       // The shell hosts the deck bar, so mounting it builds playback:
@@ -258,11 +266,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(_selected(tester), WaxNavTarget.trash.name);
 
-    // An episode is a podcasts location whose path cannot sit under
-    // `/podcasts`, so nothing but home claims it by prefix. The branch on
-    // screen is what settles it; lighting Home here would have the chrome
-    // contradict the router.
-    container.read(routerProvider).go(WaxRoute.episode('ep-1'));
+    // The show-less episode location, which a search hit opens because a
+    // hit carries no show, cannot sit under `/podcasts`, so nothing but
+    // home claims it by prefix. The branch on screen is what settles it;
+    // lighting Home here would have the chrome contradict the router.
+    // (The canonical location has the show in the path and is claimed by
+    // prefix like any other drill-in.)
+    container.read(routerProvider).go(WaxRoute.episode(_episodePid));
     await tester.pumpAndSettle();
     expect(_selected(tester), WaxNavTarget.podcasts.name);
   });

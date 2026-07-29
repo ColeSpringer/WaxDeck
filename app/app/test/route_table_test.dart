@@ -95,6 +95,9 @@ final _locations = <String, Type>{
   WaxRoute.playlist('pl-1'): PlaylistScreen,
   WaxRoute.podcasts: PodcastsScreen,
   WaxRoute.show('pc-1'): ShowScreen,
+  // The canonical episode location, with its show in the path, and the
+  // show-less one a search hit opens and an older link still carries.
+  WaxRoute.showEpisode('pc-1', 'ep-1'): EpisodeScreen,
   WaxRoute.episode('ep-1'): EpisodeScreen,
   WaxRoute.book('bk-1'): BookScreen,
   WaxRoute.radio: RadioScreen,
@@ -150,6 +153,9 @@ final _stackedInShell = <String>{
   WaxRoute.artistTracks('ar-1'),
   WaxRoute.book('bk-1'),
   WaxRoute.show('pc-1'),
+  // Declared beneath its show, which is the point of putting the show in
+  // the path: a stranger opening the link gets the show underneath.
+  WaxRoute.showEpisode('pc-1', 'ep-1'),
   WaxRoute.playlist('pl-1'),
   WaxRoute.listenLog,
   WaxRoute.yearInReview,

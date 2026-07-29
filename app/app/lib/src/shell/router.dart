@@ -315,12 +315,9 @@ final publicRoutes = <RouteBase>[
 /// track list, a remote session — are declared outside the shell, on the
 /// signed-in navigator, so they cover the chrome and back closes them.
 ///
-/// Two consequences worth knowing, both narrowed by later phases. A book
-/// lives in the home branch, because that is where books are reached from
-/// until there is a books hub, so opening one from Browse lights Home.
-/// And `/episodes/:pid` is a location of its own rather than a child of
-/// its show, which is what the route map calls for, so leaving an episode
-/// lands on the podcasts hub rather than the show.
+/// One consequence worth knowing, narrowed by a later phase: a book lives
+/// in the home branch, because that is where books are reached from until
+/// there is a books hub, so opening one from Browse lights Home.
 List<RouteBase> shellRoutes() => <RouteBase>[
   StatefulShellRoute.indexedStack(
     builder: (context, state, navigationShell) =>
@@ -373,11 +370,25 @@ List<RouteBase> shellRoutes() => <RouteBase>[
                 path: ':pid',
                 builder: (context, state) =>
                     ShowScreen(pid: state.pathParameters['pid']!),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: 'episodes/:episodePid',
+                    builder: (context, state) => EpisodeScreen(
+                      pid: state.pathParameters['episodePid']!,
+                      showPid: state.pathParameters['pid']!,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
+          // The same episode with no show around it, for a caller that
+          // has only a pid: a search hit, and a link minted before the
+          // show moved into the path. It resolves to the screen and
+          // leaves to the hub, which is the honest answer when nothing
+          // names an ancestor.
           GoRoute(
-            path: '/episodes/:pid',
+            path: '${WaxRoute.episodePrefix}:pid',
             builder: (context, state) =>
                 EpisodeScreen(pid: state.pathParameters['pid']!),
           ),

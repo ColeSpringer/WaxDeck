@@ -230,6 +230,30 @@ class NowPlayingController extends Notifier<NowPlaying> {
     );
   }
 
+  /// Adds [items] to the end of the queue without disturbing what is
+  /// playing.
+  ///
+  /// Records the summaries first, the same reason [play] does: an entry
+  /// added by hand is drawn from what the caller knew about it long
+  /// before its own start resolves one, and a queue row reading "Loading"
+  /// for something the screen was showing a title for is the seam
+  /// showing.
+  ///
+  /// An empty queue takes them as its whole contents, which is what the
+  /// queue layer already does with an insert into nothing, and playback
+  /// follows the queue's current entry, so adding to nothing starts it.
+  /// That is the design rather than a surprise: there is one queue and
+  /// playback is a view of it.
+  void enqueue(List<ItemSummary> items) {
+    if (items.isEmpty) return;
+    for (final item in items) {
+      _known[item.pid] = item;
+    }
+    ref.read(queueControllerProvider.notifier).addToEnd([
+      for (final item in items) item.pid,
+    ]);
+  }
+
   /// The same verb for a queue named by pid alone, which is what
   /// arrives from outside the widget tree: a queue handed to this
   /// endpoint by another device, or a browse leaf tapped on a head

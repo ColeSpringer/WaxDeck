@@ -74,7 +74,28 @@ abstract final class WaxRoute {
 
   static const podcasts = '/podcasts';
   static String show(String pid) => '$podcasts/$pid';
-  static String episode(String pid) => '/episodes/$pid';
+
+  /// One episode, beneath the show it belongs to.
+  ///
+  /// The show is in the path because an episode's ancestry is real: a
+  /// stranger opening this gets the episode with its show underneath, so
+  /// back lands on the show from a shared link exactly as it does from a
+  /// tap, and the address bar follows the hop. The flat location this
+  /// replaced could only be pushed, because `go` would have built the
+  /// hub beneath it and leaving an episode landed on a list of shows.
+  static String showEpisode(String showPid, String pid) =>
+      '${show(showPid)}/episodes/$pid';
+
+  /// The same episode for a caller with no show in hand.
+  ///
+  /// Search hits carry a pid, a kind, and display text and nothing else,
+  /// so this is the location they can build; it also keeps the links the
+  /// flat route minted before the show moved into the path working. A
+  /// screen opened here has no ancestry, so it is pushed and leaves to
+  /// the hub. [showEpisode] is what every caller that knows the show
+  /// uses.
+  static const episodePrefix = '/episodes/';
+  static String episode(String pid) => '$episodePrefix$pid';
 
   static String book(String pid) => '/books/$pid';
 

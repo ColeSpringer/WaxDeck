@@ -29,7 +29,7 @@ func (s *Server) ListSubscriptions(ctx context.Context, req ListSubscriptionsReq
 	if req.Params.Cursor != nil {
 		cursor = *req.Params.Cursor
 	}
-	subs, next, err := s.svc.Subscriptions(ctx, uc, cursor, limit)
+	subs, next, err := s.svc.Subscriptions(ctx, uc, cursor, limit, true)
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {
 			return ListSubscriptions400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
@@ -139,6 +139,36 @@ func (s *Server) PutSubscriptionSettings(ctx context.Context, req PutSubscriptio
 		return nil, err
 	}
 	return PutSubscriptionSettings200JSONResponse(subscriptionJSON(sub)), nil
+}
+
+func (s *Server) ListSubscribedEpisodes(ctx context.Context, req ListSubscribedEpisodesRequestObject) (ListSubscribedEpisodesResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limit, ok := pageLimit(req.Params.Limit, 100, 500)
+	if !ok {
+		return ListSubscribedEpisodes400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
+	}
+	filter := service.EpisodesLatest
+	if req.Params.Filter != nil {
+		filter = service.SubscribedEpisodeFilter(*req.Params.Filter)
+	}
+	eps, next, err := s.svc.SubscribedEpisodes(ctx, uc, filter, deref(req.Params.Cursor), limit)
+	if err != nil {
+		if service.KindOf(err) == service.KindInvalid {
+			return ListSubscribedEpisodes400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	page := EpisodePage{Items: make([]EpisodeSummary, 0, len(eps))}
+	for _, ep := range eps {
+		page.Items = append(page.Items, episodeSummaryJSON(ep))
+	}
+	if next != "" {
+		page.NextCursor = &next
+	}
+	return ListSubscribedEpisodes200JSONResponse(page), nil
 }
 
 func (s *Server) ListEpisodes(ctx context.Context, req ListEpisodesRequestObject) (ListEpisodesResponseObject, error) {
@@ -763,6 +793,11 @@ func subscriptionJSON(sub service.Subscription) Subscription {
 		Show:         showJSON(sub.Show),
 		Settings:     settingsJSON(sub.Settings),
 		SubscribedAt: time.Unix(0, sub.SubscribedAtNS).UTC(),
+		// Omitted rather than zeroed where it was not computed: the
+		// field means "this many are waiting", and a hard zero on the
+		// response to subscribing would say the opposite of the truth
+		// about a show whose whole backlog is unheard.
+		UnplayedCount: sub.UnplayedCount,
 	}
 }
 

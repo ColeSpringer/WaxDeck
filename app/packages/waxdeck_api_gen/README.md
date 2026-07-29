@@ -462,6 +462,7 @@ Class | Method | HTTP request | Description
 [*PodcastsApi*](doc/PodcastsApi.md) | [**getPodcast**](doc/PodcastsApi.md#getpodcast) | **GET** /podcasts/{pid} | Get one show with the caller&#39;s subscription state
 [*PodcastsApi*](doc/PodcastsApi.md) | [**importOpml**](doc/PodcastsApi.md#importopml) | **POST** /podcasts/opml | Import subscriptions from OPML
 [*PodcastsApi*](doc/PodcastsApi.md) | [**listEpisodes**](doc/PodcastsApi.md#listepisodes) | **GET** /podcasts/{pid}/episodes | List a show&#39;s episodes
+[*PodcastsApi*](doc/PodcastsApi.md) | [**listSubscribedEpisodes**](doc/PodcastsApi.md#listsubscribedepisodes) | **GET** /podcasts/episodes | List episodes across the caller&#39;s subscriptions
 [*PodcastsApi*](doc/PodcastsApi.md) | [**listSubscriptions**](doc/PodcastsApi.md#listsubscriptions) | **GET** /podcasts | List the caller&#39;s podcast subscriptions
 [*PodcastsApi*](doc/PodcastsApi.md) | [**putSubscriptionSettings**](doc/PodcastsApi.md#putsubscriptionsettings) | **PUT** /podcasts/{pid}/settings | Replace the caller&#39;s settings for a subscription
 [*PodcastsApi*](doc/PodcastsApi.md) | [**refreshPodcast**](doc/PodcastsApi.md#refreshpodcast) | **POST** /podcasts/{pid}/refresh | Refresh a show&#39;s feed now

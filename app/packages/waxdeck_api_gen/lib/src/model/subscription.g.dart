@@ -13,6 +13,8 @@ class _$Subscription extends Subscription {
   final SubscriptionSettings settings;
   @override
   final DateTime subscribedAt;
+  @override
+  final int? unplayedCount;
 
   factory _$Subscription([void Function(SubscriptionBuilder)? updates]) =>
       (SubscriptionBuilder()..update(updates))._build();
@@ -21,6 +23,7 @@ class _$Subscription extends Subscription {
     required this.show_,
     required this.settings,
     required this.subscribedAt,
+    this.unplayedCount,
   }) : super._();
   @override
   Subscription rebuild(void Function(SubscriptionBuilder) updates) =>
@@ -35,7 +38,8 @@ class _$Subscription extends Subscription {
     return other is Subscription &&
         show_ == other.show_ &&
         settings == other.settings &&
-        subscribedAt == other.subscribedAt;
+        subscribedAt == other.subscribedAt &&
+        unplayedCount == other.unplayedCount;
   }
 
   @override
@@ -44,6 +48,7 @@ class _$Subscription extends Subscription {
     _$hash = $jc(_$hash, show_.hashCode);
     _$hash = $jc(_$hash, settings.hashCode);
     _$hash = $jc(_$hash, subscribedAt.hashCode);
+    _$hash = $jc(_$hash, unplayedCount.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -53,7 +58,8 @@ class _$Subscription extends Subscription {
     return (newBuiltValueToStringHelper(r'Subscription')
           ..add('show_', show_)
           ..add('settings', settings)
-          ..add('subscribedAt', subscribedAt))
+          ..add('subscribedAt', subscribedAt)
+          ..add('unplayedCount', unplayedCount))
         .toString();
   }
 }
@@ -77,6 +83,11 @@ class SubscriptionBuilder
   set subscribedAt(DateTime? subscribedAt) =>
       _$this._subscribedAt = subscribedAt;
 
+  int? _unplayedCount;
+  int? get unplayedCount => _$this._unplayedCount;
+  set unplayedCount(int? unplayedCount) =>
+      _$this._unplayedCount = unplayedCount;
+
   SubscriptionBuilder() {
     Subscription._defaults(this);
   }
@@ -87,6 +98,7 @@ class SubscriptionBuilder
       _show_ = $v.show_.toBuilder();
       _settings = $v.settings.toBuilder();
       _subscribedAt = $v.subscribedAt;
+      _unplayedCount = $v.unplayedCount;
       _$v = null;
     }
     return this;
@@ -118,6 +130,7 @@ class SubscriptionBuilder
               r'Subscription',
               'subscribedAt',
             ),
+            unplayedCount: unplayedCount,
           );
     } catch (_) {
       late String _$failedField;

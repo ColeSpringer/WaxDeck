@@ -77,14 +77,20 @@ func (fs *feedServer) writeFeed(t *testing.T, n int) {
 				`<podcast:person role="Guest">Guest Star</podcast:person>` +
 				`<podcast:soundbite startTime="1.5" duration="1.0">A great moment</podcast:soundbite>`
 		}
+		// The feed declares a duration, as real feeds do. It is the only
+		// length an unfetched episode has: the catalog item is fileless
+		// until a fetch lands, so this is what every listing reports and
+		// what the played threshold is measured against.
 		fmt.Fprintf(&items, `<item>
 			<title>Episode %d</title>
 			<guid isPermaLink="false">ep-guid-%d</guid>
 			<pubDate>%s</pubDate>
+			<itunes:duration>%d</itunes:duration>
 			<description><![CDATA[<p>Notes for <b>episode %d</b></p><script>alert(1)</script>]]></description>
 			%s
 			<enclosure url="%s/%s" type="audio/mpeg" length="%d"/>
-		</item>`, i+1, i+1, base.AddDate(0, 0, i).Format(time.RFC1123Z), i+1, extra, fs.ts.URL, fs.files[i], info.Size())
+		</item>`, i+1, i+1, base.AddDate(0, 0, i).Format(time.RFC1123Z),
+			int(fs.specs[i].Duration.Seconds()), i+1, extra, fs.ts.URL, fs.files[i], info.Size())
 	}
 	doc := `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0">
@@ -1526,5 +1532,169 @@ func TestEnclosureHeadDoesNotPullTheEpisode(t *testing.T) {
 	// moves all 8 MB straight past it.
 	if got := served.Load(); got > size/2 {
 		t.Errorf("a HEAD probe pulled %d bytes of a %d byte episode", got, size)
+	}
+}
+
+// TestSubscribedEpisodesAndUnplayedCount covers the two reads the hub is
+// built on. Both exist because nothing else on the wire answers them: a
+// discovery list is over the whole library and returns generic summary
+// rows, and an unplayed backlog is an aggregate a client holding one
+// page of episodes cannot compute without claiming a window is the whole.
+func TestSubscribedEpisodesAndUnplayedCount(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 3)
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+
+	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+	episodes := decode[EpisodePage](t, resp).Items
+	if len(episodes) != 3 {
+		t.Fatalf("episodes = %d, want 3", len(episodes))
+	}
+
+	// Nothing played yet: the whole feed is the backlog.
+	if got := unplayedFor(t, h, show); got != 3 {
+		t.Fatalf("unplayedCount = %d before any listening, want 3", got)
+	}
+
+	// The tile's other two numbers ride the same walk, so a subscription
+	// row can order by recency and say how big a show is. Both were
+	// absent before, which made the hub's default sort a no-op.
+	resp = get(t, h.ts, "/api/v1/podcasts", h.token)
+	row := decode[SubscriptionPage](t, resp).Items[0]
+	if row.Show.EpisodeCount == nil || *row.Show.EpisodeCount != 3 {
+		t.Errorf("subscription row episodeCount = %v, want 3", row.Show.EpisodeCount)
+	}
+	if row.Show.LastPublishedAt == nil {
+		t.Error("a subscription row carries no lastPublishedAt to sort by")
+	}
+
+	// Absent, not zero, where nothing computed it: the response to
+	// subscribing would otherwise tell a client that just followed a
+	// backlog it has nothing waiting.
+	resp = h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	if again := decode[Subscription](t, resp).UnplayedCount; again != nil {
+		t.Errorf("subscribe answered unplayedCount %d; it computes none", *again)
+	}
+	resp = reqAs(t, h, "PUT", "/api/v1/podcasts/"+show+"/settings", h.token,
+		map[string]any{"autoDownload": false})
+	if saved := decode[Subscription](t, resp).UnplayedCount; saved != nil {
+		t.Errorf("saving settings answered unplayedCount %d; it computes none", *saved)
+	}
+
+	// Newest first, and every row carries the two fields a hub row needs
+	// and a generic summary has not got.
+	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=latest", h.token)
+	latest := decode[EpisodePage](t, resp).Items
+	if len(latest) != 3 {
+		t.Fatalf("latest = %d, want 3", len(latest))
+	}
+	for _, ep := range latest {
+		if ep.ShowPid != show {
+			t.Errorf("row %s carries showPid %q, want %q", ep.Pid, ep.ShowPid, show)
+		}
+		if ep.HasEnclosure == nil || !*ep.HasEnclosure {
+			t.Errorf("row %s should report an enclosure the relay can serve", ep.Pid)
+		}
+	}
+	for i := 1; i < len(latest); i++ {
+		if latest[i-1].PublishedAt.Before(latest[i].PublishedAt) {
+			t.Fatalf("latest is not newest first: %v then %v",
+				latest[i-1].PublishedAt, latest[i].PublishedAt)
+		}
+	}
+
+	// Finish one and start another. Played is derived from the position
+	// reached against the item's duration, and none of these have been
+	// fetched. The catalog coalesces to the length the feed declared,
+	// which is what makes a backlog markable without downloading it.
+	finished, started := latest[0], latest[1]
+	putPlayState(t, h, finished.Pid, finished.DurationMs)
+	putPlayState(t, h, started.Pid, 1_000)
+
+	if got := unplayedFor(t, h, show); got != 2 {
+		t.Errorf("unplayedCount = %d after finishing one, want 2", got)
+	}
+
+	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=unplayed", h.token)
+	for _, ep := range decode[EpisodePage](t, resp).Items {
+		if ep.Pid == finished.Pid {
+			t.Error("a finished episode is still in the unplayed listing")
+		}
+	}
+
+	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=in-progress", h.token)
+	inProgress := decode[EpisodePage](t, resp).Items
+	if len(inProgress) != 1 || inProgress[0].Pid != started.Pid {
+		t.Fatalf("in-progress = %+v, want only the started episode", inProgress)
+	}
+
+	// An unknown filter is refused rather than silently answered as
+	// latest, since a client asking for one it invented is a bug.
+	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=whatever", h.token)
+	resp.Body.Close()
+	if resp.StatusCode != 400 {
+		t.Errorf("unknown filter status = %d, want 400", resp.StatusCode)
+	}
+
+	// A cursor carries the filter it was issued under. The two orders
+	// interleave differently (publication time against last-played time),
+	// so resuming one from the other's boundary would answer a page
+	// that looks right and is not.
+	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=latest&limit=1", h.token)
+	page := decode[EpisodePage](t, resp)
+	if page.NextCursor == nil {
+		t.Fatal("a capped page should carry a cursor")
+	}
+	resp = get(t, h.ts,
+		"/api/v1/podcasts/episodes?filter=in-progress&cursor="+*page.NextCursor, h.token)
+	resp.Body.Close()
+	if resp.StatusCode != 400 {
+		t.Errorf("a cursor reused under another filter = %d, want 400", resp.StatusCode)
+	}
+	// Under its own filter it pages, rather than being refused for the
+	// sake of it.
+	resp = get(t, h.ts,
+		"/api/v1/podcasts/episodes?filter=latest&cursor="+*page.NextCursor, h.token)
+	rest := decode[EpisodePage](t, resp).Items
+	if len(rest) != 2 || rest[0].Pid == page.Items[0].Pid {
+		t.Errorf("paging under the issuing filter answered %d rows starting at %v",
+			len(rest), rest)
+	}
+
+	// Unfollowing empties the listing: it is over what the caller
+	// follows, not over what the catalog holds.
+	resp = reqAs(t, h, "DELETE", "/api/v1/podcasts/"+show, h.token, nil)
+	resp.Body.Close()
+	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=latest", h.token)
+	if got := decode[EpisodePage](t, resp).Items; len(got) != 0 {
+		t.Errorf("an unfollowed show still lists %d episodes", len(got))
+	}
+}
+
+func unplayedFor(t *testing.T, h *harness, show string) int {
+	t.Helper()
+	resp := get(t, h.ts, "/api/v1/podcasts", h.token)
+	for _, sub := range decode[SubscriptionPage](t, resp).Items {
+		if sub.Show.Pid != show {
+			continue
+		}
+		if sub.UnplayedCount == nil {
+			t.Fatal("a subscription answered no unplayedCount")
+		}
+		return *sub.UnplayedCount
+	}
+	t.Fatalf("no subscription for %s", show)
+	return 0
+}
+
+func putPlayState(t *testing.T, h *harness, pid string, positionMs int64) {
+	t.Helper()
+	resp := reqAs(t, h, "PUT", "/api/v1/items/"+pid+"/play-state", h.token,
+		map[string]any{"positionMs": positionMs})
+	resp.Body.Close()
+	if resp.StatusCode != 204 {
+		t.Fatalf("play-state for %s = %d", pid, resp.StatusCode)
 	}
 }

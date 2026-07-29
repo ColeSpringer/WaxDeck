@@ -9,6 +9,7 @@ import '../metadata/metadata_controller.dart';
 import '../player/entity_play_state_controller.dart';
 import '../player/play_state_controller.dart';
 import '../playlists/playlists_controller.dart';
+import '../podcasts/podcast_shelves.dart';
 import '../podcasts/podcasts_controller.dart';
 import '../providers.dart';
 import '../review/review_controller.dart';
@@ -46,6 +47,10 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     ref.invalidate(podcastDetailProvider);
     ref.invalidate(episodesProvider);
     ref.invalidate(episodeDetailProvider);
+    // A feed refresh that adds episodes is a catalog change, and the
+    // hub's shelves are the surface that is about what just arrived.
+    ref.invalidate(upNextEpisodesProvider);
+    ref.invalidate(latestEpisodesProvider);
     // A catalog change can shift any smart playlist's evaluation.
     ref.invalidate(playlistDetailProvider);
     // Applied review decisions and enrichment rewrite item metadata
@@ -62,9 +67,15 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     ref.invalidate(prefsControllerProvider);
     // Subscriptions and their settings ride the user stream, and a
     // membership change also reshapes the caller's own catalog view
-    // (episodes scope to subscriptions), so the grid refetches too.
+    // (episodes scope to subscriptions), so the grid refetches too. The
+    // unplayed count on each row and both hub shelves are read against
+    // the caller's positions, so a checkpoint anywhere (this device or
+    // another) is what makes them stale.
     ref.invalidate(subscriptionsProvider);
     ref.invalidate(podcastDetailProvider);
+    ref.invalidate(episodeProgressProvider);
+    ref.invalidate(upNextEpisodesProvider);
+    ref.invalidate(latestEpisodesProvider);
     ref.invalidate(libraryControllerProvider);
     // Playlist rows ride the user stream, and play-state changes (a
     // star, a rating) can shift a user-state smart rule's evaluation.

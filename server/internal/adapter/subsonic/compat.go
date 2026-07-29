@@ -290,7 +290,7 @@ func (h *Handler) allSubscriptions(ctx context.Context, uc *service.UserCtx) ([]
 	var out []service.Subscription
 	cursor := ""
 	for {
-		page, next, err := h.svc.Subscriptions(ctx, uc, cursor, 200)
+		page, next, err := h.svc.Subscriptions(ctx, uc, cursor, 200, false)
 		if err != nil {
 			return nil, err
 		}

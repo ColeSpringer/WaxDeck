@@ -16,6 +16,7 @@ part 'subscription.g.dart';
 /// * [show_] 
 /// * [settings] 
 /// * [subscribedAt] - When the caller subscribed.
+/// * [unplayedCount] - How many of this show's cataloged episodes the caller has not crossed the played threshold on, counted the same way `played` is derived everywhere else (from the position reached against the episode's duration, never from a listened-milliseconds ratio). The whole backlog, not a window: this is the number a subscription tile shows, and a count drawn from whatever a client had loaded would claim to be the backlog while being a page of it. Counted against the episodes the caller can see, so an explicit episode hidden from this account is not in it. 
 @BuiltValue()
 abstract class Subscription implements Built<Subscription, SubscriptionBuilder> {
   @BuiltValueField(wireName: r'show')
@@ -27,6 +28,10 @@ abstract class Subscription implements Built<Subscription, SubscriptionBuilder> 
   /// When the caller subscribed.
   @BuiltValueField(wireName: r'subscribedAt')
   DateTime get subscribedAt;
+
+  /// How many of this show's cataloged episodes the caller has not crossed the played threshold on, counted the same way `played` is derived everywhere else (from the position reached against the episode's duration, never from a listened-milliseconds ratio). The whole backlog, not a window: this is the number a subscription tile shows, and a count drawn from whatever a client had loaded would claim to be the backlog while being a page of it. Counted against the episodes the caller can see, so an explicit episode hidden from this account is not in it. 
+  @BuiltValueField(wireName: r'unplayedCount')
+  int? get unplayedCount;
 
   Subscription._();
 
@@ -66,6 +71,13 @@ class _$SubscriptionSerializer implements PrimitiveSerializer<Subscription> {
       object.subscribedAt,
       specifiedType: const FullType(DateTime),
     );
+    if (object.unplayedCount != null) {
+      yield r'unplayedCount';
+      yield serializers.serialize(
+        object.unplayedCount,
+        specifiedType: const FullType(int),
+      );
+    }
   }
 
   @override
@@ -109,6 +121,13 @@ class _$SubscriptionSerializer implements PrimitiveSerializer<Subscription> {
             specifiedType: const FullType(DateTime),
           ) as DateTime;
           result.subscribedAt = valueDes;
+          break;
+        case r'unplayedCount':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.unplayedCount = valueDes;
           break;
         default:
           unhandled.add(key);

@@ -5966,6 +5966,73 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /podcasts/episodes:
+    get:
+      operationId: listSubscribedEpisodes
+      summary: List episodes across the caller's subscriptions
+      description: >
+        Keyset-paginated episodes drawn from every show the caller
+        follows, for the surfaces that are about the caller rather than
+        about one show: what is new across their shows, and what they
+        started and have not finished.
+
+        This exists because the discovery lists cannot answer it. Those
+        are over the whole library and return generic summary rows, so a
+        client sifting them for episodes pays for a music collection it
+        is not asking about and gets rows carrying no `showPid` and no
+        `hasEnclosure`, the two fields that decide where an episode row
+        links and whether it can offer to play at all.
+
+        Ordering follows the filter: `latest` and `unplayed` are newest
+        first by publication date, then pid; `in-progress` is by when the
+        caller last played the episode, most recent first, which is the
+        order a "pick up where you left off" strip wants.
+
+        A cursor is only valid for the filter it was issued under, since
+        the two orders interleave differently. Sending a mismatched pair
+        is `invalid-request` rather than a silently wrong page.
+      tags: [podcasts]
+      parameters:
+        - name: filter
+          in: query
+          description: >
+            Which episodes to page. `latest` takes every episode of every
+            followed show; `unplayed` drops the ones the caller has
+            crossed the played threshold on; `in-progress` keeps only the
+            ones with a saved position that are not finished.
+          schema:
+            type: string
+            enum: [latest, unplayed, in-progress]
+            default: latest
+        - name: cursor
+          in: query
+          description: >
+            Opaque keyset cursor from a previous page's `nextCursor`. Omit
+            for the first page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum episodes per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: One page of episodes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpisodePage"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /podcasts/{pid}/episodes:
     get:
       operationId: listEpisodes
@@ -14139,6 +14206,21 @@ components:
           type: string
           format: date-time
           description: When the caller subscribed.
+        unplayedCount:
+          type: integer
+          description: >
+            How many of this show's cataloged episodes the caller has not
+            crossed the played threshold on, counted the same way `played`
+            is derived everywhere else (from the position reached against
+            the episode's duration, never from a listened-milliseconds
+            ratio).
+
+            The whole backlog, not a window: this is the number a
+            subscription tile shows, and a count drawn from whatever a
+            client had loaded would claim to be the backlog while being
+            a page of it. Counted against the episodes the caller can
+            see, so an explicit episode hidden from this account is not
+            in it.
 
     SubscriptionPage:
       type: object

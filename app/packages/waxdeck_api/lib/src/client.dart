@@ -341,6 +341,22 @@ abstract interface class WaxDeckRepository {
   /// delete: playback state survives and the episode stays fetchable).
   Future<void> removeEpisodeDownload(String pid);
 
+  /// `POST /podcasts/{pid}/refresh`: fetches the feed now and reports
+  /// how many episodes appeared. Subscribers only; a successful refresh
+  /// re-enables a feed auto-disabled after repeated failures.
+  Future<RefreshResult> refreshPodcast(String pid);
+
+  /// `GET /podcasts/episodes`: episodes across every show the caller
+  /// follows. [filter] picks which and, with it, the order: `latest` and
+  /// `unplayed` are newest published first, `in-progress` is
+  /// most-recently-played first. A cursor is only valid for the filter
+  /// it was issued under.
+  Future<EpisodePage> listSubscribedEpisodes({
+    SubscribedEpisodes filter,
+    String? cursor,
+    int? limit,
+  });
+
   /// `GET /books/{pid}`: full audiobook detail with chapters, parts, and
   /// the caller's per-book settings.
   Future<BookDetail> getBook(String pid);
@@ -1959,6 +1975,26 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<void> fetchEpisode(String pid) => _guard(() async {
     await _gen.getPodcastsApi().fetchEpisode(pid: pid);
+  });
+
+  @override
+  Future<RefreshResult> refreshPodcast(String pid) => _guard(() async {
+    final response = await _gen.getPodcastsApi().refreshPodcast(pid: pid);
+    return RefreshResult(newEpisodes: _require(response.data).newEpisodes);
+  });
+
+  @override
+  Future<EpisodePage> listSubscribedEpisodes({
+    SubscribedEpisodes filter = SubscribedEpisodes.latest,
+    String? cursor,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getPodcastsApi().listSubscribedEpisodes(
+      filter: filter.wireName,
+      cursor: cursor,
+      limit: limit,
+    );
+    return episodePageFromGen(_require(response.data), baseUrl: _baseUrl);
   });
 
   @override

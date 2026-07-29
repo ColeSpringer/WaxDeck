@@ -687,6 +687,103 @@ class PodcastsApi {
     );
   }
 
+  /// List episodes across the caller&#39;s subscriptions
+  /// Keyset-paginated episodes drawn from every show the caller follows, for the surfaces that are about the caller rather than about one show: what is new across their shows, and what they started and have not finished. This exists because the discovery lists cannot answer it. Those are over the whole library and return generic summary rows, so a client sifting them for episodes pays for a music collection it is not asking about and gets rows carrying no &#x60;showPid&#x60; and no &#x60;hasEnclosure&#x60;, the two fields that decide where an episode row links and whether it can offer to play at all. Ordering follows the filter: &#x60;latest&#x60; and &#x60;unplayed&#x60; are newest first by publication date, then pid; &#x60;in-progress&#x60; is by when the caller last played the episode, most recent first, which is the order a \&quot;pick up where you left off\&quot; strip wants. A cursor is only valid for the filter it was issued under, since the two orders interleave differently. Sending a mismatched pair is &#x60;invalid-request&#x60; rather than a silently wrong page. 
+  ///
+  /// Parameters:
+  /// * [filter] - Which episodes to page. `latest` takes every episode of every followed show; `unplayed` drops the ones the caller has crossed the played threshold on; `in-progress` keeps only the ones with a saved position that are not finished. 
+  /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. 
+  /// * [limit] - Maximum episodes per page.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [EpisodePage] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<EpisodePage>> listSubscribedEpisodes({ 
+    String? filter = 'latest',
+    String? cursor,
+    int? limit = 100,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/podcasts/episodes';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (filter != null) r'filter': encodeQueryParameter(_serializers, filter, const FullType(String)),
+      if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    EpisodePage? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(EpisodePage),
+      ) as EpisodePage;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<EpisodePage>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// List the caller&#39;s podcast subscriptions
   /// Keyset-paginated list of the calling user&#39;s podcast subscriptions, each carrying the show summary and the caller&#39;s per-subscription settings. Ordering is stable (show title, then pid). 
   ///
