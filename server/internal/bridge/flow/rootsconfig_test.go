@@ -3,6 +3,7 @@ package flow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/colespringer/waxflow/waxerr"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 )
@@ -230,6 +233,34 @@ func TestSyncRootRollsBackARefusal(t *testing.T) {
 		if n == "books" {
 			t.Error("the refused root is still in the bridge's table")
 		}
+	}
+}
+
+// TestSyncRootCarriesTheSidecarsCode is what going through the typed
+// client buys over the hand-rolled POST it replaced: the daemon's error
+// envelope is decoded into a waxerr code, and the %w wrap keeps it
+// classifiable at the caller instead of leaving a string to match on. The
+// code here is deliberately not the one the status alone would produce --
+// the client falls back to internal for anything but a 401, so reading
+// overloaded off a 503 proves the envelope itself was read.
+func TestSyncRootCarriesTheSidecarsCode(t *testing.T) {
+	path := writeConfig(t, t.TempDir())
+	b := newRootBridge(t, reloadCapsJSON(), path, []Root{{Name: "lib", Path: "/library"}},
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprint(w, `{"error":"a job is holding the root set","code":"overloaded","schemaVersion":1}`)
+		})
+
+	err := b.SyncRoot(context.Background(), "books", "/books")
+	if err == nil {
+		t.Fatal("SyncRoot = nil on a refused reload, want the sidecar's reason")
+	}
+	if !errors.Is(err, waxerr.ErrOverloaded) {
+		t.Errorf("error = %v, want the sidecar's own code to survive to the caller", err)
+	}
+	if !strings.Contains(err.Error(), "a job is holding the root set") {
+		t.Errorf("error = %v, want it to carry the sidecar's message", err)
 	}
 }
 

@@ -894,6 +894,21 @@ class PodcastShow {
   final List<FeedPerson> persons;
 }
 
+/// Which new episodes auto-download takes, by keyword against the
+/// episode title. An empty [include] takes everything; [exclude] wins
+/// where both match. Titles only, and future arrivals only: editing a
+/// filter never re-evaluates the backlog.
+class EpisodeFilter {
+  const EpisodeFilter({this.include = const [], this.exclude = const []});
+
+  final List<String> include;
+  final List<String> exclude;
+
+  /// True when the filter admits every episode, which is what an unset
+  /// one does.
+  bool get isEmpty => include.isEmpty && exclude.isEmpty;
+}
+
 /// The caller's per-subscription settings. The PUT endpoint replaces the
 /// whole document, so senders start from the stored value.
 class SubscriptionSettings {
@@ -907,6 +922,7 @@ class SubscriptionSettings {
     this.voiceBoost,
     this.skipIntroSeconds,
     this.skipOutroSeconds,
+    this.autoDownloadFilter,
   });
 
   /// Episodes to keep on the server; null means the server default and
@@ -922,6 +938,11 @@ class SubscriptionSettings {
   final bool? voiceBoost;
   final int? skipIntroSeconds;
   final int? skipOutroSeconds;
+
+  /// Narrows what [autoDownload] takes; null means take everything.
+  /// Carried here because the PUT replaces the whole document: a sender
+  /// that dropped it would erase a filter set anywhere else.
+  final EpisodeFilter? autoDownloadFilter;
 }
 
 /// One of the caller's podcast subscriptions.
@@ -982,6 +1003,7 @@ class EpisodeSummary extends ItemSummary {
     this.fetchError,
     this.explicit = false,
     this.hasTranscript = false,
+    this.hasEnclosure = false,
   });
 
   /// The show this episode belongs to.
@@ -994,8 +1016,11 @@ class EpisodeSummary extends ItemSummary {
   final String? episodeType;
   final DateTime publishedAt;
 
-  /// Whether the audio is on the server; play-info for a not-yet-fetched
-  /// episode answers `conflict`.
+  /// Whether the audio is on the server. Not what decides playability:
+  /// an episode that is not downloaded still plays when [hasEnclosure]
+  /// is true, relayed from the feed's host. What fetching adds is local
+  /// bytes and the analysis riding them, so silence trim, voice boost,
+  /// and the skip map need it.
   final bool downloaded;
 
   /// `queued` or `failed` while a server-side fetch is pending or after
@@ -1004,6 +1029,11 @@ class EpisodeSummary extends ItemSummary {
   final String? fetchError;
   final bool explicit;
   final bool hasTranscript;
+
+  /// Whether the feed named audio this server could relay. False with
+  /// [downloaded] false is the one episode that cannot play at all, so
+  /// read this rather than [downloaded] before offering play.
+  final bool hasEnclosure;
 }
 
 /// One keyset-paginated page of episodes.
@@ -1036,6 +1066,7 @@ class EpisodeDetail extends EpisodeSummary {
     super.fetchError,
     super.explicit,
     super.hasTranscript,
+    super.hasEnclosure,
     this.descriptionHtml,
     this.link,
     this.chapters = const [],

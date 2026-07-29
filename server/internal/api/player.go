@@ -89,6 +89,11 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 				VoiceBoost:  r.Svc.EffectiveVoiceBoost(ctx, uc, e.PID),
 			})
 			if err != nil {
+				if u, mime, ok := r.enclosureItem(ctx, userID, e.PID, ttl, force, err); ok {
+					item.URL, item.MimeType = base+u, mime
+					out = append(out, item)
+					continue
+				}
 				return nil, err
 			}
 			item.URL = base + info.URL
@@ -96,6 +101,11 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 		} else {
 			res, err := r.Svc.DirectPlayInfo(ctx, uc, e.PID, "")
 			if err != nil {
+				if u, mime, ok := r.enclosureItem(ctx, userID, e.PID, ttl, force, err); ok {
+					item.URL, item.MimeType = base+u, mime
+					out = append(out, item)
+					continue
+				}
 				return nil, err
 			}
 			if res.HasSpan {

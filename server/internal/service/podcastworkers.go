@@ -118,21 +118,27 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID) (int, error) 
 }
 
 // autoDownloadNewest queues enclosure fetches for the newest arrivals
-// when any subscriber wants new episodes downloaded on release.
+// that at least one subscriber's auto-download policy admits.
+//
+// The decision is per subscriber and per episode, because a keyword
+// filter makes it so. The union is deliberate and matches retention's:
+// the effective policy for a show is the most generous across its
+// subscribers, so one subscriber wanting an episode is enough to fetch
+// the shared file, and a filter narrows what that subscriber asks for
+// rather than what everyone else gets.
 func (l *Library) autoDownloadNewest(ctx context.Context, showPID model.PID, added int) {
 	subs, err := l.db.SubscribersByShow(ctx, string(showPID))
 	if err != nil {
 		l.log.Warn("listing subscribers", "show", string(showPID), "err", err)
 		return
 	}
-	wanted := false
+	filters := make([]EpisodeFilter, 0, len(subs))
 	for _, s := range subs {
 		if s.AutoDownload {
-			wanted = true
-			break
+			filters = append(filters, EpisodeFilter{Include: s.AutoDLInclude, Exclude: s.AutoDLExclude})
 		}
 	}
-	if !wanted {
+	if len(filters) == 0 {
 		return
 	}
 	eps, err := l.lib.Podcasts().Episodes(ctx, showPID, added)
@@ -142,13 +148,24 @@ func (l *Library) autoDownloadNewest(ctx context.Context, showPID model.PID, add
 	}
 	now := time.Now().UnixNano()
 	for _, ep := range eps {
-		if ep.Downloaded {
+		if ep.Downloaded || !anyFilterAdmits(filters, ep.Title) {
 			continue
 		}
 		if err := l.db.EnqueueFetch(ctx, string(ep.PID), "auto", now); err != nil {
 			l.log.Warn("queuing auto download", "episode", string(ep.PID), "err", err)
 		}
 	}
+}
+
+// anyFilterAdmits is the union: one subscriber wanting the episode is
+// enough, since the downloaded file is shared.
+func anyFilterAdmits(filters []EpisodeFilter, title string) bool {
+	for _, f := range filters {
+		if f.Admits(title) {
+			return true
+		}
+	}
+	return false
 }
 
 // DrainFetchQueue works one queued enclosure download; returns false

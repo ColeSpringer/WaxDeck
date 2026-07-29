@@ -93,7 +93,9 @@ info:
       history; drop the local mirror and re-mirror from a fresh snapshot),
       `feed-unreachable` (an upstream feed could not be fetched or parsed;
       the feed's own server answered an error, timed out, or returned
-      something that is not a feed), `source-unavailable` (the request
+      something that is not a feed, or refused the show's stored
+      credentials for one of its episode enclosures), `source-unavailable`
+      (the request
       needs an acquisition source integration, such as the YouTube bridge,
       that this server is not running), `directory-unavailable` (an
       external directory service, such as the radio station directory,
@@ -122,6 +124,21 @@ info:
       New codes may appear; clients must treat unknown codes as opaque.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
+      They live outside `/api/v1` and are not declared as operations here:
+      `/media/stream` (the streaming engine's output), `/media/download`
+      (original bytes, ranged), `/media/enclosure` (a podcast episode's
+      feed enclosure, relayed), and `/media/radio/{pid}` (a station
+      stream, relayed). All four authenticate by media token in the query
+      string rather than by session or bearer credential, so bare `<audio>`
+      elements, cast devices, and DLNA renderers that cannot send headers
+      can fetch them. A media token binds one user to one item pid; expiry
+      gates new opens rather than cutting a stream already running.
+      `/media/enclosure` takes only that pid and token, never a target
+      URL: the enclosure is read from the episode in the catalog, so a
+      token for one episode reaches that episode's audio and nothing
+      else, and the relay copies only `Content-Type`, `Content-Length`,
+      `Content-Range`, `Accept-Ranges`, `ETag`, and `Last-Modified` back
+      from the podcast host.
     - Public share links live at `/s/{token}` on the server origin, outside
       `/api/v1`. The landing page is server-rendered plain HTML (an audio
       element, artwork, OpenGraph and Twitter card tags) so link previews
@@ -4158,9 +4175,19 @@ paths:
         lives on the item summary and the book detail. Positions reported
         to play-state for multi-file books are always book-timeline
         milliseconds (`partStartMs` plus the in-part position). A podcast
-        episode whose audio has not been fetched to the server yet
-        answers `conflict`; queue it with the episode fetch endpoint and
-        retry when the catalog reports it present.
+        episode whose audio has not been fetched to the server resolves by
+        enclosure passthrough: the url points at `/media/enclosure`, which
+        relays the feed's own enclosure through this origin (a proxy, not
+        a redirect, so the listener's address never reaches the podcast
+        host and the web build can play it). Ranges pass both ways, so
+        scrubbing works when the host honours them. Passthrough audio is
+        not analyzed, so the skip map stays `unavailable` and neither
+        silence trim nor voice boost applies until the episode is fetched,
+        and `seekable` is best effort for passthrough: whether the host
+        honours ranges is unknown until the first upstream request. The
+        episode still reports `downloaded: false`, and fetching it is
+        still what makes it play from local bytes with analysis. Only an
+        episode whose feed named no enclosure at all answers `conflict`.
       tags: [playback]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -4202,8 +4229,10 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The item cannot stream yet (code `conflict`): a podcast
-            episode whose audio has not been fetched to the server.
+            The item cannot stream (code `conflict`): a podcast episode
+            whose audio has not been fetched to the server and whose feed
+            named no enclosure to relay. An unfetched episode that does
+            have an enclosure answers 200 with a passthrough url instead.
           content:
             application/json:
               schema:
@@ -6021,8 +6050,13 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The episode is being listened to right now (code
-            `conflict`); removing the file would kill the stream.
+            The removal was refused (code `conflict`), for one of two
+            reasons the message distinguishes. Either the episode is
+            being listened to right now and removing the file would kill
+            the stream, which clears when playback stops; or a
+            conflicting catalog job (a scan, an import, another delete)
+            holds the file-mutation lease, which clears on its own and
+            is worth retrying.
           content:
             application/json:
               schema:
@@ -12488,7 +12522,12 @@ components:
           type: string
           description: >
             Origin-relative, media-token-authenticated stream URL. Short TTL;
-            re-request play-info on expiry or a `stream-stale` error.
+            re-request play-info on expiry or a `stream-stale` error. Which
+            endpoint it names follows how the item resolves: `/media/stream`
+            through the streaming engine, `/media/download` on a server
+            running without it, and `/media/enclosure` for a podcast episode
+            served by enclosure passthrough. Clients play the url they are
+            given and do not parse it.
           example: /media/stream?pid=tr-01JZX5N8QW3F4V9T2B7KD3M9R6&mt=abc123
         mimeType:
           type: string
@@ -12501,7 +12540,12 @@ components:
           example: 214000
         seekable:
           type: boolean
-          description: Whether the stream supports sample-exact seeking.
+          description: >
+            Whether the stream supports sample-exact seeking. Best effort
+            for an unfetched podcast episode served by enclosure
+            passthrough: the relay forwards ranges, but whether the
+            podcast host honours them is unknown until the first upstream
+            request, so a client should degrade rather than assume.
         expiresAt:
           type: string
           format: date-time
@@ -13796,7 +13840,9 @@ components:
           type: boolean
           description: >
             Fetch new episodes to the server automatically as the feed
-            publishes them.
+            publishes them. `autoDownloadFilter` narrows which ones.
+        autoDownloadFilter:
+          $ref: "#/components/schemas/EpisodeFilter"
         folder:
           type: string
           maxLength: 512
@@ -13833,6 +13879,54 @@ components:
           minimum: 0
           maximum: 600
           description: Seconds to skip at the end of every episode.
+
+    EpisodeFilter:
+      type: object
+      description: >
+        Which new episodes auto-download takes, matched by keyword
+        against the episode title. Terms are matched case-insensitively
+        as substrings; an empty or absent `include` admits every episode,
+        and `exclude` wins over `include` where both match.
+
+        Titles only. Descriptions and summaries are deliberately not
+        matched: feed descriptions carry sponsor copy, show boilerplate,
+        and in some feeds full transcripts, so a term matched against
+        them fires on episodes a listener would never call a match and
+        the behaviour stops being predictable from the row the user is
+        looking at.
+
+        A filter applies to future arrivals only. Editing it does not
+        re-evaluate the backlog and does not unqueue or remove anything
+        already fetched: it is a subscription policy going forward, not
+        a query over history. It is consulted only where auto-download
+        decides what a feed refresh just added, so `autoDownload` must
+        be on for it to do anything, and a manual fetch is never
+        filtered.
+
+        The effective policy for a show is the union across its
+        subscribers, matching retention: an episode is fetched when any
+        subscriber with auto-download on has a filter that admits it.
+      properties:
+        include:
+          type: array
+          maxItems: 64
+          description: >
+            Take an episode only when its title contains one of these
+            terms. Empty or absent takes every episode.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+        exclude:
+          type: array
+          maxItems: 64
+          description: >
+            Skip an episode whose title contains one of these terms,
+            even when `include` matched it.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
 
     Subscription:
       type: object
@@ -13989,9 +14083,13 @@ components:
             downloaded:
               type: boolean
               description: >
-                Whether the audio is on the server. Playback needs the
-                fetch first: play-info for a not-yet-fetched episode
-                answers `conflict`, and the episode fetch endpoint
+                Whether the audio is on the server. This is not what
+                decides whether the episode plays: an episode that is not
+                downloaded still streams when `hasEnclosure` is true,
+                relayed from the feed's own host by enclosure
+                passthrough. What fetching adds is local bytes and the
+                analysis that rides them, so silence trim, voice boost,
+                and the skip map need it; the episode fetch endpoint
                 queues the download.
             fetchState:
               type: string
@@ -14010,6 +14108,24 @@ components:
             hasTranscript:
               type: boolean
               description: Whether a transcript is available.
+            hasEnclosure:
+              type: boolean
+              description: >
+                Whether the feed named audio this server could relay for
+                this episode: an enclosure URL, over http or https. True
+                with `downloaded` false is the passthrough case, where
+                the episode plays relayed from the feed's own host.
+
+                False means the episode cannot play at all, and play-info
+                answers `conflict`, so a client offering a play
+                affordance should read this rather than assume an
+                undownloaded episode is playable. True is a fact about
+                the feed rather than a promise to the caller: a show
+                whose feed needs credentials relays only for its own
+                subscribers, so play-info may still answer `conflict` for
+                someone reading an episode of a show they do not
+                subscribe to. Treat it as the signal to offer play, not
+                as a guarantee play succeeds.
       description: Compact episode representation for lists.
 
     EpisodePage:

@@ -35,9 +35,19 @@ paths:
         lives on the item summary and the book detail. Positions reported
         to play-state for multi-file books are always book-timeline
         milliseconds (`partStartMs` plus the in-part position). A podcast
-        episode whose audio has not been fetched to the server yet
-        answers `conflict`; queue it with the episode fetch endpoint and
-        retry when the catalog reports it present.
+        episode whose audio has not been fetched to the server resolves by
+        enclosure passthrough: the url points at `/media/enclosure`, which
+        relays the feed's own enclosure through this origin (a proxy, not
+        a redirect, so the listener's address never reaches the podcast
+        host and the web build can play it). Ranges pass both ways, so
+        scrubbing works when the host honours them. Passthrough audio is
+        not analyzed, so the skip map stays `unavailable` and neither
+        silence trim nor voice boost applies until the episode is fetched,
+        and `seekable` is best effort for passthrough: whether the host
+        honours ranges is unknown until the first upstream request. The
+        episode still reports `downloaded: false`, and fetching it is
+        still what makes it play from local bytes with analysis. Only an
+        episode whose feed named no enclosure at all answers `conflict`.
       tags: [playback]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -79,8 +89,10 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The item cannot stream yet (code `conflict`): a podcast
-            episode whose audio has not been fetched to the server.
+            The item cannot stream (code `conflict`): a podcast episode
+            whose audio has not been fetched to the server and whose feed
+            named no enclosure to relay. An unfetched episode that does
+            have an enclosure answers 200 with a passthrough url instead.
           content:
             application/json:
               schema:
@@ -960,7 +972,12 @@ components:
           type: string
           description: >
             Origin-relative, media-token-authenticated stream URL. Short TTL;
-            re-request play-info on expiry or a `stream-stale` error.
+            re-request play-info on expiry or a `stream-stale` error. Which
+            endpoint it names follows how the item resolves: `/media/stream`
+            through the streaming engine, `/media/download` on a server
+            running without it, and `/media/enclosure` for a podcast episode
+            served by enclosure passthrough. Clients play the url they are
+            given and do not parse it.
           example: /media/stream?pid=tr-01JZX5N8QW3F4V9T2B7KD3M9R6&mt=abc123
         mimeType:
           type: string
@@ -973,7 +990,12 @@ components:
           example: 214000
         seekable:
           type: boolean
-          description: Whether the stream supports sample-exact seeking.
+          description: >
+            Whether the stream supports sample-exact seeking. Best effort
+            for an unfetched podcast episode served by enclosure
+            passthrough: the relay forwards ranges, but whether the
+            podcast host honours them is unknown until the first upstream
+            request, so a client should degrade rather than assume.
         expiresAt:
           type: string
           format: date-time

@@ -77,22 +77,6 @@ sidecar injection seam) all landed and are not repeated here.
   500. Complete coverage, no repeats, an order that is more local than
   it should be.
 
-## WaxFlow
-
-- **A `ReloadRoots` method on the Go client.** `client.Caps` exposes
-  `Delivery.RootsReload`, so a consumer can learn the daemon serves
-  `POST /roots/reload`, but `client.Client` has no method to call it:
-  every other control endpoint (caps, sign, timelines, jobs, cache) has
-  one. WaxDeck adds a library root at runtime and reconciles the sidecar
-  against a rewritten config file, so it hand-rolls the POST with its
-  own `http.Client`, its own `X-API-Key` header, and its own decode of
-  the `{added, removed, changed, roots}` delta and the error envelope --
-  duplicating what `postJSON` and `decodeEnvelope` already do correctly,
-  including the envelope-to-code mapping this copy does not attempt.
-  The workaround is shipped and working
-  (`server/internal/bridge/flow/bridge.go`); it retires the day the
-  method exists.
-
 ## Recorded upstream non-goals
 
 Deliberate upstream decisions WaxDeck designs around; listed so they

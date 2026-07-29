@@ -87,7 +87,9 @@ Conventions:
   history; drop the local mirror and re-mirror from a fresh snapshot),
   `feed-unreachable` (an upstream feed could not be fetched or parsed;
   the feed's own server answered an error, timed out, or returned
-  something that is not a feed), `source-unavailable` (the request
+  something that is not a feed, or refused the show's stored
+  credentials for one of its episode enclosures), `source-unavailable`
+  (the request
   needs an acquisition source integration, such as the YouTube bridge,
   that this server is not running), `directory-unavailable` (an
   external directory service, such as the radio station directory,
@@ -116,6 +118,21 @@ Conventions:
   New codes may appear; clients must treat unknown codes as opaque.
 - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
   server origin, the same origin that serves this API and the web UI.
+  They live outside `/api/v1` and are not declared as operations here:
+  `/media/stream` (the streaming engine's output), `/media/download`
+  (original bytes, ranged), `/media/enclosure` (a podcast episode's
+  feed enclosure, relayed), and `/media/radio/{pid}` (a station
+  stream, relayed). All four authenticate by media token in the query
+  string rather than by session or bearer credential, so bare `<audio>`
+  elements, cast devices, and DLNA renderers that cannot send headers
+  can fetch them. A media token binds one user to one item pid; expiry
+  gates new opens rather than cutting a stream already running.
+  `/media/enclosure` takes only that pid and token, never a target
+  URL: the enclosure is read from the episode in the catalog, so a
+  token for one episode reaches that episode's audio and nothing
+  else, and the relay copies only `Content-Type`, `Content-Length`,
+  `Content-Range`, `Accept-Ranges`, `ETag`, and `Last-Modified` back
+  from the podcast host.
 - Public share links live at `/s/{token}` on the server origin, outside
   `/api/v1`. The landing page is server-rendered plain HTML (an audio
   element, artwork, OpenGraph and Twitter card tags) so link previews
@@ -583,6 +600,7 @@ Class | Method | HTTP request | Description
  - [EntityPlayState](doc/EntityPlayState.md)
  - [EntityTypeFields](doc/EntityTypeFields.md)
  - [Episode](doc/Episode.md)
+ - [EpisodeFilter](doc/EpisodeFilter.md)
  - [EpisodePage](doc/EpisodePage.md)
  - [EpisodeSummary](doc/EpisodeSummary.md)
  - [Error](doc/Error.md)

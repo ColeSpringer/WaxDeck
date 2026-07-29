@@ -926,6 +926,11 @@ func run() error {
 	// authenticate by media token like /media/stream.
 	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
 	mux.HandleFunc("GET /media/download", srv.ServeDownload)
+	// A podcast episode whose audio is not on this server relays from
+	// the feed's own host, media-token authenticated like the rest of
+	// /media/*. The target comes from the episode in the catalog, never
+	// from the query, which is what keeps it from being an open proxy.
+	mux.HandleFunc("GET /media/enclosure", srv.ServeEnclosure)
 	// Radio streams proxy through this origin under a media token,
 	// like /media/stream; the guarded client owns the URL policy.
 	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)

@@ -194,6 +194,13 @@ type Library struct {
 	transcriptHTTP        *http.Client
 	transcriptHTTPOnce    sync.Once
 	allowPrivateFeedHosts bool
+	// enclosureHTTP is the guarded client the podcast enclosure
+	// passthrough relays through, built on first use and sharing
+	// allowPrivateFeedHosts with transcript fetches. It carries no
+	// overall timeout: an episode relay lasts as long as the listening
+	// session, so the request context is its only bound.
+	enclosureHTTP     *http.Client
+	enclosureHTTPOnce sync.Once
 	// radioHTTP is the guarded client for radio streams and the
 	// station directory, built on first use; allowPrivateRadioHosts
 	// relaxes its SSRF guard. It carries no overall timeout (radio

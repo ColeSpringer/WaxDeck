@@ -12,10 +12,10 @@ part 'play_info.g.dart';
 ///
 /// Properties:
 /// * [pid] - The resolved item's PID.
-/// * [url] - Origin-relative, media-token-authenticated stream URL. Short TTL; re-request play-info on expiry or a `stream-stale` error. 
+/// * [url] - Origin-relative, media-token-authenticated stream URL. Short TTL; re-request play-info on expiry or a `stream-stale` error. Which endpoint it names follows how the item resolves: `/media/stream` through the streaming engine, `/media/download` on a server running without it, and `/media/enclosure` for a podcast episode served by enclosure passthrough. Clients play the url they are given and do not parse it. 
 /// * [mimeType] - MIME type the stream will be served as.
 /// * [durationMs] - Duration in milliseconds.
-/// * [seekable] - Whether the stream supports sample-exact seeking.
+/// * [seekable] - Whether the stream supports sample-exact seeking. Best effort for an unfetched podcast episode served by enclosure passthrough: the relay forwards ranges, but whether the podcast host honours them is unknown until the first upstream request, so a client should degrade rather than assume. 
 /// * [expiresAt] - When the embedded media token stops being accepted.
 /// * [partIndex] - Zero-based index of the resolved part within a multi-file audiobook. Present exactly when `partCount` is. 
 /// * [partCount] - Number of parts in a multi-file audiobook. Present only for multi-file books; single-file items omit the part fields entirely. 
@@ -29,7 +29,7 @@ abstract class PlayInfo implements Built<PlayInfo, PlayInfoBuilder> {
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
-  /// Origin-relative, media-token-authenticated stream URL. Short TTL; re-request play-info on expiry or a `stream-stale` error. 
+  /// Origin-relative, media-token-authenticated stream URL. Short TTL; re-request play-info on expiry or a `stream-stale` error. Which endpoint it names follows how the item resolves: `/media/stream` through the streaming engine, `/media/download` on a server running without it, and `/media/enclosure` for a podcast episode served by enclosure passthrough. Clients play the url they are given and do not parse it. 
   @BuiltValueField(wireName: r'url')
   String get url;
 
@@ -41,7 +41,7 @@ abstract class PlayInfo implements Built<PlayInfo, PlayInfoBuilder> {
   @BuiltValueField(wireName: r'durationMs')
   int get durationMs;
 
-  /// Whether the stream supports sample-exact seeking.
+  /// Whether the stream supports sample-exact seeking. Best effort for an unfetched podcast episode served by enclosure passthrough: the relay forwards ranges, but whether the podcast host honours them is unknown until the first upstream request, so a client should degrade rather than assume. 
   @BuiltValueField(wireName: r'seekable')
   bool get seekable;
 

@@ -244,31 +244,38 @@ here waits on upstream.
 
 ## Podcasts
 
-- `[in-repo]` **Enclosure-passthrough streaming for unfetched episodes.** A
-  remote episode answers a typed conflict today, and the Subsonic
-  podcast mapping gives streamIds only to downloaded episodes for the
-  same reason. One passthrough proxy would fix both.
-- `[in-repo]` **Per-feed episode keyword filters** (auto-download only matching
-  episodes). These were waiting on the smart-list engine, which now
-  exists.
 - `[in-repo]` **PodPing update notifications.** Polling is the only feed refresh
   trigger.
-- `[in-repo]` **`podcasts.spec.ts` fails intermittently on the unfetch
-  step.** Seen once on 2026-07-28: `DELETE /episodes/{pid}/fetch`
-  answered 409 rather than 204, and the run before and after it were
-  green. The refusal is real and correct — `RemoveEpisodeDownload` will
-  not archive a file someone reads as listening to, which
-  `stateReadsInUse` decides from a play state that is recent, past
-  position zero, and unfinished. The spec plays the show's *first*
-  episode through the UI and then fetches and unfetches the *second*,
-  so the likely mechanism is playback advancing into that second episode
-  and leaving exactly such a state behind, which makes it a race between
-  the transport and the API calls that follow. Not confirmed: the
-  evidence is the status code, and nobody has caught the play state in
-  the act. Worth pinning down rather than retrying past, because the
-  same window is what a listener would hit for real. Whoever picks it up
-  should either stop the transport before the unfetch or assert the
-  episode is idle first.
+- `[in-repo]` **The client half of enclosure passthrough and keyword
+  filters.** Both landed server-side (ADR-0030) and the API package
+  carries `hasEnclosure` and `autoDownloadFilter`, but nothing in the UI
+  reads either yet: `show_screen.dart`'s episode tap still branches on
+  `downloaded`, so tapping an unfetched episode queues a fetch where it
+  could now play, and the per-show settings sheet has no filter control.
+  Both are P12's, which is the phase these landed ahead of. The data-loss
+  hazard the API package would otherwise have carried is already closed:
+  the settings PUT is a full replace, so the mapping round-trips the
+  filter rather than dropping it.
+- `[in-repo]` **No concurrency or byte bound on the media relays.**
+  `/s/{token}` caps concurrent anonymous streams; `/media/enclosure` and
+  `/media/radio/{pid}` cap nothing, and both deliberately carry no
+  overall client timeout because a stream runs as long as someone
+  listens. So a user can point either at an endless or enormous remote
+  file and hold a goroutine and an upstream connection per request. The
+  URL comes from a feed or station the user chose rather than from the
+  request, so this is resource use rather than an open proxy. Fix both
+  together when it is worth a bound, since they have the same shape: a
+  per-user cap plus an idle-read deadline, not an overall one.
+- `[in-repo]` **The unfetch conflict is told apart by message, not
+  code.** `RemoveEpisodeDownload` answers 409 for two unrelated reasons:
+  someone is listening (wait for them) and a busy file-mutation job lease
+  (retry shortly). Both carry `conflict`, so only the prose distinguishes
+  them, and `podcasts.spec.ts` matches on that prose to decide what to
+  retry. The durable form is a second code added to the defined-code list
+  in `api/spec/_root.yaml` (`Error.code` is a plain string there, not an
+  enum, so the list is the contract). Left out of the batch that
+  introduced the split because it is a contract change and the two
+  messages are stable in the meantime.
 
 ## Compatibility
 
@@ -356,24 +363,6 @@ here waits on upstream.
   "never verified" blocker is cleared for manual runs. What remains is
   running it in CI as an acceptance gate (build both images, up, smoke
   the origin, down) rather than only by hand.
-- `[in-repo]` **`sync_providers.dart` imports the features it
-  invalidates, and two of them import it back.** The file holds two
-  unrelated things: the low-level declarations (`mirrorDatabaseProvider`,
-  `syncEngineProvider`, `syncStatusProvider`, `offlineProvider`), which
-  eight files across the app depend on, and `syncBinderProvider`, whose
-  `invalidateCatalog`/`invalidateUserState` reach up into every feature
-  controller. Where a feature needs the mirror as well, that is a
-  two-way import: `library_controller.dart` has been one since the
-  offline path landed, and `artwork_providers.dart` joined it when the
-  artwork store's absence cache needed the catalog signal. Dart is fine
-  with it — providers initialize lazily and nothing reads across at
-  declaration time — so this is legibility, not correctness: neither
-  file can be read or moved without the other, and the dependency
-  direction is ambiguous. The fix is a split, not an indirection: the
-  declarations into their own file that imports nothing upward, the
-  binder keeping the fan-out. Roughly one new file, fifty-odd lines
-  moved, and nine import lines. Left alone because it is pre-existing
-  structure rather than anything a feature change should be carrying.
 
 ## Curation and metadata
 

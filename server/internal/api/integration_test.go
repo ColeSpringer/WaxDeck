@@ -35,6 +35,10 @@ type harness struct {
 	library string
 	svc     *service.Library
 	store   *db.DB
+	// media mints the query-string tokens the raw /media/* routes take,
+	// for tests that drive one of those endpoints as a chosen user
+	// rather than through a mint the API performed.
+	media   *auth.MediaTokens
 	connect *connect.Service
 	group   *supervise.Group
 	flowReq struct{ apiKey, format, dynamics, gain string } // captured by the fake sidecar
@@ -161,6 +165,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	mux.Handle("/api/v1/", apiHandler)
 	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
 	mux.HandleFunc("GET /media/download", srv.ServeDownload)
+	mux.HandleFunc("GET /media/enclosure", srv.ServeEnclosure)
 	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)
 	mux.Handle("/rest/", subsonic.New(svc, bridge, media, "test"))
 	if bridge != nil {
@@ -170,6 +175,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	h.ts = httptest.NewServer(mux)
 	t.Cleanup(h.ts.Close)
 
+	h.media = media
 	h.token = login(t, h.ts)
 	h.rescanAndWait(t)
 	return h

@@ -10,7 +10,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +28,9 @@ type feedServer struct {
 	// episode file names by index, for the enclosure URLs.
 	files []string
 	specs []fixtures.Spec
+	// writes counts feed rewrites, so each one can carry a strictly
+	// newer modification time; see writeFeed.
+	writes int
 }
 
 func newFeedServer(t *testing.T, episodes int) *feedServer {
@@ -101,6 +106,73 @@ func (fs *feedServer) writeFeed(t *testing.T, n int) {
 	if err := os.WriteFile(filepath.Join(fs.dir, "transcript.vtt"), []byte(vtt), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// The sync enumerates conditionally on ETag and Last-Modified, and
+	// the file server reports Last-Modified at one-second resolution, so
+	// two rewrites inside the same second would answer 304 and the feed
+	// would look unchanged. A real feed publishing new entries advances
+	// its modification time, so this one does too, by a stride per write.
+	fs.writes++
+	stamp := time.Now().Add(time.Duration(fs.writes) * 2 * time.Second)
+	if err := os.Chtimes(filepath.Join(fs.dir, "feed.xml"), stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeEnclosureless rewrites the feed with an item carrying no
+// enclosure at all, which is the one episode passthrough cannot serve.
+func (fs *feedServer) writeEnclosureless(t *testing.T) {
+	t.Helper()
+	doc := `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+<title>Fixture Cast</title>
+<description>No audio here</description>
+<item>
+	<title>Announcement only</title>
+	<guid isPermaLink="false">ep-guid-noaudio</guid>
+	<pubDate>` + time.Date(2026, 6, 1, 8, 0, 0, 0, time.UTC).Format(time.RFC1123Z) + `</pubDate>
+	<description>Text, no audio.</description>
+</item>
+</channel></rss>`
+	if err := os.WriteFile(filepath.Join(fs.dir, "feed.xml"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// newPrivateFeedServer is newFeedServer behind HTTP basic auth, the way
+// a paid or member-only podcast host works: the feed document and the
+// enclosures both refuse an unauthenticated GET.
+func newPrivateFeedServer(t *testing.T, episodes int, user, pass string) *feedServer {
+	t.Helper()
+	fs := newFeedServer(t, episodes)
+	files := http.FileServer(http.Dir(fs.dir))
+	fs.ts.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUser, gotPass, ok := r.BasicAuth()
+		if !ok || gotUser != user || gotPass != pass {
+			w.Header().Set("WWW-Authenticate", `Basic realm="private"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		files.ServeHTTP(w, r)
+	})
+	return fs
+}
+
+// newFeedServerWithHeaders is newFeedServer with the host adding
+// headers of its own to every response, which is what the relay's
+// allowlist has to hold back.
+func newFeedServerWithHeaders(t *testing.T, episodes int, extra http.Header) *feedServer {
+	t.Helper()
+	fs := newFeedServer(t, episodes)
+	files := http.FileServer(http.Dir(fs.dir))
+	fs.ts.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for name, vals := range extra {
+			for _, v := range vals {
+				w.Header().Add(name, v)
+			}
+		}
+		files.ServeHTTP(w, r)
+	})
+	return fs
 }
 
 func (fs *feedServer) feedURL() string { return fs.ts.URL + "/feed.xml" }
@@ -221,12 +293,28 @@ func TestPodcastLifecycle(t *testing.T) {
 		t.Fatal("episode 1 should announce a transcript")
 	}
 
-	// A not-yet-fetched episode cannot stream: typed conflict.
+	// A not-yet-fetched episode streams by enclosure passthrough: the
+	// url relays the feed's own audio through this origin, and the
+	// episode still reports itself as not downloaded, because it is not.
 	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", h.token)
-	if resp.StatusCode != 409 {
-		t.Fatalf("remote episode play-info status = %d, want 409", resp.StatusCode)
+	if resp.StatusCode != 200 {
+		t.Fatalf("unfetched episode play-info status = %d, want 200", resp.StatusCode)
 	}
-	resp.Body.Close()
+	pi := decode[PlayInfo](t, resp)
+	if !strings.HasPrefix(pi.Url, "/media/enclosure?") {
+		t.Fatalf("unfetched episode play-info url = %q, want the passthrough relay", pi.Url)
+	}
+	if pi.MimeType != "audio/mpeg" {
+		t.Fatalf("passthrough mime = %q, want the feed's declared enclosure type", pi.MimeType)
+	}
+	if ep.Downloaded {
+		t.Fatal("a passthrough episode must still report downloaded false")
+	}
+	// The pair a client reads to decide whether to offer play: not
+	// downloaded, but playable because the feed named audio.
+	if ep.HasEnclosure == nil || !*ep.HasEnclosure {
+		t.Fatal("an episode the feed named audio for must report hasEnclosure")
+	}
 
 	// The skip map is unavailable before the audio exists.
 	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/skip-map", h.token)
@@ -368,11 +456,15 @@ func TestPodcastLifecycle(t *testing.T) {
 	if page.Items[1].Downloaded {
 		t.Fatal("episode still reads downloaded after removal")
 	}
+	// Removal takes the local audio, not the ability to play: the feed
+	// enclosure is still there, so play-info falls back to passthrough.
 	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", h.token)
-	if resp.StatusCode != 409 {
-		t.Fatalf("play-info after removal = %d, want 409", resp.StatusCode)
+	if resp.StatusCode != 200 {
+		t.Fatalf("play-info after removal = %d, want 200 by passthrough", resp.StatusCode)
 	}
-	resp.Body.Close()
+	if u := decode[PlayInfo](t, resp).Url; !strings.HasPrefix(u, "/media/enclosure?") {
+		t.Fatalf("play-info url after removal = %q, want the passthrough relay", u)
+	}
 	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-state", h.token)
 	if st := decode[PlayState](t, resp); !st.Played || st.PlayCount != 1 {
 		t.Fatalf("removal must archive, not delete: state = %+v", st)
@@ -837,11 +929,15 @@ func TestUnsubscribeRemovesDownloads(t *testing.T) {
 			t.Fatalf("episode %s still downloaded after last-subscriber cleanup", ep.Pid)
 		}
 	}
+	// The files are gone; the feed enclosures are not, so the episodes
+	// still play, by passthrough rather than from local bytes.
 	resp = get(t, h.ts, "/api/v1/items/"+rows[0].Pid+"/play-info", h.token)
-	if resp.StatusCode != 409 {
-		t.Fatalf("play-info after cleanup = %d, want 409", resp.StatusCode)
+	if resp.StatusCode != 200 {
+		t.Fatalf("play-info after cleanup = %d, want 200 by passthrough", resp.StatusCode)
 	}
-	resp.Body.Close()
+	if u := decode[PlayInfo](t, resp).Url; !strings.HasPrefix(u, "/media/enclosure?") {
+		t.Fatalf("play-info url after cleanup = %q, want the passthrough relay", u)
+	}
 }
 
 func TestUnsubscribeCleanupSkipsInUse(t *testing.T) {
@@ -917,9 +1013,509 @@ func TestRemoveDownloadGuards(t *testing.T) {
 	if resp.StatusCode != 409 {
 		t.Fatalf("in-use remove status = %d, want 409", resp.StatusCode)
 	}
-	resp.Body.Close()
+	// The removal path answers 409 for two unrelated reasons: this one,
+	// and a busy file-mutation job lease. They mean opposite things to a
+	// caller (wait for the listener, versus retry shortly), so only the
+	// message tells them apart and this one must not read as the other.
+	inUse := decode[Error](t, resp)
+	if !strings.Contains(inUse.Message, "listening") ||
+		strings.Contains(inUse.Message, "conflicting catalog job") {
+		t.Fatalf("in-use refusal message = %q, want it to name the listener", inUse.Message)
+	}
 	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
 	if !decode[EpisodePage](t, resp).Items[0].Downloaded {
 		t.Fatal("refused removal must leave the file in place")
+	}
+}
+
+// TestEnclosurePassthrough covers the relay an unfetched episode plays
+// through: the URL is minted from the episode rather than taken from the
+// caller, ranges pass both ways, and the podcast host's own headers stay
+// on the host's side of the relay.
+func TestEnclosurePassthrough(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newFeedServerWithHeaders(t, 1, http.Header{
+		"Set-Cookie":     []string{"host_session=leaked; Path=/"},
+		"Server":         []string{"PodcastHost/9.9"},
+		"X-Host-Tracker": []string{"listener-42"},
+	})
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	sub := decode[Subscription](t, resp)
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+	ep := decode[EpisodePage](t, resp).Items[0]
+	if ep.Downloaded {
+		t.Fatal("the episode should not be fetched for this test")
+	}
+
+	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", h.token)
+	info := decode[PlayInfo](t, resp)
+	if !strings.HasPrefix(info.Url, "/media/enclosure?") {
+		t.Fatalf("play-info url = %q, want the passthrough relay", info.Url)
+	}
+
+	// A whole-file read: the feed's audio arrives, with the allowlisted
+	// headers and nothing the host tried to add alongside them.
+	whole := get(t, h.ts, info.Url, "")
+	body, err := io.ReadAll(whole.Body)
+	whole.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if whole.StatusCode != 200 {
+		t.Fatalf("passthrough status = %d, want 200", whole.StatusCode)
+	}
+	if len(body) == 0 {
+		t.Fatal("passthrough served no bytes")
+	}
+	if got := whole.Header.Get("Content-Type"); got != "audio/mpeg" {
+		t.Errorf("Content-Type = %q, want the enclosure type", got)
+	}
+	if whole.Header.Get("Accept-Ranges") != "bytes" {
+		t.Errorf("Accept-Ranges = %q, want bytes", whole.Header.Get("Accept-Ranges"))
+	}
+	for _, blocked := range []string{"Set-Cookie", "Server", "X-Host-Tracker"} {
+		if v := whole.Header.Get(blocked); v != "" {
+			t.Errorf("the podcast host's %s reached the client: %q", blocked, v)
+		}
+	}
+
+	// A range request: forwarded upstream, and the 206 comes back with
+	// the window the client asked for.
+	req, _ := http.NewRequest("GET", h.ts.URL+info.Url, nil)
+	req.Header.Set("Range", "bytes=10-19")
+	ranged, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	part, err := io.ReadAll(ranged.Body)
+	ranged.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ranged.StatusCode != http.StatusPartialContent {
+		t.Fatalf("ranged passthrough status = %d, want 206", ranged.StatusCode)
+	}
+	if len(part) != 10 {
+		t.Fatalf("ranged passthrough served %d bytes, want 10", len(part))
+	}
+	if !bytes.Equal(part, body[10:20]) {
+		t.Error("the ranged window is not the same bytes as the whole-file read")
+	}
+	wantRange := fmt.Sprintf("bytes 10-19/%d", len(body))
+	if got := ranged.Header.Get("Content-Range"); got != wantRange {
+		t.Errorf("Content-Range = %q, want %q", got, wantRange)
+	}
+
+	// The token binds one episode. A token minted for something else
+	// cannot borrow this relay, which is what keeps it from being a
+	// general-purpose proxy.
+	swapped := strings.Replace(info.Url, "pid="+ep.Pid, "pid="+sub.Show.Pid, 1)
+	denied := get(t, h.ts, swapped, "")
+	denied.Body.Close()
+	if denied.StatusCode != 401 {
+		t.Errorf("a token for another pid = %d, want 401", denied.StatusCode)
+	}
+}
+
+// TestEnclosurePassthroughNeedsAnEnclosure keeps the conflict for the
+// one population passthrough cannot serve: an episode whose feed named
+// no audio at all.
+func TestEnclosurePassthroughNeedsAnEnclosure(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 1)
+	feed.writeEnclosureless(t)
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	sub := decode[Subscription](t, resp)
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+	page := decode[EpisodePage](t, resp)
+	if len(page.Items) == 0 {
+		t.Fatal("the enclosureless feed produced no episodes")
+	}
+	// The one episode nothing can play, and the field that says so
+	// before a client offers the affordance.
+	if hs := page.Items[0].HasEnclosure; hs != nil && *hs {
+		t.Fatal("an episode with no enclosure must not report hasEnclosure")
+	}
+	resp = get(t, h.ts, "/api/v1/items/"+page.Items[0].Pid+"/play-info", h.token)
+	defer resp.Body.Close()
+	if resp.StatusCode != 409 {
+		t.Fatalf("enclosureless episode play-info status = %d, want 409", resp.StatusCode)
+	}
+}
+
+// TestAutoDownloadFilterUnion is the filter at the only place it is
+// consulted: a feed refresh deciding what to fetch of what it just
+// added. Two subscribers with different filters mean the decision is per
+// subscriber and per episode, and the union takes an episode either one
+// wants, because the downloaded file is shared.
+func TestAutoDownloadFilterUnion(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 5)
+	feed.writeFeed(t, 2) // the show starts with two episodes published
+	ctx := context.Background()
+
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword})
+	resp.Body.Close()
+	sam := loginAs(t, h.ts, "sam", testPassword)
+
+	resp = h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+	resp = reqAs(t, h, "POST", "/api/v1/podcasts", sam.Token, map[string]any{"url": feed.feedURL()})
+	resp.Body.Close()
+
+	// The admin wants episode 3 only; sam wants everything except
+	// episodes 3 and 5. Between them, 3 and 4 are wanted and 5 is not.
+	resp = reqAs(t, h, "PUT", "/api/v1/podcasts/"+show+"/settings", h.token, map[string]any{
+		"autoDownload":       true,
+		"autoDownloadFilter": map[string]any{"include": []string{"episode 3"}},
+	})
+	if resp.StatusCode != 200 {
+		t.Fatalf("admin settings status = %d", resp.StatusCode)
+	}
+	settings := decode[Subscription](t, resp).Settings
+	if settings.AutoDownloadFilter == nil || settings.AutoDownloadFilter.Include == nil ||
+		len(*settings.AutoDownloadFilter.Include) != 1 {
+		t.Fatalf("the filter did not round-trip: %+v", settings.AutoDownloadFilter)
+	}
+	resp = reqAs(t, h, "PUT", "/api/v1/podcasts/"+show+"/settings", sam.Token, map[string]any{
+		"autoDownload":       true,
+		"autoDownloadFilter": map[string]any{"exclude": []string{"Episode 3", "EPISODE 5"}},
+	})
+	resp.Body.Close()
+
+	// The feed publishes three more; the refresh decides what to fetch.
+	feed.writeFeed(t, 5)
+	h.svc.RefreshDueFeeds(ctx, 0)
+	drainFetches(t, h)
+
+	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+	byTitle := map[string]bool{}
+	for _, ep := range decode[EpisodePage](t, resp).Items {
+		byTitle[ep.Title] = ep.Downloaded
+	}
+	for _, want := range []string{"Episode 3", "Episode 4"} {
+		if !byTitle[want] {
+			t.Errorf("%s was wanted by a subscriber and not fetched", want)
+		}
+	}
+	if byTitle["Episode 5"] {
+		t.Error("Episode 5 was excluded by the only filter that could admit it")
+	}
+	// The two that were already published are untouched: a filter
+	// applies to what a refresh adds, never to the backlog.
+	for _, old := range []string{"Episode 1", "Episode 2"} {
+		if byTitle[old] {
+			t.Errorf("%s is backlog and must not be fetched by a filter change", old)
+		}
+	}
+}
+
+// TestEnclosurePassthroughCarriesFeedCredentials is the private-feed
+// half of passthrough. A paid host refuses an unauthenticated GET, so a
+// relay that forgot the show's stored credentials would 401 on exactly
+// the feeds a listener paid for, while fetching the same episode works:
+// WaxBin's download passes the same pair, and so does the transcript
+// fetch.
+func TestEnclosurePassthroughCarriesFeedCredentials(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newPrivateFeedServer(t, 1, "member", "s3cret")
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{
+		"url": feed.feedURL(), "username": "member", "password": "s3cret",
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("subscribe to a private feed status = %d", resp.StatusCode)
+	}
+	sub := decode[Subscription](t, resp)
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+	ep := decode[EpisodePage](t, resp).Items[0]
+	if ep.Downloaded {
+		t.Fatal("the episode should not be fetched for this test")
+	}
+
+	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("private-feed play-info status = %d, want 200", resp.StatusCode)
+	}
+	relay := decode[PlayInfo](t, resp).Url
+	if !strings.HasPrefix(relay, "/media/enclosure?") {
+		t.Fatalf("play-info url = %q, want the passthrough relay", relay)
+	}
+
+	streamed := get(t, h.ts, relay, "")
+	body, err := io.ReadAll(streamed.Body)
+	streamed.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if streamed.StatusCode != 200 {
+		t.Fatalf("private-feed passthrough status = %d, want 200; the relay dropped the show's credentials", streamed.StatusCode)
+	}
+	if len(body) == 0 {
+		t.Fatal("private-feed passthrough served no bytes")
+	}
+	// The credentials are the server's to spend, never the listener's to
+	// see: nothing about them may reach the client.
+	if v := streamed.Header.Get("Www-Authenticate"); v != "" {
+		t.Errorf("the host's auth challenge reached the client: %q", v)
+	}
+}
+
+// TestEnclosurePassthroughWithheldFromNonSubscribers is the other half
+// of the same decision. An episode read stays open to anyone who can see
+// the podcast library, so without a check any account on the server
+// would stream a paid feed on the strength of somebody else's
+// subscription. The credentials are the show's and every subscriber
+// shares them, but a non-subscriber is not one of them.
+func TestEnclosurePassthroughWithheldFromNonSubscribers(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newPrivateFeedServer(t, 1, "member", "s3cret")
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{
+		"url": feed.feedURL(), "username": "member", "password": "s3cret",
+	})
+	sub := decode[Subscription](t, resp)
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+	ep := decode[EpisodePage](t, resp).Items[0]
+
+	resp = h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword})
+	resp.Body.Close()
+	sam := loginAs(t, h.ts, "sam", testPassword)
+
+	// Sam can see the episode but does not subscribe, so passthrough is
+	// not minted for them: play-info reports the same conflict an
+	// episode with no audio anywhere would.
+	resp = reqAs(t, h, "GET", "/api/v1/items/"+ep.Pid+"/play-info", sam.Token, nil)
+	samStatus := resp.StatusCode
+	samURL := ""
+	if samStatus == 200 {
+		samURL = decode[PlayInfo](t, resp).Url
+	} else {
+		resp.Body.Close()
+	}
+	if samStatus == 200 && strings.HasPrefix(samURL, "/media/enclosure?") {
+		t.Fatal("a non-subscriber was handed a relay URL for a credentialed feed")
+	}
+
+	// Sam asking the relay directly is refused the same way, so the
+	// check is on the endpoint rather than only on the mint: a media
+	// token names its user, and the relay resolves credentials for that
+	// user, so sam's own token buys sam nothing here.
+	token, _ := h.media.MintFor(sam.User.Id, ep.Pid, time.Hour)
+	direct := get(t, h.ts, "/media/enclosure?pid="+ep.Pid+"&mt="+token, "")
+	direct.Body.Close()
+	if direct.StatusCode != 403 {
+		t.Errorf("a non-subscriber at the relay = %d, want 403", direct.StatusCode)
+	}
+
+	// Not asserted, and worth naming: a relay URL minted for the
+	// subscriber streams the paid feed for anyone holding it until the
+	// token expires, because the token is the capability. That is what
+	// a media token is everywhere in this server, not something this
+	// endpoint introduces.
+}
+
+// TestOneSidedFilterHasNoNullsOnTheWire pins the wire form of a filter
+// that names only one side, which is the common shape: a listener
+// excluding trailers writes no include list at all.
+//
+// The trap is Go's own: `omitempty` on a *[]string omits a nil pointer,
+// not a pointer to a nil slice, so guarding the pair rather than each
+// field puts `"include": null` on the wire. The schema declares both
+// sides as plain arrays and neither as nullable, so that answer is off
+// contract for anything that validates it.
+func TestOneSidedFilterHasNoNullsOnTheWire(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 1)
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+
+	for _, tc := range []struct {
+		name   string
+		filter map[string]any
+	}{
+		{"exclude only", map[string]any{"exclude": []string{"bonus"}}},
+		{"include only", map[string]any{"include": []string{"mailbag"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := reqAs(t, h, "PUT", "/api/v1/podcasts/"+show+"/settings", h.token,
+				map[string]any{"autoDownload": true, "autoDownloadFilter": tc.filter})
+			body, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("settings status = %d: %s", resp.StatusCode, body)
+			}
+			if strings.Contains(string(body), "null") {
+				t.Errorf("a one-sided filter put a null on the wire: %s", body)
+			}
+			// The side that was set still round-trips; the fix must not
+			// have dropped both.
+			var got struct {
+				Settings struct {
+					AutoDownloadFilter map[string][]string `json:"autoDownloadFilter"`
+				} `json:"settings"`
+			}
+			if err := json.Unmarshal(body, &got); err != nil {
+				t.Fatal(err)
+			}
+			for key, want := range tc.filter {
+				terms := want.([]string)
+				if len(got.Settings.AutoDownloadFilter[key]) != len(terms) {
+					t.Errorf("%s did not round-trip: %s", key, body)
+				}
+			}
+			// And the unset side is absent rather than present-and-empty.
+			for _, key := range []string{"include", "exclude"} {
+				if _, set := tc.filter[key]; set {
+					continue
+				}
+				if _, present := got.Settings.AutoDownloadFilter[key]; present {
+					t.Errorf("the unset %s side is on the wire: %s", key, body)
+				}
+			}
+		})
+	}
+}
+
+// TestEnclosureRelayProbesAndDegrades covers the three shapes a real
+// podcast host and a real client produce that the happy path does not:
+// a HEAD probe, a host that ignores ranges, and the header allowlist on
+// a ranged answer rather than only on a whole-file one.
+func TestEnclosureRelayProbesAndDegrades(t *testing.T) {
+	h := newPodcastHarness(t)
+
+	// A host that answers every request whole, ignoring Range, and adds
+	// headers of its own to both shapes.
+	var sawRange, sawMethod string
+	feed := newFeedServer(t, 1)
+	files := http.FileServer(http.Dir(feed.dir))
+	feed.ts.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".mp3") {
+			sawRange, sawMethod = r.Header.Get("Range"), r.Method
+			w.Header().Set("Set-Cookie", "host_session=leaked; Path=/")
+			w.Header().Set("X-Host-Tracker", "listener-42")
+			// Deliberately no 206 and no Accept-Ranges: the host does
+			// not do ranges, which the spec's seekable caveat exists for.
+			r.Header.Del("Range")
+		}
+		files.ServeHTTP(w, r)
+	})
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	sub := decode[Subscription](t, resp)
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+	ep := decode[EpisodePage](t, resp).Items[0]
+	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", h.token)
+	relay := decode[PlayInfo](t, resp).Url
+
+	// A range the host ignores degrades to a whole 200 rather than
+	// failing: play-info promised seekable as best effort, not as a fact.
+	req, _ := http.NewRequest("GET", h.ts.URL+relay, nil)
+	req.Header.Set("Range", "bytes=10-19")
+	ranged, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(ranged.Body)
+	ranged.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ranged.StatusCode != 200 {
+		t.Fatalf("a host that ignores ranges = %d, want the whole 200 relayed", ranged.StatusCode)
+	}
+	if len(body) <= 10 {
+		t.Fatalf("the degraded answer served %d bytes, want the whole file", len(body))
+	}
+	if sawRange != "bytes=10-19" {
+		t.Errorf("the host saw Range %q, want the client's own", sawRange)
+	}
+	// The allowlist holds on this shape too, which the whole-file test
+	// alone would not show.
+	for _, blocked := range []string{"Set-Cookie", "X-Host-Tracker"} {
+		if v := ranged.Header.Get(blocked); v != "" {
+			t.Errorf("the host's %s reached the client on a ranged read: %q", blocked, v)
+		}
+	}
+
+	if sawMethod != http.MethodGet {
+		t.Errorf("the upstream request was %q", sawMethod)
+	}
+}
+
+// TestEnclosureHeadDoesNotPullTheEpisode is the cast and Safari probe.
+// Go's ServeMux routes HEAD to a GET pattern, so it reaches the relay,
+// and net/http discards whatever a handler writes for one -- which is
+// why the body a client sees proves nothing here and the assertion is
+// on what the podcast host was made to serve. Without a HEAD branch the
+// relay reads the whole episode and throws it away.
+func TestEnclosureHeadDoesNotPullTheEpisode(t *testing.T) {
+	h := newPodcastHarness(t)
+
+	// The enclosure is large enough that pulling it is unmistakable
+	// against whatever the transport buffers ahead of the first read.
+	const size = 8 << 20
+	var served atomic.Int64
+	feed := newFeedServer(t, 1)
+	files := http.FileServer(http.Dir(feed.dir))
+	feed.ts.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, ".mp3") {
+			files.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.Header().Set("Content-Length", strconv.Itoa(size))
+		w.WriteHeader(http.StatusOK)
+		buf := make([]byte, 32<<10)
+		for sent := 0; sent < size; sent += len(buf) {
+			n, err := w.Write(buf)
+			served.Add(int64(n))
+			if err != nil {
+				return
+			}
+		}
+	})
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	sub := decode[Subscription](t, resp)
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+	ep := decode[EpisodePage](t, resp).Items[0]
+	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", h.token)
+	relay := decode[PlayInfo](t, resp).Url
+
+	req, _ := http.NewRequest("HEAD", h.ts.URL+relay, nil)
+	head, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(head.Body)
+	head.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head.StatusCode != 200 {
+		t.Fatalf("HEAD on the relay = %d, want 200", head.StatusCode)
+	}
+	if len(body) != 0 {
+		t.Errorf("HEAD returned %d body bytes", len(body))
+	}
+	// The headers are the whole point of a probe, so they still have to
+	// be the episode's.
+	if ct := head.Header.Get("Content-Type"); ct != "audio/mpeg" {
+		t.Errorf("HEAD Content-Type = %q, want the episode's", ct)
+	}
+	if cl := head.Header.Get("Content-Length"); cl != strconv.Itoa(size) {
+		t.Errorf("HEAD Content-Length = %q, want %d", cl, size)
+	}
+	// The host may have pushed some bytes before the relay let go; what
+	// must not happen is the whole episode moving for a probe.
+	if got := served.Load(); got > size/8 {
+		t.Errorf("a HEAD probe pulled %d bytes of a %d byte episode", got, size)
 	}
 }

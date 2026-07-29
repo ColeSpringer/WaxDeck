@@ -134,6 +134,16 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
     timeout: 30_000,
   });
 
+  // Playback is deliberately left running through the rest of this
+  // spec. Stopping it was tried and is not worth it: the pause control
+  // sits under a sibling semantics node that intercepts the click for as
+  // long as the player screen is up, and the reason to stop it did not
+  // survive diagnosis anyway. An episode row enqueues that one episode
+  // (`QueueSourceKind.single`), so episode one finishing cannot advance
+  // into episode two and leave the play state the unfetch step used to
+  // be blamed for. What actually refuses that step is a job lease, and
+  // the poll below is where that is handled.
+
   // Show notes were sanitized server-side and render as text.
   await clickThrough(
     page.getByRole('button', { name: 'Back' }).first(),
@@ -145,7 +155,8 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   );
 
   // The fetch's inverse: a second episode fetches, removes (archive,
-  // not delete), and cannot stream until fetched again.
+  // not delete), and falls back to streaming the feed's own enclosure
+  // through this origin rather than refusing.
   const second = items[1];
   const fetch2 = await request.post(`/api/v1/episodes/${second.pid}/fetch`, authed(token));
   expect(fetch2.status()).toBe(202);
@@ -159,13 +170,45 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
       { timeout: 60_000 },
     )
     .toBeTruthy();
-  const removed = await request.delete(`/api/v1/episodes/${second.pid}/fetch`, authed(token));
-  expect(removed.status()).toBe(204);
+  // The unfetch can lose a race that is nothing to do with podcasts:
+  // it ends in a delete under the shared file-mutation job lease, and
+  // this suite runs four workers against one server, so a sibling spec's
+  // upload, rescan, or trash round trip can be holding it. That refusal
+  // clears on its own and is retried; the in-use refusal, which is the
+  // one this step is actually about, is not, and fails here with the
+  // server's own message and the play state that produced it.
+  await expect
+    .poll(
+      async () => {
+        const resp = await request.delete(`/api/v1/episodes/${second.pid}/fetch`, authed(token));
+        if (resp.status() === 204) return 204;
+        const body = await resp.text();
+        if (resp.status() === 409 && body.includes('conflicting catalog job')) return 409;
+        const state = await request.get(
+          `/api/v1/items/${second.pid}/play-state`,
+          authed(token),
+        );
+        throw new Error(
+          `unfetch answered ${resp.status()}: ${body}\nplay-state: ${await state.text()}`,
+        );
+      },
+      { timeout: 30_000, message: 'the unfetch should succeed once the catalog lease frees' },
+    )
+    .toBe(204);
   const after = await request.get(`/api/v1/podcasts/${showPid}/episodes`, authed(token));
   const secondAfter = ((await after.json()).items as any[]).find((e) => e.pid === second.pid);
   expect(secondAfter.downloaded).toBeFalsy();
   const info = await request.get(`/api/v1/items/${second.pid}/play-info`, authed(token));
-  expect(info.status(), 'a removed episode cannot stream until fetched again').toBe(409);
+  expect(info.status(), 'a removed episode still streams by enclosure passthrough').toBe(200);
+  const passthrough = (await info.json()).url as string;
+  expect(passthrough, 'passthrough resolves to the relay, not the engine').toContain(
+    '/media/enclosure?',
+  );
+  // The relay really carries the feed host's bytes, and it carries
+  // ranges, which is what makes an unfetched episode scrubbable.
+  const ranged = await request.get(passthrough, { headers: { Range: 'bytes=0-99' } });
+  expect(ranged.status(), 'the relay forwards the range upstream').toBe(206);
+  expect((await ranged.body()).length).toBe(100);
 
   // Unsubscribing while an episode sits fetched asks about the server
   // files; keeping them ends the subscription and leaves the download

@@ -22,6 +22,8 @@ class _$Episode extends Episode {
   @override
   final String? episodeType;
   @override
+  final bool? hasEnclosure;
+  @override
   final String? fetchError;
   @override
   final String? fetchState;
@@ -71,6 +73,7 @@ class _$Episode extends Episode {
     this.descriptionHtml,
     this.explicit,
     this.episodeType,
+    this.hasEnclosure,
     this.fetchError,
     this.fetchState,
     required this.publishedAt,
@@ -109,6 +112,7 @@ class _$Episode extends Episode {
         descriptionHtml == other.descriptionHtml &&
         explicit == other.explicit &&
         episodeType == other.episodeType &&
+        hasEnclosure == other.hasEnclosure &&
         fetchError == other.fetchError &&
         fetchState == other.fetchState &&
         publishedAt == other.publishedAt &&
@@ -140,6 +144,7 @@ class _$Episode extends Episode {
     _$hash = $jc(_$hash, descriptionHtml.hashCode);
     _$hash = $jc(_$hash, explicit.hashCode);
     _$hash = $jc(_$hash, episodeType.hashCode);
+    _$hash = $jc(_$hash, hasEnclosure.hashCode);
     _$hash = $jc(_$hash, fetchError.hashCode);
     _$hash = $jc(_$hash, fetchState.hashCode);
     _$hash = $jc(_$hash, publishedAt.hashCode);
@@ -173,6 +178,7 @@ class _$Episode extends Episode {
           ..add('descriptionHtml', descriptionHtml)
           ..add('explicit', explicit)
           ..add('episodeType', episodeType)
+          ..add('hasEnclosure', hasEnclosure)
           ..add('fetchError', fetchError)
           ..add('fetchState', fetchState)
           ..add('publishedAt', publishedAt)
@@ -235,6 +241,11 @@ class EpisodeBuilder
   String? get episodeType => _$this._episodeType;
   set episodeType(covariant String? episodeType) =>
       _$this._episodeType = episodeType;
+
+  bool? _hasEnclosure;
+  bool? get hasEnclosure => _$this._hasEnclosure;
+  set hasEnclosure(covariant bool? hasEnclosure) =>
+      _$this._hasEnclosure = hasEnclosure;
 
   String? _fetchError;
   String? get fetchError => _$this._fetchError;
@@ -333,6 +344,7 @@ class EpisodeBuilder
       _descriptionHtml = $v.descriptionHtml;
       _explicit = $v.explicit;
       _episodeType = $v.episodeType;
+      _hasEnclosure = $v.hasEnclosure;
       _fetchError = $v.fetchError;
       _fetchState = $v.fetchState;
       _publishedAt = $v.publishedAt;
@@ -383,6 +395,7 @@ class EpisodeBuilder
             descriptionHtml: descriptionHtml,
             explicit: explicit,
             episodeType: episodeType,
+            hasEnclosure: hasEnclosure,
             fetchError: fetchError,
             fetchState: fetchState,
             publishedAt: BuiltValueNullFieldError.checkNotNull(

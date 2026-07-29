@@ -443,12 +443,22 @@ SubscriptionSettings subscriptionSettingsFromGen(
     voiceBoost: settings.voiceBoost,
     skipIntroSeconds: settings.skipIntroSeconds,
     skipOutroSeconds: settings.skipOutroSeconds,
+    autoDownloadFilter: episodeFilterFromGen(settings.autoDownloadFilter),
+  );
+}
+
+EpisodeFilter? episodeFilterFromGen(gen.EpisodeFilter? filter) {
+  if (filter == null) return null;
+  return EpisodeFilter(
+    include: filter.include?.toList() ?? const [],
+    exclude: filter.exclude?.toList() ?? const [],
   );
 }
 
 gen.SubscriptionSettings subscriptionSettingsToGen(
   SubscriptionSettings settings,
 ) {
+  final filter = settings.autoDownloadFilter;
   return gen.SubscriptionSettings(
     (b) => b
       ..retentionKeep = settings.retentionKeep
@@ -459,7 +469,21 @@ gen.SubscriptionSettings subscriptionSettingsToGen(
       ..trimSilence = settings.trimSilence
       ..voiceBoost = settings.voiceBoost
       ..skipIntroSeconds = settings.skipIntroSeconds
-      ..skipOutroSeconds = settings.skipOutroSeconds,
+      ..skipOutroSeconds = settings.skipOutroSeconds
+      // Carried through even though nothing in the UI sets it yet: the
+      // PUT replaces the whole document, so omitting it here would wipe
+      // a filter the moment anyone saved a speed or a trim toggle.
+      // Each side is sent only when it has terms, matching what the
+      // server puts on the wire.
+      ..autoDownloadFilter = filter == null || filter.isEmpty
+          ? null
+          : (gen.EpisodeFilterBuilder()
+              ..include = filter.include.isEmpty
+                  ? null
+                  : ListBuilder<String>(filter.include)
+              ..exclude = filter.exclude.isEmpty
+                  ? null
+                  : ListBuilder<String>(filter.exclude)),
   );
 }
 
@@ -518,6 +542,7 @@ EpisodeSummary episodeSummaryFromGen(
     fetchError: episode.fetchError,
     explicit: episode.explicit ?? false,
     hasTranscript: episode.hasTranscript ?? false,
+    hasEnclosure: episode.hasEnclosure ?? false,
   );
 }
 
@@ -559,6 +584,7 @@ EpisodeDetail episodeDetailFromGen(gen.Episode episode, {String baseUrl = ''}) {
     fetchError: episode.fetchError,
     explicit: episode.explicit ?? false,
     hasTranscript: episode.hasTranscript ?? false,
+    hasEnclosure: episode.hasEnclosure ?? false,
     descriptionHtml: episode.descriptionHtml,
     link: episode.link,
     chapters: episode.chapters?.map(chapterMarkFromGen).toList() ?? const [],

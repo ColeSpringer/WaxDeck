@@ -49,7 +49,7 @@ import '../sharing/shares_screen.dart';
 import '../stats/listen_log_screen.dart';
 import '../stats/stats_screen.dart';
 import '../stats/year_in_review_screen.dart';
-import '../sync/sync_providers.dart';
+import '../sync/sync_binder.dart';
 import '../tools/tasks_screen.dart';
 import '../uploads/share_intake_gate.dart';
 import '../uploads/uploads_screen.dart';

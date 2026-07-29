@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -22,21 +23,27 @@ type Subscription struct {
 	VoiceBoost    *bool
 	SkipIntroSec  *int64
 	SkipOutroSec  *int64
+	// AutoDLInclude and AutoDLExclude are the auto-download keyword
+	// filter's title terms; nil or empty include admits everything.
+	AutoDLInclude []string
+	AutoDLExclude []string
 	CreatedAtNS   int64
 	UpdatedAtNS   int64
 }
 
 const subscriptionCols = `user_id, show_pid, folder, private, retention_keep,
 	auto_download, speed, trim_silence, voice_boost, skip_intro_secs,
-	skip_outro_secs, created_at_ns, updated_at_ns`
+	skip_outro_secs, auto_dl_include, auto_dl_exclude,
+	created_at_ns, updated_at_ns`
 
 func scanSubscription(row interface{ Scan(...any) error }) (Subscription, error) {
 	var s Subscription
 	var private, autoDownload int64
 	var trim, boost sql.NullInt64
+	var include, exclude sql.NullString
 	err := row.Scan(&s.UserID, &s.ShowPID, &s.Folder, &private, &s.RetentionKeep,
 		&autoDownload, &s.Speed, &trim, &boost, &s.SkipIntroSec,
-		&s.SkipOutroSec, &s.CreatedAtNS, &s.UpdatedAtNS)
+		&s.SkipOutroSec, &include, &exclude, &s.CreatedAtNS, &s.UpdatedAtNS)
 	if err != nil {
 		return Subscription{}, err
 	}
@@ -50,7 +57,40 @@ func scanSubscription(row interface{ Scan(...any) error }) (Subscription, error)
 		v := boost.Int64 != 0
 		s.VoiceBoost = &v
 	}
+	s.AutoDLInclude = decodeTerms(include)
+	s.AutoDLExclude = decodeTerms(exclude)
 	return s, nil
+}
+
+// decodeTerms reads a JSON string array column. A row that somehow
+// holds something else reads as unset rather than failing the whole
+// subscription: a filter nobody can parse must not make a show
+// unreadable.
+func decodeTerms(col sql.NullString) []string {
+	if !col.Valid || col.String == "" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(col.String), &out); err != nil {
+		return nil
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// encodeTerms renders a term list for storage; empty stores NULL, so
+// "no filter" is one representation rather than two.
+func encodeTerms(terms []string) any {
+	if len(terms) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(terms)
+	if err != nil {
+		return nil
+	}
+	return string(raw)
 }
 
 func nullBool(b *bool) any {
@@ -68,7 +108,7 @@ func nullBool(b *bool) any {
 func (d *DB) UpsertSubscription(ctx context.Context, s Subscription) error {
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO podcast_subscriptions (`+subscriptionCols+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (user_id, show_pid) DO UPDATE SET
 			folder = excluded.folder,
 			private = excluded.private,
@@ -79,10 +119,13 @@ func (d *DB) UpsertSubscription(ctx context.Context, s Subscription) error {
 			voice_boost = excluded.voice_boost,
 			skip_intro_secs = excluded.skip_intro_secs,
 			skip_outro_secs = excluded.skip_outro_secs,
+			auto_dl_include = excluded.auto_dl_include,
+			auto_dl_exclude = excluded.auto_dl_exclude,
 			updated_at_ns = excluded.updated_at_ns`,
 		s.UserID, s.ShowPID, s.Folder, boolInt(s.Private), s.RetentionKeep,
 		boolInt(s.AutoDownload), s.Speed, nullBool(s.TrimSilence),
 		nullBool(s.VoiceBoost), s.SkipIntroSec, s.SkipOutroSec,
+		encodeTerms(s.AutoDLInclude), encodeTerms(s.AutoDLExclude),
 		s.CreatedAtNS, s.UpdatedAtNS)
 	if err != nil {
 		return fmt.Errorf("db: upserting subscription: %w", err)

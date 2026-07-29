@@ -15,6 +15,9 @@ abstract mixin class EpisodeSummaryBuilder implements ItemSummaryBuilder {
   String? get episodeType;
   set episodeType(covariant String? episodeType);
 
+  bool? get hasEnclosure;
+  set hasEnclosure(covariant bool? hasEnclosure);
+
   String? get fetchError;
   set fetchError(covariant String? fetchError);
 
@@ -79,6 +82,8 @@ class _$$EpisodeSummary extends $EpisodeSummary {
   @override
   final String? episodeType;
   @override
+  final bool? hasEnclosure;
+  @override
   final String? fetchError;
   @override
   final String? fetchState;
@@ -123,6 +128,7 @@ class _$$EpisodeSummary extends $EpisodeSummary {
   _$$EpisodeSummary._({
     this.explicit,
     this.episodeType,
+    this.hasEnclosure,
     this.fetchError,
     this.fetchState,
     required this.publishedAt,
@@ -156,6 +162,7 @@ class _$$EpisodeSummary extends $EpisodeSummary {
     return other is $EpisodeSummary &&
         explicit == other.explicit &&
         episodeType == other.episodeType &&
+        hasEnclosure == other.hasEnclosure &&
         fetchError == other.fetchError &&
         fetchState == other.fetchState &&
         publishedAt == other.publishedAt &&
@@ -182,6 +189,7 @@ class _$$EpisodeSummary extends $EpisodeSummary {
     var _$hash = 0;
     _$hash = $jc(_$hash, explicit.hashCode);
     _$hash = $jc(_$hash, episodeType.hashCode);
+    _$hash = $jc(_$hash, hasEnclosure.hashCode);
     _$hash = $jc(_$hash, fetchError.hashCode);
     _$hash = $jc(_$hash, fetchState.hashCode);
     _$hash = $jc(_$hash, publishedAt.hashCode);
@@ -210,6 +218,7 @@ class _$$EpisodeSummary extends $EpisodeSummary {
     return (newBuiltValueToStringHelper(r'$EpisodeSummary')
           ..add('explicit', explicit)
           ..add('episodeType', episodeType)
+          ..add('hasEnclosure', hasEnclosure)
           ..add('fetchError', fetchError)
           ..add('fetchState', fetchState)
           ..add('publishedAt', publishedAt)
@@ -247,6 +256,11 @@ class $EpisodeSummaryBuilder
   String? get episodeType => _$this._episodeType;
   set episodeType(covariant String? episodeType) =>
       _$this._episodeType = episodeType;
+
+  bool? _hasEnclosure;
+  bool? get hasEnclosure => _$this._hasEnclosure;
+  set hasEnclosure(covariant bool? hasEnclosure) =>
+      _$this._hasEnclosure = hasEnclosure;
 
   String? _fetchError;
   String? get fetchError => _$this._fetchError;
@@ -340,6 +354,7 @@ class $EpisodeSummaryBuilder
     if ($v != null) {
       _explicit = $v.explicit;
       _episodeType = $v.episodeType;
+      _hasEnclosure = $v.hasEnclosure;
       _fetchError = $v.fetchError;
       _fetchState = $v.fetchState;
       _publishedAt = $v.publishedAt;
@@ -383,6 +398,7 @@ class $EpisodeSummaryBuilder
         _$$EpisodeSummary._(
           explicit: explicit,
           episodeType: episodeType,
+          hasEnclosure: hasEnclosure,
           fetchError: fetchError,
           fetchState: fetchState,
           publishedAt: BuiltValueNullFieldError.checkNotNull(

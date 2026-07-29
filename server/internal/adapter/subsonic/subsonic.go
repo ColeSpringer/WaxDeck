@@ -21,6 +21,7 @@ package subsonic
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"maps"
 	"math/rand/v2"
@@ -530,6 +531,9 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 		}
 		res, err := h.svc.DirectPlayInfo(r.Context(), uc, id, "")
 		if err != nil {
+			if h.redirectToEnclosure(w, r, uc.ID, id, err) {
+				return
+			}
 			h.failFromService(w, r, err, "no such song")
 			return
 		}
@@ -544,6 +548,9 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	}
 	info, err := h.bridge.PlayInfoFor(r.Context(), uc.ID, id, flow.PlayOptions{})
 	if err != nil {
+		if h.redirectToEnclosure(w, r, uc.ID, id, err) {
+			return
+		}
 		h.fail(w, r, 0, "resolving stream failed")
 		return
 	}
@@ -551,6 +558,30 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	// out of the byte path and rides the same proxy as first-party
 	// playback.
 	http.Redirect(w, r, info.URL, http.StatusFound)
+}
+
+// redirectToEnclosure sends a client to the passthrough relay when the
+// stream resolver refused because the episode's audio is not on this
+// server and the feed named an enclosure. Same shape as the two other
+// branches of stream: a same-origin redirect keeps the adapter out of
+// the byte path.
+//
+// maxBitRate and format conversion do not apply to a passthrough
+// episode. There is no local file for the streaming engine to cut, so
+// the relay is raw and those parameters are ignored rather than
+// silently honored, which is the same thing the direct-bytes branch
+// above already does.
+func (h *Handler) redirectToEnclosure(w http.ResponseWriter, r *http.Request, userID, id string, cause error) bool {
+	if h.media == nil || !errors.Is(cause, service.ErrEpisodeNotFetched) {
+		return false
+	}
+	if _, ok := h.svc.PassthroughEpisode(r.Context(), userID, id); !ok {
+		return false
+	}
+	token, _ := h.media.Mint(userID, id)
+	http.Redirect(w, r, "/media/enclosure?pid="+url.QueryEscape(id)+
+		"&mt="+url.QueryEscape(token), http.StatusFound)
+	return true
 }
 
 // --- the entity-keyed index --------------------------------------------------

@@ -24,11 +24,14 @@ func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) 
 		return flow.Source{}, err
 	}
 
-	// A podcast episode without its audio cannot stream; the typed
-	// conflict tells clients to queue a fetch and retry.
-	if it.Kind == model.KindEpisode && it.State != model.StatePresent {
-		return flow.Source{}, &Error{Kind: KindConflict,
-			Msg: "episode audio is not fetched to the server yet; queue it with the fetch endpoint"}
+	// A podcast episode without its audio has no local bytes, and a
+	// flow.Source cannot express a remote URL: Path is a path on this
+	// host, which the bridge maps to a WaxFlow root reference. So the
+	// conflict stays here and the decision to relay the feed's enclosure
+	// instead belongs one layer up, at each site that turns an item into
+	// a URL. ErrEpisodeNotFetched is what those sites match on.
+	if unfetchedEpisode(it) {
+		return flow.Source{}, notFetchedEpisode()
 	}
 
 	src := flow.Source{
@@ -179,11 +182,10 @@ func (l *Library) DirectPlayInfo(ctx context.Context, uc *UserCtx, apiItemPID, f
 	if err != nil {
 		return DirectPlayResolution{}, err
 	}
-	// Same contract as the engine path: an unfetched episode answers
-	// the typed conflict, telling clients to queue a fetch and retry.
-	if it.Kind == model.KindEpisode && it.State != model.StatePresent {
-		return DirectPlayResolution{}, &Error{Kind: KindConflict,
-			Msg: "episode audio is not fetched to the server yet; queue it with the fetch endpoint"}
+	// Same contract as the engine path: there are no local bytes, so the
+	// caller falls back to enclosure passthrough or reports the conflict.
+	if unfetchedEpisode(it) {
+		return DirectPlayResolution{}, notFetchedEpisode()
 	}
 	out := DirectPlayResolution{DurationMS: it.DurationMS}
 	if filePID != "" {

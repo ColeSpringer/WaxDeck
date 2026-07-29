@@ -6,7 +6,6 @@ package flow
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,9 +27,6 @@ import (
 // capsStartupWait bounds how long New waits for the sidecar's /caps
 // before giving up.
 const capsStartupWait = 30 * time.Second
-
-// rootsReloadTimeout bounds one /roots/reload call.
-const rootsReloadTimeout = 30 * time.Second
 
 // Root maps one library directory to the WaxFlow root name the same
 // directory is mounted under in the sidecar.
@@ -375,15 +371,6 @@ func (b *Bridge) RootsReloadSupported() bool {
 	return b.configPath != "" && b.caps != nil && b.caps.Delivery.RootsReload
 }
 
-// RootsDelta is the sidecar's reconcile report: what moved, plus the
-// full root set after the reload, in configuration order.
-type RootsDelta struct {
-	Added   []string `json:"added"`
-	Removed []string `json:"removed"`
-	Changed []string `json:"changed"`
-	Roots   []string `json:"roots"`
-}
-
 // ReloadRoots rewrites the sidecar's config file with the bridge's
 // current root set and has the sidecar reconcile against it.
 //
@@ -415,6 +402,16 @@ func (b *Bridge) ReloadRoots(ctx context.Context) error {
 // reloadRootsLocked is ReloadRoots' body, called with reloadMu held so
 // SyncRoot can hold the lock across its own AddRoot too.
 func (b *Bridge) reloadRootsLocked(ctx context.Context) error {
+	// The reconcile does not inherit the caller's cancellation. SyncRoot runs
+	// on the request context, and the rollback below restores the config file
+	// on any error, cancellation included, so an administrator whose browser
+	// gives up mid-reconcile would put back a root set the sidecar may
+	// already have accepted. That leaves the file disagreeing with the
+	// running sidecar, and the file is what the sidecar reads at its next
+	// boot, which is the failure the rollback exists to prevent. Dropping the
+	// caller's deadline with it is deliberate: the client applies its own 30s
+	// default to a context carrying none, which is the bound this POST needs.
+	ctx = context.WithoutCancel(ctx)
 	prev, perm, err := readRootsConfig(b.configPath)
 	if err != nil {
 		return err
@@ -422,7 +419,9 @@ func (b *Bridge) reloadRootsLocked(ctx context.Context) error {
 	if err := writeRootsConfig(b.configPath, prev, perm, b.snapshotRoots()); err != nil {
 		return err
 	}
-	delta, err := b.postRootsReload(ctx)
+	// ReloadRoots answers (nil, err) on any failure, so the delta is read
+	// only past this branch.
+	delta, err := b.client.ReloadRoots(ctx)
 	if err != nil {
 		if rerr := writeFileCrashSafe(b.configPath, prev, perm); rerr != nil {
 			// The sidecar's next start reads whatever is on disk now, so a
@@ -430,67 +429,13 @@ func (b *Bridge) reloadRootsLocked(ctx context.Context) error {
 			b.log.Error("restoring the sidecar config after a refused reload",
 				"path", b.configPath, "err", rerr)
 		}
-		return err
+		// %w, not %s: the client decodes the daemon's error envelope into a
+		// waxerr code, and re-stringifying here would throw that away.
+		return fmt.Errorf("flow: reloading sidecar roots: %w", err)
 	}
 	b.log.Info("waxflow roots reloaded",
 		"added", delta.Added, "removed", delta.Removed, "changed", delta.Changed, "roots", delta.Roots)
 	return nil
-}
-
-// postRootsReload calls the sidecar's /roots/reload. The typed client
-// has no method for it, so this hand-rolls the POST with the same
-// X-API-Key the proxy presents.
-func (b *Bridge) postRootsReload(ctx context.Context) (RootsDelta, error) {
-	var delta RootsDelta
-	// The sidecar re-reads its config and reopens every root inside this
-	// request, so it is bounded work; the bound is here because an
-	// unbounded POST would hang the library create that triggered it.
-	// This matches the typed client's own per-call default.
-	ctx, cancel := context.WithTimeout(ctx, rootsReloadTimeout)
-	defer cancel()
-	endpoint := b.base.JoinPath("roots", "reload").String()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
-	if err != nil {
-		return delta, fmt.Errorf("flow: %w", err)
-	}
-	req.Header.Set("X-API-Key", b.apiKey)
-	req.Header.Set("Accept", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return delta, fmt.Errorf("flow: posting roots reload: %w", err)
-	}
-	defer resp.Body.Close()
-	// Cap the read: an error envelope and a delta are both small, and an
-	// unbounded body from a misconfigured endpoint is not worth buffering.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return delta, fmt.Errorf("flow: reading roots reload response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return delta, fmt.Errorf("flow: roots reload refused (%s): %s",
-			resp.Status, strings.TrimSpace(sidecarErrMessage(body)))
-	}
-	if err := json.Unmarshal(body, &delta); err != nil {
-		return delta, fmt.Errorf("flow: decoding roots reload response: %w", err)
-	}
-	return delta, nil
-}
-
-// sidecarErrMessage pulls the message out of the family error envelope
-// ({error, code, schemaVersion}), falling back to the raw body when the
-// response is something else speaking (a proxy's own error page).
-func sidecarErrMessage(body []byte) string {
-	var env struct {
-		Error string `json:"error"`
-		Code  string `json:"code"`
-	}
-	if err := json.Unmarshal(body, &env); err == nil && env.Error != "" {
-		if env.Code != "" {
-			return env.Code + ": " + env.Error
-		}
-		return env.Error
-	}
-	return string(body)
 }
 
 // ServeStream is the /media/stream handler: verify the media token,

@@ -199,6 +199,7 @@ func (s *Server) GetEpisode(ctx context.Context, req GetEpisodeRequestObject) (G
 		Explicit:      sum.Explicit,
 		FetchError:    sum.FetchError,
 		FetchState:    sum.FetchState,
+		HasEnclosure:  sum.HasEnclosure,
 		HasTranscript: sum.HasTranscript,
 		MediaType:     sum.MediaType,
 		Pid:           sum.Pid,
@@ -633,6 +634,23 @@ func settingsJSON(st service.SubscriptionSettings) SubscriptionSettings {
 		n := int(*st.SkipOutroSec)
 		out.SkipOutroSeconds = &n
 	}
+	// An unset filter is absent rather than a pair of empty arrays: the
+	// two mean the same thing and one representation is enough. Each
+	// side is then set only when it has terms, per field rather than per
+	// pair: `omitempty` on a *[]string omits a nil pointer, not a
+	// pointer to a nil slice, so setting both unconditionally would put
+	// `"include": null` on the wire for an exclude-only filter, which
+	// the schema does not declare nullable.
+	if !st.AutoDLFilter.Empty() {
+		filter := EpisodeFilter{}
+		if len(st.AutoDLFilter.Include) > 0 {
+			filter.Include = &st.AutoDLFilter.Include
+		}
+		if len(st.AutoDLFilter.Exclude) > 0 {
+			filter.Exclude = &st.AutoDLFilter.Exclude
+		}
+		out.AutoDownloadFilter = &filter
+	}
 	return out
 }
 
@@ -662,6 +680,14 @@ func settingsFromJSON(in SubscriptionSettings) service.SubscriptionSettings {
 	if in.SkipOutroSeconds != nil {
 		n := int64(*in.SkipOutroSeconds)
 		out.SkipOutroSec = &n
+	}
+	if in.AutoDownloadFilter != nil {
+		if v := in.AutoDownloadFilter.Include; v != nil {
+			out.AutoDLFilter.Include = *v
+		}
+		if v := in.AutoDownloadFilter.Exclude; v != nil {
+			out.AutoDLFilter.Exclude = *v
+		}
 	}
 	return out
 }
@@ -709,6 +735,10 @@ func episodeSummaryJSON(ep service.EpisodeSummary) EpisodeSummary {
 	if ep.HasTx {
 		v := true
 		out.HasTranscript = &v
+	}
+	if ep.HasEnclosure {
+		v := true
+		out.HasEnclosure = &v
 	}
 	return out
 }

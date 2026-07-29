@@ -33,11 +33,12 @@ part 'episode.g.dart';
 /// * [episodeNumber] - Episode number, when the feed declares one.
 /// * [episodeType] - Feed-declared episode type (`full`, `trailer`, `bonus`). Open set; treat unknown values like `full`. 
 /// * [publishedAt] - Publication time. When the feed declares none, the server substitutes the time it first saw the episode, so ordering and paging stay total. 
-/// * [downloaded] - Whether the audio is on the server. Playback needs the fetch first: play-info for a not-yet-fetched episode answers `conflict`, and the episode fetch endpoint queues the download. 
+/// * [downloaded] - Whether the audio is on the server. This is not what decides whether the episode plays: an episode that is not downloaded still streams when `hasEnclosure` is true, relayed from the feed's own host by enclosure passthrough. What fetching adds is local bytes and the analysis that rides them, so silence trim, voice boost, and the skip map need it; the episode fetch endpoint queues the download. 
 /// * [fetchState] - Present while a server-side fetch is queued or after one failed: `queued` or `failed`. Absent otherwise. Open set; treat unknown values as `queued`. 
 /// * [fetchError] - Why the last fetch attempt failed (`fetchState` is `failed`). Retrying the fetch endpoint re-queues it. 
 /// * [explicit] - Feed-declared explicit flag.
 /// * [hasTranscript] - Whether a transcript is available.
+/// * [hasEnclosure] - Whether the feed named audio this server could relay for this episode: an enclosure URL, over http or https. True with `downloaded` false is the passthrough case, where the episode plays relayed from the feed's own host. False means the episode cannot play at all, and play-info answers `conflict`, so a client offering a play affordance should read this rather than assume an undownloaded episode is playable. True is a fact about the feed rather than a promise to the caller: a show whose feed needs credentials relays only for its own subscribers, so play-info may still answer `conflict` for someone reading an episode of a show they do not subscribe to. Treat it as the signal to offer play, not as a guarantee play succeeds. 
 /// * [descriptionHtml] - Show notes as sanitized HTML (server-side allowlist; safe to render directly). 
 /// * [link] - The episode's web page, when the feed declares one.
 /// * [chapters] - Chapter marks, ordered by `startMs`.
@@ -159,6 +160,13 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
       yield serializers.serialize(
         object.episodeType,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.hasEnclosure != null) {
+      yield r'hasEnclosure';
+      yield serializers.serialize(
+        object.hasEnclosure,
+        specifiedType: const FullType(bool),
       );
     }
     if (object.season != null) {
@@ -355,6 +363,13 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
             specifiedType: const FullType(String),
           ) as String;
           result.episodeType = valueDes;
+          break;
+        case r'hasEnclosure':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.hasEnclosure = valueDes;
           break;
         case r'season':
           final valueDes = serializers.deserialize(

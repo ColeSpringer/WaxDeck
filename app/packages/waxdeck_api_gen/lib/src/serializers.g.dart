@@ -84,6 +84,7 @@ Serializers _$serializers =
           ..add(EntityPlayState.serializer)
           ..add(EntityTypeFields.serializer)
           ..add(Episode.serializer)
+          ..add(EpisodeFilter.serializer)
           ..add(EpisodePage.serializer)
           ..add(Error.serializer)
           ..add(FacetBucket.serializer)
@@ -821,6 +822,14 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

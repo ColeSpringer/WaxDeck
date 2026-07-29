@@ -104,6 +104,7 @@ export 'package:waxdeck_api_gen/src/model/entity_edit.dart';
 export 'package:waxdeck_api_gen/src/model/entity_play_state.dart';
 export 'package:waxdeck_api_gen/src/model/entity_type_fields.dart';
 export 'package:waxdeck_api_gen/src/model/episode.dart';
+export 'package:waxdeck_api_gen/src/model/episode_filter.dart';
 export 'package:waxdeck_api_gen/src/model/episode_page.dart';
 export 'package:waxdeck_api_gen/src/model/episode_summary.dart';
 export 'package:waxdeck_api_gen/src/model/error.dart';

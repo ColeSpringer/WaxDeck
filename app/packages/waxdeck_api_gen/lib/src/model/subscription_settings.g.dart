@@ -12,6 +12,8 @@ class _$SubscriptionSettings extends SubscriptionSettings {
   @override
   final bool? autoDownload;
   @override
+  final EpisodeFilter? autoDownloadFilter;
+  @override
   final String? folder;
   @override
   final bool? private;
@@ -33,6 +35,7 @@ class _$SubscriptionSettings extends SubscriptionSettings {
   _$SubscriptionSettings._({
     this.retentionKeep,
     this.autoDownload,
+    this.autoDownloadFilter,
     this.folder,
     this.private,
     this.speed,
@@ -56,6 +59,7 @@ class _$SubscriptionSettings extends SubscriptionSettings {
     return other is SubscriptionSettings &&
         retentionKeep == other.retentionKeep &&
         autoDownload == other.autoDownload &&
+        autoDownloadFilter == other.autoDownloadFilter &&
         folder == other.folder &&
         private == other.private &&
         speed == other.speed &&
@@ -70,6 +74,7 @@ class _$SubscriptionSettings extends SubscriptionSettings {
     var _$hash = 0;
     _$hash = $jc(_$hash, retentionKeep.hashCode);
     _$hash = $jc(_$hash, autoDownload.hashCode);
+    _$hash = $jc(_$hash, autoDownloadFilter.hashCode);
     _$hash = $jc(_$hash, folder.hashCode);
     _$hash = $jc(_$hash, private.hashCode);
     _$hash = $jc(_$hash, speed.hashCode);
@@ -86,6 +91,7 @@ class _$SubscriptionSettings extends SubscriptionSettings {
     return (newBuiltValueToStringHelper(r'SubscriptionSettings')
           ..add('retentionKeep', retentionKeep)
           ..add('autoDownload', autoDownload)
+          ..add('autoDownloadFilter', autoDownloadFilter)
           ..add('folder', folder)
           ..add('private', private)
           ..add('speed', speed)
@@ -109,6 +115,12 @@ class SubscriptionSettingsBuilder
   bool? _autoDownload;
   bool? get autoDownload => _$this._autoDownload;
   set autoDownload(bool? autoDownload) => _$this._autoDownload = autoDownload;
+
+  EpisodeFilterBuilder? _autoDownloadFilter;
+  EpisodeFilterBuilder get autoDownloadFilter =>
+      _$this._autoDownloadFilter ??= EpisodeFilterBuilder();
+  set autoDownloadFilter(EpisodeFilterBuilder? autoDownloadFilter) =>
+      _$this._autoDownloadFilter = autoDownloadFilter;
 
   String? _folder;
   String? get folder => _$this._folder;
@@ -149,6 +161,7 @@ class SubscriptionSettingsBuilder
     if ($v != null) {
       _retentionKeep = $v.retentionKeep;
       _autoDownload = $v.autoDownload;
+      _autoDownloadFilter = $v.autoDownloadFilter?.toBuilder();
       _folder = $v.folder;
       _private = $v.private;
       _speed = $v.speed;
@@ -175,19 +188,36 @@ class SubscriptionSettingsBuilder
   SubscriptionSettings build() => _build();
 
   _$SubscriptionSettings _build() {
-    final _$result =
-        _$v ??
-        _$SubscriptionSettings._(
-          retentionKeep: retentionKeep,
-          autoDownload: autoDownload,
-          folder: folder,
-          private: private,
-          speed: speed,
-          trimSilence: trimSilence,
-          voiceBoost: voiceBoost,
-          skipIntroSeconds: skipIntroSeconds,
-          skipOutroSeconds: skipOutroSeconds,
+    _$SubscriptionSettings _$result;
+    try {
+      _$result =
+          _$v ??
+          _$SubscriptionSettings._(
+            retentionKeep: retentionKeep,
+            autoDownload: autoDownload,
+            autoDownloadFilter: _autoDownloadFilter?.build(),
+            folder: folder,
+            private: private,
+            speed: speed,
+            trimSilence: trimSilence,
+            voiceBoost: voiceBoost,
+            skipIntroSeconds: skipIntroSeconds,
+            skipOutroSeconds: skipOutroSeconds,
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'autoDownloadFilter';
+        _autoDownloadFilter?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'SubscriptionSettings',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

@@ -600,6 +600,9 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 		}
 		res, err := s.svc.DirectPlayInfo(ctx, uc, req.Pid, part.FilePID)
 		if err != nil {
+			if out, ok := s.enclosurePlayInfo(ctx, uc.ID, req.Pid, err); ok {
+				return out, nil
+			}
 			switch service.KindOf(err) {
 			case service.KindNotFound:
 				return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
@@ -649,6 +652,9 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 		VoiceBoost: boost,
 	})
 	if err != nil {
+		if out, ok := s.enclosurePlayInfo(ctx, uc.ID, req.Pid, err); ok {
+			return out, nil
+		}
 		switch service.KindOf(err) {
 		case service.KindNotFound:
 			return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil

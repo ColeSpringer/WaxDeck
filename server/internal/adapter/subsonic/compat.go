@@ -325,9 +325,11 @@ func (h *Handler) channelEpisodes(ctx context.Context, uc *service.UserCtx, show
 	return eps, nil
 }
 
-// episodeShape maps one episode. Only a downloaded episode gets a
-// streamId (unfetched enclosures do not stream through this server),
-// and the status mapping keeps the client's download button honest.
+// episodeShape maps one episode. An episode gets a streamId whenever it
+// can be played: fetched to the server, or unfetched but carrying a feed
+// enclosure the server will relay by passthrough. The status still
+// reports the download state, which is what keeps the client's download
+// button honest about what is held locally.
 func episodeShape(ep service.EpisodeSummary, showPID string) podcastEpisode {
 	out := podcastEpisode{
 		child: child{
@@ -345,9 +347,11 @@ func episodeShape(ep service.EpisodeSummary, showPID string) podcastEpisode {
 	if ep.PublishedNS > 0 {
 		out.PublishDate = time.Unix(0, ep.PublishedNS).UTC().Format(time.RFC3339)
 	}
+	if ep.Downloaded || ep.HasEnclosure {
+		out.StreamID = ep.PID
+	}
 	switch {
 	case ep.Downloaded:
-		out.StreamID = ep.PID
 		out.Status = "completed"
 	case ep.FetchState == "failed":
 		out.Status = "error"

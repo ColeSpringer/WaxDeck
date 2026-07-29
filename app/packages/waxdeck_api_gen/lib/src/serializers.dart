@@ -82,6 +82,7 @@ import 'package:waxdeck_api_gen/src/model/entity_edit.dart';
 import 'package:waxdeck_api_gen/src/model/entity_play_state.dart';
 import 'package:waxdeck_api_gen/src/model/entity_type_fields.dart';
 import 'package:waxdeck_api_gen/src/model/episode.dart';
+import 'package:waxdeck_api_gen/src/model/episode_filter.dart';
 import 'package:waxdeck_api_gen/src/model/episode_page.dart';
 import 'package:waxdeck_api_gen/src/model/episode_summary.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
@@ -402,6 +403,7 @@ part 'serializers.g.dart';
   EntityPlayState,
   EntityTypeFields,
   Episode,
+  EpisodeFilter,
   EpisodePage,
   EpisodeSummary,$EpisodeSummary,
   Error,

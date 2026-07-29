@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/podcast"
@@ -70,7 +71,92 @@ type SubscriptionSettings struct {
 	VoiceBoost    *bool
 	SkipIntroSec  *int64
 	SkipOutroSec  *int64
+	// AutoDLFilter narrows what auto-download takes; the zero value
+	// takes everything.
+	AutoDLFilter EpisodeFilter
 }
+
+// EpisodeFilter decides which new episodes auto-download takes, by
+// keyword against the episode title. Empty Include admits everything;
+// Exclude wins where both match.
+type EpisodeFilter struct {
+	Include []string
+	Exclude []string
+}
+
+// Empty reports a filter that admits every episode, which is what an
+// unset one does.
+func (f EpisodeFilter) Empty() bool { return len(f.Include) == 0 && len(f.Exclude) == 0 }
+
+// Admits reports whether an episode title passes the filter. Terms
+// match case-insensitively as substrings; titles only, never
+// descriptions, because a feed description carries sponsor copy and
+// boilerplate a listener would never call a match.
+func (f EpisodeFilter) Admits(title string) bool {
+	folded := strings.ToLower(title)
+	for _, term := range f.Exclude {
+		if t := strings.ToLower(strings.TrimSpace(term)); t != "" && strings.Contains(folded, t) {
+			return false
+		}
+	}
+	if len(f.Include) == 0 {
+		return true
+	}
+	for _, term := range f.Include {
+		if t := strings.ToLower(strings.TrimSpace(term)); t != "" && strings.Contains(folded, t) {
+			return true
+		}
+	}
+	// An include list that is nothing but blank terms is not a filter
+	// anybody expressed, so it admits rather than rejecting everything.
+	return !hasTerm(f.Include)
+}
+
+// hasTerm reports whether a term list carries at least one usable term.
+func hasTerm(terms []string) bool {
+	for _, t := range terms {
+		if strings.TrimSpace(t) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeTerms trims, drops blanks, and caps a term list for storage.
+func normalizeTerms(terms []string) []string {
+	if len(terms) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(terms))
+	for _, t := range terms {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		// By runes, not bytes. A byte slice would cut a multi-byte rune
+		// in half and store invalid UTF-8, which a non-English show
+		// title filter reaches immediately; the spec's maxLength counts
+		// characters, so this is also what makes the two agree.
+		if utf8.RuneCountInString(t) > maxFilterTermLen {
+			t = string([]rune(t)[:maxFilterTermLen])
+		}
+		out = append(out, t)
+		if len(out) == maxFilterTerms {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// The spec's own bounds on a filter, enforced here so a client that
+// ignores them stores something sane rather than an unbounded document.
+const (
+	maxFilterTerms   = 64
+	maxFilterTermLen = 128
+)
 
 // Subscription is one user's subscription with its show.
 type Subscription struct {
@@ -109,6 +195,9 @@ type EpisodeSummary struct {
 	FetchError  string
 	Explicit    bool
 	HasTx       bool
+	// HasEnclosure reports that the feed named audio for this episode,
+	// so an unfetched one still streams by passthrough.
+	HasEnclosure bool
 }
 
 // EpisodeDetail is the full episode view.
@@ -469,6 +558,8 @@ func (l *Library) PutSubscriptionSettings(ctx context.Context, uc *UserCtx, apiS
 		VoiceBoost:    s.VoiceBoost,
 		SkipIntroSec:  s.SkipIntroSec,
 		SkipOutroSec:  s.SkipOutroSec,
+		AutoDLInclude: normalizeTerms(s.AutoDLFilter.Include),
+		AutoDLExclude: normalizeTerms(s.AutoDLFilter.Exclude),
 		CreatedAtNS:   existing.CreatedAtNS,
 		UpdatedAtNS:   time.Now().UnixNano(),
 	}
@@ -712,7 +803,17 @@ func (l *Library) RemoveEpisodeDownload(ctx context.Context, uc *UserCtx, apiEpi
 	if err != nil {
 		return classify(err)
 	}
+	// ApplyDelete runs under the shared file-mutation job scope, so a
+	// scan, an import, or another delete already holding it answers a
+	// conflict too. That is the same status as the in-use refusal above
+	// and means the opposite thing: this one clears on its own, so it
+	// gets the wording the rest of the server uses for a busy catalog
+	// rather than telling an administrator somebody is listening.
 	if _, err := l.lib.ApplyDelete(ctx, plan); err != nil {
+		if KindOf(classify(err)) == KindConflict {
+			return &Error{Kind: KindConflict,
+				Msg: "a conflicting catalog job is already running; retry when it finishes", Err: err}
+		}
 		return classify(err)
 	}
 	return nil
@@ -849,6 +950,10 @@ func settingsDTO(row wdb.Subscription) SubscriptionSettings {
 		VoiceBoost:    row.VoiceBoost,
 		SkipIntroSec:  row.SkipIntroSec,
 		SkipOutroSec:  row.SkipOutroSec,
+		AutoDLFilter: EpisodeFilter{
+			Include: row.AutoDLInclude,
+			Exclude: row.AutoDLExclude,
+		},
 	}
 }
 
@@ -931,14 +1036,15 @@ func (l *Library) episodeSummary(ctx context.Context, ep *model.Episode) Episode
 			Album:      ep.PodcastTitle,
 			DurationMS: ep.DurationMS,
 		},
-		ShowPID:     apiPID(PrefixPodcast, ep.PodcastPID),
-		Season:      ep.Season,
-		EpisodeNo:   ep.EpisodeNo,
-		EpisodeType: string(ep.EpisodeType),
-		PublishedNS: pub,
-		Downloaded:  ep.Downloaded,
-		Explicit:    ep.Explicit,
-		HasTx:       ep.TranscriptURL != "",
+		ShowPID:      apiPID(PrefixPodcast, ep.PodcastPID),
+		Season:       ep.Season,
+		EpisodeNo:    ep.EpisodeNo,
+		EpisodeType:  string(ep.EpisodeType),
+		PublishedNS:  pub,
+		Downloaded:   ep.Downloaded,
+		Explicit:     ep.Explicit,
+		HasTx:        ep.TranscriptURL != "",
+		HasEnclosure: streamableEnclosure(ep.EnclosureURL),
 	}
 	if !ep.Downloaded {
 		if attempts, lastErr, err := l.db.FetchQueueRow(ctx, string(ep.PID)); err == nil {

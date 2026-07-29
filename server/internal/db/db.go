@@ -215,6 +215,10 @@ const baselineSchema = `
 		voice_boost      INTEGER,
 		skip_intro_secs  INTEGER,
 		skip_outro_secs  INTEGER,
+		-- The auto-download keyword filter, as JSON string arrays of
+		-- title terms. NULL means unset, which admits everything.
+		auto_dl_include  TEXT,
+		auto_dl_exclude  TEXT,
 		created_at_ns    INTEGER NOT NULL,
 		updated_at_ns    INTEGER NOT NULL,
 		PRIMARY KEY (user_id, show_pid)

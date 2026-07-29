@@ -431,7 +431,33 @@ void main() {
       expect(episode.fetchState, 'queued');
       expect(episode.explicit, isFalse);
       expect(episode.hasTranscript, isFalse);
+      // Absent means false rather than null: an episode the server did
+      // not mark playable must not read as playable.
+      expect(episode.hasEnclosure, isFalse);
     });
+
+    test(
+      'an undownloaded episode still reports hasEnclosure when it plays',
+      () {
+        // The passthrough pair: not on the server, still playable, which
+        // is what a client reads before offering play rather than fetch.
+        final episode = episodeSummaryFromGen(
+          gen.$EpisodeSummary(
+            (b) => b
+              ..pid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0002'
+              ..mediaType = gen.MediaType.podcast
+              ..title = 'Second Breakfast'
+              ..durationMs = 180000
+              ..showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01'
+              ..publishedAt = DateTime.utc(2026, 7, 11)
+              ..downloaded = false
+              ..hasEnclosure = true,
+          ),
+        );
+        expect(episode.downloaded, isFalse);
+        expect(episode.hasEnclosure, isTrue);
+      },
+    );
 
     test('show detail carries funding, medium, and person credits', () {
       final show = podcastShowFromGen(
@@ -536,6 +562,47 @@ void main() {
       expect(round.voiceBoost, isNull);
       expect(round.skipIntroSeconds, 30);
       expect(round.skipOutroSeconds, isNull);
+    });
+
+    test('the auto-download filter survives a settings round trip', () {
+      // The PUT replaces the whole document, so a sender that dropped
+      // this field would erase a filter the next time anyone saved a
+      // speed or a trim toggle.
+      const settings = SubscriptionSettings(
+        autoDownload: true,
+        autoDownloadFilter: EpisodeFilter(
+          include: ['mailbag'],
+          exclude: ['bonus', 'trailer'],
+        ),
+      );
+      final round = subscriptionSettingsFromGen(
+        subscriptionSettingsToGen(settings),
+      );
+      expect(round.autoDownloadFilter, isNotNull);
+      expect(round.autoDownloadFilter!.include, ['mailbag']);
+      expect(round.autoDownloadFilter!.exclude, ['bonus', 'trailer']);
+    });
+
+    test('a one-sided filter keeps the side it names and sends no other', () {
+      const settings = SubscriptionSettings(
+        autoDownload: true,
+        autoDownloadFilter: EpisodeFilter(exclude: ['bonus']),
+      );
+      final wire = subscriptionSettingsToGen(settings);
+      // The empty side is absent rather than an empty array, matching
+      // what the server puts on the wire.
+      expect(wire.autoDownloadFilter!.include, isNull);
+      expect(wire.autoDownloadFilter!.exclude!.toList(), ['bonus']);
+      final round = subscriptionSettingsFromGen(wire);
+      expect(round.autoDownloadFilter!.exclude, ['bonus']);
+      expect(round.autoDownloadFilter!.include, isEmpty);
+    });
+
+    test('no filter stays absent rather than becoming an empty one', () {
+      const settings = SubscriptionSettings(autoDownload: true);
+      final wire = subscriptionSettingsToGen(settings);
+      expect(wire.autoDownloadFilter, isNull);
+      expect(subscriptionSettingsFromGen(wire).autoDownloadFilter, isNull);
     });
 
     test('skip maps expose spans only when ready', () {
