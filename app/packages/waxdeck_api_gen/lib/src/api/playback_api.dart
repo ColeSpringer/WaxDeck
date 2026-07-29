@@ -23,6 +23,7 @@ import 'package:waxdeck_api_gen/src/model/rating_update.dart';
 import 'package:waxdeck_api_gen/src/model/skip_map.dart';
 import 'package:waxdeck_api_gen/src/model/star_update.dart';
 import 'package:waxdeck_api_gen/src/model/starred_entities.dart';
+import 'package:waxdeck_api_gen/src/model/waveform.dart';
 
 class PlaybackApi {
 
@@ -554,6 +555,95 @@ class PlaybackApi {
     }
 
     return Response<SkipMap>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Get an item&#39;s waveform overview
+  /// The item&#39;s amplitude envelope, for painting a waveform behind a seek bar. A pure read: the values come from the catalog&#39;s analyze pass and this endpoint computes nothing and queues nothing, so a server whose analyze pass has never run answers &#x60;pending&#x60; everywhere. &#x60;POST /library/analyze&#x60; and the &#x60;analyze&#x60; schedule are what produce them. &#x60;peaks&#x60; is one value per bucket, &#x60;0&#x60; silence and &#x60;255&#x60; full scale, at the fixed &#x60;resolution&#x60; the catalog stores (1000 buckets per track today, about a kilobyte). There is no &#x60;points&#x60; parameter: a resizable seek bar has to downsample to its own pixel width anyway, and a server-side width would add a query dimension to the cache key for work the renderer does for free. The stored values are 16-bit and narrowed to a byte here, so the low bits are dropped rather than rounded; that is invisible at any width a seek bar is drawn at. &#x60;state&#x60; is &#x60;ready&#x60;, &#x60;pending&#x60; (this item is analyzable and has not been analyzed yet; poll again after an analyze pass), or &#x60;unavailable&#x60; (there will never be a waveform for this item). Read &#x60;unavailable&#x60; as final. Four populations answer it: podcast episodes, which are deliberately never analyzed; a track carved out of a shared file by a cue sheet, which has no envelope of its own to report; a multi-file audiobook, whose stored waveform describes only its first part and would be the wrong audio under any other one; and a file the pass analyzed but could not measure, which is not retried until its audio changes. A client should draw its plain seek bar for &#x60;unavailable&#x60; rather than spinning. A &#x60;ready&#x60; answer is content-addressed by the item&#39;s audio essence and cacheable for a day; revalidate with &#x60;If-None-Match&#x60;. &#x60;pending&#x60; and &#x60;unavailable&#x60; are &#x60;no-store&#x60;, since both are expected to change. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [ifNoneMatch] - Previously returned `ETag`; a match answers 304 with no body.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [Waveform] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<Waveform>> getWaveform({ 
+    required String pid,
+    String? ifNoneMatch,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/waveform'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        if (ifNoneMatch != null) r'If-None-Match': ifNoneMatch,
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    Waveform? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(Waveform),
+      ) as Waveform;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<Waveform>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

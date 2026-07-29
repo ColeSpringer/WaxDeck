@@ -3198,7 +3198,7 @@ class FakeRepository implements WaxDeckRepository {
 
   /// Maintenance schedules by kind.
   final Map<String, Schedule> schedules = {
-    for (final kind in const ['scan', 'backup', 'prune'])
+    for (final kind in const ['scan', 'backup', 'prune', 'analyze'])
       kind: Schedule(kind: kind, cron: '0 3 * * *', enabled: false),
   };
 

@@ -77,6 +77,21 @@ sidecar injection seam) all landed and are not repeated here.
   500. Complete coverage, no repeats, an order that is more local than
   it should be.
 
+- **A peaks read scoped to a file, not an item.** `Library.Peaks` takes
+  an item pid and `LoadPeaks` joins `item_file` on `role = 'primary'`,
+  which for a multi-file audiobook is part one by construction (the
+  first part is written as the representative primary and the rest as
+  parts). So a twelve-part book has exactly one waveform, describing its
+  first file. `PeaksForFile(ctx, filePID)`, or a file pid on the
+  existing call, is all it would take; the rows are already keyed by
+  file. The shipped workaround: `GET /items/{pid}/waveform` answers
+  `unavailable` for a multi-file book rather than the wrong part's
+  envelope, so a client draws its plain seek bar. Single-file books and
+  tracks are unaffected and read `ready` normally, and the skip-map
+  endpoint already takes a `partIndex` because silence analysis is
+  WaxDeck-side and keyed by essence, so the shape a part-aware waveform
+  would take is already settled.
+
 ## Recorded upstream non-goals
 
 Deliberate upstream decisions WaxDeck designs around; listed so they

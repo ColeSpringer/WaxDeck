@@ -449,7 +449,20 @@ class _ScheduleRowState extends ConsumerState<_ScheduleRow> {
     'scan' => 'Library scan',
     'backup' => 'Backup',
     'prune' => 'Prune',
+    'analyze' => 'Analyze audio',
     _ => kind,
+  };
+
+  /// What a kind costs, for the kinds where that is not obvious. Only
+  /// analyze has one: it is the sole pass that decodes audio, and an
+  /// administrator who reads it as another scan will switch it on for a
+  /// large library and wonder why the machine is busy all night.
+  static String? _blurb(String kind) => switch (kind) {
+    'analyze' =>
+      'Measures loudness, fingerprints, and waveforms. Decodes every '
+          'audio file, so a large library takes hours. Resumable: files '
+          'already analyzed are skipped.',
+    _ => null,
   };
 
   @override
@@ -486,6 +499,7 @@ class _ScheduleRowState extends ConsumerState<_ScheduleRow> {
     final colorScheme = Theme.of(context).colorScheme;
     final schedule = widget.schedule;
     final kind = schedule.kind;
+    final blurb = _blurb(kind);
     final status = StringBuffer();
     if (schedule.lastRunAt != null) {
       status.write('Last run ${schedule.lastStatus ?? 'unknown'}');
@@ -519,6 +533,11 @@ class _ScheduleRowState extends ConsumerState<_ScheduleRow> {
                   ),
                 ],
               ),
+              if (blurb != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(blurb, style: textTheme.bodySmall),
+                ),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [

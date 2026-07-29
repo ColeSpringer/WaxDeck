@@ -220,9 +220,17 @@ func (c *client) volume(ctx context.Context) (int, error) {
 	return v, nil
 }
 
-// protocolInfo returns the mime types the renderer's Sink accepts,
-// lowercased. Wildcard and empty entries are dropped: a renderer that
-// answers "*" constrains nothing.
+// protocolInfo returns the mime types the renderer's Sink accepts over
+// HTTP, lowercased. Wildcard and empty entries are dropped: a renderer
+// that answers "*" constrains nothing.
+//
+// An entry is `<protocol>:<network>:<contentFormat>:<additionalInfo>`,
+// and the protocol is not decoration. Renderers routinely list formats
+// they play over transports this server does not speak -- `internal:*`
+// for their own local playback, `rtsp-rtp-udp:*` for a streaming client
+// -- and a format offered only there is not a format we can deliver. We
+// serve over http-get and nothing else, so that is what counts, plus a
+// bare wildcard protocol, which claims everything.
 func (c *client) protocolInfo(ctx context.Context) (map[string]bool, error) {
 	out, err := soapCall(ctx, c.httpc, c.desc.ConnectionManager, svcConnectionManager, "GetProtocolInfo", nil)
 	if err != nil {
@@ -232,6 +240,11 @@ func (c *client) protocolInfo(ctx context.Context) (map[string]bool, error) {
 	for _, entry := range strings.Split(out["Sink"], ",") {
 		fields := strings.Split(strings.TrimSpace(entry), ":")
 		if len(fields) < 3 {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(fields[0])) {
+		case "http-get", "*":
+		default:
 			continue
 		}
 		mime := strings.ToLower(strings.TrimSpace(fields[2]))

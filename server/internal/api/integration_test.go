@@ -38,7 +38,11 @@ type harness struct {
 	// media mints the query-string tokens the raw /media/* routes take,
 	// for tests that drive one of those endpoints as a chosen user
 	// rather than through a mint the API performed.
-	media   *auth.MediaTokens
+	media *auth.MediaTokens
+	// bridge is the fake WaxFlow bridge, nil for a no-bridge harness.
+	// Tests that drive the connect resolver directly need it to build
+	// one of their own.
+	bridge  *flow.Bridge
 	connect *connect.Service
 	group   *supervise.Group
 	flowReq struct{ apiKey, format, dynamics, gain string } // captured by the fake sidecar
@@ -124,6 +128,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 		bridge = newFakeFlowBridge(t, ctx, h, cfg, media, svc, log)
 		svc.SetFlowJobs(bridge)
 	}
+	h.bridge = bridge
 
 	hub := events.New(svc)
 	group.Go(ctx, "event-hub", hub.Run)
@@ -166,6 +171,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
 	mux.HandleFunc("GET /media/download", srv.ServeDownload)
 	mux.HandleFunc("GET /media/enclosure", srv.ServeEnclosure)
+	mux.HandleFunc("GET /media/art", srv.ServeMediaArt)
 	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)
 	mux.Handle("/rest/", subsonic.New(svc, bridge, media, "test"))
 	if bridge != nil {

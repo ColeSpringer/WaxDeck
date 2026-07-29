@@ -445,6 +445,24 @@ func (l *Library) Rescan(ctx context.Context) (Job, error) {
 	return l.JobStatus(ctx, apiPID(PrefixJob, pid))
 }
 
+// Analyze starts the asynchronous analyze pass and returns the job.
+// Like Rescan it runs on the process context so it outlives the
+// response, and StartAnalyze is the async sibling: the plain Analyze
+// runs the whole decode inline and only names its job once it is
+// finished, which is no use to an endpoint that must answer now.
+//
+// AnalyzeOptions.WriteReplayGainTags stays false. Upstream ORs it with
+// the library's own configured toggle, so leaving it unset means "do
+// whatever this library is configured to do" rather than "never write
+// tags"; opting in here would override the deployment's choice.
+func (l *Library) Analyze(ctx context.Context) (Job, error) {
+	pid, err := l.lib.StartAnalyze(l.procCtx, waxbin.AnalyzeOptions{})
+	if err != nil {
+		return Job{}, classify(err)
+	}
+	return l.JobStatus(ctx, apiPID(PrefixJob, pid))
+}
+
 // JobStatus reports one catalog job.
 func (l *Library) JobStatus(ctx context.Context, apiJobPID string) (Job, error) {
 	prefix, pid, ok := parseAPIPID(apiJobPID)

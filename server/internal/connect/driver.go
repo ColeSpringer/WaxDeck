@@ -42,6 +42,38 @@ type DriverEvent struct {
 	Err        error
 }
 
+// EndpointTarget describes the endpoint a load is being rendered for.
+// Kind is what picks the format floor; Formats is what the endpoint
+// itself said it accepts, when it says anything at all.
+type EndpointTarget struct {
+	Kind string
+	// Formats are the media types the endpoint declared, lowercased and
+	// in the endpoint's own spelling (renderers disagree about
+	// `audio/flac` versus `audio/x-flac`, so a resolver normalizes
+	// before comparing). Empty means the endpoint declared nothing, or
+	// declared a wildcard, which constrains nothing either way: the
+	// floor stands.
+	Formats []string
+}
+
+// FormatSink is the optional capability of a driver whose endpoint
+// declares what it can play. A driver that does not implement it is
+// treated as having declared nothing, which is the same answer a driver
+// whose device answered a wildcard gives.
+type FormatSink interface {
+	AcceptedFormats() []string
+}
+
+// TargetFor builds the target for an endpoint and the driver currently
+// dialed to it.
+func TargetFor(kind string, d Driver) EndpointTarget {
+	t := EndpointTarget{Kind: kind}
+	if fs, ok := d.(FormatSink); ok {
+		t.Formats = fs.AcceptedFormats()
+	}
+	return t
+}
+
 // Driver drives one physical output for one load at a time. Load
 // replaces whatever is playing. Implementations serialize their own
 // protocol I/O; calls may block on the device. Events delivers state

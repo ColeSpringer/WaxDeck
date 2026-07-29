@@ -87,6 +87,50 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /library/analyze:
+    post:
+      operationId: analyzeLibrary
+      summary: Start the analyze pass
+      description: >
+        Starts the asynchronous analyze pass and returns the job tracking
+        it. The pass decodes every audio file whose analysis is missing or
+        stale and stores its loudness (what ReplayGain and voice-boost
+        leveling read), its acoustic fingerprint (what duplicate grouping
+        reads), and its waveform peaks (what the seek bar reads). It is
+        the only pass that decodes audio: a scan hashes files and reads
+        tags without decoding them, so none of those three exists until
+        this runs.
+
+        Expect it to be slow. Each file costs a full decode, and where
+        `fpcalc` is installed it also costs one subprocess per file, so a
+        large library is priced in hours rather than minutes. It is
+        resumable and cancelable like the other catalog jobs, and a file
+        it has already analyzed is not analyzed again until its audio or
+        an analysis algorithm changes, so an interrupted run picks up
+        where it stopped. It never runs automatically after a scan; the
+        `analyze` schedule and this endpoint are the only triggers.
+
+        Analysis serializes with itself but not with scans: starting a
+        second analyze while one runs returns the conflict error, while a
+        scan may run alongside. Podcast episodes are deliberately never
+        analyzed. Administrators only.
+      tags: [admin]
+      responses:
+        "202":
+          description: The analyze pass started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /jobs/{pid}:
     get:
       operationId: getJob
@@ -543,9 +587,11 @@ paths:
         Every schedulable job kind with its cron expression, enabled
         state, and last and next run. Kinds are fixed: `scan` (a full
         library scan), `backup` (a backup archive with retention
-        applied), and `prune` (event log, replay-guard stamp, audit
+        applied), `prune` (event log, replay-guard stamp, audit
         history, and playback session history pruning, under
-        server-owned horizons). Administrators only.
+        server-owned horizons), and `analyze` (the audio-decoding pass
+        behind loudness, fingerprints, and waveforms). Administrators
+        only.
       tags: [admin]
       responses:
         "200":
@@ -1264,12 +1310,18 @@ components:
 
     ScheduleKind:
       type: string
-      enum: [scan, backup, prune]
+      enum: [scan, backup, prune, analyze]
       description: >
         A schedulable job kind. A shared named schema on purpose (the
         path parameter and the schedule object both use it): identical
         inline enums make the Dart generator emit one enum class into
         two files, which does not compile.
+
+        `analyze` is off by default and costs a full audio decode per
+        file; see `POST /library/analyze` for what it produces and what
+        it costs. A firing that collides with an analyze pass already
+        running is skipped rather than recorded as run, so it retries on
+        the next tick instead of waiting for the next scheduled window.
 
     ScrobblingAdminConfig:
       type: object

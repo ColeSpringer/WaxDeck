@@ -495,41 +495,80 @@ func run() error {
 	group.Go(ctx, "cron-scheduler", func(ctx context.Context) error {
 		tick := time.NewTicker(30 * time.Second)
 		defer tick.Stop()
-		lastCheck := time.Now()
+		// The window floor is per kind, not one value for the loop.
+		// DueSchedule asks "did this kind's cron fire between the floor
+		// and now", so a kind that was due and could not run has to keep
+		// its old floor: advancing it would move the window past the
+		// firing it just missed and the run would be lost until the next
+		// scheduled one, a week away on the analyze and backup defaults.
+		// A shared floor cannot express that, which is the bug this
+		// replaced.
+		lastCheck := map[string]time.Time{}
+		start := time.Now()
+		for _, kind := range []string{"prune", "scan", "analyze", "backup"} {
+			lastCheck[kind] = start
+		}
+		// due reports whether the kind should run now; ran records that
+		// it did (or that it was not due), advancing that kind's floor.
+		// A kind that was due and deferred simply never calls ran, so it
+		// is asked again on the next tick, 30 seconds later.
+		due := func(kind string, now time.Time) bool {
+			if svc.DueSchedule(ctx, kind, lastCheck[kind], now) {
+				return true
+			}
+			lastCheck[kind] = now
+			return false
+		}
+		ran := func(kind string, now time.Time) { lastCheck[kind] = now }
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case now := <-tick.C:
-				// Order matters: prune and scan finish fast (a scan is
-				// an async catalog job), so the one long-running kind,
-				// backup, goes last and can only delay the next tick,
-				// never a sibling due in this one. Delayed firings are
-				// caught up, not lost: DueSchedule measures from the
-				// last run, not from the tick that should have fired.
-				if svc.DueSchedule(ctx, "prune", lastCheck, now) {
+				// Order matters: prune, scan, and analyze finish fast
+				// (both passes are async catalog jobs), so the one
+				// long-running kind, backup, goes last and can only delay
+				// the next tick, never a sibling due in this one. Delayed
+				// firings are caught up, not lost: DueSchedule measures
+				// from the last run, not from the tick that should have
+				// fired.
+				if due("prune", now) {
 					svc.MarkScheduleRun(ctx, "prune", svc.RunPrune(ctx))
+					ran("prune", now)
 				}
-				if svc.DueSchedule(ctx, "scan", lastCheck, now) {
+				if due("scan", now) {
 					_, err := svc.Rescan(ctx)
 					svc.MarkScheduleRun(ctx, "scan", err)
+					ran("scan", now)
 				}
-				if svc.DueSchedule(ctx, "backup", lastCheck, now) {
+				if due("analyze", now) {
+					// An analyze pass launched by hand still holds the
+					// scope lease. Marking the schedule as run would
+					// defer this firing to the NEXT one (a week, on the
+					// default); leaving both the schedule and this kind's
+					// window floor alone retries on the next tick.
+					_, err := svc.Analyze(ctx)
+					if service.KindOf(err) == service.KindConflict {
+						log.Info("scheduled analyze waiting on a running analyze pass")
+					} else {
+						svc.MarkScheduleRun(ctx, "analyze", err)
+						ran("analyze", now)
+					}
+				}
+				if due("backup", now) {
 					row, err := backups.Create(ctx, nil, "scheduled")
 					if service.KindOf(err) == service.KindConflict {
-						// A manual backup holds the slot. Marking the
-						// schedule as run would defer it to the NEXT
-						// cron firing (a week, on the default); leaving
-						// it unmarked retries on the next tick instead.
+						// A manual backup holds the slot; same reasoning
+						// as analyze above.
 						log.Info("scheduled backup waiting on a running backup")
 					} else {
 						if err == nil {
 							err = backups.Run(ctx, row.ID)
 						}
 						svc.MarkScheduleRun(ctx, "backup", err)
+						ran("backup", now)
 					}
 				}
-				lastCheck = now
 			}
 		}
 	})
@@ -931,6 +970,10 @@ func run() error {
 	// /media/*. The target comes from the episode in the catalog, never
 	// from the query, which is what keeps it from being an open proxy.
 	mux.HandleFunc("GET /media/enclosure", srv.ServeEnclosure)
+	// Artwork for endpoints that cannot present a session: a cast
+	// receiver or a DLNA renderer fetches the URL it was handed, and the
+	// only credential it can carry is the one in that URL.
+	mux.HandleFunc("GET /media/art", srv.ServeMediaArt)
 	// Radio streams proxy through this origin under a media token,
 	// like /media/stream; the guarded client owns the URL policy.
 	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)

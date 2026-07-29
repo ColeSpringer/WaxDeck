@@ -3,13 +3,15 @@ package api
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
-// Handlers for the podcast, audiobook, and skip-map surfaces. Shapes
-// convert here; behavior lives in the service.
+// Handlers for the podcast, audiobook, skip-map, and waveform surfaces.
+// Shapes convert here; behavior lives in the service.
 
 func (s *Server) ListSubscriptions(ctx context.Context, req ListSubscriptionsRequestObject) (ListSubscriptionsResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
@@ -525,6 +527,70 @@ func (s *Server) GetSkipMap(ctx context.Context, req GetSkipMapRequestObject) (G
 		}
 	}
 	return GetSkipMap200JSONResponse(out), nil
+}
+
+// waveformCacheControl caches a ready waveform exactly as artwork is
+// cached, and for the same reasons: peaks are deterministic per audio
+// essence, the URL names a pid rather than the bytes (so re-analysis
+// under the same pid must be able to invalidate), and the answer follows
+// the item's visibility (so a shared browser must not serve one account
+// from another's copy). Neither `public` nor `immutable`, for those two
+// reasons in that order.
+const waveformCacheControl = artCacheControl
+
+func (s *Server) GetWaveform(ctx context.Context, req GetWaveformRequestObject) (GetWaveformResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wf, err := s.svc.WaveformFor(ctx, uc, req.Pid)
+	if err != nil {
+		if service.KindOf(err) == service.KindNotFound {
+			return GetWaveform404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		}
+		return nil, err
+	}
+	out := Waveform{State: wf.State}
+	setOpt(&out.EssenceHash, wf.EssenceHash)
+	if wf.State != "ready" {
+		// Both non-ready states are waiting to be contradicted: pending
+		// by the next analyze pass, unavailable by an audio change. A
+		// cached copy of either would outlive the answer.
+		noStore := "no-store"
+		return GetWaveform200JSONResponse{
+			Body:    out,
+			Headers: GetWaveform200ResponseHeaders{CacheControl: &noStore},
+		}, nil
+	}
+	// The essence scoped by the peaks revision, the way artwork's
+	// validator is the source hash scoped by the requested size. The
+	// essence alone is not enough: an analysis-version bump re-analyzes
+	// audio whose essence never changed and can rewrite both the values
+	// and the bucket count, which a client would otherwise not see for
+	// a day of freshness plus a week of stale-while-revalidate.
+	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", wf.EssenceHash, wf.Version))
+	cacheControl, vary := waveformCacheControl, artVary
+	if req.Params.IfNoneMatch != nil && httpcache.ETagMatches(*req.Params.IfNoneMatch, etag) {
+		return GetWaveform304Response{Headers: GetWaveform304ResponseHeaders{
+			ETag:         &etag,
+			CacheControl: &cacheControl,
+			Vary:         &vary,
+		}}, nil
+	}
+	peaks := make([]int, len(wf.Peaks))
+	for i, v := range wf.Peaks {
+		peaks[i] = int(v)
+	}
+	out.Peaks = &peaks
+	out.Resolution = &wf.Resolution
+	return GetWaveform200JSONResponse{
+		Body: out,
+		Headers: GetWaveform200ResponseHeaders{
+			ETag:         &etag,
+			CacheControl: &cacheControl,
+			Vary:         &vary,
+		},
+	}, nil
 }
 
 // --- converters --------------------------------------------------------------

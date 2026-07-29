@@ -128,8 +128,10 @@ info:
       They live outside `/api/v1` and are not declared as operations here:
       `/media/stream` (the streaming engine's output), `/media/download`
       (original bytes, ranged), `/media/enclosure` (a podcast episode's
-      feed enclosure, relayed), and `/media/radio/{pid}` (a station
-      stream, relayed). All four authenticate by media token in the query
+      feed enclosure, relayed), `/media/radio/{pid}` (a station
+      stream, relayed), and `/media/art` (an item's artwork, the same
+      bytes and the same fallback chain as `/items/{pid}/art`). All of
+      them authenticate by media token in the query
       string rather than by session or bearer credential, so bare `<audio>`
       elements, cast devices, and DLNA renderers that cannot send headers
       can fetch them. A media token binds one user to one item pid; expiry
@@ -139,7 +141,11 @@ info:
       token for one episode reaches that episode's audio and nothing
       else, and the relay copies only `Content-Type`, `Content-Length`,
       `Content-Range`, `Accept-Ranges`, `ETag`, and `Last-Modified` back
-      from the podcast host.
+      from the podcast host. `/media/art` exists because a device
+      endpoint has no session to present: it takes an optional `size` (16
+      to 2048, defaulting to 600) and is `no-store`, since the URL
+      carries a credential and is minted per listener. First-party
+      clients use `/items/{pid}/art`, which is cacheable.
     - Public share links live at `/s/{token}` on the server origin, outside
       `/api/v1`. The landing page is server-rendered plain HTML (an audio
       element, artwork, OpenGraph and Twitter card tags) so link previews

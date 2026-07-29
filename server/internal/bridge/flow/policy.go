@@ -2,6 +2,7 @@ package flow
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/colespringer/waxflow/client"
 )
@@ -95,6 +96,166 @@ var formatMime = map[string]string{
 	"opus": "audio/ogg",
 	"aac":  "audio/mp4",
 	"wav":  "audio/wav",
+}
+
+// canonicalMime folds the spellings devices use for one media type onto
+// a single one, so comparing what a renderer advertised against what
+// this server would send compares like with like. Renderers really do
+// say `audio/x-flac` and `audio/mp3`, and a literal comparison would
+// read those as unknown and drop a renderer that plays the format
+// perfectly well down to the floor, which looks exactly like the bug
+// negotiation is meant to fix.
+var canonicalMime = map[string]string{
+	"audio/x-flac":    "audio/flac",
+	"audio/mp3":       "audio/mpeg",
+	"audio/x-mp3":     "audio/mpeg",
+	"audio/mpeg3":     "audio/mpeg",
+	"audio/x-mpeg-3":  "audio/mpeg",
+	"audio/m4a":       "audio/mp4",
+	"audio/x-m4a":     "audio/mp4",
+	"audio/mp4a-latm": "audio/mp4",
+	"audio/x-aac":     "audio/aac",
+	"audio/x-wav":     "audio/wav",
+	"audio/wave":      "audio/wav",
+	"audio/vnd.wave":  "audio/wav",
+	"audio/x-aiff":    "audio/aiff",
+	"application/ogg": "audio/ogg",
+	"audio/vorbis":    "audio/ogg",
+	// Not here, and it is a tempting mistake: `audio/L16` and
+	// `audio/lpcm`, which DLNA renderers really do advertise, must not
+	// fold onto `audio/wav`. L16 (RFC 2586, and DLNA's LPCM profile) is
+	// headerless big-endian PCM; a WAV is a RIFF-headered little-endian
+	// one. Serving a renderer that asked for L16 a WAV plays the 44-byte
+	// header as audio and then every sample byte-swapped, which is a
+	// click followed by static. The engine has no L16 output to serve
+	// instead, and a renderer that advertises LPCM advertises mp3 too
+	// (it is the DLNA audio baseline), so the floor is the right answer
+	// for it rather than a missed opportunity.
+}
+
+// encodeTargets maps a canonical media type onto the engine output that
+// produces it, for choosing what to transcode into. It is deliberately
+// narrower than canonicalMime, and the omissions are the point:
+//
+//   - `audio/ogg` is absent. The engine's Opus output is Ogg-framed, but
+//     `audio/ogg` from a renderer overwhelmingly means Vorbis on the
+//     devices old enough to need negotiating with. Reading it as an offer
+//     of Opus would hand silence to a renderer that told the truth. (It
+//     still matches for a passthrough, where the type describes bytes
+//     that already exist rather than a codec being requested.)
+//   - `audio/aac` is absent. It names raw ADTS, and the engine's aac
+//     output is MP4-framed, so a renderer that advertised only ADTS gets
+//     the mp3 floor rather than a container it did not ask for.
+var encodeTargets = map[string]string{
+	"audio/flac": "flac",
+	"audio/mpeg": "mp3",
+	"audio/mp4":  "aac",
+	"audio/wav":  "wav",
+}
+
+// losslessTargets and lossyTargets are the encode preference orders,
+// best first, split by what the source is. A lossless source may go to
+// a lossless target; a lossy one may not, because expanding an MP3 into
+// FLAC multiplies the bytes and recovers nothing that was already lost.
+//
+// WAV is last in both, and that placement is deliberate rather than an
+// ordering slip. It is lossless, so ranking it by quality would put it
+// second, but it costs roughly 1.4 Mbit/s against 1 Mbit/s for the same
+// audio as FLAC and a fifth of that for a lossy encode, over a LAN the
+// device is sharing with everything else in the house, and a live PCM
+// stream carries no length a renderer can seek against. It is here to
+// keep a renderer that accepts nothing else playable at all -- the mp3
+// floor would be a format such a device rejects -- not as something to
+// prefer. That is also why it is in the lossy ladder despite the rule
+// above: last resort beats silence.
+var (
+	losslessTargets = []string{"flac", "aac", "mp3", "wav"}
+	lossyTargets    = []string{"aac", "mp3", "wav"}
+)
+
+// canonicalize folds a device's advertised media types into a lookup
+// from the canonical spelling back to the device's own. A renderer may
+// qualify a type with parameters (`audio/mp4; codecs=mp4a.40.2`); the
+// base type is what names the format. The original spelling is kept
+// because it is what has to be advertised back: a renderer that listed
+// `audio/x-flac` and is handed a resource declaring `audio/flac` sees a
+// type absent from its own sink, and the strict ones refuse the load.
+func canonicalize(accepts []string) map[string]string {
+	out := make(map[string]string, len(accepts))
+	for _, mime := range accepts {
+		base, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(mime)), ";")
+		base = strings.TrimSpace(base)
+		if base == "" {
+			continue
+		}
+		canonical := base
+		if c, ok := canonicalMime[base]; ok {
+			canonical = c
+		}
+		// First spelling wins, so the answer does not depend on sink
+		// order when a renderer lists two spellings of one type.
+		if _, seen := out[canonical]; !seen {
+			out[canonical] = mime
+		}
+	}
+	return out
+}
+
+// DeviceFormat decides what to serve a device endpoint that told us
+// which media types it accepts. floor is what to fall back to when the
+// device said nothing usable (the caller's own policy, mp3 for
+// renderers). It returns the engine format to force, empty meaning
+// "force nothing" (serve the original bytes), plus the media type to
+// advertise back, empty meaning "whatever the shape already says".
+//
+// The source and the shape are in hand on purpose, and the rules that
+// need them are the whole reason this is not a set intersection:
+//
+//   - A device that already plays the source's own container gets the
+//     original bytes. That is a seekable passthrough that spends no
+//     transcode session and loses no quality, and forcing a format on it
+//     (even the source's own) would engage the engine for nothing.
+//   - Only a direct-play shape has original bytes to hand over. A
+//     virtual track is a window into a larger file and an engaged voice
+//     boost is a DSP stage: both are going through the engine already,
+//     so answering "pass it through" for either would advertise the
+//     source's own type for a stream the engine is about to re-encode.
+//   - A lossy source is never re-encoded into a lossless target. A
+//     renderer advertising FLAC is telling us what it can play, not what
+//     it wants an MP3 inflated into.
+func DeviceFormat(src Source, shape Shape, caps *client.Caps, accepts []string, floor string) (format, advertise string) {
+	if caps == nil || len(accepts) == 0 {
+		return floor, ""
+	}
+	wanted := canonicalize(accepts)
+	if shape.Format == "auto" {
+		if mime := containerMime[src.Container]; mime != "" {
+			if c, ok := canonicalMime[mime]; ok {
+				mime = c
+			}
+			if spelling, ok := wanted[mime]; ok {
+				return "", spelling
+			}
+		}
+	}
+	// Reverse the accepted set onto engine formats, remembering which
+	// spelling to advertise for each.
+	encodable := make(map[string]string, len(wanted))
+	for mime, spelling := range wanted {
+		if f, ok := encodeTargets[mime]; ok {
+			encodable[f] = spelling
+		}
+	}
+	targets := lossyTargets
+	if lossless(src.Codec) {
+		targets = losslessTargets
+	}
+	for _, f := range targets {
+		if spelling, ok := encodable[f]; ok && hasOutput(caps, f) {
+			return f, spelling
+		}
+	}
+	return floor, ""
 }
 
 // lossless reports whether a codec can be transcoded without

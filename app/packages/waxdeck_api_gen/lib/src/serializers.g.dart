@@ -329,6 +329,7 @@ Serializers _$serializers =
           ..add(UserCreate.serializer)
           ..add(UserPage.serializer)
           ..add(UserUpdate.serializer)
+          ..add(Waveform.serializer)
           ..add(WriteBackFailure.serializer)
           ..add(WriteBackIssue.serializer)
           ..add(WsAckFrame.serializer)
@@ -1096,6 +1097,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),
             () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(int)]),
+            () => ListBuilder<int>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(num)]),

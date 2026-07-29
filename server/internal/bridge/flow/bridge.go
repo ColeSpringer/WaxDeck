@@ -202,6 +202,13 @@ type PlayOptions struct {
 	// Only formats in forceFormats are honored; anything else falls
 	// back to the derived shape.
 	ForceFormat string
+	// DeviceFormats are the media types a device endpoint said it
+	// accepts. Non-empty replaces ForceFormat with the source-aware
+	// answer from DeviceFormat, which may be the original bytes;
+	// ForceFormat stays the floor that answer falls back to. Empty
+	// leaves ForceFormat alone, which is every caller that is not a
+	// device endpoint.
+	DeviceFormats []string
 	// TTL sizes the media token for long deliveries (whole-queue
 	// casts); zero selects the default.
 	TTL time.Duration
@@ -210,10 +217,13 @@ type PlayOptions struct {
 // forceFormats is the closed set of client-visible format hints. The
 // hint rides the URL, so it must never widen what a token authorizes:
 // forcing a transcode of an item the user can already stream is the
-// entire attack surface, which is none.
+// entire attack surface, which is none. Every entry is an engine output
+// and is served only when the live caps carry it.
 var forceFormats = map[string]string{
-	"mp3": "audio/mpeg",
-	"wav": "audio/wav",
+	"mp3":  "audio/mpeg",
+	"wav":  "audio/wav",
+	"flac": "audio/flac",
+	"aac":  "audio/mp4",
 }
 
 // PlayInfoFor resolves an item into a tokenized stream URL. The token
@@ -227,12 +237,36 @@ func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts 
 	}
 	_, boost := VoiceBoostParams(src, b.caps, opts.VoiceBoost)
 	shape := ShapeFor(src, b.caps, boost)
-	if mime, ok := forceFormats[opts.ForceFormat]; ok && hasOutput(b.caps, opts.ForceFormat) {
+	force := opts.ForceFormat
+	advertise := ""
+	if len(opts.DeviceFormats) > 0 {
+		// A device that named what it plays gets the source-aware answer,
+		// which needs the source and the shape and so cannot be decided
+		// by the caller. It may be "serve the original bytes", which is
+		// why this can clear a floor the caller set rather than only
+		// narrowing it, and it may name a spelling of the media type
+		// that differs from ours, which is what the device has to see.
+		force, advertise = DeviceFormat(src, shape, b.caps, opts.DeviceFormats, opts.ForceFormat)
+	}
+	mime, forced := forceFormats[force]
+	// The fetch side gates on the live caps too, so a format this daemon
+	// cannot produce must not reach the URL either: the two decisions
+	// have to agree or the mime advertised here would describe bytes the
+	// stream never serves.
+	forced = forced && hasOutput(b.caps, force)
+	if forced {
 		// Proxy mode carries the forced format on the URL (&fmt= below), so the
 		// shape's Format is never read here; only the client-facing MimeType and
 		// Seekable come off the shape.
 		shape.MimeType = mime
 		shape.Seekable = true
+	}
+	if advertise != "" {
+		// The device's own spelling of the type it is about to receive.
+		// It wins over both branches above, including the passthrough
+		// one, because a resource declaring a type absent from the
+		// device's sink is one the strict renderers refuse.
+		shape.MimeType = advertise
 	}
 	token, exp := b.tokens.MintFor(user, apiItemPID, opts.TTL)
 	streamURL := "/media/stream?pid=" + url.QueryEscape(apiItemPID) + "&mt=" + url.QueryEscape(token)
@@ -242,8 +276,8 @@ func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts 
 	if boost {
 		streamURL += "&vb=1"
 	}
-	if _, ok := forceFormats[opts.ForceFormat]; ok {
-		streamURL += "&fmt=" + url.QueryEscape(opts.ForceFormat)
+	if forced {
+		streamURL += "&fmt=" + url.QueryEscape(force)
 	}
 	return PlayInfo{
 		URL:        streamURL,

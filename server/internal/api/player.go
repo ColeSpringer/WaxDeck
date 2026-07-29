@@ -38,20 +38,33 @@ func (r *ConnectResolver) Entries(ctx context.Context, userID string, pids []str
 	return entries, nil
 }
 
-// StreamItems builds absolute media URLs for a device endpoint.
-// Renderers get the mp3 floor, the jukebox gets wav, cast devices get
-// the derived shape. Multi-part books and, without the engine, span
-// tracks are refused: partial support that loses positions is worse
-// than a clear error.
-func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entries []connect.QueueEntry, kind, base string, ttl time.Duration) ([]connect.MediaItem, error) {
+// StreamItems builds absolute media URLs for a device endpoint. The
+// jukebox gets wav, cast devices get the derived shape, and renderers
+// get the best format they and the engine agree on, falling back to the
+// mp3 floor. Multi-part books and, without the engine, span tracks are
+// refused: partial support that loses positions is worse than a clear
+// error.
+func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entries []connect.QueueEntry, target connect.EndpointTarget, base string, ttl time.Duration) ([]connect.MediaItem, error) {
 	uc, err := r.Svc.UserCtxByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	force := ""
-	switch kind {
+	// deviceFormats is what the endpoint said it accepts, handed to the
+	// bridge rather than resolved here: picking well needs the source
+	// (whether the renderer already plays these bytes, whether the
+	// source is lossy), and the bridge is where the source is resolved.
+	// The jukebox declares nothing on purpose: it reads a wav preamble
+	// off its input and fails on anything else, so there is nothing to
+	// negotiate.
+	var deviceFormats []string
+	switch target.Kind {
 	case connect.KindDLNA:
+		// mp3 is the floor rather than the answer: every renderer plays
+		// it, so it is what a renderer that declared nothing (or nothing
+		// the engine can produce) gets.
 		force = "mp3"
+		deviceFormats = target.Formats
 	case connect.KindJukebox:
 		force = "wav"
 	}
@@ -70,23 +83,38 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 				Code: "feature-unavailable",
 			}
 		}
-		// No ArtURL yet: the art endpoint authenticates by session,
-		// which a cast device cannot present. A tokenized art URL is
-		// recorded as deferred work.
 		item := connect.MediaItem{
 			PID:        e.PID,
 			Title:      e.Title,
 			Artist:     e.Artist,
 			DurationMS: e.DurationMS,
 		}
+		if r.Media != nil {
+			// The art token takes the ttl this call was handed, which
+			// connect sizes to the whole queue's duration plus a margin.
+			// A fresh mint with a hand-picked lifetime is the bug it
+			// looks like the fix for: art would start 401-ing partway
+			// into a long queue while the audio played on.
+			//
+			// Set unconditionally, exactly as the item read surface sets
+			// `artUrl` unconditionally: whether art exists behind a pid
+			// is only knowable by resolving it, which loads the whole
+			// source image, and a queue load would pay that per entry to
+			// learn something a 404 says for free. A renderer handed a
+			// URL that 404s draws no art, which is what it would have
+			// done without the URL.
+			token, _ := r.Media.MintFor(userID, e.PID, ttl)
+			item.ArtURL = base + mediaArtURL(e.PID, token, castArtSize)
+		}
 		if r.Bridge != nil {
 			// The stored voice boost setting routes here exactly as it
 			// does at play-info: a device endpoint has no local DSP, so
 			// the engine applies it server side when the user asked.
 			info, err := r.Bridge.PlayInfoFor(ctx, userID, e.PID, flow.PlayOptions{
-				TTL:         ttl,
-				ForceFormat: force,
-				VoiceBoost:  r.Svc.EffectiveVoiceBoost(ctx, uc, e.PID),
+				TTL:           ttl,
+				ForceFormat:   force,
+				DeviceFormats: deviceFormats,
+				VoiceBoost:    r.Svc.EffectiveVoiceBoost(ctx, uc, e.PID),
 			})
 			if err != nil {
 				if u, mime, ok := r.enclosureItem(ctx, userID, e.PID, ttl, force, err); ok {

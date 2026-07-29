@@ -35,6 +35,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -503,7 +504,7 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 	// ordinary HTTP revalidation.
 	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", blob.SourceHash, size))
 	w.Header().Set("ETag", etag)
-	if r.Header.Get("If-None-Match") == etag {
+	if httpcache.ETagMatches(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}

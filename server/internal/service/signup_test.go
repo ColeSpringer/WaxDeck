@@ -203,8 +203,20 @@ func TestSchedulesAndReadOnlyToggles(t *testing.T) {
 	ctx, svc, admin := newAdminFixture(t)
 
 	rows := svc.Schedules(ctx)
-	if len(rows) != 3 {
-		t.Fatalf("schedule kinds: %d", len(rows))
+	if len(rows) != len(scheduleKinds) {
+		t.Fatalf("schedule kinds: %d, want %d", len(rows), len(scheduleKinds))
+	}
+	enabled := map[string]bool{}
+	for _, row := range rows {
+		enabled[row.Kind] = row.Enabled
+	}
+	// Only prune ships on: it bounds tables that otherwise grow without
+	// bound. Everything else costs enough that an administrator opts in,
+	// analyze most of all.
+	for kind, on := range enabled {
+		if want := kind == "prune"; on != want {
+			t.Errorf("%s ships enabled=%v, want %v", kind, on, want)
+		}
 	}
 	if _, err := svc.PutSchedule(ctx, admin, "scan", "not a cron", true); KindOf(err) != KindInvalid {
 		t.Fatalf("bad cron: got %v, want invalid", err)

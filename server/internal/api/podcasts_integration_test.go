@@ -1515,7 +1515,16 @@ func TestEnclosureHeadDoesNotPullTheEpisode(t *testing.T) {
 	}
 	// The host may have pushed some bytes before the relay let go; what
 	// must not happen is the whole episode moving for a probe.
-	if got := served.Load(); got > size/8 {
+	//
+	// The residue is not the relay reading ahead: it is the loopback
+	// socket buffers between the two, which the fixture handler counts
+	// as served the moment the kernel accepts them. Linux autotunes
+	// those into the megabytes, so a tight fraction here measures
+	// `tcp_wmem` rather than this handler and fails on a box whose
+	// buffers have warmed up. Half the episode is the honest line: no
+	// socket buffer reaches it, and a relay missing its HEAD branch
+	// moves all 8 MB straight past it.
+	if got := served.Load(); got > size/2 {
 		t.Errorf("a HEAD probe pulled %d bytes of a %d byte episode", got, size)
 	}
 }

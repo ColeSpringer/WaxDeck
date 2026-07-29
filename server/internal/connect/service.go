@@ -23,10 +23,11 @@ type MediaResolver interface {
 	// (a queue is one decision, never a partial load).
 	Entries(ctx context.Context, userID string, pids []string) ([]QueueEntry, error)
 	// StreamItems builds device-fetchable media items against the
-	// given base URL, minting tokens that live at least ttl. kind is
-	// the endpoint kind, which picks format floors (DLNA renderers
-	// get mp3 or passthrough, the jukebox gets wav).
-	StreamItems(ctx context.Context, userID string, entries []QueueEntry, kind, base string, ttl time.Duration) ([]MediaItem, error)
+	// given base URL, minting tokens that live at least ttl. target
+	// describes the endpoint the items are for: its kind picks the
+	// format floor, and the media types it declared narrow that floor
+	// upward where the engine can meet them.
+	StreamItems(ctx context.Context, userID string, entries []QueueEntry, target EndpointTarget, base string, ttl time.Duration) ([]MediaItem, error)
 	// Timeline renders the whole queue as one gapless stream when the
 	// streaming engine supports it and every entry is eligible. A nil
 	// result without error means "not available; use StreamItems".
@@ -533,7 +534,7 @@ func (s *Service) loadOnDevice(ctx context.Context, sess *session, ep Endpoint, 
 			sess.timeline = tm
 			s.mu.Unlock()
 		} else {
-			items, err := s.cfg.Resolver.StreamItems(ctx, ownerID, entries, ep.Kind, base, ttl)
+			items, err := s.cfg.Resolver.StreamItems(ctx, ownerID, entries, TargetFor(ep.Kind, driver), base, ttl)
 			if err != nil {
 				driver.Close()
 				return err

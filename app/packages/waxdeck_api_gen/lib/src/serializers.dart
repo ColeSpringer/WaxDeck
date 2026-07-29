@@ -315,6 +315,7 @@ import 'package:waxdeck_api_gen/src/model/user_account.dart';
 import 'package:waxdeck_api_gen/src/model/user_create.dart';
 import 'package:waxdeck_api_gen/src/model/user_page.dart';
 import 'package:waxdeck_api_gen/src/model/user_update.dart';
+import 'package:waxdeck_api_gen/src/model/waveform.dart';
 import 'package:waxdeck_api_gen/src/model/write_back_failure.dart';
 import 'package:waxdeck_api_gen/src/model/write_back_issue.dart';
 import 'package:waxdeck_api_gen/src/model/ws_ack_frame.dart';
@@ -636,6 +637,7 @@ part 'serializers.g.dart';
   UserCreate,
   UserPage,
   UserUpdate,
+  Waveform,
   WriteBackFailure,
   WriteBackIssue,
   WsAckFrame,

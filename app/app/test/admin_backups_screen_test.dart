@@ -79,9 +79,18 @@ void main() {
       ),
       findsOneWidget,
     );
-    for (final kind in const ['scan', 'backup', 'prune']) {
+    for (final kind in const ['scan', 'backup', 'prune', 'analyze']) {
       expect(find.byKey(ValueKey('schedule-row-$kind')), findsOneWidget);
     }
+    // Only analyze carries a cost line; it is the one kind whose price
+    // an administrator cannot guess from its name.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('schedule-row-analyze')),
+        matching: find.textContaining('Decodes every audio file'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('staging a restore shows the plan and the banner', (

@@ -65,6 +65,17 @@ here waits on upstream.
   an enrichment field nothing writes yet — the same provider gap that
   keeps artist artwork from existing. Both are additive sections on a
   screen that is otherwise complete.
+- `[in-repo]` **The client half of the waveform seek bar.** The server
+  side landed ahead of P18 (`GET /items/{pid}/waveform`, ADR-0031 for the
+  pass that fills it), and the generated Dart model exists, but nothing
+  reads it: there is no `waxdeck_api` repository wrapper and no seek bar
+  drawing it. P18 is the phase this landed ahead of. Two things it has to
+  handle beyond `ready`: `unavailable` is final and means draw the plain
+  slider, never a spinner, and it is the answer for every podcast
+  episode, every cue-carved track, and every multi-file audiobook; and
+  `resolution` is read from the response rather than assumed, since the
+  1000 buckets are a catalog constant that an analysis-version bump may
+  change.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
@@ -159,9 +170,9 @@ here waits on upstream.
   Discord's media proxy, so a LAN-only instance's art URLs will not
   render: Cover Art Archive URLs from matched MusicBrainz release ids
   are the workable default (a small read-surface addition if the
-  playing track does not expose its id yet), a public instance needs
-  the same media-token art variant the cast-artwork entry wants, and
-  a static WaxDeck asset is the fallback. Navidrome ships this
+  playing track does not expose its id yet), a public instance can use
+  the tokenized `/media/art` the cast displays now use, and a static
+  WaxDeck asset is the fallback. Navidrome ships this
   server-side instead, over a gateway connection authenticated with
   stored per-user Discord user tokens, which works from any client
   but is self-botting against Discord's terms of service; recorded
@@ -204,13 +215,6 @@ here waits on upstream.
   than a dead end (P14's refusal explanations); client endpoints
   handle books fully. Needs part-aware loading and part-advance in
   the session manager.
-- `[in-repo]` **DLNA format negotiation stops at the floor.** Every DLNA item is
-  delivered as mp3 (or passthrough for mp3/wav sources) regardless of
-  the renderer's ProtocolInfo. The SOAP client already parses the
-  Sink list; the resolver just does not consume it yet.
-- `[in-repo]` **Cast device displays show no artwork.** The art endpoint
-  authenticates by session, which a cast device cannot present; media
-  items are sent without an art URL. Needs a media-token art variant.
 - `[in-repo]` **Timeline URLs do not survive a server restart.** The HLS proxy
   reconstructs signed upstream URLs from an in-memory stash; after a
   restart a live timeline fetch answers not-found and the client
@@ -366,24 +370,6 @@ here waits on upstream.
 
 ## Curation and metadata
 
-- `[in-repo]` **The catalog's analyze pass never runs, so stored loudness,
-  fingerprints, and waveform peaks are empty everywhere.** The pass itself
-  is built and public: `Library.Analyze` is the resumable, job-scoped, only
-  PCM-decoding pass, and it fills all three together, stamping an analysis
-  version so the work is not repeated until the essence or an algorithm
-  changes. Nothing in the server calls it. Library startup and the tools
-  surface call `StartScan` only, and scan hashes files and reads tags
-  without decoding them; `Library.Watch`, whose options carry the flag that
-  would drive the pass, is not used either. Three features rest on data that
-  is therefore never written: ReplayGain (the crossfade entry above assumes
-  stored album gain values exist to pass as the explicit dB, and they do
-  not), fingerprint dedup grouping, and the waveform seek bar, whose
-  endpoint is otherwise a pure read of `Library.Peaks` with no computation
-  on this side at all. What is missing is the trigger and its policy: a
-  scheduled or admin-invoked run, resumable and cancelable like the other
-  long passes, with a decision about whether it follows a scan
-  automatically. Sizing it needs a measurement, since this is a full decode
-  of every file in the library.
 - `[in-repo]` **Scan discoveries do not enqueue matching on their own.** The
   identify pipeline runs for uploads and for explicit rematch
   requests; a library scan that discovers new loose files does not
@@ -551,6 +537,16 @@ here waits on upstream.
   mixes and inherit nothing sonic. Fixing it means keying embeddings
   by essence plus sample window and teaching the worker audio pull to
   serve the window (the stream surface already can).
+
+  The waveform seek bar is the same gap seen from the catalog side and
+  wants the same fix. `GET /items/{pid}/waveform` answers `unavailable`
+  for a virtual track, because the peaks row belongs to the backing file
+  and drawing the whole album's envelope under track three would be a
+  convincing wrong answer. Windowing the stored buckets by the track's
+  sample span is the cheaper half of this entry (no new analysis, just a
+  slice of what is stored) and costs effective resolution, since a
+  three-minute track out of a seventy-minute rip gets some forty of the
+  thousand buckets. Whoever takes this entry should decide both together.
 - `[in-repo]` **Time and mood mixes.** Daylist-style rotating mixes
   with scheduled auto-names are a scheduler and a naming table over
   the instant-mix engine that shipped; nothing else blocks them.
@@ -670,6 +666,11 @@ here waits on upstream.
   in format X (some Subsonic clients always pin a format) is routed
   through the engine and charged a concurrent-session slot, though the
   auto ladder would direct-play the same bytes as a seekable passthrough.
+  Device endpoints no longer walk into this: DLNA negotiation forces
+  nothing at all when the renderer already plays the source's container,
+  which is the same answer this entry wants and is reachable there
+  because the decision is made with the source in hand. What is left is
+  the client-pinned case, where the format arrives on the URL.
   `ServeStream` clears `Seekable` for any forced format unconditionally,
   and passthrough is signaled by `format=auto`, not by the source's own
   format name, so the guard is not a one-liner: it must match the forced

@@ -23,7 +23,7 @@ part 'schedule.g.dart';
 abstract class Schedule implements Built<Schedule, ScheduleBuilder> {
   @BuiltValueField(wireName: r'kind')
   ScheduleKind get kind;
-  // enum kindEnum {  scan,  backup,  prune,  };
+  // enum kindEnum {  scan,  backup,  prune,  analyze,  };
 
   /// Five-field cron expression (minute, hour, day of month, month, day of week), server-local time. 
   @BuiltValueField(wireName: r'cron')

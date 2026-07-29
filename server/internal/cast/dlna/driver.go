@@ -58,11 +58,32 @@ func (dev Device) Dial(group *supervise.Group, log Logger) connect.DialFunc {
 		if udn == "" {
 			udn = dev.Location
 		}
+		cl := newClient(desc)
+		// Ask what the renderer plays, once, here. It is a fixed property
+		// of the device, so asking per load would spend a SOAP round trip
+		// to learn the same answer; and a renderer that cannot answer is
+		// not a renderer that cannot play, so a failure narrows nothing
+		// and the caller falls back to the mp3 floor.
+		var accepts []string
+		if desc.ConnectionManager != "" {
+			mimes, err := cl.protocolInfo(ctx)
+			if err != nil {
+				log.Warn("dlna: renderer did not report its protocol info; using the format floor",
+					"udn", udn, "err", err)
+			} else {
+				accepts = make([]string, 0, len(mimes))
+				for mime := range mimes {
+					accepts = append(accepts, mime)
+				}
+				slices.Sort(accepts)
+			}
+		}
 		return &driver{
-			cl:           newClient(desc),
+			cl:           cl,
 			group:        group,
 			log:          log,
 			udn:          udn,
+			accepts:      accepts,
 			pollInterval: defaultPollInterval,
 			events:       make(chan connect.DriverEvent, eventBuffer),
 			lastVolume:   -1,
@@ -75,10 +96,13 @@ func (dev Device) Dial(group *supervise.Group, log Logger) connect.DialFunc {
 // observes transport state and synthesizes DriverEvents, including the
 // track-to-track advance the renderer will not do on its own.
 type driver struct {
-	cl           *client
-	group        *supervise.Group
-	log          Logger
-	udn          string
+	cl    *client
+	group *supervise.Group
+	log   Logger
+	udn   string
+	// accepts is the renderer's Sink media types, read once at dial and
+	// immutable after. Empty means it declared nothing usable.
+	accepts      []string
 	pollInterval time.Duration
 
 	events chan connect.DriverEvent
@@ -167,6 +191,12 @@ func (d *driver) SetRate(context.Context, float64) error {
 }
 
 func (d *driver) Events() <-chan connect.DriverEvent { return d.events }
+
+// AcceptedFormats reports the renderer's Sink media types, so the
+// resolver can serve something better than the mp3 floor when the
+// renderer and the engine agree on one. Fixed at dial; never nil-checked
+// by the caller, which reads an empty result as "no constraint".
+func (d *driver) AcceptedFormats() []string { return d.accepts }
 
 // Close stops the poll worker and closes the events channel. The
 // renderer is left as it is: closing a driver ends the session's view

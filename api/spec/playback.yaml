@@ -520,6 +520,106 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /items/{pid}/waveform:
+    get:
+      operationId: getWaveform
+      summary: Get an item's waveform overview
+      description: >
+        The item's amplitude envelope, for painting a waveform behind a
+        seek bar. A pure read: the values come from the catalog's analyze
+        pass and this endpoint computes nothing and queues nothing, so a
+        server whose analyze pass has never run answers `pending`
+        everywhere. `POST /library/analyze` and the `analyze` schedule are
+        what produce them.
+
+        `peaks` is one value per bucket, `0` silence and `255` full
+        scale, at the fixed `resolution` the catalog stores (1000 buckets
+        per track today, about a kilobyte). There is no `points`
+        parameter: a resizable seek bar has to downsample to its own
+        pixel width anyway, and a server-side width would add a query
+        dimension to the cache key for work the renderer does for free.
+        The stored values are 16-bit and narrowed to a byte here, so the
+        low bits are dropped rather than rounded; that is invisible at
+        any width a seek bar is drawn at.
+
+        `state` is `ready`, `pending` (this item is analyzable and has
+        not been analyzed yet; poll again after an analyze pass), or
+        `unavailable` (there will never be a waveform for this item).
+        Read `unavailable` as final. Four populations answer it: podcast
+        episodes, which are deliberately never analyzed; a track carved
+        out of a shared file by a cue sheet, which has no envelope of
+        its own to report; a multi-file audiobook, whose stored waveform
+        describes only its first part and would be the wrong audio under
+        any other one; and a file the pass analyzed but could not
+        measure, which is not retried until its audio changes. A client
+        should draw its plain seek bar for `unavailable` rather than
+        spinning.
+
+        A `ready` answer is content-addressed by the item's audio essence
+        and cacheable for a day; revalidate with `If-None-Match`.
+        `pending` and `unavailable` are `no-store`, since both are
+        expected to change.
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: If-None-Match
+          in: header
+          description: Previously returned `ETag`; a match answers 304 with no body.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The waveform, or its pending or unavailable state.
+          headers:
+            ETag:
+              description: >
+                Validator derived from the item's audio essence. Present
+                on `ready` only; the other two states are not cacheable.
+              schema:
+                type: string
+            Cache-Control:
+              description: >
+                `private, max-age=86400, stale-while-revalidate=604800`
+                for `ready`, `no-store` otherwise. Not `immutable`: the
+                URL names a pid, not the bytes, so re-analysis under the
+                same pid has to be able to invalidate it.
+              schema:
+                type: string
+            Vary:
+              description: >
+                `Cookie, Authorization`: the credential decides whether
+                this item exists for a caller, so a cached copy is never
+                reused across sessions on a shared browser.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Waveform"
+        "304":
+          description: >
+            The cached waveform is still current. It carries the same
+            validator and freshness the body would have.
+          headers:
+            ETag:
+              description: Validator for the cached waveform.
+              schema:
+                type: string
+            Cache-Control:
+              description: The same directive the 200 carries.
+              schema:
+                type: string
+            Vary:
+              description: The same credentials the 200 varies by.
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /play-states:
     post:
       operationId: listPlayStates
@@ -1110,3 +1210,42 @@ components:
           type: string
           format: date-time
           description: When the map was computed.
+
+    Waveform:
+      type: object
+      description: >
+        One item's amplitude envelope, produced by the catalog's analyze
+        pass and read back unchanged. Nothing here is computed on demand.
+      required: [state]
+      properties:
+        state:
+          type: string
+          description: >
+            `ready` (peaks present), `pending` (analyzable, not yet
+            analyzed), or `unavailable` (there will never be a waveform
+            for this item). Open set; treat unknown values as
+            `unavailable`.
+          example: ready
+        peaks:
+          type: array
+          description: >
+            One amplitude per bucket in playback order, `0` silence and
+            `255` full scale (`ready` only). Downsample to the pixel
+            width being drawn.
+          items:
+            type: integer
+            minimum: 0
+            maximum: 255
+        resolution:
+          type: integer
+          description: >
+            How many buckets `peaks` carries (`ready` only). Fixed by the
+            catalog at 1000 today; read it rather than assuming, because
+            an analysis version bump may change it.
+          example: 1000
+        essenceHash:
+          type: string
+          description: >
+            Content hash of the analyzed audio essence, matching the
+            download surface's `essenceHash`. A stored waveform whose
+            hash no longer matches the stored audio is stale.

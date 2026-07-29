@@ -407,7 +407,7 @@ func (s *Service) reloadRemote(ctx context.Context, sess *session, index int, po
 			sess.timeline = tm
 			s.mu.Unlock()
 		} else {
-			items, err := s.cfg.Resolver.StreamItems(ctx, ownerID, entries, ep.Kind, base, ttl)
+			items, err := s.cfg.Resolver.StreamItems(ctx, ownerID, entries, TargetFor(ep.Kind, driver), base, ttl)
 			if err != nil {
 				return err
 			}

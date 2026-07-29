@@ -20,15 +20,20 @@ type ScheduleDTO struct {
 }
 
 // scheduleKinds is the closed schedule set: each kind exists exactly
-// once. Scan and backup ship disabled until an administrator opts in;
-// prune ships enabled because the event log and stamp tables otherwise
-// grow without bound.
-var scheduleKinds = []string{"scan", "backup", "prune"}
+// once. Scan, backup, and analyze ship disabled until an administrator
+// opts in; prune ships enabled because the event log and stamp tables
+// otherwise grow without bound.
+var scheduleKinds = []string{"scan", "backup", "prune", "analyze"}
 
+// Analyze defaults to a weekly small-hours window rather than a nightly
+// one. It is the only pass that decodes audio, so it is priced in hours
+// on a large library and there is nothing to re-analyze until new files
+// arrive; a nightly firing would mostly wake up to find nothing to do.
 var scheduleDefaults = map[string]scheduleState{
-	"scan":   {Cron: "0 3 * * *"},
-	"backup": {Cron: "0 4 * * 0"},
-	"prune":  {Cron: "30 3 * * *", Enabled: true},
+	"scan":    {Cron: "0 3 * * *"},
+	"backup":  {Cron: "0 4 * * 0"},
+	"prune":   {Cron: "30 3 * * *", Enabled: true},
+	"analyze": {Cron: "0 2 * * 0"},
 }
 
 // scheduleState is the persisted per-kind document (settings KV).

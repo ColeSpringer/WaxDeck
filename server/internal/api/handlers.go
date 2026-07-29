@@ -17,6 +17,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/connect"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/service"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
@@ -451,7 +452,7 @@ func (s *Server) GetItemArt(ctx context.Context, req GetItemArtRequestObject) (G
 	// size: same source, different thumbnail sizes, different bytes.
 	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", blob.SourceHash, size))
 	cacheControl, vary := artCacheControl, artVary
-	if req.Params.IfNoneMatch != nil && *req.Params.IfNoneMatch == etag {
+	if req.Params.IfNoneMatch != nil && httpcache.ETagMatches(*req.Params.IfNoneMatch, etag) {
 		// A 304 repeats the validator and the freshness the body would
 		// have carried; without them the cached copy stays as stale as
 		// it was and revalidates again on the next paint.
@@ -543,6 +544,25 @@ func (s *Server) RescanLibrary(ctx context.Context, _ RescanLibraryRequestObject
 		return nil, err
 	}
 	return RescanLibrary202JSONResponse(jobJSON(job)), nil
+}
+
+func (s *Server) AnalyzeLibrary(ctx context.Context, _ AnalyzeLibraryRequestObject) (AnalyzeLibraryResponseObject, error) {
+	if p, ok := principalFromContext(ctx); !ok || !p.IsAdmin() {
+		return AnalyzeLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	job, err := s.svc.Analyze(ctx)
+	if err != nil {
+		if service.KindOf(err) == service.KindConflict {
+			// Narrower prose than the rescan twin's: analysis takes its
+			// own scope lease, so the only thing it can collide with is
+			// another analyze pass. Telling an administrator that some
+			// unnamed catalog job is in the way would send them looking
+			// at the scan.
+			return AnalyzeLibrary409JSONResponse{ConflictJSONResponse(errObj("conflict", "the analyze pass is already running"))}, nil
+		}
+		return nil, err
+	}
+	return AnalyzeLibrary202JSONResponse(jobJSON(job)), nil
 }
 
 func (s *Server) GetJob(ctx context.Context, req GetJobRequestObject) (GetJobResponseObject, error) {

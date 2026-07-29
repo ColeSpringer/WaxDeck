@@ -46,6 +46,90 @@ class AdminApi {
 
   const AdminApi(this._dio, this._serializers);
 
+  /// Start the analyze pass
+  /// Starts the asynchronous analyze pass and returns the job tracking it. The pass decodes every audio file whose analysis is missing or stale and stores its loudness (what ReplayGain and voice-boost leveling read), its acoustic fingerprint (what duplicate grouping reads), and its waveform peaks (what the seek bar reads). It is the only pass that decodes audio: a scan hashes files and reads tags without decoding them, so none of those three exists until this runs. Expect it to be slow. Each file costs a full decode, and where &#x60;fpcalc&#x60; is installed it also costs one subprocess per file, so a large library is priced in hours rather than minutes. It is resumable and cancelable like the other catalog jobs, and a file it has already analyzed is not analyzed again until its audio or an analysis algorithm changes, so an interrupted run picks up where it stopped. It never runs automatically after a scan; the &#x60;analyze&#x60; schedule and this endpoint are the only triggers. Analysis serializes with itself but not with scans: starting a second analyze while one runs returns the conflict error, while a scan may run alongside. Podcast episodes are deliberately never analyzed. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [Job] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<Job>> analyzeLibrary({ 
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/library/analyze';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    Job? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(Job),
+      ) as Job;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<Job>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Cancel the staged restore
   /// Unstages a staged restore before it is applied. The next server start proceeds normally. Administrators only. 
   ///
@@ -1876,7 +1960,7 @@ class AdminApi {
   }
 
   /// List the scheduled jobs
-  /// Every schedulable job kind with its cron expression, enabled state, and last and next run. Kinds are fixed: &#x60;scan&#x60; (a full library scan), &#x60;backup&#x60; (a backup archive with retention applied), and &#x60;prune&#x60; (event log, replay-guard stamp, audit history, and playback session history pruning, under server-owned horizons). Administrators only. 
+  /// Every schedulable job kind with its cron expression, enabled state, and last and next run. Kinds are fixed: &#x60;scan&#x60; (a full library scan), &#x60;backup&#x60; (a backup archive with retention applied), &#x60;prune&#x60; (event log, replay-guard stamp, audit history, and playback session history pruning, under server-owned horizons), and &#x60;analyze&#x60; (the audio-decoding pass behind loudness, fingerprints, and waveforms). Administrators only. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation

@@ -32,6 +32,15 @@ type fakeLoad struct {
 	play       bool
 }
 
+// formatDriver is a fakeDriver that also declares what its endpoint
+// plays, the way the DLNA driver does after reading ProtocolInfo.
+type formatDriver struct {
+	*fakeDriver
+	accepts []string
+}
+
+func (d *formatDriver) AcceptedFormats() []string { return d.accepts }
+
 func newFakeDriver() *fakeDriver {
 	return &fakeDriver{events: make(chan DriverEvent, 32)}
 }
@@ -84,9 +93,13 @@ func (d *fakeDriver) lastLoad(t *testing.T) fakeLoad {
 	return d.loads[len(d.loads)-1]
 }
 
-// fakeResolver serves a fixed catalog of entries.
+// fakeResolver serves a fixed catalog of entries and records the
+// endpoint target each load resolved against.
 type fakeResolver struct {
 	entries map[string]QueueEntry
+
+	mu      sync.Mutex
+	targets []EndpointTarget
 }
 
 func (r *fakeResolver) Entries(_ context.Context, _ string, pids []string) ([]QueueEntry, error) {
@@ -101,12 +114,25 @@ func (r *fakeResolver) Entries(_ context.Context, _ string, pids []string) ([]Qu
 	return out, nil
 }
 
-func (r *fakeResolver) StreamItems(_ context.Context, _ string, entries []QueueEntry, _, base string, _ time.Duration) ([]MediaItem, error) {
+func (r *fakeResolver) StreamItems(_ context.Context, _ string, entries []QueueEntry, target EndpointTarget, base string, _ time.Duration) ([]MediaItem, error) {
+	r.mu.Lock()
+	r.targets = append(r.targets, target)
+	r.mu.Unlock()
 	out := make([]MediaItem, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, MediaItem{PID: e.PID, URL: base + "/media/" + e.PID, MimeType: "audio/flac", Title: e.Title, DurationMS: e.DurationMS})
 	}
 	return out, nil
+}
+
+// lastTarget reports the target the most recent load resolved against.
+func (r *fakeResolver) lastTarget() (EndpointTarget, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.targets) == 0 {
+		return EndpointTarget{}, false
+	}
+	return r.targets[len(r.targets)-1], true
 }
 
 func (r *fakeResolver) Timeline(context.Context, string, []QueueEntry, float64, string) (*TimelineMedia, error) {
@@ -235,6 +261,70 @@ func TestCreateSessionOnDevice(t *testing.T) {
 	}
 	if id := svc.ActiveSessionID("us-bob", epID); id != snap.ID {
 		t.Fatalf("active session id %q, want %q", id, snap.ID)
+	}
+}
+
+// TestEndpointTargetCarriesDeclaredFormats covers the plumbing D2 needs:
+// what a driver says its endpoint plays has to survive the trip to the
+// resolver, which is the only place that can act on it. A driver that
+// declares nothing must leave the target's format list empty rather than
+// inventing a constraint.
+func TestEndpointTargetCarriesDeclaredFormats(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(ctx, filepath.Join(t.TempDir(), "waxdeck.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	seedUser(t, store, "us-alice", "alice")
+	resolver := &fakeResolver{entries: map[string]QueueEntry{
+		"tr-one": {PID: "tr-one", Title: "One", DurationMS: 60000},
+	}}
+	svc, err := New(ctx, Config{
+		Store:    store,
+		Group:    supervise.NewGroup(nil),
+		Resolver: resolver,
+		Sink:     &fakeSink{},
+		Bases:    Bases{LAN: "http://192.0.2.10:4420"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	talkative := &formatDriver{fakeDriver: newFakeDriver(), accepts: []string{"audio/x-flac", "audio/mpeg"}}
+	if _, err := svc.EndpointOnline(ctx, KindDLNA, "dlna-1", "Talkative renderer", "192.0.2.60:8080", true, false,
+		func(context.Context) (Driver, error) { return talkative, nil }); err != nil {
+		t.Fatal(err)
+	}
+	silent := newFakeDriver()
+	if _, err := svc.EndpointOnline(ctx, KindDLNA, "dlna-2", "Silent renderer", "192.0.2.61:8080", true, false,
+		func(context.Context) (Driver, error) { return silent, nil }); err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]string{}
+	for _, ep := range svc.Endpoints("us-alice") {
+		byName[ep.Name] = ep.ID
+	}
+
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", byName["Talkative renderer"], []string{"tr-one"}, 0, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	target, ok := resolver.lastTarget()
+	if !ok {
+		t.Fatal("no target recorded")
+	}
+	if target.Kind != KindDLNA {
+		t.Fatalf("target kind = %q, want %q", target.Kind, KindDLNA)
+	}
+	if len(target.Formats) != 2 || target.Formats[0] != "audio/x-flac" {
+		t.Fatalf("declared formats did not reach the resolver: %v", target.Formats)
+	}
+
+	if _, err := svc.CreateSession(ctx, "us-alice", "Alice", byName["Silent renderer"], []string{"tr-one"}, 0, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	target, _ = resolver.lastTarget()
+	if len(target.Formats) != 0 {
+		t.Fatalf("a driver that declares nothing must constrain nothing, got %v", target.Formats)
 	}
 }
 

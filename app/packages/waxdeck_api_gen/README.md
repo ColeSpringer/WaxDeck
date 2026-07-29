@@ -121,8 +121,10 @@ Conventions:
   They live outside `/api/v1` and are not declared as operations here:
   `/media/stream` (the streaming engine's output), `/media/download`
   (original bytes, ranged), `/media/enclosure` (a podcast episode's
-  feed enclosure, relayed), and `/media/radio/{pid}` (a station
-  stream, relayed). All four authenticate by media token in the query
+  feed enclosure, relayed), `/media/radio/{pid}` (a station
+  stream, relayed), and `/media/art` (an item's artwork, the same
+  bytes and the same fallback chain as `/items/{pid}/art`). All of
+  them authenticate by media token in the query
   string rather than by session or bearer credential, so bare `<audio>`
   elements, cast devices, and DLNA renderers that cannot send headers
   can fetch them. A media token binds one user to one item pid; expiry
@@ -132,7 +134,11 @@ Conventions:
   token for one episode reaches that episode's audio and nothing
   else, and the relay copies only `Content-Type`, `Content-Length`,
   `Content-Range`, `Accept-Ranges`, `ETag`, and `Last-Modified` back
-  from the podcast host.
+  from the podcast host. `/media/art` exists because a device
+  endpoint has no session to present: it takes an optional `size` (16
+  to 2048, defaulting to 600) and is `no-store`, since the URL
+  carries a credential and is minted per listener. First-party
+  clients use `/items/{pid}/art`, which is cacheable.
 - Public share links live at `/s/{token}` on the server origin, outside
   `/api/v1`. The landing page is server-rendered plain HTML (an audio
   element, artwork, OpenGraph and Twitter card tags) so link previews
@@ -281,9 +287,10 @@ import 'package:waxdeck_api_gen/waxdeck_api_gen.dart';
 final api = WaxdeckApiGen().getAdminApi();
 
 try {
-    api.cancelStagedRestore();
+    final response = await api.analyzeLibrary();
+    print(response);
 } catch on DioException (e) {
-    print("Exception when calling AdminApi->cancelStagedRestore: $e\n");
+    print("Exception when calling AdminApi->analyzeLibrary: $e\n");
 }
 
 ```
@@ -294,6 +301,7 @@ All URIs are relative to */api/v1*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+[*AdminApi*](doc/AdminApi.md) | [**analyzeLibrary**](doc/AdminApi.md#analyzelibrary) | **POST** /library/analyze | Start the analyze pass
 [*AdminApi*](doc/AdminApi.md) | [**cancelStagedRestore**](doc/AdminApi.md#cancelstagedrestore) | **DELETE** /admin/backups/restore | Cancel the staged restore
 [*AdminApi*](doc/AdminApi.md) | [**createBackup**](doc/AdminApi.md#createbackup) | **POST** /admin/backups | Create a backup now
 [*AdminApi*](doc/AdminApi.md) | [**createGenreNormalization**](doc/AdminApi.md#creategenrenormalization) | **POST** /admin/genre-normalize | Normalize every genre in the catalog
@@ -411,6 +419,7 @@ Class | Method | HTTP request | Description
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getPlayInfo**](doc/PlaybackApi.md#getplayinfo) | **GET** /items/{pid}/play-info | Resolve a playable stream for an item
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getPlayState**](doc/PlaybackApi.md#getplaystate) | **GET** /items/{pid}/play-state | Get the caller&#39;s playback state for an item
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getSkipMap**](doc/PlaybackApi.md#getskipmap) | **GET** /items/{pid}/skip-map | Get an item&#39;s silence skip map
+[*PlaybackApi*](doc/PlaybackApi.md) | [**getWaveform**](doc/PlaybackApi.md#getwaveform) | **GET** /items/{pid}/waveform | Get an item&#39;s waveform overview
 [*PlaybackApi*](doc/PlaybackApi.md) | [**listPlayStates**](doc/PlaybackApi.md#listplaystates) | **POST** /play-states | Read the caller&#39;s playback state for many items
 [*PlaybackApi*](doc/PlaybackApi.md) | [**listStarredEntities**](doc/PlaybackApi.md#liststarredentities) | **GET** /starred-entities | List the caller&#39;s starred artists and albums
 [*PlaybackApi*](doc/PlaybackApi.md) | [**putPlayState**](doc/PlaybackApi.md#putplaystate) | **PUT** /items/{pid}/play-state | Checkpoint the caller&#39;s playback position
@@ -833,6 +842,7 @@ Class | Method | HTTP request | Description
  - [UserCreate](doc/UserCreate.md)
  - [UserPage](doc/UserPage.md)
  - [UserUpdate](doc/UserUpdate.md)
+ - [Waveform](doc/Waveform.md)
  - [WriteBackFailure](doc/WriteBackFailure.md)
  - [WriteBackIssue](doc/WriteBackIssue.md)
  - [WsAckFrame](doc/WsAckFrame.md)

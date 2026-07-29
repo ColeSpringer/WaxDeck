@@ -337,6 +337,7 @@ export 'package:waxdeck_api_gen/src/model/user_account.dart';
 export 'package:waxdeck_api_gen/src/model/user_create.dart';
 export 'package:waxdeck_api_gen/src/model/user_page.dart';
 export 'package:waxdeck_api_gen/src/model/user_update.dart';
+export 'package:waxdeck_api_gen/src/model/waveform.dart';
 export 'package:waxdeck_api_gen/src/model/write_back_failure.dart';
 export 'package:waxdeck_api_gen/src/model/write_back_issue.dart';
 export 'package:waxdeck_api_gen/src/model/ws_ack_frame.dart';
