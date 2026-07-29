@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxdeck/fixtures"
+	"github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -1031,6 +1033,180 @@ func TestRemoveDownloadGuards(t *testing.T) {
 	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
 	if !decode[EpisodePage](t, resp).Items[0].Downloaded {
 		t.Fatal("refused removal must leave the file in place")
+	}
+}
+
+// Queued analysis outliving its audio is what an archived episode leaves
+// behind. Spending its attempts bars that audio for good, so a re-fetch
+// of the identical file would never get a skip map. Both shapes of gone:
+// an item cataloged without bytes, and an item that is not there at all.
+func TestAnalysisWithNoAudioIsDroppedNotFailed(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 1)
+	ctx := context.Background()
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	sub := decode[Subscription](t, resp)
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+	ep := decode[EpisodePage](t, resp).Items[0]
+	if ep.Downloaded {
+		t.Fatal("this test wants the episode's bytes absent")
+	}
+
+	// Queued straight into the store, the state a fetch then an archive
+	// arrives at. Not through an archive here, because the located-path
+	// cache would answer the pre-archive path until its next poll.
+	now := time.Now().UnixNano()
+	if err := h.store.EnqueueAnalysis(ctx, "sha256/mp3-frames-v1:cataloged-but-absent", ep.Pid, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.EnqueueAnalysis(ctx, "sha256/mp3-frames-v1:no-such-item", "ep-01K0000000000000000000000", now+1); err != nil {
+		t.Fatal(err)
+	}
+
+	for h.svc.DrainAnalysisQueue(ctx) {
+	}
+
+	// A year on, with an unexhaustable attempt budget: an entry still here
+	// spent its attempts instead of being dropped.
+	future := time.Now().Add(365 * 24 * time.Hour).UnixNano()
+	if row, err := h.store.LeaseAnalysis(ctx, future, 0, 1000); !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("analysis queue still holds %+v (err %v); work with no audio must be dropped", row, err)
+	}
+}
+
+// The third shape of gone: a path the catalog still names whose bytes
+// left the disk behind the server's back. Absent bytes under a live root
+// are dropped; an absent root is storage that has not arrived, and its
+// backlog has to survive it, which is the pair this covers.
+func TestAnalysisWithMissingFileIsDropped(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		wipe    func(t *testing.T, podcastDir string)
+		dropped bool
+	}{
+		{"the audio alone is gone", removeEpisodeAudio, true},
+		{"the whole root is gone", func(t *testing.T, dir string) {
+			t.Helper()
+			if err := os.RemoveAll(dir); err != nil {
+				t.Fatal(err)
+			}
+		}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			podcastDir := t.TempDir()
+			h := newHarnessWith(t, func(cfg *service.Config) {
+				cfg.PodcastDir = podcastDir
+				cfg.PodcastRootName = "podcasts"
+				cfg.AllowPrivateFeedHosts = true
+				cfg.RetentionInUseWindow = -1
+			})
+			feed := newFeedServer(t, 1)
+			ctx := context.Background()
+
+			resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+			sub := decode[Subscription](t, resp)
+			resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+			ep := decode[EpisodePage](t, resp).Items[0]
+
+			// The fetch queues the analysis; the audio goes away before the
+			// worker runs, with the catalog still naming its path.
+			r := h.postJSON(t, "/api/v1/episodes/"+ep.Pid+"/fetch", nil)
+			r.Body.Close()
+			drainFetches(t, h)
+			tc.wipe(t, podcastDir)
+
+			for h.svc.DrainAnalysisQueue(ctx) {
+			}
+
+			future := time.Now().Add(365 * 24 * time.Hour).UnixNano()
+			row, err := h.store.LeaseAnalysis(ctx, future, 0, 1000)
+			if tc.dropped {
+				if !errors.Is(err, db.ErrNotFound) {
+					t.Fatalf("analysis queue still holds %+v (err %v); a missing file must be dropped", row, err)
+				}
+				// Dropped, not measured: a map from audio the server cannot
+				// read would be a fiction, so the engine is never asked.
+				resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/skip-map", h.token)
+				if sm := decode[SkipMap](t, resp); sm.State == "ready" {
+					t.Fatalf("skip map = %+v; a missing file must not produce one", sm)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("leasing after an absent root = %v; the entry must outlive the mount", err)
+			}
+		})
+	}
+}
+
+// removeEpisodeAudio deletes the audio a fetch wrote, leaving the root.
+func removeEpisodeAudio(t *testing.T, podcastDir string) {
+	t.Helper()
+	removed := 0
+	if err := filepath.WalkDir(podcastDir, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || filepath.Ext(p) != ".mp3" {
+			return err
+		}
+		if err := os.Remove(p); err != nil {
+			return err
+		}
+		removed++
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if removed == 0 {
+		t.Fatal("the fetch wrote no audio to delete")
+	}
+}
+
+// Fetch, archive, re-fetch is ordinary podcast life, and the bytes come
+// back where the located-path cache saw none: until it polls, the episode
+// reports downloaded while everything resolving its path answers
+// not-found.
+func TestRefetchedEpisodePlaysAtOnce(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 1)
+	ctx := context.Background()
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	sub := decode[Subscription](t, resp)
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+	ep := decode[EpisodePage](t, resp).Items[0]
+
+	fetch := func() {
+		t.Helper()
+		r := h.postJSON(t, "/api/v1/episodes/"+ep.Pid+"/fetch", nil)
+		r.Body.Close()
+		if r.StatusCode != 202 {
+			t.Fatalf("fetch status = %d, want 202", r.StatusCode)
+		}
+		drainFetches(t, h)
+	}
+
+	fetch()
+	resp = h.deleteReq(t, "/api/v1/episodes/"+ep.Pid+"/fetch")
+	if resp.StatusCode != 204 {
+		t.Fatalf("archive status = %d, want 204", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// The same bytes land again: playable now, not when a cache next
+	// polls, and analyzable, which takes the fetch resolving the file it
+	// just wrote rather than the absence it remembers.
+	fetch()
+	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", h.token)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("play-info right after a re-fetch = %d, want 200", resp.StatusCode)
+	}
+	for h.svc.DrainAnalysisQueue(ctx) {
+	}
+	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/skip-map", h.token)
+	sm := decode[SkipMap](t, resp)
+	if sm.State != "ready" || sm.Spans == nil || len(*sm.Spans) == 0 {
+		t.Fatalf("skip map after re-fetch and analysis = %+v", sm)
 	}
 }
 

@@ -123,90 +123,120 @@ test('a backup archive is written, downloadable, and stageable', async ({ reques
   expect(gone.status()).toBe(404);
 });
 
-test('signup requests await approval and invites pre-approve', async ({ request }) => {
-  const token = await ensureAdmin(request);
-  const suffix = Date.now().toString(36);
+// Serial: both read the whole settings object, change one field, and PUT
+// it back, and the endpoint stores each field as its own row, so
+// concurrent replaces interleave and drop each other's change.
+test.describe.serial('server-global switches', () => {
+  test('signup requests await approval and invites pre-approve', async ({ request }) => {
+    const token = await ensureAdmin(request);
+    const suffix = Date.now().toString(36);
 
-  // Open signup off by default: the door answers forbidden.
-  const closed = await request.post('/api/v1/auth/signup', {
-    data: { username: `pending-${suffix}`, password: 'password123' },
+    // Open signup off by default: the door answers forbidden.
+    const closed = await request.post('/api/v1/auth/signup', {
+      data: { username: `pending-${suffix}`, password: 'password123' },
+    });
+    expect(closed.status()).toBe(403);
+
+    const settings = await request.get('/api/v1/admin/settings', authed(token));
+    expect(settings.ok()).toBeTruthy();
+    const current = await settings.json();
+    const opened = await request.put('/api/v1/admin/settings', {
+      ...authed(token),
+      data: { ...current, signupEnabled: true },
+    });
+    expect(opened.ok()).toBeTruthy();
+
+    // The login screen learns from the public bootstrap probe.
+    const probe = await request.get('/api/v1/auth/bootstrap');
+    expect((await probe.json()).signupEnabled).toBe(true);
+
+    const signup = await request.post('/api/v1/auth/signup', {
+      data: { username: `pending-${suffix}`, password: 'password123' },
+    });
+    expect(signup.status()).toBe(201);
+    expect((await signup.json()).state).toBe('pending');
+
+    // Pending accounts cannot log in.
+    const refused = await request.post('/api/v1/auth/login', {
+      data: { username: `pending-${suffix}`, password: 'password123' },
+    });
+    expect(refused.status()).toBe(401);
+
+    const queue = await request.get('/api/v1/users/requests', authed(token));
+    expect(queue.ok()).toBeTruthy();
+    const pending = (await queue.json()).users.find(
+      (u: { username: string }) => u.username === `pending-${suffix}`,
+    );
+    expect(pending).toBeTruthy();
+    expect(pending.pending).toBe(true);
+
+    const approved = await request.post(
+      `/api/v1/users/requests/${pending.id}/approve`,
+      { ...authed(token), data: { permissions: { download: true, delete: false, explicitContent: true, sharedOutputs: true, managePodcasts: true } } },
+    );
+    expect(approved.ok()).toBeTruthy();
+    const login = await request.post('/api/v1/auth/login', {
+      data: { username: `pending-${suffix}`, password: 'password123' },
+    });
+    expect(login.ok()).toBeTruthy();
+
+    // Invites admit immediately, even with open signup back off.
+    const closedAgain = await request.put('/api/v1/admin/settings', {
+      ...authed(token),
+      data: { ...current, signupEnabled: false },
+    });
+    expect(closedAgain.ok()).toBeTruthy();
+    const invite = await request.post('/api/v1/invites', {
+      ...authed(token),
+      data: { note: 'e2e invite', maxUses: 1 },
+    });
+    expect(invite.status()).toBe(201);
+    const inviteBody = await invite.json();
+    expect(inviteBody.token).toBeTruthy();
+
+    const invited = await request.post('/api/v1/auth/signup', {
+      data: { username: `invited-${suffix}`, password: 'password123', inviteToken: inviteBody.token },
+    });
+    expect(invited.status()).toBe(201);
+    expect((await invited.json()).state).toBe('active');
+    const invitedLogin = await request.post('/api/v1/auth/login', {
+      data: { username: `invited-${suffix}`, password: 'password123' },
+    });
+    expect(invitedLogin.ok()).toBeTruthy();
+
+    // The list shows the spent invite without its token.
+    const invites = await request.get('/api/v1/invites', authed(token));
+    const listed = (await invites.json()).invites.find(
+      (iv: { id: string }) => iv.id === inviteBody.id,
+    );
+    expect(listed.usedCount).toBe(1);
+    expect(listed.token).toBeUndefined();
   });
-  expect(closed.status()).toBe(403);
 
-  const settings = await request.get('/api/v1/admin/settings', authed(token));
-  expect(settings.ok()).toBeTruthy();
-  const current = await settings.json();
-  const opened = await request.put('/api/v1/admin/settings', {
-    ...authed(token),
-    data: { ...current, signupEnabled: true },
+  test('read-only mode refuses uploads and releases', async ({ request }) => {
+    const token = await ensureAdmin(request);
+    const settings = await (await request.get('/api/v1/admin/settings', authed(token))).json();
+
+    const on = await request.put('/api/v1/admin/settings', {
+      ...authed(token),
+      data: { ...settings, readOnly: true },
+    });
+    expect(on.ok()).toBeTruthy();
+    try {
+      const refused = await request.post('/api/v1/uploads', {
+        ...authed(token),
+        data: { fileName: 'nope.mp3', sizeBytes: 1024, mediaType: 'music' },
+      });
+      expect(refused.status()).toBe(409);
+      expect((await refused.json()).code).toBe('read-only');
+    } finally {
+      const off = await request.put('/api/v1/admin/settings', {
+        ...authed(token),
+        data: { ...settings, readOnly: false },
+      });
+      expect(off.ok()).toBeTruthy();
+    }
   });
-  expect(opened.ok()).toBeTruthy();
-
-  // The login screen learns from the public bootstrap probe.
-  const probe = await request.get('/api/v1/auth/bootstrap');
-  expect((await probe.json()).signupEnabled).toBe(true);
-
-  const signup = await request.post('/api/v1/auth/signup', {
-    data: { username: `pending-${suffix}`, password: 'password123' },
-  });
-  expect(signup.status()).toBe(201);
-  expect((await signup.json()).state).toBe('pending');
-
-  // Pending accounts cannot log in.
-  const refused = await request.post('/api/v1/auth/login', {
-    data: { username: `pending-${suffix}`, password: 'password123' },
-  });
-  expect(refused.status()).toBe(401);
-
-  const queue = await request.get('/api/v1/users/requests', authed(token));
-  expect(queue.ok()).toBeTruthy();
-  const pending = (await queue.json()).users.find(
-    (u: { username: string }) => u.username === `pending-${suffix}`,
-  );
-  expect(pending).toBeTruthy();
-  expect(pending.pending).toBe(true);
-
-  const approved = await request.post(
-    `/api/v1/users/requests/${pending.id}/approve`,
-    { ...authed(token), data: { permissions: { download: true, delete: false, explicitContent: true, sharedOutputs: true, managePodcasts: true } } },
-  );
-  expect(approved.ok()).toBeTruthy();
-  const login = await request.post('/api/v1/auth/login', {
-    data: { username: `pending-${suffix}`, password: 'password123' },
-  });
-  expect(login.ok()).toBeTruthy();
-
-  // Invites admit immediately, even with open signup back off.
-  const closedAgain = await request.put('/api/v1/admin/settings', {
-    ...authed(token),
-    data: { ...current, signupEnabled: false },
-  });
-  expect(closedAgain.ok()).toBeTruthy();
-  const invite = await request.post('/api/v1/invites', {
-    ...authed(token),
-    data: { note: 'e2e invite', maxUses: 1 },
-  });
-  expect(invite.status()).toBe(201);
-  const inviteBody = await invite.json();
-  expect(inviteBody.token).toBeTruthy();
-
-  const invited = await request.post('/api/v1/auth/signup', {
-    data: { username: `invited-${suffix}`, password: 'password123', inviteToken: inviteBody.token },
-  });
-  expect(invited.status()).toBe(201);
-  expect((await invited.json()).state).toBe('active');
-  const invitedLogin = await request.post('/api/v1/auth/login', {
-    data: { username: `invited-${suffix}`, password: 'password123' },
-  });
-  expect(invitedLogin.ok()).toBeTruthy();
-
-  // The list shows the spent invite without its token.
-  const invites = await request.get('/api/v1/invites', authed(token));
-  const listed = (await invites.json()).invites.find(
-    (iv: { id: string }) => iv.id === inviteBody.id,
-  );
-  expect(listed.usedCount).toBe(1);
-  expect(listed.token).toBeUndefined();
 });
 
 test('deleted items land in the trash and restore cleanly', async ({ request }) => {
@@ -247,31 +277,6 @@ test('deleted items land in the trash and restore cleanly', async ({ request }) 
     const item = await request.get(`/api/v1/items/${pid}`, authed(token));
     expect(item.ok()).toBeTruthy();
   }).toPass({ timeout: 60_000 });
-});
-
-test('read-only mode refuses uploads and releases', async ({ request }) => {
-  const token = await ensureAdmin(request);
-  const settings = await (await request.get('/api/v1/admin/settings', authed(token))).json();
-
-  const on = await request.put('/api/v1/admin/settings', {
-    ...authed(token),
-    data: { ...settings, readOnly: true },
-  });
-  expect(on.ok()).toBeTruthy();
-  try {
-    const refused = await request.post('/api/v1/uploads', {
-      ...authed(token),
-      data: { fileName: 'nope.mp3', sizeBytes: 1024, mediaType: 'music' },
-    });
-    expect(refused.status()).toBe(409);
-    expect((await refused.json()).code).toBe('read-only');
-  } finally {
-    const off = await request.put('/api/v1/admin/settings', {
-      ...authed(token),
-      data: { ...settings, readOnly: false },
-    });
-    expect(off.ok()).toBeTruthy();
-  }
 });
 
 test('an exported archive imports back through the backups screen', async ({

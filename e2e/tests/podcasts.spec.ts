@@ -35,6 +35,23 @@ async function subscribedShowPid(request: APIRequestContext, token: string): Pro
   return pid;
 }
 
+// The backlog the server counts for this caller, which the tile draws.
+async function serverUnplayed(
+  request: APIRequestContext,
+  token: string,
+  showPid: string,
+): Promise<number> {
+  const resp = await request.get('/api/v1/podcasts', authed(token));
+  expect(resp.ok()).toBeTruthy();
+  const hit = ((await resp.json()).items ?? []).find(
+    (s: any) => s.show.pid === showPid,
+  );
+  expect(typeof hit?.unplayedCount, 'a subscription carries its backlog').toBe(
+    'number',
+  );
+  return hit.unplayedCount as number;
+}
+
 test('subscribe, fetch, and play an episode with silence trimming', async ({ page, request }) => {
   test.setTimeout(240_000);
   const token = await ensureAdmin(request);
@@ -65,10 +82,17 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   const showTile = page.locator(sem(SemanticsIds.podcast(showPid)));
   await showTile.waitFor({ timeout: 30_000 });
 
-  // The tile says what is waiting, which is a count only the server can
-  // answer: a client holding one page of episodes would be reporting a
-  // window as the backlog. A fresh subscription's whole feed is unplayed.
-  await expect(showTile).toHaveAccessibleName(/3 unplayed/, { timeout: 30_000 });
+  // The tile draws the count the server reports, not the feed's three
+  // episodes: a backlog is per-caller, and the gpodder spec plays this
+  // same feed as this same account. Re-read each attempt, since a
+  // checkpoint from another device invalidates the grid.
+  await expect(async () => {
+    const backlog = await serverUnplayed(request, token, showPid);
+    expect(backlog, 'a fresh subscription has something waiting').toBeGreaterThan(0);
+    await expect(showTile).toHaveAccessibleName(new RegExp(`\\b${backlog} unplayed\\b`), {
+      timeout: 2_000,
+    });
+  }).toPass({ timeout: 30_000 });
   // The show screen is on screen once its follow control is: the header
   // draws it, and it is the one control the hub does not have.
   const episodeList = () => page.locator(sem(SemanticsIds.podcastUnsubscribe));
@@ -126,16 +150,18 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   // flutter's navigator is handled asynchronously, and a deferred
   // popstate can pop the very screen the test just re-entered.
   await clickThrough(page.getByRole('button', { name: 'Back' }).first(), showTile);
-  await clickThrough(showTile, page.locator(sem(SemanticsIds.episode(episode.pid))));
+  // Arrival is the follow control, never a row: the hub's shelves carry
+  // the same row identifiers, and clickThrough skips its click when the
+  // destination already shows, so a row alone never leaves the hub.
+  await clickThrough(showTile, episodeList());
+  const episodeRow = page.locator(sem(SemanticsIds.episode(episode.pid)));
+  await episodeRow.waitFor({ timeout: 30_000 });
 
   // Play it. The trim chip reports time actually saved once the
   // session seeks over the lead silence, which is the observable proof
   // the jump happened (positions stay honest, so only the counter can
   // tell trimmed playback from ordinary playback this quickly).
-  await clickThrough(
-    page.locator(sem(SemanticsIds.episode(episode.pid))),
-    page.locator(sem(SemanticsIds.playerToggle)),
-  );
+  await clickThrough(episodeRow, page.locator(sem(SemanticsIds.playerToggle)));
   await expect(page.locator(sem(SemanticsIds.playerTrim))).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(sem(SemanticsIds.playerTrim))).toHaveAccessibleName(/saved/, {
     timeout: 30_000,
@@ -237,11 +263,11 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
     page.getByRole('button', { name: 'Back' }).first(),
     showTile,
   );
-  await clickThrough(showTile, page.locator(sem(SemanticsIds.episode(third.pid))));
-  await clickThrough(
-    page.locator(sem(SemanticsIds.episode(third.pid))),
-    page.locator(sem(SemanticsIds.playerToggle)),
-  );
+  // Follow control again: a row alone would be satisfied by the hub.
+  await clickThrough(showTile, episodeList());
+  const thirdRow = page.locator(sem(SemanticsIds.episode(third.pid)));
+  await thirdRow.waitFor({ timeout: 30_000 });
+  await clickThrough(thirdRow, page.locator(sem(SemanticsIds.playerToggle)));
   const relayed = await request.get(`/api/v1/items/${third.pid}/play-info`, authed(token));
   expect(relayed.status(), 'a never-fetched episode still mints a URL').toBe(200);
   expect((await relayed.json()).url as string).toContain('/media/enclosure?');

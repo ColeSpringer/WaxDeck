@@ -199,7 +199,7 @@ logs:
 ## --- e2e & packaging ----------------------------------------------------------
 
 e2e:
-	cd e2e && npm ci --no-audit --no-fund && npx playwright test
+	cd e2e && npm ci --no-audit --no-fund && npm run typecheck && npx playwright test
 
 # The desktop app journey plus the engine conformance suite against the
 # real mpv backend, which is where clip windows and gapless crossings are

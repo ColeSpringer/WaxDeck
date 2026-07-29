@@ -114,8 +114,10 @@ func (d *DB) EnqueueAnalysis(ctx context.Context, essenceHash, itemPID string, n
 }
 
 // LeaseAnalysis claims the oldest lease-free analysis row for leaseNS
-// nanoseconds; ErrNotFound when the queue is idle. Rows past
-// maxAttempts are skipped (and swept by FailAnalysis callers).
+// nanoseconds; ErrNotFound when the queue is idle. Rows past maxAttempts
+// are skipped and nothing sweeps them, and EnqueueAnalysis ignores a key
+// it already holds, so an exhausted row bars that audio for good:
+// callers drop work that cannot come good rather than spend its attempts.
 func (d *DB) LeaseAnalysis(ctx context.Context, nowNS, leaseNS int64, maxAttempts int) (QueueRow, error) {
 	return d.leaseQueue(ctx, "analysis_queue", "essence_hash", nowNS, leaseNS, maxAttempts)
 }

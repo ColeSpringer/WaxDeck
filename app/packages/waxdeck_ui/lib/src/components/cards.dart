@@ -229,6 +229,9 @@ class _MediaCardState extends State<MediaCard> {
         if (data.unplayed) 'Unplayed',
         data.title,
         data.subtitle,
+        // Drawn on the card, so announced too, as a row's is:
+        // `excludeSemantics` below hides the Text itself.
+        data.trailingText,
         if (data.progress != null)
           '${((data.progress ?? 0) * 100).round()} percent played',
       ].nonNulls.join(', '),

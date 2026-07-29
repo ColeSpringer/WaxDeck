@@ -52,12 +52,24 @@ void main() {
     // The count is the show's whole unplayed backlog, which is a number
     // only the server can answer: a client counting the page it loaded
     // would claim a window was the backlog.
+    final semantics = tester.ensureSemantics();
     final repo = FakeRepository()
       ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
       ..unplayedCounts['pc-A'] = 4;
     await _pump(tester, repo);
 
     expect(find.text('4 unplayed'), findsOneWidget);
+    // And announces it: the label is built with `excludeSemantics`, so a
+    // count left out of it is unreadable.
+    expect(
+      tester
+          .getSemantics(
+            find.bySemanticsIdentifier(SemanticsIds.podcast('pc-A')),
+          )
+          .label,
+      contains('4 unplayed'),
+    );
+    semantics.dispose();
   });
 
   testWidgets('a show with nothing waiting falls back to its size', (

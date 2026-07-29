@@ -171,6 +171,7 @@ jobs:
         run: |
           cd e2e
           npm ci --no-audit --no-fund
+          npm run typecheck
           npx playwright install --with-deps chromium
           npx playwright test
       - uses: actions/upload-artifact@v7

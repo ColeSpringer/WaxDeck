@@ -191,6 +191,12 @@ func (l *Library) DrainFetchQueue(ctx context.Context) bool {
 		l.log.Warn("completing fetch", "episode", row.Key, "err", err)
 	}
 	l.log.Info("episode fetched", "episode", row.Key, "bytes", res.Bytes)
+	// Bytes now exist where the located-path cache saw none, and it only
+	// drops entries on its own poll: until refreshed, analysis resolves no
+	// file and play-info answers not-found for a downloaded episode.
+	if _, err := l.paths.Relocate(ctx, model.PID(row.Key)); err != nil {
+		l.log.Warn("refreshing a fetched episode's path", "episode", row.Key, "err", err)
+	}
 	// A fresh spoken-word file wants a silence map; queue analysis by
 	// essence so a replayed fetch never duplicates the work.
 	l.enqueueAnalysisForItem(ctx, model.PID(row.Key))

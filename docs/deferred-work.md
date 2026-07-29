@@ -296,6 +296,25 @@ here waits on upstream.
   enum, so the list is the contract). Left out of the batch that
   introduced the split because it is a contract change and the two
   messages are stable in the meantime.
+- `[in-repo]` **An analysis entry that exhausts its attempts is
+  permanent.** The queue is keyed by essence hash, `EnqueueAnalysis`
+  ignores a key it already holds, and only success deletes a row, so five
+  failed attempts bar that audio for the life of the database. Work that
+  cannot come good is now dropped (`errAnalysisMoot`), but a durable
+  outage still burns the budget: a sidecar down for an hour leaves every
+  file queued during it unanalyzable, and the on-access path cannot heal
+  it because its enqueue is the same no-op. Wants a sweep of exhausted
+  rows on a horizon (the prune job) or a reset on a genuinely fresh
+  enqueue; not retry-forever, since a client polling a pending skip map
+  re-enqueues on every request.
+- `[in-repo]` **A skip map stays pending for audio deleted behind the
+  server's back.** The item is still `present` in the catalog, so
+  `SkipMapFor` enqueues and answers pending, while the worker drops the
+  entry as moot: a client polling gets pending forever, re-queuing work
+  that is dropped again. Harmless (playback of that item fails anyway)
+  and self-correcting once a scan retires the item, but the honest fix is
+  for the worker's discovery that the bytes are gone to reach the
+  catalog, not just the queue.
 
 ## Compatibility
 
@@ -718,6 +737,13 @@ here waits on upstream.
   uploader is usually watching the uploads screen, which updates
   live), but it is a decision: an import-completed user event would
   close the gap for fire-and-forget uploads.
+- `[in-repo]` **The read-only e2e scenario flips a switch the whole suite
+  shares.** The two settings scenarios no longer race each other (one
+  serial group), but read-only is server-global, so for the one request it
+  is on, another worker's write would be refused too. The uploads specs
+  are what that would hit; the window is a single round trip and it has
+  not fired. Fix if it does: give the switch scenarios their own project
+  after the parallel wave, as focus-a11y is.
 
 ## Decided, not deferred
 

@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -45,6 +48,11 @@ const (
 	analysisLease       = 30 * time.Minute
 	analysisMaxAttempts = 5
 )
+
+// errAnalysisMoot marks queued analysis whose audio is gone: dropped
+// rather than failed, since the queue is keyed by essence hash and an
+// entry that spends its attempts bars that audio for good.
+var errAnalysisMoot = errors.New("nothing left to analyze")
 
 // SkipMapFor answers one item's skip map, queuing analysis on a miss
 // when the item is mappable. partIndex selects a multi-file book's
@@ -216,6 +224,14 @@ func (l *Library) DrainAnalysisQueue(ctx context.Context) bool {
 		return false
 	}
 	if err := l.runAnalysis(ctx, row); err != nil {
+		if errors.Is(err, errAnalysisMoot) {
+			// Not a failure: no attempt can bring the bytes back, and a
+			// re-fetch or a rescan of the same essence queues fresh work.
+			if dbErr := l.db.CompleteAnalysis(ctx, row.Key); dbErr != nil {
+				l.log.Warn("dropping analysis with no audio", "key", row.Key, "err", dbErr)
+			}
+			return true
+		}
 		l.log.Warn("silence analysis failed", "key", row.Key, "attempt", row.Attempts+1, "err", err)
 		retryAt := time.Now().Add(queueRetryDelay(row.Attempts)).UnixNano()
 		if dbErr := l.db.FailAnalysis(ctx, row.Key, err.Error(), retryAt); dbErr != nil {
@@ -229,21 +245,100 @@ func (l *Library) DrainAnalysisQueue(ctx context.Context) bool {
 	return true
 }
 
-func (l *Library) runAnalysis(ctx context.Context, row wdb.QueueRow) error {
-	itemPID, filePID, _ := strings.Cut(row.ItemPID, "|")
-	var path string
+// analysisSource resolves the file a queued entry names, errAnalysisMoot
+// when there is nothing left to measure.
+func (l *Library) analysisSource(ctx context.Context, itemPID, filePID string) (string, error) {
+	// A named part reads the catalog directly, so its answer is current.
 	if filePID != "" {
 		f, err := l.fileByPID(ctx, model.PID(filePID))
 		if err != nil {
-			return err
+			if KindOf(err) == KindNotFound {
+				return "", errAnalysisMoot
+			}
+			return "", err
 		}
-		path = string(f.Path)
-	} else {
-		loc, err := l.paths.Locate(ctx, model.PID(itemPID))
-		if err != nil {
-			return classify(err)
+		return l.usableSource(string(f.Path))
+	}
+	loc, err := l.paths.Locate(ctx, model.PID(itemPID))
+	if err != nil {
+		if KindOf(classify(err)) == KindNotFound {
+			return "", errAnalysisMoot
 		}
-		path = loc.Path
+		return "", classify(err)
+	}
+	path, err := l.usableSource(loc.Path)
+	if !errors.Is(err, errAnalysisMoot) {
+		return path, err
+	}
+	// Locate is cached and invalidates on a poll, so it can be a rename or
+	// a fresh landing behind the catalog. Nothing is written off on it.
+	fresh, err := l.paths.Relocate(ctx, model.PID(itemPID))
+	if err != nil {
+		if KindOf(classify(err)) == KindNotFound {
+			return "", errAnalysisMoot
+		}
+		return "", classify(err)
+	}
+	if fresh.Path == loc.Path {
+		return "", errAnalysisMoot
+	}
+	return l.usableSource(fresh.Path)
+}
+
+// usableSource answers a path worth analyzing: errAnalysisMoot when the
+// catalog names bytes that are not there, a retryable error when the
+// library root itself is missing, which is storage that has not arrived
+// rather than audio that is gone.
+func (l *Library) usableSource(path string) (string, error) {
+	if path == "" {
+		return "", errAnalysisMoot
+	}
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		if root := l.storageRootFor(path); root != "" {
+			if _, err := os.Stat(root); errors.Is(err, os.ErrNotExist) {
+				return "", fmt.Errorf("root %s is not mounted", root)
+			}
+		}
+		return "", errAnalysisMoot
+	}
+	return path, nil
+}
+
+// storageRootFor answers the configured root a path sits under, longest
+// match, or "" when none does. Read from the roots WaxDeck was given
+// rather than the catalog's attribution, which only carries roots the
+// catalog records a display path for.
+func (l *Library) storageRootFor(path string) string {
+	clean := filepath.Clean(path)
+	best := ""
+	for _, dir := range append([]string{l.podcastDir}, rootPaths(l.roots)...) {
+		if dir == "" {
+			continue
+		}
+		root := filepath.Clean(dir)
+		if clean != root && !strings.HasPrefix(clean, root+string(filepath.Separator)) {
+			continue
+		}
+		if len(root) > len(best) {
+			best = root
+		}
+	}
+	return best
+}
+
+func rootPaths(roots []Root) []string {
+	out := make([]string, 0, len(roots))
+	for _, r := range roots {
+		out = append(out, r.Path)
+	}
+	return out
+}
+
+func (l *Library) runAnalysis(ctx context.Context, row wdb.QueueRow) error {
+	itemPID, filePID, _ := strings.Cut(row.ItemPID, "|")
+	path, err := l.analysisSource(ctx, itemPID, filePID)
+	if err != nil {
+		return err
 	}
 
 	// One analysis is bounded well under the lease so a wedged job
