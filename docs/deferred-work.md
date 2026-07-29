@@ -102,6 +102,24 @@ here waits on upstream.
   are the defaults every client ships, and there is no way to change them.
   The per-device store exists now (ADR-0027); the setting still needs its
   control in Settings, Playback, which is all that is left. See ADR-0023.
+- `[roadmap]` **The deck bar has no volume control, at any width.** The
+  layout system puts a slider in the bar's right cluster under two
+  separate conditions: on desktop and web it is always present and drives
+  local output, and on mobile it appears only while controlling a remote
+  endpoint that reports `volumeControl`, since hardware buttons own local
+  volume there. Neither is built, and only the second was written down,
+  which is how the first went missing instead of being cut. Nothing local
+  reads or writes the engine's volume: `AudioEnginePort.setVolume` and
+  `volume` exist, and their only callers are the endpoint controller's
+  session report and its `set-volume` case, so another device can turn
+  this one down while its own user has no way to. `waxdeck_ui` carries no
+  slider primitive either (the seek bar is bespoke, and the remote screen
+  that has one predates the design system and uses Material's), so this
+  wants that primitive, a volume field on `NowPlayingData` and
+  `DeckBarActions`, a desktop and web gate, and a generated semantics id.
+  It lands with the cast phase, which builds the second condition anyway;
+  the radio player face and the keyboard map's volume and mute keys read
+  the same state after that. See ADR-0023.
 - `[in-repo]` **The web build's per-device settings binding is not covered
   by an automated test.** `BrowserClientSettingsStore` — the probe, the
   fallback to memory, the write-through shadow, the key semantics — is
@@ -184,10 +202,13 @@ here waits on upstream.
   The bar reads local playback alone, so handing a session to another
   endpoint leaves it showing the item stopped rather than "on
   [endpoint name]": the cast glyph over the artwork, the caption line,
-  and the volume slider that appears only for an endpoint reporting
-  `volumeControl` are all specified and none is wired
-  (`NowPlayingData.remoteEndpoint` is never set). It stayed out of the
-  deck bar's own phase because controlling another endpoint is a pushed
+  and the volume slider an endpoint reporting `volumeControl` gets are
+  all specified and none is wired (`NowPlayingData.remoteEndpoint` is
+  never set). That slider has a second reason to exist which this entry
+  does not cover, tracked above under the deck bar having no volume
+  control: on desktop and web it belongs there for local output, with no
+  endpoint involved. The remote face stayed out of the deck bar's own
+  phase because controlling another endpoint is a pushed
   screen holding its own watch-frame state, and making the shell follow
   it is a piece of the Connect UX rather than of the bar: the picker,
   the disconnect triad, and the refusal explanations land together with

@@ -80,7 +80,10 @@ cast, overflow) draws only the controls the caller wired, so a surface a
 later phase builds is absent rather than permanently greyed. The transport
 is the opposite case and keeps its controls disabled where they cannot
 act: a bar that loses its next button on the last track moves under the
-hand.
+hand. *Amended 2026-07-29: that enumeration is not the whole cluster. The
+layout system puts a volume slider in it too, the component has no
+parameter for one, and it is absent by omission rather than by this rule;
+see the consequence below.*
 
 **The panel is shell state, and it opens onto the queue.** `WaxPanel` names
 what is open, `sidePanelProvider` holds it, and the frame docks it beside
@@ -125,6 +128,17 @@ does not move under a cursor every time a socket blinks.
   another endpoint is a pushed screen with state of its own rather than
   something the shell knows about; making the bar follow it is the cast
   phase's, with the rest of the Connect UX.
+- **There is no volume control, and that one was not a decision.** The
+  right cluster was built without a volume slider and without a parameter
+  for one, so both of the conditions the layout system gives it are
+  unbuilt: the desktop and web slider over local output, needing no
+  endpoint at all, and the mobile one that appears for an endpoint
+  reporting `volumeControl`. Nothing local reads or writes
+  `AudioEnginePort.volume` either, though
+  this client already reports it and answers a routed `set-volume`, so
+  another device can turn this one down while its own user cannot.
+  Recorded 2026-07-29; it rides the cast phase with the remote face, and
+  deferred work carries the shape.
 - **No lyrics control.** There is no lyrics view, so the action is not
   wired and the control is not drawn. The endpoint exists; the surface
   rides the player-extras phase.
