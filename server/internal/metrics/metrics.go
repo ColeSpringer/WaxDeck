@@ -55,6 +55,7 @@ type family struct {
 	fn      func() float64
 	cvec    *CounterVec
 	gvec    *GaugeVec
+	hvec    *HistogramVec
 }
 
 // Registry holds metric families and renders them in the Prometheus text
@@ -191,6 +192,47 @@ func (r *Registry) Histogram(name, help string, buckets []float64) *Histogram {
 	h := newHistogram(name, buckets)
 	r.families[name] = &family{name: name, help: help, typ: typeHistogram, hist: h}
 	return h
+}
+
+// HistogramVec returns the labeled histogram family registered under
+// name, creating it on first use. Every child shares one bucket set,
+// which is what makes the family aggregatable across label values; a
+// nil or empty buckets slice means DefBuckets. Repeated calls with the
+// same name and the same label names return the same *HistogramVec and
+// ignore buckets; anything else panics.
+func (r *Registry) HistogramVec(name, help string, labels []string, buckets []float64) *HistogramVec {
+	mustMetricName(name)
+	mustLabelNames(labels)
+	// le is the bucket bound's own label, and the exposition appends it
+	// to these. A family carrying one would emit two le keys on every
+	// bucket line, which no scraper can parse. The check is here rather
+	// than in mustLabelNames because le is reserved for histograms
+	// alone: on a counter or gauge family it is merely an odd name.
+	for _, l := range labels {
+		if l == "le" {
+			panic(fmt.Sprintf("metrics: %q reserves the le label for bucket bounds", name))
+		}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if f, ok := r.families[name]; ok {
+		if f.hvec == nil || !slices.Equal(f.hvec.v.labels, labels) {
+			panicConflict(name)
+		}
+		return f.hvec
+	}
+	// Validating the bounds here rather than inside the child
+	// constructor means a bad bucket list panics at registration, where
+	// the mistake is, instead of on whichever request first observes.
+	// The bounds are immutable, so every child shares the one slice; the
+	// histogram they are validated through is discarded rather than
+	// captured, so its counts and mutex do not outlive this call.
+	bounds := newHistogram(name, buckets).upper
+	hv := &HistogramVec{v: newVec(labels, func() *Histogram {
+		return &Histogram{upper: bounds, counts: make([]uint64, len(bounds))}
+	})}
+	r.families[name] = &family{name: name, help: help, typ: typeHistogram, hvec: hv}
+	return hv
 }
 
 func panicConflict(name string) {

@@ -54,6 +54,13 @@ func buildGolden(reverse bool) *Registry {
 			h.Observe(0.75)
 			h.Observe(3)
 		},
+		func() {
+			hv := r.HistogramVec("wax_route_seconds", "Request latency per route.",
+				[]string{"route"}, []float64{0.1, 0.5})
+			hv.With("api").Observe(0.0625)
+			hv.With("api").Observe(0.75)
+			hv.With("web").Observe(0.25)
+		},
 	}
 	if reverse {
 		for i := len(fill) - 1; i >= 0; i-- {
@@ -83,6 +90,18 @@ wax_req_seconds_bucket{le="1"} 3
 wax_req_seconds_bucket{le="+Inf"} 4
 wax_req_seconds_sum 4.0625
 wax_req_seconds_count 4
+# HELP wax_route_seconds Request latency per route.
+# TYPE wax_route_seconds histogram
+wax_route_seconds_bucket{route="api",le="0.1"} 1
+wax_route_seconds_bucket{route="api",le="0.5"} 1
+wax_route_seconds_bucket{route="api",le="+Inf"} 2
+wax_route_seconds_sum{route="api"} 0.8125
+wax_route_seconds_count{route="api"} 2
+wax_route_seconds_bucket{route="web",le="0.1"} 0
+wax_route_seconds_bucket{route="web",le="0.5"} 1
+wax_route_seconds_bucket{route="web",le="+Inf"} 1
+wax_route_seconds_sum{route="web"} 0.25
+wax_route_seconds_count{route="web"} 1
 # HELP wax_tracks_scanned_total Tracks scanned.
 # TYPE wax_tracks_scanned_total counter
 wax_tracks_scanned_total 3
@@ -249,6 +268,18 @@ func TestCollectorIdentity(t *testing.T) {
 	if cv.With("1", "2") == cv.With("1", "3") {
 		t.Error("CounterVec.With with different values returned the same child")
 	}
+	hv := r.HistogramVec("hv_seconds", "", []string{"a"}, []float64{1, 2})
+	if hv != r.HistogramVec("hv_seconds", "", []string{"a"}, nil) {
+		t.Error("HistogramVec with same name and labels returned a different vec")
+	}
+	if hv.With("x") != hv.With("x") {
+		t.Error("HistogramVec.With with same values returned a different child")
+	}
+	// Every child shares the family's bounds, which is what makes the
+	// family aggregatable across label values.
+	if a, b := hv.With("x"), hv.With("y"); a == b || len(a.upper) != len(b.upper) {
+		t.Error("HistogramVec children do not share one bucket set")
+	}
 }
 
 func TestRegistrationPanics(t *testing.T) {
@@ -275,6 +306,22 @@ func TestRegistrationPanics(t *testing.T) {
 		{"vec label mismatch", func(r *Registry) {
 			r.CounterVec("m", "", []string{"a"})
 			r.CounterVec("m", "", []string{"b"})
+		}},
+		{"histogram vec then histogram", func(r *Registry) {
+			r.HistogramVec("m", "", []string{"a"}, nil)
+			r.Histogram("m", "", nil)
+		}},
+		{"histogram vec label mismatch", func(r *Registry) {
+			r.HistogramVec("m", "", []string{"a"}, nil)
+			r.HistogramVec("m", "", []string{"b"}, nil)
+		}},
+		{"unsorted histogram vec buckets", func(r *Registry) {
+			r.HistogramVec("m", "", []string{"a"}, []float64{2, 1})
+		}},
+		// The exposition appends le to the family's labels, so a family
+		// carrying one of its own emits two le keys per bucket line.
+		{"histogram vec claims the le label", func(r *Registry) {
+			r.HistogramVec("m", "", []string{"le"}, nil)
 		}},
 		{"duplicate gauge func", func(r *Registry) {
 			r.GaugeFunc("m", "", func() float64 { return 0 })

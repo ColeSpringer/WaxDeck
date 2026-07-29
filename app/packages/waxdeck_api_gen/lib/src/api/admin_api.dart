@@ -647,7 +647,7 @@ class AdminApi {
   }
 
   /// Download a backup archive
-  /// The archive itself, as a zip. Only finished archives download; a running or failed backup answers &#x60;conflict&#x60;. Administrators only. 
+  /// The archive itself, as a zip. Only finished archives download; a running or failed backup answers &#x60;conflict&#x60;. Administrators only. The response serves byte ranges, so an interrupted download of a large archive resumes instead of restarting. 
   ///
   /// Parameters:
   /// * [backupId] - Backup PID (e.g. `bu-01JZX5N8QW3F4V9T2B7KD3M9R6`).

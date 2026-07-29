@@ -198,6 +198,15 @@ type albumList2 struct {
 }
 
 // child is the Subsonic song shape (the protocol's directory-era name).
+//
+// ExplicitStatus is the OpenSubsonic content advisory. It is set for
+// podcast episodes, whose feeds declare one, and left empty for music:
+// WaxDeck has no first-class explicit flag for music by decision, and
+// the ITUNESADVISORY custom tag that stands in for one is not on the
+// item read surface this mapping uses, so filling it would cost a read
+// per song on every list response. Empty is also the honest answer for
+// an episode whose feed says nothing, since the parsed flag is a bool
+// and cannot tell a declared "clean" from an absent declaration.
 type child struct {
 	ID          string `xml:"id,attr" json:"id"`
 	Parent      string `xml:"parent,attr,omitempty" json:"parent,omitempty"`
@@ -216,6 +225,8 @@ type child struct {
 	AlbumID     string `xml:"albumId,attr,omitempty" json:"albumId,omitempty"`
 	ArtistID    string `xml:"artistId,attr,omitempty" json:"artistId,omitempty"`
 	Type        string `xml:"type,attr" json:"type"`
+
+	ExplicitStatus string `xml:"explicitStatus,attr,omitempty" json:"explicitStatus,omitempty"`
 }
 
 type genres struct {

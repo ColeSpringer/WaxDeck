@@ -44,6 +44,7 @@ type harness struct {
 	// one of their own.
 	bridge  *flow.Bridge
 	connect *connect.Service
+	backups *service.Backups
 	group   *supervise.Group
 	flowReq struct{ apiKey, format, dynamics, gain string } // captured by the fake sidecar
 }
@@ -147,6 +148,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	h.connect = connectSvc
 	group.Go(ctx, "connect", connectSvc.Run)
 
+	h.backups = service.NewBackups(svc, dataDir, nil)
 	srv := NewServer("test", Options{
 		Service:  svc,
 		Bridge:   bridge,
@@ -155,6 +157,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 		Connect:  connectSvc,
 		Group:    group,
 		Bases:    connect.Bases{LAN: "http://192.0.2.10:4420"},
+		Backups:  h.backups,
 	})
 	apiHandler := HandlerWithOptions(
 		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
@@ -169,6 +172,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/", apiHandler)
 	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
+	mux.Handle(BackupArchiveRoute, srv.AuthMiddleware(http.HandlerFunc(srv.ServeBackupArchive)))
 	mux.HandleFunc("GET /media/download", srv.ServeDownload)
 	mux.HandleFunc("GET /media/enclosure", srv.ServeEnclosure)
 	mux.HandleFunc("GET /media/art", srv.ServeMediaArt)

@@ -818,7 +818,8 @@ paths:
       description: >
         The archive itself, as a zip. Only finished archives download;
         a running or failed backup answers `conflict`. Administrators
-        only.
+        only. The response serves byte ranges, so an interrupted
+        download of a large archive resumes instead of restarting.
       tags: [admin]
       parameters:
         - $ref: "#/components/parameters/BackupId"

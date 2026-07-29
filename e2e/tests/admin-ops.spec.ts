@@ -92,6 +92,15 @@ test('a backup archive is written, downloadable, and stageable', async ({ reques
   expect(archive.headers()['content-type']).toContain('zip');
   expect((await archive.body()).length).toBe(backup!.sizeBytes);
 
+  // The archive serves ranges, so an interrupted download of a
+  // multi-gigabyte one resumes rather than starting over.
+  const partial = await request.get(`/api/v1/admin/backups/${backup!.id}/archive`, {
+    headers: { ...authed(token).headers, Range: 'bytes=8-23' },
+  });
+  expect(partial.status()).toBe(206);
+  expect(partial.headers()['content-range']).toBe(`bytes 8-23/${backup!.sizeBytes}`);
+  expect((await partial.body()).length).toBe(16);
+
   const staged = await request.post(
     `/api/v1/admin/backups/${backup!.id}/restore`,
     authed(token),

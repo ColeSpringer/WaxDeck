@@ -77,6 +77,28 @@ func (f *family) writeText(b *bytes.Buffer) {
 		writeSample(b, f.name+"_bucket", leLabel, []string{"+Inf"}, float64(count))
 		writeSample(b, f.name+"_sum", nil, nil, sum)
 		writeSample(b, f.name+"_count", nil, nil, float64(count))
+	case f.hvec != nil:
+		// Bucket lines carry the family's own labels plus le, which the
+		// text format wants last. Both slices are built once and their
+		// tails overwritten per sample, since appending to the vec's own
+		// label slice could write into its backing array.
+		labels := f.hvec.v.labels
+		bucketLabels := make([]string, len(labels)+1)
+		copy(bucketLabels, labels)
+		bucketLabels[len(labels)] = "le"
+		bucketVals := make([]string, len(labels)+1)
+		for _, ch := range f.hvec.v.children() {
+			upper, cum, count, sum := ch.c.snapshot()
+			copy(bucketVals, ch.vals)
+			for i, ub := range upper {
+				bucketVals[len(labels)] = formatFloat(ub)
+				writeSample(b, f.name+"_bucket", bucketLabels, bucketVals, float64(cum[i]))
+			}
+			bucketVals[len(labels)] = "+Inf"
+			writeSample(b, f.name+"_bucket", bucketLabels, bucketVals, float64(count))
+			writeSample(b, f.name+"_sum", labels, ch.vals, sum)
+			writeSample(b, f.name+"_count", labels, ch.vals, float64(count))
+		}
 	}
 }
 

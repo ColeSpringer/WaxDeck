@@ -16,6 +16,8 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/colespringer/waxflow/client"
+
+	"github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // Timeline support: a queue rendered as one gapless HLS presentation.
@@ -60,14 +62,33 @@ type TimelineResult struct {
 }
 
 // stashedTimeline lets the HLS proxy reconstruct the signed upstream
-// master URL for a digest. Lost on restart, which surfaces to clients
-// as a failed fetch and one re-mint.
+// master URL for a digest. Persisted through TimelineStore when one is
+// configured, so a restart does not turn every live timeline URL into a
+// not-found; without a store it is memory only and a restart costs one
+// re-mint per live timeline.
 type stashedTimeline struct {
 	signedMaster string
 	expires      time.Time
 }
 
-// timelineState is the bridge's in-memory timeline bookkeeping.
+// TimelineStore persists the stash across restarts. *db.DB implements
+// it; nil leaves the stash in memory, which is what a bridge built
+// without a database (the tests, and any caller that has none) gets.
+//
+// Restoring a row does not guarantee the sidecar can still serve it:
+// the signed master is sidecar-signed, and under compose both processes
+// restart together. That is why nothing here promises a restored row
+// works, and why the read path treats an upstream miss on one as a
+// re-mint, which is the same clean outcome an absent stash produces.
+type TimelineStore interface {
+	LoadTimelineStash(ctx context.Context, nowNS int64) ([]db.TimelineStash, error)
+	PutTimelineStash(ctx context.Context, t db.TimelineStash, nowNS int64) error
+	ForgetTimelineStash(ctx context.Context, digest string) error
+}
+
+// timelineState is the bridge's in-memory timeline bookkeeping. The
+// stash mirrors the store; jobs are deliberately memory only, since an
+// in-flight measurement job does not outlive the process that polls it.
 type timelineState struct {
 	mu    sync.Mutex
 	stash map[string]stashedTimeline // digest -> signed master
@@ -82,6 +103,58 @@ func (b *Bridge) timelines() *timelineState {
 		}
 	})
 	return b.tl
+}
+
+// loadTimelineStash reads the persisted mints back into memory at
+// startup. The store drops expired rows in the same pass.
+func (b *Bridge) loadTimelineStash(ctx context.Context) error {
+	rows, err := b.tlStore.LoadTimelineStash(ctx, time.Now().UnixNano())
+	if err != nil {
+		return err
+	}
+	ts := b.timelines()
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	for _, r := range rows {
+		ts.stash[r.Digest] = stashedTimeline{
+			signedMaster: r.SignedMaster,
+			expires:      time.Unix(0, r.ExpiresAtNS),
+		}
+	}
+	return nil
+}
+
+// deadTimelineStatus reports whether an upstream answer means the
+// stashed digest can never be served again, as opposed to a transient
+// failure worth relaying.
+func deadTimelineStatus(status int) bool {
+	switch status {
+	case http.StatusNotFound, http.StatusGone,
+		http.StatusUnauthorized, http.StatusForbidden:
+		return true
+	}
+	return false
+}
+
+// forgetTimeline drops one digest from both the memory stash and the
+// store, for a timeline the sidecar has stopped serving.
+func (b *Bridge) forgetTimeline(ctx context.Context, digest string) {
+	ts := b.timelines()
+	ts.mu.Lock()
+	delete(ts.stash, digest)
+	ts.mu.Unlock()
+	if b.tlStore == nil {
+		return
+	}
+	// The row is known dead, so dropping it does not ride the request
+	// that discovered it: a client that gives up mid-answer would
+	// otherwise cancel the cleanup its own fetch just proved necessary.
+	ctx = context.WithoutCancel(ctx)
+	if err := b.tlStore.ForgetTimelineStash(ctx, digest); err != nil {
+		// Leaving the row costs nothing beyond one repeat of this same
+		// eviction on the next fetch.
+		b.log.Warn("dropping a dead timeline from the stash", "digest", digest, "err", err)
+	}
 }
 
 // TimelinesSupported reports whether the sidecar mints timelines.
@@ -190,15 +263,25 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	}
 
 	token, exp := b.tokens.MintFor(user, "tl-"+tl.Tl, ttl)
+	now := time.Now()
 	ts := b.timelines()
 	ts.mu.Lock()
 	ts.stash[tl.Tl] = stashedTimeline{signedMaster: signed.URL, expires: exp}
 	for digest, st := range ts.stash {
-		if time.Now().After(st.expires) {
+		if now.After(st.expires) {
 			delete(ts.stash, digest)
 		}
 	}
 	ts.mu.Unlock()
+	if b.tlStore != nil {
+		// A failed write degrades to the memory-only behavior this stash
+		// had before it was persisted: the URL works until the next
+		// restart, which then costs one re-mint.
+		row := db.TimelineStash{Digest: tl.Tl, SignedMaster: signed.URL, ExpiresAtNS: exp.UnixNano()}
+		if err := b.tlStore.PutTimelineStash(ctx, row, now.UnixNano()); err != nil {
+			b.log.Warn("persisting a minted timeline", "digest", tl.Tl, "err", err)
+		}
+	}
 
 	out := &TimelineResult{
 		URL:              "/media/hls/master.m3u8?tl=" + url.QueryEscape(tl.Tl) + "&mt=" + url.QueryEscape(token),
@@ -305,7 +388,7 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var upstreamURL string
+	var upstreamURL, stashed string
 	if strings.HasSuffix(r.URL.Path, "/master.m3u8") && q.Get("tl") != "" {
 		// The master fetch names the digest; the stashed signed URL
 		// carries the format and crossfade the mint chose.
@@ -323,6 +406,7 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		upstreamURL = st.signedMaster
+		stashed = digest
 	} else {
 		// Child fetches (variant playlists, init, segments) carry the
 		// upstream-signed query verbatim plus our mt, which we strip.
@@ -352,6 +436,29 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	// A stashed digest the sidecar will not serve is dead. Drop it so the
+	// next fetch takes the absent-stash path, and answer the same
+	// re-request an absent stash gives rather than relaying the upstream
+	// status: persisting the stash is only worth doing if a restored row
+	// that cannot be served fails the same clean way an unrestored one
+	// does.
+	//
+	// Three ways it dies, and the signature ones are why this is not just
+	// 404. The sidecar no longer holds the digest (404). The files moved
+	// underneath a live one (410, which keeps its own code because it
+	// means something different). Or the stashed signature no longer
+	// verifies (401 unauthorized, 403 signature-invalid or
+	// signature-expired), which is what a sidecar whose signing secret
+	// was regenerated answers -- it is auto-generated into its data dir,
+	// so recreating that volume alone rotates it under an otherwise
+	// untouched stash.
+	if stashed != "" && deadTimelineStatus(resp.StatusCode) {
+		b.forgetTimeline(r.Context(), stashed)
+		if resp.StatusCode != http.StatusGone {
+			writeJSONError(w, http.StatusNotFound, "not-found", "this timeline URL is no longer live; re-request it")
+			return
+		}
+	}
 	if resp.StatusCode == http.StatusGone {
 		writeJSONError(w, http.StatusGone, "stream-stale", "the timeline no longer matches the files on disk; re-request it")
 		return

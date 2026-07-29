@@ -432,6 +432,19 @@ const baselineSchema = `
 	);
 	CREATE INDEX playback_sessions_user ON playback_sessions (user_id, active, updated_at_ns);
 
+	-- Minted gapless timelines. The HLS proxy reconstructs the signed
+	-- upstream master URL for a digest a client presents; without a row
+	-- here every live timeline URL dies with the process. Rows are swept
+	-- by expiry on load as well as on each mint, so a server that was
+	-- down past every stored expiry does not carry dead rows until the
+	-- next mint happens to sweep them.
+	CREATE TABLE timeline_stash (
+		digest        TEXT    PRIMARY KEY,
+		signed_master TEXT    NOT NULL,
+		expires_at_ns INTEGER NOT NULL
+	);
+	CREATE INDEX timeline_stash_expiry ON timeline_stash (expires_at_ns);
+
 	-- The curation surface: the matching review queue with its durable
 	-- identify work queue, resumable uploads, tool tasks (book merge
 	-- and split, cue splits), the health sweep index, and the fix

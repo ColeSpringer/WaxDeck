@@ -244,7 +244,7 @@ func (h *Handler) getPodcasts(w http.ResponseWriter, r *http.Request, uc *servic
 			Status:   "completed",
 		}
 		if includeEpisodes {
-			eps, err := h.channelEpisodes(r.Context(), uc, sub.Show.PID, episodesPerChannel)
+			eps, err := h.channelEpisodes(r.Context(), uc, sub.Show, episodesPerChannel)
 			if err != nil {
 				h.failFromService(w, r, err, "listing episodes failed")
 				return
@@ -272,7 +272,7 @@ func (h *Handler) getNewestPodcasts(w http.ResponseWriter, r *http.Request, uc *
 		// Episode pages are newest-first, so the global newest count
 		// can only come from each show's newest count; fetching more
 		// per show would be materialized and thrown away.
-		eps, err := h.channelEpisodes(r.Context(), uc, sub.Show.PID, count)
+		eps, err := h.channelEpisodes(r.Context(), uc, sub.Show, count)
 		if err != nil {
 			h.failFromService(w, r, err, "listing episodes failed")
 			return
@@ -303,16 +303,16 @@ func (h *Handler) allSubscriptions(ctx context.Context, uc *service.UserCtx) ([]
 	return out, nil
 }
 
-func (h *Handler) channelEpisodes(ctx context.Context, uc *service.UserCtx, showPID string, cap int) ([]podcastEpisode, error) {
+func (h *Handler) channelEpisodes(ctx context.Context, uc *service.UserCtx, show service.PodcastShow, cap int) ([]podcastEpisode, error) {
 	eps := []podcastEpisode{}
 	cursor := ""
 	for len(eps) < cap {
-		page, next, err := h.svc.Episodes(ctx, uc, showPID, cursor, min(cap, 100))
+		page, next, err := h.svc.Episodes(ctx, uc, show.PID, cursor, min(cap, 100))
 		if err != nil {
 			return nil, err
 		}
 		for _, ep := range page {
-			eps = append(eps, episodeShape(ep, showPID))
+			eps = append(eps, episodeShape(ep, show))
 			if len(eps) >= cap {
 				break
 			}
@@ -330,7 +330,8 @@ func (h *Handler) channelEpisodes(ctx context.Context, uc *service.UserCtx, show
 // enclosure the server will relay by passthrough. The status still
 // reports the download state, which is what keeps the client's download
 // button honest about what is held locally.
-func episodeShape(ep service.EpisodeSummary, showPID string) podcastEpisode {
+func episodeShape(ep service.EpisodeSummary, show service.PodcastShow) podcastEpisode {
+	showPID := show.PID
 	out := podcastEpisode{
 		child: child{
 			ID:       ep.PID,
@@ -346,6 +347,21 @@ func episodeShape(ep service.EpisodeSummary, showPID string) podcastEpisode {
 	}
 	if ep.PublishedNS > 0 {
 		out.PublishDate = time.Unix(0, ep.PublishedNS).UTC().Format(time.RFC3339)
+	}
+	if ep.Explicit || show.Explicit {
+		// The show's own flag counts, not just the episode's: a feed that
+		// declares the advisory once at the channel level covers every
+		// episode under it, and WaxDeck's content gating already reads it
+		// that way (a show marked explicit is withheld whole from an
+		// account without the permission). Reporting only the item-level
+		// flag would have the compatibility surface disagree with the
+		// server about the same episode.
+		//
+		// Only the positive direction is reported: the feed flag parses to
+		// a bool, so a false one is "the feed did not say explicit", not
+		// "the feed said clean", and OpenSubsonic reads an empty
+		// explicitStatus as unknown.
+		out.ExplicitStatus = "explicit"
 	}
 	if ep.Downloaded || ep.HasEnclosure {
 		out.StreamID = ep.PID

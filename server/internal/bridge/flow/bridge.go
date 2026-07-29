@@ -61,7 +61,10 @@ type Config struct {
 	Tokens *auth.MediaTokens
 	// Resolver resolves item PIDs to stream sources.
 	Resolver SourceResolver
-	Logger   *slog.Logger
+	// Timelines persists minted timelines so their proxied URLs survive
+	// a restart. Nil keeps them in memory only.
+	Timelines TimelineStore
+	Logger    *slog.Logger
 }
 
 // Bridge is the live bridge, holding the sidecar's capabilities as
@@ -86,9 +89,11 @@ type Bridge struct {
 	// gate admits engine-backed stream sessions; nil admits everything.
 	gate TranscodeGate
 
-	// Timeline bookkeeping, built lazily on first use.
-	tlOnce sync.Once
-	tl     *timelineState
+	// Timeline bookkeeping, built lazily on first use; tlStore persists
+	// the stash half of it and is nil when nothing was configured.
+	tlOnce  sync.Once
+	tl      *timelineState
+	tlStore TimelineStore
 }
 
 // New validates the configuration against the live sidecar (fail fast:
@@ -148,6 +153,15 @@ func New(ctx context.Context, cfg Config) (*Bridge, error) {
 		caps:       caps,
 		client:     c,
 		log:        log,
+		tlStore:    cfg.Timelines,
+	}
+	if b.tlStore != nil {
+		if err := b.loadTimelineStash(ctx); err != nil {
+			// A stash that cannot be read is not fatal: every live
+			// timeline URL re-mints, which is what a restart cost
+			// unconditionally before the stash was persisted at all.
+			log.Warn("loading the timeline stash", "err", err)
+		}
 	}
 	b.proxy = &httputil.ReverseProxy{
 		Rewrite:        b.rewrite,

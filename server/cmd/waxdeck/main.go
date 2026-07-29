@@ -439,6 +439,7 @@ func run() error {
 			ConfigPath: *flowConfig,
 			Tokens:     media,
 			Resolver:   svc,
+			Timelines:  store,
 			Logger:     log,
 		})
 		if err != nil {
@@ -956,60 +957,90 @@ func run() error {
 		},
 	)
 
+	// Request metrics ride the same registry the endpoint exposes, so a
+	// server with no metrics token instruments nothing at all: there is
+	// no scraper, and the series would only accumulate unread.
+	var reg *metrics.Registry
+	var httpm *httpMetrics
+	if *metricsToken != "" {
+		reg = newMetricsRegistry(version, store, svc)
+		httpm = newHTTPMetrics(reg)
+	} else {
+		log.Info("metrics endpoint disabled; set WAXDECK_METRICS_TOKEN to enable GET /metrics")
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/", apiHandler)
+	mux.Handle("/api/v1/", httpm.instrument("api", apiHandler.ServeHTTP))
 	// The event channel and the download endpoint live outside the
 	// generated router: a WebSocket upgrade and a ranged file server do
 	// not fit the strict-handler shape. The event channel runs behind
 	// the same auth middleware as the rest of the API; downloads
-	// authenticate by media token like /media/stream.
+	// authenticate by media token like /media/stream. It is also the one
+	// route with no request metrics: the upgrade hijacks the connection,
+	// so nothing is written through an instrumented writer, and what it
+	// opens is a session rather than a request.
 	mux.Handle("GET /api/v1/ws", srv.AuthMiddleware(srv.ServeWS(hub)))
-	mux.HandleFunc("GET /media/download", srv.ServeDownload)
+	// Backup archives are ranged and resumable, which the generated
+	// whole-body shape cannot be; the exact pattern wins over the
+	// /api/v1/ prefix above, and the same auth middleware still runs.
+	mux.Handle(api.BackupArchiveRoute,
+		httpm.instrumentStream("download", srv.AuthMiddleware(http.HandlerFunc(srv.ServeBackupArchive)).ServeHTTP))
+	// The tool-task event stream stays on the generated handler and is
+	// registered here only to be classed apart: it is open for as long as
+	// someone watches a task, so timing it as request duration is the
+	// poisoning the api class exists to avoid. Bulk request bodies under
+	// /api/v1/ (artwork, upload chunks, a backup import) deliberately stay
+	// in the api class: they are bounded transfers, and a slow one reads
+	// as a slow request, which is true.
+	mux.Handle(api.TaskEventsRoute, httpm.instrumentStream("api-events", apiHandler.ServeHTTP))
+	mux.Handle("GET /media/download", httpm.instrumentStream("download", srv.ServeDownload))
 	// A podcast episode whose audio is not on this server relays from
 	// the feed's own host, media-token authenticated like the rest of
 	// /media/*. The target comes from the episode in the catalog, never
 	// from the query, which is what keeps it from being an open proxy.
-	mux.HandleFunc("GET /media/enclosure", srv.ServeEnclosure)
+	mux.Handle("GET /media/enclosure", httpm.instrumentStream("media-stream", srv.ServeEnclosure))
 	// Artwork for endpoints that cannot present a session: a cast
 	// receiver or a DLNA renderer fetches the URL it was handed, and the
 	// only credential it can carry is the one in that URL.
-	mux.HandleFunc("GET /media/art", srv.ServeMediaArt)
+	mux.Handle("GET /media/art", httpm.instrument("media-art", srv.ServeMediaArt))
 	// Radio streams proxy through this origin under a media token,
 	// like /media/stream; the guarded client owns the URL policy.
-	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)
+	mux.Handle("GET /media/radio/{pid}", httpm.instrumentStream("media-stream", srv.ServeRadio))
 	// Public share pages: server-rendered plain HTML plus their media,
 	// authenticated by the capability token in the path.
-	mux.HandleFunc("GET /s/{token}", srv.ServeSharePage)
-	mux.HandleFunc("GET /s/{token}/stream", srv.ServeShareStream)
-	mux.HandleFunc("GET /s/{token}/art", srv.ServeShareArt)
-	mux.HandleFunc("GET /s/{token}/download", srv.ServeShareDownload)
+	mux.Handle("GET /s/{token}", httpm.instrument("share", srv.ServeSharePage))
+	mux.Handle("GET /s/{token}/stream", httpm.instrumentStream("media-stream", srv.ServeShareStream))
+	mux.Handle("GET /s/{token}/art", httpm.instrument("share", srv.ServeShareArt))
+	mux.Handle("GET /s/{token}/download", httpm.instrumentStream("download", srv.ServeShareDownload))
 	// The similarity worker's audio pull; worker-token authenticated.
-	mux.HandleFunc("GET /media/analysis/{pid}", srv.ServeAnalysisAudio)
+	mux.Handle("GET /media/analysis/{pid}", httpm.instrumentStream("media-stream", srv.ServeAnalysisAudio))
 	// The read-only OpenSubsonic compatibility surface. App-password
 	// authenticated; third-party clients browse and stream while the
 	// first-party clients mature.
-	mux.Handle("/rest/", subsonic.New(svc, bridge, media, version))
+	mux.Handle("/rest/", httpm.instrument("subsonic", subsonic.New(svc, bridge, media, version).ServeHTTP))
 	// The gpodder.net-compatible sync surface (AntennaPod and friends):
 	// app passwords over Basic plus its own stateless session cookie.
 	gp := gpodder.New(svc, secret, log)
-	mux.Handle("/api/2/", gp)
-	mux.Handle("/subscriptions/", gp)
+	mux.Handle("/api/2/", httpm.instrument("gpodder", gp.ServeHTTP))
+	mux.Handle("/subscriptions/", httpm.instrument("gpodder", gp.ServeHTTP))
 	if bridge != nil {
-		mux.HandleFunc("/media/stream", bridge.ServeStream)
-		mux.HandleFunc("/media/hls/", bridge.ServeHLS)
+		mux.Handle("/media/stream", httpm.instrumentStream("media-stream", bridge.ServeStream))
+		// HLS fetches are many short requests (a playlist, an init
+		// segment, a few seconds of audio each), so total duration is a
+		// real latency number here and not a listening session's length.
+		mux.Handle("/media/hls/", httpm.instrument("media-hls", bridge.ServeHLS))
 	} else {
-		mux.HandleFunc("/media/stream", func(w http.ResponseWriter, r *http.Request) {
+		mux.Handle("/media/stream", httpm.instrument("media-stream", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusNotImplemented)
 			fmt.Fprintln(w, `{"code":"internal","message":"streaming is not configured on this server"}`)
-		})
+		}))
 	}
-	if *metricsToken != "" {
-		mux.Handle("GET /metrics", metricsHandler(*metricsToken, version, store, svc))
-	} else {
-		log.Info("metrics endpoint disabled; set WAXDECK_METRICS_TOKEN to enable GET /metrics")
+	if reg != nil {
+		// Exempt from instrumentation: a scrape must not measure itself.
+		mux.Handle("GET /metrics", metricsHandler(*metricsToken, reg))
 	}
-	mux.Handle("/", web.Handler(*webDir))
+	mux.Handle("/", httpm.instrument("web", web.Handler(*webDir).ServeHTTP))
 
 	// Streaming handlers (the radio proxy, any long response body) hold
 	// their connections active for as long as both sides stay open, and
@@ -1302,7 +1333,11 @@ func keyProber(sealer *auth.Sealer) service.KeyProber {
 // metricsHandler serves the Prometheus endpoint behind its bearer
 // token. Gauges sample the database at scrape time; counts here are
 // small at self-host scale.
-func metricsHandler(token, version string, store *db.DB, svc *service.Library) http.Handler {
+// newMetricsRegistry builds the registry the /metrics endpoint renders.
+// It is separate from the handler because the request-level families
+// are registered on it before the mux is wired, and the wiring is what
+// names each route's class.
+func newMetricsRegistry(version string, store *db.DB, svc *service.Library) *metrics.Registry {
 	reg := metrics.NewRegistry()
 	reg.GoRuntime()
 	reg.GaugeVec("waxdeck_build_info", "Build metadata; value is always 1.", []string{"version"}).
@@ -1334,6 +1369,11 @@ func metricsHandler(token, version string, store *db.DB, svc *service.Library) h
 		count(`SELECT COUNT(*) FROM notify_outbox`))
 	reg.GaugeFunc("waxdeck_transcode_sessions_active", "Engine-backed streams in flight.",
 		func() float64 { return float64(svc.ActiveTranscodeSessions()) })
+	return reg
+}
+
+// metricsHandler renders a registry behind the scrape token.
+func metricsHandler(token string, reg *metrics.Registry) http.Handler {
 	inner := reg.Handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")

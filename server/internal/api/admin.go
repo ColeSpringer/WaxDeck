@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -788,29 +788,19 @@ func (s *Server) DeleteBackup(ctx context.Context, req DeleteBackupRequestObject
 	return DeleteBackup204Response{}, nil
 }
 
+// DownloadBackup is unreachable: ServeBackupArchive owns BackupArchiveRoute
+// on the outer mux, and an exact pattern wins over the generated router's
+// /api/v1/ prefix. The method stays because the generated strict
+// interface requires one for every declared operation, and the
+// operation stays declared so clients keep generating against it. The
+// generated response shape streams a whole body and cannot serve
+// ranges, which is exactly why the raw handler exists.
+//
+// Reaching this means a mux registered the generated router without
+// BackupArchiveRoute beside it, so the error names that rather than
+// pretending to be a server fault.
 func (s *Server) DownloadBackup(ctx context.Context, req DownloadBackupRequestObject) (DownloadBackupResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return DownloadBackup403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
-	path, err := s.backups.ArchivePath(ctx, string(req.BackupId))
-	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return DownloadBackup404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no backup with id "+string(req.BackupId)))}, nil
-		}
-		return nil, err
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return DownloadBackup404JSONResponse{NotFoundJSONResponse(errObj("not-found", "the archive file is missing"))}, nil
-	}
-	st, err := f.Stat()
-	if err != nil {
-		f.Close()
-		return nil, err
-	}
-	// The generated visitor closes the file after copying.
-	return DownloadBackup200ApplicationzipResponse{Body: f, ContentLength: st.Size()}, nil
+	return nil, errors.New("api: the backup archive is served outside the generated router; this mux is missing api.BackupArchiveRoute")
 }
 
 func (s *Server) ImportBackup(ctx context.Context, req ImportBackupRequestObject) (ImportBackupResponseObject, error) {

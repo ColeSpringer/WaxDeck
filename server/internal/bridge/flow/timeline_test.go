@@ -9,15 +9,26 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
+	"github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // fakeTimelineSidecar answers the surfaces TimelineFor and ServeHLS
 // touch: caps, the timeline mint, signing, and the HLS tree.
 func fakeTimelineSidecar(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(timelineSidecarMux(t))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// timelineSidecarMux is the sidecar's routing table on its own, for a
+// test that wraps it rather than serving it directly.
+func timelineSidecarMux(t *testing.T) *http.ServeMux {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/caps", func(w http.ResponseWriter, r *http.Request) {
@@ -94,9 +105,7 @@ func fakeTimelineSidecar(t *testing.T) *httptest.Server {
 		w.Header().Set("Proxy-Connection", "keep-alive")
 		w.Write([]byte("segmentbytes"))
 	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	return srv
+	return mux
 }
 
 func newTimelineBridge(t *testing.T) (*Bridge, string) {
@@ -327,6 +336,124 @@ func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("item token accepted on HLS: %d", rec.Code)
 	}
+}
+
+// TestTimelineStashSurvivesRestart mints through one bridge and serves
+// the same URL through a second one built over the same store, which is
+// what a restart is: the media-token key is loaded from the data
+// directory and survives too, so a restored row's token still verifies.
+func TestTimelineStashSurvivesRestart(t *testing.T) {
+	var deadStatus atomic.Int32
+	sidecar := restartableTimelineSidecar(t, &deadStatus)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "one.flac")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, err := db.Open(context.Background(), filepath.Join(dir, "waxdeck.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	newBridge := func() *Bridge {
+		b, err := New(context.Background(), Config{
+			BaseURL:   sidecar.URL,
+			APIKey:    "key",
+			Roots:     []Root{{Name: "lib", Path: dir}},
+			Tokens:    auth.NewMediaTokens([]byte("test-secret"), 0),
+			Timelines: store,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+
+	first := newBridge()
+	res, err := first.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The restart. Nothing is carried over in memory; the stash comes
+	// back off disk.
+	second := newBridge()
+	second.tl.mu.Lock()
+	restored := len(second.tl.stash)
+	second.tl.mu.Unlock()
+	if restored != 1 {
+		t.Fatalf("restored %d stash rows, want 1", restored)
+	}
+
+	get := func(b *Bridge, u string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, u, nil))
+		return rec
+	}
+	rec := get(second, res.URL)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("master through the restarted bridge: status %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "media.m3u8?v=abc&sig=child1&mt=") {
+		t.Fatalf("child URI not stamped: %s", rec.Body.String())
+	}
+
+	// The other half of persisting: a restored row the sidecar will not
+	// serve must fail the way an absent stash does, not by relaying the
+	// upstream status. Both refusals count. 403 is the one a signature
+	// failure produces, which is what a sidecar whose auto-generated
+	// signing secret was recreated answers for every restored row.
+	for _, dead := range []int{http.StatusNotFound, http.StatusForbidden} {
+		// Each pass re-mints, since the previous one evicted the row.
+		res, err := second.TimelineFor(context.Background(), "us-alice",
+			[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		deadStatus.Store(int32(dead))
+		rec = get(second, res.URL)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("upstream %d: answered %d, want 404", dead, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), `"not-found"`) || !strings.Contains(rec.Body.String(), "re-request it") {
+			t.Fatalf("upstream %d: body %q, want the re-request refusal", dead, rec.Body.String())
+		}
+		rows, err := store.LoadTimelineStash(context.Background(), time.Now().UnixNano())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rows) != 0 {
+			t.Fatalf("upstream %d: dead row still stored: %+v", dead, rows)
+		}
+
+		// And the eviction holds in memory, so the next fetch takes the
+		// absent-stash path without asking the sidecar again.
+		deadStatus.Store(0)
+		if rec = get(second, res.URL); rec.Code != http.StatusNotFound {
+			t.Fatalf("upstream %d: evicted digest answered %d, want 404", dead, rec.Code)
+		}
+	}
+}
+
+// restartableTimelineSidecar is the fake sidecar with a switch that
+// makes the master fetch fail the way a restarted one does. The status
+// is settable because there is more than one such answer: 404 for a
+// digest the sidecar no longer holds, 403 for a signature its
+// regenerated signing secret no longer verifies.
+func restartableTimelineSidecar(t *testing.T, deadStatus *atomic.Int32) *httptest.Server {
+	t.Helper()
+	inner := timelineSidecarMux(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if status := int(deadStatus.Load()); status != 0 && r.URL.Path == "/hls/master.m3u8" {
+			http.Error(w, `{"error":"the timeline is gone","code":"not-found"}`, status)
+			return
+		}
+		inner.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 func TestRewritePlaylist(t *testing.T) {

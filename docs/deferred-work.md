@@ -215,10 +215,6 @@ here waits on upstream.
   than a dead end (P14's refusal explanations); client endpoints
   handle books fully. Needs part-aware loading and part-advance in
   the session manager.
-- `[in-repo]` **Timeline URLs do not survive a server restart.** The HLS proxy
-  reconstructs signed upstream URLs from an in-memory stash; after a
-  restart a live timeline fetch answers not-found and the client
-  re-mints. Cheap to persist if it ever matters beyond the seam.
 - `[in-repo]` **Cast preflight verifies server-side only.** The
   reachability verdict is the server fetching itself through each
   candidate base; true device-side verification (loading a probe URL
@@ -452,12 +448,19 @@ here waits on upstream.
   display nicety, not a correctness gap: manual editing and the surfaced
   candidate both cover it, and rewriting embedded tags from a guess is the
   riskier half.
-- `[in-repo]` **OpenSubsonic explicitStatus is not emitted.** The
-  Subsonic surface's song and album shapes accept an
-  `explicitStatus` field ("explicit" or "clean") that clients
-  render; mapping it from the episode flag and the ITUNESADVISORY
-  custom tag is a small adapter change next time that surface is
-  touched.
+- `[in-repo]` **OpenSubsonic `explicitStatus` is not emitted for music.**
+  Podcast episodes carry it now, mapped from the feed's own advisory
+  flag. Music does not, and it is not the one-line addition it looks
+  like: `ITUNESADVISORY` reaches WaxDeck only through the metadata
+  editor's custom-tag surface, and the item read surface the Subsonic
+  song mapping uses carries no custom tags, so filling the field means
+  either widening that read surface deliberately or taking an extra
+  read per song, which on a list response is an N+1. Whoever widens
+  that read surface for another reason should take this with it. Note
+  what the episode half does not do either: the field is only ever
+  emitted in the positive direction, because the advisory parses to a
+  bool and "declared clean" and "the source said nothing" are the same
+  value, so claiming the former would be inventing an assertion.
 - `[in-repo]` **Synced external playlists.** A YouTube playlist reaches
   the library two ways today and neither keeps a WaxDeck playlist in
   step with its source: "Add from URL" acquisition
@@ -651,11 +654,6 @@ here waits on upstream.
   backdated idempotent listen ingest, dry runs, task reports) is
   built; Jellyfin, Last.fm and ListenBrainz history, and the Spotify
   GDPR export ride it as fast-follows, as the roadmap allows.
-- `[in-repo]` **Backup archive downloads are not ranged.** The
-  download endpoint streams the whole zip; resuming an interrupted
-  multi-gigabyte download re-fetches it. Needs serving outside the
-  generated strict-handler shape (http.ServeContent), like the media
-  download endpoint.
 - `[in-repo]` **The transcode session limiter gates progressive
   streams only.** HLS timeline segment fetches are too granular to
   count as sessions; they ride the streaming engine's own liveSlots
@@ -684,10 +682,6 @@ here waits on upstream.
   transition-and-parse guards; a per-user preference (and possibly a
   per-station flag for talk stations) is the obvious follow-up for
   anyone whose station's metadata is honest but unwanted.
-- `[in-repo]` **No request-level metrics.** /metrics serves runtime,
-  account, queue-depth, and transcode-session gauges; an HTTP
-  request counter/latency histogram by route class needs a mux
-  middleware pass that has not been written.
 - `[in-repo]` **Notification provider niceties.** The provider
   surface ships deliberately plain: no webhook custom headers or
   HMAC request signing (receivers that must authenticate WaxDeck can

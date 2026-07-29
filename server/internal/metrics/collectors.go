@@ -146,6 +146,16 @@ type GaugeVec struct {
 // values always return the same *Gauge.
 func (gv *GaugeVec) With(labelValues ...string) *Gauge { return gv.v.with(labelValues) }
 
+// HistogramVec is a family of histograms partitioned by label values.
+type HistogramVec struct {
+	v vec[*Histogram]
+}
+
+// With returns the child histogram for the given label values, creating
+// it on first use. The number of values must match the vec's label
+// names; the same values always return the same *Histogram.
+func (hv *HistogramVec) With(labelValues ...string) *Histogram { return hv.v.with(labelValues) }
+
 // Histogram counts observations into cumulative buckets and tracks their sum.
 type Histogram struct {
 	upper []float64 // finite bucket upper bounds, strictly increasing; immutable
