@@ -290,6 +290,15 @@ class _RadioDeckBar extends ConsumerWidget {
     // that could say so, and its one control would otherwise read
     // "Play" and stop the station when it was pressed.
     final blocked = ref.watch(autoplayBlockedProvider);
+    // The same two conditions the item bar reads: this platform hands
+    // local output a slider, and this width has a right cluster to put
+    // one in. A station is the engine's output like anything else, so
+    // leaving this off was a bar with a level on every screen except the
+    // one live radio was playing on.
+    final localVolume =
+        WaxSizeClass.of(context).hasSidebar &&
+        ref.watch(localVolumeAvailableProvider);
+    final volume = localVolume ? ref.watch(outputVolumeProvider) : null;
     return _EngineTransport(
       builder: (context, playing) => DeckBar(
         ids: _ids,
@@ -314,6 +323,7 @@ class _RadioDeckBar extends ConsumerWidget {
           // would offer "Play" during the wait and stop the stream when
           // it was pressed.
           playing: (playing || playback.starting) && !blocked,
+          volume: volume,
         ),
         autoplayBlocked: blocked,
         actions: DeckBarActions(
@@ -326,6 +336,16 @@ class _RadioDeckBar extends ConsumerWidget {
                 ? ref.read(radioPlaybackProvider.notifier).resume()
                 : ref.read(radioPlaybackProvider.notifier).stop(),
           ),
+          onVolume: localVolume
+              ? (level) => unawaited(
+                  ref.read(outputVolumeProvider.notifier).set(level),
+                )
+              : null,
+          onMute: localVolume
+              ? () => unawaited(
+                  ref.read(outputVolumeProvider.notifier).toggleMute(),
+                )
+              : null,
           onExpand: () => context.go(WaxRoute.radio),
         ),
       ),

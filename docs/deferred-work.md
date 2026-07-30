@@ -71,6 +71,23 @@ here waits on upstream.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
+- `[roadmap]` **The full player's volume row is Material, not `WaxSlider`.**
+  Every other surface that draws local output (the deck bar's right
+  cluster, the radio hub, the remote screen) uses the design system's
+  slider; `PlayerScreen` predates the package and still imports Material
+  directly for its app bar, seek slider, chips, and menus, so a lone
+  `WaxSlider` there would convert nothing (the file's Material import is
+  what the `material_ui` split cares about) and would sit under a seek bar
+  drawn a different way. `buildWaxTheme`'s `sliderTheme` already paints
+  Material sliders in the same accent, hairline, and 4 px track, so the
+  two read alike today. What does differ is the drag: `WaxSlider` holds a
+  local `_dragValue` so the knob follows the finger until the gesture
+  ends, where the Material one is fully controlled, so a write the
+  platform refuses mid-drag snaps the knob back to the engine's level
+  under the finger. It converts with the screen, which is the rebuild onto
+  `PlayerScaffold` - the scaffold exists in `waxdeck_ui` and the app does
+  not use it yet, and it has no volume slot, so that rebuild is where both
+  belong.
 - `[roadmap]` **The account menu is in the tab bar, not the app bar.** The
   layout system puts the avatar in the top app bar at every width; the
   shell owns no app bar, and the screens that do are the ones written

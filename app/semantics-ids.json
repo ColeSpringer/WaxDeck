@@ -1029,6 +1029,10 @@
           "id": "player-discover"
         },
         {
+          "name": "playerMute",
+          "id": "player-mute"
+        },
+        {
           "name": "playerSeek",
           "id": "player-seek"
         },
@@ -1043,6 +1047,10 @@
         {
           "name": "playerTrim",
           "id": "player-trim"
+        },
+        {
+          "name": "playerVolume",
+          "id": "player-volume"
         },
         {
           "name": "rating",
@@ -1507,6 +1515,10 @@
           ]
         },
         {
+          "name": "radioMute",
+          "id": "radio-mute"
+        },
+        {
           "name": "radioNameField",
           "id": "radio-name-field"
         },
@@ -1536,6 +1548,10 @@
         {
           "name": "radioUrlField",
           "id": "radio-url-field"
+        },
+        {
+          "name": "radioVolume",
+          "id": "radio-volume"
         }
       ]
     },

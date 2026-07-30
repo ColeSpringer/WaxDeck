@@ -483,6 +483,66 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    testWidgets('is on the radio face too, over the same engine gain', (
+      tester,
+    ) async {
+      // The reported bug: the bar carried a level on every face but the
+      // one live radio was on. A station is the engine's output like an
+      // item is, and the two faces share the gain, so a level set while a
+      // station plays is still there when an item takes the engine back.
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final station = RadioStation(
+        pid: 'ra-1',
+        name: 'Coastal FM',
+        streamUrl: 'https://radio.example/stream',
+        createdAt: DateTime.utc(2026, 7, 1),
+      );
+      repo.radioStationsByPid[station.pid] = station;
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: engine,
+        container: playbackContainer(
+          repo: repo,
+          engine: engine,
+          extra: [localVolumeAvailableProvider.overrideWithValue(true)],
+        ),
+      );
+
+      await harness.container
+          .read(radioPlaybackProvider.notifier)
+          .play(station);
+      await tester.pumpAndSettle();
+      expect(find.text('Coastal FM'), findsOneWidget);
+
+      final slider = find.bySemanticsIdentifier(SemanticsIds.deckVolume);
+      expect(slider, findsOneWidget);
+      tester.binding.performSemanticsAction(
+        SemanticsActionEvent(
+          type: SemanticsAction.decrease,
+          nodeId: tester.getSemantics(slider).id,
+          viewId: tester.view.viewId,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(engine.volume, closeTo(0.95, 0.001));
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.deckMute));
+      await tester.pumpAndSettle();
+      expect(engine.volume, 0);
+
+      // One gain, whichever face is drawing it: the level the station was
+      // set to is what the item plays at.
+      await harness.container.read(radioPlaybackProvider.notifier).stop();
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+      expect(engine.volume, 0);
+      expect(tester.getSemantics(slider).value, '0%');
+
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('is absent on the compact bar, which has no cluster', (
       tester,
     ) async {

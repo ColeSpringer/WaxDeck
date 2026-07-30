@@ -227,10 +227,12 @@ export const SemanticsIds = {
   playerChapters: 'player-chapters',
   playerDevices: 'player-devices',
   playerDiscover: 'player-discover',
+  playerMute: 'player-mute',
   playerSeek: 'player-seek',
   playerSpeed: 'player-speed',
   playerToggle: 'player-toggle',
   playerTrim: 'player-trim',
+  playerVolume: 'player-volume',
   rating: (scope: string | number, value: string | number) => `${scope}rating-${value}`,
   shareLink: 'share-link',
   similarTracks: 'similar-tracks',
@@ -325,6 +327,7 @@ export const SemanticsIds = {
   radioFavorite: (pid: string | number) => `radio-favorite-${pid}`,
   radioHub: 'radio-hub',
   radioMenu: (pid: string | number) => `radio-menu-${pid}`,
+  radioMute: 'radio-mute',
   radioNameField: 'radio-name-field',
   radioNowPlaying: 'radio-now-playing',
   radioSearchAdd: (index: string | number) => `radio-search-add-${index}`,
@@ -332,6 +335,7 @@ export const SemanticsIds = {
   radioSearchRun: 'radio-search-run',
   radioTune: 'radio-tune',
   radioUrlField: 'radio-url-field',
+  radioVolume: 'radio-volume',
 
   // review: The review queue and its keyboard-first controls.
   candidate: (mbid: string | number) => `candidate-${mbid}`,

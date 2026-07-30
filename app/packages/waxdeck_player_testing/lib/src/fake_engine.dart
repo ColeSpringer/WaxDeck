@@ -39,6 +39,38 @@ class FakeEngine implements AudioEnginePort {
   /// follows is allowed.
   bool refuseNextPlay = false;
 
+  /// Fails the next [load] the way media that will not open fails: it
+  /// throws, and nothing else about the engine moves. Cleared as it
+  /// fires, so the load after it is allowed.
+  ///
+  /// A thrown load is what a dead stream or a deleted file looks like from
+  /// here, and it is not a [WaxDeckApiException]: the server answered
+  /// fine and the media is what did not. Callers that caught the API type
+  /// alone are the ones this exists to catch out.
+  bool failNextLoad = false;
+
+  /// Fails the next [setVolume] the way a platform that will not take the
+  /// write fails: it throws and the gain does not move. Cleared as it
+  /// fires.
+  bool failNextSetVolume = false;
+
+  /// Fails the next [stop] the way a platform that will not release the
+  /// media fails: it throws and nothing about the engine moves. Cleared
+  /// as it fires.
+  bool failNextStop = false;
+
+  /// Holds [pause] open until the test completes it, so a caller can be
+  /// caught still inside one.
+  ///
+  /// The flag drops before the gate, which is the order just_audio uses:
+  /// it moves its playing flag and *then* asks the platform (see the note
+  /// on the engine's refusal path). A caller suspended in a pause has
+  /// therefore already published that it is not playing, which is what
+  /// lets a second caller run straight past the pause and reach the code
+  /// after it first. Null leaves [pause] as immediate as it has always
+  /// been.
+  Completer<void>? pauseGate;
+
   final _positions = StreamController<Duration>.broadcast();
   final _durations = StreamController<Duration?>.broadcast();
   final _playings = StreamController<bool>.broadcast();
@@ -108,6 +140,10 @@ class FakeEngine implements AudioEnginePort {
 
   @override
   Future<void> setVolume(double volume) async {
+    if (failNextSetVolume) {
+      failNextSetVolume = false;
+      throw const VolumeRefused();
+    }
     _volume = volume;
     if (!_volumes.isClosed) _volumes.add(volume);
   }
@@ -132,6 +168,10 @@ class FakeEngine implements AudioEnginePort {
     Duration? clipStart,
     Duration? clipEnd,
   }) async {
+    if (failNextLoad) {
+      failNextLoad = false;
+      throw const MediaWillNotOpen();
+    }
     // A fresh load starts a fresh window, preload included.
     await clearPreload();
     loadedUrl = url;
@@ -200,7 +240,10 @@ class FakeEngine implements AudioEnginePort {
   }
 
   @override
-  Future<void> pause() async => _setPlaying(false);
+  Future<void> pause() async {
+    _setPlaying(false);
+    await pauseGate?.future;
+  }
 
   @override
   Future<void> seek(Duration position) async {
@@ -214,6 +257,10 @@ class FakeEngine implements AudioEnginePort {
 
   @override
   Future<void> stop() async {
+    if (failNextStop) {
+      failNextStop = false;
+      throw const MediaWillNotRelease();
+    }
     _setPlaying(false);
     _setState(EngineProcessingState.idle);
     // Stopping releases the media, and the window with it.
@@ -316,4 +363,33 @@ class _RefusedByPlatform implements Exception {
 
   @override
   String toString() => 'the platform refused to start playback';
+}
+
+/// What [FakeEngine.failNextLoad] throws.
+///
+/// Public, so a test can name the failure it arranged rather than
+/// asserting on whatever type happened to come out.
+class MediaWillNotOpen implements Exception {
+  const MediaWillNotOpen();
+
+  @override
+  String toString() => 'the media would not open';
+}
+
+/// What [FakeEngine.failNextSetVolume] throws. Public for the same
+/// reason as [MediaWillNotOpen].
+class VolumeRefused implements Exception {
+  const VolumeRefused();
+
+  @override
+  String toString() => 'the platform would not take the level';
+}
+
+/// What [FakeEngine.failNextStop] throws. Public for the same reason as
+/// [MediaWillNotOpen].
+class MediaWillNotRelease implements Exception {
+  const MediaWillNotRelease();
+
+  @override
+  String toString() => 'the media would not be released';
 }

@@ -1549,8 +1549,13 @@ class FakeRepository implements WaxDeckRepository {
     radioStationsByPid.remove(pid);
   }
 
+  /// Holds a station's play-info call open until the test releases it, so
+  /// a tune can be caught mid-flight and another one started over it.
+  final Map<String, Completer<void>> radioPlayInfoGates = {};
+
   @override
   Future<RadioPlayInfo> getRadioPlayInfo(String pid) async {
+    await radioPlayInfoGates[pid]?.future;
     return RadioPlayInfo(url: '/media/radio/$pid?mt=fake');
   }
 

@@ -16,6 +16,7 @@ import '../shell/semantics_ids.dart';
 import 'download_action.dart';
 import 'item_star_rating_row.dart';
 import 'now_playing_controller.dart';
+import 'output_volume.dart';
 import 'playback_session.dart';
 import 'sleep_timer.dart';
 
@@ -353,6 +354,7 @@ class _PlayerBody extends ConsumerWidget {
               _SleepTimerButton(session: session),
             ],
           ),
+          const _VolumeRow(),
           if (session.isSpokenWord) ...[
             const SizedBox(height: 8),
             _TrimChip(session: session),
@@ -360,6 +362,68 @@ class _PlayerBody extends ConsumerWidget {
           const SizedBox(height: 16),
         ],
       ),
+    );
+  }
+}
+
+/// This device's own output level.
+///
+/// Drawn where the platform gives the app a level to set, which is
+/// desktop and web; a phone and a tablet get nothing, because the
+/// hardware buttons own local volume there and a software slider fights
+/// the OS volume stack rather than driving it. The deck bar answers the
+/// same question and adds a width condition of its own - a 64 px bar has
+/// nowhere to put a track - and this screen is the surface that has the
+/// room, so a narrow window reaches its level here.
+///
+/// Nothing is stored: the level follows the engine, which is written from
+/// three places no widget hears about (a routed set-volume, the sleep
+/// timer's fade, this slider), so a control holding its own copy would
+/// draw a loudness the output no longer has.
+class _VolumeRow extends ConsumerWidget {
+  const _VolumeRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(localVolumeAvailableProvider)) {
+      return const SizedBox.shrink();
+    }
+    final level = ref.watch(outputVolumeProvider).clamp(0.0, 1.0);
+    final volume = ref.read(outputVolumeProvider.notifier);
+    // A level of zero is muted whatever else is true, and the glyph is
+    // the only part of this that has to read right without colour.
+    final muted = level == 0;
+    final muteLabel = muted ? 'Unmute' : 'Mute';
+    return Row(
+      children: [
+        Semantics(
+          identifier: SemanticsIds.playerMute,
+          label: muteLabel,
+          button: true,
+          // The label moves with the state, so the wrapper carries it and
+          // the button's own node is folded in: two nodes would leave
+          // assertions reading whichever one they found first.
+          excludeSemantics: true,
+          onTap: () => unawaited(volume.toggleMute()),
+          child: IconButton(
+            key: const Key(SemanticsIds.playerMute),
+            tooltip: muteLabel,
+            icon: Icon(muted ? Icons.volume_off : Icons.volume_up),
+            onPressed: () => unawaited(volume.toggleMute()),
+          ),
+        ),
+        Expanded(
+          child: Semantics(
+            identifier: SemanticsIds.playerVolume,
+            label: 'Volume',
+            child: Slider(
+              key: const Key(SemanticsIds.playerVolume),
+              value: level,
+              onChanged: (value) => unawaited(volume.set(value)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

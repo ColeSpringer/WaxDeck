@@ -228,10 +228,12 @@ abstract final class SemanticsIds {
   static const String playerChapters = 'player-chapters';
   static const String playerDevices = 'player-devices';
   static const String playerDiscover = 'player-discover';
+  static const String playerMute = 'player-mute';
   static const String playerSeek = 'player-seek';
   static const String playerSpeed = 'player-speed';
   static const String playerToggle = 'player-toggle';
   static const String playerTrim = 'player-trim';
+  static const String playerVolume = 'player-volume';
   static String rating(Object scope, Object value) => '${scope}rating-$value';
   static const String shareLink = 'share-link';
   static const String similarTracks = 'similar-tracks';
@@ -327,6 +329,7 @@ abstract final class SemanticsIds {
   static String radioFavorite(Object pid) => 'radio-favorite-$pid';
   static const String radioHub = 'radio-hub';
   static String radioMenu(Object pid) => 'radio-menu-$pid';
+  static const String radioMute = 'radio-mute';
   static const String radioNameField = 'radio-name-field';
   static const String radioNowPlaying = 'radio-now-playing';
   static String radioSearchAdd(Object index) => 'radio-search-add-$index';
@@ -334,6 +337,7 @@ abstract final class SemanticsIds {
   static const String radioSearchRun = 'radio-search-run';
   static const String radioTune = 'radio-tune';
   static const String radioUrlField = 'radio-url-field';
+  static const String radioVolume = 'radio-volume';
 
   // review: The review queue and its keyboard-first controls.
   static String candidate(Object mbid) => 'candidate-$mbid';

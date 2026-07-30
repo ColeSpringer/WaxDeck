@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// Override lives here rather than in the root library.
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
+import 'package:waxdeck/src/player/output_volume.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
@@ -61,6 +66,7 @@ ProviderContainer _container(
   FakeRepository repo, {
   FakeEngine? engine,
   FakeArtworkStore? artwork,
+  List<Override> extra = const <Override>[],
 }) {
   final container = ProviderContainer(
     overrides: [
@@ -71,6 +77,7 @@ ProviderContainer _container(
         MemoryClientSettingsStore(),
       ),
       if (artwork != null) artworkStoreProvider.overrideWithValue(artwork),
+      ...extra,
     ],
   );
   addTearDown(container.dispose);
@@ -290,6 +297,171 @@ void main() {
     await tester.tap(_byId(SemanticsIds.radio('rs-1')));
     await tester.pumpAndSettle();
     expect(container.read(radioPlaybackProvider).station, isNull);
+  });
+
+  testWidgets('tuning to a station that will not open stops the one that was', (
+    tester,
+  ) async {
+    // The reported bug: with the second station down, the hub and the bar
+    // both moved onto it while the first one kept playing. Two faults met
+    // there - a stream that will not open throws from the engine rather
+    // than as an API error, which the catch did not cover, and nothing
+    // released the engine on the way in, so the old stream stayed up.
+    final engine = FakeEngine();
+    final container = _container(_repo(), engine: engine);
+    await _pumpHub(tester, container);
+
+    await tester.tap(_byId(SemanticsIds.radio('rs-1')));
+    await tester.pumpAndSettle();
+    expect(engine.playing, isTrue);
+    expect(engine.loadedUrl, contains('rs-1'));
+
+    engine.failNextLoad = true;
+    await tester.tap(_byId(SemanticsIds.radio('rs-2')));
+    await tester.pumpAndSettle();
+
+    // Nothing is on: the station that was playing was let go as the dial
+    // turned, and the one that would not open never started.
+    expect(engine.playing, isFalse);
+    expect(
+      container.read(radioPlaybackProvider).station,
+      isNull,
+      reason: 'the hub must not name a station making no sound',
+    );
+    // And the tap says so rather than reading as one that was dropped.
+    expect(find.text('Could not tune Deck Radio'), findsOneWidget);
+  });
+
+  testWidgets('a tune overtaken before it opens leaves the newer one alone', (
+    tester,
+  ) async {
+    // Two taps in flight at once: the slow one must not open its stream
+    // over the station that replaced it, nor publish itself as what is on
+    // when it finally comes back.
+    final repo = _repo();
+    final engine = FakeEngine();
+    final gate = Completer<void>();
+    repo.radioPlayInfoGates['rs-1'] = gate;
+    final container = _container(repo, engine: engine);
+    await _pumpHub(tester, container);
+
+    await tester.tap(_byId(SemanticsIds.radio('rs-1')));
+    await tester.pump();
+    expect(container.read(radioPlaybackProvider).starting, isTrue);
+
+    await tester.tap(_byId(SemanticsIds.radio('rs-2')));
+    await tester.pumpAndSettle();
+    expect(container.read(radioPlaybackProvider).station?.pid, 'rs-2');
+    expect(engine.loadedUrl, contains('rs-2'));
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(container.read(radioPlaybackProvider).station?.pid, 'rs-2');
+    expect(engine.loadedUrl, contains('rs-2'));
+    expect(engine.playing, isTrue);
+
+    // The title poll outlives the widget tree, like every other thing
+    // playback owns: a station left on is a timer still firing.
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a stop that fails is not reported as a failed tune', (
+    tester,
+  ) async {
+    // Tapping the station that is on stops it. Naming every failure after
+    // tuning told a listener their station could not be tuned while it
+    // carried on playing.
+    final engine = FakeEngine();
+    final container = _container(_repo(), engine: engine);
+    await _pumpHub(tester, container);
+
+    await tester.tap(_byId(SemanticsIds.radio('rs-1')));
+    await tester.pumpAndSettle();
+    expect(container.read(radioPlaybackProvider).station?.pid, 'rs-1');
+
+    engine.failNextStop = true;
+    await tester.tap(_byId(SemanticsIds.radio('rs-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not stop Coastal FM'), findsOneWidget);
+    expect(find.textContaining('Could not tune'), findsNothing);
+  });
+
+  testWidgets('an overtaken tune that then fails says nothing', (tester) async {
+    // The failure belongs to a station the listener has already moved off,
+    // and the one they moved to is tuning fine: reporting the old one puts
+    // "could not tune" on screen over a station that is about to play.
+    final repo = _repo();
+    final engine = FakeEngine();
+    final gate = Completer<void>();
+    repo.radioPlayInfoGates['rs-1'] = gate;
+    final container = _container(repo, engine: engine);
+    await _pumpHub(tester, container);
+
+    await tester.tap(_byId(SemanticsIds.radio('rs-1')));
+    await tester.pump();
+
+    await tester.tap(_byId(SemanticsIds.radio('rs-2')));
+    await tester.pumpAndSettle();
+    expect(container.read(radioPlaybackProvider).station?.pid, 'rs-2');
+
+    // The overtaken tune comes back to a stream that will not open.
+    engine.failNextLoad = true;
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Could not tune'), findsNothing);
+    expect(
+      container.read(radioPlaybackProvider).station?.pid,
+      'rs-2',
+      reason: 'a failure it no longer owns must not clear the newer station',
+    );
+
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the hub carries the level while a station is on', (
+    tester,
+  ) async {
+    // The compact deck bar has no right cluster to hold a track, and this
+    // hub is what that bar expands to: without a level here, live radio
+    // was the one thing playing with no way to set its loudness below
+    // sidebar width.
+    final engine = FakeEngine();
+    final container = _container(
+      _repo(),
+      engine: engine,
+      extra: [localVolumeAvailableProvider.overrideWithValue(true)],
+    );
+    await _pumpHub(tester, container, size: const Size(700, 900));
+
+    expect(
+      _byId(SemanticsIds.radioVolume),
+      findsNothing,
+      reason: 'nothing is playing, so there is no output to set',
+    );
+
+    await tester.tap(_byId(SemanticsIds.radio('rs-1')));
+    await tester.pumpAndSettle();
+
+    final slider = _byId(SemanticsIds.radioVolume);
+    expect(slider, findsOneWidget);
+    // Straight onto the engine, and the control follows it back rather
+    // than keeping a copy: the sleep timer's fade writes the same gain.
+    await tester.tapAt(tester.getTopRight(slider) - const Offset(1, 0));
+    await tester.pumpAndSettle();
+    expect(engine.volume, closeTo(1.0, 0.02));
+
+    await tester.tap(_byId(SemanticsIds.radioMute));
+    await tester.pumpAndSettle();
+    expect(engine.volume, 0);
+
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.radioVolume), findsNothing);
   });
 
   testWidgets('removing a station drops the pin that named it', (tester) async {

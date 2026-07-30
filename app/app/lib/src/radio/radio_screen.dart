@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../media_view.dart';
+import '../player/output_volume.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../shell/semantics_ids.dart';
@@ -50,6 +51,8 @@ class RadioScreen extends ConsumerWidget {
               child: _Dial(dial: dial, playback: playback),
             ),
           ),
+        if (playback.station != null)
+          const SliverToBoxAdapter(child: _StationVolume()),
         switch (stations) {
           AsyncData(:final value) when value.isEmpty =>
             const SliverFillRemaining(
@@ -120,6 +123,46 @@ class _Dial extends ConsumerWidget {
       onStop: playback.station == null
           ? null
           : () => unawaited(ref.read(radioPlaybackProvider.notifier).stop()),
+    );
+  }
+}
+
+/// How loud the station that is on comes out of this device.
+///
+/// Here because the deck bar's compact layout has no right cluster to
+/// hold a track, and this hub is what that bar expands to: the level a
+/// wide window reads on the bar is one tap away on every narrower one,
+/// which is the arrangement the remote session already uses for its own
+/// endpoint. Above sidebar width both are drawn, over the same engine
+/// gain, so neither can show a loudness the other does not.
+///
+/// Absent on a phone and a tablet, where the hardware buttons own local
+/// volume and a software slider would fight the OS volume stack.
+class _StationVolume extends ConsumerWidget {
+  const _StationVolume();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(localVolumeAvailableProvider)) {
+      return const SizedBox.shrink();
+    }
+    final volume = ref.read(outputVolumeProvider.notifier);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: WaxSpace.s16),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: WaxSlider(
+          value: ref.watch(outputVolumeProvider),
+          onChanged: (level) => unawaited(volume.set(level)),
+          onMute: () => unawaited(volume.toggleMute()),
+          label: 'Volume',
+          glyph: WaxIcons.volume,
+          mutedGlyph: WaxIcons.volumeMuted,
+          trackWidth: 160,
+          semanticsId: SemanticsIds.radioVolume,
+          muteSemanticsId: SemanticsIds.radioMute,
+        ),
+      ),
     );
   }
 }
@@ -318,6 +361,16 @@ class _StationTile extends ConsumerWidget {
 }
 
 /// Tunes a station in, or stops it when it is the one playing.
+///
+/// Every failure is reported, not only the server's: the play-info call is
+/// one of two things that can go wrong, and the other is the stream itself
+/// refusing to open, which throws from the engine. Catching the API alone
+/// left a dead station as a tap that did nothing and said nothing.
+///
+/// Exceptions, not everything: a platform refusing a stream raises one, and
+/// an assertion or a type error is this app being wrong rather than the
+/// station being unreachable. Those belong in the console, not behind a
+/// message telling a listener their station is down.
 Future<void> _tune(
   BuildContext context,
   WidgetRef ref,
@@ -326,16 +379,30 @@ Future<void> _tune(
 ) async {
   final messenger = ScaffoldMessenger.of(context);
   final controller = ref.read(radioPlaybackProvider.notifier);
+  // Which of the two ran, so the failure is named after it: a stop that
+  // threw used to report that the station could not be tuned, while it
+  // carried on playing.
+  final tuning = station.pid != playback.station?.pid;
   try {
-    if (station.pid == playback.station?.pid) {
-      await controller.stop();
-    } else {
+    if (tuning) {
       await controller.play(station);
+    } else {
+      await controller.stop();
     }
-  } on WaxDeckApiException catch (e) {
+  } on Exception catch (e) {
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(e.message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            e is WaxDeckApiException
+                ? e.message
+                : tuning
+                ? 'Could not tune ${station.name}'
+                : 'Could not stop ${station.name}',
+          ),
+        ),
+      );
   }
 }
 

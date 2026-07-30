@@ -69,11 +69,34 @@ class OutputVolumeController extends Notifier<double> {
   /// Sets the level. Optimistic: the state moves now and the stream
   /// confirms it, because a slider that waits for a platform round trip
   /// per drag frame stutters under the finger.
+  ///
+  /// A write the platform turns down puts the state back to what the
+  /// engine actually has, which is the whole promise of this controller:
+  /// optimism that survives its own failure is a control drawing a
+  /// loudness the output never took. Back to the *engine's* level rather
+  /// than the one held before the call, because the write is not the only
+  /// thing that moves the gain - another device raising it during the
+  /// await is a level this must not undo.
+  ///
+  /// The failure is not raised. Every caller is a slider or a glyph that
+  /// fires and forgets, so a raised one is an unhandled zone error per
+  /// drag frame and nothing on screen; the level snapping back to what the
+  /// output has is the report, and it is the one a listener can act on.
   Future<void> set(double volume) async {
     final level = volume.clamp(0.0, 1.0);
-    if (level > 0) _beforeMute = null;
     state = level;
-    await ref.read(audioEngineProvider).setVolume(level);
+    final engine = ref.read(audioEngineProvider);
+    try {
+      await engine.setVolume(level);
+    } on Object catch (failure) {
+      debugPrint('the platform would not take the level: $failure');
+      if (ref.mounted) state = engine.volume.clamp(0.0, 1.0);
+      return;
+    }
+    // Spent only once the level actually took. Cleared before the write,
+    // a refused unmute forgot the level it was restoring and left the
+    // retry with nothing to go back to but full.
+    if (level > 0) _beforeMute = null;
   }
 
   /// Silences the output, or puts it back where it was.

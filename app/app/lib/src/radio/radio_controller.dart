@@ -211,6 +211,16 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   Timer? _titlePoll;
   Timer? _firstTitleTick;
 
+  /// Which tune owns the engine.
+  ///
+  /// Bumped by everything that takes it - another station, a stop, an item
+  /// session - so the awaits inside a slow [play] can tell whether they are
+  /// still the current one. A tune crosses a round trip and an engine load,
+  /// and without this a station whose play-info crawled would open its
+  /// stream over whatever replaced it in the meantime and then publish
+  /// itself as what is on.
+  int _tuning = 0;
+
   @override
   RadioPlayback build() {
     ref.onDispose(_stopTitlePoll);
@@ -218,33 +228,75 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   }
 
   Future<void> play(RadioStation station) async {
-    // A paused session stops writing checkpoints, so taking the engine
-    // from it cannot corrupt the item's saved position. The session
-    // surface exposes a toggle, so pause only when actually playing.
-    final session = ref.read(currentSessionRegistryProvider).current;
-    if (session != null && ref.read(audioEngineProvider).playing) {
-      await session.toggle();
-    }
+    // Claimed and published before anything here can suspend, which is
+    // the whole point of the counter: a generation taken after an await
+    // is handed out in completion order rather than in tap order, so the
+    // tap that came first can wake last, outrank the station the listener
+    // actually asked for, and win. The same window hid the tune from
+    // [stop] and [markInterrupted], which used to look for a station this
+    // had not published yet.
+    final tuning = ++_tuning;
     _stopTitlePoll();
+    final engine = ref.read(audioEngineProvider);
+    // Whether a station holds the engine right now, asked before the state
+    // is replaced with the one being tuned.
+    final wasTuned = state.station != null;
     state = RadioPlayback(station: station, starting: true);
     try {
+      // A paused session stops writing checkpoints, so taking the engine
+      // from it cannot corrupt the item's saved position. Paused rather
+      // than toggled: for a session that is playing these are the same
+      // call, and a pause is the verb this actually wants, since the
+      // other half of a toggle starts playback. just_audio drops its
+      // playing flag before it asks the platform, so a second tune reads
+      // the engine as stopped and never reaches here - but that is the
+      // engine's timing rather than this controller's promise, and an
+      // idempotent pause does not rest on it.
+      final session = ref.read(currentSessionRegistryProvider).current;
+      if (session != null && engine.playing) await engine.pause();
+      if (tuning != _tuning) return;
+      // The station being left goes quiet as the dial turns rather than
+      // when the new stream opens: a stream that is down never gets that
+      // far, and leaving the old one running is how the bar came to name
+      // one station while another played.
+      if (wasTuned) await engine.stop();
+      if (tuning != _tuning) return;
       final info = await ref
           .read(repositoryProvider)
           .getRadioPlayInfo(station.pid);
-      final engine = ref.read(audioEngineProvider);
+      if (tuning != _tuning) return;
       await engine.load(info.url);
+      if (tuning != _tuning) return;
       await engine.play();
+      if (tuning != _tuning) return;
       state = RadioPlayback(station: station, nowPlaying: info.nowPlaying);
       _startTitlePoll(station.pid);
-    } on WaxDeckApiException {
+    } on Object {
+      // A tune that was overtaken is nobody's failure to hear about: it
+      // owns neither the state nor the engine any more, and the station
+      // that replaced it reports its own outcome. Raised, this one puts
+      // "could not tune" on screen underneath a station tuning fine.
+      if (tuning != _tuning) return;
+      // Every failure, not only the server's: a stream that will not open
+      // throws from the engine, and a catch that knew about API errors
+      // alone left the state standing at a station making no sound.
       state = const RadioPlayback();
       rethrow;
     }
   }
 
   Future<void> stop() async {
-    if (state.station == null) return;
+    // Unconditional, and before the state check: a tune still in flight is
+    // one of the things a stop stops, and reading `state.station` for that
+    // answer misses the one already past its first await with a station on
+    // the bar. Without the bump its remaining awaits would open the stream
+    // this just silenced and put the station back.
+    _tuning++;
     _stopTitlePoll();
+    // Nothing tuned means nothing of the engine's to release: whatever is
+    // holding it is an item session, and stopping that here would take the
+    // media out from under the screen playing it.
+    if (state.station == null) return;
     state = const RadioPlayback();
     await ref.read(audioEngineProvider).stop();
   }
@@ -262,11 +314,18 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
 
   /// Clears radio state without touching the engine; the player screen
   /// calls this as it hands the engine to a new item session.
+  ///
+  /// The generation goes up for the same reason [stop] raises it, and just
+  /// as unconditionally: the item session owns the engine from here, and a
+  /// tune still resolving would otherwise load its stream over the item
+  /// that just started. Guarding the bump on a published station missed
+  /// exactly the tune that had not published one yet, which is the window
+  /// this is called in - the controller reaches here while loading an
+  /// item, which is what a tune's own first await is waiting on.
   void markInterrupted() {
-    if (state.station != null) {
-      _stopTitlePoll();
-      state = const RadioPlayback();
-    }
+    _tuning++;
+    _stopTitlePoll();
+    if (state.station != null) state = const RadioPlayback();
   }
 
   /// The in-stream title lives in play-info and only exists while the
