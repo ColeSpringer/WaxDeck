@@ -119,8 +119,8 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
       // The other half of that contract: a platform that turns a start
       // down says so here rather than by throwing, so an engine that is
       // playing must stay silent on this stream. A refusal itself
-      // cannot be provoked from a test — it takes a browser's autoplay
-      // policy — so the surfaces that read it are exercised against the
+      // cannot be provoked from a test - it takes a browser's autoplay
+      // policy - so the surfaces that read it are exercised against the
       // fake instead.
       final refusals = <Object>[];
       final sub = engine.playbackRefused.listen(refusals.add);
@@ -236,6 +236,50 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
       await harness.advance(engine, Duration.zero);
       expect(emitted.any((s) => (s - 1.5).abs() < 0.001), isTrue);
       await sub.cancel();
+    });
+
+    // Volume had no cases at all until a surface drew it: the two callers
+    // it started with were the endpoint controller's session report and
+    // its routed `set-volume`, neither of which reads the level back, so
+    // nothing here was ever verified against a real engine.
+    test('volume defaults to 1.0 and setVolume reads back', () async {
+      await engine.load(harness.mediaUrl);
+      expect(engine.volume, closeTo(1.0, 0.001));
+      await engine.setVolume(0.4);
+      expect(engine.volume, closeTo(0.4, 0.001));
+    });
+
+    test('volumeStream emits the new volume', () async {
+      await engine.load(harness.mediaUrl);
+      final emitted = <double>[];
+      final sub = engine.volumeStream.listen(emitted.add);
+      await engine.setVolume(0.25);
+      await harness.advance(engine, Duration.zero);
+      expect(emitted.any((v) => (v - 0.25).abs() < 0.001), isTrue);
+      await sub.cancel();
+    });
+
+    // Every case above subscribes before the level moves, which is the one
+    // arrangement that cannot tell a seeded stream from a plain broadcast
+    // one.
+    test('volumeStream replays the current volume on listen', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.setVolume(0.35);
+      await harness.advance(engine, Duration.zero);
+      expect(
+        await engine.volumeStream.first,
+        closeTo(0.35, 0.001),
+        reason: 'volumeStream must seed a new listener with the current level',
+      );
+    });
+
+    // The level is the listener's, not the track's: a queue crossing must
+    // not put the room back to full.
+    test('volume survives loading new media', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.setVolume(0.3);
+      await engine.load(harness.mediaUrl);
+      expect(engine.volume, closeTo(0.3, 0.001));
     });
 
     test('speed persists across pause and play', () async {

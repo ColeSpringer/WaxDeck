@@ -255,7 +255,7 @@ void main() {
     expect(repo.putPlayStateCalls, isEmpty);
 
     // The queue still holds the entry, so the same tap that failed is
-    // one button away from playing — from where it was asked to start,
+    // one button away from playing - from where it was asked to start,
     // not from wherever the item was last checkpointed.
     repo.playInfoError = null;
     await tester.tap(find.byKey(const Key('player-retry')));

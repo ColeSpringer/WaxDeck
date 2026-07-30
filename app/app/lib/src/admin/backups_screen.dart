@@ -37,7 +37,7 @@ class BackupsScreen extends ConsumerWidget {
     await _importArchive(context, ref, file);
   }
 
-  /// Streams an archive up whole — never buffered in memory: archives
+  /// Streams an archive up whole - never buffered in memory: archives
   /// carry both databases and a large catalog easily exceeds a hundred
   /// megabytes. Every picked reference carries a lazy reader (disk on
   /// native, the browser file handle on web).

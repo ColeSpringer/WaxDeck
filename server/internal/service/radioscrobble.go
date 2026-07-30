@@ -10,7 +10,7 @@ import (
 
 // Radio scrobbling: the stream proxy observes ICY title transitions
 // per listener and reports finished segments here. Only segments that
-// END with an observed transition scrobble — a station whose "title"
+// END with an observed transition scrobble - a station whose "title"
 // never changes (a slogan, a URL) produces no transitions and so no
 // junk, and the tail segment at disconnect (whose end was never
 // heard) stays off the record. The half-or-four-minutes rule needs a

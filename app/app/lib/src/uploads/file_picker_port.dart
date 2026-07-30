@@ -5,7 +5,7 @@ import 'file_picker_impl.dart' as impl;
 /// Audio extensions the pickers offer and the drop areas accept
 /// (lowercase, no dot): a hardcoded mirror of the server's default
 /// accepted-format set (uploadFormatSet in
-/// server/internal/service/uploads.go — keep in step). Native dialogs
+/// server/internal/service/uploads.go - keep in step). Native dialogs
 /// keep an "All files" group so a custom WAXDECK_UPLOAD_FORMATS set
 /// stays reachable; the server's session create is the real gate.
 const kAcceptedAudioExtensions = {
@@ -79,8 +79,8 @@ abstract interface class FilePickerPort {
   });
 }
 
-/// The platform port. Null on platforms with no picker wiring — and in
-/// widget tests overriding it so — which hides every pick affordance;
+/// The platform port. Null on platforms with no picker wiring - and in
+/// widget tests overriding it so - which hides every pick affordance;
 /// that hide-when-null contract predates the real implementations and
 /// stands.
 final filePickerProvider = Provider<FilePickerPort?>(

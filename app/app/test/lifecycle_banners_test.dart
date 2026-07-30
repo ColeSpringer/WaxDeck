@@ -106,7 +106,7 @@ void main() {
     // The probe runs unawaited, so anything escaping it reaches the zone
     // with no handler. The client maps only transport failures into the
     // structured API error, and a response the generated deserializer
-    // cannot build throws something else — which is exactly the shape
+    // cannot build throws something else - which is exactly the shape
     // the one event this watches for can produce.
     final repo = FakeRepository()
       ..serverHealthError = const FormatException('not the health you knew');

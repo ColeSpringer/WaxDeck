@@ -10,7 +10,7 @@ import 'package:built_value/serializer.dart';
 
 part 'playback_session_history_entry.g.dart';
 
-/// One ended playback session, as the state it stopped in. It has no live half: nothing extrapolates, `positionMs` is final, and the session cannot be controlled or resumed in place — restore means starting a new session from this queue, index, and position. Deliberately not a `PlaybackSession` with a flag: a row here is history, while that schema's `ended` marks a live session's last frame, and one type meaning both would make callers ask which transport an object arrived on. 
+/// One ended playback session, as the state it stopped in. It has no live half: nothing extrapolates, `positionMs` is final, and the session cannot be controlled or resumed in place - restore means starting a new session from this queue, index, and position. Deliberately not a `PlaybackSession` with a flag: a row here is history, while that schema's `ended` marks a live session's last frame, and one type meaning both would make callers ask which transport an object arrived on. 
 ///
 /// Properties:
 /// * [id] - The session's PID. It names a session that no longer exists; the id is here to correlate with what the caller may have seen live, not to address anything. 

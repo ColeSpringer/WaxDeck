@@ -15,7 +15,7 @@ import 'controls.dart';
 ///
 /// [name] is the destination's identity: the chrome selects and reports by
 /// it, so a list rebuilt every frame still compares equal without the
-/// caller holding indices. Nothing here is coloured by domain — an active
+/// caller holding indices. Nothing here is coloured by domain - an active
 /// destination is amber in every one of them, because five differently
 /// hued active tabs is the rainbow-nav trap.
 @immutable
@@ -59,8 +59,8 @@ class WaxDestination {
   final List<WaxDestination> children;
 
   /// The handle for the disclosure control beside a parent row. It is a
-  /// separate control from the row — the row navigates, the chevron
-  /// opens — so it takes a separate identifier.
+  /// separate control from the row - the row navigates, the chevron
+  /// opens - so it takes a separate identifier.
   final String? discloseSemanticsId;
 }
 
@@ -737,8 +737,8 @@ class WaxNavOverflowButton extends StatelessWidget {
 /// The account control: who is signed in, and everything the chrome has
 /// no room to list.
 ///
-/// On compact this is the only way to reach the secondary destinations —
-/// a phone's tab bar holds the domains and nothing else — so the caller
+/// On compact this is the only way to reach the secondary destinations -
+/// a phone's tab bar holds the domains and nothing else - so the caller
 /// hands it whatever the surrounding chrome is not already listing, plus
 /// the account's own actions. A monogram rather than a glyph: the design
 /// system has no person icon, and the first letter of the name is the
@@ -935,7 +935,7 @@ class WaxSidebar extends StatefulWidget {
 class _WaxSidebarState extends State<WaxSidebar> {
   /// What a visitor has decided about a group, where they have decided
   /// anything. A group holding the active destination opens on its own, so
-  /// arriving by URL never hides where you are — but that has to be a
+  /// arriving by URL never hides where you are - but that has to be a
   /// default rather than a floor, or the row cannot be closed from inside
   /// the very group whose child is selected.
   final Map<String, bool> _disclosed = <String, bool>{};
@@ -945,7 +945,7 @@ class _WaxSidebarState extends State<WaxSidebar> {
       group.children.any((child) => child.name == widget.selected);
 
   /// A parent destination opens on its own while it or one of its
-  /// children is where the visitor is, and closes when they leave — until
+  /// children is where the visitor is, and closes when they leave - until
   /// they say otherwise, after which their answer stands.
   bool _isParentOpen(WaxDestination parent) =>
       _disclosed[parent.name] ??
@@ -1331,9 +1331,9 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
 
     // The content is its own semantics region, and that is load-bearing
     // rather than decorative. Every route inside it carries a
-    // `ModalBarrier`, which wraps itself in `BlockSemantics` — "excludes
+    // `ModalBarrier`, which wraps itself in `BlockSemantics` - "excludes
     // the semantics of all widgets painted before it in the same semantic
-    // container" — so a pane sharing this frame's container would erase
+    // container" - so a pane sharing this frame's container would erase
     // the chrome painted ahead of it: the sidebar and the rail would
     // render and expose nothing at all, to a screen reader or to the
     // suite. A boundary ends that walk (`isBlockingPreviousSibling`
@@ -1518,7 +1518,7 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
 /// its pill and is drawn. Not zero: a zero-size render object leaves the
 /// semantics tree, which takes the link out of the tab order, which is
 /// the one thing this control cannot afford. And not full-size either,
-/// which is what it used to be — on web the semantics tree is real DOM,
+/// which is what it used to be - on web the semantics tree is real DOM,
 /// and an element with a tap action takes the browser's click for its
 /// whole box whatever Flutter's own hit test says about it. At the
 /// leading corner that box is over the sidebar header, so a field there
@@ -1568,7 +1568,7 @@ class _SkipLinkState extends State<_SkipLink> {
       // render object is an opaque `MouseRegion`, whose `hitTest`
       // answers for the whole box whatever sits beneath it, and this box
       // is painted last in the frame's stack. Ignoring from inside left
-      // roughly 140 by 48 of dead corner over the content pane — at rail
+      // roughly 140 by 48 of dead corner over the content pane - at rail
       // width that is exactly where a screen's back button sits.
       //
       // The clip is the other half of the same problem, for the platform
@@ -1634,7 +1634,7 @@ class _SkipLinkState extends State<_SkipLink> {
 ///
 /// A plain `SizedBox` around it would lay the pill out at one pixel and
 /// wrap the label to nothing; this lets the child measure itself, paints
-/// it, and only lies about the size — which is what both the semantics
+/// it, and only lies about the size - which is what both the semantics
 /// rect and the parent's clip are read from. Focused, it is an ordinary
 /// pass-through.
 class _SkipLinkBox extends SingleChildRenderObjectWidget {

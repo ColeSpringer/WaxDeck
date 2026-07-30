@@ -30,7 +30,7 @@ type TrackFacts struct {
 	Codec       string
 	Container   string
 
-	// API-form entity pids (ar-…, al-…). AlbumArtistPID carries the same
+	// API-form entity pids (ar-..., al-...). AlbumArtistPID carries the same
 	// fallback as the AlbumArtist display string above, so it is the
 	// grouping handle; the raw track-artist pid is deliberately absent,
 	// because a consumer reaching for it would be reaching for the

@@ -242,7 +242,7 @@ enum WaxNavTarget {
   ///
   /// The layout system's rule: a domain tab goes away where the library
   /// holds none of that medium, and home absorbs the gap. Only
-  /// audiobooks gates on it so far — a tab per medium is what makes the
+  /// audiobooks gates on it so far - a tab per medium is what makes the
   /// count tight on a phone, and books is the medium a library most
   /// often has none of. Podcasts and Radio stay unconditional until
   /// their own phases have a count to gate on.
@@ -337,7 +337,7 @@ bool _isUnder(String location, String base) =>
 ///
 /// Home is the only target that claims a location by being home; every
 /// other match is a prefix, which is the stronger signal. So a location
-/// only home would claim goes to whichever branch [branchIndex] names —
+/// only home would claim goes to whichever branch [branchIndex] names -
 /// the show-less `/episodes/:pid`, which a search hit opens because it
 /// has no show to name, is a podcasts location whose path cannot sit
 /// under `/podcasts`, and lighting Home while the podcasts branch is on
@@ -366,7 +366,7 @@ WaxNavTarget? activeNavTarget(
 /// A per-device preference: a rail is a choice about this screen and
 /// this pointer, not something to carry to a listener's phone. Stored
 /// where those go (ADR-0027), so the first frame is drawn expanded and
-/// collapses once the read lands — a launch does not wait on a disk to
+/// collapses once the read lands - a launch does not wait on a disk to
 /// lay itself out.
 class SidebarCollapsed extends Notifier<bool> with StoredSetting<bool> {
   @override
@@ -417,8 +417,8 @@ enum WaxAccountVerb {
   /// The verb the menu reported, or null if it named one this build does
   /// not have.
   ///
-  /// The menu can only report a name this enum minted — the design
-  /// system carries the actions it is handed and invents none — so a
+  /// The menu can only report a name this enum minted - the design
+  /// system carries the actions it is handed and invents none - so a
   /// miss is a programming error rather than input. It is looked up
   /// rather than resolved by `byName` because the callback that runs it
   /// is fired and forgotten from a menu, where a throw has no handler at
@@ -528,8 +528,8 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
         final target = byName[name];
         if (target != null) _select(target);
       },
-      // Who is signed in, and — on compact, where the tab bar has room
-      // for the domains and nothing else — the only way to everything
+      // Who is signed in, and - on compact, where the tab bar has room
+      // for the domains and nothing else - the only way to everything
       // that is not one.
       //
       // Never withheld for want of a name. `SessionInfo` requires only
@@ -578,7 +578,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
     // Through the router's back-button dispatcher rather than a
     // `PopScope`. A PopScope here registers with the shell page's route,
     // and `popRoute` walks the navigator chain from the root down, halting
-    // at a shell navigator whose enclosing route is not current — which is
+    // at a shell navigator whose enclosing route is not current - which is
     // the state a branch lands in after it has been drilled into and
     // stepped back out of, so the scope is simply never consulted and the
     // press reaches the platform from a domain root. The dispatcher is

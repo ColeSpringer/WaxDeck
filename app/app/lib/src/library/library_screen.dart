@@ -59,7 +59,7 @@ class LibraryScreen extends ConsumerWidget {
       // Adding audio is a primary action, so it gets a button here
       // rather than living inside the curation menu. Podcasts are added
       // by subscribing to a feed (their own screen), so the button is
-      // hidden on that filter — and everywhere for accounts without
+      // hidden on that filter - and everywhere for accounts without
       // upload rights, which every path behind it needs (URL
       // acquisition included).
       floatingActionButton: filter == LibraryFilter.podcasts || !canUpload

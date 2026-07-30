@@ -225,7 +225,7 @@ func (l *Library) CompleteUploadBatch(ctx context.Context, uc *UserCtx, id strin
 // arrived (completed members are never silently discarded; the
 // grouping degrades to what staged), and expired ones an interrupted
 // entry opening left half-done get their entries repaired. true means
-// a batch was fully processed — a round where every batch failed
+// a batch was fully processed - a round where every batch failed
 // reports false so the caller's drain loop waits for the next tick
 // instead of hot-looping over the same failures.
 func (l *Library) DrainExpiredUploadBatches(ctx context.Context) bool {
@@ -276,7 +276,7 @@ func (l *Library) openBatchEntries(ctx context.Context, b wdb.UploadBatch, membe
 		return b, nil
 	}
 	// The batch flip is already committed; what remains is server-side
-	// completion of that decision, so it rides the process context —
+	// completion of that decision, so it rides the process context -
 	// a client disconnect mid-finalize must not cancel entry opening
 	// or member linking halfway (the idempotent retry could then only
 	// cover the unlinked members with fresh entries).

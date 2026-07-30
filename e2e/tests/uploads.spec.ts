@@ -14,7 +14,7 @@ import { SemanticsIds, sem } from './semantics-ids';
 // The manual-upload journey: pick files in the web UI, group them as
 // one album through the upload batch, watch the batch finalize into a
 // single review entry, accept it, and find the titles in the library.
-// The source files live in .run/upload-src — outside the scanned
+// The source files live in .run/upload-src - outside the scanned
 // roots, so they only ever enter the library through this pipeline.
 
 

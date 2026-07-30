@@ -99,7 +99,7 @@ class QueueSource {
   /// draw resumes rather than restarts. Opaque: the server shapes its
   /// cursors and this only carries them.
   ///
-  /// Empty means the frontier is not known — an ordered window cut short
+  /// Empty means the frontier is not known - an ordered window cut short
   /// of what its caller had loaded, or a restored queue whose cursor was
   /// never written. A draw against an empty cursor finds its place from
   /// the queue's last entry instead, which costs a page per cap's worth
@@ -145,7 +145,7 @@ class QueueSource {
 /// The separator between a seeded draw's seed and its cursor in the one
 /// stored string the two travel in.
 ///
-/// Both halves are the same fact — where the source's listing stands —
+/// Both halves are the same fact - where the source's listing stands -
 /// and a cursor issued under one seed is invalid under another, so they
 /// are stored together or not at all. Safe as a separator because a
 /// cursor is base64url and never contains one.

@@ -17,8 +17,8 @@ import 'music_controllers.dart';
 
 /// What the queue an artist screen builds is a window over.
 ///
-/// One builder for all three entry points — Play, Shuffle, and a tapped
-/// row — because they queue the same scope and a source that differed
+/// One builder for all three entry points - Play, Shuffle, and a tapped
+/// row - because they queue the same scope and a source that differed
 /// between them would mean the same artist refilled from one button and
 /// stopped at the cap from another.
 QueueSource artistSource(String pid, String name, MusicItemsState? state) =>
@@ -236,7 +236,7 @@ class _Body extends ConsumerWidget {
               //
               // Pushed, not gone to: an album is declared under the
               // albums index, which is not where this is, so `go` would
-              // rebuild that ancestry and throw the artist away — back
+              // rebuild that ancestry and throw the artist away - back
               // from a release would land on the index rather than on
               // the artist whose release it is (ADR-0022).
               if (target != null) {
@@ -293,7 +293,7 @@ class _Body extends ConsumerWidget {
   }
 
   Future<void> _play(BuildContext context, WidgetRef ref, int index) async {
-    // A book resumes on its own screen — chapters, speed, position — so
+    // A book resumes on its own screen - chapters, speed, position - so
     // a row that is one opens it rather than dropping a twelve-hour file
     // into the queue between two tracks.
     if (items[index].mediaType == MediaType.audiobook) {

@@ -99,7 +99,7 @@ Each user connects their own accounts under Settings, Scrobbling:
   API URLs on private network addresses are refused by default, since
   the server delivers to them; set
   `WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS=true` for a LAN instance.
-- **Last.fm**: needs server API credentials — the pair that
+- **Last.fm**: needs server API credentials - the pair that
   identifies this install as a Last.fm application (register one at
   last.fm/api/account/create). An administrator sets them right in
   Settings under the Last.fm row (sealed at rest), or through
@@ -114,7 +114,7 @@ the proxy, the in-stream title's transitions bound the tracks: a
 segment scrobbles when the title changes away from it after at least
 thirty seconds (radio carries no track lengths, so the minimum listen
 stands in for the half-track rule). Only segments with an observed
-ending scrobble — a station whose "title" never changes produces
+ending scrobble - a station whose "title" never changes produces
 nothing, and the unfinished track at disconnect stays off the record.
 Titles that do not honestly parse as "Artist - Title" (station
 slogans, URLs, ads) are dropped rather than guessed at.

@@ -86,8 +86,8 @@ func (s *Schedule) String() string {
 // Candidate wall-clock times are built with time.Date, which normalizes
 // times a DST transition makes nonexistent: a schedule for 02:30 on a
 // spring-forward day where 02:00 jumps to 03:00 fires at the instant
-// time.Date resolves 02:30 to — a wall time valid in one of the two zones
-// adjacent to the transition — instead of being skipped or looping. During
+// time.Date resolves 02:30 to - a wall time valid in one of the two zones
+// adjacent to the transition - instead of being skipped or looping. During
 // a fall-back overlap the schedule fires once, at whichever of the two
 // instants time.Date resolves the repeated wall time to.
 func (s *Schedule) Next(after time.Time) time.Time {

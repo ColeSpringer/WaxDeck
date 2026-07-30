@@ -26,7 +26,7 @@ entry.** `NowPlayingController` (`src/player/now_playing_controller.dart`)
 holds at most one `PlaybackSession`, in the order the widget kept:
 interrupt radio, build the session, register it, attach Connect, start it,
 feed the sleep timer. Whatever puts an entry at the queue's current index
-is what starts playing — a tap, a skip, a drag onto the current slot, a
+is what starts playing - a tap, a skip, a drag onto the current slot, a
 restored queue, an advance at the end of an item. Nothing else starts
 playback, and no screen stops it.
 
@@ -50,8 +50,8 @@ no engine state.** On `itemBoundary` the outgoing session is finalized
 where its item ended (`finishAtBoundary`: checkpoint at the item's own
 duration, listen report `finished: true`) rather than at the engine's
 position, which by then belongs to the item now playing. The queue is
-moved to the entry that was prepared — found by identity, since the queue
-may have been edited since — and a session for it *adopts* the running
+moved to the entry that was prepared - found by identity, since the queue
+may have been edited since - and a session for it *adopts* the running
 stream: no fetch, no load, no seek, no play. Engine ownership moves as the
 new session starts, so the outgoing one flushes without stopping media it
 no longer owns.
@@ -67,9 +67,9 @@ fallback, and multi-part books are untouched.
 the next item only when all of these hold:
 
 - Both the playing item and the next one are music. Spoken word carries
-  per-item playback config a crossing cannot apply in time — a show or
+  per-item playback config a crossing cannot apply in time - a show or
   book plays at its own remembered speed, and an episode with a
-  skip-intro setting does not start at its own head — and a book's parts
+  skip-intro setting does not start at its own head - and a book's parts
   roll inside one session, which is not a queue boundary at all.
 - The next item's play-info is a passthrough stream: seekable and not
   voice-boosted. A preloaded transcode opens a second server-side session,
@@ -101,8 +101,8 @@ is the truth about the engine, and it is what lets a crossing during that
 window find by identity which entry actually played. Correcting the
 engine is the reconcile's job: a sync request that arrives while an arm
 is in flight is remembered and run after it rather than dropped, so the
-edit is honored immediately instead of waiting for the next position tick
-— which never comes if playback is paused.
+edit is honored immediately instead of waiting for the next position tick -
+which never comes if playback is paused.
 
 **A crossing publishes once, whole.** The new session goes on the state
 as soon as it exists, not once its adoption settles, and the summary is
@@ -115,7 +115,7 @@ finalized, and naming it would hand surfaces something that has let go.
 
 **Radio never advances a queue, and the item lets go of the engine.**
 Radio drives the engine directly, bypassing sessions, so completion and
-boundary events are ignored while a station is playing — without that, a
+boundary events are ignored while a station is playing - without that, a
 stream dropping would step the queue and load a track over the radio. The
 item that was playing also hands the engine over the moment a station
 starts: checkpointed where it stands, its listen reported unfinished, the

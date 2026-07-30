@@ -14,33 +14,33 @@ the API. Every account has a role (`admin` or `user`), library
 visibility (every library, or an explicit set), and a set of
 permission toggles:
 
-- **Upload** — bring audio into the library: chunked uploads from
+- **Upload** - bring audio into the library: chunked uploads from
   any client, and URL acquisitions, both staged for a review
   decision instead of landing directly. The grant carries
   item-scoped metadata editing over what the account's uploads
   bring in, and an optional per-account byte quota caps the total
   uploads the account may hold at once (acquired bytes count
   against it too).
-- **Download** — fetch original files for offline use.
-- **Delete** — delete visible library items to the trash. Permanent
+- **Download** - fetch original files for offline use.
+- **Delete** - delete visible library items to the trash. Permanent
   deletion is always admin-only.
-- **Explicit content** — see and play content flagged explicit.
+- **Explicit content** - see and play content flagged explicit.
   Podcasts carry the feed's own flag; turning this off hides flagged
   shows and episodes. Music mostly has no canonical explicit flag, so
   the honest music-side control is a tag rule (below).
-- **Shared outputs** — control shared device endpoints (cast targets,
+- **Shared outputs** - control shared device endpoints (cast targets,
   DLNA renderers, the jukebox). A user's own devices are always
   theirs to control.
-- **Manage podcasts** — subscribe, unsubscribe, and trigger episode
+- **Manage podcasts** - subscribe, unsubscribe, and trigger episode
   fetches. Off leaves existing subscriptions playable but frozen.
-- **Tag allow / deny lists** — visibility rules over custom tags.
+- **Tag allow / deny lists** - visibility rules over custom tags.
   A deny rule hides items matching it; an allow list, when set, shows
   only items matching every rule. An item without the rule's tag
   passes a deny rule, which is exactly how a deny list should read.
   Together with the explicit toggle this is the parental-controls
   mechanism: a kids account with an allow list on `KIDS=yes` sees
   nothing else.
-- **Max transcode bitrate** — a per-account ceiling on transcoded
+- **Max transcode bitrate** - a per-account ceiling on transcoded
   streams, overriding the server default.
 
 Administrators hold every permission implicitly. A new account starts
@@ -54,13 +54,13 @@ content.
 Out of the box, accounts are admin-created. Two self-serve doors can
 be opened:
 
-- **Open signup** (Settings → Server): registrations land as pending
+- **Open signup** (Settings > Server): registrations land as pending
   requests. A pending account cannot log in until an administrator
-  approves it — approval assigns the role, library access, and
+  approves it - approval assigns the role, library access, and
   permissions in the same step. Rejection deletes the request and
   frees the username. New requests raise a `signup-requested`
   notification.
-- **Invites** (Users → Invites): an invite link token pre-approves
+- **Invites** (Users > Invites): an invite link token pre-approves
   signup with a chosen shape. The token is shown exactly once at
   creation; invites can be single- or multi-use, can expire, and can
   be revoked. Invites work whether or not open signup is enabled.
@@ -68,7 +68,7 @@ be opened:
 ## The audit log
 
 Every administrative and destructive action is recorded: who did it,
-to what, and the detail of the change — account edits, permission
+to what, and the detail of the change - account edits, permission
 changes, playlist deletions, entity merges, item deletions, trash
 operations, backups and restores, settings changes, migration runs.
 Names are captured at write time, so "who deleted this playlist" has
@@ -85,7 +85,7 @@ excluded by design: an archive holding both the database and the key
 would be plaintext-equivalent for stored credentials, so keep the
 keyfile safe separately.
 
-Back up on demand (Backups → Back up now) or on a schedule. Retention
+Back up on demand (Backups > Back up now) or on a schedule. Retention
 keeps the newest N archives and a total byte budget, both editable in
 settings; imported archives are exempt. Archives can be downloaded
 from the UI and uploaded to another server. Outcomes raise the
@@ -98,12 +98,12 @@ validates the archive and answers with the plan: whether this server's
 key opens the archive's sealed credentials, and exactly which
 credentials break when it does not (they are marked pending re-auth
 instead of surfacing as scattered errors). At the next start the
-current databases are set aside — not deleted — the archive's
+current databases are set aside - not deleted - the archive's
 databases move into place, and every client's sync cursor resets
 cleanly. A staged restore can be cancelled any time before the
 restart.
 
-Restoring onto a new host: upload the archive (Backups → import), stage
+Restoring onto a new host: upload the archive (Backups > import), stage
 it, restart. Without the old keyfile everything restores except sealed
 credentials (app passwords, scrobbling connections, private feed
 logins, notification target configurations), which need re-entering.
@@ -119,7 +119,7 @@ next firing time.
 
 ## The trash
 
-Deletions go to the catalog's reversible trash — a same-volume
+Deletions go to the catalog's reversible trash - a same-volume
 `.waxbin-trash` directory the scanner skips. The admin trash surface
 lists every trashed file with where it lived, restores files back into
 the catalog (re-scanned and un-archived), and empties the trash
@@ -147,7 +147,7 @@ the upload flow itself, grouping, and the review pipeline are in the
 ## Read-only mode
 
 For media mounted read-only on principle: per library, or server-wide
-(Settings → Server). A read-only library refuses uploads, organizing,
+(Settings > Server). A read-only library refuses uploads, organizing,
 file write-back, deletion, and the file tools with the `read-only`
 error code, while playback, browsing, and per-user state (stars,
 progress, playlists) keep working. Podcast libraries need a writable
@@ -155,17 +155,17 @@ root for episode fetching; the flag refuses fetches too.
 
 ## Adding a library at runtime
 
-Settings → Libraries creates a library root without restarting the
+Settings > Libraries creates a library root without restarting the
 server: the path is validated (absolute, not overlapping an existing
 root, the inbox, or the podcast download dir), cataloged, and scanned in
 the background. Browsing and downloading its files work as soon as the
 scan indexes them. The library name doubles as the streaming engine's
-root name, so it also has to be free there — including the podcast root
+root name, so it also has to be free there - including the podcast root
 name, which the engine mounts but the library list never shows.
 
 Streaming needs the engine to mount the same root, which it can learn at
-runtime. Point both sides at one JSON config file — `WAXDECK_FLOW_CONFIG`
-for the server, `WAXFLOW_CONFIG` for the engine — and creating a library
+runtime. Point both sides at one JSON config file - `WAXDECK_FLOW_CONFIG`
+for the server, `WAXFLOW_CONFIG` for the engine - and creating a library
 rewrites the file's `roots` array and asks the engine to reconcile.
 `make up` wires this and seeds the file; the compose service mounts the
 directory read-write into WaxDeck and read-only into the engine, and
@@ -177,7 +177,7 @@ keep working untouched.
 
 Two limits are worth knowing. The engine advertises whether it reloads
 at all (`delivery.rootsReload`), and it only does so when its roots come
-from a config file — pinning them with `WAXFLOW_ROOTS` disables the
+from a config file - pinning them with `WAXFLOW_ROOTS` disables the
 endpoint, since that variable is read once at process start. And a
 runtime-added root only streams if its path is already inside a volume
 the engine mounts; the reload reconciles names and paths, it cannot
@@ -213,17 +213,17 @@ scrape_configs:
 
 ## Moving in from another server
 
-The migration assistant (curation menu → Import from another server)
+The migration assistant (curation menu > Import from another server)
 pulls listening state from a running server and matches it onto your
 library through the same identifier-first resolve ladder the rest of
 WaxDeck uses (MusicBrainz IDs, then fingerprints, then descriptive
 metadata):
 
-- **Navidrome / any Subsonic server** — starred songs, ratings, play
+- **Navidrome / any Subsonic server** - starred songs, ratings, play
   counts, and bookmark positions, over the server's own Subsonic API.
-- **Audiobookshelf** — book progress and finished flags, over its
+- **Audiobookshelf** - book progress and finished flags, over its
   REST API with an API token.
-- **Podcast apps** — subscriptions migrate via OPML import on the
+- **Podcast apps** - subscriptions migrate via OPML import on the
   podcasts screen (Pocket Casts, AntennaPod, and friends all export
   it).
 

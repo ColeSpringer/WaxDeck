@@ -8,6 +8,7 @@ import 'package:built_value/json_object.dart';
 import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
+import 'dart:typed_data';
 import 'package:waxdeck_api_gen/src/api_util.dart';
 import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/radio_directory_results.dart';
@@ -349,6 +350,100 @@ class RadioApi {
     }
 
     return Response<RadioStation>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Get a station logo
+  /// The station&#39;s logo, fetched by this server and served from this origin. **This reverses the direct-fetch behavior &#x60;logoUrl&#x60; documented**: clients render logos from here, not from the station host. Two reasons, both of which made direct fetches wrong rather than merely suboptimal. On the web build a logo on another origin has no CORS headers to offer and an http logo is mixed content on an https UI, so a large share of logos simply could not be drawn; and a direct fetch tells every station host the listener&#39;s IP address, which nothing about rendering a picture requires.  The fetch goes through the same guarded client the stream proxy uses, so a logo URL pointing at a loopback, link-local, or private address is refused at dial time (after DNS resolution) unless the server permits LAN stations, and redirects are bounded. Bytes are capped and non-image answers are refused: a station host serving an HTML error page where a favicon used to be is a station with no logo, which is a 404 here. Results are cached in the server for a day (misses for an hour), so a household browsing the dial does not re-fetch the same logos per device.  **Raster only, and SVG is refused.** A logo URL is attacker-supplied - any account may add a station, pointing anywhere - and these bytes are served from this origin, where an SVG opened as a document would run its script under the caller&#39;s session. So the served type is decided by inspecting the bytes rather than by trusting the host&#39;s &#x60;Content-Type&#x60;, only JPEG/PNG/WebP/GIF pass, and a station whose mark is an SVG draws the monogram a station with no mark draws. The response also carries &#x60;nosniff&#x60; and a locked-down &#x60;Content-Security-Policy&#x60;, so a mistake in that check stays a broken image.  404 covers every way there is no picture to draw - no logo configured, the host unreachable, a refused or non-image answer - because a client can act on none of the differences: it draws a monogram disc. Answers carry a content-addressed &#x60;ETag&#x60;; revalidate with &#x60;If-None-Match&#x60;. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [size] - Accepted and ignored, so the sized-artwork request a client already builds for covers reaches this endpoint unchanged. Station logos are small square images from a directory and the server does not re-encode them: rescaling would have to pick a format, and the transparency most logos carry does not survive that choice. 
+  /// * [ifNoneMatch] - Previously returned `ETag`; a match answers 304 with no body.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [Uint8List] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<Uint8List>> getRadioStationLogo({ 
+    required String pid,
+    int? size,
+    String? ifNoneMatch,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/radio/stations/{pid}/logo'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      responseType: ResponseType.bytes,
+      headers: <String, dynamic>{
+        if (ifNoneMatch != null) r'If-None-Match': ifNoneMatch,
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      if (size != null) r'size': encodeQueryParameter(_serializers, size, const FullType(int)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    Uint8List? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : rawResponse as Uint8List;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<Uint8List>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

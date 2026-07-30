@@ -167,4 +167,16 @@ abstract interface class AudioEnginePort {
 
   /// Current output volume.
   double get volume;
+
+  /// Volume changes, wherever they came from.
+  ///
+  /// A surface drawing the level cannot own it, which is the whole reason
+  /// this exists: a routed `set-volume` from another device and the sleep
+  /// timer's fade both write here without asking any widget, so a slider
+  /// holding its own copy of the number would show a loudness the output
+  /// no longer has.
+  ///
+  /// Replays the current level to a new listener. A surface built after the
+  /// level moved would otherwise draw full until somebody changed it.
+  Stream<double> get volumeStream;
 }

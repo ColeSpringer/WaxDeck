@@ -10,9 +10,9 @@ import 'queue_state.dart';
 /// How few unplayed entries a rolling window falls to before it draws
 /// again.
 ///
-/// Far enough ahead that the draw lands before the gap does — a draw is
+/// Far enough ahead that the draw lands before the gap does - a draw is
 /// a round trip, and the entry after the current one is the one the
-/// engine prepares — and short enough that a listener who stops after
+/// engine prepares - and short enough that a listener who stops after
 /// two tracks has not pulled a hundred more down behind them.
 const int kQueueRefillLead = 10;
 
@@ -31,7 +31,7 @@ const int _maxDrawsPerDrain = 5;
 /// The queue is a pure state machine and the pager is I/O; this is the
 /// piece between them. It watches the queue drain, draws more of the
 /// source when it gets short, and seals the window when the source has
-/// no more to give — which is what turns the "window over a larger
+/// no more to give - which is what turns the "window over a larger
 /// scope" caption off, so nothing claims there is more once there is
 /// not.
 class QueueRefiller {

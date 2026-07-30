@@ -95,9 +95,9 @@ void main() {
 
   testWidgets('an artist row draws its monogram without asking, and an '
       'album row still asks', (tester) async {
-    // Nothing automatic writes artist-level artwork — every art-bearing
+    // Nothing automatic writes artist-level artwork - every art-bearing
     // enrichment provider targets the release group, and the one way an
-    // artist gets a cover is an admin setting it by hand — so a
+    // artist gets a cover is an admin setting it by hand - so a
     // five-hundred-artist index would fire five hundred requests for an
     // answer that is statically known. Albums are the opposite case and
     // must keep their covers.
@@ -145,8 +145,8 @@ void main() {
     await tester.tap(find.text('Most items'));
     await tester.pumpAndSettle();
 
-    // A separate listing with a cursor space of its own — the server
-    // refuses a cursor carried across the two — so the request goes out
+    // A separate listing with a cursor space of its own - the server
+    // refuses a cursor carried across the two - so the request goes out
     // fresh rather than paging on what the alphabet had.
     expect(repository.facetSorts.last, FacetSort.count);
     // And the rail goes with it: in count order the letters are scattered
@@ -413,7 +413,7 @@ void main() {
   testWidgets('dragging the sort chips does not fetch a page', (tester) async {
     // The paging listener wraps the whole screen and the chips are a
     // horizontal scroller inside it, sitting at pixel zero of a very
-    // short extent — which reads as "near the end" to anything that only
+    // short extent - which reads as "near the end" to anything that only
     // looks at the numbers.
     final repository = FakeRepository()
       ..facets['artist'] = <FacetBucket>[

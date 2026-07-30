@@ -152,6 +152,151 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /radio/stations/{pid}/logo:
+    get:
+      operationId: getRadioStationLogo
+      summary: Get a station logo
+      description: >
+        The station's logo, fetched by this server and served from this
+        origin. **This reverses the direct-fetch behavior `logoUrl`
+        documented**: clients render logos from here, not from the
+        station host. Two reasons, both of which made direct fetches
+        wrong rather than merely suboptimal. On the web build a logo on
+        another origin has no CORS headers to offer and an http logo is
+        mixed content on an https UI, so a large share of logos simply
+        could not be drawn; and a direct fetch tells every station host
+        the listener's IP address, which nothing about rendering a
+        picture requires.
+
+
+        The fetch goes through the same guarded client the stream proxy
+        uses, so a logo URL pointing at a loopback, link-local, or
+        private address is refused at dial time (after DNS resolution)
+        unless the server permits LAN stations, and redirects are
+        bounded. Bytes are capped and non-image answers are refused: a
+        station host serving an HTML error page where a favicon used to
+        be is a station with no logo, which is a 404 here. Results are
+        cached in the server for a day (misses for an hour), so a
+        household browsing the dial does not re-fetch the same logos per
+        device.
+
+
+        **Raster only, and SVG is refused.** A logo URL is
+        attacker-supplied - any account may add a station, pointing
+        anywhere - and these bytes are served from this origin, where an
+        SVG opened as a document would run its script under the caller's
+        session. So the served type is decided by inspecting the bytes
+        rather than by trusting the host's `Content-Type`, only
+        JPEG/PNG/WebP/GIF pass, and a station whose mark is an SVG draws
+        the monogram a station with no mark draws. The response also
+        carries `nosniff` and a locked-down `Content-Security-Policy`, so
+        a mistake in that check stays a broken image.
+
+
+        404 covers every way there is no picture to draw - no logo
+        configured, the host unreachable, a refused or non-image answer - because a
+        client can act on none of the differences: it draws a
+        monogram disc. Answers carry a content-addressed `ETag`;
+        revalidate with `If-None-Match`.
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: size
+          in: query
+          description: >
+            Accepted and ignored, so the sized-artwork request a client
+            already builds for covers reaches this endpoint unchanged.
+            Station logos are small square images from a directory and
+            the server does not re-encode them: rescaling would have to
+            pick a format, and the transparency most logos carry does not
+            survive that choice.
+          schema:
+            type: integer
+            minimum: 16
+            maximum: 2048
+        - name: If-None-Match
+          in: header
+          description: Previously returned `ETag`; a match answers 304 with no body.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: >
+            The logo image, always one of the raster types below. The
+            served type is decided by inspecting the bytes, not by what
+            the station host called them, so a body is never labelled as
+            something it is not.
+          headers:
+            ETag:
+              description: Content-addressed validator for the returned bytes.
+              schema:
+                type: string
+            Cache-Control:
+              description: >
+                `private, max-age=86400, stale-while-revalidate=604800`.
+                No `Vary`, unlike item artwork: the station library is
+                shared by every user, so these bytes do not depend on who
+                asked. `private` all the same, because the request needs a
+                session and a shared cache must not answer one without.
+              schema:
+                type: string
+            X-Content-Type-Options:
+              description: >
+                `nosniff`. These bytes came from a host any account can
+                name and they are served from this origin, so a browser
+                must not be free to decide the body is really markup.
+              schema:
+                type: string
+            Content-Security-Policy:
+              description: >
+                `default-src 'none'; sandbox; style-src 'unsafe-inline'`,
+                which neutralizes script and navigation for a document
+                opened straight from this URL. Defence in depth: the
+                endpoint serves only raster types and refuses anything
+                whose bytes are not one, and this is what keeps a future
+                mistake in that check a broken image rather than a
+                same-origin script.
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: >
+            The cached copy is still current, with the same validator and
+            freshness the body would have carried.
+          headers:
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: >
+            There is no logo to draw for this station (code `not-found`).
+            Render a monogram disc.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /radio/directory:
     get:
       operationId: searchRadioDirectory
@@ -224,10 +369,13 @@ components:
         logoUrl:
           type: string
           description: >
-            Station logo URL, when known. Clients fetch logos
-            directly (they are not proxied), so an http logo may be
-            blocked as mixed content on an https UI; render the
-            placeholder in that case.
+            The station's own logo URL, when known: what an edit form
+            shows and what the server fetches from. Do not render it
+            directly - `GET /radio/stations/{pid}/logo` is where the
+            picture comes from, and that endpoint's description records
+            why this reverses the direct-fetch behavior documented here
+            before. Its presence is still the signal there is a logo to
+            ask for at all.
         createdAt:
           type: string
           format: date-time
@@ -313,7 +461,12 @@ components:
           description: Station website.
         logoUrl:
           type: string
-          description: Station logo URL.
+          description: >
+            Station logo URL as the directory lists it, carried so adding
+            the station keeps it. There is no proxy for a directory match:
+            the proxy addresses a station by pid and a match has none
+            until it is added, so a search result draws a monogram disc
+            and the logo appears once the station is in the library.
         tags:
           type: string
           description: Comma-separated directory tags.

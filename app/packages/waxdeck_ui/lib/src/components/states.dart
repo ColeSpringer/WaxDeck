@@ -83,6 +83,7 @@ class ErrorState extends StatelessWidget {
     this.onRetry,
     this.detail,
     this.semanticsId,
+    this.retrySemanticsId,
     super.key,
   });
 
@@ -95,6 +96,11 @@ class ErrorState extends StatelessWidget {
   final String? detail;
 
   final String? semanticsId;
+
+  /// The retry button's own handle. Its own, not the pane's: the pane is a
+  /// live region a screen reader reads, and the button is the one thing on
+  /// it a spec can press.
+  final String? retrySemanticsId;
 
   @override
   Widget build(BuildContext context) {
@@ -141,6 +147,7 @@ class ErrorState extends StatelessWidget {
                     kind: WaxButtonKind.tonal,
                     icon: WaxIcons.refresh,
                     onPressed: onRetry,
+                    semanticsId: retrySemanticsId,
                   ),
                 ],
               ],

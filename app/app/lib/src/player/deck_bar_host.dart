@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../connect/device_picker.dart';
+import '../connect/remote_session.dart';
 import '../artwork/artwork_providers.dart';
 import '../media_view.dart';
 import '../playlists/add_to_playlist_dialog.dart';
@@ -21,6 +22,7 @@ import '../shell/semantics_ids.dart';
 import '../shell/side_panel.dart';
 import 'autoplay_gate.dart';
 import 'now_playing_controller.dart';
+import 'output_volume.dart';
 import 'play_state_controller.dart';
 import 'playback_session.dart';
 
@@ -44,6 +46,8 @@ const _ids = DeckBarIds(
   seek: SemanticsIds.deckSeek,
   queue: SemanticsIds.deckQueue,
   cast: SemanticsIds.deckCast,
+  volume: SemanticsIds.deckVolume,
+  mute: SemanticsIds.deckMute,
   more: SemanticsIds.deckMore,
 );
 
@@ -52,10 +56,20 @@ const _ids = DeckBarIds(
 /// It lives in the shell's own slot, outside every branch navigator, so
 /// playback survives navigation and has one home on every screen. What
 /// it shows, in order: the station when live radio has the engine, the
-/// queue's current entry when there is one, the queue a launch found
-/// when there is one to offer back, and otherwise nothing at all —
-/// a bar with no item is a stripe of surface, and the first-run library
-/// should not have one.
+/// queue's current entry when there is one, a session this client is
+/// driving on another endpoint, the queue a launch found when there is
+/// one to offer back, and otherwise nothing at all - a bar with no item
+/// is a stripe of surface, and the first-run library should not have one.
+///
+/// The remote session sits *below* local playback in that order, which is
+/// the one ordering decision here worth its own paragraph. The bar's
+/// promise is "this is what you are listening to", and local playback is
+/// what is coming out of this device. Handing a session away stops local
+/// playback - the server routes a stop to the source client - so the
+/// remote face is what fills the silence, which is the case the entry
+/// scheduling this named. Opening someone else's session to skip a track
+/// while an album plays here does not take the bar away from the album;
+/// the remote screen that opened is where that session is driven.
 class DeckBarHost extends ConsumerWidget {
   const DeckBarHost({super.key});
 
@@ -66,6 +80,9 @@ class DeckBarHost extends ConsumerWidget {
 
     final now = ref.watch(nowPlayingProvider);
     if (now.entry != null) return _PlayingDeckBar(now: now);
+
+    final remote = ref.watch(remoteSessionProvider);
+    if (remote != null) return _RemoteDeckBar(remote: remote);
 
     final offer = ref.watch(queueRestoreProvider).value;
     if (offer != null) return _OfferDeckBar(offer: offer);
@@ -137,6 +154,12 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
     // asks the server for a play state: the compact bar would otherwise
     // fetch one per track for a control it does not show.
     final wide = WaxSizeClass.of(context).hasSidebar;
+    // Same reasoning for the level: the compact bar draws no right
+    // cluster, so it does not follow the engine's gain either. Both
+    // conditions have to hold - the platform gives local output a slider,
+    // and this width has somewhere to put one.
+    final localVolume = wide && ref.watch(localVolumeAvailableProvider);
+    final volume = localVolume ? ref.watch(outputVolumeProvider) : null;
     final starred = wide && item != null
         ? ref.watch(playStateControllerProvider(item.pid)).value?.starred ??
               false
@@ -170,6 +193,7 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
             QueueRepeat.one => WaxRepeat.one,
           },
           speed: spokenWord ? session?.speed : null,
+          volume: volume,
         ),
         ids: _ids,
         positionTicker: _position,
@@ -217,12 +241,22 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
           onQueue: () => wide
               ? ref.read(sidePanelProvider.notifier).toggle(WaxPanel.queue)
               : context.push(WaxRoute.queue),
+          onVolume: localVolume
+              ? (level) => unawaited(
+                  ref.read(outputVolumeProvider.notifier).set(level),
+                )
+              : null,
+          onMute: localVolume
+              ? () => unawaited(
+                  ref.read(outputVolumeProvider.notifier).toggleMute(),
+                )
+              : null,
           onCast: item == null
               ? null
               : () => unawaited(
                   showDevicePicker(
                     context,
-                    ref,
+                    from: CastSource.here,
                     currentPid: item.pid,
                     positionMs: session?.displayPosition.inMilliseconds ?? 0,
                   ),
@@ -262,7 +296,14 @@ class _RadioDeckBar extends ConsumerWidget {
         now: NowPlayingData(
           title: station.name,
           subtitle: playback.nowPlaying,
-          artwork: waxArtwork(ref.watch(artworkStoreProvider), station.logoUrl),
+          // Through the proxy, like the hub's tiles: the station host's own
+          // URL is the direct fetch the logo endpoint exists to replace,
+          // and on web most of them would not draw at all.
+          artwork: waxStationLogo(
+            ref.watch(artworkStoreProvider),
+            ref.watch(repositoryProvider),
+            station,
+          ),
           domain: WaxDomain.radio,
           shape: ArtworkShape.circle,
           position: Duration.zero,
@@ -292,6 +333,99 @@ class _RadioDeckBar extends ConsumerWidget {
   }
 }
 
+/// The bar while playback is happening on another endpoint.
+///
+/// Everything on it is routed rather than local: the transport goes over
+/// the command bus, the position is extrapolated against the server clock,
+/// and the level - when the endpoint says it has one - is the endpoint's
+/// own. What makes it the *remote* face is `remoteEndpoint`, which the bar
+/// draws as a cast glyph on the artwork and an "on [name]" caption, so a
+/// glance says where the sound is rather than leaving a silent device
+/// looking broken.
+///
+/// No artwork: a session frame carries a title, an artist, and a duration
+/// per entry and no cover, so the bar draws a monogram from the title.
+/// Asking the catalog for one would be a request per crossing for a
+/// 48-pixel square, and the pid a frame carries is the item's, which the
+/// player screen is the surface for.
+class _RemoteDeckBar extends ConsumerWidget {
+  const _RemoteDeckBar({required this.remote});
+
+  final RemoteSession remote;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final controller = ref.read(remoteSessionProvider.notifier);
+    final entry = remote.currentEntry;
+    final session = remote.session;
+    // The endpoint's level, not this device's, and only where the endpoint
+    // says it can be told: the server refuses `set-volume` on one that
+    // reports none, so a slider without this check is a control whose
+    // every use is an error.
+    //
+    // Not width-gated the way the local one is, because this is not a
+    // decision this widget gets to make: the bar draws a right cluster
+    // only in its three-zone layout, so a level handed to a compact bar
+    // is simply not drawn. Below sidebar width the endpoint's slider is on
+    // the remote screen, one tap away through the bar - a 64 px bar
+    // holding 48 px of artwork, a title block, and a transport has no
+    // room for a track, and squeezing one in is how that bar stops being
+    // one line.
+    final volume = remote.volumeControl ? (session.volume ?? 1.0) : null;
+
+    return DeckBar(
+      ids: _ids,
+      now: NowPlayingData(
+        title: entry?.title ?? 'Playing',
+        subtitle: entry?.artist,
+        remoteEndpoint: remote.endpointName,
+        position: controller.position.value,
+        duration: remote.duration,
+        playing: session.playing,
+        volume: volume,
+      ),
+      positionTicker: controller.position,
+      actions: DeckBarActions(
+        onPlayPause: () => unawaited(_report(context, controller.toggle())),
+        onNext: () => unawaited(_report(context, controller.next())),
+        onPrevious: () => unawaited(_report(context, controller.previous())),
+        onSeek: (at) => unawaited(_report(context, controller.seek(at))),
+        onVolume: volume == null
+            ? null
+            : (level) =>
+                  unawaited(_report(context, controller.setVolume(level))),
+        // No mute: the level lives on the other endpoint and this client
+        // has nowhere to remember what it silenced, so the glyph stays a
+        // label rather than becoming a control that cannot undo itself.
+        // The slider reaches zero on its own.
+        onExpand: () => context.push(WaxRoute.remote),
+        // The cast control is how you get back: the picker is where
+        // leaving a remote session is spelled out as a choice.
+        onCast: () =>
+            unawaited(showDevicePicker(context, from: CastSource.elsewhere)),
+      ),
+    );
+  }
+
+  /// Says why a routed command did nothing.
+  ///
+  /// Every verb here crosses a network and a second device, so a refusal
+  /// is ordinary rather than exceptional - an endpoint that has gone
+  /// offline, a command that timed out, a device in the middle of
+  /// something. The bus keeps the server's own code and message, and that
+  /// message is what a listener reads.
+  Future<void> _report(BuildContext context, Future<void> work) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await work;
+    } on WaxDeckApiException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+}
+
 /// The bar as an offer: a queue this launch found, named so accepting it
 /// is a decision.
 class _OfferDeckBar extends ConsumerWidget {
@@ -305,7 +439,7 @@ class _OfferDeckBar extends ConsumerWidget {
     final restore = ref.read(queueRestoreProvider.notifier);
     return DeckBarOffer(
       // Offline, or for a queue the mirror never learned about, the
-      // count is all there is to say — and it is enough to decide on.
+      // count is all there is to say - and it is enough to decide on.
       title: item?.title ?? '${offer.length} queued items',
       subtitle: item?.artist ?? 'Pick up where you left off',
       artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),

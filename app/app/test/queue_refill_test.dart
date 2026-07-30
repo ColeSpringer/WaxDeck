@@ -21,8 +21,8 @@ List<String> _tracks(int count, {int from = 0}) => [
 ];
 
 /// A pager whose answers a test writes, and which records what it was
-/// asked. Standing in for the network, so the refill's own decisions —
-/// when to draw, when to stop, what a failure costs — are what is under
+/// asked. Standing in for the network, so the refill's own decisions -
+/// when to draw, when to stop, what a failure costs - are what is under
 /// test.
 class _FakePager implements QueueSourcePager {
   _FakePager(this.answers);

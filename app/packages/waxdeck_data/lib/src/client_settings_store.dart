@@ -1,6 +1,6 @@
 import 'database.dart';
 
-/// Where a preference that belongs to this device — not to the account —
+/// Where a preference that belongs to this device - not to the account -
 /// lives between launches.
 ///
 /// The scope is the whole point. Theme, locale, and the shared-stats
@@ -45,7 +45,7 @@ abstract final class ClientSettingKeys {
 
   /// When the most recently declined resume offer stopped, as an ISO
   /// instant. A watermark rather than an id: the history is newest
-  /// first, so declining an offer declines everything at or before it —
+  /// first, so declining an offer declines everything at or before it -
   /// storing one id instead would offer the next-oldest session at the
   /// following launch, and the one after that at the one after, which is
   /// the "comes back with no explanation" the offer is supposed to end.
@@ -116,7 +116,7 @@ class DriftClientSettingsStore implements ClientSettingsStore {
 /// Settings that live only as long as the process.
 ///
 /// Used by tests, and by the web store when the browser will not hold a
-/// value — a preference set in a private window is then good for the
+/// value - a preference set in a private window is then good for the
 /// session rather than being an error the caller has to handle.
 class MemoryClientSettingsStore implements ClientSettingsStore {
   final Map<String, String> _values = {};

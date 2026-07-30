@@ -46,12 +46,12 @@ class StoredQueue {
 
   /// Where the source's own listing stood when this window was cut, so a
   /// window that drains can ask for more instead of ending at the cap.
-  /// Opaque — the server shapes its cursors and this only carries them.
+  /// Opaque - the server shapes its cursors and this only carries them.
   ///
   /// Round-tripped here but not yet filled: nothing on the queue side
   /// pages a source, so [QueueState] has no cursor to hand over and the
   /// empty string is the honest answer. The plumbing is what stops the
-  /// column from being a trap for whoever builds the refill — a `save`
+  /// column from being a trap for whoever builds the refill - a `save`
   /// that omitted it would quietly reset the stored cursor on every
   /// write, and no test would have said so.
   final String sourceCursor;

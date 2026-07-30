@@ -33,8 +33,8 @@ export default defineConfig({
     channel: 'chromium',
     // The playback specs stream real audio for as long as their fixtures
     // last, and on a workstation that comes out of the speakers. Nothing
-    // in the suite asserts audible sound — playback is checked through
-    // positions and the server's own play accounting — so the browser is
+    // in the suite asserts audible sound - playback is checked through
+    // positions and the server's own play accounting - so the browser is
     // muted and the suite is safe to run anywhere.
     launchOptions: { args: ['--mute-audio'] },
   },

@@ -41,7 +41,7 @@ class WaxFocusRing extends StatelessWidget {
     // The CustomPaint is always here and only its painter comes and goes.
     // Returning the bare child while unfocused would change the shape of
     // the element tree the moment focus arrived, and a child whose parent
-    // changes type is rebuilt from scratch — which for a text field means
+    // changes type is rebuilt from scratch - which for a text field means
     // losing its state and its input connection on the way in.
     return CustomPaint(
       foregroundPainter: focused
@@ -106,7 +106,7 @@ class _FocusRingPainter extends CustomPainter {
 /// wrapped once.
 ///
 /// Three things have to happen together and are easy to ship two of. The
-/// control announces itself once, which means excluding its subtree —
+/// control announces itself once, which means excluding its subtree -
 /// and excluding a subtree drops the `focusable` flag the [Focus] inside
 /// would have contributed, which is what web turns into a `tabindex`, so
 /// the node has to declare it back or the control is unreachable from a
@@ -405,6 +405,247 @@ class WaxIconButton extends StatelessWidget {
   }
 }
 
+/// A horizontal level control: a glyph that mutes, and a track that sets.
+///
+/// The house's general-purpose slider, which the deck bar's volume is the
+/// first caller of. The seek bar next to it is deliberately not this
+/// widget: it draws a buffered band and an optional waveform, announces a
+/// spoken time rather than a level, and is the one control on the bar
+/// whose value moves several times a second on its own. What they share
+/// is drag handling, and that is a dozen lines.
+///
+/// A semantic slider, so a screen reader can set it: increase and
+/// decrease step by [step], and the announced value is a percentage,
+/// which is what a level is.
+///
+/// [onMute] is optional and is what the glyph does. Without it the glyph
+/// is decoration and says the level rather than offering to silence it -
+/// which is the honest arrangement where nothing can be un-muted, and is
+/// why the caller decides.
+class WaxSlider extends StatefulWidget {
+  const WaxSlider({
+    required this.value,
+    required this.onChanged,
+    required this.label,
+    this.glyph,
+    this.mutedGlyph,
+    this.onMute,
+    this.muted = false,
+    this.step = 0.05,
+    this.trackWidth = 96,
+    this.semanticsId,
+    this.muteSemanticsId,
+    super.key,
+  });
+
+  /// 0 to 1. Values outside are clamped rather than asserted: this draws
+  /// live state, and a platform reporting 1.0000001 is not a bug worth
+  /// crashing a bar over.
+  final double value;
+
+  /// Null disables the control: the track greys and the semantics say so.
+  final ValueChanged<double>? onChanged;
+
+  /// The accessible name of the level itself ("Volume").
+  final String label;
+
+  /// Drawn to the left of the track. Two glyphs rather than one, because
+  /// the muted state has to be visible without colour.
+  final WaxGlyph? glyph;
+  final WaxGlyph? mutedGlyph;
+
+  /// What the glyph does when it is a control rather than a label.
+  final VoidCallback? onMute;
+
+  /// Forces the muted glyph and label. A level of zero already counts as
+  /// muted - see [_muted] - so this is only for a caller whose output is
+  /// silent at a level above zero, and no caller has to remember it to get
+  /// a silent slider drawn as silent.
+  final bool muted;
+
+  /// How far one keyboard or screen-reader step moves the level.
+  final double step;
+
+  /// The track's own width. The bar's right cluster sizes to its
+  /// contents, so this is a real number rather than an Expanded: a
+  /// slider that took the space it could would push the transport off
+  /// centre as the window narrowed.
+  final double trackWidth;
+
+  final String? semanticsId;
+  final String? muteSemanticsId;
+
+  @override
+  State<WaxSlider> createState() => _WaxSliderState();
+}
+
+class _WaxSliderState extends State<WaxSlider> {
+  /// Where a drag in progress has the knob, so the track follows the
+  /// finger rather than the value the caller has got round to writing
+  /// back. Cleared when the gesture ends.
+  double? _dragValue;
+
+  double get _value => (_dragValue ?? widget.value).clamp(0.0, 1.0);
+
+  /// A level of zero *is* muted, whatever the caller said.
+  ///
+  /// Asked here rather than at each call site because forgetting it draws a
+  /// speaker over silence, which is the one thing the glyph exists to be
+  /// right about - and the remote screen forgot it. A caller that has a
+  /// separate mute with a level behind it still sets [WaxSlider.muted].
+  bool get _muted => widget.muted || _value == 0;
+
+  String _announce(double value) => '${(value.clamp(0.0, 1.0) * 100).round()}%';
+
+  double _stepped(double delta) => (_value + delta).clamp(0.0, 1.0);
+
+  void _nudge(double delta) => widget.onChanged?.call(_stepped(delta));
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final enabled = widget.onChanged != null;
+    final glyph = _muted ? widget.mutedGlyph : widget.glyph;
+
+    final track = Semantics(
+      identifier: widget.semanticsId,
+      slider: true,
+      enabled: enabled,
+      label: widget.label,
+      value: _announce(_value),
+      // A slider offering increase without saying where increasing lands
+      // is a half-built control, and an assertion failure besides.
+      increasedValue: _announce(_stepped(widget.step)),
+      decreasedValue: _announce(_stepped(-widget.step)),
+      onIncrease: enabled ? () => _nudge(widget.step) : null,
+      onDecrease: enabled ? () => _nudge(-widget.step) : null,
+      child: ExcludeSemantics(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            void update(Offset local) {
+              final width = constraints.maxWidth;
+              if (width <= 0) return;
+              setState(() => _dragValue = (local.dx / width).clamp(0.0, 1.0));
+            }
+
+            void commit() {
+              widget.onChanged!(_value);
+              setState(() => _dragValue = null);
+            }
+
+            // A press that loses the arena to a scroll never ends, and a
+            // level left mid-drag would pin the knob where the finger
+            // passed. Same reasoning as the seek bar's own abandon.
+            void abandon() => setState(() => _dragValue = null);
+
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: enabled ? (d) => update(d.localPosition) : null,
+              onTapUp: enabled ? (_) => commit() : null,
+              onTapCancel: enabled ? abandon : null,
+              onHorizontalDragUpdate: enabled
+                  ? (d) => update(d.localPosition)
+                  : null,
+              onHorizontalDragEnd: enabled ? (_) => commit() : null,
+              onHorizontalDragCancel: enabled ? abandon : null,
+              child: SizedBox(
+                width: double.infinity,
+                // The touch target, not the drawn track: a 4 px bar is
+                // unhittable, and the paint is centred inside this.
+                height: WaxSpace.touchTarget,
+                child: CustomPaint(
+                  painter: _LevelPainter(
+                    fraction: _value,
+                    track: colors.hairline,
+                    fill: enabled ? colors.accent : colors.textDisabled,
+                    knob: enabled ? colors.accent : colors.textDisabled,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        if (glyph != null)
+          if (widget.onMute != null)
+            WaxIconButton(
+              glyph: glyph,
+              label: _muted ? 'Unmute' : 'Mute',
+              size: 18,
+              active: _muted,
+              onPressed: widget.onMute,
+              semanticsId: widget.muteSemanticsId,
+            )
+          else
+            // Decoration, so it is excluded rather than announced: the
+            // track beside it already carries the label and the level,
+            // and a second node saying "volume" is one more stop for a
+            // screen reader with nothing behind it.
+            Padding(
+              padding: const EdgeInsets.only(right: WaxSpace.s4),
+              child: ExcludeSemantics(
+                child: WaxIcon(
+                  glyph,
+                  size: 18,
+                  color: enabled ? colors.textSecondary : colors.textDisabled,
+                ),
+              ),
+            ),
+        SizedBox(width: widget.trackWidth, child: track),
+      ],
+    );
+  }
+}
+
+class _LevelPainter extends CustomPainter {
+  _LevelPainter({
+    required this.fraction,
+    required this.track,
+    required this.fill,
+    required this.knob,
+  });
+
+  final double fraction;
+  final Color track;
+  final Color fill;
+  final Color knob;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const height = 4.0;
+    final top = (size.height - height) / 2;
+    const radius = Radius.circular(2);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, top, size.width, height),
+        radius,
+      ),
+      Paint()..color = track,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, top, size.width * fraction, height),
+        radius,
+      ),
+      Paint()..color = fill,
+    );
+    canvas.drawCircle(
+      Offset(size.width * fraction, size.height / 2),
+      5,
+      Paint()..color = knob,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_LevelPainter old) =>
+      old.fraction != fraction || old.fill != fill || old.track != track;
+}
+
 /// One row of a [WaxMenuButton].
 @immutable
 class WaxMenuItem<T> {
@@ -635,7 +876,11 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final enabled = widget.onSeek != null;
+    // Every position here is a fraction of the duration, so at zero a
+    // scrub or a keyboard step seeks to the start. Callers reach that
+    // without meaning to (an unresolved duration, a session frame carrying
+    // none), so the guard is here rather than in each of them.
+    final enabled = widget.onSeek != null && widget.duration > Duration.zero;
 
     return Semantics(
       identifier: widget.semanticsId,

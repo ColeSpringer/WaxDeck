@@ -294,7 +294,7 @@ void main() {
           '${scale}x text', (tester) async {
         // The card reserves one caption line for the trailing readout, so
         // a readout that wrapped overflowed the cell by exactly one line
-        // — which a book's "1 hr 20 min left" did on the audiobooks hub.
+        // which a book's "1 hr 20 min left" did on the audiobooks hub.
         await tester.pumpWidget(
           MediaQuery(
             data: MediaQueryData(textScaler: TextScaler.linear(scale)),

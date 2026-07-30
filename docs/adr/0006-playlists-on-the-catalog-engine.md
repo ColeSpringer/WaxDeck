@@ -81,7 +81,7 @@ fail the create, not the first read.
   contract documents the gap and it is the second recorded upstream
   candidate.
 
-## Update — 2026-07-23: the reissue seam is dissolved
+## Update - 2026-07-23: the reissue seam is dissolved
 
 Both recorded upstream candidates landed. The catalog engine grew an
 in-place rule setter (`playlist.SetRule`), relative-date operators

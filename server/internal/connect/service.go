@@ -378,8 +378,8 @@ func (s *Service) SessionHistory(ctx context.Context, userID string) ([]EndedSes
 		if e.Rate <= 0 {
 			e.Rate = 1
 		}
-		// The endpoint may be long gone — a client endpoint goes with
-		// its connection — so the name is absent rather than an error.
+		// The endpoint may be long gone - a client endpoint goes with
+		// its connection - so the name is absent rather than an error.
 		if ep, ok := s.reg.Lookup(userID, row.EndpointID); ok {
 			e.EndpointName = ep.Name
 		}
@@ -868,7 +868,7 @@ func (s *Service) End(ctx context.Context, userID, sessionID string) error {
 	s.endSessionLocked(ctx, sess, true)
 	s.mu.Unlock()
 	// The teardown persists too, but from a supervised goroutine, and
-	// the session leaves the live map synchronously — so between the
+	// the session leaves the live map synchronously - so between the
 	// two it is in neither list. A caller that ends a session and reads
 	// history back would race that window, and a process stopping
 	// inside it would leave the row active with a stale position.

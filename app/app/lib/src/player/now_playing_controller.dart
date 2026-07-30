@@ -351,8 +351,8 @@ class NowPlayingController extends Notifier<NowPlaying> {
   ///
   /// Does nothing while a session is live: that session's own toggle is
   /// the verb for playing and pausing. Nor while one is still starting,
-  /// which looks the same from the outside — the state carries an entry
-  /// and no session for the whole resolve-and-load window — but is
+  /// which looks the same from the outside - the state carries an entry
+  /// and no session for the whole resolve-and-load window - but is
   /// already on its way, and starting it again would supersede a load
   /// in flight, re-mint its stream token and its listen session, and
   /// drop the position it was asked to start at.

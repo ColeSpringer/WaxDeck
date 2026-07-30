@@ -12,7 +12,7 @@ make e2e         # rebuilds the UI and the binary if stale, then runs
 build when a Dart source is newer than the embedded bundle, and the server
 binary always, since it embeds that bundle at link time. It used to be on
 the caller to run `make web build` first, and forgetting meant the suite
-drove the *previous* build — which reads exactly like a missing feature
+drove the *previous* build - which reads exactly like a missing feature
 and fails on whichever spec touched it rather than saying the bundle is
 stale.
 

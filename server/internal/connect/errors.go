@@ -16,9 +16,9 @@ var (
 
 // InvalidError carries a request-shaped failure with its detail, and
 // optionally the wire code that failure already had a name for. A
-// refusal minted somewhere that knew what it was refusing — a client
+// refusal minted somewhere that knew what it was refusing - a client
 // endpoint answering `cmd-result`, a handler turning a queue away from
-// a device — sets Code so the controller can branch on it instead of
+// a device - sets Code so the controller can branch on it instead of
 // parsing prose. The zero value keeps the old behavior: the transport
 // decides, and both transports decide `invalid-request`.
 type InvalidError struct {

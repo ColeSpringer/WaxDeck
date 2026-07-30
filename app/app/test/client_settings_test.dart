@@ -15,7 +15,7 @@ import 'fakes.dart';
 /// A browser's storage, as far as this store is concerned. The knobs are
 /// the ways a real one fails: refusing writes when it is out of room,
 /// refusing everything in a partitioned context, and the one that a
-/// write-only probe would miss — taking a write and then answering null.
+/// write-only probe would miss - taking a write and then answering null.
 class FakeBrowserStorage implements BrowserStorage {
   FakeBrowserStorage({
     this.throwOnWrite = false,
@@ -188,8 +188,8 @@ void main() {
       storage.throwOnWrite = true;
       await store.remove('k');
       expect(await store.read('k'), isNull);
-      // Still in the browser, which is honest — it comes back next
-      // launch — and not what this session is told.
+      // Still in the browser, which is honest - it comes back next
+      // launch - and not what this session is told.
       expect(storage.values['k'], 'v');
     });
 
@@ -328,7 +328,7 @@ void main() {
         'startup', () async {
       // Both shipped stores promise never to throw. These are unawaited
       // futures on a launch path, though, so one that did would be an
-      // unhandled zone error rather than a caught failure — and the
+      // unhandled zone error rather than a caught failure - and the
       // whole cost of losing here is a preference read at its default.
       final container = containerOver(ThrowingClientSettingsStore());
 
@@ -348,7 +348,7 @@ void main() {
       // dependency changes, and whatever build returns replaces the
       // state. A hydrate that always answered defaultValue would discard
       // the listener's preference and, because the value had already
-      // been touched, never read it back either — the setting would sit
+      // been touched, never read it back either - the setting would sit
       // at its default for the rest of the session.
       final store = MemoryClientSettingsStore();
       final container = containerOver(store);
@@ -377,7 +377,7 @@ void main() {
 
     test('a search remembered before the stored list arrives does not '
         'erase it', () async {
-      // The base rule — what this session set wins — is right for a
+      // The base rule - what this session set wins - is right for a
       // preference naming one thing and a permanent data loss for one
       // that accumulates: the write that follows would persist a
       // one-entry history over everything that was there. Recent

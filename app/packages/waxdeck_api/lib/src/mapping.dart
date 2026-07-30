@@ -115,22 +115,34 @@ gen.PrefsThemeEnum themePrefToGen(ThemePref theme) =>
 
 Prefs prefsFromGen(gen.Prefs prefs) {
   final theme = prefs.theme;
+  final favorites = prefs.radioFavorites;
   return Prefs(
     timezone: prefs.timezone,
     locale: prefs.locale,
     theme: theme == null ? null : themePrefFromGen(theme),
     sharedStatsOptOut: prefs.sharedStatsOptOut,
+    radioFavorites: favorites == null
+        ? null
+        : favorites.toList(growable: false),
   );
 }
 
 gen.Prefs prefsToGen(Prefs prefs) {
   final theme = prefs.theme;
+  final favorites = prefs.radioFavorites;
   return gen.Prefs(
     (b) => b
       ..timezone = prefs.timezone
       ..locale = prefs.locale
       ..theme = theme == null ? null : themePrefToGen(theme)
-      ..sharedStatsOptOut = prefs.sharedStatsOptOut,
+      ..sharedStatsOptOut = prefs.sharedStatsOptOut
+      // Faithful either way: an absent list is sent absent and an empty one
+      // is sent as `[]`. PUT replaces the whole document, so both clear the
+      // field - which is what makes the last unpin stick, and why nothing
+      // here has to invent one shape for the other.
+      ..radioFavorites = favorites == null
+          ? null
+          : ListBuilder<String>(favorites),
   );
 }
 
@@ -939,6 +951,17 @@ PlayerEndpoint playerEndpointFromGen(gen.PlayerEndpoint ep) {
     volumeControl: ep.volumeControl,
     rateControl: ep.rateControl,
     activeSessionId: ep.activeSessionId,
+  );
+}
+
+// The generated names carry trailing underscores: `base` and `source`
+// collide with built_value's own members, so the generator escapes them.
+CastPreflightBase castPreflightBaseFromGen(gen.CastPreflightBase b) {
+  return CastPreflightBase(
+    base: b.base_,
+    source: b.source_,
+    reachable: b.reachable,
+    notes: b.notes.toList(growable: false),
   );
 }
 

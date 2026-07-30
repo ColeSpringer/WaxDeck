@@ -87,7 +87,7 @@ func (l *Library) UserCtx(ctx context.Context, u *wdb.User) (*UserCtx, error) {
 	return uc, nil
 }
 
-// libraryDirs is the path→library attribution table: every library
+// libraryDirs is the path-to-library attribution table: every library
 // root, longest path first so nested roots (the podcast dir under a
 // media mount) attribute to the deepest match.
 type libraryDirs struct {

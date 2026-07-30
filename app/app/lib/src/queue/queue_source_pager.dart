@@ -9,7 +9,7 @@ import 'queue_state.dart';
 ///
 /// Deliberately far below [kQueueCap]: the draw lands on a queue that is
 /// nearly full, so every entry it adds evicts an older one, and drawing a
-/// whole cap's worth would leave the queue with no history at all — the
+/// whole cap's worth would leave the queue with no history at all - the
 /// "Previously" strip empty a moment after a track ends. A hundred is
 /// several hours ahead and leaves most of the queue to what was played.
 const int kQueueDrawSize = 100;
@@ -20,7 +20,7 @@ const int kQueueDrawSize = 100;
 /// A cursor is the ordinary way back into a source; this is the fallback
 /// for a window cut short of its caller's frontier, and for one restored
 /// from a build that stored no cursor. Each page is a cap's worth, so
-/// this reaches twenty thousand items in — past that, sealing the window
+/// this reaches twenty thousand items in - past that, sealing the window
 /// is a better answer than a minute of paging.
 const int _maxPlacementPages = 40;
 
@@ -52,8 +52,8 @@ class QueueDraw {
 ///
 /// The queue is a window: it holds at most [kQueueCap] entries of
 /// something that may be far larger, and this is what turns the source
-/// it came from back into more pids. Sources that cannot be paged — a
-/// mix, a search, one item tapped on its own — answer null, and the
+/// it came from back into more pids. Sources that cannot be paged - a
+/// mix, a search, one item tapped on its own - answer null, and the
 /// window is sealed rather than pretending there is more.
 abstract class QueueSourcePager {
   /// The next draw against [source], or null when nothing here can page

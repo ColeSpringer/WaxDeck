@@ -30,7 +30,7 @@ export const test = base.extend({
     // Belt to the perf specs' braces rather than the thing that saves
     // them: they build their own contexts off `browser` and never
     // request this fixture, so nothing here runs for them today. This
-    // catches the perf spec that does take a `page` — matched on the
+    // catches the perf spec that does take a `page` - matched on the
     // basename by prefix, so a new one inherits it, and split on either
     // separator because `testInfo.file` is an absolute platform path.
     if (!isPerfSpec(testInfo.file)) {

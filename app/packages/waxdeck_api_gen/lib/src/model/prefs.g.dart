@@ -83,12 +83,19 @@ class _$Prefs extends Prefs {
   final PrefsThemeEnum? theme;
   @override
   final bool? sharedStatsOptOut;
+  @override
+  final BuiltList<String>? radioFavorites;
 
   factory _$Prefs([void Function(PrefsBuilder)? updates]) =>
       (PrefsBuilder()..update(updates))._build();
 
-  _$Prefs._({this.timezone, this.locale, this.theme, this.sharedStatsOptOut})
-    : super._();
+  _$Prefs._({
+    this.timezone,
+    this.locale,
+    this.theme,
+    this.sharedStatsOptOut,
+    this.radioFavorites,
+  }) : super._();
   @override
   Prefs rebuild(void Function(PrefsBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -103,7 +110,8 @@ class _$Prefs extends Prefs {
         timezone == other.timezone &&
         locale == other.locale &&
         theme == other.theme &&
-        sharedStatsOptOut == other.sharedStatsOptOut;
+        sharedStatsOptOut == other.sharedStatsOptOut &&
+        radioFavorites == other.radioFavorites;
   }
 
   @override
@@ -113,6 +121,7 @@ class _$Prefs extends Prefs {
     _$hash = $jc(_$hash, locale.hashCode);
     _$hash = $jc(_$hash, theme.hashCode);
     _$hash = $jc(_$hash, sharedStatsOptOut.hashCode);
+    _$hash = $jc(_$hash, radioFavorites.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -123,7 +132,8 @@ class _$Prefs extends Prefs {
           ..add('timezone', timezone)
           ..add('locale', locale)
           ..add('theme', theme)
-          ..add('sharedStatsOptOut', sharedStatsOptOut))
+          ..add('sharedStatsOptOut', sharedStatsOptOut)
+          ..add('radioFavorites', radioFavorites))
         .toString();
   }
 }
@@ -148,6 +158,12 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
   set sharedStatsOptOut(bool? sharedStatsOptOut) =>
       _$this._sharedStatsOptOut = sharedStatsOptOut;
 
+  ListBuilder<String>? _radioFavorites;
+  ListBuilder<String> get radioFavorites =>
+      _$this._radioFavorites ??= ListBuilder<String>();
+  set radioFavorites(ListBuilder<String>? radioFavorites) =>
+      _$this._radioFavorites = radioFavorites;
+
   PrefsBuilder() {
     Prefs._defaults(this);
   }
@@ -159,6 +175,7 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       _locale = $v.locale;
       _theme = $v.theme;
       _sharedStatsOptOut = $v.sharedStatsOptOut;
+      _radioFavorites = $v.radioFavorites?.toBuilder();
       _$v = null;
     }
     return this;
@@ -178,14 +195,27 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
   Prefs build() => _build();
 
   _$Prefs _build() {
-    final _$result =
-        _$v ??
-        _$Prefs._(
-          timezone: timezone,
-          locale: locale,
-          theme: theme,
-          sharedStatsOptOut: sharedStatsOptOut,
-        );
+    _$Prefs _$result;
+    try {
+      _$result =
+          _$v ??
+          _$Prefs._(
+            timezone: timezone,
+            locale: locale,
+            theme: theme,
+            sharedStatsOptOut: sharedStatsOptOut,
+            radioFavorites: _radioFavorites?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'radioFavorites';
+        _radioFavorites?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(r'Prefs', _$failedField, e.toString());
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

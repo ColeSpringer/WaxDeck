@@ -287,7 +287,7 @@ test('an exported archive imports back through the backups screen', async ({
   const token = await ensureAdmin(request);
 
   // A genuine archive to round-trip: create (or reuse) one and
-  // download its bytes — the import endpoint validates real WaxDeck
+  // download its bytes - the import endpoint validates real WaxDeck
   // backups, so a synthetic zip would be refused.
   const started = await request.post('/api/v1/admin/backups', authed(token));
   expect([202, 409]).toContain(started.status());

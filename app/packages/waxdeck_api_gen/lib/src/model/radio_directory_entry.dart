@@ -14,7 +14,7 @@ part 'radio_directory_entry.g.dart';
 /// * [name] - Station name as listed in the directory.
 /// * [streamUrl] - Resolved stream URL.
 /// * [homepageUrl] - Station website.
-/// * [logoUrl] - Station logo URL.
+/// * [logoUrl] - Station logo URL as the directory lists it, carried so adding the station keeps it. There is no proxy for a directory match: the proxy addresses a station by pid and a match has none until it is added, so a search result draws a monogram disc and the logo appears once the station is in the library. 
 /// * [tags] - Comma-separated directory tags.
 /// * [country] - Directory country name.
 /// * [codec] - Directory-reported stream codec.
@@ -33,7 +33,7 @@ abstract class RadioDirectoryEntry implements Built<RadioDirectoryEntry, RadioDi
   @BuiltValueField(wireName: r'homepageUrl')
   String? get homepageUrl;
 
-  /// Station logo URL.
+  /// Station logo URL as the directory lists it, carried so adding the station keeps it. There is no proxy for a directory match: the proxy addresses a station by pid and a match has none until it is added, so a search result draws a monogram disc and the logo appears once the station is in the library. 
   @BuiltValueField(wireName: r'logoUrl')
   String? get logoUrl;
 

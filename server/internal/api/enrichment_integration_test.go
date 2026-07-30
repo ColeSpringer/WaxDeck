@@ -55,6 +55,6 @@ func TestEnrichBookFallsThroughMalformedProvider(t *testing.T) {
 	// The bad provider ran first and offered only the malformed ISBN; the good
 	// provider's publisher lands only if the pass fell through instead of ending.
 	if got := h.itemMeta(t, book).Fields["publisher"]; got != "Beta House" {
-		t.Fatalf("publisher = %q, want Beta House — enrich did not fall through the malformed provider", got)
+		t.Fatalf("publisher = %q, want Beta House - enrich did not fall through the malformed provider", got)
 	}
 }

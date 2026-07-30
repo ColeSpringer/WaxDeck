@@ -4,7 +4,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 ///
 /// Declared here rather than taken as `web.Storage` so the store is a
 /// plain Dart object: the probe, the degradation, and the key semantics
-/// are then exercised on the VM with a fake — a throwing one included —
+/// are then exercised on the VM with a fake - a throwing one included -
 /// and the only thing left unexercised is the handful of lines that hand
 /// over the real `localStorage`.
 abstract interface class BrowserStorage {
@@ -24,11 +24,11 @@ abstract interface class BrowserStorage {
 /// the shell that reads it at startup. Same house rule the credential
 /// store follows for the same reason.
 ///
-/// Whatever this session changed is answered from memory first —
+/// Whatever this session changed is answered from memory first -
 /// a removal as much as a write. That is what makes a change storage
 /// refused still hold: it is in the shadow whether or not the browser
 /// took it. It also means a second tab's writes are not picked up
-/// mid-session, which is deliberate — these are per-device preferences
+/// mid-session, which is deliberate - these are per-device preferences
 /// read at startup, not a cross-tab channel, and the native store does
 /// not offer one either.
 class BrowserClientSettingsStore implements ClientSettingsStore {
@@ -43,7 +43,7 @@ class BrowserClientSettingsStore implements ClientSettingsStore {
   final BrowserStorage? _storage;
 
   /// Every key this session touched, whether or not [_storage] took the
-  /// change — a removal included, which is why the values are nullable
+  /// change - a removal included, which is why the values are nullable
   /// and why membership rather than a non-null value is what makes the
   /// shadow authoritative. A `remove` the browser refuses would
   /// otherwise read back out of storage as the value that was just

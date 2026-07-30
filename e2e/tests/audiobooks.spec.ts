@@ -14,8 +14,8 @@ import { SemanticsIds, sem } from './semantics-ids';
 // right chapter, and the web client resumes there.
 //
 // Serial, not parallel. Both tests write the fixture book's own play
-// position — one to hand a place over between devices, one to mark it
-// finished — and the suite runs four workers against one server and one
+// position - one to hand a place over between devices, one to mark it
+// finished - and the suite runs four workers against one server and one
 // account, so the two would otherwise race over the same row.
 
 

@@ -158,7 +158,7 @@ components:
           type: string
           description: >
             The artist entity behind `artist`, so a client can group and
-            link by identity rather than by display text — two artists
+            link by identity rather than by display text - two artists
             with the same name are two entities, and one artist spelled
             two ways is still one. Absent when the item has no artist
             entity. For an audiobook this is its author.

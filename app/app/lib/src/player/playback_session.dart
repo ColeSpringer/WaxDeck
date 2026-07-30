@@ -95,8 +95,8 @@ class PlaybackSession {
   /// The loaded media's own duration: one part's for a multi-part book,
   /// the whole item's otherwise.
   ///
-  /// Filled by both load paths, so the part arithmetic below — where a
-  /// seek leaves the loaded part, and where the next part starts — never
+  /// Filled by both load paths, so the part arithmetic below - where a
+  /// seek leaves the loaded part, and where the next part starts - never
   /// has to know whether the server or the download store resolved it.
   /// Reading play-info for it was what made every one of those sums zero
   /// on the offline path.
@@ -255,8 +255,8 @@ class PlaybackSession {
       }
       // A downloaded book whose parts can be placed on its own timeline
       // resolves the part the resume position falls in, exactly as
-      // play-info would have. Anything else — a track, a single-file
-      // book, a book whose stored parts carry no durations — is the one
+      // play-info would have. Anything else - a track, a single-file
+      // book, a book whose stored parts carry no durations - is the one
       // file this always loaded.
       if (_isBook && local.sequenced) {
         _localParts = local;
@@ -425,9 +425,9 @@ class PlaybackSession {
   /// starts.
   ///
   /// The state it sets is the state play-info sets, which is what makes
-  /// everything above it — the display timeline, checkpoints in book
+  /// everything above it - the display timeline, checkpoints in book
   /// milliseconds, a seek that leaves the part, the roll into the next
-  /// one — behave offline exactly as it does online. No skip map is
+  /// one - behave offline exactly as it does online. No skip map is
   /// fetched: trimming needs a server, and this branch is the one that
   /// has none.
   Future<void> _loadLocalPartFor(

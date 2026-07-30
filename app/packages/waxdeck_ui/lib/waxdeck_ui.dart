@@ -28,6 +28,7 @@ export 'src/components/player_scaffold.dart';
 export 'src/components/scaffold.dart';
 export 'src/components/semantics_slots.dart';
 export 'src/components/states.dart';
+export 'src/components/station_dial.dart';
 export 'src/components/view_data.dart';
 export 'src/components/wordmark.dart';
 export 'src/color/palette.dart';

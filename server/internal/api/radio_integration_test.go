@@ -192,6 +192,338 @@ func TestRadioPlayInfoAndProxy(t *testing.T) {
 	if cc := streamResp.Header.Get("Cache-Control"); cc != "no-store" {
 		t.Fatalf("Cache-Control = %q, want no-store", cc)
 	}
+	if got := streamResp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+}
+
+// A station that answers markup does not get to have it relayed as
+// markup: the proxy serves an attacker-nameable host's bytes from
+// WaxDeck's own origin, which is the same exposure the logo endpoint has
+// and the same answer.
+func TestRadioProxyRefusesExecutableContentTypes(t *testing.T) {
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.AllowPrivateRadioHosts = true
+	})
+
+	station := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, `<html><script>alert(document.cookie)</script></html>`)
+	}))
+	t.Cleanup(station.Close)
+
+	resp := h.postJSON(t, "/api/v1/radio/stations", map[string]any{
+		"name": "Markup FM", "streamUrl": station.URL + "/stream",
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	st := decode[RadioStation](t, resp)
+
+	pi := decode[RadioPlayInfo](t, get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/play-info", h.token))
+	streamResp, err := http.Get(h.ts.URL + pi.Url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(streamResp.Body)
+	streamResp.Body.Close()
+	// Relayed as audio, which is what a listener asked for: a station
+	// answering markup has already failed to be a stream, and passing the
+	// type on would make it a script in this origin instead.
+	if got := streamResp.Header.Get("Content-Type"); got != "audio/mpeg" {
+		t.Fatalf("Content-Type = %q, want audio/mpeg for a text/html station", got)
+	}
+	if got := streamResp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+}
+
+func TestRadioStreamContentType(t *testing.T) {
+	for _, tc := range []struct{ declared, want string }{
+		{"audio/mpeg", "audio/mpeg"},
+		{"audio/aacp", "audio/aacp"},
+		{"application/ogg", "application/ogg"},
+		// A parameter rides along untouched; only the essence decides.
+		{"audio/mpeg; charset=utf-8", "audio/mpeg; charset=utf-8"},
+		// The executable families, and the empty default.
+		{"", "audio/mpeg"},
+		{"text/html", "audio/mpeg"},
+		{"TEXT/HTML; charset=utf-8", "audio/mpeg"},
+		{"image/svg+xml", "audio/mpeg"},
+		{"application/xhtml+xml", "audio/mpeg"},
+		{"text/xml", "audio/mpeg"},
+	} {
+		if got := radioStreamContentType(tc.declared); got != tc.want {
+			t.Errorf("radioStreamContentType(%q) = %q, want %q", tc.declared, got, tc.want)
+		}
+	}
+}
+
+// A one-pixel PNG, so the sniff sees real image bytes rather than a
+// string that happens to be long enough.
+var pngPixel = []byte{
+	0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a,
+	0x00, 0x00, 0x00, 0x0d, 'I', 'H', 'D', 'R',
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+	0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+	0x89, 0x00, 0x00, 0x00, 0x0a, 'I', 'D', 'A', 'T',
+	0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05,
+	0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00,
+	0x00, 0x00, 'I', 'E', 'N', 'D', 0xae, 0x42, 0x60, 0x82,
+}
+
+func TestRadioStationLogoProxy(t *testing.T) {
+	var fetches, misses int
+	logoHost := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/logo.png":
+			fetches++
+			// Labelled the way a good many hosts label favicons: the
+			// bytes decide the served type, not this.
+			w.Header().Set("Content-Type", "image/x-icon")
+			w.Write(pngPixel)
+		case "/nameless":
+			// No Content-Type at all, which is ordinary for a favicon on a
+			// static host. Saying nothing is not a claim of anything, so the
+			// bytes get to decide as they do everywhere else here.
+			fetches++
+			w.Write(pngPixel)
+		case "/notanimage":
+			misses++
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, "<html>gone</html>")
+		case "/huge":
+			w.Header().Set("Content-Type", "image/png")
+			w.Write(bytes.Repeat([]byte{0x89}, (512<<10)+1))
+		case "/logo.svg":
+			// The XSS attempt: a station's logo URL is attacker-supplied
+			// and this endpoint serves from WaxDeck's own origin, so an
+			// SVG proxied here would run its script under the caller's
+			// session. Labelled honestly, because the point is that an
+			// honest label is not enough to get it served.
+			w.Header().Set("Content-Type", "image/svg+xml")
+			fmt.Fprint(w, `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`)
+		case "/logo.html":
+			// The same attempt wearing an image's label: the served type
+			// is decided by the bytes, so claiming image/png buys nothing.
+			w.Header().Set("Content-Type", "image/png")
+			fmt.Fprint(w, `<html><script>alert(1)</script></html>`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(logoHost.Close)
+
+	// The logo fetch rides the stream proxy's guarded client, so a
+	// loopback fake needs the LAN escape hatch.
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.AllowPrivateRadioHosts = true
+	})
+
+	create := func(name, logo string) RadioStation {
+		t.Helper()
+		body := map[string]any{"name": name, "streamUrl": "http://198.51.100.7/" + name}
+		if logo != "" {
+			body["logoUrl"] = logo
+		}
+		resp := h.postJSON(t, "/api/v1/radio/stations", body)
+		if resp.StatusCode != 201 {
+			raw, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			t.Fatalf("create %s status = %d (%s)", name, resp.StatusCode, raw)
+		}
+		return decode[RadioStation](t, resp)
+	}
+
+	withLogo := create("logo-fm", logoHost.URL+"/logo.png")
+
+	// The bytes come back as what they are rather than as what the host
+	// called them, with a validator and the day of freshness.
+	resp := get(t, h.ts, "/api/v1/radio/stations/"+withLogo.Pid+"/logo", h.token)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("logo status = %d (%s)", resp.StatusCode, body)
+	}
+	if !bytes.Equal(body, pngPixel) {
+		t.Fatalf("logo served %d bytes, want the %d byte fixture", len(body), len(pngPixel))
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "image/png" {
+		t.Fatalf("Content-Type = %q, want image/png (sniffed, not the host's image/x-icon)", ct)
+	}
+	etag := resp.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("logo carried no ETag")
+	}
+	if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "private") || !strings.Contains(cc, "max-age=86400") {
+		t.Fatalf("Cache-Control = %q", cc)
+	}
+	// Nothing varies by credential: the station library is shared.
+	if v := resp.Header.Get("Vary"); v != "" {
+		t.Fatalf("Vary = %q, want none", v)
+	}
+	// The hardening pair. These bytes came from a host any account can
+	// name and they are served from this origin, so a browser must not be
+	// free to re-decide the body, and a document opened straight from this
+	// URL must not be able to run anything.
+	if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'none'") ||
+		!strings.Contains(csp, "sandbox") {
+		t.Fatalf("Content-Security-Policy = %q", csp)
+	}
+
+	// A `size` is still accepted and still changes nothing, which is what
+	// the contract says. Today's client no longer sends one - one identical
+	// body behind a URL per rung is a fetch per rung for nothing - but a
+	// hand-typed URL and an older build both still land here.
+	resp = get(t, h.ts, "/api/v1/radio/stations/"+withLogo.Pid+"/logo?size=256", h.token)
+	sized, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !bytes.Equal(sized, pngPixel) {
+		t.Fatalf("sized logo status = %d, %d bytes", resp.StatusCode, len(sized))
+	}
+
+	// Both of those were served from one upstream fetch: the cache is
+	// what keeps a household browsing the dial off the station's host.
+	if fetches != 1 {
+		t.Fatalf("upstream fetches = %d, want 1 (the second read is cached)", fetches)
+	}
+
+	// A host that named no type is served on the strength of its bytes.
+	// The declared type is a filter against downloading a page to learn it
+	// is a page; it was never the authority on what a body is, and a
+	// silent host has claimed nothing to disagree with.
+	nameless := create("nameless-fm", logoHost.URL+"/nameless")
+	resp = get(t, h.ts, "/api/v1/radio/stations/"+nameless.Pid+"/logo", h.token)
+	namelessBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !bytes.Equal(namelessBody, pngPixel) {
+		t.Fatalf("Content-Type-less logo status = %d, %d bytes", resp.StatusCode, len(namelessBody))
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "image/png" {
+		t.Fatalf("Content-Type = %q, want the sniffed image/png", ct)
+	}
+
+	// A matching validator answers 304 with the same freshness, so a
+	// revalidation refreshes the cached copy instead of leaving it stale.
+	req, _ := http.NewRequest("GET", h.ts.URL+"/api/v1/radio/stations/"+withLogo.Pid+"/logo", nil)
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	req.Header.Set("If-None-Match", etag)
+	fresh, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh.Body.Close()
+	if fresh.StatusCode != 304 {
+		t.Fatalf("If-None-Match status = %d, want 304", fresh.StatusCode)
+	}
+	if fresh.Header.Get("ETag") != etag || fresh.Header.Get("Cache-Control") == "" {
+		t.Fatalf("304 headers = %v", fresh.Header)
+	}
+
+	// Every way there is nothing to draw is the same 404, because a
+	// client draws a monogram for all of them - and two of these are the
+	// stored-XSS attempt rather than a broken station: anything that could
+	// execute in this origin is refused rather than sanitized, because a
+	// decorative favicon is not worth an SVG sanitizer's bypasses.
+	for _, station := range []struct {
+		name string
+		logo string
+	}{
+		{"nologo-fm", ""},
+		{"html-fm", logoHost.URL + "/notanimage"},
+		{"huge-fm", logoHost.URL + "/huge"},
+		{"missing-fm", logoHost.URL + "/gone.png"},
+		{"svg-fm", logoHost.URL + "/logo.svg"},
+		{"markup-as-png-fm", logoHost.URL + "/logo.html"},
+	} {
+		st := create(station.name, station.logo)
+		resp := get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/logo", h.token)
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 404 {
+			t.Fatalf("%s logo status = %d, want 404 (%s)", station.name, resp.StatusCode, raw)
+		}
+	}
+
+	// A failure is remembered too, and that is the point of the shorter
+	// miss TTL rather than an oversight: a grid of thirty stations behind
+	// one dead host would otherwise cost thirty upstream fetches per paint,
+	// per device, forever.
+	htmlStation := create("cached-miss-fm", logoHost.URL+"/notanimage")
+	// From zero: the cache is keyed by pid rather than by URL, so the
+	// station created for the 404 sweep above fetched this same path once
+	// already, and correctly so - two stations naming one dead host are two
+	// stations.
+	misses = 0
+	for range 3 {
+		resp := get(t, h.ts, "/api/v1/radio/stations/"+htmlStation.Pid+"/logo", h.token)
+		resp.Body.Close()
+		if resp.StatusCode != 404 {
+			t.Fatalf("repeat miss status = %d, want 404", resp.StatusCode)
+		}
+	}
+	if misses != 1 {
+		t.Fatalf("upstream fetches for a failing host = %d, want 1", misses)
+	}
+
+	// A station nobody is signed in to see nothing of: the read needs a
+	// session like every other.
+	anon := get(t, h.ts, "/api/v1/radio/stations/"+withLogo.Pid+"/logo", "")
+	anon.Body.Close()
+	if anon.StatusCode != 401 {
+		t.Fatalf("tokenless logo status = %d, want 401", anon.StatusCode)
+	}
+
+	// Changing the URL drops the cached copy, so the new logo is drawn
+	// rather than a day-old copy of the old one.
+	resp = h.putJSON(t, "/api/v1/radio/stations/"+withLogo.Pid, map[string]any{
+		"name": "logo-fm", "streamUrl": "http://198.51.100.7/logo-fm",
+		"logoUrl": logoHost.URL + "/gone.png",
+	})
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("update status = %d", resp.StatusCode)
+	}
+	resp = get(t, h.ts, "/api/v1/radio/stations/"+withLogo.Pid+"/logo", h.token)
+	resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("logo after re-pointing = %d, want 404 from the new URL", resp.StatusCode)
+	}
+}
+
+// A logo URL aimed at a private address is refused for the reason a
+// stream URL is: the row is attacker-supplied, and the proxy would
+// otherwise read internal services on the caller's behalf.
+func TestRadioStationLogoRefusesPrivateHosts(t *testing.T) {
+	logoHost := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngPixel)
+	}))
+	t.Cleanup(logoHost.Close)
+
+	// No escape hatch this time, so the dial-time guard is live. The
+	// station's own stream URL is a public address the write-time check
+	// accepts; the logo is the loopback one.
+	h := newHarness(t)
+	resp := h.postJSON(t, "/api/v1/radio/stations", map[string]any{
+		"name": "sneaky-fm", "streamUrl": "http://198.51.100.7/stream",
+		"logoUrl": logoHost.URL + "/logo.png",
+	})
+	if resp.StatusCode != 201 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("create status = %d (%s)", resp.StatusCode, body)
+	}
+	st := decode[RadioStation](t, resp)
+
+	resp = get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/logo", h.token)
+	resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("private-host logo status = %d, want 404", resp.StatusCode)
+	}
 }
 
 func TestRadioDirectorySearch(t *testing.T) {

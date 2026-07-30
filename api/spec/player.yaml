@@ -64,8 +64,8 @@ paths:
         `endpoint-offline` means the target endpoint is not connected
         right now, and `timeout` means it is connected but did not
         answer in time. A queue the target cannot play answers
-        `feature-unavailable` naming the pid — a multi-part audiobook
-        or a windowed track sent to a device endpoint, say — which a
+        `feature-unavailable` naming the pid - a multi-part audiobook
+        or a windowed track sent to a device endpoint, say - which a
         controller can turn into an offer to play it somewhere that
         can, rather than a bare failure. When the target is a client
         endpoint, that client's own refusal code and message are what
@@ -102,7 +102,7 @@ paths:
       operationId: listPlaybackSessionHistory
       summary: List the caller's ended playback sessions
       description: >
-        What was playing, where, and how far in — for the sessions
+        What was playing, where, and how far in - for the sessions
         that have stopped. This is the queue-restore surface: an
         entry carries the whole queue with its index and position, so
         "pick up where I left off" needs no second call. Distinct from
@@ -122,8 +122,8 @@ paths:
 
         A session ended through `DELETE /player/sessions/{sessionId}`
         appears here as soon as that call answers. One that ends any
-        other way — a playing client disconnecting, a device leaving
-        the network, a server restart — appears shortly after, and its
+        other way - a playing client disconnecting, a device leaving
+        the network, a server restart - appears shortly after, and its
         position is the last one checkpointed rather than the last one
         played. Checkpoints run every few seconds while a session is
         playing, so the gap is small, but it is a gap.
@@ -348,7 +348,7 @@ components:
         The command could not be completed on the target player
         endpoint. Read `code` rather than the status: this answer
         carries three, and they call for different things.
-        `endpoint-offline` means the endpoint is not connected — refresh
+        `endpoint-offline` means the endpoint is not connected - refresh
         the endpoint list; the device may have left the network or the
         client may have disconnected. `timeout` means it is connected
         but did not answer within the routing deadline, so retrying
@@ -572,7 +572,7 @@ components:
       description: >
         One ended playback session, as the state it stopped in. It has
         no live half: nothing extrapolates, `positionMs` is final, and
-        the session cannot be controlled or resumed in place — restore
+        the session cannot be controlled or resumed in place - restore
         means starting a new session from this queue, index, and
         position. Deliberately not a `PlaybackSession` with a flag: a
         row here is history, while that schema's `ended` marks a live

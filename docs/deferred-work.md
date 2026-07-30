@@ -34,7 +34,7 @@ here waits on upstream.
   real device to verify against. Blocked on hardware access.
 - `[in-repo]` **The queue surface has no multi-select.** Rows reorder by
   drag (or by the move actions a screen reader gets), remove by swipe or
-  by their own button, and jump on tap — one at a time. Long-pressing to
+  by their own button, and jump on tap - one at a time. Long-pressing to
   select several and moving or dropping the set together is the half
   that is not built, and neither is dragging a row out of a listing and
   into the panel. Both are additions to `queueSlivers`, which is the one
@@ -46,15 +46,15 @@ here waits on upstream.
   back (`NowPlayingController.undoReplace`), but the "Playing from
   [source]" toast the plan asks for on every replacing tap exists only
   on the "EARLIER" rows of the queue surface, which is where a mis-tap
-  is most destructive. Every other play verb — a track row, an album's
-  Play, a Shuffle — replaces silently. The mechanism is built and
+  is most destructive. Every other play verb - a track row, an album's
+  Play, a Shuffle - replaces silently. The mechanism is built and
   tested; what is missing is one toast, raised from wherever the play
   verbs converge rather than added per call site.
 - `[in-repo]` **An artist screen has no "Appears on" and no biography.**
   The screen shows the artist's own releases and tracks. Albums they are
   credited on without being the album artist would need a credits-shaped
   query the catalog does not expose as a facet, and the biography needs
-  an enrichment field nothing writes yet — the same provider gap that
+  an enrichment field nothing writes yet - the same provider gap that
   keeps artist artwork from existing. Both are additive sections on a
   screen that is otherwise complete.
 - `[in-repo]` **The client half of the waveform seek bar.** The server
@@ -77,7 +77,7 @@ here waits on upstream.
   before the design system existed, so on compact the control takes a
   fixed cell at the trailing end of the tab bar instead. It moves to the
   bar's trailing slot once every tab root has a `WaxScaffold` bar to host
-  it, which is home and radio away — the settings and home phases.
+  it, which is home and radio away - the settings and home phases.
 
   The count question this entry anticipated is settled and is not what is
   left (ADR-0033): the fifth domain tab hides where the library has
@@ -93,7 +93,7 @@ here waits on upstream.
   starts at its own head), with no way to hold that back on a metered
   connection. The per-device store it would be written to now exists
   (ADR-0027); what is still missing is the control in Settings, Playback
-  and — the larger half — a connectivity port to tell metered from not,
+  and - the larger half - a connectivity port to tell metered from not,
   since no connectivity plugin is pinned anywhere and wrapping one is its
   own decision. Until then the cost is one track's worth of buffering
   ahead. See ADR-0020.
@@ -102,24 +102,6 @@ here waits on upstream.
   are the defaults every client ships, and there is no way to change them.
   The per-device store exists now (ADR-0027); the setting still needs its
   control in Settings, Playback, which is all that is left. See ADR-0023.
-- `[roadmap]` **The deck bar has no volume control, at any width.** The
-  layout system puts a slider in the bar's right cluster under two
-  separate conditions: on desktop and web it is always present and drives
-  local output, and on mobile it appears only while controlling a remote
-  endpoint that reports `volumeControl`, since hardware buttons own local
-  volume there. Neither is built, and only the second was written down,
-  which is how the first went missing instead of being cut. Nothing local
-  reads or writes the engine's volume: `AudioEnginePort.setVolume` and
-  `volume` exist, and their only callers are the endpoint controller's
-  session report and its `set-volume` case, so another device can turn
-  this one down while its own user has no way to. `waxdeck_ui` carries no
-  slider primitive either (the seek bar is bespoke, and the remote screen
-  that has one predates the design system and uses Material's), so this
-  wants that primitive, a volume field on `NowPlayingData` and
-  `DeckBarActions`, a desktop and web gate, and a generated semantics id.
-  It lands with the cast phase, which builds the second condition anyway;
-  the radio player face and the keyboard map's volume and mute keys read
-  the same state after that. See ADR-0023.
 - `[in-repo]` **The downloads manager reports what WaxDeck holds and not
   what the device has left.** The storage header adds up used bytes by
   medium, which is the half a listener can act on; the layout also asks
@@ -133,8 +115,8 @@ here waits on upstream.
   Worth taking with the next plugin that lands for another reason. See
   ADR-0033.
 - `[in-repo]` **The web build's per-device settings binding is not covered
-  by an automated test.** `BrowserClientSettingsStore` — the probe, the
-  fallback to memory, the write-through shadow, the key semantics — is
+  by an automated test.** `BrowserClientSettingsStore` - the probe, the
+  fallback to memory, the write-through shadow, the key semantics - is
   tested on the VM against a fake `BrowserStorage`, including a throwing
   one. What no test touches is `_LocalStorage`, the ten lines that hand
   over the real `window.localStorage`. Nothing in this repo runs under a
@@ -160,7 +142,7 @@ here waits on upstream.
   half a gigabyte on disk (covers are roughly 400 KB each against 86 KB
   of audio per album), against well under a tenth of that without them.
   And the three scenarios are declared `mode: 'default'` so they run in
-  one worker in order — running them at once would price the contention
+  one worker in order - running them at once would price the contention
   between them rather than the app, which is the opposite of the point.
 
   The reason it was split off rather than run inline: by the skwasm
@@ -174,8 +156,8 @@ here waits on upstream.
   FPS or long-frame share on the *index* scenarios reopens the artwork
   negative cache's approach then and there, since those are the surfaces
   it just changed. The artwork pipeline (ADR-0025) already took the cheap
-  levers — sized requests, bounded decodes, a day of client-side
-  freshness — so a miss on the grid is a signal about the virtualized
+  levers - sized requests, bounded decodes, a day of client-side
+  freshness - so a miss on the grid is a signal about the virtualized
   list rather than about artwork, and `-covers=false` is the run that
   tells the two apart.
 - `[in-repo]` **Discord rich presence from the desktop builds.** The
@@ -210,21 +192,6 @@ here waits on upstream.
 
 ## Connect and casting
 
-- `[roadmap]` **The deck bar does not say when playback is somewhere else.**
-  The bar reads local playback alone, so handing a session to another
-  endpoint leaves it showing the item stopped rather than "on
-  [endpoint name]": the cast glyph over the artwork, the caption line,
-  and the volume slider an endpoint reporting `volumeControl` gets are
-  all specified and none is wired (`NowPlayingData.remoteEndpoint` is
-  never set). That slider has a second reason to exist which this entry
-  does not cover, tracked above under the deck bar having no volume
-  control: on desktop and web it belongs there for local output, with no
-  endpoint involved. The remote face stayed out of the deck bar's own
-  phase because controlling another endpoint is a pushed
-  screen holding its own watch-frame state, and making the shell follow
-  it is a piece of the Connect UX rather than of the bar: the picker,
-  the disconnect triad, and the refusal explanations land together with
-  the cast phase. See ADR-0023.
 - `[in-repo]` **Web gapless over hls.js stayed a gated attempt and did not ship.**
   The engine port grew everything it needs (a fourth implementation
   slot behind the same conformance suite), and the server side is
@@ -247,15 +214,19 @@ here waits on upstream.
   naming the pid, so a picker can offer "play here instead" rather
   than a dead end (P14's refusal explanations); client endpoints
   handle books fully. Needs part-aware loading and part-advance in
-  the session manager.
+  the session manager. When it lands, delete the client's special
+  case with it: `feature-unavailable` is the umbrella code for
+  everything a target cannot play (a windowed track answers it too),
+  so the picker tells this refusal apart by the phrase
+  "multi-part audiobook" in the server's message - `multiPartRefusal` in
+  `server/internal/api/player.go`,
+  `_explain` in `app/app/lib/src/connect/device_picker.dart`, and
+  `TestMultiPartRefusalWording` holding the two together.
 - `[in-repo]` **Cast preflight verifies server-side only.** The
   reachability verdict is the server fetching itself through each
   candidate base; true device-side verification (loading a probe URL
   on the device and watching status) would catch DNS and cert
   failures the server cannot see.
-- `[in-repo]` **Cast preflight has no UI surface.** The endpoint
-  answers plain-language diagnostics, but no settings or picker
-  screen renders them yet; users would have to curl it.
 - `[in-repo]` **Crossfade and ReplayGain settings do not feed
   timelines yet.** The whole mechanism is built and tested end to
   end: the mint takes crossfadeSeconds, the identical value rides
@@ -355,9 +326,9 @@ here waits on upstream.
   color-emoji face is its own multi-megabyte decision). Native builds
   keep using system fonts and are unaffected.
 - `[in-repo]` **The e2e renderer hang is diagnosed: a memory race
-  inside multi-threaded skwasm.** The old shape — one suite run in
+  inside multi-threaded skwasm.** The old shape - one suite run in
   about four, a random spec stalls mid-step, page unresponsive,
-  generic timeout — is the aftermath of a wasm fault. The page throws
+  generic timeout - is the aftermath of a wasm fault. The page throws
   `RuntimeError: memory access out of bounds` inside skwasm's
   allocator on the paragraph-layout path (`ParagraphImpl::layout`,
   `TArray<Block>` copy, `sk_malloc`, `emscripten_builtin_malloc`), and
@@ -367,8 +338,8 @@ here waits on upstream.
   `tests/fixtures.ts`, whose page fixture buffers console and
   pageerror from birth and, when a test fails or times out, races
   responsiveness probes (main thread, CDP, compositor, each worker)
-  and snapshots every chromium thread twice — state, wait channel,
-  CPU delta — into `hang-evidence.json` beside the trace. The first
+  and snapshots every chromium thread twice - state, wait channel,
+  CPU delta - into `hang-evidence.json` beside the trace. The first
   capture (audiobooks, second suite run of the night) showed exactly
   that dual spin with everything else idle. `e2e/skwasm-repro/`
   reproduces it with no WaxDeck code in three to five seconds: fresh
@@ -377,9 +348,9 @@ here waits on upstream.
   `SkStrike`, Skia's shared glyph cache, from both the layout side
   (`skhb_glyph_h_advances`) and the raster side
   (`onDrawGlyphRunList`), in four flavors including unaligned atomics
-  on torn pointers. Forcing single-threaded skwasm — same build, the
+  on torn pointers. Forcing single-threaded skwasm - same build, the
   `forceSingleThreadedSkwasm` engine flag, injected suite-wide through
-  a temporary knob during the investigation — ran the same hammer clean
+  a temporary knob during the investigation - ran the same hammer clean
   to its cap
   and ten suite runs without a hang (two of the ten failed on an
   unrelated desktop-loopback child-process flake, page responsive per
@@ -387,7 +358,7 @@ here waits on upstream.
   83675ed27633283e7fc296c8bca22e841224c096, Flutter 3.44. Filed as
   flutter/flutter#190039, and the app now ships skwasm single-threaded
   (`web/index.html` owns the loader call and passes
-  `forceSingleThreadedSkwasm` — the same block also sets
+  `forceSingleThreadedSkwasm` - the same block also sets
   `canvasKitBaseUrl` so the engine loads from the embedded bundle
   instead of Google's CDN, which the stock bootstrap reaches for and a
   LAN-only instance cannot). What remains is the un-forcing: when the
@@ -604,34 +575,18 @@ here waits on upstream.
 - `[in-repo]` **Time and mood mixes.** Daylist-style rotating mixes
   with scheduled auto-names are a scheduler and a naming table over
   the instant-mix engine that shipped; nothing else blocks them.
-- `[roadmap]` **Search has no radio results.** The search screen's filter
-  chips cover what `GET /library/search` answers: music, podcasts, and
-  audiobooks. The layout gives it a Radio chip too, searching the station
-  directory and offering "Add station" per result — that is the radio
-  surface the radio slice rebuilds (logo proxy, add-station flow, the
-  hub), and building a second one now is work that slice redoes. The chip
-  lands with it.
-- `[roadmap]` **Search is one tap further away from a phone's radio and
-  home screens.** The layout puts a search control in the top app bar
-  below sidebar width, and the shell owns no top app bar — every screen
-  brings its own — so the control lives on the screens rebuilt so far:
-  the music hub with its indexes and listings, the podcast screens, the
-  books hub and book screen, the downloads manager, and the library grid,
-  which is the compact landing screen. Radio gets it with the cast phase
-  and home with the home phase, the same way the avatar does; until then
-  search from radio is Home and then the control.
 - `[in-repo]` **A has-art signal on `FacetBucket`, once artist art
-  exists.** The repeated-404 half of this is fixed — `ArtworkStore`
+  exists.** The repeated-404 half of this is fixed - `ArtworkStore`
   keeps a negative cache, so a cover the server has answered 404 for is
   asked about once and drawn as a monogram from then on, and the artist
-  dimension no longer asks at all — but the entry is kept because the
+  dimension no longer asks at all - but the entry is kept because the
   reasoning behind those two choices is what the next agent tempted by a
   `hasArt` field needs, and because there is a real case left.
 
   **The premise the entry was written on was wrong.** It said item rows
   never 404 because the server omits `artUrl` when there is nothing
   behind it. They do: `summaryJSON` sets `ArtUrl` unconditionally, and
-  `_shared.yaml` says so — "Always populated; the endpoint itself returns
+  `_shared.yaml` says so - "Always populated; the endpoint itself returns
   404 for items with no artwork." So this was never a bucket-only
   problem, which is why the fix is in the store, where it covers item
   rows too.
@@ -643,7 +598,7 @@ here waits on upstream.
   (`store/sqlite/art.go`: "Album art is derived on read from current
   track maps, so a re-cover, retag, or delete cannot leave a stale album
   mapping behind"). For a normally scanned album `/art` answers 200 and
-  `ArtRoles(al-…)` is empty, so gating on it would have turned the album
+  `ArtRoles(al-...)` is empty, so gating on it would have turned the album
   index into a wall of monograms. `ResolveArt(ref, front, 0)` is not the
   escape either: the `size <= 0` early return does skip the thumbnail,
   but it fires *after* the full source blob is loaded, so a 100-bucket
@@ -655,16 +610,16 @@ here waits on upstream.
   human-driven, so nothing automatic ever writes artist-level art. The
   cost is that a hand-set artist cover stops appearing on the index row
   (it still appears on the artist's own screen, which reads the entity's
-  art directly), and nothing in the UI explains the difference — the
+  art directly), and nothing in the UI explains the difference - the
   person most likely to hit it is the admin who set the cover. A contract
-  field whose value is knowable statically is not worth the spec surface
-  — so `hasArt` on `FacetBucket` becomes worth building when artist art
+  field whose value is knowable statically is not worth the spec surface - so
+  `hasArt` on `FacetBucket` becomes worth building when artist art
   starts existing, which is the provider chain filling auxiliary slots.
   Sequence it there, and the index row's silence closes with it.
 
   **The negative cache's own limit, for whoever touches it next.** It is
   cleared by a catalog invalidation, by a cover editor's `evict`, and by
-  sign-out. Nothing else — so a cover that appears while the app is open
+  sign-out. Nothing else - so a cover that appears while the app is open
   and the sync channel is down stays a monogram until the channel
   reconnects and invalidates. That is the same window every other cached
   view has, and it closes the same way.
@@ -673,7 +628,7 @@ here waits on upstream.
   tapping S on a long index asks for successive pages until an S-shaped
   bucket is loaded. Pages are 500 buckets served from one cached
   enumeration, so a long walk is a handful of cheap requests rather than
-  a slow one — but it is still O(pages) round trips where a `startsAt`
+  a slow one - but it is still O(pages) round trips where a `startsAt`
   parameter (or the upstream `FacetPage` this endpoint's window is
   waiting on) would be one.
 - `[in-repo]` **Share-card image export.** The year-in-review surface

@@ -252,9 +252,9 @@ class _UpNextShelf extends ConsumerWidget {
           downloaded: row.episode.downloaded,
           // Its own handle, not the row identifier the Latest list and
           // the show's own list use. The two shelves overlap by
-          // definition — `unplayed` is below the played threshold and
+          // definition - `unplayed` is below the played threshold and
           // `in-progress` is any saved position, so an episode a third of
-          // the way in is in both — and one handle on two controls makes
+          // the way in is in both - and one handle on two controls makes
           // a click a strict-mode violation rather than a tap.
           semanticsId: SemanticsIds.episodeContinue(row.episode.pid),
         ),
@@ -410,26 +410,6 @@ class _FolderGroupState extends State<_FolderGroup> {
   }
 }
 
-/// The grid of show tiles, as a sliver.
-/// How wide a tile actually gets, and how many fit, for [available].
-///
-/// Measured rather than assumed. A max-cross-axis-extent delegate is
-/// told the widest a cell may be and then divides the room evenly, so
-/// the cell is usually *narrower* than the number it was given, and a
-/// card sized to that number inside it draws artwork taller than the
-/// height budget computed from the same number, which overflows by
-/// however much the two disagree. Deciding the count here makes the
-/// width the card draws at and the height the grid reserves for it the
-/// same measurement.
-({int columns, double width}) _tileGrid(double available) {
-  const gap = WaxShellMetrics.gridGap;
-  final columns = ((available + gap) / (kShowTileExtent + gap)).ceil().clamp(
-    1,
-    12,
-  );
-  return (columns: columns, width: (available - gap * (columns - 1)) / columns);
-}
-
 /// The widest a show tile is allowed to be.
 const double kShowTileExtent = 180;
 
@@ -442,7 +422,10 @@ class _ShowGrid extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return SliverLayoutBuilder(
       builder: (context, constraints) {
-        final grid = _tileGrid(constraints.crossAxisExtent);
+        final grid = MediaCard.gridFor(
+          constraints.crossAxisExtent,
+          extent: kShowTileExtent,
+        );
         return SliverGrid.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: grid.columns,
@@ -470,7 +453,10 @@ class _ShowGridBox extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final grid = _tileGrid(constraints.maxWidth);
+        final grid = MediaCard.gridFor(
+          constraints.maxWidth,
+          extent: kShowTileExtent,
+        );
         return GridView.builder(
           shrinkWrap: true,
           // Inside the page's own scroll view: a folder holds a handful

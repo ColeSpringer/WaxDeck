@@ -119,7 +119,7 @@ func (l *Library) TrashRetentionDays(ctx context.Context) int {
 		return 0
 	}
 	// Clamp at read too: a value stored before the cap existed (or set
-	// out-of-band) must never reach the sweep's day→duration conversion
+	// out-of-band) must never reach the sweep's day-to-duration conversion
 	// large enough to overflow.
 	if days > maxTrashRetentionDays {
 		return maxTrashRetentionDays

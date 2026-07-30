@@ -17,7 +17,7 @@ class EntityStarRatingRow extends ConsumerWidget {
     required this.label,
   });
 
-  /// The entity's API pid (`ar-…` or `al-…`).
+  /// The entity's API pid (`ar-...` or `al-...`).
   final String pid;
 
   /// What the controls act on, for the accessibility labels and

@@ -1,6 +1,6 @@
 // Hammer driver: opens N copies of the repro app and watches for the
-// two signatures captured in the e2e evidence — a wasm RuntimeError
-// (pageerror) or a full main-thread stall — then snapshots every
+// two signatures captured in the e2e evidence - a wasm RuntimeError
+// (pageerror) or a full main-thread stall - then snapshots every
 // chromium thread twice to show who is spinning. Set ST=1 to force
 // single-threaded skwasm (the negative control: same workload, no
 // render worker, no fault). Usage:

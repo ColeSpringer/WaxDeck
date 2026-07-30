@@ -50,14 +50,14 @@ Adopt the role model across the contract:
 **The health art rules stay on `ResolveArt`, not `has_art`.** This is the
 non-obvious call. `has_art` is own-front-only, so a missing-art rule
 built on it would flag every track that correctly inherits its album's
-cover — a false positive on a healthy library. "Missing art" means no
+cover - a false positive on a healthy library. "Missing art" means no
 cover anywhere in the chain, which is exactly what a `ResolveArt`
 not-found reports; "small art" reads the resolved cover's dimensions,
 which `ResolveArt` now returns. Both rules are already correct and
 chain-aware. Moving them onto the own-only field to save a resolve would
 regress correctness for an efficiency gain, so it is declined. The
 own-versus-inherited distinction the field expresses is surfaced where it
-belongs — the editor's `hasOwnArtwork` and the `art-roles` listing — not
+belongs - the editor's `hasOwnArtwork` and the `art-roles` listing - not
 folded into the health sweep.
 
 ## Consequences

@@ -28,8 +28,8 @@ class LocalPlayback {
   /// A multi-part book plays as one timeline and a part's offset in it is
   /// the sum of the durations before it, so a single missing duration
   /// puts every later part somewhere wrong. Better to say the item cannot
-  /// be sequenced — which plays its first file, the behaviour before
-  /// durations were stored at all — than to resume a listener two hours
+  /// be sequenced - which plays its first file, the behaviour before
+  /// durations were stored at all - than to resume a listener two hours
   /// from where they were.
   bool get sequenced =>
       parts.length > 1 && parts.every((p) => (p.durationMs ?? 0) > 0);
@@ -38,7 +38,7 @@ class LocalPlayback {
   /// that part begins at.
   ///
   /// The first part for an item that is one file or cannot be sequenced,
-  /// and the last for a position past the end — which is where a
+  /// and the last for a position past the end - which is where a
   /// checkpoint written against a longer edition of the same book lands.
   LocalPartAt partAt(int ms) {
     if (!sequenced) {
@@ -93,8 +93,8 @@ class DownloadProgress {
 /// screen: what it holds on disk and how far along it is.
 ///
 /// Deliberately per item rather than per file. The manager offers
-/// removal, and removal is per item — a book's parts come and go
-/// together — so a row is an item and its files are its bytes.
+/// removal, and removal is per item - a book's parts come and go
+/// together - so a row is an item and its files are its bytes.
 class DownloadedItem {
   const DownloadedItem({
     required this.pid,

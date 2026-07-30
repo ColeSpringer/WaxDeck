@@ -19,6 +19,16 @@ mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,fe
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR/testidp" ./cmd/testidp)
 (cd "$E2E_DIR/../fixtures" && go build -o "$RUN_DIR/feedserv" ./cmd/feedserv)
 
+# A station logo for the radio journey, served by the same loopback host
+# the podcast fixture uses. Written here rather than vendored: it is
+# generated media, and the logo proxy's whole job is to fetch a picture
+# from a station host and serve it from this origin, so the test needs a
+# host with a picture on it. A 1x1 opaque PNG is enough - what is under
+# test is the fetch, the sniffed type, and the validator, not the image.
+base64 -d >"$RUN_DIR/feed/station-logo.png" <<'PNG'
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==
+PNG
+
 # Roots come from a config file rather than WAXFLOW_ROOTS: the env form
 # is read once at process start, so the sidecar only wires POST
 # /roots/reload (and advertises delivery.rootsReload) when its roots come
@@ -64,6 +74,7 @@ WAXDECK_MANAGED_ROOTS="lib" \
 WAXDECK_MATCHING=false \
 WAXDECK_PODCAST_DIR="$RUN_DIR/podcasts" \
 WAXDECK_ALLOW_PRIVATE_FEED_HOSTS=true \
+WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS=true \
 WAXDECK_FLOW_URL=http://127.0.0.1:4418 \
 WAXDECK_FLOW_API_KEY=e2e-test-key \
 WAXDECK_FLOW_CONFIG="$RUN_DIR/waxflow.json" \

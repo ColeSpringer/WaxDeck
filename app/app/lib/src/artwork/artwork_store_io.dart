@@ -39,7 +39,7 @@ ArtworkStore createArtworkStore({
 ///
 /// 1. A disk cache ([flutter_cache_manager], kept behind this port per
 ///    the plugin-wrapping rule) holding whatever was looked at recently,
-///    revalidated by ETag. Every request carries the bearer token — the
+///    revalidated by ETag. Every request carries the bearer token - the
 ///    bug this store was built to fix is that native builds fetched
 ///    artwork with no credential at all and silently painted monograms
 ///    over a library full of covers.
@@ -205,7 +205,7 @@ class CachedArtworkStore extends ArtworkStore {
       } catch (_) {
         // A full disk, a revoked directory. This runs beside a download
         // that has already succeeded, and a cover that could not be kept
-        // is not a failed download — the next one tries again, and until
+        // is not a failed download - the next one tries again, and until
         // then the item plays offline under a monogram.
       }
     }

@@ -97,8 +97,8 @@ enum MusicDimension {
   /// appears on the artist's own screen, which reads the entity's art
   /// directly rather than through a bucket.
   ///
-  /// When artist art starts existing — the provider chain filling
-  /// auxiliary slots is its own deferred item — this is where it
+  /// When artist art starts existing - the provider chain filling
+  /// auxiliary slots is its own deferred item - this is where it
   /// becomes a question worth asking the server again.
   bool get hasArtwork => this == MusicDimension.albums;
 
@@ -108,8 +108,8 @@ enum MusicDimension {
 
 /// The URL segment the unknown bucket takes.
 ///
-/// Its key is legitimately empty — it is the bucket for items a dimension
-/// is absent from — and an empty path segment is not a location. No real
+/// Its key is legitimately empty - it is the bucket for items a dimension
+/// is absent from - and an empty path segment is not a location. No real
 /// key collides: entity keys are ULIDs behind a type prefix, year keys
 /// are digits, and a genre key is a ULID.
 const musicUnknownSegment = 'unknown';
@@ -224,9 +224,9 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
       return false;
     } catch (_) {
       // Anything else is a defect, not a hiccup: a decode failure, a bad
-      // cast. Release the paging guard first — loadingMore is what keeps
+      // cast. Release the paging guard first - loadingMore is what keeps
       // two fetches from racing, so leaving it set would wedge paging
-      // permanently and silently — then let the error reach the zone's
+      // permanently and silently - then let the error reach the zone's
       // handler instead of vanishing here.
       if (generation == _generation) {
         state = AsyncData(current.copyWith(loadingMore: false));
@@ -303,7 +303,7 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
   /// The queue cap, deliberately.
   ///
   /// Playing a row plays the bucket from there, and what the screen hands
-  /// over is what it has loaded — so a page smaller than the cap would
+  /// over is what it has loaded - so a page smaller than the cap would
   /// queue a prefix of an artist and call it the artist. At the cap, any
   /// bucket the queue could hold whole is loaded whole before the first
   /// row can be tapped, and a bucket bigger than that is windowed by the
@@ -322,7 +322,7 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
           // A bucket is drilled exactly as its count was computed, with
           // no media type on top. The music dimensions already leave
           // podcast episodes out server-side, and they take in whatever
-          // else carries an artist or a year — an audiobook has both — so
+          // else carries an artist or a year - an audiobook has both - so
           // narrowing to music here would open a bucket of two to an
           // empty list. A count that disagrees with the list it opens is
           // the one thing faceted browse cannot do.

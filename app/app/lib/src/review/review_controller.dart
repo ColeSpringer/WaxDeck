@@ -114,9 +114,9 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
       state = AsyncData(current.copyWith(loadingMore: false, loadError: true));
     } catch (_) {
       // Anything else is a defect, not a hiccup: a decode failure,
-      // a bad cast. Release the paging guard first — loadingMore is
+      // a bad cast. Release the paging guard first - loadingMore is
       // what keeps two fetches from racing, so leaving it set would
-      // wedge paging permanently and silently — then let the error
+      // wedge paging permanently and silently - then let the error
       // reach the zone's handler instead of vanishing here.
       if (generation == _generation) {
         state = AsyncData(

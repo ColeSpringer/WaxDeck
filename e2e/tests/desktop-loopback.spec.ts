@@ -17,7 +17,7 @@ const APP_DIR = path.resolve(__dirname, '..', '..', 'app', 'app');
 /// One listener for the child's whole life, because a per-wait listener
 /// loses output: removing the last `data` listener does not pause a
 /// flowing stream in Node, so anything written while nobody is listening
-/// is discarded rather than buffered — and this spec spends half a minute
+/// is discarded rather than buffered - and this spec spends half a minute
 /// driving a browser between the probe's two lines. That window is exactly
 /// where the answer arrives.
 class ProbeOutput {

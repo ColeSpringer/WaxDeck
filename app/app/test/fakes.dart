@@ -77,7 +77,7 @@ class FakeRepository implements WaxDeckRepository {
   /// Thrown by [health] when set. Deliberately an [Object] rather than
   /// the structured API error: the client maps only transport failures
   /// into that type, and a response a generated deserializer cannot
-  /// build throws something else entirely — which is the shape a probe
+  /// build throws something else entirely - which is the shape a probe
   /// meets right after the server it is probing was replaced.
   Object? serverHealthError;
 
@@ -1413,6 +1413,10 @@ class FakeRepository implements WaxDeckRepository {
     return List.of(sessionHistory);
   }
 
+  /// Thrown by [createPlaybackSession] when set, for the refusals a
+  /// picker has to explain (a multi-part book on a cast device).
+  WaxDeckApiException? createSessionError;
+
   @override
   Future<PlaybackSessionInfo> createPlaybackSession({
     required String endpointId,
@@ -1421,6 +1425,8 @@ class FakeRepository implements WaxDeckRepository {
     int positionMs = 0,
     bool play = true,
   }) async {
+    final error = createSessionError;
+    if (error != null) throw error;
     createPlaybackSessionCalls.add((
       endpointId: endpointId,
       itemPids: itemPids,
@@ -1493,6 +1499,10 @@ class FakeRepository implements WaxDeckRepository {
     return rows;
   }
 
+  /// Thrown by [createRadioStation] when set: a duplicate stream URL is
+  /// the refusal the add dialog most has to render.
+  WaxDeckApiException? createStationError;
+
   @override
   Future<RadioStation> createRadioStation({
     required String name,
@@ -1500,6 +1510,8 @@ class FakeRepository implements WaxDeckRepository {
     String? homepageUrl,
     String? logoUrl,
   }) async {
+    final error = createStationError;
+    if (error != null) throw error;
     final st = RadioStation(
       pid: 'rs-FAKE${_stationSeq++}',
       name: name,
@@ -1543,10 +1555,41 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
+  String radioLogoUrlFor(String pid) => '/api/v1/radio/stations/$pid/logo';
+
+  /// Every directory query, in call order, so a test can see which surface
+  /// a keystroke actually reached.
+  final List<String> directoryQueries = [];
+
+  /// Thrown by [searchRadioDirectory] when set: the directory is a public
+  /// service over the internet and is unreachable while everything else
+  /// works.
+  WaxDeckApiException? directoryError;
+
+  @override
   Future<List<RadioDirectoryEntry>> searchRadioDirectory(
     String query, {
     int? limit,
-  }) async => directoryEntries;
+  }) async {
+    directoryQueries.add(query);
+    final error = directoryError;
+    if (error != null) throw error;
+    return directoryEntries;
+  }
+
+  /// What [getCastPreflight] answers; the surface renders whatever is
+  /// here, including the empty list a server with no candidate base has.
+  List<CastPreflightBase> preflightBases = const <CastPreflightBase>[];
+
+  /// Thrown by [getCastPreflight] when set.
+  WaxDeckApiException? preflightError;
+
+  @override
+  Future<List<CastPreflightBase>> getCastPreflight() async {
+    final error = preflightError;
+    if (error != null) throw error;
+    return preflightBases;
+  }
 
   /// Scrobbler slots served by [listScrobblers]; connect and disconnect
   /// mutate them.
@@ -4273,11 +4316,23 @@ class FakeArtworkStore extends ArtworkStore {
   final List<String> pinned = <String>[];
   final List<String> unpinned = <String>[];
 
+  /// Every URL a surface asked for artwork at, so a test can see which
+  /// origin a picture is being fetched from.
+  final List<String> requested = <String>[];
+
+  /// Every URL something asked this store to forget, for the invalidations
+  /// that happen behind a stable URL: a cover write, a station's logo
+  /// re-pointed.
+  final List<String> evicted = <String>[];
+
   @override
   String get baseUrl => '';
 
   @override
-  ImageProvider? imageFor(String? artUrl, int px) => null;
+  ImageProvider? imageFor(String? artUrl, int px) {
+    if (artUrl != null) requested.add(artUrl);
+    return null;
+  }
 
   @override
   Future<Uint8List?> bytesFor(String artUrl, int px) async => null;
@@ -4293,7 +4348,7 @@ class FakeArtworkStore extends ArtworkStore {
   Future<void> unpin(String pid) async => unpinned.add(pid);
 
   @override
-  Future<void> evict(String artUrl) async {}
+  Future<void> evict(String artUrl) async => evicted.add(artUrl);
 
   @override
   Future<void> forgetEverything() async {}

@@ -15,8 +15,8 @@ written into this change on purpose when it went up.
 **Compact had no way to reach anything that is not a domain.** The
 sidebar lists the secondary destinations and the rail reaches them
 through one overflow menu, but a phone's tab bar holds the domains and
-nothing else. The screens' own app-bar row — seven icon buttons and a
-popup menu on the library grid — was left standing for exactly that
+nothing else. The screens' own app-bar row - seven icon buttons and a
+popup menu on the library grid - was left standing for exactly that
 reason, and deleting it is what this change does.
 
 **There was no skip-to-content link.** 9.2 asks for one. The frame had
@@ -24,7 +24,7 @@ one until it was proved dead: it sat in the shell route's focus scope
 while the branch navigator's route owns focus from the first frame, so
 Tab never reached it, and it was absent from the semantics tree besides.
 ADR-0022 recorded that a working one has to sit in the scope that holds
-focus — the page scaffold — or behind a traversal group spanning chrome
+focus - the page scaffold - or behind a traversal group spanning chrome
 and content, and left the verdict to this phase's accessibility pass.
 
 ## Decision
@@ -52,7 +52,7 @@ decides what it carries, because the frame is what knows the size class:
   on the same terms.
 
 3.2 puts the avatar in the top app bar, and that is where it belongs once
-the screens are rebuilt on `WaxScaffold` — the shell owns no app bar, and
+the screens are rebuilt on `WaxScaffold` - the shell owns no app bar, and
 the screens that do are still the ones written before the design system
 existed. The tab bar is the one piece of compact chrome the shell owns
 today, so that is where it goes. Its cell is a fixed width rather than an
@@ -79,7 +79,7 @@ knot sort happened to walk first.
 That is the order that matters, because it is the order in which the
 chrome comes before the content. Tab runs the other way: a route owns
 focus from its first frame, so a keyboard reaches the page's own
-controls, then the link, then the chrome — nothing to skip, and nothing
+controls, then the link, then the chrome - nothing to skip, and nothing
 lost by the link not being first there. Measured on the real build, not
 assumed. ADR-0022 recorded the link as unreachable by Tab; that was a
 probe artifact (a classifier that reported the link as page content) and
@@ -87,7 +87,7 @@ it is corrected here: the link is reached, second.
 
 **The chrome declares its own `focusable`, because excluding semantics
 drops it.** One node per control is the contract the suite and assistive
-tech steer by, and `excludeSemantics: true` is what enforces it — but
+tech steer by, and `excludeSemantics: true` is what enforces it - but
 what it drops is the `Focus` widget's own semantics, and the `focusable`
 flag lives there. Web turns that flag into a `tabindex`, so every
 destination, the account menu, the collapse toggle, and the skip link
@@ -110,7 +110,7 @@ precedes the content.
 link needs somewhere to send focus, and a scope is what gives it one.
 `FocusScopeNode` defaults to a closed loop, which would have trapped tab
 traversal inside the page and put the whole sidebar out of a keyboard's
-reach — the regression is invisible to a golden, so a test tabs out of a
+reach - the regression is invisible to a golden, so a test tabs out of a
 routed pane and fails without the edge behaviour. Skipping asks the
 traversal policy where the page starts rather than focusing the scope
 itself: a scope with nothing focused takes the focus, which leaves the
@@ -129,7 +129,7 @@ control exists to save.
   the problem.
 - **The link is painted last and must not swallow the corner it covers.**
   Its box is roughly 140 by 48 at the start edge, which at rail width
-  overhangs the content pane by half its width — where a screen's back
+  overhangs the content pane by half its width - where a screen's back
   button sits. Ignoring pointers from inside the detector did not do it:
   the detector's outermost render object is an opaque `MouseRegion`,
   whose `hitTest` answers for the whole box whatever sits beneath it, and

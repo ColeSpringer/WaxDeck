@@ -401,7 +401,7 @@
     },
     {
       "name": "connect",
-      "doc": "Connect: endpoints, remote sessions, and cast controls.",
+      "doc": "Connect: the device picker, the disconnect triad, cast preflight, remote sessions, and cast controls.",
       "ids": [
         {
           "name": "endpoint",
@@ -409,6 +409,41 @@
           "params": [
             "id"
           ]
+        },
+        {
+          "name": "picker",
+          "id": "device-picker"
+        },
+        {
+          "name": "pickerCheck",
+          "id": "device-picker-check"
+        },
+        {
+          "name": "pickerOverflow",
+          "id": "device-picker-overflow"
+        },
+        {
+          "name": "pickerThisDevice",
+          "id": "device-picker-this-device"
+        },
+        {
+          "name": "preflight",
+          "id": "cast-preflight"
+        },
+        {
+          "name": "preflightBase",
+          "id": "cast-preflight-base-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "preflightRetry",
+          "id": "cast-preflight-retry"
+        },
+        {
+          "name": "remoteLeave",
+          "id": "remote-leave"
         },
         {
           "name": "remoteNext",
@@ -425,6 +460,10 @@
         {
           "name": "remoteSeek",
           "id": "remote-seek"
+        },
+        {
+          "name": "remoteStopThere",
+          "id": "remote-stop-there"
         },
         {
           "name": "remoteToggle",
@@ -470,6 +509,10 @@
         {
           "name": "deckMore",
           "id": "deck-more"
+        },
+        {
+          "name": "deckMute",
+          "id": "deck-mute"
         },
         {
           "name": "deckNext",
@@ -522,6 +565,10 @@
         {
           "name": "deckStar",
           "id": "deck-star"
+        },
+        {
+          "name": "deckVolume",
+          "id": "deck-volume"
         },
         {
           "name": "panel",
@@ -1399,7 +1446,7 @@
     },
     {
       "name": "radio",
-      "doc": "Internet radio stations.",
+      "doc": "The radio hub: the favorites dial, the station grid, and the add-station flow.",
       "ids": [
         {
           "name": "radio",
@@ -1415,6 +1462,80 @@
         {
           "name": "radioAddConfirm",
           "id": "radio-add-confirm"
+        },
+        {
+          "name": "radioAddDirectory",
+          "id": "radio-add-directory-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "radioDelete",
+          "id": "radio-delete-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "radioDial",
+          "id": "radio-dial"
+        },
+        {
+          "name": "radioEdit",
+          "id": "radio-edit-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "radioFavorite",
+          "id": "radio-favorite-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "radioHub",
+          "id": "radio-hub"
+        },
+        {
+          "name": "radioMenu",
+          "id": "radio-menu-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "radioNameField",
+          "id": "radio-name-field"
+        },
+        {
+          "name": "radioNowPlaying",
+          "id": "radio-now-playing"
+        },
+        {
+          "name": "radioSearchAdd",
+          "id": "radio-search-add-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "radioSearchField",
+          "id": "radio-search-field"
+        },
+        {
+          "name": "radioSearchRun",
+          "id": "radio-search-run"
+        },
+        {
+          "name": "radioTune",
+          "id": "radio-tune"
+        },
+        {
+          "name": "radioUrlField",
+          "id": "radio-url-field"
         }
       ]
     },

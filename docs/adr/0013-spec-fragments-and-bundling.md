@@ -15,9 +15,9 @@ uploads surface paid attention tax on fourteen thousand lines of
 everything else.
 
 Splitting the spec with cross-file `$ref`s is the textbook answer and
-was rejected. The contract has six consumers — `oapi-codegen`, the
+was rejected. The contract has six consumers - `oapi-codegen`, the
 dart-dio generator, spectral, oasdiff, drift-check, and the CI probe
-that reads the spec out of the base ref with `git show` — and their
+that reads the spec out of the base ref with `git show` - and their
 support for multi-file documents is uneven: oapi-codegen treats
 external references as cross-package imports unless each one is mapped
 away, the spectral config addresses schemas by bundle path, and the
@@ -38,12 +38,12 @@ One file per API tag (`admin.yaml`, `uploads.yaml`, ...) holding that
 domain's paths and the components only it uses, plus three special
 files:
 
-- `_root.yaml` — the preamble: `openapi`, `info`, `servers`, `tags`,
+- `_root.yaml` - the preamble: `openapi`, `info`, `servers`, `tags`,
   `security`. Nothing else may appear here.
-- `_shared.yaml` — components referenced across domains: the error
+- `_shared.yaml` - components referenced across domains: the error
   model, the shared responses and parameters, and cross-domain entity
   summaries (`ItemSummary`, `MediaType`, `ChapterMark`).
-- `events.yaml` — the WebSocket frame DTOs (`api/events.md`), which no
+- `events.yaml` - the WebSocket frame DTOs (`api/events.md`), which no
   REST path references.
 
 Ownership rules, applied when a component's home is ambiguous: an
@@ -53,14 +53,14 @@ domains' state and never claims ownership of what it mirrors; all of
 `components.securitySchemes` lives in `auth.yaml`, because security
 requirements reference schemes by name, not `$ref`, so usage analysis
 cannot see them. Fragments use internal `#/components/...` references
-exactly as before — references resolve in the bundle, so a fragment is
+exactly as before - references resolve in the bundle, so a fragment is
 not independently a valid OpenAPI document, and no `$ref` rewriting
 exists anywhere.
 
 ### Bundling is textual, verified semantically
 
 specbundle moves each fragment's section bodies into the bundle
-verbatim — never re-encoded — so hand-written formatting, comments, and
+verbatim - never re-encoded - so hand-written formatting, comments, and
 deliberate quoting (the YAML 1.1 `"off"` trap) survive byte for byte.
 Correctness does not rest on the carving: the tool re-parses the
 assembled bundle and deep-compares it against the merged fragment
@@ -72,7 +72,7 @@ bundle.
 
 The bundle opens with a generated-file banner and is never hand-edited.
 `make drift-check` already regenerates and diffs the spec, so a stale
-bundle — fragments edited without `make generate` — fails CI through
+bundle - fragments edited without `make generate` - fails CI through
 the existing gate.
 
 ## Consequences

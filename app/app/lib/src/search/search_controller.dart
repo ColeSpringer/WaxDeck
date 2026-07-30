@@ -13,7 +13,17 @@ enum SearchScope {
   all('all', 'All'),
   music('music', 'Music'),
   podcasts('podcasts', 'Podcasts'),
-  books('books', 'Audiobooks');
+  books('books', 'Audiobooks'),
+
+  /// The one chip that does not narrow the library search: it asks a
+  /// different question of a different surface. Everything else here
+  /// filters the answer `GET /library/search` already gave; radio searches
+  /// the public station directory for stations this server does not have
+  /// yet, and offers to add them. So it is not in [all] - a query typed
+  /// with no chip chosen must not fire a directory call over the internet
+  /// on every keystroke, and a station that is not in the library is not a
+  /// search result in the sense the other groups are.
+  radio('radio', 'Radio');
 
   const SearchScope(this.name, this.label);
 
@@ -31,7 +41,12 @@ enum SearchScope {
           kind == SearchHitKind.tracks,
     SearchScope.podcasts => kind == SearchHitKind.episodes,
     SearchScope.books => kind == SearchHitKind.books,
+    SearchScope.radio => false,
   };
+
+  /// Whether this scope answers from the station directory rather than
+  /// from the library.
+  bool get isDirectory => this == SearchScope.radio;
 
   static SearchScope byName(String name) =>
       SearchScope.values.firstWhere((s) => s.name == name);
@@ -119,18 +134,44 @@ final searchScopeProvider =
 /// The results for the current query. An empty query answers null rather
 /// than an empty result set: "nothing typed yet" and "nothing matched"
 /// are different screens.
+///
+/// Not asked at all under the radio chip: that scope answers from the
+/// station directory, and a library search whose every group is hidden is
+/// a round trip spent on nothing.
+/// Selected down to the one thing about the scope this reads: the library
+/// chips filter an answer already in hand, so watching the whole chip
+/// refires the identical query, behind a skeleton, on every tap.
 final searchResultsProvider = FutureProvider<SearchResults?>((ref) async {
   final query = ref.watch(searchQueryProvider);
   if (query.isEmpty) return null;
+  if (ref.watch(searchScopeProvider.select((s) => s.isDirectory))) return null;
   return ref.watch(repositoryProvider).search(query);
 });
+
+/// Station directory matches for the current query, under the radio chip.
+///
+/// The directory is a public service over the internet, reached through the
+/// server: it is slower than a library search, it is rate-limited, and it
+/// can be unreachable while everything else works. So it is asked only
+/// while its own chip is chosen, and the query it uses is the settled one
+/// the debounce already produced. Two characters is the endpoint's own
+/// minimum.
+final radioDirectoryResultsProvider =
+    FutureProvider<List<RadioDirectoryEntry>?>((ref) async {
+      if (!ref.watch(searchScopeProvider.select((s) => s.isDirectory))) {
+        return null;
+      }
+      final query = ref.watch(searchQueryProvider);
+      if (query.length < 2) return null;
+      return ref.watch(repositoryProvider).searchRadioDirectory(query);
+    });
 
 /// The last few queries, newest first.
 ///
 /// Per-device rather than per-account, and stored where those go
 /// (ADR-0027): what someone typed on this machine is a shortcut back to
 /// it, not a fact about their library. JSON is the encoding because the
-/// value is a list and a query may hold anything a keyboard emits — a
+/// value is a list and a query may hold anything a keyboard emits - a
 /// separator would eventually appear inside one.
 class RecentSearches extends Notifier<List<String>>
     with StoredSetting<List<String>> {
@@ -145,7 +186,7 @@ class RecentSearches extends Notifier<List<String>>
   /// The one rule about what this list may hold: newest first, no two
   /// casings of the same query, never longer than [limit]. Everything
   /// that builds a list goes through it, so a value that arrived from
-  /// storage obeys it as surely as one just typed — an older build with
+  /// storage obeys it as surely as one just typed - an older build with
   /// a larger cap, or a hand-edited entry, cannot leave the list in a
   /// shape the rest of the class does not expect.
   static List<String> _capped(Iterable<String> queries) {
@@ -179,7 +220,7 @@ class RecentSearches extends Notifier<List<String>>
   }
 
   /// A search remembered before the stored list arrived does not throw
-  /// that list away — it goes on the front of it. The base behavior
+  /// that list away - it goes on the front of it. The base behavior
   /// would be right for a preference naming one thing and is a permanent
   /// data loss for one that accumulates: the write that followed the
   /// first search would have persisted a one-entry history over
@@ -221,7 +262,7 @@ final recentSearchesProvider = NotifierProvider<RecentSearches, List<String>>(
 /// What search leaves behind when a session ends: nothing.
 ///
 /// The store these live in is per-device and a sign-out deliberately
-/// leaves most of it standing — a collapsed sidebar describes the
+/// leaves most of it standing - a collapsed sidebar describes the
 /// machine, not the account. This key is the exception, and the
 /// distinction is worth being exact about: recent searches are strings
 /// the departing listener typed, and they name artists, albums, and

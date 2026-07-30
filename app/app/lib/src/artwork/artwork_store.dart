@@ -3,9 +3,9 @@
 /// screen asks.
 ///
 /// Artwork is the one request the app makes hundreds of at a time, and
-/// the three things that decide what that costs — how big a copy is
+/// the three things that decide what that costs - how big a copy is
 /// asked for, whether it comes off the network at all, and how many
-/// pixels it decodes to — are all decided here rather than at each of
+/// pixels it decodes to - are all decided here rather than at each of
 /// the fifty places that draw a cover.
 library;
 
@@ -29,7 +29,7 @@ const List<int> kOfflineArtworkRungs = <int>[1024, 256];
 
 /// The rung a draw of [px] physical pixels asks for: the smallest one
 /// that covers it, or the largest rung when nothing does. Fetching a
-/// smaller copy than will be painted is the one failure worth avoiding —
+/// smaller copy than will be painted is the one failure worth avoiding -
 /// upscaled artwork is visibly soft, and artwork is the surface people
 /// look at.
 int artworkRung(int px) {
@@ -49,8 +49,8 @@ int artworkRung(int px) {
 /// a player hero is measured from the window, so a drag-resize would
 /// otherwise mint a decode per frame.
 ///
-/// Rounded up, never down — a copy decoded smaller than the box it fills
-/// is visibly soft — and never past the largest rung, since nothing
+/// Rounded up, never down - a copy decoded smaller than the box it fills
+/// is visibly soft - and never past the largest rung, since nothing
 /// bigger is ever fetched.
 const int kArtworkDrawStep = 32;
 
@@ -80,18 +80,32 @@ int artworkDrawSize(int px) {
 /// Built through [Uri] rather than string concatenation because art URLs
 /// already carry a `role` for anything but a front cover, and a naive
 /// `?size=` would strip it.
-String sizedArtUrl(String artUrl, int rung, {int? bust}) {
+/// A null [rung] asks for whatever the endpoint has, for the endpoints
+/// that hold one rendition (see [isUnsizedArtUrl]).
+String sizedArtUrl(String artUrl, int? rung, {int? bust}) {
   final uri = Uri.parse(artUrl);
+  if (rung == null && bust == null) return artUrl;
   return uri
       .replace(
         queryParameters: <String, String>{
           ...uri.queryParameters,
-          'size': '$rung',
+          if (rung != null) 'size': '$rung',
           if (bust != null) 'v': '$bust',
         },
       )
       .toString();
 }
+
+/// Whether [artUrl] answers one rendition however it is asked.
+///
+/// A station logo has no stored original to scale from, so the contract
+/// says `size` there is accepted and ignored. Asking for a rung anyway
+/// splits one identical body across a URL per rung: the dial and the grid
+/// draw at different sizes, so that is two fetches of the same bytes.
+bool isUnsizedArtUrl(String artUrl) =>
+    _unsizedArt.hasMatch(Uri.parse(artUrl).path);
+
+final RegExp _unsizedArt = RegExp(r'/radio/stations/[^/]+/logo$');
 
 /// The PID an art URL belongs to, or null for a URL that names none.
 ///
@@ -112,7 +126,7 @@ String? artworkPidOf(String artUrl) {
 /// a real, routine case rather than a defensive one.
 bool isWaxDeckUrl(String artUrl, String baseUrl) {
   // A path is same-origin by construction: the web SPA is served by the
-  // WaxDeck server itself. Two slashes is not a path — `//host/logo.png`
+  // WaxDeck server itself. Two slashes is not a path - `//host/logo.png`
   // is somebody else's host with the scheme left to the caller, and
   // station logos come from feeds that are free to write one.
   if (artUrl.startsWith('//')) return false;
@@ -149,7 +163,7 @@ abstract class ArtworkStore {
   ///
   /// Artwork lives at one URL whatever it holds, and the endpoint now
   /// answers with a day of freshness, so after a cover write every cache
-  /// between here and the disk would go on serving the old image — the
+  /// between here and the disk would go on serving the old image - the
   /// browser's most stubbornly, since nothing in this process can reach
   /// into it. Asking under a name no cache has seen is what can be done
   /// from this side. It grows only when somebody edits a cover, which is
@@ -160,8 +174,8 @@ abstract class ArtworkStore {
   /// Covers the server has answered 404 for.
   ///
   /// Every item carries an art URL whether or not there is anything
-  /// behind it — the contract says so, and the endpoint 404s for the
-  /// ones there is not — so an index of art-less rows asks once per row
+  /// behind it - the contract says so, and the endpoint 404s for the
+  /// ones there is not - so an index of art-less rows asks once per row
   /// and asks again every time it is scrolled back over. Remembering
   /// the answer turns that into one request per cover for the life of
   /// the session, and turns the monogram into the first thing drawn
@@ -187,11 +201,15 @@ abstract class ArtworkStore {
   @protected
   String requestUrl(String artUrl, int px) {
     if (!isWaxDeckUrl(artUrl, baseUrl)) return artUrl;
-    return sizedArtUrl(artUrl, artworkRung(px), bust: _replaced[artUrl]);
+    return sizedArtUrl(
+      artUrl,
+      isUnsizedArtUrl(artUrl) ? null : artworkRung(px),
+      bust: _replaced[artUrl],
+    );
   }
 
   /// Records that the bytes behind [artUrl] have changed, so everything
-  /// asked for afterwards is asked for under a new name — and that
+  /// asked for afterwards is asked for under a new name - and that
   /// whatever this store knew about the old bytes no longer holds,
   /// including their absence.
   @protected
@@ -222,7 +240,7 @@ abstract class ArtworkStore {
   ///
   /// Public because the important caller is outside: artwork mostly
   /// appears without anything here being told. A scan picks up embedded
-  /// art, enrichment finishes, another device writes a cover — none of
+  /// art, enrichment finishes, another device writes a cover - none of
   /// those routes through [evict], which only the cover editors call.
   /// Without this the monogram cached during a browse of a fresh
   /// library would outlast the enrichment that filled it in, for the
@@ -361,7 +379,7 @@ class NetworkArtworkStore extends ArtworkStore {
   Future<void> evict(String artUrl) async {
     // The absence goes first, because the ladder below is built by
     // asking for providers and a known-absent URL answers null for
-    // every one of them — which would walk away from real decoded
+    // every one of them - which would walk away from real decoded
     // bytes when a cover is deleted server-side and only then answers
     // 404.
     forgetAbsent(artUrl);
@@ -401,7 +419,7 @@ class NetworkArtworkStore extends ArtworkStore {
 /// still keyed and cached identically.
 ///
 /// Only a 404 counts. Being offline, or a server that is down, must not
-/// be remembered as "this item has no cover" — the next attempt would
+/// be remembered as "this item has no cover" - the next attempt would
 /// find one, and the monogram would outlive the outage.
 class _WatchedArtwork extends ResizeImage {
   const _WatchedArtwork(
@@ -452,7 +470,7 @@ class _WatchedArtwork extends ResizeImage {
 /// Drops every decoded copy from Flutter's own image cache.
 ///
 /// Guarded because sign-out is reachable from a provider-level test,
-/// which runs with no painting binding at all — and with nothing
+/// which runs with no painting binding at all - and with nothing
 /// decoded to drop.
 void dropDecodedArtwork() {
   try {
@@ -481,8 +499,8 @@ Map<String, String> authHeadersFor(
 /// bytes) and for any failure, which is always drawable: a missing cover
 /// is a monogram, not an error dialog.
 ///
-/// [onAbsent] fires only for a 404 — the server saying there is nothing
-/// here, as opposed to being unable to say — so a caller can stop
+/// [onAbsent] fires only for a 404 - the server saying there is nothing
+/// here, as opposed to being unable to say - so a caller can stop
 /// asking without confusing an outage for an empty cover.
 Future<ArtworkBytes?> fetchArtwork(
   Dio dio,
@@ -519,8 +537,8 @@ Future<ArtworkBytes?> fetchArtwork(
     // Everything, not just DioException: dio casts the response body
     // outside its own error wrapping, so a body that is not what was
     // asked for arrives as a plain TypeError. This is called from
-    // background work nobody is awaiting — a warm-ahead, a pin beside a
-    // download — where an escaping error is an unhandled one, and the
+    // background work nobody is awaiting - a warm-ahead, a pin beside a
+    // download - where an escaping error is an unhandled one, and the
     // answer to every failure here is the same anyway: no bytes, and the
     // monogram that is already the drawn state for a cover there is none
     // of.

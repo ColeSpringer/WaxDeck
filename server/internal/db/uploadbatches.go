@@ -151,7 +151,7 @@ func (d *DB) SetUploadBatchEntries(ctx context.Context, id, entryIDsJSON string)
 
 // ExpiredUploadBatches returns batches the janitor owes work: open
 // ones past their window, plus already-expired ones still holding a
-// staged member with no review entry — the state an entry opening
+// staged member with no review entry - the state an entry opening
 // interrupted by a crash or a database failure leaves behind, which
 // nothing else revisits (the client finalize answers conflict on an
 // expired batch before opening entries). Fully processed batches
@@ -184,7 +184,7 @@ func (d *DB) ExpiredUploadBatches(ctx context.Context, nowNS int64, limit int) (
 // LinkUploadReviewEntry records the review entry a batch member
 // landed in, claiming only a still-unlinked staged row. A member that
 // vanished (deleted mid-finalize) or was already linked affects zero
-// rows and reports false — nothing to do, not a failure — and the
+// rows and reports false - nothing to do, not a failure - and the
 // narrow claim never clobbers concurrent state changes the way a
 // whole-row rewrite from a stale gather would.
 func (d *DB) LinkUploadReviewEntry(ctx context.Context, uploadID, entryID string) (bool, error) {

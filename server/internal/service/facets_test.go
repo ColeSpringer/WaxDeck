@@ -444,8 +444,8 @@ func TestTagDimensionsCanonicalize(t *testing.T) {
 			t.Fatalf("%q did not populate the canonical cache entry", spelling)
 		}
 	}
-	// One dimension in the cache, not four. It holds an entry per order —
-	// both come out of the one aggregation — so the thing to count is the
+	// One dimension in the cache, not four. It holds an entry per order -
+	// both come out of the one aggregation - so the thing to count is the
 	// dimensions, which is what a client could otherwise mint without
 	// bound.
 	f.svc.facets.mu.Lock()

@@ -10,7 +10,7 @@ import { SemanticsIds, sem } from './semantics-ids';
 //
 // Measures cold and warm time-to-interactive (the login form is the
 // first interactive surface), time from login to a populated grid over
-// 100k items, and frame pacing while scrolling — the library grid, the
+// 100k items, and frame pacing while scrolling - the library grid, the
 // music indexes and a bucket listing, and the grid again with a track
 // playing. Budgets are the pre-agreed gate criteria; measured values
 // print for the record either way.
@@ -77,7 +77,7 @@ async function waitForCorpus(
 }
 
 // Runs [body] against a pristine page and closes its context however it
-// ends. A failing assertion would otherwise leak a browser context —
+// ends. A failing assertion would otherwise leak a browser context -
 // invisible with one scenario in the file, three plus retries less so.
 async function measuring(
   browser: Browser,
@@ -114,7 +114,7 @@ test.describe('large-library web gate', () => {
   // tests within a file. Three scenarios each wheel-scrolling a 100k
   // library for a quarter minute, run at once on one machine against one
   // server, would report the contention between them rather than the
-  // app — and these numbers become the gate's recorded baseline. Default
+  // app - and these numbers become the gate's recorded baseline. Default
   // mode runs them in order in one worker. Not serial mode: a scenario
   // that misses its budget must not skip the two after it, because which
   // surface missed is exactly what the miss policy turns on.

@@ -167,8 +167,8 @@ Future<void> pickFolderAndUpload(
 }
 
 /// The one upload flow behind every entry point (picker, folder,
-/// drag-and-drop): asks the media type — and, for several files, the
-/// grouping intent — opens the batch, uploads every file, and
+/// drag-and-drop): asks the media type - and, for several files, the
+/// grouping intent - opens the batch, uploads every file, and
 /// finalizes. Per-file failures surface and the loop continues; the
 /// finalize runs regardless so the files that did arrive reach
 /// review.
@@ -332,7 +332,7 @@ class _AcquireDialogState extends State<AcquireDialog> {
 
 /// The media-type prompt before an upload; with several files it also
 /// asks the grouping intent, so an album folder never floods the
-/// review queue with per-file entries by accident — and a mixed grab
+/// review queue with per-file entries by accident - and a mixed grab
 /// of singles never merges into one album.
 class MediaTypeDialog extends StatefulWidget {
   const MediaTypeDialog({

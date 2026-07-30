@@ -229,8 +229,8 @@ void main() {
 
       expect(find.byType(BookScreen), findsOneWidget);
       // And the chrome lights nothing rather than lying about where the
-      // visitor is. The branch on screen still names its domain — that is
-      // what keeps a drill-in from lighting Home — but the chrome is not
+      // visitor is. The branch on screen still names its domain - that is
+      // what keeps a drill-in from lighting Home - but the chrome is not
       // drawing that destination, so no row is selected.
       final frame = tester.widget<WaxShellFrame>(find.byType(WaxShellFrame));
       expect(frame.selected, WaxNavTarget.books.name);
@@ -408,7 +408,7 @@ void main() {
     tester,
   ) async {
     // A book is declared under the audiobooks hub, so `go` from anywhere
-    // else rebuilds that ancestry and takes the stack with it — here, a
+    // else rebuilds that ancestry and takes the stack with it - here, a
     // drilled genre three levels into the music branch. Pushing is what
     // makes the excursion an excursion.
     final container = await _pumpShell(tester);
@@ -680,7 +680,7 @@ void main() {
         WaxNavTarget.podcasts,
       );
       // Home's own branch still answers home, for a location only home
-      // claims — every domain's own drill-ins are claimed by prefix now
+      // claims - every domain's own drill-ins are claimed by prefix now
       // that the last of them has a hub.
       expect(
         activeNavTarget(WaxRoute.home, targets, branchIndex: 0),

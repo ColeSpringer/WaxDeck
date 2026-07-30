@@ -14,7 +14,7 @@ const _track = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK1';
 ///
 /// The seam the manager's bookkeeping is driven through: every transfer is
 /// started, paused, and finished on this test's schedule, so the ordering
-/// invariants are assertable — which is what neither the plugin nor a
+/// invariants are assertable - which is what neither the plugin nor a
 /// filesystem would give.
 class FakeTransferEngine implements TransferEnginePort {
   final _events = StreamController<TransferEvent>.broadcast();
@@ -271,7 +271,7 @@ void main() {
 
     test('a failed file discards the whole item', () async {
       // Left alone, the failed row stays `pending` behind a transfer
-      // nothing is driving — a row the manager screen draws as a transfer
+      // nothing is driving - a row the manager screen draws as a transfer
       // in flight forever. And the rows that *did* land would then be the
       // only ones left, every one of them complete, so a book missing its
       // last part would answer `isComplete`.
@@ -470,7 +470,7 @@ void main() {
     test('a second report for a finished transfer is ignored', () async {
       // The observable half of "terminal transfers are forgotten". Every
       // id ever transferred used to stay mapped for the life of the
-      // process, which is a leak with nothing to see — except this: a
+      // process, which is a leak with nothing to see - except this: a
       // mapping that outlives its transfer is a mapping something can act
       // on again, so a repeated report would rewrite a settled row and
       // announce a completion twice.

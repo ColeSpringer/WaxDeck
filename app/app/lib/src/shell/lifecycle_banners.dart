@@ -84,7 +84,7 @@ class ServerBuildWatcher extends Notifier<bool> {
       // unawaited, so anything escaping it is an unhandled zone error,
       // and the client maps only Dio's failures into that type: a
       // response the generated deserializer cannot build throws
-      // something else entirely — which is precisely the shape of the
+      // something else entirely - which is precisely the shape of the
       // one event this probe exists to notice, a server replaced by a
       // build that answers differently.
       debugPrint('server build probe failed: $error');

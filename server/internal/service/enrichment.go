@@ -200,7 +200,7 @@ var builtinProviderFor = map[string]string{
 // key-free built-ins for the wanted artifacts the injected providers left
 // empty. Injected providers keep priority: they ran first, so a built-in
 // only claims an artifact that was still absent beforehand and is present
-// after the item-scoped Enrich. Best-effort — a built-in failure leaves
+// after the item-scoped Enrich. Best-effort - a built-in failure leaves
 // the injected result untouched.
 func (l *Library) enrichItemBuiltins(ctx context.Context, it *model.ItemView, wants []string, applied, skipped *[]string) {
 	var builtinWants []string
@@ -556,8 +556,8 @@ func (l *Library) enrichBook(ctx context.Context, it *model.ItemView, locked map
 
 // bookEnrichEdits maps a book provider candidate to the fill-when-empty edits it
 // can honestly supply: only fields the item currently lacks and has not locked.
-// A provider value that WaxBin would reject on write — a malformed ISBN or a
-// non-numeric year — is dropped rather than added, because one bad value fails
+// A provider value that WaxBin would reject on write - a malformed ISBN or a
+// non-numeric year - is dropped rather than added, because one bad value fails
 // the whole edit and costs the provider's other fields. Dropped values are
 // returned keyed by field so the caller can log them.
 func bookEnrichEdits(cand *enrich.Candidate, detail *model.BookDetail, it *model.ItemView, locked map[string]bool) (edits, skipped map[string]string) {

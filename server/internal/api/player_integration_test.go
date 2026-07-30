@@ -778,3 +778,23 @@ func pGet(t *testing.T, h *harness, path, token string, out any) {
 		t.Fatalf("decoding %s: %v", path, err)
 	}
 }
+
+// The multi-part refusal's phrase is a contract with the client's device
+// picker, which turns this one `feature-unavailable` into an offer to play
+// the book here. The code cannot carry that on its own - a windowed track
+// answers the same code - so the phrase is what the picker keys on, and
+// this is what makes rewording it a build failure rather than a silently
+// restored dead end. See app/app/lib/src/connect/device_picker.dart.
+func TestMultiPartRefusalWording(t *testing.T) {
+	refusal := multiPartRefusal("bk-01HZZZZZZZZZZZZZZZZZZZZZZZ")
+	if refusal.Code != "feature-unavailable" {
+		t.Errorf("code = %q, want feature-unavailable", refusal.Code)
+	}
+	if !strings.Contains(refusal.Msg, "multi-part audiobook") {
+		t.Errorf("message = %q, must contain %q for the picker to recognise it",
+			refusal.Msg, "multi-part audiobook")
+	}
+	if !strings.Contains(refusal.Msg, "bk-01HZZZZZZZZZZZZZZZZZZZZZZZ") {
+		t.Errorf("message = %q, must name the pid the spec says it names", refusal.Msg)
+	}
+}

@@ -6,7 +6,7 @@ import 'browser_settings_store.dart';
 /// The real binding: `window.localStorage`, which survives a reload and
 /// is scoped to the origin the app is served from.
 ///
-/// Not `sessionStorage` — a preference that forgets itself when the tab
+/// Not `sessionStorage` - a preference that forgets itself when the tab
 /// closes is the in-memory notifier this store replaced.
 class _LocalStorage implements BrowserStorage {
   const _LocalStorage();
@@ -24,7 +24,7 @@ class _LocalStorage implements BrowserStorage {
 
 /// The web build's per-device settings store. There is no mirror
 /// database here (drift does not run on web), so [db] is always null and
-/// the browser holds the values instead — which is the point: the
+/// the browser holds the values instead - which is the point: the
 /// desktop-shaped surface that most wants a collapsed sidebar is the one
 /// running in a browser.
 ClientSettingsStore createClientSettingsStore(MirrorDatabase? db) =>

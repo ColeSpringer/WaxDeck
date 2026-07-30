@@ -831,8 +831,8 @@ func (l *Library) CreatePlaylist(ctx context.Context, uc *UserCtx, req PlaylistC
 
 // UpdatePlaylist applies a partial update: a rename, a visibility
 // change, or a smart playlist's rule, in any combination. Each applies
-// in place under a stable pid — the rule setter lets the rule change
-// without reissuing — so one server event carries the result.
+// in place under a stable pid - the rule setter lets the rule change
+// without reissuing - so one server event carries the result.
 func (l *Library) UpdatePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPID string, req PlaylistUpdate) (Playlist, error) {
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {

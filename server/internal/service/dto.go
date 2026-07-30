@@ -16,7 +16,7 @@ import "time"
 // text, so a client can group and link by identity: two artists with
 // the same name are two entities, and an album title alone is not a
 // location. Each is empty when the entity is absent, and AlbumPID is
-// track-only — an episode's or a book's Album is a show or series
+// track-only - an episode's or a book's Album is a show or series
 // title with no album entity behind it.
 //
 // TrackNo and DiscNo ride the summary rather than the detail because a

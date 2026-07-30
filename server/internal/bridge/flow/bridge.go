@@ -525,8 +525,8 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 			// Clear Seekable so this stream routes through the admission control
 			// below: a forced format engages the engine (a transcode), not a
 			// passthrough of the original bytes. PlayInfoFor advertises this same
-			// format to the client as Seekable:true — the encoded endpoint is
-			// client-seekable — so here the flag doubles as "no engine session",
+			// format to the client as Seekable:true - the encoded endpoint is
+			// client-seekable - so here the flag doubles as "no engine session",
 			// which a forced format is not.
 			shape.Seekable = false
 		}

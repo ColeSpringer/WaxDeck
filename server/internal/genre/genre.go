@@ -3,9 +3,9 @@
 // name and the aliases that resolve to it.
 //
 // It exists because the catalog deliberately does not decide what a
-// genre is called. WaxBin folds spelling variants together — its match
+// genre is called. WaxBin folds spelling variants together - its match
 // key lowercases, strips diacritics, and folds punctuation to spaces, so
-// "Hip-Hop" and "hip hop" already join one genre row — but the row's
+// "Hip-Hop" and "hip hop" already join one genre row - but the row's
 // display name is whichever spelling was scanned first, and true
 // synonyms ("Rap" and "Hip Hop", "DnB" and "Drum & Bass") are separate
 // rows no folding can merge. This package answers both: an alias list
@@ -75,8 +75,8 @@ type Normalizer struct {
 // could not resolve deterministically: a duplicate name, an alias
 // claimed twice, an alias that collides with a different genre's name,
 // a parent that is not itself a declared top-level genre, or a node that
-// is its own parent. The tree is two levels deep by design — a genre
-// browse is a list with optional grouping, not an outline — so a parent
+// is its own parent. The tree is two levels deep by design - a genre
+// browse is a list with optional grouping, not an outline - so a parent
 // may not itself have a parent.
 func New(t Tree) (*Normalizer, error) {
 	if len(t) == 0 {

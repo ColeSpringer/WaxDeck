@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../connect/remote_session.dart';
 import '../providers.dart';
 import '../queue/queue_persistence.dart';
 import '../search/search_controller.dart';
@@ -172,6 +173,11 @@ class AuthController extends AsyncNotifier<SessionState> {
     // the departing listener typed, naming things in their library, in a
     // browser store the next account on this machine can read back.
     await forgetSearchesOnSignOut(ref);
+    // A session on another endpoint stays playing - stepping away from a
+    // cast has never silenced the room and signing out is no different -
+    // but this client stops controlling it, so the next account does not
+    // inherit a deck bar pointed at someone else's speaker.
+    releaseRemoteOnSignOut(ref);
     // The rest of the per-device settings deliberately stand. A
     // collapsed sidebar describes the machine rather than the account,
     // and wiping it would make signing out a factory reset of a shared

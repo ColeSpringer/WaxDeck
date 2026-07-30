@@ -473,6 +473,7 @@ Class | Method | HTTP request | Description
 [*RadioApi*](doc/RadioApi.md) | [**deleteRadioStation**](doc/RadioApi.md#deleteradiostation) | **DELETE** /radio/stations/{pid} | Delete a radio station
 [*RadioApi*](doc/RadioApi.md) | [**getRadioPlayInfo**](doc/RadioApi.md#getradioplayinfo) | **GET** /radio/stations/{pid}/play-info | Resolve a playable station stream
 [*RadioApi*](doc/RadioApi.md) | [**getRadioStation**](doc/RadioApi.md#getradiostation) | **GET** /radio/stations/{pid} | Get one radio station
+[*RadioApi*](doc/RadioApi.md) | [**getRadioStationLogo**](doc/RadioApi.md#getradiostationlogo) | **GET** /radio/stations/{pid}/logo | Get a station logo
 [*RadioApi*](doc/RadioApi.md) | [**listRadioStations**](doc/RadioApi.md#listradiostations) | **GET** /radio/stations | List radio stations
 [*RadioApi*](doc/RadioApi.md) | [**searchRadioDirectory**](doc/RadioApi.md#searchradiodirectory) | **GET** /radio/directory | Search the station directory
 [*RadioApi*](doc/RadioApi.md) | [**updateRadioStation**](doc/RadioApi.md#updateradiostation) | **PUT** /radio/stations/{pid} | Update a radio station

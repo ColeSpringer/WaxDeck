@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_providers.dart';
 import '../player/session_registry.dart';
 import '../providers.dart';
+import '../settings/prefs_controller.dart';
 
 /// The shared internet radio station library.
 class RadioStationsController extends AsyncNotifier<List<RadioStation>> {
@@ -33,6 +35,31 @@ class RadioStationsController extends AsyncNotifier<List<RadioStation>> {
     return created;
   }
 
+  /// Replaces a station's fields and reloads.
+  Future<RadioStation> edit(
+    String pid, {
+    required String name,
+    required String streamUrl,
+    String? homepageUrl,
+    String? logoUrl,
+  }) async {
+    final repository = ref.read(repositoryProvider);
+    final updated = await repository.updateRadioStation(
+      pid,
+      name: name,
+      streamUrl: streamUrl,
+      homepageUrl: homepageUrl,
+      logoUrl: logoUrl,
+    );
+    // The proxy URL is keyed by pid, which an edit does not change. The
+    // server drops its copy; this drops ours, including the note that the
+    // station had no logo, or the fix draws the old picture all session.
+    await ref.read(artworkStoreProvider).evict(repository.radioLogoUrlFor(pid));
+    ref.invalidateSelf();
+    await future;
+    return updated;
+  }
+
   Future<void> remove(String pid) async {
     await ref.read(repositoryProvider).deleteRadioStation(pid);
     ref.invalidateSelf();
@@ -44,6 +71,123 @@ final radioStationsProvider =
     AsyncNotifierProvider<RadioStationsController, List<RadioStation>>(
       RadioStationsController.new,
     );
+
+/// The stations pinned to the dial, in dial order.
+///
+/// Per account, in the synced preference document, and that placement is
+/// the decision worth stating. The station library is shared by the whole
+/// household, so 6.10 read the absence of per-user station state as
+/// "favourites are a client pref" - but ADR-0027's test is whether a
+/// preference describes the *machine* or the *account*, and which six of
+/// the household's stations are yours plainly describes you. A collapsed
+/// sidebar is a fact about a screen and a pointer; a dial is not. So the
+/// prefs document grew an ordered list of station pids (ADR-0034), which
+/// also means a pin made on the desktop is on the phone, and signing out
+/// takes it with the account rather than leaving it on a shared machine.
+///
+/// The state stays synchronous, like the theme's: the dial draws what is
+/// loaded and nothing while the document is still in flight.
+class RadioFavorites extends Notifier<List<String>> {
+  /// How many stations the dial draws. Past about a dozen a band under a
+  /// needle stops being a dial and becomes a list harder to use than the
+  /// grid below it. The client's cap rather than the contract's - the
+  /// document allows more, so a later design is not a spec change.
+  static const limit = 12;
+
+  /// What the document may hold, from the contract's `maxItems`. Separate
+  /// from [limit] on purpose: presenting the stored list through the dial's
+  /// cap and writing that back deletes another client's thirteenth pin.
+  static const _stored = 64;
+
+  /// One rule about what the list may hold: no duplicates, no blanks, never
+  /// past what the document allows. Everything that builds one goes through
+  /// it, so another client's document obeys it too.
+  static List<String> _clean(Iterable<String> pids) {
+    final seen = <String>{};
+    final kept = <String>[];
+    for (final pid in pids) {
+      if (pid.isEmpty || !seen.add(pid)) continue;
+      kept.add(pid);
+      if (kept.length == _stored) break;
+    }
+    return kept;
+  }
+
+  @override
+  List<String> build() {
+    // Watched, so a pin made on another device lands here: the server
+    // emits a prefs event and the document is refetched. Whatever the
+    // document says replaces optimistic state, which is what keeps the
+    // server the authority rather than this notifier.
+    final prefs = ref.watch(prefsControllerProvider).value;
+    return _clean(prefs?.radioFavorites ?? const <String>[]);
+  }
+
+  bool contains(String pid) => state.contains(pid);
+
+  /// Whether the dial has room for another pin.
+  bool get full => state.length >= limit;
+
+  /// Pins or unpins. A pin goes on the end, so the dial's order is the
+  /// order stations were pinned in and does not shuffle under a thumb.
+  ///
+  /// Answers null when the pin landed, or the message to show when it did
+  /// not: a full dial, or the server's refusal. Returned rather than thrown
+  /// because the callers are a glyph and a menu item, neither a place an
+  /// unhandled rejection can be seen.
+  ///
+  /// Optimistic, because a star that waits for a round trip reads as a
+  /// dropped tap; a refused write puts the old list back.
+  Future<String?> toggle(String pid) async {
+    final before = state;
+    final pinned = state.contains(pid);
+    if (!pinned && full) {
+      // Said, not swallowed: dropping the pin and writing the unchanged
+      // list back is a tap that reports success and does nothing.
+      return 'The dial holds $limit stations. Unpin one to make room.';
+    }
+    state = pinned
+        ? <String>[
+            for (final favorite in state)
+              if (favorite != pid) favorite,
+          ]
+        : _clean([...state, pid]);
+    try {
+      await ref.read(prefsControllerProvider.notifier).setRadioFavorites(state);
+      return null;
+    } on WaxDeckApiException catch (e) {
+      if (ref.mounted) state = before;
+      return e.message;
+    }
+  }
+}
+
+final radioFavoritesProvider = NotifierProvider<RadioFavorites, List<String>>(
+  RadioFavorites.new,
+);
+
+/// The pinned stations that still exist, in dial order.
+///
+/// Resolved against the library rather than trusted: a station deleted on
+/// another device leaves a pid behind in this device's list, and a dial
+/// slot for a station nobody can tune is worse than one fewer slot. The
+/// stale pid is left in storage on purpose - nothing here writes, so a
+/// list read while the library is still loading does not prune itself
+/// against an empty answer.
+///
+/// The dial's cap applies here, not to the stored list: a document holding
+/// more than this client draws keeps every entry.
+final radioDialProvider = Provider<List<RadioStation>>((ref) {
+  final stations = ref.watch(radioStationsProvider).value;
+  if (stations == null) return const <RadioStation>[];
+  final byPid = <String, RadioStation>{
+    for (final station in stations) station.pid: station,
+  };
+  return <RadioStation>[
+    for (final pid in ref.watch(radioFavoritesProvider))
+      if (byPid[pid] != null) byPid[pid]!,
+  ].take(RadioFavorites.limit).toList(growable: false);
+});
 
 /// What the radio player is doing right now.
 class RadioPlayback {
@@ -154,12 +298,16 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     if (state.station?.pid != pid) return;
     try {
       final info = await ref.read(repositoryProvider).getRadioPlayInfo(pid);
-      if (state.station?.pid == pid) {
-        state = RadioPlayback(
-          station: state.station,
-          nowPlaying: info.nowPlaying,
-        );
-      }
+      if (state.station?.pid != pid) return;
+      // Only when it moved. This asks every fifteen seconds and a station
+      // announces every few minutes, and [RadioPlayback] has no value
+      // equality, so an identical assignment rebuilds the dial band, every
+      // visible tile, and the deck bar for the same words.
+      if (info.nowPlaying == state.nowPlaying) return;
+      state = RadioPlayback(
+        station: state.station,
+        nowPlaying: info.nowPlaying,
+      );
     } on WaxDeckApiException {
       // Metadata is decoration; playback carries on without it.
     }

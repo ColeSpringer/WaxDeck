@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
@@ -14,6 +13,7 @@ import '../tokens/typography.dart';
 import 'artwork.dart';
 import 'controls.dart';
 import 'indicators.dart';
+import 'snap_physics.dart';
 import 'view_data.dart';
 
 /// An eyebrow, a title, and an optional action: the head of every shelf,
@@ -125,6 +125,25 @@ class MediaCard extends StatefulWidget {
       WaxType.caption.height! * WaxType.caption.fontSize!,
     );
     return width + WaxSpace.s8 + title + caption * 2;
+  }
+
+  /// How many cards of at most [extent] fit across [available], and how
+  /// wide each one comes out.
+  ///
+  /// Measured rather than assumed: a max-extent delegate divides the room
+  /// evenly and hands back a cell narrower than the number it was given, so
+  /// a card sized to that number draws taller than [heightFor] reserved.
+  /// Deciding the count here makes the two one measurement.
+  static ({int columns, double width}) gridFor(
+    double available, {
+    required double extent,
+  }) {
+    const gap = WaxShellMetrics.gridGap;
+    final columns = ((available + gap) / (extent + gap)).ceil().clamp(1, 12);
+    return (
+      columns: columns,
+      width: (available - gap * (columns - 1)) / columns,
+    );
   }
 
   @override
@@ -293,7 +312,7 @@ class _MediaCardState extends State<MediaCard> {
                       // for a load-bearing reason: [heightFor] reserves
                       // one caption line for this, so a readout that
                       // wrapped would overflow the cell by exactly one
-                      // line — which is what a book's "1 hr 20 min left"
+                      // line - which is what a book's "1 hr 20 min left"
                       // did.
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -375,7 +394,7 @@ class MediaListRow extends StatelessWidget {
   /// The same reason [MediaCard.heightFor] exists, from the other end: a
   /// screen that scrolls to a row by index has to know the pitch before
   /// the rows are built, and a guess drifts the moment the OS text scale
-  /// moves — a title and a caption at 1.5x are taller than the density's
+  /// moves - a title and a caption at 1.5x are taller than the density's
   /// row height, so an estimate made from that alone lands short by more
   /// with every row it counts.
   ///
@@ -613,6 +632,185 @@ class MediaListRow extends StatelessWidget {
   }
 }
 
+/// A glyph, a name, a line under it, and something on the right.
+///
+/// The house row for lists that are not media: the device picker's
+/// endpoints, a cast diagnostic's candidate bases, a settings list. Beside
+/// [MediaListRow] rather than inside it because the leading slot is the
+/// difference and it is not a small one - a media row's leading slot is
+/// artwork, which means a monogram when there is none, and a speaker drawn
+/// as the letter K is not a speaker.
+///
+/// One announcement per row, with the controls the caller puts in
+/// [trailing] keeping their own nodes: the label sits on the content
+/// region, for the reason [MediaListRow] records at length - excluding a
+/// whole row's subtree takes its own controls out of the semantics tree
+/// while leaving them perfectly visible.
+class WaxOptionRow extends StatelessWidget {
+  const WaxOptionRow({
+    required this.title,
+    this.subtitle,
+    this.glyph,
+    this.leading,
+    this.trailing,
+    this.onTap,
+    this.enabled = true,
+    this.selected = false,
+    this.active = false,
+    this.activeLabel = 'Playing',
+    this.spokenSubtitle,
+    this.semanticsId,
+    super.key,
+  });
+
+  final String title;
+
+  /// The line under the name: what a device is, why it cannot be used,
+  /// what is playing on it.
+  final String? subtitle;
+
+  /// The leading glyph. [leading] wins where a caller has a whole widget
+  /// to put there (a logo, a spinner).
+  final WaxGlyph? glyph;
+  final Widget? leading;
+
+  /// A control or a readout on the trailing edge. Keeps its own semantics.
+  final Widget? trailing;
+
+  final VoidCallback? onTap;
+
+  /// False greys the row and refuses the tap, for an option that exists
+  /// and cannot be taken right now - an endpoint that has gone offline.
+  /// The row still says why in [subtitle], which is the difference between
+  /// disabled and hidden.
+  final bool enabled;
+
+  final bool selected;
+
+  /// Tints the glyph and the name, and by default announces the row as
+  /// playing: this is where the sound is.
+  final bool active;
+
+  /// What a screen reader hears before the title while [active]. Null for a
+  /// highlight that is not about playback: the connection check's reachable
+  /// addresses would otherwise all announce as playing.
+  final String? activeLabel;
+
+  /// What a screen reader hears instead of [subtitle], where the drawn
+  /// line is abbreviated for the room it has.
+  final String? spokenSubtitle;
+
+  final String? semanticsId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final layout = WaxLayout.of(context);
+    final tappable = enabled && onTap != null;
+    final titleColor = !enabled
+        ? colors.textDisabled
+        : (active ? colors.accent : colors.textPrimary);
+
+    final inside = Row(
+      children: <Widget>[
+        if (leading != null)
+          leading!
+        else if (glyph != null)
+          WaxIcon(
+            glyph!,
+            size: 22,
+            active: active,
+            color: !enabled
+                ? colors.textDisabled
+                : (active ? colors.accent : colors.textSecondary),
+          ),
+        if (leading != null || glyph != null)
+          const SizedBox(width: WaxSpace.s12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: WaxType.titleItem.copyWith(color: titleColor),
+              ),
+              if (subtitle != null)
+                Text(
+                  subtitle!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: WaxType.caption.copyWith(
+                    color: enabled ? colors.textSecondary : colors.textDisabled,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    final announcement = <String?>[
+      if (active) activeLabel,
+      title,
+      spokenSubtitle ?? subtitle,
+    ].nonNulls.join(', ');
+
+    // The content is what carries the row's identity and its tap, and
+    // [trailing] sits outside it. That split is the point: the wrapper
+    // excludes its subtree so the row announces once, and a trailing
+    // control inside that subtree would be dropped from the semantics
+    // tree while looking perfectly fine - the defect MediaListRow shipped
+    // and the reason it is a comment there too.
+    final Widget content = tappable
+        ? WaxTappable(
+            label: announcement,
+            onPressed: onTap,
+            selected: selected ? true : null,
+            semanticsId: semanticsId,
+            child: InkWell(onTap: onTap, child: inside),
+          )
+        : Semantics(
+            identifier: semanticsId,
+            // A row that is not tappable is still a row: an offline
+            // endpoint says what it is and that it cannot be chosen, and
+            // dropping its node would make it invisible rather than
+            // unavailable.
+            button: onTap != null,
+            enabled: enabled,
+            selected: selected,
+            label: announcement,
+            excludeSemantics: true,
+            child: inside,
+          );
+
+    return Material(
+      color: selected ? colors.surface2 : Colors.transparent,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: layout.rowHeight),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: WaxSpace.s16,
+            vertical: WaxSpace.s8,
+          ),
+          child: Row(
+            children: <Widget>[
+              Expanded(child: content),
+              if (trailing != null) ...<Widget>[
+                const SizedBox(width: WaxSpace.s8),
+                trailing!,
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A horizontal shelf: a header and a snapping row of cards.
 ///
 /// Shelves never animate their arrival. Staggered entrances make a fast
@@ -663,7 +861,7 @@ class ShelfRow extends StatelessWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: gutter,
-            physics: _ShelfSnapPhysics(
+            physics: SnapScrollPhysics(
               itemExtent: width + WaxShellMetrics.gridGap,
               leadingInset: gutter.left,
             ),
@@ -692,53 +890,3 @@ class ShelfRow extends StatelessWidget {
 /// knows nothing about the leading gutter, so a flick rests wherever the
 /// page happens to land: half a card clipped at the edge. This settles on
 /// whole cards, gutter included.
-class _ShelfSnapPhysics extends ScrollPhysics {
-  const _ShelfSnapPhysics({
-    required this.itemExtent,
-    required this.leadingInset,
-    super.parent,
-  });
-
-  final double itemExtent;
-  final double leadingInset;
-
-  @override
-  _ShelfSnapPhysics applyTo(ScrollPhysics? ancestor) => _ShelfSnapPhysics(
-    itemExtent: itemExtent,
-    leadingInset: leadingInset,
-    parent: buildParent(ancestor),
-  );
-
-  double _snap(double offset, ScrollMetrics position) {
-    final target =
-        ((offset - leadingInset) / itemExtent).roundToDouble() * itemExtent +
-        leadingInset;
-    return target.clamp(position.minScrollExtent, position.maxScrollExtent);
-  }
-
-  @override
-  Simulation? createBallisticSimulation(
-    ScrollMetrics position,
-    double velocity,
-  ) {
-    // Out of range: let the parent's spring bring it back first.
-    if ((velocity <= 0 && position.pixels <= position.minScrollExtent) ||
-        (velocity >= 0 && position.pixels >= position.maxScrollExtent)) {
-      return super.createBallisticSimulation(position, velocity);
-    }
-    final simulation = super.createBallisticSimulation(position, velocity);
-    final landing = simulation?.x(double.infinity) ?? position.pixels;
-    final target = _snap(landing, position);
-    if ((target - position.pixels).abs() < precisionErrorTolerance) return null;
-    return ScrollSpringSimulation(
-      spring,
-      position.pixels,
-      target,
-      velocity,
-      tolerance: toleranceFor(position),
-    );
-  }
-
-  @override
-  bool get allowImplicitScrolling => false;
-}

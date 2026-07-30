@@ -260,14 +260,14 @@ paths:
         entries open (their ids land in `reviewEntryIds`). Members
         still receiving bytes fall back to opening their own
         per-file entry when they later complete. Call this exactly
-        when the client finishes sending members — after per-file
+        when the client finishes sending members - after per-file
         failures too, so the files that did arrive are reviewed
         (a batch whose every member was deleted finalizes empty).
         Only the batch's owner (or an administrator) may finalize;
         anyone else sees `not-found`. Idempotent: finalizing a
         finalized batch answers the same batch again. Finalizing a
-        batch the server has already expired answers `conflict` —
-        its members were grouped with what had arrived when the
+        batch the server has already expired answers `conflict` - its members were
+        grouped with what had arrived when the
         server closed it.
       tags: [uploads]
       responses:
@@ -410,7 +410,7 @@ components:
             folder, forward-slash separated (empty or absent for a
             file at the top). The `auto` grouping clusters by it, so
             disc subfolders (`CD1`, `Disc 2`) fold into one album.
-            Must stay relative — absolute paths and `..` segments
+            Must stay relative - absolute paths and `..` segments
             are rejected, as is passing it without `batchId`.
             `fileName` stays a bare name regardless.
           example: The Wall/CD1
@@ -455,7 +455,7 @@ components:
           description: >
             The review entry the file landed in. Opened at completion
             for a solo session; for a batch member, filled when the
-            batch finalizes — or at its own completion, for a member
+            batch finalizes - or at its own completion, for a member
             that finished only after the batch closed.
         batchId:
           type: string

@@ -55,7 +55,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   static const pageSize = 50;
 
   /// Chunk size for the resumable transfer loop: 1 MiB. Also the most
-  /// of any file that sits in memory at once — sources are lazy
+  /// of any file that sits in memory at once - sources are lazy
   /// references windowed through here.
   static const chunkBytes = 1024 * 1024;
 
@@ -106,9 +106,9 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       state = AsyncData(_copy(current, loadingMore: false));
     } catch (_) {
       // Anything else is a defect, not a hiccup: a decode failure,
-      // a bad cast. Release the paging guard first — loadingMore is
+      // a bad cast. Release the paging guard first - loadingMore is
       // what keeps two fetches from racing, so leaving it set would
-      // wedge paging permanently and silently — then let the error
+      // wedge paging permanently and silently - then let the error
       // reach the zone's handler instead of vanishing here.
       if (generation == _generation) {
         state = AsyncData(_copy(current, loadingMore: false));
@@ -183,7 +183,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
 
   /// Opens a session for a reader-backed source (web picks and drops)
   /// and streams it up in [chunkBytes] windows pulled lazily from the
-  /// accessor — only the window in flight materializes. Failure
+  /// accessor - only the window in flight materializes. Failure
   /// handling matches [uploadFromPath], with the accessor retained
   /// for [retry].
   Future<void> uploadFromReader({

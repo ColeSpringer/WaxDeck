@@ -1,7 +1,7 @@
 /// Platform switch for where per-device preferences persist.
 ///
 /// Native builds already have a durable local store, so they use it. The
-/// web build has no mirror at all — drift does not run there — and the
+/// web build has no mirror at all - drift does not run there - and the
 /// alternative was the no-op store the queue uses on web, which would
 /// leave a collapsed sidebar unpersisted on exactly the surface that
 /// wants it. So the browser gets a real implementation over

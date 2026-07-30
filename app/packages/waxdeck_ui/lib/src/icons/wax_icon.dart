@@ -85,7 +85,7 @@ class WaxIcon extends StatelessWidget {
 /// Deliberately *not* `@staticIconProvider`. That annotation tells the
 /// release build's icon tree-shaker to ignore the constants declared in
 /// the annotated class, so a glyph survives only where the shaker finds
-/// its constant materialized at a use site — which a reference from
+/// its constant materialized at a use site - which a reference from
 /// another package's widget code is not. With the annotation on, 32 of
 /// these 57 names shipped as blank boxes in release builds while
 /// rendering correctly in every debug run, golden, and widget test.

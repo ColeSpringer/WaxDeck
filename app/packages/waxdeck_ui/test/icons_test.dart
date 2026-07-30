@@ -48,7 +48,7 @@ void main() {
       // `@staticIconProvider` tells the icon tree-shaker to ignore the
       // constants declared in the annotated class, so a glyph then ships
       // only where the shaker finds its constant materialized at a use
-      // site it walks — which a reference from another package's widget
+      // site it walks - which a reference from another package's widget
       // code is not. With it on, 32 of these names shipped as blank boxes
       // in release builds while rendering in every debug run, golden, and
       // widget test, which is why this is a source check rather than a

@@ -16,6 +16,7 @@ import '../auth/signup_screen.dart';
 import '../books/book_screen.dart';
 import '../books/books_screen.dart';
 import '../connect/remote_screen.dart';
+import '../connect/remote_session.dart';
 import '../discovery/track_list_screen.dart';
 import '../downloads/downloads_screen.dart';
 import '../health/diagnostics_screen.dart';
@@ -154,9 +155,21 @@ String? _redirect(Ref ref, GoRouterState state) {
   final signedIn =
       ref.read(authControllerProvider).value?.authenticated ?? false;
   if (signedIn) {
-    if (!WaxRoute.authLocations.contains(location)) return null;
-    final from = state.uri.queryParameters[WaxRoute.fromParam];
-    return from != null && _isInAppLocation(from) ? from : WaxRoute.home;
+    if (WaxRoute.authLocations.contains(location)) {
+      final from = state.uri.queryParameters[WaxRoute.fromParam];
+      return from != null && _isInAppLocation(from) ? from : WaxRoute.home;
+    }
+    // The remote screen is a view of the session this client drives
+    // elsewhere, and that is provider state rather than route `extra`, so
+    // [_requires] cannot ask about it. This is the same rule from the one
+    // redirect that can read a provider: arriving with nothing to control
+    // a reload, a restored history entry, a guessed URL - lands home
+    // rather than on an empty transport.
+    if (location == WaxRoute.remote &&
+        ref.read(remoteSessionProvider) == null) {
+      return WaxRoute.home;
+    }
+    return null;
   }
 
   // A server with no accounts has exactly one thing to offer. An
@@ -202,9 +215,9 @@ GoRouterRedirect _requires<T>(String fallback) =>
 /// gets subtly wrong.
 ///
 /// The two entity dimensions open onto the entity itself rather than
-/// onto its filtered listing. Same location either way — the contract
+/// onto its filtered listing. Same location either way - the contract
 /// makes a bucket's key its entity pid behind a type prefix, so one
-/// address names the artist and filters the list — but an artist is a
+/// address names the artist and filters the list - but an artist is a
 /// screen about an artist, not a list of their tracks, and the list
 /// still has a location one level down.
 GoRoute _musicIndexRoute(MusicDimension dimension) => GoRoute(
@@ -241,7 +254,7 @@ Widget _bucketScreen(MusicDimension dimension, GoRouterState state) {
   // one travels as its bare key, and the bucket a dimension is absent
   // from travels as a sentinel. The prefix is the test, and it is the
   // same one `musicFacetKey` keys on to turn a handle back into a facet
-  // key — so the two cannot disagree about what the segment is.
+  // key - so the two cannot disagree about what the segment is.
   final prefix = dimension.entityPrefix;
   if (prefix != null && segment.startsWith(prefix)) {
     switch (dimension) {
@@ -313,8 +326,8 @@ final publicRoutes = <RouteBase>[
 /// domain gets a branch, so its stack survives a trip to another one, and
 /// everything that is not a domain shares the last branch: a settings
 /// visit must not become what the Home tab restores. Locations that only
-/// make sense on top of what is already there — the player, a computed
-/// track list, a remote session — are declared outside the shell, on the
+/// make sense on top of what is already there - the player, a computed
+/// track list, a remote session - are declared outside the shell, on the
 /// signed-in navigator, so they cover the chrome and back closes them.
 ///
 /// Every branch is declared whether or not its tab is drawn: the branch
@@ -416,7 +429,7 @@ List<RouteBase> shellRoutes() => <RouteBase>[
         ],
       ),
       // Everything that is not a domain. Nothing calls `goBranch` on this
-      // one — its destinations are reached by location — so it needs no
+      // one - its destinations are reached by location - so it needs no
       // root of its own.
       StatefulShellBranch(
         routes: <RouteBase>[
@@ -578,11 +591,16 @@ List<RouteBase> shellRoutes() => <RouteBase>[
     redirect: _requires<TrackListArgs>(WaxRoute.home),
     builder: _trackList,
   ),
+  // A view of the session this client is driving elsewhere, so it carries
+  // no payload: which session that is lives in the controller the deck bar
+  // reads too, which is what lets the bar keep following a session after
+  // this screen is left. Arriving with none is sent home by the session
+  // redirect, which is the one that can read a provider. Still pushed
+  // rather than gone to: nothing about "the session I am controlling" is
+  // in a URL a stranger could open.
   GoRoute(
     path: WaxRoute.remote,
-    redirect: _requires<PlaybackSessionInfo>(WaxRoute.home),
-    builder: (context, state) =>
-        RemoteControlScreen(initial: state.extra! as PlaybackSessionInfo),
+    builder: (context, state) => const RemoteControlScreen(),
   ),
 ];
 

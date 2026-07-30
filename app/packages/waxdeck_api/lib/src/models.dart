@@ -224,7 +224,13 @@ enum ThemePref {
 /// and clients apply their own defaults. The PUT endpoint replaces the
 /// whole document, so senders start from the stored value.
 class Prefs {
-  const Prefs({this.timezone, this.locale, this.theme, this.sharedStatsOptOut});
+  const Prefs({
+    this.timezone,
+    this.locale,
+    this.theme,
+    this.sharedStatsOptOut,
+    this.radioFavorites,
+  });
 
   /// IANA timezone name, for example Europe/Amsterdam.
   final String? timezone;
@@ -238,6 +244,19 @@ class Prefs {
   /// Absent means enrolled, the default.
   final bool? sharedStatsOptOut;
 
+  /// Radio stations this account has pinned, in dial order.
+  ///
+  /// The station library is shared by the household, so this is the one
+  /// piece of per-user station state there is.
+  ///
+  /// Null is an absent list, which the server answers with when nothing is
+  /// pinned - unpinning everything clears the field rather than storing
+  /// `[]`. Nothing here defaults a pinned station out of an absent list, so
+  /// absent and empty are the same answer on the way back, deliberately;
+  /// what makes the last unpin stick is that an empty list is a *value* on
+  /// the way out, which [copyWith] carries and null does not.
+  final List<String>? radioFavorites;
+
   /// Copy with individual fields replaced. Passing null keeps the current
   /// value; clearing a stored field is not something the UI needs yet.
   Prefs copyWith({
@@ -245,12 +264,14 @@ class Prefs {
     String? locale,
     ThemePref? theme,
     bool? sharedStatsOptOut,
+    List<String>? radioFavorites,
   }) {
     return Prefs(
       timezone: timezone ?? this.timezone,
       locale: locale ?? this.locale,
       theme: theme ?? this.theme,
       sharedStatsOptOut: sharedStatsOptOut ?? this.sharedStatsOptOut,
+      radioFavorites: radioFavorites ?? this.radioFavorites,
     );
   }
 }
@@ -1681,6 +1702,33 @@ class PlayerEndpoint {
   final String? activeSessionId;
 }
 
+/// One candidate advertise base a cast device would fetch media from,
+/// with the server's own verdict on reaching itself through it.
+class CastPreflightBase {
+  const CastPreflightBase({
+    required this.base,
+    required this.source,
+    required this.reachable,
+    required this.notes,
+  });
+
+  final String base;
+
+  /// `configured` (the public base) or `detected` (the auto-detected LAN
+  /// address); open vocabulary.
+  final String source;
+
+  /// Whether the server could fetch its own health endpoint through this
+  /// base. Unreachable predicts a cast failure; reachable does not
+  /// promise the device agrees, because it is not on the server's side of
+  /// the network.
+  final bool reachable;
+
+  /// Plain-language observations: scheme and certificate caveats, name
+  /// resolution warnings, why a base is likely or unlikely to work.
+  final List<String> notes;
+}
+
 /// One queue entry of a playback session, hydrated for display.
 class PlaybackSessionEntry {
   const PlaybackSessionEntry({
@@ -1794,7 +1842,7 @@ class PlaybackSessionInfo {
 ///
 /// Deliberately not a [PlaybackSessionInfo] carrying a flag: this has no
 /// live half. Nothing extrapolates, the position is final, and there is
-/// nothing to control — putting it back means starting a new session
+/// nothing to control - putting it back means starting a new session
 /// from this queue, this index, and this position.
 class PlaybackSessionHistoryEntry {
   const PlaybackSessionHistoryEntry({
@@ -3302,7 +3350,7 @@ class AuditEvent {
   final String? actorId;
   final String? actorName;
 
-  /// Dotted action name (`user.create`, `backup.restore-staged`, …).
+  /// Dotted action name (`user.create`, `backup.restore-staged`, ...).
   final String action;
   final String? targetKind;
   final String? targetPid;
@@ -3341,7 +3389,7 @@ class TrashEntry {
   /// The original library-relative path.
   final String name;
 
-  /// Why the file was trashed (`delete`, `upgrade`, …). Open vocabulary.
+  /// Why the file was trashed (`delete`, `upgrade`, ...). Open vocabulary.
   final String reason;
   final int sizeBytes;
   final DateTime trashedAt;

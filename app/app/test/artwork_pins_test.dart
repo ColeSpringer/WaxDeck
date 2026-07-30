@@ -23,7 +23,7 @@ const _station = 'https://logos.example.net/coastal-fm.png';
 /// written, the pin rows are a real database, and the fetches the server
 /// does not answer fail the way an unreachable server fails. The cache
 /// is stubbed because what these tests are about is the layers under it
-/// — what draws when it cannot answer — and because the real one opens
+/// what draws when it cannot answer - and because the real one opens
 /// its own store asynchronously, which races a temporary directory being
 /// taken away at the end of a test.
 void main() {
@@ -348,7 +348,7 @@ class _NotFoundCache implements CacheManager {
 
   // Through noSuchMethod rather than an override: the manager's files
   // are package:file's, which this package has no business naming.
-  // Anything but the fetch is a call these tests say must not happen —
+  // Anything but the fetch is a call these tests say must not happen -
   // bar the two an invalidation makes.
   @override
   dynamic noSuchMethod(Invocation invocation) {

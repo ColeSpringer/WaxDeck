@@ -33,7 +33,7 @@ class TransferEvent {
   final double? fraction;
 
   /// Where the bytes landed. Set on [TransferState.complete] and nowhere
-  /// else — resolving it is the engine's job, because it owns the
+  /// else - resolving it is the engine's job, because it owns the
   /// directory the file went into.
   final String? path;
 
@@ -58,7 +58,7 @@ class TransferRequest {
 /// The thing that actually moves bytes.
 ///
 /// WaxDeck-owned and narrow: `background_downloader` sits behind it, and
-/// the plugin's task objects never cross the line — the engine holds them
+/// the plugin's task objects never cross the line - the engine holds them
 /// and hands out ids. That is what makes the manager's bookkeeping
 /// testable, and the manager unlinks files.
 abstract interface class TransferEnginePort {

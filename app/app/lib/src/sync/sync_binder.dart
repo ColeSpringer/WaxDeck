@@ -36,8 +36,8 @@ import 'sync_providers.dart';
 /// that watches the binder is the only file that reads this one.
 final syncBinderProvider = Provider.autoDispose<void>((ref) {
   void invalidateCatalog() {
-    // Covers appear as part of the catalog changing — a scan reading
-    // embedded art, enrichment landing, another device writing one —
+    // Covers appear as part of the catalog changing - a scan reading
+    // embedded art, enrichment landing, another device writing one -
     // and the store has been remembering which ones answered 404 so it
     // can draw the monogram without asking again. Those answers are
     // exactly what a catalog change can falsify, and this is the only
@@ -145,7 +145,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     live.onConnectionChanged = (connected) =>
         ref.read(liveLinkProvider.notifier).report(connected: connected);
     // Held, not read from the callback below: a disposal callback may
-    // not touch `ref` at all — the element is already marked disposed
+    // not touch `ref` at all - the element is already marked disposed
     // and the container swallows what that throws, so the reset would
     // silently never happen and the banner would stand over the login
     // screen of the next session.

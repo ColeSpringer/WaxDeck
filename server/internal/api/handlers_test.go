@@ -584,6 +584,86 @@ func TestPrefsRoundTrip(t *testing.T) {
 	resp.Body.Close()
 }
 
+// The dial's pinned stations are per account, which is what this field is
+// for: the station library is shared by the household, so which of its
+// stations are yours is the one piece of per-user station state there is.
+func TestPrefsRadioFavorites(t *testing.T) {
+	ts := newAuthTestServer(t)
+	lr := bootstrap(t, ts)
+
+	put := func(body any) *http.Response {
+		t.Helper()
+		return putJSON(t, ts, "/api/v1/users/me/prefs", lr.Token, body)
+	}
+
+	const one = "rs-01JZX5N8QW3F4V9T2B7KD3M9R6"
+	const two = "rs-01JZX5N8QW3F4V9T2B7KD3M9R7"
+
+	// Order is the client's to set, and it round-trips as given: new pins
+	// go on the end so a dial does not reshuffle under a thumb.
+	stored := decode[Prefs](t, put(map[string]any{
+		"theme": "dark", "radioFavorites": []string{two, one},
+	}))
+	if stored.RadioFavorites == nil || len(*stored.RadioFavorites) != 2 ||
+		(*stored.RadioFavorites)[0] != two {
+		t.Fatalf("stored favorites = %+v", stored.RadioFavorites)
+	}
+
+	// The list travels with the rest of the document, so writing one does
+	// not cost the other.
+	read := decode[Prefs](t, get(t, ts, "/api/v1/users/me/prefs", lr.Token))
+	if read.Theme == nil || *read.Theme != "dark" {
+		t.Fatalf("theme lost to a favorites write: %+v", read)
+	}
+
+	// Unpinning everything clears the field, which is what every reader
+	// wants from it: nothing defaults a pinned station when the list is
+	// absent, so "unpinned everything" and "never pinned anything" are one
+	// state on purpose and the last unpin lands either way.
+	stored = decode[Prefs](t, put(map[string]any{
+		"theme": "dark", "radioFavorites": []string{},
+	}))
+	if stored.RadioFavorites != nil && len(*stored.RadioFavorites) != 0 {
+		t.Fatalf("emptied favorites = %+v", stored.RadioFavorites)
+	}
+
+	// Stored in the case the contract's pattern declares, whatever case it
+	// arrived in. Two things at once: what is read back matches the schema,
+	// and the duplicate check below can work at all - Crockford base32
+	// parses either case, so without this a station could hold two dial
+	// slots and a star could not unpin the one it drew.
+	stored = decode[Prefs](t, put(map[string]any{
+		"radioFavorites": []string{strings.ToLower(one)},
+	}))
+	if stored.RadioFavorites == nil || (*stored.RadioFavorites)[0] != one {
+		t.Fatalf("lower-case pid stored as %+v, want %s", stored.RadioFavorites, one)
+	}
+
+	// Shape is validated: a pid that is not a station's, a duplicate, and
+	// the same station twice in two casings.
+	for _, body := range []map[string]any{
+		{"radioFavorites": []string{"tr-01JZX5N8QW3F4V9T2B7KD3M9R6"}},
+		{"radioFavorites": []string{one, one}},
+		{"radioFavorites": []string{one, strings.ToLower(one)}},
+	} {
+		resp := put(body)
+		resp.Body.Close()
+		if resp.StatusCode != 400 {
+			t.Fatalf("%v status = %d, want 400", body, resp.StatusCode)
+		}
+	}
+
+	// A station another household member deleted is deliberately *not*
+	// rejected: failing a whole preference write over one departed station
+	// would make it cost a listener their theme, and clients render only
+	// the pids they can still find.
+	resp := put(map[string]any{"radioFavorites": []string{one}})
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("unresolved pid status = %d, want 200", resp.StatusCode)
+	}
+}
+
 func TestBearerSchemeCaseInsensitive(t *testing.T) {
 	ts := newAuthTestServer(t)
 	token := login(t, ts)

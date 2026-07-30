@@ -308,7 +308,7 @@ void main() {
     addTearDown(db.close);
 
     // The bytes a v3 install already fetched are what an upgrade must
-    // not cost it, and the added column reads null on them — which is
+    // not cost it, and the added column reads null on them - which is
     // what makes the book unsequenceable rather than misplaced. Asking
     // for it again is what fills them in.
     final records = await db.select(db.downloadRecords).get();

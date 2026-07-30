@@ -20,7 +20,7 @@ package service
 //
 // Caching is narrow on purpose. Only the unfiltered enumeration, only
 // per dimension and order, only for full-visibility callers, keyed on
-// the catalog feed position — the same restriction TrackFacts applies,
+// the catalog feed position - the same restriction TrackFacts applies,
 // for the same reason: Facet takes a user pid and a query, so a
 // restricted caller's answer is not a function of the tail alone. A
 // restricted caller's enumeration is computed live every time.
@@ -157,8 +157,8 @@ type FacetBucket struct {
 // Folding is what makes the A-to-Z order read as an alphabet rather than
 // as ASCII: without it "Zebra" sorts ahead of "abba", and an index whose
 // rail says Z would be showing the a's. It is a fold and not a collation
-// — scripts outside ASCII still land after z, the same way the catalog's
-// own tie-break does — and a proper locale collation is a bigger change
+// scripts outside ASCII still land after z, the same way the catalog's
+// own tie-break does - and a proper locale collation is a bigger change
 // than an index screen justifies.
 func facetFolded(b FacetBucket) FacetBucket {
 	b.fold = strings.ToLower(b.Label)
@@ -211,7 +211,7 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, dimension string, ord
 	}
 	// Validated here as well as at the edge: the type narrows what a call
 	// site can transpose, not what it can invent, and an order nothing
-	// serves must not fall through to the default — answering
+	// serves must not fall through to the default - answering
 	// biggest-first to a caller who asked for A to Z puts the wrong
 	// letters under the rail.
 	order, err = ParseFacetSort(string(order))

@@ -212,11 +212,11 @@ contract):
 | `GET /admin/audit` | The admin-action audit log (admin) |
 | `POST /admin/backups` | Back up now; schedules and restore ride the same surface (admin) |
 
-Administration — accounts and granular permissions, signup requests
+Administration - accounts and granular permissions, signup requests
 and invites, the audit log, scheduled scans and backups, staged
 restore, the trash, read-only mode, transcoding limits, Prometheus
 metrics (set `WAXDECK_METRICS_TOKEN`), and the migration assistant for
-moving in from Navidrome or Audiobookshelf — is covered in
+moving in from Navidrome or Audiobookshelf - is covered in
 [admin-and-ops.md](admin-and-ops.md).
 
 ## Maintenance and the waxbin CLI

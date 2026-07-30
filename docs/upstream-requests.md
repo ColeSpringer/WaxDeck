@@ -86,13 +86,13 @@ sidecar injection seam) all landed and are not repeated here.
   whole catalog and nothing else. WaxDeck's queue windows any scope
   larger than 500 entries and draws more as it drains (ADR-0028); for a
   shuffled window that draw wants a random order over the *scope*, which
-  is usually one facet bucket — a giant artist, a giant genre. A
+  is usually one facet bucket - a giant artist, a giant genre. A
   `Query query.Query` field on `BrowseOptions`, applied the way
   `QueryPage` applies one, would give every discovery list a scope and
   make this exact. The shipped workaround: a shuffled window over the
   whole music library uses `ListRandom` and is a real shuffle, and a
   shuffled window over a bucket pages that bucket's own listing and
-  shuffles each arriving page among itself — so a shuffled 5,000-track
+  shuffles each arriving page among itself - so a shuffled 5,000-track
   genre hears a shuffle of its first 500 before a shuffle of its second
   500. Complete coverage, no repeats, an order that is more local than
   it should be.

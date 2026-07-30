@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// Override lives here rather than in the root library.
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
@@ -21,11 +23,13 @@ QueueSource playedAlone(ItemSummary item) =>
 ProviderContainer playbackContainer({
   required FakeRepository repo,
   required FakeEngine engine,
+  List<Override> extra = const <Override>[],
 }) {
   final container = ProviderContainer(
     overrides: [
       repositoryProvider.overrideWithValue(repo),
       audioEngineProvider.overrideWithValue(engine),
+      ...extra,
     ],
   );
   addTearDown(container.dispose);

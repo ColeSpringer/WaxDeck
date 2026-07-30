@@ -113,7 +113,7 @@ class UploadsApi {
   }
 
   /// Finalize an upload batch
-  /// Declares the batch complete: every member staged so far is grouped per the batch&#39;s grouping intent and the review entries open (their ids land in &#x60;reviewEntryIds&#x60;). Members still receiving bytes fall back to opening their own per-file entry when they later complete. Call this exactly when the client finishes sending members — after per-file failures too, so the files that did arrive are reviewed (a batch whose every member was deleted finalizes empty). Only the batch&#39;s owner (or an administrator) may finalize; anyone else sees &#x60;not-found&#x60;. Idempotent: finalizing a finalized batch answers the same batch again. Finalizing a batch the server has already expired answers &#x60;conflict&#x60; — its members were grouped with what had arrived when the server closed it. 
+  /// Declares the batch complete: every member staged so far is grouped per the batch&#39;s grouping intent and the review entries open (their ids land in &#x60;reviewEntryIds&#x60;). Members still receiving bytes fall back to opening their own per-file entry when they later complete. Call this exactly when the client finishes sending members - after per-file failures too, so the files that did arrive are reviewed (a batch whose every member was deleted finalizes empty). Only the batch&#39;s owner (or an administrator) may finalize; anyone else sees &#x60;not-found&#x60;. Idempotent: finalizing a finalized batch answers the same batch again. Finalizing a batch the server has already expired answers &#x60;conflict&#x60; - its members were grouped with what had arrived when the server closed it. 
   ///
   /// Parameters:
   /// * [batchId] - Upload batch PID (e.g. `ub-01JZX5N8QW3F4V9T2B7KD3M9R6`).

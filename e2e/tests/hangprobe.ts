@@ -5,7 +5,7 @@ import type { Page, TestInfo } from '@playwright/test';
 // Evidence collector for the one remaining flake: a renderer hang in the
 // wasm rendering path (docs/deferred-work.md). Playwright's trace shows
 // the page stopped answering but nothing about which thread stopped or
-// why; this closes that gap. Everything here races against a deadline —
+// why; this closes that gap. Everything here races against a deadline -
 // a probe against a hung renderer must never be awaited bare, and a
 // probe promise that loses its race must carry a catch already, or its
 // late rejection (when the context closes) takes down the runner.

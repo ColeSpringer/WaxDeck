@@ -28,6 +28,8 @@ class DeckBarIds {
     this.queue,
     this.lyrics,
     this.cast,
+    this.volume,
+    this.mute,
     this.more,
   });
 
@@ -44,6 +46,8 @@ class DeckBarIds {
   final String? queue;
   final String? lyrics;
   final String? cast;
+  final String? volume;
+  final String? mute;
   final String? more;
 }
 

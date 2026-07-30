@@ -56,8 +56,8 @@ final queueHistoryOpenProvider = NotifierProvider<QueueHistoryOpen, bool>(
 /// before, as slivers.
 ///
 /// One body for both surfaces. The desktop panel and the compact screen
-/// are the same list at two widths — the same order, the same drag, the
-/// same verbs — so a listener who learns one has learned the other, and
+/// are the same list at two widths - the same order, the same drag, the
+/// same verbs - so a listener who learns one has learned the other, and
 /// a fix to either is a fix to both. Slivers rather than a widget so
 /// each surface owns its own scroll view: a scaffold builds one for its
 /// large title, and a panel has no title to scroll under.
@@ -302,7 +302,7 @@ Widget _label(BuildContext context, String text) => SliverToBoxAdapter(
 );
 
 /// Swipe to drop an entry. The row's own remove button does the same
-/// thing, so this is a shortcut rather than the only way out — which is
+/// thing, so this is a shortcut rather than the only way out - which is
 /// what keeps the queue usable by keyboard and by screen reader.
 class _Dismissable extends StatelessWidget {
   const _Dismissable({

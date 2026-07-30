@@ -144,9 +144,9 @@ void main() {
     expect(find.text('Latest episodes'), findsOneWidget);
     expect(find.text('Brand New'), findsWidgets);
 
-    // The two shelves overlap by definition — `unplayed` is below the
+    // The two shelves overlap by definition - `unplayed` is below the
     // played threshold and `in-progress` is any saved position, so an
-    // episode a third of the way in is in both — so a shelf card and a
+    // episode a third of the way in is in both - so a shelf card and a
     // list row are two controls and wear two handles. One handle would
     // make a click on it a strict-mode violation rather than a tap.
     Finder byId(String id) => find.byWidgetPredicate(

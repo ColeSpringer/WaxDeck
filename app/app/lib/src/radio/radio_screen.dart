@@ -1,13 +1,23 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/artwork_providers.dart';
+import '../media_view.dart';
 import '../providers.dart';
+import '../search/search_chrome.dart';
 import '../shell/semantics_ids.dart';
+import 'add_station.dart';
 import 'radio_controller.dart';
 
-/// The shared internet radio library: play or stop stations, add them
-/// by directory search or by hand, remove them.
+/// The dial: what is pinned, and everything there is to tune.
+///
+/// The favourites strip is a visual shortcut over the grid, which is the
+/// primary surface and the one that carries the semantics - every station
+/// on the dial is a row below it, so nothing is only reachable by flicking
+/// a carousel.
 class RadioScreen extends ConsumerWidget {
   const RadioScreen({super.key});
 
@@ -15,301 +25,321 @@ class RadioScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stations = ref.watch(radioStationsProvider);
     final playback = ref.watch(radioPlaybackProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Radio')),
-      floatingActionButton: Semantics(
-        identifier: SemanticsIds.radioAdd,
-        label: 'Add station',
-        button: true,
-        child: FloatingActionButton(
-          key: const Key(SemanticsIds.radioAdd),
-          tooltip: 'Add station',
-          onPressed: () => showDialog<void>(
-            context: context,
-            builder: (_) => const _AddStationDialog(),
-          ),
-          child: const Icon(Icons.add),
+    final dial = ref.watch(radioDialProvider);
+
+    return WaxScaffold(
+      title: 'Radio',
+      semanticsId: SemanticsIds.radioHub,
+      actions: <Widget>[
+        WaxIconButton(
+          glyph: WaxIcons.add,
+          label: 'Add station',
+          semanticsId: SemanticsIds.radioAdd,
+          onPressed: () => unawaited(showAddStationDialog(context)),
         ),
-      ),
-      body: switch (stations) {
-        AsyncData(:final value) =>
-          value.isEmpty
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text('No stations yet; add one to start listening'),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: value.length,
-                  itemBuilder: (context, index) =>
-                      _StationRow(station: value[index], playback: playback),
-                ),
-        AsyncError(:final error) => Center(
-          child: Text(
-            error is WaxDeckApiException
-                ? error.message
-                : 'Could not load stations',
+        const SearchAction(),
+      ],
+      slivers: <Widget>[
+        if (dial.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(
+                top: WaxSpace.s8,
+                bottom: WaxSpace.s16,
+              ),
+              child: _Dial(dial: dial, playback: playback),
+            ),
           ),
-        ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+        switch (stations) {
+          AsyncData(:final value) when value.isEmpty =>
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: EmptyState(
+                title: 'No stations yet',
+                message:
+                    'Search the directory to add your first, or paste a stream '
+                    'URL if you already have one.',
+                glyph: WaxIcons.radio,
+              ),
+            ),
+          AsyncData(:final value) => _StationGrid(
+            stations: value,
+            playback: playback,
+          ),
+          AsyncError(:final error) => SliverFillRemaining(
+            hasScrollBody: false,
+            child: ErrorState(
+              title: 'Could not load stations',
+              message: error is WaxDeckApiException
+                  ? error.message
+                  : 'The server did not answer.',
+              onRetry: () => ref.invalidate(radioStationsProvider),
+            ),
+          ),
+          _ => const SliverToBoxAdapter(
+            child: SkeletonShapes(shape: SkeletonShape.grid),
+          ),
+        },
+        const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
+      ],
     );
   }
 }
 
-class _StationRow extends ConsumerWidget {
-  const _StationRow({required this.station, required this.playback});
+/// The favourites strip, fed from the pinned stations.
+class _Dial extends ConsumerWidget {
+  const _Dial({required this.dial, required this.playback});
 
-  final RadioStation station;
+  final List<RadioStation> dial;
   final RadioPlayback playback;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final active = playback.station?.pid == station.pid;
-    final controller = ref.read(radioPlaybackProvider.notifier);
-    final messenger = ScaffoldMessenger.of(context);
-    return Semantics(
-      identifier: SemanticsIds.radio(station.pid),
-      label: station.name,
-      button: true,
-      child: ListTile(
-        key: ValueKey(SemanticsIds.radio(station.pid)),
-        leading: Icon(active ? Icons.radio : Icons.radio_outlined),
-        title: Text(station.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: active
-            ? Text(
-                playback.starting
-                    ? 'Tuning in'
-                    : (playback.nowPlaying == null
-                          ? 'Playing'
-                          : 'Playing: ${playback.nowPlaying}'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              )
-            : null,
-        trailing: PopupMenuButton<String>(
-          key: ValueKey('radio-menu-${station.pid}'),
-          onSelected: (choice) async {
-            if (choice == 'delete') {
-              await ref
-                  .read(radioStationsProvider.notifier)
-                  .remove(station.pid);
-              if (active) await controller.stop();
-            }
-          },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'delete', child: Text('Remove station')),
-          ],
-        ),
-        onTap: () async {
-          try {
-            if (active) {
-              await controller.stop();
-            } else {
-              await controller.play(station);
-            }
-          } on WaxDeckApiException catch (e) {
-            messenger
-              ..hideCurrentSnackBar()
-              ..showSnackBar(SnackBar(content: Text(e.message)));
-          }
+    final store = ref.watch(artworkStoreProvider);
+    final repository = ref.watch(repositoryProvider);
+    final playingAt = dial.indexWhere(
+      (station) => station.pid == playback.station?.pid,
+    );
+    return StationDial(
+      // Opens on what is playing when the dial holds it, so a listener
+      // coming back to the screen finds the needle where they left it.
+      initialIndex: playingAt < 0 ? 0 : playingAt,
+      stations: <DialStation>[
+        for (final station in dial)
+          DialStation(
+            name: station.name,
+            artwork: waxStationLogo(store, repository, station),
+            playing: station.pid == playback.station?.pid,
+            nowPlaying: playback.nowPlaying,
+          ),
+      ],
+      semanticsId: SemanticsIds.radioDial,
+      tuneSemanticsId: SemanticsIds.radioTune,
+      nowPlayingSemanticsId: SemanticsIds.radioNowPlaying,
+      onTune: (index) => unawaited(_tune(context, ref, dial[index], playback)),
+      onStop: playback.station == null
+          ? null
+          : () => unawaited(ref.read(radioPlaybackProvider.notifier).stop()),
+    );
+  }
+}
+
+/// Every station, as logos.
+class _StationGrid extends ConsumerWidget {
+  const _StationGrid({required this.stations, required this.playback});
+
+  final List<RadioStation> stations;
+  final RadioPlayback playback;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sizeClass = WaxSizeClass.of(context);
+    final store = ref.watch(artworkStoreProvider);
+    final repository = ref.watch(repositoryProvider);
+    final favorites = ref.watch(radioFavoritesProvider);
+    return SliverPadding(
+      padding: sizeClass.gutter,
+      sliver: SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final grid = MediaCard.gridFor(
+            constraints.crossAxisExtent,
+            extent: _tileExtent,
+          );
+          return SliverGrid.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: grid.columns,
+              mainAxisSpacing: WaxShellMetrics.gridGap,
+              crossAxisSpacing: WaxShellMetrics.gridGap,
+              mainAxisExtent: MediaCard.heightFor(context, width: grid.width),
+            ),
+            itemCount: stations.length,
+            itemBuilder: (context, index) {
+              final station = stations[index];
+              final playing = station.pid == playback.station?.pid;
+              return _StationTile(
+                station: station,
+                width: grid.width,
+                playing: playing,
+                starting: playing && playback.starting,
+                pinned: favorites.contains(station.pid),
+                nowPlaying: playing ? playback.nowPlaying : null,
+                artwork: waxStationLogo(store, repository, station),
+                playback: playback,
+              );
+            },
+          );
         },
       ),
     );
   }
 }
 
-/// Directory search with a manual fallback.
-class _AddStationDialog extends ConsumerStatefulWidget {
-  const _AddStationDialog();
+/// One station: its logo, its name, the pin, and its menu.
+class _StationTile extends ConsumerWidget {
+  const _StationTile({
+    required this.station,
+    required this.width,
+    required this.playing,
+    required this.starting,
+    required this.pinned,
+    required this.nowPlaying,
+    required this.artwork,
+    required this.playback,
+  });
+
+  final RadioStation station;
+  final double width;
+  final bool playing;
+  final bool starting;
+  final bool pinned;
+  final String? nowPlaying;
+  final WaxArtwork? artwork;
+  final RadioPlayback playback;
 
   @override
-  ConsumerState<_AddStationDialog> createState() => _AddStationDialogState();
-}
-
-class _AddStationDialogState extends ConsumerState<_AddStationDialog> {
-  final _searchController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _urlController = TextEditingController();
-  var _manual = false;
-  var _busy = false;
-  List<RadioDirectoryEntry>? _results;
-  String? _searchError;
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _nameController.dispose();
-    _urlController.dispose();
-    super.dispose();
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Stack(
+      children: <Widget>[
+        MediaCard(
+          data: MediaTileData(
+            title: station.name,
+            // What is on, when this is the station that is on: the ICY
+            // line is the reason to look at a station tile at all.
+            subtitle: starting
+                ? 'Tuning in'
+                : (playing ? (nowPlaying ?? 'Playing') : null),
+            artwork: artwork,
+            domain: WaxDomain.radio,
+            shape: ArtworkShape.circle,
+            semanticsId: SemanticsIds.radio(station.pid),
+          ),
+          width: width,
+          playing: playing,
+          onTap: () => unawaited(_tune(context, ref, station, playback)),
+        ),
+        // Beside the card rather than inside it: both are controls, and a
+        // card that swallowed them would announce one node for three
+        // things (the trap MediaListRow shipped once).
+        Positioned(
+          top: 0,
+          right: 0,
+          child: Row(
+            children: <Widget>[
+              WaxIconButton(
+                glyph: WaxIcons.star,
+                label: pinned
+                    ? 'Unpin ${station.name} from the dial'
+                    : 'Pin ${station.name} to the dial',
+                size: 16,
+                active: pinned,
+                semanticsId: SemanticsIds.radioFavorite(station.pid),
+                onPressed: () => unawaited(_pin(context, ref)),
+              ),
+              WaxMenuButton<String>(
+                glyph: WaxIcons.more,
+                label: 'More for ${station.name}',
+                semanticsId: SemanticsIds.radioMenu(station.pid),
+                items: <WaxMenuItem<String>>[
+                  WaxMenuItem<String>(
+                    value: 'edit',
+                    label: 'Edit station',
+                    semanticsId: SemanticsIds.radioEdit(station.pid),
+                  ),
+                  if (station.homepageUrl != null)
+                    const WaxMenuItem<String>(
+                      value: 'homepage',
+                      label: 'Station website',
+                    ),
+                  WaxMenuItem<String>(
+                    value: 'delete',
+                    label: 'Remove station',
+                    semanticsId: SemanticsIds.radioDelete(station.pid),
+                  ),
+                ],
+                onSelected: (choice) => unawaited(_menu(context, ref, choice)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
-  Future<void> _search() async {
-    final query = _searchController.text.trim();
-    if (query.length < 2 || _busy) return;
-    setState(() {
-      _busy = true;
-      _searchError = null;
-    });
-    try {
-      final results = await ref
-          .read(repositoryProvider)
-          .searchRadioDirectory(query, limit: 15);
-      if (mounted) setState(() => _results = results);
-    } on WaxDeckApiException catch (e) {
-      if (mounted) setState(() => _searchError = e.message);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+  /// Pins or unpins, saying so when the write did not land. The star has no
+  /// room to report anything, so the refusal goes where the screen's others
+  /// go: a full dial is actionable, and a refused write would otherwise be
+  /// a star that silently springs back.
+  Future<void> _pin(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final refusal = await ref
+        .read(radioFavoritesProvider.notifier)
+        .toggle(station.pid);
+    if (refusal == null) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(refusal)));
+  }
+
+  Future<void> _menu(BuildContext context, WidgetRef ref, String choice) async {
+    switch (choice) {
+      case 'edit':
+        await showAddStationDialog(context, editing: station);
+      case 'homepage':
+        await openStationHomepage(context, station);
+      case 'delete':
+        await _remove(context, ref);
     }
   }
 
-  Future<void> _add({
-    required String name,
-    required String streamUrl,
-    String? homepageUrl,
-    String? logoUrl,
-  }) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    final navigator = Navigator.of(context);
+  Future<void> _remove(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final favorites = ref.read(radioFavoritesProvider.notifier);
+    final playbackController = ref.read(radioPlaybackProvider.notifier);
+    final wasPlaying = playing;
     try {
-      await ref
-          .read(radioStationsProvider.notifier)
-          .add(
-            name: name,
-            streamUrl: streamUrl,
-            homepageUrl: homepageUrl,
-            logoUrl: logoUrl,
-          );
-      navigator.pop();
+      await ref.read(radioStationsProvider.notifier).remove(station.pid);
+      if (wasPlaying) await playbackController.stop();
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      return;
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Add station'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: false, label: Text('Search')),
-                ButtonSegment(value: true, label: Text('By URL')),
-              ],
-              selected: {_manual},
-              onSelectionChanged: (selection) =>
-                  setState(() => _manual = selection.first),
-            ),
-            const SizedBox(height: 12),
-            if (!_manual) ...[
-              TextField(
-                key: const Key('radio-search-field'),
-                controller: _searchController,
-                decoration: const InputDecoration(labelText: 'Station name'),
-                onSubmitted: (_) => _search(),
-                autofocus: true,
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                key: const Key('radio-search-run'),
-                onPressed: _busy ? null : _search,
-                child: const Text('Search directory'),
-              ),
-              if (_searchError != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    _searchError!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              if (_results != null)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 260),
-                  child: _results!.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('No matches'),
-                        )
-                      : ListView(
-                          shrinkWrap: true,
-                          children: [
-                            for (final entry in _results!)
-                              ListTile(
-                                dense: true,
-                                title: Text(
-                                  entry.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                subtitle: entry.country == null
-                                    ? null
-                                    : Text(entry.country!),
-                                onTap: _busy
-                                    ? null
-                                    : () => _add(
-                                        name: entry.name,
-                                        streamUrl: entry.streamUrl,
-                                        homepageUrl: entry.homepageUrl,
-                                        logoUrl: entry.logoUrl,
-                                      ),
-                              ),
-                          ],
-                        ),
-                ),
-            ] else ...[
-              TextField(
-                key: const Key('radio-name-field'),
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Station name'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const Key('radio-url-field'),
-                controller: _urlController,
-                decoration: const InputDecoration(labelText: 'Stream URL'),
-                keyboardType: TextInputType.url,
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        if (_manual)
-          Semantics(
-            identifier: SemanticsIds.radioAddConfirm,
-            label: 'Add station',
-            button: true,
-            child: FilledButton(
-              key: const Key(SemanticsIds.radioAddConfirm),
-              onPressed: _busy
-                  ? null
-                  : () => _add(
-                      name: _nameController.text.trim(),
-                      streamUrl: _urlController.text.trim(),
-                    ),
-              child: const Text('Add'),
-            ),
-          ),
-      ],
-    );
+    // A pin outlives the station it names: the dial draws nothing, but the
+    // stored list keeps a dead pid and a slot of the cap. Awaited rather
+    // than fired off, since an unawaited toggle escapes the block above.
+    if (!favorites.contains(station.pid)) return;
+    final refusal = await favorites.toggle(station.pid);
+    if (refusal == null) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(refusal)));
   }
 }
+
+/// Tunes a station in, or stops it when it is the one playing.
+Future<void> _tune(
+  BuildContext context,
+  WidgetRef ref,
+  RadioStation station,
+  RadioPlayback playback,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final controller = ref.read(radioPlaybackProvider.notifier);
+  try {
+    if (station.pid == playback.station?.pid) {
+      await controller.stop();
+    } else {
+      await controller.play(station);
+    }
+  } on WaxDeckApiException catch (e) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(e.message)));
+  }
+}
+
+/// The widest a station logo is allowed to be. Circular art reads smaller
+/// than a square of the same width, and a station has one line of text
+/// under it rather than two.
+const double _tileExtent = 148;

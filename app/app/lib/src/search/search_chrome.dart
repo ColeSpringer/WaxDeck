@@ -8,7 +8,7 @@ import '../shell/semantics_ids.dart';
 ///
 /// The layout system puts a search field in the sidebar header and a
 /// search control in the top app bar below that width, and the shell owns
-/// no top app bar — every screen brings its own. So the control lives
+/// no top app bar - every screen brings its own. So the control lives
 /// here, and a screen adds it to its bar as it is rebuilt on
 /// `WaxScaffold`.
 ///

@@ -220,7 +220,7 @@ class ArtworkPins extends Table {
 /// these already and every phase adds more, and a typed column means a
 /// schema migration per preference; the controller that reads a key is
 /// the one place that knows what its value means, so that is where the
-/// typing lives. Nothing synced belongs here — the server-side
+/// typing lives. Nothing synced belongs here - the server-side
 /// preference document is a different store with a different scope.
 class ClientSettings extends Table {
   TextColumn get key => text()();
@@ -264,7 +264,7 @@ class MirrorDatabase extends _$MirrorDatabase {
         await m.createTable(clientSettings);
         // Only for a database that already had the table. Guards are
         // cumulative, and `createTable` above builds today's shape, not
-        // the shape v2 shipped — so a v1 install has just been given a
+        // the shape v2 shipped - so a v1 install has just been given a
         // queue_meta that carries this column already, and adding it
         // again is a duplicate-column error rather than a no-op. Every
         // later step that adds a column to a table an earlier step

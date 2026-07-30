@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -99,6 +101,92 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 	return GetRadioPlayInfo200JSONResponse(out), nil
 }
 
+// radioLogoCacheControl is the freshness a station logo carries: the same
+// as item artwork, because it is the same kind of thing - a picture
+// behind a stable URL, cheap to revalidate and harmless to hold. No Vary
+// beside it, unlike artwork: the station library is shared, so these
+// bytes do not depend on who asked. Still private, because the request
+// needs a session and a shared cache must not answer one without.
+const radioLogoCacheControl = artCacheControl
+
+// The logo response's hardening pair, and the one endpoint in this file
+// that needs it: these bytes came from a host any account can name, and
+// they are served from WaxDeck's own origin.
+//
+// The service is what makes the response safe - it serves only raster
+// types, decided by sniffing the bytes rather than by trusting the host,
+// so nothing that can carry script gets this far. These two make that
+// hold even if it stops holding. `nosniff` stops a browser from deciding
+// the body is really markup, and the policy neutralizes script and
+// navigation for a document opened straight from this URL. Cheap, and
+// exactly the layer that turns a future mistake in the type check from a
+// stored-XSS hole into a broken image.
+const (
+	radioLogoNoSniff = "nosniff"
+	radioLogoCSP     = "default-src 'none'; sandbox; style-src 'unsafe-inline'"
+)
+
+// radioStreamContentType is the type the stream proxy serves for a
+// station's own, refusing the ones a browser would execute.
+//
+// A station names its type and the proxy relays it from this origin, so
+// the executable families are replaced by the audio default rather than
+// passed on: what a listener asked for is a stream, and a station that
+// answers markup has already failed to be one.
+func radioStreamContentType(declared string) string {
+	essence, _, _ := strings.Cut(declared, ";")
+	switch strings.ToLower(strings.TrimSpace(essence)) {
+	case "", "text/html", "application/xhtml+xml", "image/svg+xml",
+		"application/xml", "text/xml", "text/plain":
+		return "audio/mpeg"
+	}
+	return declared
+}
+
+func (s *Server) GetRadioStationLogo(ctx context.Context, req GetRadioStationLogoRequestObject) (GetRadioStationLogoResponseObject, error) {
+	if _, _, err := s.requireUserCtx(ctx); err != nil {
+		return nil, err
+	}
+	logo, err := s.svc.RadioStationLogo(ctx, req.Pid)
+	if err != nil {
+		// Every way there is nothing to draw is a 404, including a station
+		// that does not exist: the caller renders a monogram either way,
+		// and the service has already collapsed the fetch failures.
+		if service.KindOf(err) == service.KindNotFound {
+			return GetRadioStationLogo404JSONResponse(errObj("not-found", "no logo for station "+req.Pid)), nil
+		}
+		return nil, err
+	}
+	cacheControl := radioLogoCacheControl
+	if req.Params.IfNoneMatch != nil && httpcache.ETagMatches(*req.Params.IfNoneMatch, logo.ETag) {
+		return GetRadioStationLogo304Response{Headers: GetRadioStationLogo304ResponseHeaders{
+			ETag:         &logo.ETag,
+			CacheControl: &cacheControl,
+		}}, nil
+	}
+	noSniff, csp := radioLogoNoSniff, radioLogoCSP
+	headers := GetRadioStationLogo200ResponseHeaders{
+		ETag:                  &logo.ETag,
+		CacheControl:          &cacheControl,
+		XContentTypeOptions:   &noSniff,
+		ContentSecurityPolicy: &csp,
+	}
+	body := bytes.NewReader(logo.Bytes)
+	length := int64(len(logo.Bytes))
+	// The service serves only these four, decided by sniffing the bytes,
+	// so there is no branch here for a type that can carry script.
+	switch logo.MimeType {
+	case "image/png":
+		return GetRadioStationLogo200ImagepngResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	case "image/webp":
+		return GetRadioStationLogo200ImagewebpResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	case "image/gif":
+		return GetRadioStationLogo200ImagegifResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	default:
+		return GetRadioStationLogo200ImagejpegResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	}
+}
+
 func (s *Server) SearchRadioDirectory(ctx context.Context, req SearchRadioDirectoryRequestObject) (SearchRadioDirectoryResponseObject, error) {
 	if _, _, err := s.requireUserCtx(ctx); err != nil {
 		return nil, err
@@ -181,11 +269,19 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	metaint, _ := strconv.Atoi(resp.Header.Get("Icy-Metaint"))
-	ct := resp.Header.Get("Content-Type")
-	if ct == "" {
-		ct = "audio/mpeg"
-	}
+	// The station's own type, minus the ones that would make this origin
+	// run a stranger's markup. The proxy serves an attacker-nameable host's
+	// bytes from WaxDeck's origin, exactly as the logo endpoint does, and a
+	// station answering text/html or an SVG here would be the same stored
+	// XSS from the other door. Passed through rather than allowlisted
+	// because the set of types real stations send is long and odd
+	// (audio/aacp, application/ogg, audio/x-mpegurl) and refusing an
+	// unfamiliar one would break playback to prevent nothing; what is
+	// refused is only what a browser would execute. `nosniff` covers the
+	// rest, so a mislabelled body cannot be re-decided into markup.
+	ct := radioStreamContentType(resp.Header.Get("Content-Type"))
 	w.Header().Set("Content-Type", ct)
+	w.Header().Set("X-Content-Type-Options", radioLogoNoSniff)
 	w.Header().Set("Cache-Control", "no-store")
 	for name, vals := range resp.Header {
 		lower := strings.ToLower(name)

@@ -84,8 +84,8 @@ test('the sort toggle swaps the index order and the rail with it', async ({
     if (r.url().includes('/library/facets')) sorted.push(r.url());
   });
 
-  // Biggest-first is a listing of its own with its own cursor space —
-  // the server refuses one carried across the toggle — and the rail goes
+  // Biggest-first is a listing of its own with its own cursor space -
+  // the server refuses one carried across the toggle - and the rail goes
   // with it, because in count order the letters are scattered down the
   // list.
   await page.getByRole('button', { name: 'Most items' }).click();

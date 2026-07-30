@@ -8,12 +8,12 @@ Accepted.
 
 ## Context
 
-`/music/artists/ar-…` and `/music/albums/al-…` have been reachable since
+`/music/artists/ar-...` and `/music/albums/al-...` have been reachable since
 the music indexes shipped, and what they rendered was the bucket's item
 list. The contract makes that possible in the first place: a facet
 bucket's `entityPid` is its `key` behind a type prefix, so one address
 names the entity and filters the listing. What was missing was a screen
-about the entity — its own artwork, its releases, the star and rating
+about the entity - its own artwork, its releases, the star and rating
 row that has existed and been tested since before there was anywhere to
 put it.
 
@@ -42,7 +42,7 @@ property of the entry point, not of the route, and both of these have
 more than one entry point. An album `go`es from the albums index, which
 is where it is declared; it is **pushed** from an artist's release tile
 and from a search hit, because `go` would rebuild the albums ancestry
-and throw away the artist or the query you were standing in — back from
+and throw away the artist or the query you were standing in - back from
 a release would land on the index rather than on the artist whose
 release it is. The same holds for an artist opened from search. Back on
 these screens is `context.leave(fallback: index)` rather than a bare
@@ -54,7 +54,7 @@ which is the trap ADR-0022 records from the episode case.
 `artistPid` and `albumPid`, filled from the entity projections WaxBin
 already puts on an item view. Grouping an artist's tracks into releases
 by display text would merge two albums that share a title and split one
-spelled two ways, and a title is not a location — an album card needs a
+spelled two ways, and a title is not a location - an album card needs a
 pid to open. The same delta moves `trackNumber` and `discNumber` from
 the detail onto the summary: a listing arrives in the catalog's own
 stable order, which is not track order, and these are what sort a
@@ -69,7 +69,7 @@ fewer than the count promised is the one thing faceted browse cannot do.
 So the artist screen lists everything and queues only what plays in
 sequence: Play and Shuffle are disabled for an author with no music, a
 book row opens the book, and the section names what it actually holds.
-The alternative — filtering the list to music — puts an audiobook
+The alternative - filtering the list to music - puts an audiobook
 author's own screen at "nothing by this artist" while the index beside
 it says two.
 
@@ -95,7 +95,7 @@ second, which is the web build's only source (it keeps no mirror) and a
 fresh native install's. Declining a server-sourced offer is recorded per
 device in the client-settings store rather than deleting the session:
 the history is the account's, and another device may still want it. What
-is stored is when the declined session stopped, not which one it was —
+is stored is when the declined session stopped, not which one it was -
 the history is newest first, so a decline is about everything up to it,
 and one id would have offered the next-oldest session at the following
 launch and the one after that at the one after.
@@ -110,9 +110,9 @@ still missing everywhere else and is tracked.
 ## Consequences
 
 The deferred entries for artist and album detail screens and for
-rendering session history close. The queue surface's remaining halves —
+rendering session history close. The queue surface's remaining halves -
 multi-select for batch moves, and dragging a row from a listing into the
-panel — are recorded in `docs/deferred-work.md`; neither is on the path
+panel - are recorded in `docs/deferred-work.md`; neither is on the path
 of anything else.
 
 An album's track order is now the client's to compute, because

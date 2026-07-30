@@ -671,7 +671,7 @@ paths:
         settings; media files are never included, and the encryption
         keyfile is excluded by design (an archive holding both the
         database and the key is plaintext-equivalent for stored
-        credentials — keep the keyfile safe separately). Retention
+        credentials - keep the keyfile safe separately). Retention
         (`backupKeepCount`/`backupKeepBytes` in the runtime settings)
         is applied after every successful backup, oldest first.
         Answers `conflict` while another backup is running.

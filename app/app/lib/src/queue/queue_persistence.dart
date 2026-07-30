@@ -245,7 +245,7 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
   /// sessions per user and this offers the newest.
   ///
   /// Never throws. A launch offline, or against a server that does not
-  /// serve this yet, is a launch with nothing to offer — not a failed
+  /// serve this yet, is a launch with nothing to offer - not a failed
   /// one, and certainly not a deck bar stuck on an error.
   Future<RestorableQueue?> _fromServer() async {
     final List<PlaybackSessionHistoryEntry> sessions;
@@ -311,8 +311,8 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
   ///
   /// Two things to forget, because the offer comes from two places. A
   /// queue off the disk is cleared. A session off the server is not
-  /// this client's to delete — it is the account's history, and another
-  /// device may still want it — so declining it is recorded here
+  /// this client's to delete - it is the account's history, and another
+  /// device may still want it - so declining it is recorded here
   /// instead, per device, which is the scope the decision has.
   ///
   /// The forgetting is attempted first, so a failure to write is a

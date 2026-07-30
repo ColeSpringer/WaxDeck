@@ -38,6 +38,26 @@ func (r *ConnectResolver) Entries(ctx context.Context, userID string, pids []str
 	return entries, nil
 }
 
+// multiPartRefusal is what a device endpoint gets for a book the server
+// cannot yet split for it. Coded so a controller can offer "play here
+// instead" rather than rendering a dead end: client endpoints handle
+// books fully, and this is the only thing wrong.
+//
+// The wording is load-bearing past this package. `feature-unavailable`
+// is the umbrella code for everything a target cannot play - a windowed
+// track sent to a device answers it too - so the code alone cannot say
+// which refusal this is, and the client's device picker keys on the
+// phrase "multi-part audiobook" to turn this one into that offer (see
+// app/app/lib/src/connect/device_picker.dart). Rewording it without
+// moving that is how the offer silently becomes a dead end again, so
+// TestMultiPartRefusalWording pins the phrase.
+func multiPartRefusal(pid string) connect.InvalidError {
+	return connect.InvalidError{
+		Msg:  "multi-part audiobooks cannot play on this endpoint yet: " + pid,
+		Code: "feature-unavailable",
+	}
+}
+
 // StreamItems builds absolute media URLs for a device endpoint. The
 // jukebox gets wav, cast devices get the derived shape, and renderers
 // get the best format they and the engine agree on, falling back to the
@@ -75,13 +95,7 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 			return nil, err
 		}
 		if part.MultiPart {
-			// Coded so a controller can offer "play here instead"
-			// rather than rendering a dead end: client endpoints
-			// handle books fully, and this is the only thing wrong.
-			return nil, connect.InvalidError{
-				Msg:  "multi-part audiobooks cannot play on this endpoint yet: " + e.PID,
-				Code: "feature-unavailable",
-			}
+			return nil, multiPartRefusal(e.PID)
 		}
 		item := connect.MediaItem{
 			PID:        e.PID,

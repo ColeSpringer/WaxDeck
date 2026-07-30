@@ -17,9 +17,9 @@ and the queue a launch finds is offered to nobody.
 
 Three other things were open around the same slots. The layout system
 asks for a right panel on wide windows and gives it nothing to host. The
-self-host lifecycle surfaces (6.20) are unbuilt, so a server restart —
+self-host lifecycle surfaces (6.20) are unbuilt, so a server restart -
 which this audience does constantly, with the web client embedded in the
-binary — reads as actions failing one at a time. And the design system's
+binary - reads as actions failing one at a time. And the design system's
 deck bar carries an `autoplayBlocked` state that nothing could ever set,
 because no layer knew a browser had refused to start.
 
@@ -30,8 +30,8 @@ starts.
 
 **`AudioEnginePort.play()` resolves when playback starts, and a refusal
 is announced on a stream of its own.** just_audio's `play()` resolves
-when playback *stops* — its own documented contract ("completes when the
-playback completes or is paused or stopped") — and `JustAudioEngine`
+when playback *stops* - its own documented contract ("completes when the
+playback completes or is paused or stopped") - and `JustAudioEngine`
 returned that future directly. Every caller reads the port's wording
 instead, so `PlaybackSession.start` awaited the end of the item before
 `NowPlayingController` published its session: on web and Android the
@@ -44,15 +44,15 @@ The engine now issues the request and lets go. A platform that turns it
 down errors on that request, and the engine puts just_audio's optimistic
 playing flag back before announcing the refusal on `playbackRefused`, so
 no surface reads as playing over silence. `AutoplayGate` listens for the
-session's whole life — from `_SignedInScope`, not from the bar, which is
-not mounted until there is something to show — and the deck bar says "Tap
+session's whole life - from `_SignedInScope`, not from the bar, which is
+not mounted until there is something to show - and the deck bar says "Tap
 to resume", which is the gesture the browser was waiting for.
 
 **The deck bar is the shell's, and its position is a leaf.** `DeckBarHost`
 sits in the frame's bottom slot, outside every branch navigator, and shows
 in order: the station when live radio has the engine, the queue's current
 entry, the queue a launch found, and otherwise nothing. It watches
-identity — what is playing and whether it is — and feeds the live position
+identity - what is playing and whether it is - and feeds the live position
 into the bar through a `ValueListenable` the bar consumes inside a
 `RepaintBoundary`. The bar rebuilds on a track or transport change and not
 otherwise, which is 8.8's requirement, and a widget test fails if the bar
@@ -67,8 +67,8 @@ drag reorder emits a queue state per frame and the bar must not rebuild
 with it.
 
 **`NowPlayingController.resume()` replaces `retry()`.** Two states leave
-an entry on the bar with nothing driving it — a start that failed, and an
-item that handed the engine to live radio — and in both the queue never
+an entry on the bar with nothing driving it - a start that failed, and an
+item that handed the engine to live radio - and in both the queue never
 moved, so nothing else would ever start it again. One verb covers both;
 it asks again for the position the failed start was asked for, and for
 the checkpoint otherwise, because a session that let go wrote one on its
@@ -88,7 +88,7 @@ see the consequence below.*
 **The panel is shell state, and it opens onto the queue.** `WaxPanel` names
 what is open, `sidePanelProvider` holds it, and the frame docks it beside
 the content on wide and lays it over the content's trailing edge on
-expanded — scrim-free, because the page underneath stays usable, which is
+expanded - scrim-free, because the page underneath stays usable, which is
 the whole reason it is a panel and not a sheet. Narrower windows get no
 panel at all: the compact queue is a route, and that route is the queue
 surface's phase to build. Its first content is the queue, because a host
@@ -108,7 +108,7 @@ does not move under a cursor every time a socket blinks.
   the title, the artist, and both timecodes into its own label, so the bar
   announced its elapsed time and re-announced it at every tick. The
   container is explicit about its children now, the loose text is excluded,
-  and the position is announced by the one control that owns it — the seek
+  and the position is announced by the one control that owns it - the seek
   bar, as a spoken time. The same merge silently swallowed the banner's
   Reload button until `explicitChildNodes` went on: a `Semantics` that is
   not a container folds into the nearest one that is, which is worth
@@ -152,8 +152,8 @@ does not move under a cursor every time a socket blinks.
   store landed early (ADR-0027); what these two still want is a control
   in Settings, and wifi-only a connectivity port besides.*
 - **A sheet opened from the bar does not belong to the bar.** The bar is
-  replaced by whatever playback does next — clearing the queue, a station
-  taking the engine — and its overflow menu stays up across that. The
+  replaced by whatever playback does next - clearing the queue, a station
+  taking the engine - and its overflow menu stays up across that. The
   menu captures the root navigator's context and the router when it
   opens, so the tap that follows still lands; reaching back through the
   bar's own context is how a dialog ends up pushed from an element that
@@ -164,12 +164,12 @@ does not move under a cursor every time a socket blinks.
   item that handed the engine to radio. `resume()` refuses while a start
   is in flight, because starting again supersedes the load, re-mints its
   stream token and listen session, and drops the position it was asked
-  for — a tap on a book's chapter twelve landing at the checkpoint
+  for - a tap on a book's chapter twelve landing at the checkpoint
   instead. The controller records the start's own token for that, and
   clears it only if a newer start has not claimed the window.
 - **A disposal callback may not touch `ref`.** Riverpod marks the
   element disposed before running these and asserts on its callback
-  stack, and the container swallows what that throws — so a reset
+  stack, and the container swallows what that throws - so a reset
   written there does not fail loudly, it just never happens. The sync
   binder holds the notifier from its build instead. This is the same
   rule the queue controller already records for letting go of a session.
@@ -177,14 +177,14 @@ does not move under a cursor every time a socket blinks.
   asks whether `play()` answers while the item is still playing, which
   is what one backend spent a phase not doing, and another asks that a
   start which was taken reports nothing on `playbackRefused`. A refusal
-  itself cannot be provoked from a test — it takes a browser's autoplay
-  policy — so the surfaces that read one are exercised against the fake.
+  itself cannot be provoked from a test - it takes a browser's autoplay
+  policy - so the surfaces that read one are exercised against the fake.
 - **Two fire-and-forget paths catch everything, deliberately.** The
   server-build probe and the engine's refusal handler both run with no
   caller to fail: the probe is `unawaited`, and the handler hangs off a
   `catchError` on a request nobody awaits. Narrowing either to the
   structured API error would put an unhandled zone error one deserialize
-  failure away — and a response the generated code cannot build is the
+  failure away - and a response the generated code cannot build is the
   very shape of the event the probe exists to notice.
 - The composites' deck bars are wired end to end now, which is what the
   "nothing unwired is drawn" rule made visible: their right clusters had

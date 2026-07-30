@@ -121,7 +121,7 @@ class DownloadsController extends AsyncNotifier<DownloadsState> {
   /// Two calls, not one. The download path pins the item's artwork so a
   /// downloaded item has a cover with the server unreachable (ADR-0025),
   /// and that pin is kept by pid in a table the downloads port knows
-  /// nothing about — so removing the audio alone leaves image files
+  /// nothing about - so removing the audio alone leaves image files
   /// nothing short of a sign-out will reclaim. This is the only caller
   /// either half has ever had.
   Future<void> remove(String pid) async {
@@ -184,8 +184,8 @@ class DownloadsController extends AsyncNotifier<DownloadsState> {
   /// Asks for every held item again.
   ///
   /// This is the stale sweep. Nothing local can tell a stale file from a
-  /// current one — staleness is a comparison against what the server has
-  /// now — and `download` already makes exactly that comparison per
+  /// current one - staleness is a comparison against what the server has
+  /// now - and `download` already makes exactly that comparison per
   /// file: it fetches download-info, keeps any file whose essence hash
   /// still matches, and re-transfers the rest. So refreshing everything
   /// costs one request per item and re-downloads only what actually

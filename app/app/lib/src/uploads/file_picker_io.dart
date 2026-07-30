@@ -114,7 +114,7 @@ Future<List<PickedAudioFile>> _filesUnder(
   return out;
 }
 
-/// The last separator position. On Windows both `\` and `/` count —
+/// The last separator position. On Windows both `\` and `/` count -
 /// neither is legal inside a Windows file name, and pickers and drops
 /// there hand back either or mixed forms. On POSIX only `/` counts: a
 /// backslash is a legal file-name character and must never split.

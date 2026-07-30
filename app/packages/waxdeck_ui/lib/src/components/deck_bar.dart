@@ -33,6 +33,8 @@ class DeckBarActions {
     this.onQueue,
     this.onLyrics,
     this.onCast,
+    this.onVolume,
+    this.onMute,
     this.onMore,
     this.onStar,
     this.onSeek,
@@ -69,6 +71,20 @@ class DeckBarActions {
   final VoidCallback? onQueue;
   final VoidCallback? onLyrics;
   final VoidCallback? onCast;
+
+  /// Sets the output level. Wired together with [NowPlayingData.volume]:
+  /// the level says what to draw and this says whether it can be moved,
+  /// and the slider appears only when both are present. A level with no
+  /// setter would be a readout, which is not a thing the bar has room to
+  /// be.
+  final ValueChanged<double>? onVolume;
+
+  /// Silences the output and puts it back. Optional beside [onVolume]:
+  /// where a caller has nowhere to remember the level it silenced, the
+  /// glyph stays a label rather than becoming a control that cannot undo
+  /// itself.
+  final VoidCallback? onMute;
+
   final VoidCallback? onMore;
   final ValueChanged<bool>? onStar;
   final ValueChanged<Duration>? onSeek;
@@ -237,6 +253,23 @@ class DeckBar extends StatelessWidget {
   }
 
   Widget _expanded(BuildContext context, WaxColors colors) {
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          _zones(context, colors, constraints.maxWidth),
+    );
+  }
+
+  /// How wide the volume track is, given the room the bar has.
+  ///
+  /// The right cluster is sized to its contents and the other two zones
+  /// share what is left, so the newest thing in the cluster is the thing
+  /// that has to give: at 840 px a full-width track took the left zone
+  /// below what its artwork, star, and needle need, and five pixels came
+  /// out the side. Measured from the bar's own width rather than the
+  /// window's, because the bar sits in a shell slot beside a sidebar.
+  static double _volumeTrack(double available) => available >= 1000 ? 80 : 52;
+
+  Widget _zones(BuildContext context, WaxColors colors, double available) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
       child: Row(
@@ -256,13 +289,21 @@ class DeckBar extends StatelessWidget {
                       child: _titleBlock(colors, compact: false),
                     ),
                   ),
-                  const SizedBox(width: WaxSpace.s8),
-                  StarButton(
-                    starred: now.starred,
-                    size: 16,
-                    onChanged: actions.onStar,
-                    semanticsId: ids.star,
-                  ),
+                  // Only where the caller wired it, which is the rule the
+                  // right cluster already follows: a permanently greyed
+                  // control reads as broken rather than as absent. Live
+                  // radio is the case that proves it - a station has no
+                  // per-user state to star, so the bar drew a disabled
+                  // star over every stream.
+                  if (actions.onStar != null) ...<Widget>[
+                    const SizedBox(width: WaxSpace.s8),
+                    StarButton(
+                      starred: now.starred,
+                      size: 16,
+                      onChanged: actions.onStar,
+                      semanticsId: ids.star,
+                    ),
+                  ],
                   if (now.playing) ...<Widget>[
                     const SizedBox(width: WaxSpace.s8),
                     PlayingIndicator(playing: now.playing, size: 26),
@@ -359,6 +400,20 @@ class DeckBar extends StatelessWidget {
                   active: now.remoteEndpoint != null,
                   onPressed: actions.onCast,
                   semanticsId: ids.cast,
+                ),
+              // Both halves or neither: a level with nothing to set it is
+              // a readout, and a setter with no level has nothing to draw.
+              if (now.volume != null && actions.onVolume != null)
+                WaxSlider(
+                  value: now.volume!,
+                  onChanged: actions.onVolume,
+                  label: 'Volume',
+                  glyph: WaxIcons.volume,
+                  mutedGlyph: WaxIcons.volumeMuted,
+                  onMute: actions.onMute,
+                  trackWidth: _volumeTrack(available),
+                  semanticsId: ids.volume,
+                  muteSemanticsId: ids.mute,
                 ),
               if (actions.onMore != null)
                 WaxIconButton(
@@ -590,7 +645,7 @@ class DeckBar extends StatelessWidget {
 /// The deck bar's other face: a queue found at launch, offered back.
 ///
 /// It stands in the same slot at the same height, because it is the same
-/// promise — this is where what you are listening to lives — and because
+/// promise - this is where what you are listening to lives - and because
 /// the bar appearing under the content on launch and then jumping as
 /// playback starts would move the page twice. The offer names what would
 /// come back, so accepting it is a decision rather than a guess, and it

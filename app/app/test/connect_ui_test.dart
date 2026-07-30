@@ -1,17 +1,22 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// Override lives here rather than in the root library.
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/connect/connect_bus.dart';
 import 'package:waxdeck/src/connect/connect_providers.dart';
 import 'package:waxdeck/src/connect/device_picker.dart';
 import 'package:waxdeck/src/connect/remote_screen.dart';
-import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/connect/remote_session.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 import 'routed_host.dart';
 
 const _endpoint = PlayerEndpoint(
@@ -22,6 +27,17 @@ const _endpoint = PlayerEndpoint(
   shared: true,
   mine: false,
   volumeControl: true,
+  rateControl: false,
+);
+
+const _offline = PlayerEndpoint(
+  id: 'pe-porch',
+  kind: 'dlna',
+  name: 'Porch radio',
+  online: false,
+  shared: true,
+  mine: false,
+  volumeControl: false,
   rateControl: false,
 );
 
@@ -44,7 +60,13 @@ PlaybackSessionInfo _session({bool playing = true}) => PlaybackSessionInfo(
 );
 
 class _PickerHost extends ConsumerWidget {
-  const _PickerHost();
+  const _PickerHost({
+    this.currentPid = 'tr-current',
+    this.from = CastSource.here,
+  });
+
+  final String? currentPid;
+  final CastSource from;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -53,8 +75,8 @@ class _PickerHost extends ConsumerWidget {
         child: ElevatedButton(
           onPressed: () => showDevicePicker(
             context,
-            ref,
-            currentPid: 'tr-current',
+            from: from,
+            currentPid: currentPid,
             positionMs: 5000,
           ),
           child: const Text('open'),
@@ -64,18 +86,23 @@ class _PickerHost extends ConsumerWidget {
   }
 }
 
+/// The same container the player tests build, which is the one every
+/// surface here needs: a repository and an engine.
+ProviderContainer _container({
+  required FakeRepository repo,
+  List<Override> extra = const <Override>[],
+}) => playbackContainer(repo: repo, engine: FakeEngine(), extra: extra);
+
 void main() {
   testWidgets('the picker lists endpoints and starts playback there', (
     tester,
   ) async {
     final repo = FakeRepository(items: [testItem('tr-current')])
       ..playerEndpoints = [_endpoint];
+    final container = _container(repo: repo);
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repo),
-          audioEngineProvider.overrideWithValue(FakeEngine()),
-        ],
+      UncontrolledProviderScope(
+        container: container,
         child: routedHost(const _PickerHost()),
       ),
     );
@@ -83,7 +110,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Kitchen speaker'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('endpoint-pe-speaker')));
+    // Grouped by what an endpoint is, so a cast device sits under the
+    // speakers heading rather than in one flat list.
+    expect(find.text('Speakers and displays'), findsOneWidget);
+    // The capability hint the picker promises, so "can I turn this down?"
+    // is answered before the trip rather than after it.
+    expect(find.text('Remote volume control'), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-speaker')),
+    );
     await tester.pumpAndSettle();
 
     // No reported mirror session exists, so the tap creates a session
@@ -94,6 +130,111 @@ void main() {
     expect(call.itemPids, ['tr-current']);
     expect(call.positionMs, 5000);
     expect(find.text('Playing on Kitchen speaker'), findsOneWidget);
+
+    // Starting playback elsewhere is what the shell now follows: the bar's
+    // remote face and the remote screen both read this.
+    expect(container.read(remoteSessionProvider)?.id, 'ps-created');
+
+    // A playing remote session feeds a position, which is a timer that
+    // lives as long as the session does; the harness checks for pending
+    // ones when the tree goes away, and a container teardown runs after
+    // that. Letting go here is what a listener does with the triad.
+    container.read(remoteSessionProvider.notifier).release();
+  });
+
+  // Both faces can be live at once, so which session moves is the face's
+  // answer: inferring it sent the observed session to the picked endpoint
+  // and left the album playing here where it was.
+  testWidgets('casting from here moves what is here, not what is elsewhere', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = [_endpoint];
+    final container = _container(repo: repo);
+    // A session in the kitchen while an album plays here.
+    container.read(remoteSessionProvider.notifier).adopt(_session());
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-speaker')),
+    );
+    await tester.pumpAndSettle();
+
+    // The local item went, and the kitchen session was left alone.
+    expect(repo.transferPlaybackSessionCalls, isEmpty);
+    expect(repo.createPlaybackSessionCalls, hasLength(1));
+    expect(repo.createPlaybackSessionCalls.single.itemPids, ['tr-current']);
+
+    container.read(remoteSessionProvider.notifier).release();
+  });
+
+  // The server answers a transfer to the current endpoint with a 200
+  // no-op, so a live row there is a control that does nothing.
+  testWidgets('the endpoint a session is already on is not a control', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-x')])
+      ..playerEndpoints = [_endpoint];
+    final container = _container(repo: repo);
+    container.read(remoteSessionProvider.notifier).adopt(_session());
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(
+          const _PickerHost(currentPid: null, from: CastSource.elsewhere),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final row = find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-speaker'));
+    expect(row, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(row)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isFalse,
+      reason: 'the endpoint the session is on offers no trip to itself',
+    );
+    await tester.tap(row, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(repo.transferPlaybackSessionCalls, isEmpty);
+
+    container.read(remoteSessionProvider.notifier).release();
+  });
+
+  testWidgets('an offline endpoint says why rather than disappearing', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = [_offline];
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: _container(repo: repo),
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Porch radio'), findsOneWidget);
+    expect(find.text('Offline'), findsOneWidget);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-porch')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(repo.createPlaybackSessionCalls, isEmpty);
   });
 
   testWidgets('the picker holds its rows across a refresh', (tester) async {
@@ -101,10 +242,9 @@ void main() {
       ..playerEndpoints = [_endpoint];
     var listings = 0;
     final refetch = Completer<void>();
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
+    final container = _container(
+      repo: repo,
+      extra: [
         // The second listing is held open, which is the window the
         // sheet has to survive. A real one is a round trip wide.
         playbackSessionsProvider.overrideWith((ref) async {
@@ -113,7 +253,6 @@ void main() {
         }),
       ],
     );
-    addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -123,7 +262,7 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    final row = find.byKey(const Key('session-ps-remote'));
+    final row = find.bySemanticsIdentifier(SemanticsIds.session('ps-remote'));
     expect(row, findsOneWidget);
 
     // The player topic invalidates both lists whenever any session
@@ -143,12 +282,15 @@ void main() {
   testWidgets('the remote screen sends commands and transfers here', (
     tester,
   ) async {
-    final repo = FakeRepository(items: [testItem('tr-x')]);
+    // The endpoint list is where the volume capability comes from: the
+    // session reports a level, and whether it can be *set* is the
+    // endpoint's own claim, which the server enforces.
+    final repo = FakeRepository(items: [testItem('tr-x')])
+      ..playerEndpoints = [_endpoint];
     final sent = <Map<String, Object?>>[];
-    final container = ProviderContainer(
-      overrides: [
-        repositoryProvider.overrideWithValue(repo),
-        audioEngineProvider.overrideWithValue(FakeEngine()),
+    final container = _container(
+      repo: repo,
+      extra: [
         connectBusProvider.overrideWith((ref) {
           final bus = ConnectBus(
             send: (f) {
@@ -161,15 +303,13 @@ void main() {
         }),
       ],
     );
-    addTearDown(container.dispose);
+    // Adopting is what the picker does; the screen is a viewer of it.
+    container.read(remoteSessionProvider.notifier).adopt(_session());
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: routedHost(
-          RemoteControlScreen(initial: _session()),
-          pushed: true,
-        ),
+        child: routedHost(const RemoteControlScreen(), pushed: true),
       ),
     );
     await tester.pump();
@@ -177,12 +317,13 @@ void main() {
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Kitchen speaker'), findsOneWidget);
 
-    // The screen watched its session on init.
+    // The controller watched the session when it adopted it, which is what
+    // makes the deck bar's face survive this screen being left.
     expect(sent.any((f) => f['type'] == 'watch'), isTrue);
 
     // Toggle sends pause for a playing session; answer the ack so the
     // future settles.
-    await tester.tap(find.byKey(const Key('remote-toggle')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.remoteToggle));
     await tester.pump();
     final cmd = sent.lastWhere((f) => f['type'] == 'cmd');
     expect(cmd['verb'], 'pause');
@@ -193,14 +334,178 @@ void main() {
     });
     await tester.pump();
 
-    // Play here transfers to this client's endpoint once registered.
+    // The endpoint reports volume control, so the screen offers its level
+    // this is where a phone gets the slider 5.2 gives it, since the
+    // compact deck bar has no right cluster to hold one.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.remoteVolume),
+      findsOneWidget,
+    );
+
+    // Transfer here moves the session to this client's endpoint once
+    // registered, and stops treating it as somewhere else.
     container.read(connectControllerProvider).endpointId.value = 'pe-me';
-    await tester.tap(find.byKey(const Key('remote-play-here')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.remotePlayHere));
     await tester.pumpAndSettle();
     expect(repo.transferPlaybackSessionCalls, hasLength(1));
     expect(repo.transferPlaybackSessionCalls.single, (
       sessionId: 'ps-remote',
       endpointId: 'pe-me',
     ));
+    expect(container.read(remoteSessionProvider), isNull);
+  });
+
+  testWidgets('leaving a session playing stops controlling and nothing else', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-x')]);
+    final container = _container(repo: repo);
+    container.read(remoteSessionProvider.notifier).adopt(_session());
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const RemoteControlScreen(), pushed: true),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.remoteLeave));
+    await tester.pumpAndSettle();
+
+    expect(container.read(remoteSessionProvider), isNull);
+    // The whole point of the choice: the room keeps playing.
+    expect(repo.deletePlaybackSessionCalls, isEmpty);
+  });
+
+  testWidgets('stopping playback there ends the session', (tester) async {
+    final repo = FakeRepository(items: [testItem('tr-x')]);
+    final container = _container(repo: repo);
+    container.read(remoteSessionProvider.notifier).adopt(_session());
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const RemoteControlScreen(), pushed: true),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.remoteStopThere));
+    await tester.pumpAndSettle();
+
+    expect(repo.deletePlaybackSessionCalls, ['ps-remote']);
+    expect(container.read(remoteSessionProvider), isNull);
+  });
+
+  testWidgets('a session ending elsewhere releases the controller', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-x')]);
+    final container = _container(repo: repo);
+    final controller = container.read(remoteSessionProvider.notifier);
+    controller.adopt(_session());
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const RemoteControlScreen(), pushed: true),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Alpha'), findsOneWidget);
+
+    // Somebody stopped it in the kitchen. The screen has nothing left to
+    // control and says so instead of drawing a dead transport.
+    container.read(connectBusProvider).handleFrame({
+      'type': 'session',
+      'session': <String, dynamic>{
+        'id': 'ps-remote',
+        'endpointId': 'pe-speaker',
+        'ended': true,
+        'positionAt': DateTime.now().toUtc().toIso8601String(),
+      },
+    });
+    await tester.pumpAndSettle();
+
+    expect(container.read(remoteSessionProvider), isNull);
+    expect(find.text('Nothing playing elsewhere'), findsOneWidget);
+  });
+
+  testWidgets('the connection check renders each base and its notes', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-current')])
+      ..playerEndpoints = [_endpoint]
+      ..preflightBases = const [
+        CastPreflightBase(
+          base: 'https://waxdeck.example',
+          source: 'configured',
+          reachable: false,
+          notes: ['The certificate is not publicly trusted.'],
+        ),
+        CastPreflightBase(
+          base: 'http://192.168.1.20:4420',
+          source: 'detected',
+          reachable: true,
+          notes: [],
+        ),
+      ];
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: _container(repo: repo),
+        child: routedHost(const _PickerHost()),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.pickerCheck));
+    await tester.pumpAndSettle();
+
+    expect(find.text('https://waxdeck.example'), findsOneWidget);
+    expect(find.text('Configured address, not reachable'), findsOneWidget);
+    expect(
+      find.text('The certificate is not publicly trusted.'),
+      findsOneWidget,
+    );
+    expect(find.text('http://192.168.1.20:4420'), findsOneWidget);
+    expect(find.text('Detected on this network, reachable'), findsOneWidget);
+  });
+
+  testWidgets('a multi-part book refused by a device offers a way out', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('bk-1')])
+      ..playerEndpoints = [_endpoint]
+      ..createSessionError = const WaxDeckApiException(
+        code: 'feature-unavailable',
+        message: 'multi-part audiobooks cannot play on this endpoint yet: bk-1',
+      );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: _container(repo: repo),
+        child: routedHost(const _PickerHost(currentPid: 'bk-1')),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.endpoint('pe-speaker')),
+    );
+    await tester.pumpAndSettle();
+
+    // The server's typed refusal, rendered as the thing to do about it
+    // rather than as the sentence a server logs.
+    expect(
+      find.textContaining("can't play on Kitchen speaker yet"),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Play it on this device instead'),
+      findsOneWidget,
+    );
   });
 }

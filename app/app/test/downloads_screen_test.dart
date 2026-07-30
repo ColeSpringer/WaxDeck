@@ -383,7 +383,7 @@ void main() {
       tester,
     ) async {
       // The progress stream is what drives the bars, and a completion on
-      // it re-reads the store from inside a stream callback — worth a
+      // it re-reads the store from inside a stream callback - worth a
       // test of its own, because an invalidate from the wrong place
       // throws at runtime and nothing else here would see it.
       await pump(

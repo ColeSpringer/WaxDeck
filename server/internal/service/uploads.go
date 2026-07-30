@@ -475,7 +475,7 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 		// races finalize correctly under either ordering: it lands only
 		// while the batch is open (finalize's gather then covers the
 		// member), and a batch closed mid-work affects zero rows, so
-		// the member falls through to the per-file path below —
+		// the member falls through to the per-file path below -
 		// exactly one review entry either way.
 		staged, err := l.db.StageBatchMember(ctx, u, marshalJSON(track))
 		if err != nil {

@@ -41,8 +41,8 @@ class BookScreen extends ConsumerWidget {
     return WaxScaffold(
       title: book?.title ?? 'Audiobook',
       largeTitle: false,
-      // Pops where something pushed this — a search hit, a shelf on
-      // home — and goes to the hub where nothing did, so the arrow and
+      // Pops where something pushed this - a search hit, a shelf on
+      // home - and goes to the hub where nothing did, so the arrow and
       // the system gesture agree from either entry point.
       onBack: () => context.leave(fallback: WaxRoute.books),
       actions: <Widget>[
@@ -209,7 +209,7 @@ class _Header extends ConsumerWidget {
   }
 
   /// "Resume Chapter 12" where the resume point named its chapter, and
-  /// plain "Resume" where it did not — a book with no chapter marks, or a
+  /// plain "Resume" where it did not - a book with no chapter marks, or a
   /// screen whose resume read has not landed and is drawing the batch
   /// play state's position instead.
   static String _resumeLabel(BookResume? resume) {
@@ -340,7 +340,7 @@ class _Chapters extends ConsumerWidget {
               leadingText: formatCueTimestamp(book.chapters[i].startMs),
               // Selected, not playing. `playing` means the engine is on
               // this item and draws the animated bars over the leading
-              // slot — which would take the timecode away from the one
+              // slot - which would take the timecode away from the one
               // row whose position a listener most wants to see, and
               // claim playback for a chapter that may be nothing but a
               // saved place.
@@ -572,7 +572,7 @@ class _BookOverflow extends ConsumerWidget {
     // inside the toast: the undo outlives the row that offered it. A
     // `WidgetRef` is dead the moment its element is disposed, so a book
     // screen left behind while the toast is still up would take the undo
-    // with it — the same lesson the mark-older dialog is built on.
+    // with it - the same lesson the mark-older dialog is built on.
     final container = ProviderScope.containerOf(context, listen: false);
     final repository = container.read(repositoryProvider);
     try {

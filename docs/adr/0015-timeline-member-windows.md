@@ -15,8 +15,8 @@ timeline (`POST /player/timeline`) that names each queue member as a
 source the streaming sidecar stitches without gaps.
 
 The sidecar's timeline sources originally addressed a whole file. A
-virtual member has no whole-file identity to hand over — only a window
-into another file — so the timeline builder refused any queue holding a
+virtual member has no whole-file identity to hand over - only a window
+into another file - so the timeline builder refused any queue holding a
 virtual track and both callers (the queue-timeline mint and the
 connect-session timeline) bailed on the whole timeline rather than
 serving a wrong one. A carved track could play on the direct path,
@@ -48,7 +48,7 @@ answers a conflict, exactly as before.
 - A cue-carved track joins a gapless timeline on a sidecar that
   advertises member windows, and playback is gapless across it. On an
   older sidecar the queue degrades to per-item playback, which still
-  clips the window correctly through the direct path — no track is
+  clips the window correctly through the direct path - no track is
   ever skipped or served whole by mistake.
 - The refusal is all-or-nothing per timeline, not per member: a
   timeline with one unsupported virtual member is refused whole rather

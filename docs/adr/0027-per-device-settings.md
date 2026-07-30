@@ -9,7 +9,7 @@ Accepted.
 ## Context
 
 WaxDeck already stores preferences. `/prefs` holds a document per
-account — theme, locale, timezone, the shared-stats opt-out — and
+account - theme, locale, timezone, the shared-stats opt-out - and
 `PrefsController` reads and replaces it. That is the right home for
 anything a listener would expect to find waiting on a new phone.
 
@@ -21,15 +21,15 @@ here. Syncing those would mean a phone inheriting a desktop's icon rail,
 and a device that is offline could not read its own preferences at all.
 
 So three deferred entries and the settings section of the UI plan all
-said the same thing — "needs the per-device client-settings store" —
-and no such store existed. Two controllers shipped as in-memory
+said the same thing - "needs the per-device client-settings store" - and
+no such store existed. Two controllers shipped as in-memory
 `Notifier`s with a comment pointing at this decision, which is what makes
 it worth writing down rather than just building.
 
 The awkward half is the web build. Drift does not run there at all:
 `open_stub.dart` throws and `mirrorDatabaseProvider` answers null under
 `kIsWeb`. The established pattern for that is the queue's `NoQueueStore`
-— a store where nothing persists — and taking it here would leave the
+- a store where nothing persists - and taking it here would leave the
 sidebar rail unpersisted on the desktop-shaped surface that most wants
 it. A browser window *is* the desktop client for a large share of this
 product's use.
@@ -51,7 +51,7 @@ stored" instead of throwing at launch.
 
 **Native persists in the mirror database; the web build persists in
 `localStorage`.** Different problems, different implementations, one
-port — the same split ADR-0025 made for artwork, and made for the same
+port - the same split ADR-0025 made for artwork, and made for the same
 reason. Mirror schema v3 adds a `ClientSettings` table (and, in the same
 migration, the `QueueMeta.sourceCursor` column the queue-UI phase needs,
 so that phase mints no second one).
@@ -67,7 +67,7 @@ then a plain Dart object: the probe, the degradation, and the key
 semantics are exercised on the VM against a fake, and only the handful of
 lines that hand over the real `localStorage` are untested by machine.
 
-**Degrade, never throw — in both implementations, not just the one with
+**Degrade, never throw - in both implementations, not just the one with
 an obvious way to fail.** `localStorage` is not a guarantee: private and
 incognito contexts have thrown on write, a partitioned context can refuse
 it, a visitor can switch it off. The browser store probes once at
@@ -82,20 +82,20 @@ other quietly does not is worse than one that never made the promise.
 
 **And the reader enforces it rather than trusting it.** These are
 unawaited futures on a startup path, so anything escaping one is an
-unhandled zone error, not a caught failure — while the entire cost of
+unhandled zone error, not a caught failure - while the entire cost of
 losing is a preference that reads at its default. The mixin therefore
 guards its own read and write, which also covers a `decode` that a later
 setting writes badly. Failures go to the console, because a preference
 that will not persist has no other symptom; that is the same treatment,
 for the same reason, that a queue which will not write gets.
 
-**Whatever this session changed is answered from memory first — a
+**Whatever this session changed is answered from memory first - a
 removal as much as a write.** That is what makes a change the browser
 refused still hold: it is in the shadow whether or not storage took it.
 Membership in the shadow is what makes it authoritative, not a non-null
 value, because a removal storage rejects would otherwise fall through and
 be answered with the value that was just deleted. The cost is that a
-second tab's writes are not picked up mid-session, which is deliberate —
+second tab's writes are not picked up mid-session, which is deliberate -
 these are preferences read at startup, not a cross-tab channel, and the
 native store offers no such channel either.
 
@@ -112,7 +112,7 @@ thing.** For a preference that accumulates it is a data loss: the first
 search remembered before the stored list arrived would discard the whole
 history, and the write behind it would persist a one-entry list over it
 permanently. So the race has a `merge` hook. Its default keeps the
-session's value — correct for the sidebar — and the recent searches
+session's value - correct for the sidebar - and the recent searches
 override it to put the new query on the front of the stored ones and
 write the result back.
 
@@ -143,16 +143,16 @@ question for itself.
   (a bool) and the recent searches (a list, encoded as JSON because a
   query may contain any separator a keyboard can emit). A store with no
   reader has an unvalidated shape, and the two cover both value kinds.
-- The remaining three named settings — spoken-word skip intervals, the
-  wifi-only preload switch, and density — are not wired here. Each needs
+- The remaining three named settings - spoken-word skip intervals, the
+  wifi-only preload switch, and density - are not wired here. Each needs
   a Settings control that does not exist yet, and wifi-only additionally
   needs a connectivity port (no connectivity plugin is pinned anywhere),
   which is its own wrap-and-pin decision. Their deferred entries stay
   open and now name a store that exists.
 - The real `localStorage` binding is not covered by an automated test.
-  Nothing in this repo runs under a browser — there is no `@TestOn`
+  Nothing in this repo runs under a browser - there is no `@TestOn`
   anywhere and `waxdeck_data`'s tests import `drift/native`, so
-  `--platform chrome` cannot simply be switched on — and adding Chrome to
+  `--platform chrome` cannot simply be switched on - and adding Chrome to
   CI is an infrastructure decision that should not ride a store. Recorded
   in `docs/deferred-work.md` with the verification that stands in for it.
 - Migration steps are cumulative and `createTable` builds *today's*

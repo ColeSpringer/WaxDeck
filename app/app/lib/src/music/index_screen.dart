@@ -70,8 +70,8 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
   Future<void> _jumpTo(String letter) async {
     if (_jumping) return;
     // The letter is not marked current until the list actually moves to
-    // it. Every early return below is a walk that reached nothing — no
-    // buckets yet, a page already in flight, the dimension exhausted —
+    // it. Every early return below is a walk that reached nothing - no
+    // buckets yet, a page already in flight, the dimension exhausted -
     // and a rail showing a letter it never arrived at is the rail lying
     // about where the list is.
     var arrived = false;
@@ -84,7 +84,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
       // density theme and the text scale, and holding the number rather
       // than the context is what keeps this off a context that may not
       // outlive the paging. Asked of the row itself rather than guessed
-      // from the row height, which is only the floor — at 1.5x text a
+      // from the row height, which is only the floor - at 1.5x text a
       // title and a caption clear it, and a guess that is short by four
       // pixels a row is short by a screenful after eighty of them.
       final rowExtent = MediaListRow.heightFor(context);

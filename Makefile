@@ -201,7 +201,7 @@ logs:
 # The suite drives the real web build through the real binary:
 # run-stack.sh starts ./server/waxdeck, which serves the UI embedded at
 # link time. So both have to be current or the suite tests the last build
-# and fails for reasons that are not in the working tree — a stale bundle
+# and fails for reasons that are not in the working tree - a stale bundle
 # reads exactly like a missing feature, and the failure lands on whichever
 # spec touched it rather than saying so.
 #
@@ -209,7 +209,7 @@ logs:
 # the Dart sources, so a spec-only or Go-only iteration pays no Flutter
 # compile. `build` is unconditional and cheap by comparison: it has to run
 # whenever the bundle moved, and it is also what heals a binary
-# `e2e-desktop` left behind — that runner links without `-tags withweb`,
+# `e2e-desktop` left behind - that runner links without `-tags withweb`,
 # so a desktop run followed by this one used to serve the placeholder
 # page.
 #

@@ -146,7 +146,7 @@ void main() {
 
   test('every field of the meta row survives a save and a load', () async {
     // A save replaces the whole row, so a field the companion omits is
-    // not left alone — it is reset to its column default on every write.
+    // not left alone - it is reset to its column default on every write.
     // That failure is silent, which is why this asserts the whole record
     // rather than the fields a given change happened to touch.
     await store.save(_fullQueue());

@@ -56,15 +56,15 @@ resumable, carry a required media type label (music, podcast episode,
 audiobook), and stage outside the library until a review decision
 imports them. Items a user's own uploads bring into the library stay
 editable by that user afterward: the full-depth editor's item-scoped
-operations accept the uploader as well as administrators. The identify pipeline runs on every completed upload,
-so a well-tagged file usually arrives with its candidates already
-scored. Duplicate warnings (exact bytes, or the same recording in a
-different encoding) inform the decision instead of blocking it. The
-uploads screen shows the account's quota usage at the top of the
-session list.
+operations accept the uploader as well as administrators. The
+identify pipeline runs on every completed upload, so a well-tagged
+file usually arrives with its candidates already scored. Duplicate
+warnings (exact bytes, or the same recording in a different encoding)
+inform the decision instead of blocking it. The uploads screen shows
+the account's quota usage at the top of the session list.
 
 Files reach the flow three ways: a file picker on every platform, a
-folder picker on desktop (Linux, macOS, Windows — Android folder
+folder picker on desktop (Linux, macOS, Windows - Android folder
 access means SAF tree URIs, which the picker port does not speak),
 and drag-and-drop onto the library or uploads screen on web and
 desktop. Web transfers read the browser's file handles in windows, so
@@ -73,12 +73,12 @@ picking a multi-hundred-megabyte album never loads it into memory.
 Uploading several files at once asks a grouping question so an album
 folder does not flood the review queue with per-file entries:
 **Auto-detect** (the default) clusters files into album units by
-their tags and relative folders — disc subfolders like `CD1` fold
-into one release — **One album** reviews everything as a single
+their tags and relative folders - disc subfolders like `CD1` fold
+into one release - **One album** reviews everything as a single
 release, and **Separate tracks** opens one entry per file. The
 grouping rides an upload batch: members upload individually
 (per-file failures never sink the rest), and the batch finalizes
-into review entries when the transfer finishes — or within a day,
+into review entries when the transfer finishes - or within a day,
 with whatever arrived, if the client vanished. Files shared to the
 Android app group by auto-detection without asking.
 
@@ -101,12 +101,12 @@ playlist, or a channel (bounded to two hundred entries per
 acquisition; subscribing the channel as a show is the archive-scale
 path). The downloader is on by default; it needs a managed library
 root for the files to land in (`WAXDECK_MANAGED_ROOTS`), and
-`WAXDECK_YOUTUBE=false` turns it off. See the getting-started guide. The download runs as a background task through
-the acquisition bridge, with SponsorBlock cuts and embedded source
-metadata (title, channel, thumbnail) plus provenance tags recording
-where the audio came from. The files then stage exactly like uploads
-and flow through the same identify and review pipeline, grouped into
-album units.
+`WAXDECK_YOUTUBE=false` turns it off. See the getting-started guide.
+The download runs as a background task through the acquisition
+bridge, with SponsorBlock cuts and embedded source metadata (title,
+channel, thumbnail) plus provenance tags recording where the audio
+came from. The files then stage exactly like uploads and flow through
+the same identify and review pipeline, grouped into album units.
 
 This is where the honest-metadata story matters most: a ripped album
 playlist with clean titles will often match its release and arrive

@@ -279,7 +279,7 @@ class JustAudioEngine implements AudioEnginePort {
   /// Nothing here may throw: it is reached through `catchError` on a
   /// request nobody awaits, so an error escaping it has no handler and
   /// surfaces as an unhandled zone error. Disposal is the way to get
-  /// one — the flag is raised several awaits before the player is
+  /// one - the flag is raised several awaits before the player is
   /// actually released, and a pause issued into that window is talking
   /// to a platform that is tearing down.
   Future<void> _refused(Object error) async {
@@ -382,6 +382,9 @@ class JustAudioEngine implements AudioEnginePort {
 
   @override
   Stream<double> get speedStream => _player.speedStream;
+
+  @override
+  Stream<double> get volumeStream => _player.volumeStream;
 
   EngineProcessingState _map(ProcessingState state) {
     return switch (state) {

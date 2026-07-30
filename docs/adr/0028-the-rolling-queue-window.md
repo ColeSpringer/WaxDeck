@@ -17,9 +17,9 @@ refused. Until now the window was also the end of it: starting a
 5,000-track genre at its first track played 500 and stopped, with 4,500
 tracks the listener had asked for silently out of reach. ADR-0019
 recorded that as deliberate for the ordered case and anticipated a
-refill only for a rolling shuffle. It is not what the product wants —
-it is the truncation the cap exists to avoid, moved one screen later —
-and the shuffled half had no producer either, because nothing in the app
+refill only for a rolling shuffle. It is not what the product wants - it
+is the truncation the cap exists to avoid, moved one screen later - and
+the shuffled half had no producer either, because nothing in the app
 minted a shuffled window until this phase's Shuffle buttons.
 
 So both draws want the same thing: a way back to the scope the window
@@ -34,11 +34,11 @@ source's own listing stands at the queue's frontier), and `seed` (the
 permutation a random draw walks). All three persist: the mirror's
 `queue_meta` already carries a `sourceCursor` column, and the seed rides
 in front of the cursor in it, because a cursor issued under one seed is
-invalid under another and the two are the same fact — where the listing
+invalid under another and the two are the same fact - where the listing
 stands. A cursor is base64url, so the separator can never appear in one.
 
 **A pager turns a source back into pids.** `QueueSourcePager` is the
-port; the repository implementation knows how each source lists itself —
+port; the repository implementation knows how each source lists itself -
 a bucket is a facet drill, the whole library is a browse list, a
 playlist is its own members endpoint. Sources with no listing behind
 them (a mix, a search, one item tapped on its own) answer null, and the
@@ -54,7 +54,7 @@ arrivals it just added are spared.
 
 **Draw size is a hundred, not a cap's worth.** The draw lands on a queue
 that is nearly full, so every entry it adds evicts an older one. A
-cap-sized draw would leave the queue with no history at all — the
+cap-sized draw would leave the queue with no history at all - the
 "Previously" strip empty a moment after a track ends. A hundred is
 several hours ahead and leaves most of the queue to what was played.
 
@@ -66,8 +66,8 @@ cursor is exactly right. An ordered window is a contiguous run, and one
 cut short of the caller's last item ends inside the list: resuming from
 the caller's cursor would step over everything between. So the cursor is
 dropped there, and the draw finds its place by the entry at the frontier
-— the last one taken from the scope, in the order the scope handed them
-over — paging the source from its head until it passes that pid. That
+- the last one taken from the scope, in the order the scope handed them
+over - paging the source from its head until it passes that pid. That
 costs a page per cap's worth of scope passed, on the one path that needs
 it, and it is exact where a stale cursor would not be. A draw never
 re-adds what the queue already holds, so a frontier moved by a hand
@@ -87,8 +87,8 @@ The fix is a facet filter on the browse endpoint, which needs WaxBin's
 
 The first window is a page the Shuffle button draws for itself, not the
 list the screen happens to have scrolled into memory. Sampling an
-accumulated list drops whatever it did not sample — the queue cannot
-hold it, and the cursor beside it points past all of it — so a visitor
+accumulated list drops whatever it did not sample - the queue cannot
+hold it, and the cursor beside it points past all of it - so a visitor
 who scrolled a 5,000-track genre before pressing Shuffle would lose
 everything they scrolled past. One page is exactly one window's worth,
 and the cursor that comes with it is that window's frontier, which is
@@ -109,7 +109,7 @@ restarting it, since the cursor and the seed persist with the queue.
 A failed draw waits for the current entry to change before trying again:
 a failure is usually the network, and the next queue edit is often the
 same second. The visible cost of a draw that never succeeds is the
-behaviour this ADR replaces — a queue that ends at its window — which is
+behaviour this ADR replaces - a queue that ends at its window - which is
 not worth taking anything down for.
 
 Refills are bounded per drain (five draws), so a scope with a long run of

@@ -434,6 +434,9 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 	if req.Body.Theme != nil {
 		in.Theme = string(*req.Body.Theme)
 	}
+	if req.Body.RadioFavorites != nil {
+		in.RadioFavorites = *req.Body.RadioFavorites
+	}
 	stored, err := s.svc.PutPrefs(ctx, uc, in)
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {
@@ -458,6 +461,9 @@ func prefsJSON(p service.Prefs) Prefs {
 	}
 	if p.SharedStatsOptOut {
 		out.SharedStatsOptOut = ptr(true)
+	}
+	if len(p.RadioFavorites) > 0 {
+		out.RadioFavorites = &p.RadioFavorites
 	}
 	return out
 }

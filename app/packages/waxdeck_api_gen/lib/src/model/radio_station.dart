@@ -15,7 +15,7 @@ part 'radio_station.g.dart';
 /// * [name] - Display name.
 /// * [streamUrl] - The station's stream URL.
 /// * [homepageUrl] - The station's website, when known.
-/// * [logoUrl] - Station logo URL, when known. Clients fetch logos directly (they are not proxied), so an http logo may be blocked as mixed content on an https UI; render the placeholder in that case. 
+/// * [logoUrl] - The station's own logo URL, when known: what an edit form shows and what the server fetches from. Do not render it directly - `GET /radio/stations/{pid}/logo` is where the picture comes from, and that endpoint's description records why this reverses the direct-fetch behavior documented here before. Its presence is still the signal there is a logo to ask for at all. 
 /// * [createdAt] - When the station was added.
 @BuiltValue()
 abstract class RadioStation implements Built<RadioStation, RadioStationBuilder> {
@@ -35,7 +35,7 @@ abstract class RadioStation implements Built<RadioStation, RadioStationBuilder> 
   @BuiltValueField(wireName: r'homepageUrl')
   String? get homepageUrl;
 
-  /// Station logo URL, when known. Clients fetch logos directly (they are not proxied), so an http logo may be blocked as mixed content on an https UI; render the placeholder in that case. 
+  /// The station's own logo URL, when known: what an edit form shows and what the server fetches from. Do not render it directly - `GET /radio/stations/{pid}/logo` is where the picture comes from, and that endpoint's description records why this reverses the direct-fetch behavior documented here before. Its presence is still the signal there is a logo to ask for at all. 
   @BuiltValueField(wireName: r'logoUrl')
   String? get logoUrl;
 

@@ -675,7 +675,7 @@ func (s *Service) pushPlayingToWatchers() {
 // arrives in reports the playing client sends, and the server counting
 // it as well would count it twice. The checkpoint covers both, because
 // a session only ever ends gracefully through endSessionLocked, and
-// nothing writes a mirror session's row between queue changes — so a
+// nothing writes a mirror session's row between queue changes - so a
 // crash or restart mid-album used to leave its history entry at
 // whatever the last queue change said, which is usually the first
 // track at zero.

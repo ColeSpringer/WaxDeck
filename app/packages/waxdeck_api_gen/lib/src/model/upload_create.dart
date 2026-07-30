@@ -18,7 +18,7 @@ part 'upload_create.g.dart';
 /// * [libraryPid] - Target library; required when several libraries of the media type are visible to the caller. 
 /// * [sha256] - Lowercase hex SHA-256 of the file, for the up-front exact duplicate warning and the completion integrity check. 
 /// * [batchId] - Joins the session to an open upload batch owned by the caller; its grouping intent then decides how this file reaches the review queue. The session must declare the batch's media type and library. Referencing a batch that is not open, or not the caller's, or mismatching either field, answers `invalid-request`. 
-/// * [batchPath] - The file's directory relative to the picked or dropped folder, forward-slash separated (empty or absent for a file at the top). The `auto` grouping clusters by it, so disc subfolders (`CD1`, `Disc 2`) fold into one album. Must stay relative — absolute paths and `..` segments are rejected, as is passing it without `batchId`. `fileName` stays a bare name regardless. 
+/// * [batchPath] - The file's directory relative to the picked or dropped folder, forward-slash separated (empty or absent for a file at the top). The `auto` grouping clusters by it, so disc subfolders (`CD1`, `Disc 2`) fold into one album. Must stay relative - absolute paths and `..` segments are rejected, as is passing it without `batchId`. `fileName` stays a bare name regardless. 
 @BuiltValue()
 abstract class UploadCreate implements Built<UploadCreate, UploadCreateBuilder> {
   /// The file's name (base name only; any path is rejected). The extension picks the accepted-format check. 
@@ -45,7 +45,7 @@ abstract class UploadCreate implements Built<UploadCreate, UploadCreateBuilder> 
   @BuiltValueField(wireName: r'batchId')
   String? get batchId;
 
-  /// The file's directory relative to the picked or dropped folder, forward-slash separated (empty or absent for a file at the top). The `auto` grouping clusters by it, so disc subfolders (`CD1`, `Disc 2`) fold into one album. Must stay relative — absolute paths and `..` segments are rejected, as is passing it without `batchId`. `fileName` stays a bare name regardless. 
+  /// The file's directory relative to the picked or dropped folder, forward-slash separated (empty or absent for a file at the top). The `auto` grouping clusters by it, so disc subfolders (`CD1`, `Disc 2`) fold into one album. Must stay relative - absolute paths and `..` segments are rejected, as is passing it without `batchId`. `fileName` stays a bare name regardless. 
   @BuiltValueField(wireName: r'batchPath')
   String? get batchPath;
 

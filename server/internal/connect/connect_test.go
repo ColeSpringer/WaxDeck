@@ -587,8 +587,8 @@ func TestMirrorSessionLifecycle(t *testing.T) {
 // A mirror session's row has to keep up with what the client is
 // playing, because a crash or a restart never runs the teardown that
 // would otherwise write the final position. Without a checkpoint, the
-// history entry says whatever the last queue change said — the first
-// track at zero — and resuming it starts the album over.
+// history entry says whatever the last queue change said - the first
+// track at zero - and resuming it starts the album over.
 func TestMirrorSessionsCheckpointWhilePlaying(t *testing.T) {
 	svc, _, _ := newTestService(t)
 	ctx := context.Background()

@@ -7,7 +7,7 @@ import '../providers.dart';
 /// half of a release: the codec, the sample rate, the year.
 ///
 /// Auto-disposing and per-pid: an album screen asks for exactly one of
-/// these — the first track speaks for the release — and a listing that
+/// these - the first track speaks for the release - and a listing that
 /// asked per row would be a fetch per row for a caption.
 final itemDetailProvider = FutureProvider.autoDispose
     .family<ItemDetail, String>(

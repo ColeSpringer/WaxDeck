@@ -32,7 +32,24 @@ ArtworkShape waxShapeOf(MediaType type) => switch (type) {
 /// there is none: the placeholder monogram is a real state, not a
 /// loading one.
 ///
-/// The store decides what a URL costs — which size rung to ask the
+/// The store decides what a URL costs - which size rung to ask the
 /// server for, whether the bytes come off the network at all, what the
 /// decode is bounded to. Screens only decide where the cover goes.
 WaxArtwork? waxArtwork(ArtworkStore store, String? url) => store.source(url);
+
+/// A station's logo, through the server's proxy.
+///
+/// Never the station host's own URL: on web it offers no CORS headers, an
+/// http logo is mixed content on an https page, and the fetch hands the
+/// listener's IP to a stranger. `logoUrl` is the signal there is anything
+/// to ask for; the proxy 404s otherwise and the monogram covers it.
+///
+/// Shared because two copies is how the deck bar's radio face kept
+/// fetching from the station after the hub was converted.
+WaxArtwork? waxStationLogo(
+  ArtworkStore store,
+  WaxDeckRepository repository,
+  RadioStation station,
+) => station.logoUrl == null
+    ? null
+    : store.source(repository.radioLogoUrlFor(station.pid));

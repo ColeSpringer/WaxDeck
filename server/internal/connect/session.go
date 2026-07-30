@@ -99,8 +99,8 @@ type Session struct {
 
 // EndedSession is one session's final state, read back from the
 // history rows: the live map holds nothing once a session ends. It
-// has no live half by construction — no `playing`, nothing to
-// extrapolate, no queue version — because restoring one means
+// has no live half by construction - no `playing`, nothing to
+// extrapolate, no queue version - because restoring one means
 // starting a new session from this queue, not reviving this one.
 type EndedSession struct {
 	ID           string

@@ -296,7 +296,7 @@ void main() {
     // depends on what the content pane contains. A routed pane carries a
     // ModalBarrier per route, and a barrier wraps itself in
     // BlockSemantics, which drops the semantics of everything painted
-    // before it in the same container — the sidebar and the rail, both
+    // before it in the same container - the sidebar and the rail, both
     // painted ahead of the pane. The frame gives the content a boundary
     // of its own so that walk stops there; without it the chrome renders
     // and announces nothing, which is invisible to a golden and to every
@@ -394,7 +394,7 @@ void main() {
   group('a hub holds the selection for its indexes', () {
     // Every form but an open sidebar section draws the hub and not its
     // indexes, so an index has to light the hub or the chrome lights
-    // nothing at all — which is what a phone standing on Artists did.
+    // nothing at all - which is what a phone standing on Artists did.
     for (final entry in <String, Size>{
       'tabs': const Size(400, 800),
       'the rail': const Size(700, 900),
@@ -481,8 +481,8 @@ void main() {
         onToggleCollapsed: () => toggled++,
       );
 
-      // No labels are drawn at rail width, so every entry — group
-      // children included — has to be reachable as an icon, or it is
+      // No labels are drawn at rail width, so every entry - group
+      // children included - has to be reachable as an icon, or it is
       // reachable nowhere.
       expect(find.text('Podcasts'), findsNothing);
       for (final name in <String>['Home', 'Podcasts', 'Settings', 'Users']) {
@@ -567,7 +567,7 @@ void main() {
       );
 
       // Unlike a group's children, these are reachable one tap further
-      // on — the hub they belong to lists them — so the rail spends its
+      // on - the hub they belong to lists them - so the rail spends its
       // icons on destinations that are reachable nowhere else.
       expect(find.bySemanticsLabel('Music'), findsOneWidget);
       expect(find.bySemanticsLabel('Artists'), findsNothing);
@@ -625,7 +625,7 @@ void main() {
       // widget type cannot work, because the entries are generic over a
       // private type that no test can spell. So the assertion is that
       // opening the menu adds no second copy of a destination the chrome
-      // is already responsible for — which fails the moment the frame
+      // is already responsible for - which fails the moment the frame
       // starts handing it `secondary` at these widths.
       final onChrome = entry.key == 'the sidebar' ? 1 : 0;
       testWidgets('lists no destination beside ${entry.key}', (tester) async {
@@ -824,7 +824,7 @@ void main() {
       tester,
     ) async {
       // The link is painted last and is roughly 140 by 48, which at rail
-      // width overhangs the content pane by half its width — exactly
+      // width overhangs the content pane by half its width - exactly
       // where a screen's back button sits. Ignoring pointers from inside
       // the detector was not enough: its outermost render object is an
       // opaque `MouseRegion`, which answers the hit test for the whole
@@ -860,7 +860,7 @@ void main() {
       // The half of that problem Flutter's own hit test cannot answer.
       // On web the semantics tree is real DOM, and an element carrying a
       // tap action takes the browser's click for its whole rect whatever
-      // an IgnorePointer above it says — so the rect is what has to
+      // an IgnorePointer above it says - so the rect is what has to
       // shrink. At the leading corner the old full-size box sat over the
       // sidebar header, where the search field is: visible, and
       // unclickable with a mouse.

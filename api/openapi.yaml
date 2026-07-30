@@ -1045,7 +1045,7 @@ paths:
         settings; media files are never included, and the encryption
         keyfile is excluded by design (an archive holding both the
         database and the key is plaintext-equivalent for stored
-        credentials — keep the keyfile safe separately). Retention
+        credentials - keep the keyfile safe separately). Retention
         (`backupKeepCount`/`backupKeepBytes` in the runtime settings)
         is applied after every successful backup, oldest first.
         Answers `conflict` while another backup is running.
@@ -4946,8 +4946,8 @@ paths:
         `endpoint-offline` means the target endpoint is not connected
         right now, and `timeout` means it is connected but did not
         answer in time. A queue the target cannot play answers
-        `feature-unavailable` naming the pid — a multi-part audiobook
-        or a windowed track sent to a device endpoint, say — which a
+        `feature-unavailable` naming the pid - a multi-part audiobook
+        or a windowed track sent to a device endpoint, say - which a
         controller can turn into an offer to play it somewhere that
         can, rather than a bare failure. When the target is a client
         endpoint, that client's own refusal code and message are what
@@ -4984,7 +4984,7 @@ paths:
       operationId: listPlaybackSessionHistory
       summary: List the caller's ended playback sessions
       description: >
-        What was playing, where, and how far in — for the sessions
+        What was playing, where, and how far in - for the sessions
         that have stopped. This is the queue-restore surface: an
         entry carries the whole queue with its index and position, so
         "pick up where I left off" needs no second call. Distinct from
@@ -5004,8 +5004,8 @@ paths:
 
         A session ended through `DELETE /player/sessions/{sessionId}`
         appears here as soon as that call answers. One that ends any
-        other way — a playing client disconnecting, a device leaving
-        the network, a server restart — appears shortly after, and its
+        other way - a playing client disconnecting, a device leaving
+        the network, a server restart - appears shortly after, and its
         position is the last one checkpointed rather than the last one
         played. Checkpoints run every few seconds while a session is
         playing, so the gap is small, but it is a gap.
@@ -6435,6 +6435,151 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /radio/stations/{pid}/logo:
+    get:
+      operationId: getRadioStationLogo
+      summary: Get a station logo
+      description: >
+        The station's logo, fetched by this server and served from this
+        origin. **This reverses the direct-fetch behavior `logoUrl`
+        documented**: clients render logos from here, not from the
+        station host. Two reasons, both of which made direct fetches
+        wrong rather than merely suboptimal. On the web build a logo on
+        another origin has no CORS headers to offer and an http logo is
+        mixed content on an https UI, so a large share of logos simply
+        could not be drawn; and a direct fetch tells every station host
+        the listener's IP address, which nothing about rendering a
+        picture requires.
+
+
+        The fetch goes through the same guarded client the stream proxy
+        uses, so a logo URL pointing at a loopback, link-local, or
+        private address is refused at dial time (after DNS resolution)
+        unless the server permits LAN stations, and redirects are
+        bounded. Bytes are capped and non-image answers are refused: a
+        station host serving an HTML error page where a favicon used to
+        be is a station with no logo, which is a 404 here. Results are
+        cached in the server for a day (misses for an hour), so a
+        household browsing the dial does not re-fetch the same logos per
+        device.
+
+
+        **Raster only, and SVG is refused.** A logo URL is
+        attacker-supplied - any account may add a station, pointing
+        anywhere - and these bytes are served from this origin, where an
+        SVG opened as a document would run its script under the caller's
+        session. So the served type is decided by inspecting the bytes
+        rather than by trusting the host's `Content-Type`, only
+        JPEG/PNG/WebP/GIF pass, and a station whose mark is an SVG draws
+        the monogram a station with no mark draws. The response also
+        carries `nosniff` and a locked-down `Content-Security-Policy`, so
+        a mistake in that check stays a broken image.
+
+
+        404 covers every way there is no picture to draw - no logo
+        configured, the host unreachable, a refused or non-image answer - because a
+        client can act on none of the differences: it draws a
+        monogram disc. Answers carry a content-addressed `ETag`;
+        revalidate with `If-None-Match`.
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: size
+          in: query
+          description: >
+            Accepted and ignored, so the sized-artwork request a client
+            already builds for covers reaches this endpoint unchanged.
+            Station logos are small square images from a directory and
+            the server does not re-encode them: rescaling would have to
+            pick a format, and the transparency most logos carry does not
+            survive that choice.
+          schema:
+            type: integer
+            minimum: 16
+            maximum: 2048
+        - name: If-None-Match
+          in: header
+          description: Previously returned `ETag`; a match answers 304 with no body.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: >
+            The logo image, always one of the raster types below. The
+            served type is decided by inspecting the bytes, not by what
+            the station host called them, so a body is never labelled as
+            something it is not.
+          headers:
+            ETag:
+              description: Content-addressed validator for the returned bytes.
+              schema:
+                type: string
+            Cache-Control:
+              description: >
+                `private, max-age=86400, stale-while-revalidate=604800`.
+                No `Vary`, unlike item artwork: the station library is
+                shared by every user, so these bytes do not depend on who
+                asked. `private` all the same, because the request needs a
+                session and a shared cache must not answer one without.
+              schema:
+                type: string
+            X-Content-Type-Options:
+              description: >
+                `nosniff`. These bytes came from a host any account can
+                name and they are served from this origin, so a browser
+                must not be free to decide the body is really markup.
+              schema:
+                type: string
+            Content-Security-Policy:
+              description: >
+                `default-src 'none'; sandbox; style-src 'unsafe-inline'`,
+                which neutralizes script and navigation for a document
+                opened straight from this URL. Defence in depth: the
+                endpoint serves only raster types and refuses anything
+                whose bytes are not one, and this is what keeps a future
+                mistake in that check a broken image rather than a
+                same-origin script.
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: >
+            The cached copy is still current, with the same validator and
+            freshness the body would have carried.
+          headers:
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: >
+            There is no logo to draw for this station (code `not-found`).
+            Render a monogram disc.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /radio/directory:
     get:
@@ -7990,14 +8135,14 @@ paths:
         entries open (their ids land in `reviewEntryIds`). Members
         still receiving bytes fall back to opening their own
         per-file entry when they later complete. Call this exactly
-        when the client finishes sending members — after per-file
+        when the client finishes sending members - after per-file
         failures too, so the files that did arrive are reviewed
         (a batch whose every member was deleted finalizes empty).
         Only the batch's owner (or an administrator) may finalize;
         anyone else sees `not-found`. Idempotent: finalizing a
         finalized batch answers the same batch again. Finalizing a
-        batch the server has already expired answers `conflict` —
-        its members were grouped with what had arrived when the
+        batch the server has already expired answers `conflict` - its members were
+        grouped with what had arrived when the
         server closed it.
       tags: [uploads]
       responses:
@@ -8889,7 +9034,7 @@ components:
         The command could not be completed on the target player
         endpoint. Read `code` rather than the status: this answer
         carries three, and they call for different things.
-        `endpoint-offline` means the endpoint is not connected — refresh
+        `endpoint-offline` means the endpoint is not connected - refresh
         the endpoint list; the device may have left the network or the
         client may have disconnected. `timeout` means it is connected
         but did not answer within the routing deadline, so retrying
@@ -8994,7 +9139,7 @@ components:
           type: string
           description: >
             The artist entity behind `artist`, so a client can group and
-            link by identity rather than by display text — two artists
+            link by identity rather than by display text - two artists
             with the same name are two entities, and one artist spelled
             two ways is still one. Absent when the item has no artist
             entity. For an audiobook this is its author.
@@ -13152,7 +13297,7 @@ components:
       description: >
         One ended playback session, as the state it stopped in. It has
         no live half: nothing extrapolates, `positionMs` is final, and
-        the session cannot be controlled or resumed in place — restore
+        the session cannot be controlled or resumed in place - restore
         means starting a new session from this queue, index, and
         position. Deliberately not a `PlaybackSession` with a flag: a
         row here is history, while that schema's `ended` marks a live
@@ -14594,10 +14739,13 @@ components:
         logoUrl:
           type: string
           description: >
-            Station logo URL, when known. Clients fetch logos
-            directly (they are not proxied), so an http logo may be
-            blocked as mixed content on an https UI; render the
-            placeholder in that case.
+            The station's own logo URL, when known: what an edit form
+            shows and what the server fetches from. Do not render it
+            directly - `GET /radio/stations/{pid}/logo` is where the
+            picture comes from, and that endpoint's description records
+            why this reverses the direct-fetch behavior documented here
+            before. Its presence is still the signal there is a logo to
+            ask for at all.
         createdAt:
           type: string
           format: date-time
@@ -14683,7 +14831,12 @@ components:
           description: Station website.
         logoUrl:
           type: string
-          description: Station logo URL.
+          description: >
+            Station logo URL as the directory lists it, carried so adding
+            the station keeps it. There is no proxy for a directory match:
+            the proxy addresses a station by pid and a match has none
+            until it is added, so a search result draws a monogram disc
+            and the logo appears once the station is in the library.
         tags:
           type: string
           description: Comma-separated directory tags.
@@ -16158,7 +16311,7 @@ components:
             folder, forward-slash separated (empty or absent for a
             file at the top). The `auto` grouping clusters by it, so
             disc subfolders (`CD1`, `Disc 2`) fold into one album.
-            Must stay relative — absolute paths and `..` segments
+            Must stay relative - absolute paths and `..` segments
             are rejected, as is passing it without `batchId`.
             `fileName` stays a bare name regardless.
           example: The Wall/CD1
@@ -16203,7 +16356,7 @@ components:
           description: >
             The review entry the file landed in. Opened at completion
             for a solo session; for a batch member, filled when the
-            batch finalizes — or at its own completion, for a member
+            batch finalizes - or at its own completion, for a member
             that finished only after the batch closed.
         batchId:
           type: string
@@ -16418,9 +16571,9 @@ components:
           type: boolean
           description: >
             Whether the account may upload audio. On self views
-            (login, session) this is the *effective* value —
-            administrators always may, whatever their stored flag
-            says — and clients gate their upload affordances on it.
+            (login, session) this is the *effective* value - administrators always may,
+            whatever their stored flag
+            says - and clients gate their upload affordances on it.
             On administrative account views (`UserAccount`) it is the
             stored per-account flag the account editor round-trips;
             an administrator's own stored flag may therefore read
@@ -16657,6 +16810,42 @@ components:
             review). Household members are enrolled by default; opting
             out removes this user's listening from every server-wide
             figure. Personal stats are unaffected.
+        radioFavorites:
+          type: array
+          description: >
+            Radio stations this user has pinned, in the order the dial
+            presents them. The station library itself is shared by every
+            account, so this is the one piece of per-user station state
+            there is: which of the household's stations are *yours*.
+
+
+            Ordered, and the order is the client's to set - new pins go
+            on the end, so a dial does not reshuffle under a thumb.
+            Entries are station PIDs (`rs-...`) and are not resolved on
+            write: a station deleted by another household member leaves
+            its pid here, and a client renders only the pids it can still
+            find, because failing a whole preference write over one
+            departed station would be worse than a dial one slot shorter.
+
+
+            Capped at 64, which is a bound on the document rather than on
+            the feature: clients present about a dozen, and that cap is
+            theirs. A client presenting fewer than the document holds must
+            still write back what it did not draw - the cap belongs to the
+            dial, not to the list.
+
+
+            Stored in the canonical upper-case form the pattern above
+            declares, whatever case a write used, so a pin always names the
+            station the server named. Absent when nothing is pinned:
+            unpinning everything drops the field rather than storing `[]`,
+            and nothing reads a default set of pins out of an absent list,
+            so absent and empty are one answer on the way back.
+          items:
+            type: string
+            pattern: "^rs-[0-9A-HJKMNP-TV-Z]{26}$"
+          maxItems: 64
+          example: [rs-01JZX5N8QW3F4V9T2B7KD3M9R6]
 
     AppPassword:
       type: object

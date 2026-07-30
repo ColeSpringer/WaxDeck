@@ -102,7 +102,7 @@ rather than becoming the one path that cannot read a private feed.
 Spending them needs a rule, because an episode read stays open to any
 caller who can see the podcast library while the credentials belong to
 the show. Without a check, any account on the server could stream a paid
-feed on the strength of somebody else's subscription — a real widening,
+feed on the strength of somebody else's subscription - a real widening,
 since before this an unfetched episode of such a show simply refused.
 So the credentials are resolved only for a caller who subscribes; every
 other caller keeps the conflict, and play-info never mints a relay URL
@@ -132,7 +132,7 @@ than silently honoured.
 
 **An endpoint that forces an output format does not get passthrough.**
 The jukebox is handed `wav` and the DLNA floor is `mp3` because those
-endpoints require them — the jukebox reads a wav preamble off its input
+endpoints require them - the jukebox reads a wav preamble off its input
 and refuses anything else. A relay serves whatever the podcast host
 sends and there is no local file to cut, so passthrough cannot satisfy a
 forced format; those endpoints keep the conflict they answered before,
@@ -160,7 +160,7 @@ or not a later listener could have streamed the enclosure instead.
 **`hasEnclosure` is what a client reads to decide whether to offer
 play.** `downloaded` no longer answers that question: an episode that is
 not downloaded still plays when the feed named audio. So the episode
-summary carries both, and `downloaded` now means what it says — local
+summary carries both, and `downloaded` now means what it says - local
 bytes, and the analysis that rides them (silence trim, voice boost, the
 skip map). The one episode that cannot play at all is `downloaded`
 false with `hasEnclosure` false, and that is the only one play-info
@@ -179,7 +179,7 @@ looking at.
 
 **Terms are bounded in characters, not bytes.** The spec's `maxLength`
 counts characters, and a byte-wise cap would cut a multi-byte rune in
-half and store invalid UTF-8 — which any non-English show reaches
+half and store invalid UTF-8 - which any non-English show reaches
 immediately, and which yields a term that then matches nothing.
 
 **Filters apply to future arrivals only.** Editing one does not

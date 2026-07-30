@@ -131,7 +131,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
             Expanded(
               // Annotating rather than containing, and around the field
               // alone: the identifier and the name land on the input's
-              // own node, so there is one node per control — the role,
+              // own node, so there is one node per control - the role,
               // the name, and the e2e handle on the thing that is
               // actually the text box, with the clear button beside it
               // keeping a node of its own.
@@ -198,7 +198,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
 ///
 /// Two shapes, because search has two jobs. Given [onChanged] it is a
 /// real field the caller drives; given [onTap] instead it is a launcher
-/// — a field-shaped control that opens the search screen, which is what
+/// a field-shaped control that opens the search screen, which is what
 /// the sidebar header holds. A launcher never carries text of its own, so
 /// there is no second field to keep in step with the one that owns the
 /// query.

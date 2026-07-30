@@ -41,9 +41,9 @@ configuration accumulates. A provider reads the flag so a widget test can
 mount either shell without a second compilation.
 
 **The frame is a design-system component; the wiring is the app's.**
-`WaxShellFrame` picks one piece of chrome per size class — bottom tabs
+`WaxShellFrame` picks one piece of chrome per size class - bottom tabs
 under 600, a 72 px icon rail to 839, a 248 px sidebar above that, with
-the right panel docking only on `wide` — and takes plain view-data
+the right panel docking only on `wide` - and takes plain view-data
 destinations, a content pane, and slots for the deck bar and the panel.
 The app supplies destinations, role gating, and the highlight. That keeps
 the chrome golden-testable at four widths with no app wiring, and it is
@@ -61,16 +61,16 @@ multiply the invalidation fan-out the persistent shell already widens.
 
 **What the address bar shows: `go` where the location's declared parent is
 where you already are, `push` everywhere else.** Two questions, in order.
-Can a stranger open this location and get this screen? No — an in-memory
+Can a stranger open this location and get this screen? No - an in-memory
 payload (`/tracks`, `/remote`, `/browse/items`, `/playlists/rules`,
 `/playlists/:pid/edit`, `/admin/users/edit`), or the player, which is a
-view of whatever is playing opened over whatever you were doing — then
+view of whatever is playing opened over whatever you were doing - then
 `push`, and it stays out of the bar because its URL resolves to something
-else on its own. Yes, and it is declared under the screen you are on —
+else on its own. Yes, and it is declared under the screen you are on -
 then `go`: the ancestry rebuilds beneath it, back lands where a push would
 have, and the bar carries a link worth sending.
 
-Yes but declared somewhere else — then `push` as well, because `go` would
+Yes but declared somewhere else - then `push` as well, because `go` would
 rebuild that other ancestry and discard the stack you are standing in.
 That is a property of the entry point, not of the route, so the same route
 answers differently from different places: a book `go`es from the library
@@ -81,7 +81,7 @@ holds for `/tasks` from a snackbar (a transient excursion that must return
 you to the import or upload that started it), for a review entry opened
 from the uploads list rather than from the queue it is declared under, for
 `/shares` from a settings row, for `/metadata/:pid` from a review entry,
-and for `/episodes/:pid` from its show — an episode's location names no
+and for `/episodes/:pid` from its show - an episode's location names no
 show, so `go` would build nothing beneath it. Pushing across branches is
 sound: go_router renders the pushed page in the branch that declares it
 and pops back to the branch you came from, and the branch you left keeps
@@ -101,7 +101,7 @@ from home's own root the press falls through and the app closes.
 
 Not a `PopScope`. One registers with the shell page's route, and
 `popRoute` walks the navigator chain from the root down, halting at a
-shell navigator whose enclosing route is not current — which is the state
+shell navigator whose enclosing route is not current - which is the state
 a branch is left in after it has been drilled into and stepped back out
 of. In that state the scope is never consulted at all, so back left the
 app from a domain root, and a test that only ever visited a branch root
@@ -130,17 +130,17 @@ face instead of asking Google's CDN for Roboto.
 - The chrome's branch list and the router's branches are one contract
   split in two, because `goBranch` takes a number. The same test pins
   them together.
-- A domain root has no back affordance, which is correct — a destination
-  is not a stack — but it is a change from the old table, where
+- A domain root has no back affordance, which is correct - a destination
+  is not a stack - but it is a change from the old table, where
   everything sat under home. Screens still call `leave()`, which goes
   home when nothing can pop.
 - A book lives in the home branch, so opening one from Browse lights
   Home until the audiobooks hub gives books a branch of their own.
 - **The highlight falls back to the branch on screen.** Home is the only
   destination that claims a location by being home; every other match is a
-  path prefix. So a location nothing else claims — `/episodes/:pid`, and
+  path prefix. So a location nothing else claims - `/episodes/:pid`, and
   anything a later phase adds to a domain branch without putting it under
-  the destination's path — lights the domain whose branch is rendering it,
+  the destination's path - lights the domain whose branch is rendering it,
   rather than lighting Home while the podcasts branch is on screen. The
   router's branch index is the authority there, and the prefix match is
   the heuristic. The shared branch names no destination, so a location
@@ -150,8 +150,8 @@ face instead of asking Google's CDN for Roboto.
 - **An episode is pushed from its show, and its back button pops.**
   `/episodes/:pid` names no show, so `go` can build none beneath it. An
   earlier draft kept `go` and had the app bar walk *up* to the show
-  instead, which left two back affordances doing different things — the
-  button went to the show, the system gesture to Home — and left the up
+  instead, which left two back affordances doing different things - the
+  button went to the show, the system gesture to Home - and left the up
   target null for as long as the detail was still loading. Pushing gives
   the screen one behaviour that both affordances share and a real page
   underneath. A link to an episode still resolves; leaving one opened that
@@ -176,7 +176,7 @@ face instead of asking Google's CDN for Roboto.
 - **`@staticIconProvider` came off `WaxIcons`** (amending ADR-0016). The
   annotation tells the release build's icon tree-shaker to ignore the
   constants declared in the annotated class, so a glyph ships only where
-  the shaker finds its constant materialized at a use site it walks — and
+  the shaker finds its constant materialized at a use site it walks - and
   a reference from another package's widget code is not one. The sidebar
   is the first surface to name glyphs the design system's own components
   never use, and 32 of the 57 arrived as blank boxes in the release build
@@ -189,7 +189,7 @@ face instead of asking Google's CDN for Roboto.
   9.2 asks for one, and the frame had one until it was proved dead: the
   branch navigator's route owns focus from the first frame and Flutter's
   traversal never leaves the scope it starts in, so a link rendered beside
-  the content — in the outer route's scope — is unreachable by Tab, and it
+  the content - in the outer route's scope - is unreachable by Tab, and it
   is absent from the semantics tree besides (it takes no room until
   focused, and a zero-size node is dropped). A working one has to sit in
   the scope that holds focus, which means the page scaffold rather than

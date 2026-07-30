@@ -15,8 +15,8 @@ import '../tokens/typography.dart';
 /// and a screen reader still finds one.
 ///
 /// It is a supplementary affordance, never the only way to reach a
-/// bucket. Its slices are deliberately smaller than a touch target — a
-/// 27-target strip could not be otherwise — and scrolling reaches
+/// bucket. Its slices are deliberately smaller than a touch target - a
+/// 27-target strip could not be otherwise - and scrolling reaches
 /// everything it does, which is why it hides itself entirely rather than
 /// shrink below legibility.
 class FastScrollRail extends StatefulWidget {

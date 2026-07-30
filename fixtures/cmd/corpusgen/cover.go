@@ -12,7 +12,7 @@ import (
 // coverSize is the edge of a synthesized cover in pixels. Real album art
 // runs a few hundred pixels square upward, and the server's cost here is
 // a decode plus a resize per requested rung, which scales with pixel
-// count and not with file size — so an honest measurement needs a
+// count and not with file size - so an honest measurement needs a
 // realistic edge rather than a thumbnail.
 const coverSize = 600
 
@@ -21,7 +21,7 @@ const coverSize = 600
 //
 // Pure Go, per repo policy: no vendored image and no external tool. The
 // output is a deterministic function of index, and distinct for every
-// index, which is the property the whole exercise rests on — artwork is
+// index, which is the property the whole exercise rests on - artwork is
 // addressed by content hash, so a corpus sharing one cover would share
 // one cache entry and report a render cost 1000 albums lighter than a
 // real library's.

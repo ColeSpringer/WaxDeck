@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -6,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../music/music_controllers.dart';
 import '../player/now_playing_controller.dart';
 import '../queue/queue_state.dart';
+import '../radio/add_station.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'search_controller.dart';
@@ -43,17 +46,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   void didUpdateWidget(SearchScreen old) {
     super.didUpdateWidget(old);
+    if (old.initialQuery == widget.initialQuery) return;
+    // The location moved because *this screen* put the settled query in
+    // the address bar, which happens on every keystroke: there is nothing
+    // to adopt from a location this screen wrote, and treating it as an
+    // arrival resets the filter chip on every character typed. Picking
+    // Podcasts and typing put the chips back to All; picking Radio did it
+    // too, and there it also fired a library search the screen had no
+    // group to show.
+    if (widget.initialQuery == ref.read(searchQueryProvider)) return;
     // Arriving at `/search` while already on `/search?q=night` is one
-    // click — the sidebar launcher is on screen the whole time, and so
+    // click - the sidebar launcher is on screen the whole time, and so
     // is every rebuilt screen's search control. go_router keys a page by
     // its path and its path parameters, and a query is neither, so the
     // same State is reused and `initState` never runs again. Without
     // this the field still reads "night", the results are still night's,
     // and the bar says the search is empty.
-    if (old.initialQuery != widget.initialQuery) {
-      _field.text = widget.initialQuery;
-      _adopt(widget.initialQuery);
-    }
+    _field.text = widget.initialQuery;
+    _adopt(widget.initialQuery);
   }
 
   /// Takes the location's query as the one being answered.
@@ -89,7 +99,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   ///
   /// `replace`, not `go`. Search is one location whose query changes, so
   /// back should leave it rather than walk back through every prefix
-  /// somebody typed — and on web `go` mints a browser history entry per
+  /// somebody typed - and on web `go` mints a browser history entry per
   /// call, which is exactly that walk.
   void _publish(String query) {
     if (!mounted) return;
@@ -105,7 +115,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void _onSubmitted(String value) {
     final trimmed = value.trim();
     ref.read(searchQueryProvider.notifier).submit(trimmed);
-    ref.read(recentSearchesProvider.notifier).remember(trimmed);
+    // Library queries only. Recents are offered under the library chips
+    // and not the Radio one, so an entry stored here would be a shortcut
+    // that runs a library search for a station name.
+    if (!ref.read(searchScopeProvider).isDirectory) {
+      ref.read(recentSearchesProvider.notifier).remember(trimmed);
+    }
   }
 
   void _runRecent(String query) {
@@ -120,8 +135,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // with the same type-prefixed ids the rest of the API uses.
     switch (hit.kind) {
       // Pushed, not gone to. Every one of these is declared under
-      // something that is not search — an artist and an album under
-      // their index, a book under home — so `go` would rebuild that
+      // something that is not search - an artist and an album under
+      // their index, a book under home - so `go` would rebuild that
       // ancestry and throw the results away: back from an artist would
       // land on the artists index rather than on the query that found
       // them (ADR-0022). Pushing across branches is sound; go_router
@@ -153,7 +168,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     // The one place the address bar is written: every route into a query
-    // — typing, submitting, a recent search, arriving on a link — ends at
+    // typing, submitting, a recent search, arriving on a link - ends at
     // this provider, so following it is what keeps the two in step
     // without four call sites remembering to.
     ref.listen<String>(searchQueryProvider, (previous, next) {
@@ -219,6 +234,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     required SearchScope scope,
     required AsyncValue<SearchResults?> results,
   }) {
+    // The directory scope answers first, including with nothing typed: the
+    // recent searches are queries put to the *library*, and offering them
+    // under a chip that searches the station directory would put a shortcut
+    // to the wrong surface behind them. What an empty Radio chip owes is
+    // "here is what typing will do".
+    if (scope.isDirectory) return _directory(query);
     if (query.isEmpty) return _recents();
     return switch (results) {
       AsyncData(:final value) when value != null => _groups(value, scope),
@@ -241,6 +262,93 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
       ],
     };
+  }
+
+  /// The station directory, under the Radio chip.
+  ///
+  /// A different question of a different surface: these are stations this
+  /// server does not have, so every row's action is "add", not "play". The
+  /// add flow is the radio hub's own - one directory, one way of adding
+  /// from it, so a station added here is a station the dial will draw with
+  /// its logo through the proxy.
+  List<Widget> _directory(String query) {
+    if (query.length < 2) {
+      return const <Widget>[
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: EmptyState(
+            title: 'Search the station directory',
+            message:
+                'Type a station name to look it up in the public directory, '
+                'then add it to this server.',
+            glyph: WaxIcons.radio,
+          ),
+        ),
+      ];
+    }
+    final entries = ref.watch(radioDirectoryResultsProvider);
+    return switch (entries) {
+      AsyncData(:final value) when value == null || value.isEmpty => <Widget>[
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: EmptyState(
+            title: 'No stations for "$query"',
+            message: 'The directory lists nothing under that name.',
+            glyph: WaxIcons.radio,
+          ),
+        ),
+      ],
+      AsyncData(:final value) => <Widget>[
+        SliverList.builder(
+          itemCount: value!.length,
+          itemBuilder: (context, index) => WaxOptionRow(
+            title: value[index].name,
+            subtitle: describeDirectoryEntry(value[index]),
+            glyph: WaxIcons.radio,
+            semanticsId: SemanticsIds.searchHit('radio', index),
+            trailing: WaxButton(
+              label: 'Add station',
+              kind: WaxButtonKind.tonal,
+              icon: WaxIcons.add,
+              semanticsId: SemanticsIds.radioSearchAdd(index),
+              onPressed: () => unawaited(_addStation(value[index])),
+            ),
+          ),
+        ),
+      ],
+      AsyncError(:final error) => <Widget>[
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: ErrorState(
+            title: 'Could not reach the directory',
+            message: error is WaxDeckApiException
+                ? error.message
+                : 'The station directory did not answer.',
+            // The way out the directory-unavailable mapping implies:
+            // adding a station by URL works with no directory at all.
+            detail: 'Adding a station by its stream URL still works.',
+            onRetry: () => ref.invalidate(radioDirectoryResultsProvider),
+          ),
+        ),
+      ],
+      _ => const <Widget>[
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: SkeletonShapes(shape: SkeletonShape.list),
+        ),
+      ],
+    };
+  }
+
+  /// Adds a directory match, reporting a refusal where there is no modal to
+  /// hide a snackbar behind.
+  Future<void> _addStation(RadioDirectoryEntry entry) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final refusal = await addDirectoryStation(context, ref, entry);
+    if (refusal == null || !mounted) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(refusal)));
   }
 
   List<Widget> _recents() {

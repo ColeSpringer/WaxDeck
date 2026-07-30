@@ -141,7 +141,7 @@ class QueueController extends Notifier<QueueState> {
   /// caller's last item ends inside the list rather than at its end.
   /// Resuming from the caller's cursor would step over everything
   /// between, so the cursor is dropped and the draw finds its place by
-  /// the entry at the frontier instead — and it is rolling whatever the
+  /// the entry at the frontier instead - and it is rolling whatever the
   /// caller declared, because there demonstrably is more.
   ///
   /// A shuffled window is a sample of the whole list rather than a run,
@@ -163,8 +163,8 @@ class QueueController extends Notifier<QueueState> {
   ///
   /// [more] false seals the window: the scope ran out, the caption goes,
   /// and nothing draws again. An empty [pids] with [more] true is a page
-  /// that landed empty and says nothing either way — everything visible
-  /// was filtered out of it, say — so the cursor moves on and the next
+  /// that landed empty and says nothing either way - everything visible
+  /// was filtered out of it, say - so the cursor moves on and the next
   /// drain tries again.
   ///
   void appendWindow(
@@ -178,7 +178,7 @@ class QueueController extends Notifier<QueueState> {
     if (state.isEmpty) return;
     // A draw is machinery, not a gesture: it places itself in the source
     // by an entry or a cursor, and either can land it on ground the
-    // queue already covers — a reorder that moved the frontier entry, a
+    // queue already covers - a reorder that moved the frontier entry, a
     // cursor issued before an edit. Whatever it already holds is not
     // drawn again. A listener adding the same track twice by hand is a
     // different verb and still gets two of them.
@@ -315,8 +315,8 @@ class QueueController extends Notifier<QueueState> {
   ///
   /// Plain list semantics: the entry is removed and re-inserted, so [to]
   /// is an index into the queue without it. That is what
-  /// `SliverReorderableList.onReorderItem` hands out — it adjusts for
-  /// the removal itself — so a surface using the older `onReorder`
+  /// `SliverReorderableList.onReorderItem` hands out - it adjusts for
+  /// the removal itself - so a surface using the older `onReorder`
   /// would have to subtract one when moving an entry down.
   void reorder(int from, int to) {
     if (from < 0 || from >= state.length) return;

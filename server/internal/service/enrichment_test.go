@@ -85,7 +85,7 @@ func TestBookEnrichEditsYearMustBeNumeric(t *testing.T) {
 }
 
 // A locked field is never overwritten, and a field the item already carries is
-// left alone — bookEnrichEdits only fills genuine gaps.
+// left alone - bookEnrichEdits only fills genuine gaps.
 func TestBookEnrichEditsRespectsLocksAndExisting(t *testing.T) {
 	it := &model.ItemView{Kind: model.KindBook, Narrator: "Existing Reader"}
 	detail := &model.BookDetail{Publisher: "Existing Publisher"}

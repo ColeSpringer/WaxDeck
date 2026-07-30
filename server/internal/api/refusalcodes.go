@@ -21,7 +21,7 @@ import "net/http"
 // `not-found` because it has not downloaded a track would tell the
 // controller the endpoint or the item does not exist, and one that
 // answers `endpoint-offline` would send it to refresh a list the
-// endpoint is still online in — which is a loop, not a fix. Those
+// endpoint is still online in - which is a loop, not a fix. Those
 // arrive as `invalid-request` carrying the client's own message.
 //
 // Unexported and never written after init: both readers are in this

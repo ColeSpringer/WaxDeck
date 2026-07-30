@@ -42,7 +42,11 @@ void main() {
         await _pumpAt(
           tester,
           DeckBar(
-            now: _music.copyWithSpeed(1.2),
+            // Everything the right cluster can hold at once, the volume
+            // slider included: it is 80 px of track plus a mute glyph, so
+            // it is the largest thing ever added to that cluster and the
+            // widths between compact and wide are where it lands hardest.
+            now: _music.copyWithSpeed(1.2).copyWithVolume(0.6),
             actions: DeckBarActions(
               onPlayPause: () {},
               onNext: () {},
@@ -52,6 +56,8 @@ void main() {
               onQueue: () {},
               onLyrics: () {},
               onCast: () {},
+              onVolume: (_) {},
+              onMute: () {},
               onMore: () {},
               onSeek: (_) {},
               onStar: (_) {},
@@ -167,6 +173,37 @@ void main() {
   });
 
   group('seek bar', () {
+    testWidgets('a track with no length offers no seek', (tester) async {
+      // Every position is a fraction of the duration, so at zero a scrub or
+      // a keyboard step seeks to the start. Callers reach that without
+      // meaning to, so the guard is in the widget.
+      Duration? sought;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 400,
+          child: WaxSeekBar(
+            position: Duration.zero,
+            duration: Duration.zero,
+            onSeek: (value) => sought = value,
+            semanticsId: 'seek',
+          ),
+        ),
+        size: const Size(400, 200),
+      );
+
+      final node = tester.getSemantics(find.bySemanticsIdentifier('seek'));
+      expect(
+        node.getSemanticsData().hasAction(SemanticsAction.increase),
+        isFalse,
+      );
+      await tester.tapAt(
+        tester.getTopLeft(find.byType(WaxSeekBar)) + const Offset(200, 12),
+      );
+      await tester.pumpAndSettle();
+      expect(sought, isNull);
+    });
+
     testWidgets('a cancelled press releases the playhead', (tester) async {
       // A press that loses the gesture arena (press, then scroll the
       // page) never ends, and the scrub position it set used to stay put
@@ -241,5 +278,16 @@ extension on NowPlayingData {
     duration: duration,
     playing: playing,
     speed: speed,
+  );
+
+  NowPlayingData copyWithVolume(double volume) => NowPlayingData(
+    title: title,
+    subtitle: subtitle,
+    provenance: provenance,
+    position: position,
+    duration: duration,
+    playing: playing,
+    speed: speed,
+    volume: volume,
   );
 }

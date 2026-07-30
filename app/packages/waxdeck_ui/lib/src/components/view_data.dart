@@ -25,7 +25,7 @@ enum ArtworkShape {
 ///
 /// The component is the only thing that knows how big the artwork will
 /// be on this screen (its extent times the device pixel ratio); the app
-/// is the only thing that knows how a URL becomes bytes — which stored
+/// is the only thing that knows how a URL becomes bytes - which stored
 /// size to ask the server for, the header a native request needs, the
 /// copy pinned for offline. So artwork crosses the boundary as a
 /// function of the size it will be drawn at, in physical pixels, and the
@@ -80,7 +80,7 @@ class MediaTileData {
   final double? progress;
 
   /// Right-aligned metadata: duration, remaining time, track count. Set
-  /// in mono by the components that show it, and clamped to one line —
+  /// in mono by the components that show it, and clamped to one line -
   /// the components reserve one line for it.
   final String? trailingText;
 
@@ -135,6 +135,7 @@ class NowPlayingData {
     this.shuffled = false,
     this.repeat = WaxRepeat.off,
     this.remoteEndpoint,
+    this.volume,
     this.speed,
   });
 
@@ -172,6 +173,16 @@ class NowPlayingData {
   /// says so rather than pretending the sound is local.
   final String? remoteEndpoint;
 
+  /// The output level, 0 to 1, when there is one this surface should
+  /// offer. Null hides the slider, and hiding it is the ordinary case
+  /// rather than the exception: the layout system gives the bar a volume
+  /// control under two conditions and only two - local output on desktop
+  /// and web, and a remote endpoint that reports it can be turned down.
+  /// A phone controlling its own playback has hardware buttons and an OS
+  /// volume stack that a software slider only fights, so it gets none,
+  /// and the caller is the only thing that knows which case it is in.
+  final double? volume;
+
   /// Playback rate for spoken word, shown as a compact chip.
   final double? speed;
 
@@ -204,7 +215,7 @@ String formatTimecode(Duration d) {
 /// "45 min".
 ///
 /// For the readouts that answer "how much", where a timecode answers the
-/// wrong question — an audiobook with "7:50:12" left is telling you a
+/// wrong question - an audiobook with "7:50:12" left is telling you a
 /// clock time. Minutes are dropped past ten hours, where they are noise,
 /// and a span under a minute rounds up rather than reading "0 min".
 ///

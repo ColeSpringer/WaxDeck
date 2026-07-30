@@ -226,7 +226,7 @@ class _ContinueShelf extends ConsumerWidget {
           // Its own handle, not the grid card's. A half-heard book is on
           // this shelf *and* in the grid below, so one handle would name
           // two controls and leave a spec picking by document order
-          // rather than by intent — which is what the search field and
+          // rather than by intent - which is what the search field and
           // the search action were split over.
           semanticsId: SemanticsIds.bookContinue(book.pid),
         ),
@@ -280,7 +280,10 @@ class _BookGrid extends ConsumerWidget {
       padding: sizeClass.gutter,
       sliver: SliverLayoutBuilder(
         builder: (context, constraints) {
-          final grid = bookTileGrid(constraints.crossAxisExtent);
+          final grid = MediaCard.gridFor(
+            constraints.crossAxisExtent,
+            extent: kBookTileExtent,
+          );
           return SliverGrid.builder(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: grid.columns,
@@ -336,21 +339,6 @@ class _BookGrid extends ConsumerWidget {
     }
     return durationMs > 0 ? span(Duration(milliseconds: durationMs)) : null;
   }
-}
-
-/// How many book covers fit in [available], and how wide each comes out.
-///
-/// Measured rather than assumed, for the reason the podcast hub's grid
-/// records: a max-extent delegate divides the room evenly and hands back
-/// a narrower cell than the number it was given, so a card sized to that
-/// number draws taller than the height reserved for it.
-({int columns, double width}) bookTileGrid(double available) {
-  const gap = WaxShellMetrics.gridGap;
-  final columns = ((available + gap) / (kBookTileExtent + gap)).ceil().clamp(
-    1,
-    12,
-  );
-  return (columns: columns, width: (available - gap * (columns - 1)) / columns);
 }
 
 /// The widest a book cover is allowed to be. Narrower than a show tile:

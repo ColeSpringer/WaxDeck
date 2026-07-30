@@ -69,7 +69,7 @@ void main() {
     // Real staged files, as MainActivity leaves them: the upload path
     // reads windows from disk and never holds a file whole. Setup and
     // teardown use the synchronous io calls (async io never completes
-    // outside runAsync under the test binding — it hangs the test);
+    // outside runAsync under the test binding - it hangs the test);
     // the upload flow itself runs under runAsync, where the real
     // event loop turns, with completion polled rather than
     // pump-settled.

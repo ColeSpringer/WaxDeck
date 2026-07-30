@@ -217,7 +217,7 @@ func (b *Backups) uniqueBackupFileName(now time.Time) string {
 	for i := 2; ; i++ {
 		// Any stat error ends the search: not-exist means the name is
 		// free, and anything else (permissions, a clobbered directory)
-		// will surface properly from the write that follows — looping
+		// will surface properly from the write that follows - looping
 		// on it would spin forever.
 		if _, err := os.Lstat(b.archivePath(name)); err != nil {
 			return name

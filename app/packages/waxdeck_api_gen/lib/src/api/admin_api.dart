@@ -187,7 +187,7 @@ class AdminApi {
   }
 
   /// Create a backup now
-  /// Starts writing a backup archive in the background and answers immediately with the &#x60;running&#x60; backup; poll the list for completion. Administrators only. The archive holds both databases (the catalog via its own backup facility, the server database via a consistent snapshot) plus server-managed settings; media files are never included, and the encryption keyfile is excluded by design (an archive holding both the database and the key is plaintext-equivalent for stored credentials — keep the keyfile safe separately). Retention (&#x60;backupKeepCount&#x60;/&#x60;backupKeepBytes&#x60; in the runtime settings) is applied after every successful backup, oldest first. Answers &#x60;conflict&#x60; while another backup is running. 
+  /// Starts writing a backup archive in the background and answers immediately with the &#x60;running&#x60; backup; poll the list for completion. Administrators only. The archive holds both databases (the catalog via its own backup facility, the server database via a consistent snapshot) plus server-managed settings; media files are never included, and the encryption keyfile is excluded by design (an archive holding both the database and the key is plaintext-equivalent for stored credentials - keep the keyfile safe separately). Retention (&#x60;backupKeepCount&#x60;/&#x60;backupKeepBytes&#x60; in the runtime settings) is applied after every successful backup, oldest first. Answers &#x60;conflict&#x60; while another backup is running. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation

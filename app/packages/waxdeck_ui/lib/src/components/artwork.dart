@@ -19,7 +19,7 @@ import 'view_data.dart';
 /// This is also where the one thing only the widget knows is measured:
 /// how many physical pixels the artwork will actually occupy. It asks
 /// the caller's [WaxArtwork] for exactly that many, and what comes back
-/// is the app's business — which stored size to fetch, what to decode at,
+/// is the app's business - which stored size to fetch, what to decode at,
 /// where the bytes are cached. A caller that animates [size] re-asks as
 /// it animates, so animate the box (a scale, a hero flight), not this.
 class ArtworkImage extends StatelessWidget {

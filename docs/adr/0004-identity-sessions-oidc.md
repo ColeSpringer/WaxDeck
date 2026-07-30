@@ -119,7 +119,7 @@ native clients must store the bearer token in the OS keychain and
 rotate it periodically. OIDC requires the deployment to state its
 public base URL.
 
-## Update — 2026-07-23: entity search restored for restricted users
+## Update - 2026-07-23: entity search restored for restricted users
 
 The catalog engine grew per-entity library attribution: an entity read
 reports the distinct libraries holding its members' primary files.

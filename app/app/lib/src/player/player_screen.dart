@@ -88,7 +88,7 @@ class PlayerScreen extends ConsumerWidget {
                   excludeSemantics: true,
                   onTap: () => showDevicePicker(
                     context,
-                    ref,
+                    from: CastSource.here,
                     currentPid: item.pid,
                     positionMs: positionMs(),
                   ),
@@ -98,7 +98,7 @@ class PlayerScreen extends ConsumerWidget {
                     icon: const Icon(Icons.cast),
                     onPressed: () => showDevicePicker(
                       context,
-                      ref,
+                      from: CastSource.here,
                       currentPid: item.pid,
                       positionMs: positionMs(),
                     ),

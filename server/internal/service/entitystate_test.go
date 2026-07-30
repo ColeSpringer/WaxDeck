@@ -9,8 +9,8 @@ import (
 // The entity star and rating surface is gated exactly as entity search
 // hits are: an entity is visible when a library holding one of its
 // member items is granted. The gate reads a lookup and a visibility
-// check, and those are two separate verdicts — a lookup failure is not
-// a not-found — so both halves are pinned here.
+// check, and those are two separate verdicts - a lookup failure is not
+// a not-found - so both halves are pinned here.
 
 // entityFixture returns a catalog fixture, an album entity pid, and two
 // restricted contexts: one granted the library holding it, one granted

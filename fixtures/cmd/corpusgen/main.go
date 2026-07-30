@@ -7,14 +7,14 @@
 //	corpusgen -out /tmp/corpus -items 100000
 //
 // One directory per album, each holding its audio, its cue sheet, and
-// its own cover — the layout a real library has and the one folder art
+// its own cover - the layout a real library has and the one folder art
 // requires. Pass -covers=false for a run that measures the grid without
 // artwork, which is the comparison the web perf gate's open question
 // wants.
 //
 // Budget the disk: covers dominate. A cover is about 400 KB against
 // 86 KB for the album's audio, so the documented 100k-item run is
-// roughly 400 MB of PNG on top of 86 MB of FLAC — call it half a
+// roughly 400 MB of PNG on top of 86 MB of FLAC - call it half a
 // gigabyte, where the same corpus without covers is under a tenth of
 // that. The size is the grain doing its job (see cover.go); the point
 // of saying so here is that it is a deliberate cost and not a surprise.

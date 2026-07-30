@@ -52,7 +52,7 @@ design system keeps its rule of depending on Flutter alone, and no screen
 is in a position to fetch a 2048-pixel scan for a 48-pixel row.
 
 **Five rungs: 64, 128, 256, 512, 1024.** A draw takes the smallest rung
-that covers it and the largest rung when nothing does — an undersized
+that covers it and the largest rung when nothing does - an undersized
 fetch is visibly soft, and this is the surface people look at. Buckets,
 because the server renders and caches a thumbnail per distinct size, and
 a client asking for 337 here and 341 there would make it render one per
@@ -70,8 +70,8 @@ decode.** Flutter's image cache holds one decoded copy per key and the
 key includes the size decoded at, so a cover painted at 200 pixels in one
 place and 206 in another is two bitmaps for no visible difference. That
 is not hypothetical: a player hero is measured from the window, so a
-drag-resize would mint a decode per frame. Rounding up, never down —
-smaller than its box is soft — and never past the top rung, since nothing
+drag-resize would mint a decode per frame. Rounding up, never down -
+smaller than its box is soft - and never past the top rung, since nothing
 larger is ever fetched. The rungs are multiples of the step, so rounding
 a draw up can never change which rung is fetched for it.
 
@@ -86,7 +86,7 @@ refetch.
 stale-while-revalidate=604800`, and `Vary: Cookie, Authorization`,** on
 the art endpoint (API item 7), on the 200 and on the 304 alike. A 304
 that repeats neither the validator nor the freshness leaves the cached
-copy exactly as stale as it was, so the next paint revalidates again —
+copy exactly as stale as it was, so the next paint revalidates again -
 which is the round trip this exists to remove. `Vary` is not decoration:
 artwork follows the item's visibility, the same URL can legitimately
 answer 200 for one account and 404 for another, and this endpoint takes
@@ -101,12 +101,12 @@ serving the old image, and the browser's is one no code in this process
 can reach into. Dropping the decoded copies is what the client can do
 directly; the rest is an opaque `v` parameter (declared in the spec,
 ignored by the server) that the store varies for any URL it has been
-told was replaced. That is what keeps `evictPlaylistCover` — a control
-that exists precisely because the URL does not change — true on web.
+told was replaced. That is what keeps `evictPlaylistCover` - a control
+that exists precisely because the URL does not change - true on web.
 
 **Pins are not a cache.** Downloading an item promises it plays with the
 server unreachable, and a promise kept as a grey monogram is not kept, so
-a download pins two rungs — 1024 for a player hero, 256 for a grid cell —
+a download pins two rungs - 1024 for a player hero, 256 for a grid cell -
 as files the cache may not evict, recorded in the `ArtworkPins` table
 mirror schema v2 already added. A re-pin presents the stored validator
 and keeps what it has when the server says nothing changed, unless the
@@ -153,8 +153,8 @@ session was allowed to see.
   rotates mid-session.
 - Where the cache cannot answer, the store falls back rather than
   consulting a flag: the stale copy of exactly the right size, then the
-  pin. Being offline is one of several reasons a fetch fails — a
-  refused credential and an unreachable server look the same to a grid —
+  pin. Being offline is one of several reasons a fetch fails - a
+  refused credential and an unreachable server look the same to a grid -
   and falling back on the failure covers all of them without asking
   anything to keep an offline flag current.
 - Warming a scroll ahead fetches without decoding. A decode belongs to
@@ -162,7 +162,7 @@ session was allowed to see.
   slightly wrong would leave a second copy in memory rather than saving a
   round trip. Fetching is keyed by rung, so the guess only has to land in
   the right bucket. It runs when a scroll stops, never during one, and
-  three at a time — one at a time would put two dozen round trips end to
+  three at a time - one at a time would put two dozen round trips end to
   end, which on anything but a local server is slower than the scroll it
   is trying to get ahead of, and all at once would queue the covers on
   screen behind the ones that are not.
@@ -170,7 +170,7 @@ session was allowed to see.
   exception, including the ones dio does not wrap (it casts the response
   body outside its own error handling, so a body that is not what was
   asked for arrives as a plain `TypeError`). The callers are background
-  work nobody awaits — a warm-ahead, a pin beside a download — where an
+  work nobody awaits - a warm-ahead, a pin beside a download - where an
   escaping error is an unhandled one, and where the drawn answer to every
   failure is the same monogram.
 - Eviction is exact without any bookkeeping, and that is the step's
@@ -180,8 +180,8 @@ session was allowed to see.
   name every size it was drawn at, and remembering them instead would
   mean a set that grows for as long as the window keeps being resized.
 - `ArtworkImage` re-asks when its `size` changes, so a caller that
-  animates that number animates the fetch with it. Animate the box —
-  a scale, a hero flight — not the extent. Nothing does today; the
+  animates that number animates the fetch with it. Animate the box - a
+  scale, a hero flight - not the extent. Nothing does today; the
   player's drag physics arrive in a later phase and this is the rule they
   inherit.
 - Native tests get the plain network store: a widget test has no
@@ -199,7 +199,7 @@ session was allowed to see.
   downloads, so nothing else would ever revisit an item downloaded before
   its artwork changed, and it would keep the old cover offline for good.
 - `unpin` is called by sign-out and, when it lands, by the downloads
-  manager — the roadmap puts removing a download at all in that same
+  manager - the roadmap puts removing a download at all in that same
   phase, and `DownloadManagerPort.remove` has had no caller since it was
   written for exactly that reason. A pin lives as long as the download it
   belongs to, which is the whole of its contract.

@@ -214,11 +214,26 @@ type Library struct {
 	// process is proxying the stream).
 	radioTitles   map[string]radioTitle
 	radioTitlesMu sync.Mutex
+	// radioLogos caches fetched station logos, and the stations found to
+	// have none, so a household browsing the dial does not re-fetch the
+	// same favicons once per device. Memory only and bounded by bytes:
+	// logos are decoration, and losing them at restart costs one fetch
+	// each. radioLogosOrder is insertion order, for eviction.
+	// radioLogoFlights are the fetches in progress, keyed by station pid,
+	// so two callers asking for one logo at the same moment cost one
+	// request to the station host rather than two. A dial and a grid draw
+	// the same station on one paint and two devices paint at once, and
+	// against a dead host each of those is a ten-second wait.
+	radioLogos       map[string]radioLogo
+	radioLogosOrder  []string
+	radioLogosBytes  int
+	radioLogoFlights map[string]chan struct{}
+	radioLogosMu     sync.Mutex
 	// batchFinalizeMu serializes upload-batch finalization (the flip,
 	// entry opening, and member linking as one unit): two concurrent
 	// finalizes of one batch would otherwise both gather the same
 	// still-unlinked members and open duplicate review entries.
-	// Process-wide is fine — finalizes are rare and database-only.
+	// Process-wide is fine - finalizes are rare and database-only.
 	batchFinalizeMu sync.Mutex
 	// lastfmPtr holds the swappable outbound Last.fm client (admin
 	// credential changes rebuild it at runtime); envLastfmKey/Secret
@@ -344,6 +359,8 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		allowPrivateRadioHosts: cfg.AllowPrivateRadioHosts,
 		radioDirectoryBase:     cfg.RadioDirectoryBase,
 		radioTitles:            map[string]radioTitle{},
+		radioLogos:             map[string]radioLogo{},
+		radioLogoFlights:       map[string]chan struct{}{},
 		listenbrainz:           scrobble.NewListenBrainz(),
 		sim:                    similarity.New(),
 		workerLocalPaths:       cfg.WorkerLocalPaths,

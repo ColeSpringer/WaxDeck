@@ -59,7 +59,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     List<SharedFile> files,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
-    // A multi-file share groups through a batch with auto-detection —
+    // A multi-file share groups through a batch with auto-detection -
     // no dialog: the share sheet is a fire-and-forget gesture, and
     // auto clustering does the right thing for an album share while
     // leaving unrelated files separate.

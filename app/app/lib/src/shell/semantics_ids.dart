@@ -88,12 +88,21 @@ abstract final class SemanticsIds {
   static const String booksHubOverflow = 'books-hub-overflow';
   static String chapter(Object index) => 'chapter-$index';
 
-  // connect: Connect: endpoints, remote sessions, and cast controls.
+  // connect: Connect: the device picker, the disconnect triad, cast preflight, remote sessions, and cast controls.
   static String endpoint(Object id) => 'endpoint-$id';
+  static const String picker = 'device-picker';
+  static const String pickerCheck = 'device-picker-check';
+  static const String pickerOverflow = 'device-picker-overflow';
+  static const String pickerThisDevice = 'device-picker-this-device';
+  static const String preflight = 'cast-preflight';
+  static String preflightBase(Object index) => 'cast-preflight-base-$index';
+  static const String preflightRetry = 'cast-preflight-retry';
+  static const String remoteLeave = 'remote-leave';
   static const String remoteNext = 'remote-next';
   static const String remotePlayHere = 'remote-play-here';
   static const String remotePrevious = 'remote-previous';
   static const String remoteSeek = 'remote-seek';
+  static const String remoteStopThere = 'remote-stop-there';
   static const String remoteToggle = 'remote-toggle';
   static const String remoteVolume = 'remote-volume';
   static String session(Object id) => 'session-$id';
@@ -105,6 +114,7 @@ abstract final class SemanticsIds {
   static const String deckBar = 'deck-bar';
   static const String deckCast = 'deck-cast';
   static const String deckMore = 'deck-more';
+  static const String deckMute = 'deck-mute';
   static const String deckNext = 'deck-next';
   static const String deckOffer = 'deck-offer';
   static const String deckOfferDismiss = 'deck-offer-dismiss';
@@ -118,6 +128,7 @@ abstract final class SemanticsIds {
   static const String deckSkipBack = 'deck-skip-back';
   static const String deckSkipForward = 'deck-skip-forward';
   static const String deckStar = 'deck-star';
+  static const String deckVolume = 'deck-volume';
   static const String panel = 'panel';
   static const String panelClose = 'panel-close';
   static const String queueClear = 'queue-clear';
@@ -305,10 +316,24 @@ abstract final class SemanticsIds {
   static String protoRow(Object index) => 'proto-row-$index';
   static const String protoTable = 'proto-table';
 
-  // radio: Internet radio stations.
+  // radio: The radio hub: the favorites dial, the station grid, and the add-station flow.
   static String radio(Object pid) => 'radio-$pid';
   static const String radioAdd = 'radio-add';
   static const String radioAddConfirm = 'radio-add-confirm';
+  static String radioAddDirectory(Object index) => 'radio-add-directory-$index';
+  static String radioDelete(Object pid) => 'radio-delete-$pid';
+  static const String radioDial = 'radio-dial';
+  static String radioEdit(Object pid) => 'radio-edit-$pid';
+  static String radioFavorite(Object pid) => 'radio-favorite-$pid';
+  static const String radioHub = 'radio-hub';
+  static String radioMenu(Object pid) => 'radio-menu-$pid';
+  static const String radioNameField = 'radio-name-field';
+  static const String radioNowPlaying = 'radio-now-playing';
+  static String radioSearchAdd(Object index) => 'radio-search-add-$index';
+  static const String radioSearchField = 'radio-search-field';
+  static const String radioSearchRun = 'radio-search-run';
+  static const String radioTune = 'radio-tune';
+  static const String radioUrlField = 'radio-url-field';
 
   // review: The review queue and its keyboard-first controls.
   static String candidate(Object mbid) => 'candidate-$mbid';

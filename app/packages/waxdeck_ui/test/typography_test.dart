@@ -192,8 +192,8 @@ void main() {
   });
 
   group('the theme font floor', () {
-    // The theme names a family so that a bare style — one written with no
-    // family at all, which old screens still contain — resolves to the
+    // The theme names a family so that a bare style - one written with no
+    // family at all, which old screens still contain - resolves to the
     // bundled UI face rather than asking Google's CDN for Roboto. It must
     // not do that by flattening the token faces: three faces carry three
     // jobs, and a floor applied over the top would make them one.

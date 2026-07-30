@@ -108,7 +108,7 @@ class WaxBanner extends StatelessWidget {
       identifier: semanticsId,
       container: true,
       // Without this the action's own node merges into this one and the
-      // banner becomes a single node that announces "…Reload" and
+      // banner becomes a single node that announces "...Reload" and
       // handles a tap nobody can find: a Semantics that is not a
       // container folds into the nearest one that is.
       explicitChildNodes: true,

@@ -69,7 +69,7 @@ class WaxScaffold extends StatelessWidget {
 
   /// How much of the top of the page the pinned bar occupies.
   ///
-  /// For anything laid over the scaffold rather than inside it — an index
+  /// For anything laid over the scaffold rather than inside it - an index
   /// screen's alphabet rail is the one so far. Two things go into it and
   /// both have been got wrong: the large title's expanded height, and the
   /// window's top inset, which a `primary` [SliverAppBar] adds to itself

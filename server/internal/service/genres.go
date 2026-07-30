@@ -16,7 +16,7 @@ package service
 // scalar changes which genre entity the item links to, so a "Rap" tag
 // rewritten to "Hip Hop" moves the item onto the Hip Hop row: that is the
 // synonym case, and it is real data movement. It does not rename an
-// existing genre row — the catalog folds "hip hop" and "Hip Hop" onto one
+// existing genre row - the catalog folds "hip hop" and "Hip Hop" onto one
 // row whose display name is whichever spelling was scanned first, and
 // offers no way to rename it. WaxDeck therefore owns the label: every
 // surface that shows a genre bucket resolves its name through the same

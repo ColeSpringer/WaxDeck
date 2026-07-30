@@ -47,6 +47,7 @@ class FakeEngine implements AudioEnginePort {
   final _boundaries = StreamController<void>.broadcast();
   final _refusals = StreamController<Object>.broadcast();
   final _speeds = StreamController<double>.broadcast();
+  final _volumes = StreamController<double>.broadcast();
 
   Duration _position = Duration.zero;
   Duration? _duration;
@@ -108,10 +109,20 @@ class FakeEngine implements AudioEnginePort {
   @override
   Future<void> setVolume(double volume) async {
     _volume = volume;
+    if (!_volumes.isClosed) _volumes.add(volume);
   }
 
   @override
   double get volume => _volume;
+
+  /// Seeded, as the port requires and just_audio's behaviour subject is: a
+  /// plain broadcast stream would draw full loudness in a test and the true
+  /// level in the app.
+  @override
+  Stream<double> get volumeStream async* {
+    yield _volume;
+    yield* _volumes.stream;
+  }
 
   @override
   Future<void> load(
@@ -224,6 +235,7 @@ class FakeEngine implements AudioEnginePort {
     unawaited(_boundaries.close());
     unawaited(_refusals.close());
     unawaited(_speeds.close());
+    unawaited(_volumes.close());
   }
 
   /// Advances the manual clock by [amount] of wall time.

@@ -10,7 +10,7 @@
 //
 // Identifier scheme: songs are real item PIDs, and so are artists and
 // albums wherever the catalog holds an entity for them. A group with no
-// entity behind it — a loose track has no album row — falls back to an
+// entity behind it - a loose track has no album row - falls back to an
 // identifier minted from its display strings, opaque to clients and
 // stable across requests, which is also what still resolves an id a
 // client cached before the surface moved to entity pids. Cover art for
@@ -905,8 +905,8 @@ func entityGroupID(id string) bool {
 }
 
 // Minted identifiers: "A!" + base64(artist) and "L!" + base64(artist
-// US album). They name a group the catalog holds no entity for — a
-// loose track has no album row — and stay decodable without state so an
+// US album). They name a group the catalog holds no entity for - a
+// loose track has no album row - and stay decodable without state so an
 // id a client cached before the surface moved to entity pids still
 // resolves.
 func encodeArtistID(name string) string {

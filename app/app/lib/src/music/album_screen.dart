@@ -24,7 +24,7 @@ import 'music_controllers.dart';
 class AlbumScreen extends ConsumerWidget {
   const AlbumScreen({required this.pid, this.label, super.key});
 
-  /// The album entity's pid (`al-…`), which is also the bucket handle
+  /// The album entity's pid (`al-...`), which is also the bucket handle
   /// its listing drills by.
   final String pid;
 
@@ -44,7 +44,7 @@ class AlbumScreen extends ConsumerWidget {
     return WaxScaffold(
       title: facts.title,
       largeTitle: false,
-      // Pops when something pushed this — an artist's release tile — and
+      // Pops when something pushed this - an artist's release tile - and
       // goes to the index when nothing did, so the arrow and the system
       // gesture do the same thing from either entry point.
       onBack: () =>
@@ -155,7 +155,7 @@ class _TrackList extends ConsumerWidget {
   final List<ItemSummary> tracks;
 
   /// The release this list belongs to, which is what a queue built from
-  /// it is playing from — not whatever the tapped row happens to carry,
+  /// it is playing from - not whatever the tapped row happens to carry,
   /// which on a row with no album handle would lose the entity a refill
   /// needs and caption the queue differently from the header above it.
   final String albumPid;

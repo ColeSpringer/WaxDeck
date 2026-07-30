@@ -6,6 +6,7 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
 import 'package:waxdeck/src/shell/routes.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -15,11 +16,13 @@ import 'routed_host.dart';
 SearchResults _results({
   List<SearchHit> artists = const <SearchHit>[],
   List<SearchHit> tracks = const <SearchHit>[],
+  List<SearchHit> episodes = const <SearchHit>[],
   bool truncated = false,
 }) => SearchResults(
   query: 'night',
   artists: artists,
   tracks: tracks,
+  episodes: episodes,
   truncated: truncated,
 );
 
@@ -30,6 +33,12 @@ Future<ProviderContainer> _pump(
   WidgetTester tester,
   FakeRepository repository, {
   String initialQuery = '',
+
+  /// Mounts the screen at the location it publishes to, so a settled query
+  /// reuses this State instead of replacing the page - which is what the
+  /// app does, and what a test about the filter surviving a keystroke has
+  /// to reproduce.
+  bool atOwnLocation = false,
 }) async {
   tester.view.physicalSize = const Size(900, 1400);
   tester.view.devicePixelRatio = 1;
@@ -41,7 +50,10 @@ Future<ProviderContainer> _pump(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: routedHost(SearchScreen(initialQuery: initialQuery)),
+      child: routedHost(
+        SearchScreen(initialQuery: initialQuery),
+        at: atOwnLocation ? WaxRoute.search : null,
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -49,6 +61,32 @@ Future<ProviderContainer> _pump(
 }
 
 void main() {
+  testWidgets('a chosen filter survives the next keystroke', (tester) async {
+    // The address bar follows the settled query, and the screen adopts the
+    // query the location arrives with - including the one it just wrote
+    // itself, which reset the chips on every character typed. Picking
+    // Podcasts and typing put them back to All, and picking Radio also
+    // fired a library search the screen had no group left to show.
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        episodes: <SearchHit>[_hit('episode', 'Nightjar Weekly')],
+      );
+    final container = await _pump(tester, repository, atOwnLocation: true);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('podcasts')),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(searchScopeProvider), SearchScope.podcasts);
+
+    await tester.enterText(find.byType(TextField), 'night');
+    await tester.pump(SearchQuery.debounce);
+    await tester.pumpAndSettle();
+
+    expect(container.read(searchScopeProvider), SearchScope.podcasts);
+    expect(find.text('Nightjar Weekly'), findsOneWidget);
+  });
+
   testWidgets('typing is debounced into one query', (tester) async {
     final repository = FakeRepository()
       ..searchResults['night'] = _results(
@@ -292,6 +330,30 @@ void main() {
     // everything says so.
     expect(find.text('Nightjar'), findsNothing);
     expect(find.textContaining('Nothing for'), findsOneWidget);
+  });
+
+  testWidgets('narrowing filters the answer rather than asking again', (
+    tester,
+  ) async {
+    // Every library chip filters a result set already in hand. Watching the
+    // whole chip re-executed the provider on each tap, refiring the
+    // identical query behind a skeleton.
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        artists: <SearchHit>[_hit('artist', 'Nightjar')],
+        tracks: <SearchHit>[_hit('track', 'Night Drive')],
+      );
+    await _pump(tester, repository, initialQuery: 'night');
+    expect(repository.searchCalls, ['night']);
+
+    for (final chip in <String>['music', 'podcasts', 'books', 'all']) {
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.searchFilter(chip)),
+      );
+      await tester.pumpAndSettle();
+    }
+    expect(repository.searchCalls, ['night']);
+    expect(find.text('Nightjar'), findsOneWidget);
   });
 
   testWidgets('an entity hit opens its location, a track plays', (

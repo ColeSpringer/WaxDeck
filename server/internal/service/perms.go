@@ -24,7 +24,7 @@ type Permissions struct {
 	MaxTranscodeKbps int64
 	// TagAllow, when non-empty, restricts visibility to items matching
 	// every rule; TagDeny hides items matching any rule. An item without
-	// a deny rule's tag passes it (absence is not a match) — the exact
+	// a deny rule's tag passes it (absence is not a match) - the exact
 	// deny-list contract.
 	TagAllow []TagRule
 	TagDeny  []TagRule

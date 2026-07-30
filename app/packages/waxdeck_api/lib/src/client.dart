@@ -507,8 +507,8 @@ abstract interface class WaxDeckRepository {
   /// first, each carrying the whole queue it stopped on. This is the
   /// resume surface: putting one back is an ordinary
   /// [createPlaybackSession] (or a local queue) from its entries, index,
-  /// and position. Short and unpaged by design — the server keeps a few
-  /// per user — and never includes anything still playing.
+  /// and position. Short and unpaged by design - the server keeps a few
+  /// per user - and never includes anything still playing.
   Future<List<PlaybackSessionHistoryEntry>> listPlaybackSessionHistory();
 
   /// `POST /player/sessions`: start playback on an endpoint.
@@ -533,6 +533,14 @@ abstract interface class WaxDeckRepository {
     String endpointId,
   );
 
+  /// `GET /player/cast/preflight`: the advertise bases a cast session
+  /// will offer a device, in try order, each with the server's own
+  /// reachability verdict and plain-language notes. A base unreachable
+  /// here reliably predicts a silent cast failure; a reachable one is
+  /// not a promise, because the device's view of the network is not the
+  /// server's.
+  Future<List<CastPreflightBase>> getCastPreflight();
+
   /// `POST /radio/stations`: adds a station.
   Future<RadioStation> createRadioStation({
     required String name,
@@ -556,6 +564,16 @@ abstract interface class WaxDeckRepository {
   /// `GET /radio/stations/{pid}/play-info`: a tokenized proxied stream
   /// URL, absolute against the client base URL.
   Future<RadioPlayInfo> getRadioPlayInfo(String pid);
+
+  /// The logo endpoint for the station at [pid], resolved the way
+  /// [artUrlFor] resolves a cover.
+  ///
+  /// A station's `logoUrl` is the station host's own URL and is not what
+  /// a client draws: on web it has no CORS headers to offer and an http
+  /// logo is mixed content on an https UI, so the server fetches it and
+  /// serves it from this origin. `logoUrl` being present is the signal
+  /// there is anything to ask for.
+  String radioLogoUrlFor(String pid);
 
   /// `GET /radio/directory`: searches the public station directory.
   Future<List<RadioDirectoryEntry>> searchRadioDirectory(
@@ -742,7 +760,7 @@ abstract interface class WaxDeckRepository {
     String? libraryPid,
   });
 
-  /// `POST /uploads/batches/{batchId}/complete`: finalizes a batch —
+  /// `POST /uploads/batches/{batchId}/complete`: finalizes a batch -
   /// members staged so far are grouped and their review entries open.
   /// Idempotent.
   Future<UploadBatch> completeUploadBatch(String batchId);
@@ -1210,7 +1228,7 @@ abstract interface class WaxDeckRepository {
 
   /// `POST /admin/backups/import`: uploads an archive produced by
   /// another instance (administrators). The zip streams from
-  /// [openRead] — archives carry whole databases and easily exceed
+  /// [openRead] - archives carry whole databases and easily exceed
   /// what should sit in memory, so the body is never buffered whole.
   Future<Backup> importBackup({
     required int sizeBytes,
@@ -1673,7 +1691,7 @@ class WaxDeckClient implements WaxDeckRepository {
   /// Only those two prefixes name a catalog entity. Anything else is a
   /// caller mistake (an item pid, a typo) and is refused here rather
   /// than sent to the album endpoint to come back as a confusing
-  /// "no album with pid tr-…".
+  /// "no album with pid tr-...".
   static bool _isArtistPid(String pid) {
     if (pid.startsWith('ar-')) return true;
     if (pid.startsWith('al-')) return false;
@@ -2351,6 +2369,14 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<List<CastPreflightBase>> getCastPreflight() => _guard(() async {
+    final response = await _gen.getPlayerApi().getCastPreflight();
+    return _require(
+      response.data,
+    ).bases.map(castPreflightBaseFromGen).toList(growable: false);
+  });
+
+  @override
   Future<RadioStation> createRadioStation({
     required String name,
     required String streamUrl,
@@ -2402,6 +2428,12 @@ class WaxDeckClient implements WaxDeckRepository {
       nowPlaying: info.nowPlaying,
     );
   });
+
+  @override
+  String radioLogoUrlFor(String pid) => resolveMediaUrl(
+    _baseUrl,
+    '/api/v1/radio/stations/${Uri.encodeComponent(pid)}/logo',
+  );
 
   @override
   Future<List<RadioDirectoryEntry>> searchRadioDirectory(

@@ -7,8 +7,8 @@ import 'artwork_store.dart';
 
 /// Fetches the artwork a scroll is about to reach, and only that.
 ///
-/// Warming puts bytes on the device — in the browser's cache, in the
-/// native disk cache — without decoding a picture. The decode belongs to
+/// Warming puts bytes on the device - in the browser's cache, in the
+/// native disk cache - without decoding a picture. The decode belongs to
 /// whatever ends up painting, at the size it paints; a warm that guessed
 /// the size slightly wrong would leave a second decoded copy in memory
 /// rather than saving anything. The guess only has to land on the right
@@ -35,7 +35,7 @@ class ArtworkPrecacher {
   /// never queue behind the ones that are not.
   static const int _inFlight = 3;
 
-  /// Warms [urls] — the covers just past the viewport, which the caller
+  /// Warms [urls] - the covers just past the viewport, which the caller
   /// is the one able to name, since it is the one that knows where its
   /// viewport ends. A second call supersedes the first: the scroll
   /// moved, and where it stopped is a better guess than where it stopped

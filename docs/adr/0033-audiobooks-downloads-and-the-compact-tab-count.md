@@ -8,8 +8,8 @@ Accepted.
 
 ## Context
 
-Audiobooks were the domain with no front door. A book had a detail screen
-— written before the design system, on a Material scaffold — and the only
+Audiobooks were the domain with no front door. A book had a detail screen -
+written before the design system, on a Material scaffold - and the only
 way to one was a card on the library grid. There was no hub, so the
 layout system's own rule kept the Audiobooks tab out of the shell: a tab
 with nothing behind it has nowhere to send anyone.
@@ -19,7 +19,7 @@ Original files have been fetched, resumed, and played offline since the
 sync slice; nothing has ever listed them, said how much room they take,
 or offered to reclaim it. Two capabilities had never had a single caller.
 `DownloadManagerPort.remove` drops an item's audio, and
-`ArtworkStore.unpin` drops the cover pinned beside it (ADR-0025) — and
+`ArtworkStore.unpin` drops the cover pinned beside it (ADR-0025) - and
 they have to be called together, because the pin is kept by pid in a
 table the downloads port knows nothing about.
 
@@ -45,15 +45,15 @@ its own, which is what lets an offline client place a book-timeline
 position without asking the server; a carved virtual track reports its
 *containing* file's, with the span giving the item's window inside it. It
 is optional, because a file no scan could probe has no duration to
-report, and omitted rather than zeroed — a client sequencing parts has to
+report, and omitted rather than zeroed - a client sequencing parts has to
 tell "forty minutes" from "nobody knows", and a zero would stack every
 later part at the same offset. Additive, `oasdiff` clean.
 
 **Offline part resolution mirrors the server's, and it is the same code
 path above it.** `LocalPlayback` carries parts rather than paths, and
 answers which part holds a book-timeline millisecond. `PlaybackSession`
-sets the same four fields from it that play-info sets — part index, part
-count, part start, loaded duration — so everything above resolution
+sets the same four fields from it that play-info sets - part index, part
+count, part start, loaded duration - so everything above resolution
 behaves offline exactly as it does online: the display timeline,
 checkpoints in book milliseconds, a seek that leaves the part, and the
 roll into the next one.
@@ -61,7 +61,7 @@ roll into the next one.
 **An item whose stored parts carry no durations is not sequenced, and
 plays its first file.** That is what the code did for every book before
 this, so a download taken under an earlier release is no worse than it
-was — and it is better than the alternative, because a part's offset is
+was - and it is better than the alternative, because a part's offset is
 the sum of the ones before it and one missing value puts every later part
 somewhere invented. Asking for the item again fills them in, which the
 manager's stale sweep does; `download` also refreshes the record on the
@@ -87,8 +87,8 @@ listings use it: playing from the grid plays what the screen has.
 **The author chips come from the loaded books, not from the facet
 endpoint.** That endpoint enumerates artists across the whole library, so
 its buckets count an author's music alongside their books and its keys
-drill to a mixed listing. This is P11's bug seen from the other side — an
-artist bucket counting two audiobooks opened to an empty music list — and
+drill to a mixed listing. This is P11's bug seen from the other side - an
+artist bucket counting two audiobooks opened to an empty music list - and
 the authors worth offering are the ones on the shelf in front of you.
 
 **"Recently added" reads off the pid.** A listing carries no added-at
@@ -98,7 +98,7 @@ addition, and it is what a listener wants when they open the hub after an
 import.
 
 **"6 hr left" is drawn and "6 hours left" is spoken.** A book's remainder
-is a span, not a position, so a timecode is the wrong readout — "7:50:12
+is a span, not a position, so a timecode is the wrong readout - "7:50:12
 left" is telling you a clock time. `formatSpan` abbreviates it to what a
 cell has room for, and `MediaTileData.trailingSpoken` carries the spelled
 form for the ear, because "6 hr" read aloud is not feedback. That
@@ -132,7 +132,7 @@ left behind while the toast is still up must not take the undo with it.
 
 **The current chapter is *selected*, not *playing*.** `playing` means the
 engine is on this item, and the row draws animated bars over its leading
-slot — which would take the timecode away from the one row whose position
+slot - which would take the timecode away from the one row whose position
 a listener most wants to see, and claim playback for what may be nothing
 but a saved place.
 
@@ -168,8 +168,8 @@ recorded in deferred work rather than faked.
 staleness check.** Nothing local can tell a stale file from a current
 one: staleness is a comparison against what the server has now, and there
 is no stored flag that could hold it. `download` already makes exactly
-that comparison per file — it fetches download-info, keeps any file whose
-essence hash still matches, and re-transfers the rest — so the sweep
+that comparison per file - it fetches download-info, keeps any file whose
+essence hash still matches, and re-transfers the rest - so the sweep
 costs one request per item and re-downloads only what moved.
 
 **Pause answers whether it took.** A transfer the plugin cannot pause (a
@@ -195,14 +195,14 @@ a shelf), which is 8.3's rule.
 
 **Downloads is a native-only secondary.** 4.1 puts it in the sidebar and
 the avatar menu rather than in the tabs, and it is hidden where the build
-keeps nothing offline. Not a permission — a platform capability, and the
+keeps nothing offline. Not a permission - a platform capability, and the
 screen behind it has no data source at all on the web. The *route* is
 still declared there, so a link pasted from a phone lands on an honest
 empty screen rather than on not-found.
 
 **The compact tab count: the fifth tab gives, conditionally, and the
 account cell stays until P17.** This is the decision the phase was
-holding, and it is 4.1's own mechanism rather than a new one — a domain
+holding, and it is 4.1's own mechanism rather than a new one - a domain
 tab hides when the server has nothing behind it, and home absorbs the
 gap. `emptyDomainsProvider` probes once per session with one
 one-item request, and only audiobooks gates on it: it is the medium a
@@ -215,7 +215,7 @@ are the ones nobody is aiming at it on.
 The all-five case was measured rather than argued about, and it fits: at
 five domains plus the account cell, each tab gets 59 px at 360 px of
 window and the selection pill needs 54, with every label inside its cell.
-At 320 px — a phone narrower than anything current — one label
+At 320 px - a phone narrower than anything current - one label
 ("Podcasts", at 52.6 px in a 51.2 px cell) ellipsizes, which is reflow
 rather than truncation: the glyph carries the meaning and the accessible
 name is untouched. No overflow at any width or text scale tested.
@@ -235,9 +235,9 @@ into one working.
 
 ## Consequences
 
-**The play-state batch left podcasts.** The mechanism podcasts built —
-one batched read keyed by a sorted pid string, windowed to the listing's
-page size — is the same question a books hub asks, so it moved to
+**The play-state batch left podcasts.** The mechanism podcasts built - one
+batched read keyed by a sorted pid string, windowed to the listing's
+page size - is the same question a books hub asks, so it moved to
 `src/player/play_progress.dart` as `PlayProgress` and friends rather than
 being copied. A second copy would have been a second chance to step on
 the trap that mechanism exists around: a family keys by `==`, a `List`
@@ -257,8 +257,8 @@ the manager does on the removing side.
 **`PlaybackSession._playInfo` is gone.** It existed to answer "how long
 is the loaded media", and every one of its readers wanted that number
 rather than the object. Reading it was also the bug: on the offline path
-there is no play-info at all, so the part arithmetic — where a seek
-leaves the loaded part, where the next part starts — summed to zero, and
+there is no play-info at all, so the part arithmetic - where a seek
+leaves the loaded part, where the next part starts - summed to zero, and
 `_advanceToNextPart` would have re-resolved part one forever. One
 `_loadedDurationMs`, filled by both load paths, and neither has to know
 which resolved it.
@@ -266,7 +266,7 @@ which resolved it.
 **A shelf card and a grid row are two controls, so they wear two
 handles.** A half-heard book is on the continue shelf *and* in the grid
 below it, and one identifier on both makes a click a strict-mode
-violation rather than a tap — which is how the e2e journey failed before
+violation rather than a tap - which is how the e2e journey failed before
 the handles were split. The podcast hub had the same shape and shipped
 with it: `unplayed` is below the played threshold and `in-progress` is
 any saved position, so an episode a third of the way in is on both
@@ -279,7 +279,7 @@ item on screen twice carries two handles.
 
 **Two design-system defects, both found by the books hub and both older
 than it.** `MediaCard` never clamped its trailing readout, while
-`heightFor` reserves exactly one caption line for it — so a readout that
+`heightFor` reserves exactly one caption line for it - so a readout that
 wrapped overflowed the cell by exactly one line, which "1 hr 20 min left"
 did. Any long trailing text would have done it; a book is just the first
 thing with one. And the same card had no way to say a different thing to
@@ -293,13 +293,13 @@ fresh-install equivalence test in `schema_migration_test.dart` failed on
 exactly that, which is the third time that test has earned its place. The
 v3 snapshot is now beside v1 and v2, because v3 is the only shape where
 `download_records` exists without a duration while everything else is
-current — the path this migration's one step actually runs on.
+current - the path this migration's one step actually runs on.
 
 **A review round then landed four fixes, and the first two are the same
 mistake seen twice: a comment asserting a property the code did not
 have.** The undo toast's own comment said it ran "through the container
-rather than through this widget's ref" and then passed the `WidgetRef` —
-so walking away from a book while the toast was up and tapping Undo threw
+rather than through this widget's ref" and then passed the `WidgetRef` - so
+walking away from a book while the toast was up and tapping Undo threw
 `Bad state: Using "ref" when a widget is about to or has been unmounted`.
 That is exactly the shape ADR-0032 records for the mark-older dialog, and
 the fix is the same: capture the container and the repository before
@@ -310,7 +310,7 @@ here.
 And the offline part fallback was written into `_advanceToNextPart` alone,
 which is only one of five ways to cross a part boundary. A seek, a chapter
 tap, the deck bar's skip, and repeat-one's `replay` all go through
-`_loadPartFor`, and three of those call sites do not await — so a server
+`_loadPartFor`, and three of those call sites do not await - so a server
 that went away mid-book turned a seek into an *unhandled async error*
 rather than a failure anyone could see. The fallback lives in
 `_loadPartFor` now, which is where every crossing already passes, and it
@@ -321,7 +321,7 @@ window; this does not).
 Two in the download store, both about a transfer outliving the record it
 belongs to. `remove` deleted rows and unlinked files while a transfer for
 the same pid was still running, so the file landed back on disk with
-nothing naming it and a completion fired against a deleted row — reachable
+nothing naming it and a completion fired against a deleted row - reachable
 through "Clear all", which sweeps every row it holds, in flight included.
 And the taskId-to-pid map only ever grew: `_forget` runs on the terminal
 states, where no further update can arrive, so every map can drop the
@@ -331,10 +331,10 @@ lets it resume.
 **Both of those were found by reading rather than by a red test, and that
 is what got fixed rather than filed.** `BackgroundDownloadManager` had no
 coverage at all, because `FileDownloader` was a plugin singleton it
-reached for directly — and this is the class that unlinks a listener's
+reached for directly - and this is the class that unlinks a listener's
 files. `TransferEnginePort` is the seam: `start`, `pause`, `resume`,
 `cancel`, and a stream of four states, with `BackgroundTransferEngine`
-holding everything plugin-shaped behind it — the task objects, the status
+holding everything plugin-shaped behind it - the task objects, the status
 vocabulary, the app-support directory, the resume-or-re-enqueue dance, and
 the platform call that resolves a finished file's path. The plugin's own
 types never cross the line, so nothing above can come to depend on its
@@ -356,7 +356,7 @@ makes possible instead.
 where it will be read.** Bulk removal loops sequentially and a
 `Future.wait` would be faster, but `remove` decides whether to unlink by
 asking whether any *other* row still holds the same essence hash. Two
-items sharing one file — CUE siblings share an image — removed
+items sharing one file - CUE siblings share an image - removed
 concurrently would each see the other's row still present, each conclude
 the file is shared, and leave it on disk with nothing pointing at it.
 Clearing downloads is not latency-sensitive; correctness is the whole job.
@@ -364,5 +364,5 @@ Clearing downloads is not latency-sensitive; correctness is the whole job.
 **What did not land.** The hub has no series dimension, because the
 catalog has none: the series line narrows to the author instead. Free
 disk space is absent, recorded. And the account cell is still in the tab
-bar, which stays P17's entry — this phase forced the count question and
+bar, which stays P17's entry - this phase forced the count question and
 answered it, which is what it was scheduled to do.

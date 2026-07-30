@@ -20,7 +20,7 @@ export interface ScrollPacing {
   /// adding a budget for it would be inventing a gate criterion nobody
   /// agreed to.
   p95Ms: number;
-  /// Share of frames longer than 50ms — a visible hitch, not a slow
+  /// Share of frames longer than 50ms - a visible hitch, not a slow
   /// average.
   longFrameShare: number;
 }
@@ -42,7 +42,7 @@ interface Collector {
   /// Which run owns the page. A loop only exits by checking `__stop`
   /// after it has already pushed a frame, so a start landing within a
   /// frame of a stop would leave the old loop alive to reschedule itself
-  /// into the new run — two loops pushing into one array, halving the
+  /// into the new run - two loops pushing into one array, halving the
   /// apparent deltas and doubling the reported frame rate. Claiming a
   /// run number makes that structural rather than a matter of how far
   /// apart two measurements happen to fall.
@@ -112,7 +112,7 @@ export async function measureScrollPacing(
     // missed.
     throw new Error(
       `scroll pacing collected ${frames.length} frames over ` +
-        `${steps} steps (${(steps * stepPauseMs) / 1000}s) — the page ` +
+        `${steps} steps (${(steps * stepPauseMs) / 1000}s) - the page ` +
         `rendered nothing to measure`,
     );
   }

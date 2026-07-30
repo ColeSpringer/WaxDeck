@@ -18,7 +18,7 @@ import 'music_controllers.dart';
 /// bucket of one dimension.
 ///
 /// One screen for both, because a bucket is the same list with a filter
-/// on it — the toolbar, the row, the queue it plays, and the empty state
+/// on it - the toolbar, the row, the queue it plays, and the empty state
 /// are all the same, and only the title and the fetch differ.
 class MusicListingScreen extends ConsumerStatefulWidget {
   const MusicListingScreen({
@@ -35,7 +35,7 @@ class MusicListingScreen extends ConsumerStatefulWidget {
   final String segment;
 
   /// The bucket's display label, when the caller had one. A visitor
-  /// arriving cold has no `extra` — a reload or a shared link drops it —
+  /// arriving cold has no `extra` - a reload or a shared link drops it -
   /// so the screen names itself from what it loads instead, and the
   /// listing itself never depends on this.
   final String? label;
@@ -52,7 +52,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
   ///
   /// A year bucket names itself: its key is the year. An artist or album
   /// bucket is a pid, and a genre bucket is a catalog id, so the items
-  /// themselves are the only thing on hand that carries the label — the
+  /// themselves are the only thing on hand that carries the label - the
   /// first row of an artist's listing knows the artist's name.
   String _title(List<ItemSummary> items) {
     final given = widget.label;
@@ -100,8 +100,8 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
     final items = state.items;
     final dimension = widget.dimension;
     // A bucket holds whatever carried the artist or the year it counts,
-    // and a book is one of those. Books resume on their own screen —
-    // chapters, speed, position — so a row that is one opens it rather
+    // and a book is one of those. Books resume on their own screen -
+    // chapters, speed, position - so a row that is one opens it rather
     // than dropping a twelve-hour file into the queue.
     if (items[index].mediaType == MediaType.audiobook) {
       context.push(WaxRoute.book(items[index].pid));
@@ -154,7 +154,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
   /// have scrolled into memory. Two reasons, and the second is the one
   /// that bites: a sample of a loaded list longer than the cap silently
   /// drops whatever it did not sample, because the queue cannot hold it
-  /// and the cursor beside it points past all of it — so a visitor who
+  /// and the cursor beside it points past all of it - so a visitor who
   /// scrolled a 5,000-track genre before pressing this would lose
   /// everything they scrolled past. A page is exactly one window's
   /// worth, and the cursor that comes with it is the frontier of that

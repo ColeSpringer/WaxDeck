@@ -80,6 +80,19 @@ void main() {
       expect(sizedArtUrl(_art, 64), '$_art?size=64');
     });
 
+    // A station logo has no stored original to scale from, so `size` there
+    // is accepted and ignored. Asking for a rung anyway splits one
+    // identical body across a URL per rung.
+    test('an endpoint with one rendition is asked for without a size', () {
+      const logo = '/api/v1/radio/stations/rs-01JZX5N8QW3F4V9T2B7KD3M9R6/logo';
+      expect(isUnsizedArtUrl(logo), isTrue);
+      expect(isUnsizedArtUrl('$logo?v=3'), isTrue);
+      expect(isUnsizedArtUrl(_art), isFalse);
+      expect(sizedArtUrl(logo, null), logo);
+      // A replacement still gets a name no cache has seen.
+      expect(sizedArtUrl(logo, null, bust: 3), '$logo?v=3');
+    });
+
     test('an art URL names the item it belongs to, which is how a pin is '
         'found', () {
       expect(artworkPidOf(_art), 'tr-01JZX5N8QW3F4V9T2B7KD3M9R6');
@@ -226,7 +239,7 @@ void main() {
         'fetch', () {
       // Web hands this an empty map (the browser attaches a cookie), and
       // that is what keeps the browser-native decode path. Native is
-      // never given this store — but if it were, it would authenticate
+      // never given this store - but if it were, it would authenticate
       // rather than paint monograms over a whole library.
       final authed = NetworkArtworkStore(
         baseUrl: _base,

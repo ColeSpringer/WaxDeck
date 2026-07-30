@@ -10,7 +10,7 @@ import 'controls.dart';
 /// The right panel's chrome: a titled surface beside the content.
 ///
 /// The panel is where a wide window keeps something open next to what it
-/// is about — the queue, lyrics, the session playing on another device —
+/// is about - the queue, lyrics, the session playing on another device -
 /// rather than covering the page with a sheet. It owns its own frame and
 /// nothing else: what goes inside is the caller's, and the shell decides
 /// whether it docks beside the content or lies over its trailing edge.

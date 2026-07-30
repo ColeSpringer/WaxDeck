@@ -166,8 +166,8 @@ func applyReplayedPosition(recencyPrim bool, positionMS, recNS, curPositionMS, s
 // an offline replay, reconciled per medium against the position stamp.
 //
 // The reported applied says whether the position moved. A skipped
-// replay is a success, not an error — the winning state is already in
-// the event stream — but a caller counting what it wrote (a migration
+// replay is a success, not an error - the winning state is already in
+// the event stream - but a caller counting what it wrote (a migration
 // report) must not count one, so the outcome is returned rather than
 // hidden behind a nil error.
 func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, recordedAt *time.Time) (applied bool, err error) {

@@ -4,15 +4,15 @@ import 'package:flutter/material.dart';
 
 // Standalone reproduction for the WaxDeck e2e renderer hang: the wasm
 // build trapped with "memory access out of bounds" inside skwasm's
-// malloc, on the paragraph-layout path (ParagraphImpl::layout →
-// TArray<Block> → sk_malloc), after which the UI thread and the skwasm
+// malloc, on the paragraph-layout path (ParagraphImpl::layout ->
+// TArray<Block> -> sk_malloc), after which the UI thread and the skwasm
 // render worker both spun forever on the allocator lock.
 //
 // This app recreates the two-sided allocator pressure with no WaxDeck
 // code at all: every frame the UI thread lays out dozens of fresh
 // multi-span paragraphs (each span its own style block) while the
 // render worker rasterizes the previous frame's text-heavy picture.
-// Query knobs: ?paragraphs=N&spans=M&images=1 — images adds a strip of
+// Query knobs: ?paragraphs=N&spans=M&images=1 - images adds a strip of
 // network images whose URLs alternate between 404s and tiny PNGs,
 // mirroring the failed cover-art burst that preceded the trap in the
 // captured trace.

@@ -16,6 +16,7 @@ part 'prefs.g.dart';
 /// * [locale] - Preferred BCP 47 locale tag (for example `en-US`).
 /// * [theme] - Preferred app theme.
 /// * [sharedStatsOptOut] - Leave the server-wide aggregate stats (the server year in review). Household members are enrolled by default; opting out removes this user's listening from every server-wide figure. Personal stats are unaffected. 
+/// * [radioFavorites] - Radio stations this user has pinned, in the order the dial presents them. The station library itself is shared by every account, so this is the one piece of per-user station state there is: which of the household's stations are *yours*.  Ordered, and the order is the client's to set - new pins go on the end, so a dial does not reshuffle under a thumb. Entries are station PIDs (`rs-...`) and are not resolved on write: a station deleted by another household member leaves its pid here, and a client renders only the pids it can still find, because failing a whole preference write over one departed station would be worse than a dial one slot shorter.  Capped at 64, which is a bound on the document rather than on the feature: clients present about a dozen, and that cap is theirs. A client presenting fewer than the document holds must still write back what it did not draw - the cap belongs to the dial, not to the list.  Stored in the canonical upper-case form the pattern above declares, whatever case a write used, so a pin always names the station the server named. Absent when nothing is pinned: unpinning everything drops the field rather than storing `[]`, and nothing reads a default set of pins out of an absent list, so absent and empty are one answer on the way back. 
 @BuiltValue()
 abstract class Prefs implements Built<Prefs, PrefsBuilder> {
   /// IANA timezone name (for example `Europe/Amsterdam`). Drives streaks, heatmaps, and other calendar-bucketed statistics. 
@@ -34,6 +35,10 @@ abstract class Prefs implements Built<Prefs, PrefsBuilder> {
   /// Leave the server-wide aggregate stats (the server year in review). Household members are enrolled by default; opting out removes this user's listening from every server-wide figure. Personal stats are unaffected. 
   @BuiltValueField(wireName: r'sharedStatsOptOut')
   bool? get sharedStatsOptOut;
+
+  /// Radio stations this user has pinned, in the order the dial presents them. The station library itself is shared by every account, so this is the one piece of per-user station state there is: which of the household's stations are *yours*.  Ordered, and the order is the client's to set - new pins go on the end, so a dial does not reshuffle under a thumb. Entries are station PIDs (`rs-...`) and are not resolved on write: a station deleted by another household member leaves its pid here, and a client renders only the pids it can still find, because failing a whole preference write over one departed station would be worse than a dial one slot shorter.  Capped at 64, which is a bound on the document rather than on the feature: clients present about a dozen, and that cap is theirs. A client presenting fewer than the document holds must still write back what it did not draw - the cap belongs to the dial, not to the list.  Stored in the canonical upper-case form the pattern above declares, whatever case a write used, so a pin always names the station the server named. Absent when nothing is pinned: unpinning everything drops the field rather than storing `[]`, and nothing reads a default set of pins out of an absent list, so absent and empty are one answer on the way back. 
+  @BuiltValueField(wireName: r'radioFavorites')
+  BuiltList<String>? get radioFavorites;
 
   Prefs._();
 
@@ -86,6 +91,13 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
         specifiedType: const FullType(bool),
       );
     }
+    if (object.radioFavorites != null) {
+      yield r'radioFavorites';
+      yield serializers.serialize(
+        object.radioFavorites,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
   }
 
   @override
@@ -136,6 +148,13 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.sharedStatsOptOut = valueDes;
+          break;
+        case r'radioFavorites':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>;
+          result.radioFavorites.replace(valueDes);
           break;
         default:
           unhandled.add(key);

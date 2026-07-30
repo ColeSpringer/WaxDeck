@@ -18,7 +18,7 @@ final clientSettingsStoreProvider = Provider<ClientSettingsStore>(
 /// A notifier whose state is one per-device preference.
 ///
 /// The state stays synchronous. Everything reading a preference reads a
-/// value, not an `AsyncValue` of one — a shell that cannot lay itself
+/// value, not an `AsyncValue` of one - a shell that cannot lay itself
 /// out until the disk answers would be a worse trade than a first frame
 /// drawn at the default. So the notifier starts at [defaultValue],
 /// replaces it once the stored value arrives, and writes every change
@@ -45,7 +45,7 @@ mixin StoredSetting<T> on Notifier<T> {
   String encode(T value);
 
   /// Combines a value this session set with one the store answered with
-  /// afterwards. Called only when the two race — a preference changed
+  /// afterwards. Called only when the two race - a preference changed
   /// before its own read came back.
   ///
   /// Keeping the session's value and dropping the stored one is right
@@ -78,7 +78,7 @@ mixin StoredSetting<T> on Notifier<T> {
   T hydrate() {
     if (_known) return _value;
     // Read, not watch. Which store this is cannot meaningfully change
-    // under a running app — it is chosen by the platform at startup —
+    // under a running app - it is chosen by the platform at startup -
     // and watching it would make every preference vulnerable to the
     // rebuild this notifier has to survive rather than merely tolerate.
     unawaited(_load(ref.read(clientSettingsStoreProvider), ++_generation));
@@ -130,7 +130,7 @@ mixin StoredSetting<T> on Notifier<T> {
   /// its default again.
   ///
   /// For a key that turns out to be an account's content rather than a
-  /// device's — the recent searches on sign-out. Public where [put] is
+  /// device's - the recent searches on sign-out. Public where [put] is
   /// protected, because the caller is the session ending rather than the
   /// setting's own screen.
   ///
@@ -159,7 +159,7 @@ mixin StoredSetting<T> on Notifier<T> {
   }
 
   /// A preference that cannot be read or written has no symptom of its
-  /// own — it simply reads as the default next launch — so the console
+  /// own - it simply reads as the default next launch - so the console
   /// gets the reason rather than nothing. Same treatment, and the same
   /// reasoning, as a queue that will not write.
   void _failed(String verb, Object error) {

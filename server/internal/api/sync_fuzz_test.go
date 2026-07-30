@@ -109,8 +109,8 @@ func runSyncModelFuzz(t *testing.T, seed uint64) {
 	// is a silent no-op that preserves the stamp, so re-starring a
 	// starred item keeps "starred since" truthful and an idempotent
 	// re-rate never masquerades as a newer change to a syncing client.
-	// Positions carry no such rule — every checkpoint is a real
-	// observation — so their stamp bumps unconditionally.
+	// Positions carry no such rule - every checkpoint is a real
+	// observation - so their stamp bumps unconditionally.
 	applyModel := func(m fuzzMutation, replay bool) {
 		st := stateOf(m.pid)
 		now := time.Now()

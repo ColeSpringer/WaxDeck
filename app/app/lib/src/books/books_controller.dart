@@ -125,7 +125,7 @@ class BooksState {
 /// One listing for the whole hub, sorted and filtered client-side. The
 /// endpoint orders by title and offers no author or finished predicate,
 /// and a library holds tens or hundreds of books rather than the tens of
-/// thousands of tracks the music indexes page through — so the honest
+/// thousands of tracks the music indexes page through - so the honest
 /// shape is to load them and answer every arrangement from what is held,
 /// instead of minting a cursor space per chip.
 class BooksController extends AsyncNotifier<BooksState> {
@@ -215,7 +215,7 @@ List<({String name, int count})> bookAuthors(List<ItemSummary> books) {
 /// [progress] answers the finished filter, so a hub whose play states
 /// have not landed yet shows everything rather than guessing. The
 /// listing arrives in title order, which is what makes `recent` the only
-/// arrangement that needs a key of its own — and the catalog gives a
+/// arrangement that needs a key of its own - and the catalog gives a
 /// listing no added-at, so recency reads off the pid, whose ULID prefix
 /// is its mint time.
 List<ItemSummary> arrangeBooks(
@@ -262,7 +262,7 @@ List<ItemSummary> arrangeBooks(
 /// first: the continue-listening shelf.
 ///
 /// Ordered by the position write the server recorded, which is the
-/// cross-device answer — a book left off on a phone leads the shelf on
+/// cross-device answer - a book left off on a phone leads the shelf on
 /// the desktop. Books whose state carries no timestamp sort after the
 /// ones that do rather than jumbling with them.
 List<ItemSummary> continueListening(
