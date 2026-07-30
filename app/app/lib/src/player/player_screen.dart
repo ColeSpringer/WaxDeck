@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../artwork/artwork_box.dart';
-import '../artwork/artwork_providers.dart';
 import '../connect/device_picker.dart';
 import '../discovery/discovery_actions.dart';
 import '../library/item_delete.dart';
@@ -14,12 +13,11 @@ import '../media_icons.dart';
 import '../playlists/add_to_playlist_dialog.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/semantics_ids.dart';
-import '../sync/sync_providers.dart';
+import 'download_action.dart';
+import 'item_star_rating_row.dart';
 import 'now_playing_controller.dart';
-import 'play_state_controller.dart';
 import 'playback_session.dart';
 import 'sleep_timer.dart';
-import 'star_rating_row.dart';
 
 /// Speed presets the player button cycles through.
 const playerSpeedSteps = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
@@ -177,7 +175,11 @@ class PlayerScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
-                _DownloadButton(pid: item.pid, artUrl: item.artUrl),
+                DownloadAction(
+                  pid: item.pid,
+                  artUrl: item.artUrl,
+                  semanticsId: SemanticsIds.downloadButton,
+                ),
                 ItemDeleteAction(pid: item.pid, onDeleted: () => context.pop()),
               ],
       ),
@@ -286,7 +288,7 @@ class _PlayerBody extends ConsumerWidget {
             ),
           if (item.mediaType == MediaType.audiobook)
             _ChapterIndicator(session: session),
-          _StarRatingRow(pid: item.pid),
+          ItemStarRatingRow(pid: item.pid),
           const SizedBox(height: 8),
           StreamBuilder<Duration>(
             stream: session.displayPositionStream,
@@ -694,148 +696,6 @@ class _ChapterSheet extends StatelessWidget {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-/// The item's star toggle and rating row, backed by its play state.
-class _StarRatingRow extends ConsumerWidget {
-  const _StarRatingRow({required this.pid});
-
-  final String pid;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // A failed mutation rolls the value back and lands here as an error
-    // still carrying that previous value; tell the user the tap did not
-    // stick while the row keeps rendering the real state.
-    ref.listen(playStateControllerProvider(pid), (previous, next) {
-      if (next.hasError && !next.isLoading) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(content: Text('Could not save that change')),
-          );
-      }
-    });
-    final playState = ref.watch(playStateControllerProvider(pid)).value;
-    final notifier = ref.read(playStateControllerProvider(pid).notifier);
-
-    return StarRatingRow(
-      starred: playState?.starred ?? false,
-      rating: playState?.rating,
-      enabled: playState != null,
-      onStar: notifier.setStarred,
-      onRate: notifier.rate,
-      idPrefix: '',
-      starLabel: (starred) => starred ? 'Unstar' : 'Star',
-      ratingLabel: (n) => '$n star rating',
-    );
-  }
-}
-
-/// Downloads the item's original for offline playback. Hidden on
-/// platforms without a download manager (web). Three states: not
-/// downloaded, transferring, on disk.
-class _DownloadButton extends ConsumerStatefulWidget {
-  const _DownloadButton({required this.pid, required this.artUrl});
-
-  final String pid;
-
-  /// The cover to pin beside the audio, when the item has one.
-  final String? artUrl;
-
-  @override
-  ConsumerState<_DownloadButton> createState() => _DownloadButtonState();
-}
-
-class _DownloadButtonState extends ConsumerState<_DownloadButton> {
-  bool? _complete;
-  bool _inFlight = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _probe();
-  }
-
-  Future<void> _probe() async {
-    final port = ref.read(downloadManagerProvider);
-    if (port == null) return;
-    final complete = await port.isComplete(widget.pid);
-    if (mounted) setState(() => _complete = complete);
-  }
-
-  Future<void> _download() async {
-    final port = ref.read(downloadManagerProvider);
-    if (port == null) return;
-    setState(() => _inFlight = true);
-    try {
-      // Listen before enqueuing so a fast completion cannot slip past,
-      // and stop on failure too; waiting on the complete event alone
-      // would spin forever when a file fails.
-      final done = Completer<void>();
-      final sub = port.progress.listen((p) {
-        if (p.pid == widget.pid &&
-            (p.complete || p.failed) &&
-            !done.isCompleted) {
-          done.complete();
-        }
-      });
-      try {
-        await port.download(widget.pid);
-        // Everything may already be on disk (an early tap before the
-        // probe landed, or a server-side retag): nothing was enqueued,
-        // so no event will ever come.
-        if (!await port.isComplete(widget.pid)) {
-          await done.future;
-        }
-      } finally {
-        await sub.cancel();
-      }
-      // The cover comes down with the audio. Downloading an item is a
-      // promise that it plays with the server unreachable, and an
-      // offline library of grey monograms does not keep it — but only
-      // once the audio is actually on disk: the wait above ends on a
-      // failed transfer too, and a pinned cover for an item that cannot
-      // play is a promise about nothing.
-      if (await port.isComplete(widget.pid)) {
-        await ref
-            .read(artworkStoreProvider)
-            .pinForOffline(widget.pid, widget.artUrl);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _inFlight = false);
-      }
-      await _probe();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (ref.watch(downloadManagerProvider) == null) {
-      return const SizedBox.shrink();
-    }
-    final complete = _complete ?? false;
-    return Semantics(
-      identifier: SemanticsIds.downloadButton,
-      label: complete ? 'Downloaded' : 'Download',
-      button: true,
-      excludeSemantics: true,
-      onTap: complete || _inFlight ? null : _download,
-      child: IconButton(
-        key: const Key(SemanticsIds.downloadButton),
-        tooltip: complete ? 'Downloaded' : 'Download for offline playback',
-        onPressed: complete || _inFlight ? null : _download,
-        icon: _inFlight
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Icon(complete ? Icons.download_done : Icons.download_outlined),
       ),
     );
   }

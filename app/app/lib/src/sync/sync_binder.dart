@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../books/books_controller.dart';
 import '../connect/connect_providers.dart';
+import '../downloads/downloads_controller.dart';
 import '../library/library_controller.dart';
 import '../metadata/metadata_controller.dart';
 import '../player/entity_play_state_controller.dart';
+import '../player/play_progress.dart';
 import '../player/play_state_controller.dart';
 import '../playlists/playlists_controller.dart';
 import '../podcasts/podcast_shelves.dart';
@@ -14,6 +17,7 @@ import '../podcasts/podcasts_controller.dart';
 import '../providers.dart';
 import '../review/review_controller.dart';
 import '../settings/prefs_controller.dart';
+import '../shell/adaptive_shell.dart';
 import '../shell/lifecycle_banners.dart';
 import '../tools/tasks_screen.dart';
 import '../uploads/uploads_controller.dart';
@@ -42,6 +46,15 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     ref.read(artworkStoreProvider).forgetAbsences();
     ref.invalidate(libraryControllerProvider);
     ref.invalidate(continueListeningProvider);
+    ref.invalidate(booksProvider);
+    // Whether a domain has anything behind it is a catalog fact, and it
+    // decides whether the chrome offers its tab. This is what turns the
+    // Audiobooks tab on when a first scan finds books, instead of at the
+    // next launch.
+    ref.invalidate(emptyDomainsProvider);
+    // What is downloaded is local, but who each row is comes from the
+    // mirror, so a retitled item has to reach an open manager.
+    ref.invalidate(downloadsProvider);
     // Shows and episodes are catalog entities too: a server-side fetch
     // flipping an episode to downloaded must reach an open show screen.
     ref.invalidate(podcastDetailProvider);
@@ -73,7 +86,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     // another) is what makes them stale.
     ref.invalidate(subscriptionsProvider);
     ref.invalidate(podcastDetailProvider);
-    ref.invalidate(episodeProgressProvider);
+    ref.invalidate(playProgressProvider);
     ref.invalidate(upNextEpisodesProvider);
     ref.invalidate(latestEpisodesProvider);
     ref.invalidate(libraryControllerProvider);

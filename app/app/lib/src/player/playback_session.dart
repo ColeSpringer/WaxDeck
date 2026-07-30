@@ -63,7 +63,6 @@ class PlaybackSession {
   /// session must not stop an engine a newer session has taken over.
   static final Expando<PlaybackSession> _engineOwners = Expando('engine owner');
 
-  PlayInfo? _playInfo;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<bool>? _playingSub;
   StreamSubscription<void>? _completedSub;
@@ -92,6 +91,22 @@ class PlaybackSession {
   int? _partIndex;
   int? _partCount;
   int _partStartMs = 0;
+
+  /// The loaded media's own duration: one part's for a multi-part book,
+  /// the whole item's otherwise.
+  ///
+  /// Filled by both load paths, so the part arithmetic below — where a
+  /// seek leaves the loaded part, and where the next part starts — never
+  /// has to know whether the server or the download store resolved it.
+  /// Reading play-info for it was what made every one of those sums zero
+  /// on the offline path.
+  int _loadedDurationMs = 0;
+
+  /// The downloaded parts this book is playing from, set only where the
+  /// offline branch took over an item whose parts can be placed on its
+  /// timeline. Non-null means part resolution runs against the download
+  /// store rather than against play-info.
+  LocalPlayback? _localParts;
 
   /// Whether media ever reached the engine under this session. A start
   /// that failed before loading has no position of its own: the engine's
@@ -151,8 +166,7 @@ class PlaybackSession {
       final total = _book?.durationMs ?? item.durationMs;
       if (total > 0) return Duration(milliseconds: total);
     }
-    return engine.duration ??
-        Duration(milliseconds: _playInfo?.durationMs ?? 0);
+    return engine.duration ?? Duration(milliseconds: _loadedDurationMs);
   }
 
   /// Current position on the display timeline (book timeline for books).
@@ -199,7 +213,7 @@ class PlaybackSession {
       } else {
         final info = await repository.getPlayInfo(item.pid);
         if (_disposed) return;
-        _playInfo = info;
+        _loadedDurationMs = info.durationMs;
         _applyOutroCutoff(info.durationMs);
         // The same guard against a checkpoint the media outgrew: a
         // position at or past the end is not a place to start, however
@@ -239,24 +253,42 @@ class PlaybackSession {
       if (initialPositionMs == null && saved != null && !saved.finished) {
         resumeMs = saved.positionMs;
       }
-      if (!_isBook) resumeMs = _applyIntroSkip(resumeMs);
-      final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
-      // Downloaded originals carry the same window; clipping here is
-      // what makes an offline carved track play as itself instead of
-      // the whole rip.
-      await engine.load(
-        Uri.file(local.paths.first).toString(),
-        initialPosition: resumeAt,
-        clipStart: local.spanStartMs == null
-            ? null
-            : Duration(milliseconds: local.spanStartMs!),
-        // The server closes open-ended windows now; the zero guard
-        // covers download records stored before it did (an open clip
-        // end plays to the file's end, which is what those meant).
-        clipEnd: local.spanEndMs == null || local.spanEndMs! <= 0
-            ? null
-            : Duration(milliseconds: local.spanEndMs!),
-      );
+      // A downloaded book whose parts can be placed on its own timeline
+      // resolves the part the resume position falls in, exactly as
+      // play-info would have. Anything else — a track, a single-file
+      // book, a book whose stored parts carry no durations — is the one
+      // file this always loaded.
+      if (_isBook && local.sequenced) {
+        _localParts = local;
+        await _loadPartFor(resumeMs, autoplay: false);
+      } else {
+        if (!_isBook) resumeMs = _applyIntroSkip(resumeMs);
+        final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
+        // A carved item's file duration is the whole rip's, and the engine
+        // is about to be clipped to the window: the loaded media is the
+        // item's own length.
+        final span = local.spanStartMs != null && (local.spanEndMs ?? 0) > 0
+            ? local.spanEndMs! - local.spanStartMs!
+            : null;
+        _loadedDurationMs =
+            span ?? local.parts.first.durationMs ?? item.durationMs;
+        // Downloaded originals carry the same window; clipping here is
+        // what makes an offline carved track play as itself instead of
+        // the whole rip.
+        await engine.load(
+          Uri.file(local.parts.first.path).toString(),
+          initialPosition: resumeAt,
+          clipStart: local.spanStartMs == null
+              ? null
+              : Duration(milliseconds: local.spanStartMs!),
+          // The server closes open-ended windows now; the zero guard
+          // covers download records stored before it did (an open clip
+          // end plays to the file's end, which is what those meant).
+          clipEnd: local.spanEndMs == null || local.spanEndMs! <= 0
+              ? null
+              : Duration(milliseconds: local.spanEndMs!),
+        );
+      }
     }
     if (_disposed) return;
     _lastPosition = engine.position;
@@ -280,7 +312,7 @@ class PlaybackSession {
     if (_disposed) return;
     await engine.setSpeed(_configuredSpeed());
     if (_disposed) return;
-    _playInfo = info;
+    _loadedDurationMs = info.durationMs;
     _applyOutroCutoff(info.durationMs);
     _lastPosition = engine.position;
     _loaded = true;
@@ -342,12 +374,35 @@ class PlaybackSession {
 
   /// Resolves and loads the part containing book-timeline [bookMs]
   /// (single-file items resolve to the whole file with partStartMs 0).
+  ///
+  /// The fallback to downloaded parts is here rather than at the call
+  /// sites, so every crossing gets it: a seek, a chapter tap, the deck
+  /// bar's skip, replay, and the roll off a part's end. Three of those do
+  /// not await, so an escape would be an unhandled async error.
+  ///
+  /// Rethrows for parts that cannot be placed on a timeline, which is
+  /// [start]'s own offline branch to answer: it has the mirror position.
   Future<void> _loadPartFor(int bookMs, {required bool autoplay}) async {
-    final info = await repository.getPlayInfo(item.pid, positionMs: bookMs);
+    final held = _localParts;
+    if (held != null) {
+      await _loadLocalPartFor(held, bookMs, autoplay: autoplay);
+      return;
+    }
+    final PlayInfo info;
+    try {
+      info = await repository.getPlayInfo(item.pid, positionMs: bookMs);
+    } on WaxDeckApiException catch (e) {
+      final local = await _localFallback(e);
+      if (_disposed) return;
+      if (local == null || !local.sequenced) rethrow;
+      _localParts = local;
+      await _loadLocalPartFor(local, bookMs, autoplay: autoplay);
+      return;
+    }
     // Let go while the part was resolving: loading it now would put this
     // book over whatever took the engine.
     if (_disposed) return;
-    _playInfo = info;
+    _loadedDurationMs = info.durationMs;
     _partIndex = info.partIndex;
     _partCount = info.partCount;
     _partStartMs = info.partStartMs ?? 0;
@@ -362,6 +417,38 @@ class PlaybackSession {
     );
     _lastPosition = engine.position;
     if (trimEnabled.value) unawaited(_loadSkipMap());
+    if (autoplay) await engine.play();
+  }
+
+  /// The same resolution against the download store: which downloaded
+  /// part holds book-timeline [bookMs], and where on the timeline it
+  /// starts.
+  ///
+  /// The state it sets is the state play-info sets, which is what makes
+  /// everything above it — the display timeline, checkpoints in book
+  /// milliseconds, a seek that leaves the part, the roll into the next
+  /// one — behave offline exactly as it does online. No skip map is
+  /// fetched: trimming needs a server, and this branch is the one that
+  /// has none.
+  Future<void> _loadLocalPartFor(
+    LocalPlayback local,
+    int bookMs, {
+    required bool autoplay,
+  }) async {
+    final at = local.partAt(bookMs);
+    _loadedDurationMs = at.part.durationMs ?? 0;
+    _partIndex = at.index;
+    _partCount = local.parts.length;
+    _partStartMs = at.startMs;
+    _skipSpans = const [];
+    _lastJumpedSpan = -1;
+    final inPartMs = bookMs - at.startMs;
+    await engine.load(
+      Uri.file(at.part.path).toString(),
+      initialPosition: inPartMs > 0 ? Duration(milliseconds: inPartMs) : null,
+    );
+    if (_disposed) return;
+    _lastPosition = engine.position;
     if (autoplay) await engine.play();
   }
 
@@ -387,10 +474,10 @@ class PlaybackSession {
   /// timeline otherwise.
   Future<void> seek(Duration position) async {
     final targetMs = position.inMilliseconds;
-    final partDurationMs = _playInfo?.durationMs ?? 0;
     final withinPart =
         _partIndex == null ||
-        (targetMs >= _partStartMs && targetMs <= _partStartMs + partDurationMs);
+        (targetMs >= _partStartMs &&
+            targetMs <= _partStartMs + _loadedDurationMs);
     if (withinPart) {
       await engine.seek(Duration(milliseconds: targetMs - _partStartMs));
     } else {
@@ -522,7 +609,9 @@ class PlaybackSession {
   /// to the next item, and the listen report says finished. The stream
   /// is left running: the next item's session adopts it.
   Future<void> finishAtBoundary() => _shutdown(
-    at: Duration(milliseconds: _playInfo?.durationMs ?? item.durationMs),
+    at: Duration(
+      milliseconds: _loadedDurationMs > 0 ? _loadedDurationMs : item.durationMs,
+    ),
     finished: true,
     stopEngine: false,
   );
@@ -601,7 +690,9 @@ class PlaybackSession {
     // Held as well as written: the engine is paused at the cutoff, so a
     // final checkpoint taken from it would put the resume point back
     // before the outro and fire this again on the next play.
-    final endMs = _playInfo?.durationMs ?? position.inMilliseconds;
+    final endMs = _loadedDurationMs > 0
+        ? _loadedDurationMs
+        : position.inMilliseconds;
     _endedAt = Duration(milliseconds: endMs);
     unawaited(_checkpoint(at: _endedAt!));
     unawaited(_reportSession(finished: true));
@@ -640,12 +731,14 @@ class PlaybackSession {
   }
 
   Future<void> _advanceToNextPart() async {
-    final nextStartMs = _partStartMs + (_playInfo?.durationMs ?? 0);
     try {
-      await _loadPartFor(nextStartMs, autoplay: true);
+      // Falls back to the downloaded parts itself where there are any:
+      // a server that went away mid-book does not end a book somebody
+      // downloaded, which is the whole point of downloading one.
+      await _loadPartFor(_partStartMs + _loadedDurationMs, autoplay: true);
     } on WaxDeckApiException {
-      // The next part cannot be resolved (server unreachable): end the
-      // session honestly where it stopped.
+      // Nothing local to carry on from: end the session honestly where
+      // it stopped.
       _finished = true;
       unawaited(_checkpoint());
       unawaited(_reportSession(finished: true));

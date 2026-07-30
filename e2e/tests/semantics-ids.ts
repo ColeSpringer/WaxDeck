@@ -68,12 +68,24 @@ export const SemanticsIds = {
   signupSubmit: 'signup-submit',
   signupUsername: 'signup-username',
 
-  // books: Audiobooks: the book screen, its chapters, and its per-book settings.
+  // books: Audiobooks: the hub, the book screen, its chapters, and its per-book settings.
+  book: (pid: string | number) => `book-${pid}`,
+  bookAuthorFilter: (key: string | number) => `book-author-${key}`,
+  bookContinue: (pid: string | number) => `book-continue-${pid}`,
+  bookDownload: 'book-download',
+  bookEdition: 'book-edition',
+  bookFinishedFilter: (name: string | number) => `book-finished-${name}`,
+  bookMarkFinished: 'book-mark-finished',
+  bookOverflow: 'book-overflow',
+  bookPartsNote: 'book-parts-note',
   bookResume: 'book-resume',
   bookSettingsOpen: 'book-settings-open',
   bookSettingsSave: 'book-settings-save',
   bookSettingsSpeed: 'book-settings-speed',
-  bookToolsMenu: 'book-tools-menu',
+  bookSort: (name: string | number) => `book-sort-${name}`,
+  bookStartOver: 'book-start-over',
+  booksHub: 'books-hub',
+  booksHubOverflow: 'books-hub-overflow',
   chapter: (index: string | number) => `chapter-${index}`,
 
   // connect: Connect: endpoints, remote sessions, and cast controls.
@@ -123,6 +135,19 @@ export const SemanticsIds = {
   instantMixRun: 'instant-mix-run',
   mixAdventurousness: 'mix-adventurousness',
   scopedItem: (scope: string | number, index: string | number) => `${scope}-item-${index}`,
+
+  // downloads: The downloads manager: what this device holds and the transfers in flight.
+  downloadCancel: (pid: string | number) => `download-cancel-${pid}`,
+  downloadPause: (pid: string | number) => `download-pause-${pid}`,
+  downloadRemove: (pid: string | number) => `download-remove-${pid}`,
+  downloadResume: (pid: string | number) => `download-resume-${pid}`,
+  downloadRow: (pid: string | number) => `download-row-${pid}`,
+  downloadsClearAll: 'downloads-clear-all',
+  downloadsOverflow: 'downloads-overflow',
+  downloadsRefresh: 'downloads-refresh',
+  downloadsRemoveFinished: 'downloads-remove-finished',
+  downloadsScreen: 'downloads-screen',
+  downloadsStorage: 'downloads-storage',
 
   // health: Library health: rules, issues, and their fixes.
   adminDiagnostics: 'admin-diagnostics',
@@ -226,17 +251,18 @@ export const SemanticsIds = {
 
   // podcasts: Podcasts: shows, episodes, and subscription actions.
   episode: (pid: string | number) => `episode-${pid}`,
+  episodeContinue: (pid: string | number) => `episode-continue-${pid}`,
   episodeFetch: (pid: string | number) => `episode-fetch-${pid}`,
   episodeInfo: (pid: string | number) => `episode-info-${pid}`,
   episodeMarkPlayed: 'episode-mark-played',
-  episodeQueue: 'episode-queue',
   episodePlay: 'episode-play',
+  episodeQueue: 'episode-queue',
   episodeRemove: (pid: string | number) => `episode-remove-${pid}`,
   episodeSection: (name: string | number) => `episode-section-${name}`,
   episodeSelect: (pid: string | number) => `episode-select-${pid}`,
   episodeShare: 'episode-share',
-  markOlderPlayed: 'mark-older-played',
   markOlderConfirm: 'mark-older-confirm',
+  markOlderPlayed: 'mark-older-played',
   markOlderPreset: (name: string | number) => `mark-older-preset-${name}`,
   notesLink: (index: string | number) => `notes-link-${index}`,
   podcast: (pid: string | number) => `podcast-${pid}`,

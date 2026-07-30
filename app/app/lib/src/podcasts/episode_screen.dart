@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../player/play_progress.dart';
 import '../player/session_registry.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
@@ -111,14 +112,14 @@ class _EpisodeBody extends ConsumerWidget {
   /// This episode alone, as the progress family keys it: one row's worth
   /// of the same batch read the show's list uses, so a position written
   /// here and one written there land in the same shape of state.
-  String get _progressKey => episodePidsKey(<String>[episode.pid]);
+  String get _progressKey => playPidsKey(<String>[episode.pid]);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
     final colors = WaxColors.of(context);
-    final progress = EpisodeProgressView(
-      ref.watch(episodeProgressProvider(_progressKey)).value ?? const {},
+    final progress = PlayProgressView(
+      ref.watch(playProgressProvider(_progressKey)).value ?? const {},
     )[episode.pid];
     final gutter = EdgeInsets.symmetric(
       horizontal: sizeClass.gutter.horizontal / 2,
@@ -313,7 +314,7 @@ class _ActionBar extends ConsumerWidget {
   });
 
   final EpisodeDetail episode;
-  final EpisodeProgress progress;
+  final PlayProgress progress;
   final String progressKey;
   final String? showPid;
 

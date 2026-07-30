@@ -110,6 +110,20 @@ class DownloadRecords extends Table {
   IntColumn get spanStartMs => integer().nullable()();
   IntColumn get spanEndMs => integer().nullable()();
 
+  /// This file's own duration, as download-info reported it. Null when
+  /// the catalog did not know it, and on records written before the
+  /// field existed. It is what places a book-timeline position in one
+  /// part of a multi-file book with the server unreachable: a part's
+  /// offset is the sum of the durations before it, so one missing value
+  /// makes the whole item unsequenceable rather than slightly wrong.
+  ///
+  /// Last on purpose, like every other column a migration added:
+  /// `ALTER TABLE ADD COLUMN` appends, so a column declared in the
+  /// middle here would sit in a different position on an upgraded
+  /// database than on a fresh one. The equivalence test in
+  /// `schema_migration_test.dart` catches exactly that, and did.
+  IntColumn get durationMs => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {pid, fileIndex};
 }
@@ -235,7 +249,7 @@ class MirrorDatabase extends _$MirrorDatabase {
   MirrorDatabase(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -259,6 +273,12 @@ class MirrorDatabase extends _$MirrorDatabase {
         if (from >= 2) {
           await m.addColumn(queueMeta, queueMeta.sourceCursor);
         }
+      }
+      if (from < 4) {
+        // No version guard needed here, unlike the step above:
+        // download_records is a v1 table, so every upgrade path arrives
+        // with it already built and missing this column.
+        await m.addColumn(downloadRecords, downloadRecords.durationMs);
       }
     },
   );

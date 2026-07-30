@@ -190,7 +190,7 @@ func (s *Server) GetDownloadInfo(ctx context.Context, req GetDownloadInfoRequest
 	token, exp := s.media.Mint(uc.ID, req.Pid)
 	out := DownloadInfo{Pid: req.Pid, ExpiresAt: exp, Files: make([]DownloadFile, 0, len(res.Files))}
 	for _, f := range res.Files {
-		out.Files = append(out.Files, DownloadFile{
+		df := DownloadFile{
 			Url: "/media/download?pid=" + url.QueryEscape(req.Pid) +
 				"&mt=" + url.QueryEscape(token) +
 				"&f=" + url.QueryEscape(f.FilePID) +
@@ -200,7 +200,15 @@ func (s *Server) GetDownloadInfo(ctx context.Context, req GetDownloadInfoRequest
 			FileName:    f.FileName,
 			EssenceHash: f.EssenceHash,
 			Etag:        f.ETag,
-		})
+		}
+		// Omitted rather than reported as zero: a client sequencing a
+		// downloaded book's parts has to tell "this part is 40 minutes"
+		// from "nobody knows how long this part is", and a zero would
+		// place every later part at the same offset.
+		if f.DurationMS > 0 {
+			df.DurationMs = ptr(f.DurationMS)
+		}
+		out.Files = append(out.Files, df)
 	}
 	if res.HasSpan {
 		out.SpanStartMs = ptr(res.SpanStartMS)

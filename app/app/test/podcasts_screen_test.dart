@@ -143,6 +143,20 @@ void main() {
     expect(find.text('Half Heard'), findsWidgets);
     expect(find.text('Latest episodes'), findsOneWidget);
     expect(find.text('Brand New'), findsWidgets);
+
+    // The two shelves overlap by definition — `unplayed` is below the
+    // played threshold and `in-progress` is any saved position, so an
+    // episode a third of the way in is in both — so a shelf card and a
+    // list row are two controls and wear two handles. One handle would
+    // make a click on it a strict-mode violation rather than a tap.
+    Finder byId(String id) => find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.identifier == id,
+    );
+    // This fixture is the overlap: a third of the way in is both. So the
+    // same episode is on screen twice, and each control has a handle of
+    // its own rather than the two sharing one.
+    expect(byId(SemanticsIds.episodeContinue('tr-half')), findsOneWidget);
+    expect(byId(SemanticsIds.episode('tr-half')), findsOneWidget);
   });
 
   testWidgets('empty state invites a first show', (tester) async {

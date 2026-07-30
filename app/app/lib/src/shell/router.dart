@@ -14,8 +14,10 @@ import '../auth/login_screen.dart';
 import '../auth/setup_screen.dart';
 import '../auth/signup_screen.dart';
 import '../books/book_screen.dart';
+import '../books/books_screen.dart';
 import '../connect/remote_screen.dart';
 import '../discovery/track_list_screen.dart';
+import '../downloads/downloads_screen.dart';
 import '../health/diagnostics_screen.dart';
 import '../health/health_screen.dart';
 import '../library/library_screen.dart';
@@ -315,28 +317,21 @@ final publicRoutes = <RouteBase>[
 /// track list, a remote session — are declared outside the shell, on the
 /// signed-in navigator, so they cover the chrome and back closes them.
 ///
-/// One consequence worth knowing, narrowed by a later phase: a book lives
-/// in the home branch, because that is where books are reached from until
-/// there is a books hub, so opening one from Browse lights Home.
+/// Every branch is declared whether or not its tab is drawn: the branch
+/// index is `goBranch`'s contract, so a branch that came and went with a
+/// count would renumber the ones after it. A domain with nothing behind
+/// it loses its tab, not its routes, which is also what keeps a shared
+/// link into one working.
 List<RouteBase> shellRoutes() => <RouteBase>[
   StatefulShellRoute.indexedStack(
     builder: (context, state, navigationShell) =>
         AdaptiveShell(shell: navigationShell, location: state.uri.path),
     branches: <StatefulShellBranch>[
-      // Home. Books hang off it: the library grid is where they are
-      // reached from until the audiobooks hub exists.
       StatefulShellBranch(
         routes: <RouteBase>[
           GoRoute(
             path: WaxRoute.home,
             builder: (context, state) => const LibraryScreen(),
-            routes: <RouteBase>[
-              GoRoute(
-                path: 'books/:pid',
-                builder: (context, state) =>
-                    BookScreen(pid: state.pathParameters['pid']!),
-              ),
-            ],
           ),
         ],
       ),
@@ -391,6 +386,24 @@ List<RouteBase> shellRoutes() => <RouteBase>[
             path: '${WaxRoute.episodePrefix}:pid',
             builder: (context, state) =>
                 EpisodeScreen(pid: state.pathParameters['pid']!),
+          ),
+        ],
+      ),
+      // Audiobooks: the hub, and one book beneath it. Its own branch now
+      // that there is a hub to send anyone to; before this the book hung
+      // off home, so opening one from the library grid lit Home.
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: WaxRoute.books,
+            builder: (context, state) => const BooksScreen(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: ':pid',
+                builder: (context, state) =>
+                    BookScreen(pid: state.pathParameters['pid']!),
+              ),
+            ],
           ),
         ],
       ),
@@ -457,6 +470,13 @@ List<RouteBase> shellRoutes() => <RouteBase>[
                 builder: (context, state) => const YearInReviewScreen(),
               ),
             ],
+          ),
+          // Native only in the chrome, but declared here regardless:
+          // the screen reports an empty store on the web build rather
+          // than 404ing a link somebody pasted from their phone.
+          GoRoute(
+            path: WaxRoute.downloads,
+            builder: (context, state) => const DownloadsScreen(),
           ),
           GoRoute(
             path: WaxRoute.settings,

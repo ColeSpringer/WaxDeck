@@ -97,9 +97,17 @@ abstract final class WaxRoute {
   static const episodePrefix = '/episodes/';
   static String episode(String pid) => '$episodePrefix$pid';
 
-  static String book(String pid) => '/books/$pid';
+  /// The audiobook domain: a hub, and one book beneath it. The book's
+  /// declared parent is the hub, so it is gone to from there and pushed
+  /// from anywhere else (a search hit, a home shelf).
+  static const books = '/books';
+  static String book(String pid) => '$books/$pid';
 
   static const radio = '/radio';
+
+  /// What this device holds offline. Native only: the web build has no
+  /// download manager, so the destination is not offered there.
+  static const downloads = '/downloads';
 
   static const stats = '/stats';
   static const listenLog = '$stats/log';

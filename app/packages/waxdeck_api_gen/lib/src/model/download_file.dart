@@ -14,6 +14,7 @@ part 'download_file.g.dart';
 /// * [url] - Origin-relative, media-token-authenticated download URL serving this file's original bytes with range support. 
 /// * [mimeType] - MIME type of the file.
 /// * [sizeBytes] - Exact size of the file in bytes.
+/// * [durationMs] - This file's own duration in milliseconds, absent when the catalog does not know it (a file no scan could probe). It is the file's duration, not the item's, and the two differ in both directions: each part of a multi-file audiobook reports its own, so a client holding the downloaded parts can place a book-timeline position in one of them without asking the server; and an item carved out of a larger file reports the containing file's duration, with `spanStartMs` and `spanEndMs` giving the item's window inside it. 
 /// * [fileName] - Suggested file name (the original base name), also sent as the download's `Content-Disposition`. 
 /// * [essenceHash] - Content hash of the file's audio essence, stable across retags and moves: the download-store key. 
 /// * [etag] - Strong validator of the exact file bytes, served as the download's `ETag`. Changes on any rewrite of the file, including retags that leave `essenceHash` unchanged; a mismatch means restart this file's transfer instead of resuming a range. 
@@ -30,6 +31,10 @@ abstract class DownloadFile implements Built<DownloadFile, DownloadFileBuilder> 
   /// Exact size of the file in bytes.
   @BuiltValueField(wireName: r'sizeBytes')
   int get sizeBytes;
+
+  /// This file's own duration in milliseconds, absent when the catalog does not know it (a file no scan could probe). It is the file's duration, not the item's, and the two differ in both directions: each part of a multi-file audiobook reports its own, so a client holding the downloaded parts can place a book-timeline position in one of them without asking the server; and an item carved out of a larger file reports the containing file's duration, with `spanStartMs` and `spanEndMs` giving the item's window inside it. 
+  @BuiltValueField(wireName: r'durationMs')
+  int? get durationMs;
 
   /// Suggested file name (the original base name), also sent as the download's `Content-Disposition`. 
   @BuiltValueField(wireName: r'fileName')
@@ -81,6 +86,13 @@ class _$DownloadFileSerializer implements PrimitiveSerializer<DownloadFile> {
       object.sizeBytes,
       specifiedType: const FullType(int),
     );
+    if (object.durationMs != null) {
+      yield r'durationMs';
+      yield serializers.serialize(
+        object.durationMs,
+        specifiedType: const FullType(int),
+      );
+    }
     yield r'fileName';
     yield serializers.serialize(
       object.fileName,
@@ -139,6 +151,13 @@ class _$DownloadFileSerializer implements PrimitiveSerializer<DownloadFile> {
             specifiedType: const FullType(int),
           ) as int;
           result.sizeBytes = valueDes;
+          break;
+        case r'durationMs':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.durationMs = valueDes;
           break;
         case r'fileName':
           final valueDes = serializers.deserialize(

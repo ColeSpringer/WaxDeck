@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../player/now_playing_controller.dart';
+import '../player/play_progress.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../shell/routes.dart';
@@ -95,14 +96,14 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     // One read per window of loaded rows rather than one over all of
     // them: paging then costs the page it just loaded instead of every
     // page before it.
-    final positions = <String, EpisodeProgress>{};
-    for (final key in episodeProgressKeys(loaded)) {
+    final positions = <String, PlayProgress>{};
+    for (final key in playProgressKeys(loaded)) {
       positions.addAll(
-        ref.watch(episodeProgressProvider(key)).value ??
-            const <String, EpisodeProgress>{},
+        ref.watch(playProgressProvider(key)).value ??
+            const <String, PlayProgress>{},
       );
     }
-    final view = EpisodeProgressView(positions);
+    final view = PlayProgressView(positions);
     final visible = _visible(loaded, view);
     final title = detail.value?.show.title ?? 'Show';
 
@@ -164,7 +165,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
   /// What the filters, the season, and the query leave standing.
   List<EpisodeSummary> _visible(
     List<EpisodeSummary> loaded,
-    EpisodeProgressView progress,
+    PlayProgressView progress,
   ) {
     final needle = _query.trim().toLowerCase();
     return <EpisodeSummary>[
@@ -300,7 +301,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
   Widget _list(
     AsyncValue<EpisodeListState> episodes,
     List<EpisodeSummary> visible,
-    EpisodeProgressView progress,
+    PlayProgressView progress,
   ) {
     final loadingMore = episodes.value?.loadingMore ?? false;
     return switch (episodes) {
@@ -355,7 +356,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
 
   Widget _rows(
     List<EpisodeSummary> visible,
-    EpisodeProgressView progress,
+    PlayProgressView progress,
     bool loadingMore,
   ) {
     final sizeClass = WaxSizeClass.of(context);
@@ -490,7 +491,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     if (marked > 0) {
       // The family rather than one key: a selection spans windows, and
       // the hub's tile draws the backlog this just changed.
-      ref.invalidate(episodeProgressProvider);
+      ref.invalidate(playProgressProvider);
       ref.invalidate(subscriptionsProvider);
       ref.invalidate(upNextEpisodesProvider);
       ref.invalidate(latestEpisodesProvider);
@@ -801,7 +802,7 @@ class _EpisodeRow extends ConsumerWidget {
 
   final String showPid;
   final EpisodeSummary episode;
-  final EpisodeProgress progress;
+  final PlayProgress progress;
   final bool selecting;
   final bool selected;
   final ValueChanged<bool> onSelect;

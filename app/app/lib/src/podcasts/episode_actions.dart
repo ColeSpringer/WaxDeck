@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../player/now_playing_controller.dart';
+import '../player/play_progress.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../shell/routes.dart';
@@ -149,7 +150,7 @@ class EpisodeActions {
   ) async {
     try {
       final done = await ref
-          .read(episodeProgressProvider(progressKey).notifier)
+          .read(playProgressProvider(progressKey).notifier)
           .markPlayed(episode.pid, episode.durationMs);
       if (!context.mounted) return;
       _report(

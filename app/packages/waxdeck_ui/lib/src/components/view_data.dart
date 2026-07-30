@@ -57,6 +57,7 @@ class MediaTileData {
     this.shape = ArtworkShape.square,
     this.progress,
     this.trailingText,
+    this.trailingSpoken,
     this.starred = false,
     this.downloaded = false,
     this.unplayed = false,
@@ -79,8 +80,15 @@ class MediaTileData {
   final double? progress;
 
   /// Right-aligned metadata: duration, remaining time, track count. Set
-  /// in mono by the components that show it.
+  /// in mono by the components that show it, and clamped to one line —
+  /// the components reserve one line for it.
   final String? trailingText;
+
+  /// What a screen reader hears in place of [trailingText], where the
+  /// drawn form is abbreviated for the room it has. "6 hr" is the right
+  /// caption and the wrong thing to read aloud; [spellDuration] is what
+  /// belongs here. Defaults to the drawn text.
+  final String? trailingSpoken;
 
   final bool starred;
   final bool downloaded;
@@ -190,6 +198,26 @@ String formatTimecode(Duration d) {
     return '$hours:${minutes.toString().padLeft(2, '0')}:$seconds';
   }
   return '$minutes:$seconds';
+}
+
+/// A duration as a span rather than as a position: "6 hr", "1 hr 20 min",
+/// "45 min".
+///
+/// For the readouts that answer "how much", where a timecode answers the
+/// wrong question — an audiobook with "7:50:12" left is telling you a
+/// clock time. Minutes are dropped past ten hours, where they are noise,
+/// and a span under a minute rounds up rather than reading "0 min".
+///
+/// Abbreviated on purpose, because it lives in captions and cells that
+/// have room for a few characters. What a screen reader should hear is
+/// [spellDuration]; the components that draw one carry both.
+String formatSpan(Duration d) {
+  final total = d.inSeconds.abs();
+  final hours = total ~/ 3600;
+  final minutes = (total % 3600) ~/ 60;
+  if (hours == 0) return '${minutes == 0 ? 1 : minutes} min';
+  if (minutes == 0 || hours >= 10) return '$hours hr';
+  return '$hours hr $minutes min';
 }
 
 /// Spells a duration for screen readers and for prose: "2 minutes

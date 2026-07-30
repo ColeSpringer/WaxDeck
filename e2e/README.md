@@ -5,13 +5,26 @@ Playwright smoke tests against a real server binary with the embedded web UI.
 ## Running locally
 
 ```sh
-make web build   # build the Flutter web app and the server with -tags withweb
-make e2e         # npm ci + playwright test (launches ../server/waxdeck itself)
+make e2e         # rebuilds the UI and the binary if stale, then runs
 ```
+
+`make e2e` brings the thing under test up to date itself: the Flutter web
+build when a Dart source is newer than the embedded bundle, and the server
+binary always, since it embeds that bundle at link time. It used to be on
+the caller to run `make web build` first, and forgetting meant the suite
+drove the *previous* build — which reads exactly like a missing feature
+and fails on whichever spec touched it rather than saying the bundle is
+stale.
+
+The Flutter compile is guarded by a real-file stamp against the Dart
+sources, so a spec-only or Go-only iteration does not pay for one. Note
+that `make generate` rewrites generated Dart, so the first `make e2e`
+after it rebuilds the bundle.
 
 The config's `webServer` starts `server/waxdeck` and waits on
 `/api/v1/health`; set `WAXDECK_BASE_URL` to target an already-running
-instance instead (`reuseExistingServer` is on).
+instance instead (`reuseExistingServer` is on). With that set, `make e2e`
+rebuilds nothing: the stack is the caller's, not ours.
 
 ## How this harness grows
 

@@ -305,8 +305,56 @@
     },
     {
       "name": "books",
-      "doc": "Audiobooks: the book screen, its chapters, and its per-book settings.",
+      "doc": "Audiobooks: the hub, the book screen, its chapters, and its per-book settings.",
       "ids": [
+        {
+          "name": "book",
+          "id": "book-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "bookAuthorFilter",
+          "id": "book-author-{key}",
+          "params": [
+            "key"
+          ]
+        },
+        {
+          "name": "bookContinue",
+          "id": "book-continue-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "bookDownload",
+          "id": "book-download"
+        },
+        {
+          "name": "bookEdition",
+          "id": "book-edition"
+        },
+        {
+          "name": "bookFinishedFilter",
+          "id": "book-finished-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "bookMarkFinished",
+          "id": "book-mark-finished"
+        },
+        {
+          "name": "bookOverflow",
+          "id": "book-overflow"
+        },
+        {
+          "name": "bookPartsNote",
+          "id": "book-parts-note"
+        },
         {
           "name": "bookResume",
           "id": "book-resume"
@@ -324,8 +372,23 @@
           "id": "book-settings-speed"
         },
         {
-          "name": "bookToolsMenu",
-          "id": "book-tools-menu"
+          "name": "bookSort",
+          "id": "book-sort-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "bookStartOver",
+          "id": "book-start-over"
+        },
+        {
+          "name": "booksHub",
+          "id": "books-hub"
+        },
+        {
+          "name": "booksHubOverflow",
+          "id": "books-hub-overflow"
         },
         {
           "name": "chapter",
@@ -544,6 +607,71 @@
             "scope",
             "index"
           ]
+        }
+      ]
+    },
+    {
+      "name": "downloads",
+      "doc": "The downloads manager: what this device holds and the transfers in flight.",
+      "ids": [
+        {
+          "name": "downloadCancel",
+          "id": "download-cancel-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "downloadPause",
+          "id": "download-pause-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "downloadRemove",
+          "id": "download-remove-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "downloadResume",
+          "id": "download-resume-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "downloadRow",
+          "id": "download-row-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "downloadsClearAll",
+          "id": "downloads-clear-all"
+        },
+        {
+          "name": "downloadsOverflow",
+          "id": "downloads-overflow"
+        },
+        {
+          "name": "downloadsRefresh",
+          "id": "downloads-refresh"
+        },
+        {
+          "name": "downloadsRemoveFinished",
+          "id": "downloads-remove-finished"
+        },
+        {
+          "name": "downloadsScreen",
+          "id": "downloads-screen"
+        },
+        {
+          "name": "downloadsStorage",
+          "id": "downloads-storage"
         }
       ]
     },
@@ -1012,6 +1140,13 @@
           ]
         },
         {
+          "name": "episodeContinue",
+          "id": "episode-continue-{pid}",
+          "params": [
+            "pid"
+          ]
+        },
+        {
           "name": "episodeFetch",
           "id": "episode-fetch-{pid}",
           "params": [
@@ -1030,12 +1165,12 @@
           "id": "episode-mark-played"
         },
         {
-          "name": "episodeQueue",
-          "id": "episode-queue"
-        },
-        {
           "name": "episodePlay",
           "id": "episode-play"
+        },
+        {
+          "name": "episodeQueue",
+          "id": "episode-queue"
         },
         {
           "name": "episodeRemove",
@@ -1063,12 +1198,12 @@
           "id": "episode-share"
         },
         {
-          "name": "markOlderPlayed",
-          "id": "mark-older-played"
-        },
-        {
           "name": "markOlderConfirm",
           "id": "mark-older-confirm"
+        },
+        {
+          "name": "markOlderPlayed",
+          "id": "mark-older-played"
         },
         {
           "name": "markOlderPreset",

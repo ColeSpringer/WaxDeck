@@ -6,7 +6,9 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
 import '../player/deck_bar_host.dart';
+import '../providers.dart';
 import '../settings/client_settings_providers.dart';
+import '../sync/sync_providers.dart';
 import 'lifecycle_banners.dart';
 import 'routes.dart';
 import 'semantics_ids.dart';
@@ -93,6 +95,16 @@ enum WaxNavTarget {
     WaxRoute.podcasts,
     WaxNavSection.primary,
   ),
+  // "Books" rather than "Audiobooks" on the chrome, which is what the
+  // layout system's own tab row says: five labels share a phone's width,
+  // and the hub's own title is where the long name belongs.
+  books(
+    'Books',
+    WaxIcons.audiobooks,
+    WaxRoute.books,
+    WaxNavSection.primary,
+    hidesWhenEmpty: true,
+  ),
   radio('Radio', WaxIcons.radio, WaxRoute.radio, WaxNavSection.primary),
 
   stats(
@@ -100,6 +112,15 @@ enum WaxNavTarget {
     WaxIcons.stats,
     WaxRoute.stats,
     WaxNavSection.secondary,
+  ),
+  // Native only: the web build keeps nothing offline, so there is no
+  // manager to reach and the destination is not offered.
+  downloads(
+    'Downloads',
+    WaxIcons.downloads,
+    WaxRoute.downloads,
+    WaxNavSection.secondary,
+    needsDownloads: true,
   ),
   settings(
     'Settings',
@@ -197,6 +218,8 @@ enum WaxNavTarget {
     this.section, {
     this.adminOnly = false,
     this.needsUpload = false,
+    this.needsDownloads = false,
+    this.hidesWhenEmpty = false,
   });
 
   final String label;
@@ -210,12 +233,39 @@ enum WaxNavTarget {
   /// empty list nothing can be done on.
   final bool needsUpload;
 
+  /// Hidden where this build keeps nothing offline (web). Not a
+  /// permission: it is a platform capability, and the screen behind it
+  /// has no data source at all there.
+  final bool needsDownloads;
+
+  /// Hidden while the server has nothing behind it.
+  ///
+  /// The layout system's rule: a domain tab goes away where the library
+  /// holds none of that medium, and home absorbs the gap. Only
+  /// audiobooks gates on it so far — a tab per medium is what makes the
+  /// count tight on a phone, and books is the medium a library most
+  /// often has none of. Podcasts and Radio stay unconditional until
+  /// their own phases have a count to gate on.
+  final bool hidesWhenEmpty;
+
   /// Whether [user] may be offered this target at all. The server refuses
   /// the calls behind it regardless; this keeps the chrome honest.
-  bool visibleTo(WaxDeckUser? user) {
+  ///
+  /// [emptyDomains] names the domains a probe has found nothing for.
+  /// Absence means "not answered yet", which shows the tab: a tab that
+  /// arrives late shifts the row under a thumb already moving, and the
+  /// libraries that would gain one are the ones nobody is aiming at it
+  /// on.
+  bool visibleTo(
+    WaxDeckUser? user, {
+    bool hasDownloads = false,
+    Set<WaxNavTarget> emptyDomains = const <WaxNavTarget>{},
+  }) {
     final isAdmin = user?.roles.contains('admin') ?? false;
     if (adminOnly && !isAdmin) return false;
     if (needsUpload && !(user?.uploadEnabled ?? false)) return false;
+    if (needsDownloads && !hasDownloads) return false;
+    if (hidesWhenEmpty && emptyDomains.contains(this)) return false;
     return true;
   }
 
@@ -248,8 +298,31 @@ const List<WaxNavTarget> waxShellBranches = <WaxNavTarget>[
   WaxNavTarget.home,
   WaxNavTarget.music,
   WaxNavTarget.podcasts,
+  WaxNavTarget.books,
   WaxNavTarget.radio,
 ];
+
+/// The domains the server has nothing behind, probed once per session.
+///
+/// One cheap request per gating domain, cached for the app's lifetime
+/// rather than auto-disposed: the answer is a property of the library,
+/// the chrome asks on every build, and a library does not gain its first
+/// audiobook while somebody is looking at the tab bar. A catalog
+/// invalidation is what refreshes it (`sync_binder` drops it), which is
+/// also what makes a first scan's books turn the tab on without a
+/// relaunch.
+final emptyDomainsProvider = FutureProvider<Set<WaxNavTarget>>((ref) async {
+  final repository = ref.watch(repositoryProvider);
+  final empty = <WaxNavTarget>{};
+  // One item is all the question needs: the tab is about whether there
+  // is anything at all, not about how much.
+  final books = await repository.listItems(
+    mediaType: MediaType.audiobook,
+    limit: 1,
+  );
+  if (books.items.isEmpty) empty.add(WaxNavTarget.books);
+  return empty;
+});
 
 /// Whether [location] is [base] or something declared beneath it.
 bool _isUnder(String location, String base) =>
@@ -258,10 +331,9 @@ bool _isUnder(String location, String base) =>
 /// Which target the chrome shows as active: the longest declared location
 /// this one sits under, with the branch on screen breaking the tie.
 ///
-/// `/podcasts/pc-1` is Podcasts and `/books/bk-1` is Home, because home is
-/// what every location sits under when nothing more specific claims it. A
-/// curation area lights its own row rather than the tab whose branch
-/// happens to declare it.
+/// `/podcasts/pc-1` is Podcasts and `/books/bk-1` is Books, each claimed
+/// by prefix. A curation area lights its own row rather than the tab whose
+/// branch happens to declare it.
 ///
 /// Home is the only target that claims a location by being home; every
 /// other match is a prefix, which is the stronger signal. So a location
@@ -406,8 +478,17 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authControllerProvider).value?.user;
+    final hasDownloads = ref.watch(downloadManagerProvider) != null;
+    final empty =
+        ref.watch(emptyDomainsProvider).value ?? const <WaxNavTarget>{};
     final visible = WaxNavTarget.values
-        .where((target) => target.visibleTo(user))
+        .where(
+          (target) => target.visibleTo(
+            user,
+            hasDownloads: hasDownloads,
+            emptyDomains: empty,
+          ),
+        )
         .toList();
     final byName = <String, WaxNavTarget>{
       for (final target in visible) target.name: target,

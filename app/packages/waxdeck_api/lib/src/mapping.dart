@@ -370,6 +370,7 @@ DownloadInfo downloadInfoFromGen(gen.DownloadInfo info, {String baseUrl = ''}) {
             fileName: f.fileName,
             essenceHash: f.essenceHash,
             etag: f.etag,
+            durationMs: f.durationMs,
           ),
         )
         .toList(),

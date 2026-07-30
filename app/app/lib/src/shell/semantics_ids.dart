@@ -68,12 +68,24 @@ abstract final class SemanticsIds {
   static const String signupSubmit = 'signup-submit';
   static const String signupUsername = 'signup-username';
 
-  // books: Audiobooks: the book screen, its chapters, and its per-book settings.
+  // books: Audiobooks: the hub, the book screen, its chapters, and its per-book settings.
+  static String book(Object pid) => 'book-$pid';
+  static String bookAuthorFilter(Object key) => 'book-author-$key';
+  static String bookContinue(Object pid) => 'book-continue-$pid';
+  static const String bookDownload = 'book-download';
+  static const String bookEdition = 'book-edition';
+  static String bookFinishedFilter(Object name) => 'book-finished-$name';
+  static const String bookMarkFinished = 'book-mark-finished';
+  static const String bookOverflow = 'book-overflow';
+  static const String bookPartsNote = 'book-parts-note';
   static const String bookResume = 'book-resume';
   static const String bookSettingsOpen = 'book-settings-open';
   static const String bookSettingsSave = 'book-settings-save';
   static const String bookSettingsSpeed = 'book-settings-speed';
-  static const String bookToolsMenu = 'book-tools-menu';
+  static String bookSort(Object name) => 'book-sort-$name';
+  static const String bookStartOver = 'book-start-over';
+  static const String booksHub = 'books-hub';
+  static const String booksHubOverflow = 'books-hub-overflow';
   static String chapter(Object index) => 'chapter-$index';
 
   // connect: Connect: endpoints, remote sessions, and cast controls.
@@ -124,6 +136,19 @@ abstract final class SemanticsIds {
   static const String instantMixRun = 'instant-mix-run';
   static const String mixAdventurousness = 'mix-adventurousness';
   static String scopedItem(Object scope, Object index) => '$scope-item-$index';
+
+  // downloads: The downloads manager: what this device holds and the transfers in flight.
+  static String downloadCancel(Object pid) => 'download-cancel-$pid';
+  static String downloadPause(Object pid) => 'download-pause-$pid';
+  static String downloadRemove(Object pid) => 'download-remove-$pid';
+  static String downloadResume(Object pid) => 'download-resume-$pid';
+  static String downloadRow(Object pid) => 'download-row-$pid';
+  static const String downloadsClearAll = 'downloads-clear-all';
+  static const String downloadsOverflow = 'downloads-overflow';
+  static const String downloadsRefresh = 'downloads-refresh';
+  static const String downloadsRemoveFinished = 'downloads-remove-finished';
+  static const String downloadsScreen = 'downloads-screen';
+  static const String downloadsStorage = 'downloads-storage';
 
   // health: Library health: rules, issues, and their fixes.
   static const String adminDiagnostics = 'admin-diagnostics';
@@ -228,17 +253,18 @@ abstract final class SemanticsIds {
 
   // podcasts: Podcasts: shows, episodes, and subscription actions.
   static String episode(Object pid) => 'episode-$pid';
+  static String episodeContinue(Object pid) => 'episode-continue-$pid';
   static String episodeFetch(Object pid) => 'episode-fetch-$pid';
   static String episodeInfo(Object pid) => 'episode-info-$pid';
   static const String episodeMarkPlayed = 'episode-mark-played';
-  static const String episodeQueue = 'episode-queue';
   static const String episodePlay = 'episode-play';
+  static const String episodeQueue = 'episode-queue';
   static String episodeRemove(Object pid) => 'episode-remove-$pid';
   static String episodeSection(Object name) => 'episode-section-$name';
   static String episodeSelect(Object pid) => 'episode-select-$pid';
   static const String episodeShare = 'episode-share';
-  static const String markOlderPlayed = 'mark-older-played';
   static const String markOlderConfirm = 'mark-older-confirm';
+  static const String markOlderPlayed = 'mark-older-played';
   static String markOlderPreset(Object name) => 'mark-older-preset-$name';
   static String notesLink(Object index) => 'notes-link-$index';
   static String podcast(Object pid) => 'podcast-$pid';

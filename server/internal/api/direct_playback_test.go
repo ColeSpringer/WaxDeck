@@ -100,6 +100,27 @@ func TestDirectPlayback(t *testing.T) {
 		t.Fatalf("book part fetch status = %d bytes = %d", resp.StatusCode, len(body))
 	}
 
+	// Download-info reports each part's own duration, which is what an
+	// offline client places a book-timeline position with: the parts sum
+	// to the book, and no part is as long as the whole.
+	di := decode[DownloadInfo](t, get(t, h.ts, "/api/v1/items/"+book.Pid+"/download-info", h.token))
+	if len(di.Files) != *pi.PartCount {
+		t.Fatalf("download files = %d, want one per part (%d)", len(di.Files), *pi.PartCount)
+	}
+	var summed int64
+	for i, f := range di.Files {
+		if f.DurationMs == nil || *f.DurationMs <= 0 {
+			t.Fatalf("part %d carries no duration: %+v", i, f)
+		}
+		if *f.DurationMs >= book.DurationMs {
+			t.Fatalf("part %d duration = %d, want less than the book's %d", i, *f.DurationMs, book.DurationMs)
+		}
+		summed += *f.DurationMs
+	}
+	if summed != book.DurationMs {
+		t.Fatalf("parts sum to %d, want the book's %d", summed, book.DurationMs)
+	}
+
 	// A CUE rip carves the flac into virtual tracks. Direct play
 	// serves the whole backing file and reports the window.
 	flacs, err := filepath.Glob(filepath.Join(h.library, "alpha*"))

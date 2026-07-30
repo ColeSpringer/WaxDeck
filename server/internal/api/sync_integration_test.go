@@ -569,6 +569,9 @@ func TestDownloadOriginal(t *testing.T) {
 	if f.FileName != "alpha.flac" {
 		t.Fatalf("fileName = %q, want alpha.flac", f.FileName)
 	}
+	if f.DurationMs == nil || *f.DurationMs != alpha.DurationMs {
+		t.Fatalf("durationMs = %v, want the item's own %d", f.DurationMs, alpha.DurationMs)
+	}
 	if info.SpanStartMs != nil {
 		t.Fatal("whole-file item carries a span")
 	}

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../player/play_progress.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import 'podcast_shelves.dart';
@@ -165,7 +166,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
       // this wrote past all of them.
       if (done > 0) {
         container.invalidate(episodesProvider(widget.pid));
-        container.invalidate(episodeProgressProvider);
+        container.invalidate(playProgressProvider);
         // The hub's tile draws the show's unplayed backlog, which is
         // exactly the number this just changed, and it comes from the
         // subscription row rather than from anything the show screen

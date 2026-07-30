@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart';
+import 'package:waxdeck/src/artwork/artwork_store.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 
 /// In-memory repository for widget tests. Pagination uses the item index as
 /// the cursor, which is enough to exercise keyset-style paging end to end.
@@ -481,7 +484,12 @@ class FakeRepository implements WaxDeckRepository {
     playCount: finishedPids.contains(pid) ? 1 : 0,
     starred: starredByPid[pid] ?? false,
     rating: ratingByPid[pid],
+    updatedAt: playStateUpdatedAt[pid],
   );
+
+  /// When each position was last written, for the surfaces ordered by
+  /// recency (a continue-listening shelf).
+  final Map<String, DateTime> playStateUpdatedAt = {};
 
   /// Holds every checkpoint until completed, so a test can stand a
   /// write up mid-flight and act around it.
@@ -4128,13 +4136,29 @@ BookDetail testBook(
   List<ChapterMark>? chapters,
   BookSettings? settings,
   String? descriptionHtml,
+  String? subtitle,
+  String? series,
+  String? seriesSequence,
+  String? publisher,
+  String? isbn,
+  String? asin,
+  String? edition,
+  bool? abridged,
 }) {
   final partMs = durationMs ~/ partCount;
   return BookDetail(
     pid: pid,
     title: title,
+    subtitle: subtitle,
     authors: authors,
     narrators: narrators,
+    series: series,
+    seriesSequence: seriesSequence,
+    publisher: publisher,
+    isbn: isbn,
+    asin: asin,
+    edition: edition,
+    abridged: abridged,
     durationMs: durationMs,
     descriptionHtml: descriptionHtml,
     chapters: chapters ?? const [],
@@ -4144,4 +4168,136 @@ BookDetail testBook(
     ],
     settings: settings,
   );
+}
+
+/// A downloads port over a map of what is "on disk", for the playback
+/// and downloads-manager tests.
+///
+/// The verbs record rather than pretend: a screen under test asserts
+/// against [removed], [canceled], [paused], and [downloaded] instead of
+/// against a filesystem this has none of.
+class FakeDownloads implements DownloadManagerPort {
+  FakeDownloads({
+    Map<String, LocalPlayback>? local,
+    List<DownloadedItem>? items,
+  }) : byPid = local ?? <String, LocalPlayback>{},
+       _items = items ?? <DownloadedItem>[];
+
+  final Map<String, LocalPlayback> byPid;
+  List<DownloadedItem> _items;
+
+  final removed = <String>[];
+  final canceled = <String>[];
+  final paused = <String>[];
+  final resumed = <String>[];
+  final downloaded = <String>[];
+
+  /// What [pause] answers; false is a transfer the plugin would not pause.
+  bool pausable = true;
+
+  final _progress = StreamController<DownloadProgress>.broadcast();
+
+  void emit(DownloadProgress progress) => _progress.add(progress);
+
+  void setStored(List<DownloadedItem> items) => _items = items;
+
+  @override
+  Future<LocalPlayback?> localFor(String pid) async => byPid[pid];
+
+  @override
+  Future<bool> isComplete(String pid) async => byPid.containsKey(pid);
+
+  @override
+  Future<void> download(String pid) async => downloaded.add(pid);
+
+  @override
+  Future<void> remove(String pid) async {
+    removed.add(pid);
+    byPid.remove(pid);
+    _items = _items.where((i) => i.pid != pid).toList();
+  }
+
+  @override
+  Future<List<DownloadedItem>> stored() async => _items;
+
+  @override
+  Future<void> cancel(String pid) async {
+    canceled.add(pid);
+    _items = _items.where((i) => i.pid != pid).toList();
+  }
+
+  @override
+  Future<bool> pause(String pid) async {
+    paused.add(pid);
+    return pausable;
+  }
+
+  @override
+  Future<void> resume(String pid) async => resumed.add(pid);
+
+  @override
+  Stream<DownloadProgress> get progress => _progress.stream;
+
+  void dispose() => _progress.close();
+}
+
+/// One downloaded file "on disk", for [FakeDownloads].
+LocalPlayback testLocal(
+  String path, {
+  int? durationMs,
+  int? spanStartMs,
+  int? spanEndMs,
+}) => LocalPlayback(
+  parts: <LocalPart>[LocalPart(path: path, durationMs: durationMs)],
+  spanStartMs: spanStartMs,
+  spanEndMs: spanEndMs,
+);
+
+/// A multi-part book "on disk": equal parts of [partMs] each, named after
+/// their index.
+LocalPlayback testLocalParts(
+  int count, {
+  int partMs = 60000,
+  String prefix = '/downloads/part',
+  bool durations = true,
+}) => LocalPlayback(
+  parts: <LocalPart>[
+    for (var i = 0; i < count; i++)
+      LocalPart(path: '$prefix$i.flac', durationMs: durations ? partMs : null),
+  ],
+);
+
+/// An artwork store that records what was pinned and unpinned and reaches
+/// no network. For the surfaces whose contract is a pair of calls.
+class FakeArtworkStore extends ArtworkStore {
+  final List<String> pinned = <String>[];
+  final List<String> unpinned = <String>[];
+
+  @override
+  String get baseUrl => '';
+
+  @override
+  ImageProvider? imageFor(String? artUrl, int px) => null;
+
+  @override
+  Future<Uint8List?> bytesFor(String artUrl, int px) async => null;
+
+  @override
+  Future<void> warm(String artUrl, int px) async {}
+
+  @override
+  Future<void> pinForOffline(String pid, String? artUrl) async =>
+      pinned.add(pid);
+
+  @override
+  Future<void> unpin(String pid) async => unpinned.add(pid);
+
+  @override
+  Future<void> evict(String artUrl) async {}
+
+  @override
+  Future<void> forgetEverything() async {}
+
+  @override
+  void dispose() {}
 }

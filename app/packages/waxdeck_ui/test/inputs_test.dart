@@ -288,6 +288,52 @@ void main() {
     }
   });
 
+  group('MediaCard.heightFor', () {
+    for (final scale in <double>[1, 1.5]) {
+      testWidgets('a long trailing readout stays inside the cell at '
+          '${scale}x text', (tester) async {
+        // The card reserves one caption line for the trailing readout, so
+        // a readout that wrapped overflowed the cell by exactly one line
+        // — which a book's "1 hr 20 min left" did on the audiobooks hub.
+        await tester.pumpWidget(
+          MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+            child: _host(
+              Builder(
+                builder: (context) => SizedBox(
+                  height: MediaCard.heightFor(context, width: 120),
+                  child: const MediaCard(
+                    width: 120,
+                    data: MediaTileData(
+                      title: 'A Very Long Book Title That Wraps Twice Over',
+                      subtitle: 'An Author With A Long Name',
+                      trailingText: '11 hr 20 min left of this one',
+                    ),
+                  ),
+                ),
+              ),
+              height: 600,
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull, reason: 'at ${scale}x');
+      });
+    }
+  });
+
+  group('formatSpan', () {
+    test('answers how much, not what time it is', () {
+      expect(formatSpan(const Duration(hours: 6)), '6 hr');
+      expect(formatSpan(const Duration(hours: 1, minutes: 20)), '1 hr 20 min');
+      expect(formatSpan(const Duration(minutes: 45)), '45 min');
+      // Minutes are noise past ten hours, and a span under a minute is
+      // still a minute rather than none.
+      expect(formatSpan(const Duration(hours: 12, minutes: 40)), '12 hr');
+      expect(formatSpan(const Duration(seconds: 20)), '1 min');
+      expect(formatSpan(Duration.zero), '1 min');
+    });
+  });
+
   group('fastScrollLetter', () {
     test('names the row a label belongs under', () {
       expect(fastScrollLetter('Nightjar'), 'N');

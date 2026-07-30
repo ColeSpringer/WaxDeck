@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/podcasts/mark_older_played_dialog.dart';
-import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -121,9 +121,9 @@ void main() {
     final container = await _open(tester, repo);
 
     // Something is watching the progress read, as the show's list is.
-    final key = episodePidsKey(<String>['tr-ep7']);
-    await container.read(episodeProgressProvider(key).future);
-    final before = container.read(episodeProgressProvider(key));
+    final key = playPidsKey(<String>['tr-ep7']);
+    await container.read(playProgressProvider(key).future);
+    final before = container.read(playProgressProvider(key));
 
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.markOlderConfirm));
     await tester.pump();
@@ -134,7 +134,7 @@ void main() {
 
     expect(repo.putPlayStateCalls, isNotEmpty);
     expect(
-      identical(container.read(episodeProgressProvider(key)), before),
+      identical(container.read(playProgressProvider(key)), before),
       isFalse,
       reason: 'a cancelled run still invalidates what it wrote past',
     );

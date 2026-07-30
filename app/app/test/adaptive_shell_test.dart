@@ -24,6 +24,7 @@ import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/side_panel.dart';
+import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -32,6 +33,7 @@ import 'fakes.dart';
 
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const _episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
+const _bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 
 const _admin = WaxDeckUser(
   id: 'us-1',
@@ -46,6 +48,8 @@ Future<ProviderContainer> _pumpShell(
   WidgetTester tester, {
   Size size = const Size(1000, 900),
   WaxDeckUser user = _admin,
+  bool hasBooks = true,
+  bool hasDownloads = true,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -62,12 +66,27 @@ Future<ProviderContainer> _pumpShell(
           // the chrome highlights, not about a failed fetch.
           ..episodesByShow[_showPid] = <EpisodeSummary>[
             testEpisode(_episodePid),
-          ],
+          ]
+          // A library with a book in it, because the Audiobooks tab hides
+          // where there are none; the false case is its own test.
+          ..libraryItems.addAll(<ItemSummary>[
+            if (hasBooks)
+              testItem(
+                _bookPid,
+                mediaType: MediaType.audiobook,
+                title: 'There And Back Again',
+              ),
+          ])
+          ..books[_bookPid] = testBook(_bookPid),
       ),
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
       // The shell hosts the deck bar, so mounting it builds playback:
       // the real engine wants platform channels no widget test has.
       audioEngineProvider.overrideWithValue(FakeEngine()),
+      // Downloads is a native destination, and a widget test has no
+      // manager unless it is given one.
+      if (hasDownloads)
+        downloadManagerProvider.overrideWithValue(FakeDownloads()),
     ],
   );
   addTearDown(container.dispose);
@@ -177,6 +196,67 @@ void main() {
     expect(router.canPop(), isTrue);
   });
 
+  group('a domain with nothing behind it', () {
+    Finder navFor(WaxNavTarget target) => find.byWidgetPredicate(
+      (widget) =>
+          widget is Semantics &&
+          widget.properties.identifier ==
+              SemanticsIds.navDestination(target.name),
+    );
+
+    testWidgets('loses its tab, and home absorbs the gap', (tester) async {
+      // The layout system's rule, and the answer to the tab count a fifth
+      // domain forces: a library with no audiobooks is not offered a
+      // books tab. The routes stay declared either way, so a shared link
+      // into one still resolves.
+      await _pumpShell(tester, hasBooks: false);
+      expect(navFor(WaxNavTarget.books), findsNothing);
+      expect(navFor(WaxNavTarget.podcasts), findsWidgets);
+      expect(navFor(WaxNavTarget.home), findsWidgets);
+    });
+
+    testWidgets('keeps its tab where the library has one', (tester) async {
+      await _pumpShell(tester);
+      expect(navFor(WaxNavTarget.books), findsWidgets);
+    });
+
+    testWidgets('a book is still reachable by location without the tab', (
+      tester,
+    ) async {
+      final container = await _pumpShell(tester, hasBooks: false);
+      container.read(routerProvider).go(WaxRoute.book(_bookPid));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BookScreen), findsOneWidget);
+      // And the chrome lights nothing rather than lying about where the
+      // visitor is. The branch on screen still names its domain — that is
+      // what keeps a drill-in from lighting Home — but the chrome is not
+      // drawing that destination, so no row is selected.
+      final frame = tester.widget<WaxShellFrame>(find.byType(WaxShellFrame));
+      expect(frame.selected, WaxNavTarget.books.name);
+      expect(
+        frame.destinations.map((d) => d.name),
+        isNot(contains(WaxNavTarget.books.name)),
+      );
+    });
+
+    // Two mounts in one body would tear the first app down with its
+    // timers pending, which is why every width above is its own test.
+    testWidgets('downloads is absent where this build keeps none', (
+      tester,
+    ) async {
+      await _pumpShell(tester, hasDownloads: false);
+      expect(navFor(WaxNavTarget.downloads), findsNothing);
+    });
+
+    testWidgets('downloads is offered where this build keeps some', (
+      tester,
+    ) async {
+      await _pumpShell(tester);
+      expect(navFor(WaxNavTarget.downloads), findsWidgets);
+    });
+  });
+
   testWidgets('every destination is exposed to assistive tech and the suite', (
     tester,
   ) async {
@@ -258,9 +338,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(_selected(tester), WaxNavTarget.podcasts.name);
 
-    container.read(routerProvider).go(WaxRoute.book('bk-1'));
+    container.read(routerProvider).go(WaxRoute.book(_bookPid));
     await tester.pumpAndSettle();
-    expect(_selected(tester), WaxNavTarget.home.name);
+    expect(_selected(tester), WaxNavTarget.books.name);
 
     container.read(routerProvider).go(WaxRoute.trash);
     await tester.pumpAndSettle();
@@ -327,10 +407,10 @@ void main() {
   testWidgets('a pushed excursion keeps the stack it came from', (
     tester,
   ) async {
-    // A book is declared under home, so `go` from anywhere else rebuilds
-    // that ancestry and takes the stack with it — here, a drilled genre
-    // three levels into the music branch. Pushing is what makes the
-    // excursion an excursion.
+    // A book is declared under the audiobooks hub, so `go` from anywhere
+    // else rebuilds that ancestry and takes the stack with it — here, a
+    // drilled genre three levels into the music branch. Pushing is what
+    // makes the excursion an excursion.
     final container = await _pumpShell(tester);
     final router = container.read(routerProvider);
 
@@ -338,7 +418,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MusicListingScreen), findsOneWidget);
 
-    router.push<void>(WaxRoute.book('bk-1'));
+    router.push<void>(WaxRoute.book(_bookPid));
     await tester.pumpAndSettle();
     expect(find.byType(BookScreen), findsOneWidget);
 
@@ -564,7 +644,7 @@ void main() {
       expect(activeNavTarget(WaxRoute.home, targets), WaxNavTarget.home);
       expect(
         activeNavTarget(WaxRoute.book('bk-1'), targets),
-        WaxNavTarget.home,
+        WaxNavTarget.books,
       );
       expect(
         activeNavTarget(WaxRoute.show(_showPid), targets),
@@ -599,9 +679,11 @@ void main() {
         activeNavTarget(WaxRoute.show('pc-1'), targets, branchIndex: 0),
         WaxNavTarget.podcasts,
       );
-      // Home's own branch still answers home.
+      // Home's own branch still answers home, for a location only home
+      // claims — every domain's own drill-ins are claimed by prefix now
+      // that the last of them has a hub.
       expect(
-        activeNavTarget(WaxRoute.book('bk-1'), targets, branchIndex: 0),
+        activeNavTarget(WaxRoute.home, targets, branchIndex: 0),
         WaxNavTarget.home,
       );
       // And the shared branch names no destination, so a location nothing

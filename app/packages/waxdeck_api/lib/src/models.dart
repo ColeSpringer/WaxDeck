@@ -723,6 +723,7 @@ class DownloadFileInfo {
     required this.fileName,
     required this.essenceHash,
     required this.etag,
+    this.durationMs,
   });
 
   /// Media-token-authenticated download URL, resolved against the
@@ -731,6 +732,11 @@ class DownloadFileInfo {
   final String mimeType;
   final int sizeBytes;
   final String fileName;
+
+  /// This file's own duration, null when the catalog does not know it.
+  /// A part of a multi-file book reports the part's; a carved item
+  /// reports the containing file's, with the span naming its window.
+  final int? durationMs;
 
   /// Content hash of the audio essence: the download-store key, stable
   /// across retags and moves.

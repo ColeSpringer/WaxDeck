@@ -14,6 +14,8 @@ class _$DownloadFile extends DownloadFile {
   @override
   final int sizeBytes;
   @override
+  final int? durationMs;
+  @override
   final String fileName;
   @override
   final String essenceHash;
@@ -27,6 +29,7 @@ class _$DownloadFile extends DownloadFile {
     required this.url,
     required this.mimeType,
     required this.sizeBytes,
+    this.durationMs,
     required this.fileName,
     required this.essenceHash,
     required this.etag,
@@ -45,6 +48,7 @@ class _$DownloadFile extends DownloadFile {
         url == other.url &&
         mimeType == other.mimeType &&
         sizeBytes == other.sizeBytes &&
+        durationMs == other.durationMs &&
         fileName == other.fileName &&
         essenceHash == other.essenceHash &&
         etag == other.etag;
@@ -56,6 +60,7 @@ class _$DownloadFile extends DownloadFile {
     _$hash = $jc(_$hash, url.hashCode);
     _$hash = $jc(_$hash, mimeType.hashCode);
     _$hash = $jc(_$hash, sizeBytes.hashCode);
+    _$hash = $jc(_$hash, durationMs.hashCode);
     _$hash = $jc(_$hash, fileName.hashCode);
     _$hash = $jc(_$hash, essenceHash.hashCode);
     _$hash = $jc(_$hash, etag.hashCode);
@@ -69,6 +74,7 @@ class _$DownloadFile extends DownloadFile {
           ..add('url', url)
           ..add('mimeType', mimeType)
           ..add('sizeBytes', sizeBytes)
+          ..add('durationMs', durationMs)
           ..add('fileName', fileName)
           ..add('essenceHash', essenceHash)
           ..add('etag', etag))
@@ -92,6 +98,10 @@ class DownloadFileBuilder
   int? get sizeBytes => _$this._sizeBytes;
   set sizeBytes(int? sizeBytes) => _$this._sizeBytes = sizeBytes;
 
+  int? _durationMs;
+  int? get durationMs => _$this._durationMs;
+  set durationMs(int? durationMs) => _$this._durationMs = durationMs;
+
   String? _fileName;
   String? get fileName => _$this._fileName;
   set fileName(String? fileName) => _$this._fileName = fileName;
@@ -114,6 +124,7 @@ class DownloadFileBuilder
       _url = $v.url;
       _mimeType = $v.mimeType;
       _sizeBytes = $v.sizeBytes;
+      _durationMs = $v.durationMs;
       _fileName = $v.fileName;
       _essenceHash = $v.essenceHash;
       _etag = $v.etag;
@@ -154,6 +165,7 @@ class DownloadFileBuilder
             r'DownloadFile',
             'sizeBytes',
           ),
+          durationMs: durationMs,
           fileName: BuiltValueNullFieldError.checkNotNull(
             fileName,
             r'DownloadFile',

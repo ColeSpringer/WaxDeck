@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'database.dart';
 import 'downloads_port.dart';
+import 'transfer_engine.dart';
 
 /// Web stub: the browser build keeps no offline downloads yet, so the
 /// manager is never constructed there (providers hand out null).
@@ -12,6 +13,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     required MirrorDatabase db,
     required WaxDeckRepository repository,
     required String baseUrl,
+    TransferEnginePort? engine,
   }) {
     throw UnsupportedError('downloads are not supported on the web build');
   }
@@ -29,6 +31,18 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   @override
   Future<bool> isComplete(String pid) => throw UnsupportedError('web');
+
+  @override
+  Future<List<DownloadedItem>> stored() => throw UnsupportedError('web');
+
+  @override
+  Future<void> cancel(String pid) => throw UnsupportedError('web');
+
+  @override
+  Future<bool> pause(String pid) => throw UnsupportedError('web');
+
+  @override
+  Future<void> resume(String pid) => throw UnsupportedError('web');
 
   @override
   Stream<DownloadProgress> get progress => const Stream.empty();

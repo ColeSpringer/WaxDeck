@@ -1001,6 +1001,20 @@ components:
           type: integer
           format: int64
           description: Exact size of the file in bytes.
+        durationMs:
+          type: integer
+          format: int64
+          description: >
+            This file's own duration in milliseconds, absent when the
+            catalog does not know it (a file no scan could probe).
+
+            It is the file's duration, not the item's, and the two differ
+            in both directions: each part of a multi-file audiobook
+            reports its own, so a client holding the downloaded parts can
+            place a book-timeline position in one of them without asking
+            the server; and an item carved out of a larger file reports
+            the containing file's duration, with `spanStartMs` and
+            `spanEndMs` giving the item's window inside it.
         fileName:
           type: string
           description: >

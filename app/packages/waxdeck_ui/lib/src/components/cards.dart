@@ -230,8 +230,9 @@ class _MediaCardState extends State<MediaCard> {
         data.title,
         data.subtitle,
         // Drawn on the card, so announced too, as a row's is:
-        // `excludeSemantics` below hides the Text itself.
-        data.trailingText,
+        // `excludeSemantics` below hides the Text itself. The spoken form
+        // wins where the drawn one is abbreviated.
+        data.trailingSpoken ?? data.trailingText,
         if (data.progress != null)
           '${((data.progress ?? 0) * 100).round()} percent played',
       ].nonNulls.join(', '),
@@ -288,6 +289,14 @@ class _MediaCardState extends State<MediaCard> {
                   if (data.trailingText != null)
                     Text(
                       data.trailingText!,
+                      // Clamped like every other line in the card, and
+                      // for a load-bearing reason: [heightFor] reserves
+                      // one caption line for this, so a readout that
+                      // wrapped would overflow the cell by exactly one
+                      // line — which is what a book's "1 hr 20 min left"
+                      // did.
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: WaxType.caption.copyWith(
                         color: colors.textTertiary,
                       ),
@@ -448,7 +457,7 @@ class MediaListRow extends StatelessWidget {
         if (data.unplayed) 'Unplayed',
         data.title,
         data.subtitle,
-        data.trailingText,
+        data.trailingSpoken ?? data.trailingText,
       ].nonNulls.join(', '),
       excludeSemantics: true,
       onTap: onTap,

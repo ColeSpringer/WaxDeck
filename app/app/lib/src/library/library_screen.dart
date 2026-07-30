@@ -27,8 +27,10 @@ class LibraryScreen extends ConsumerWidget {
   void _openPlayer(BuildContext context, WidgetRef ref, ItemSummary item) {
     // Audiobooks route through their detail screen (resume, chapters,
     // settings); music and downloaded podcast episodes play directly.
+    // Pushed: a book is declared under the audiobooks hub, so `go` would
+    // rebuild that ancestry and discard this grid.
     if (item.mediaType == MediaType.audiobook) {
-      context.go(WaxRoute.book(item.pid));
+      context.push(WaxRoute.book(item.pid));
       return;
     }
     // One item: this grid mixes media types and pages as it scrolls, so

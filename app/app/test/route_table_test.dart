@@ -9,6 +9,8 @@ import 'package:waxdeck/src/admin/users_screen.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
+import 'package:waxdeck/src/books/books_screen.dart';
+import 'package:waxdeck/src/downloads/downloads_screen.dart';
 import 'package:waxdeck/src/health/diagnostics_screen.dart';
 import 'package:waxdeck/src/health/health_screen.dart';
 import 'package:waxdeck/src/library/library_screen.dart';
@@ -99,8 +101,10 @@ final _locations = <String, Type>{
   // show-less one a search hit opens and an older link still carries.
   WaxRoute.showEpisode('pc-1', 'ep-1'): EpisodeScreen,
   WaxRoute.episode('ep-1'): EpisodeScreen,
+  WaxRoute.books: BooksScreen,
   WaxRoute.book('bk-1'): BookScreen,
   WaxRoute.radio: RadioScreen,
+  WaxRoute.downloads: DownloadsScreen,
   // A view of whatever is playing, so it carries no payload and a
   // reload lands back on it.
   WaxRoute.nowPlaying: PlayerScreen,

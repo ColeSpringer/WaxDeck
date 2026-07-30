@@ -250,7 +250,13 @@ class _UpNextShelf extends ConsumerWidget {
           progress: row.progress.fractionOf(row.episode.durationMs),
           trailingText: _remaining(row),
           downloaded: row.episode.downloaded,
-          semanticsId: SemanticsIds.episode(row.episode.pid),
+          // Its own handle, not the row identifier the Latest list and
+          // the show's own list use. The two shelves overlap by
+          // definition — `unplayed` is below the played threshold and
+          // `in-progress` is any saved position, so an episode a third of
+          // the way in is in both — and one handle on two controls makes
+          // a click a strict-mode violation rather than a tap.
+          semanticsId: SemanticsIds.episodeContinue(row.episode.pid),
         ),
     ];
     return Padding(

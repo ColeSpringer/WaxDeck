@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../player/play_progress.dart';
 import '../providers.dart';
-import 'podcasts_controller.dart';
 
 /// One row of a hub shelf: an episode of a followed show with the
 /// caller's position beside it.
@@ -10,7 +10,7 @@ class ShelfEpisode {
   const ShelfEpisode({required this.episode, required this.progress});
 
   final EpisodeSummary episode;
-  final EpisodeProgress progress;
+  final PlayProgress progress;
 
   /// The show, as the row names it.
   String? get showTitle => episode.artist ?? episode.album;
@@ -49,15 +49,15 @@ Future<List<ShelfEpisode>> _shelf(
   if (!withProgress) {
     return <ShelfEpisode>[
       for (final episode in page.items)
-        ShelfEpisode(episode: episode, progress: EpisodeProgress.none),
+        ShelfEpisode(episode: episode, progress: PlayProgress.none),
     ];
   }
   final states = await repository.listPlayStates([
     for (final episode in page.items) episode.pid,
   ]);
-  final byPid = <String, EpisodeProgress>{
+  final byPid = <String, PlayProgress>{
     for (final state in states)
-      state.pid: EpisodeProgress(
+      state.pid: PlayProgress(
         positionMs: state.positionMs,
         played: state.played,
         finished: state.finished,
@@ -67,7 +67,7 @@ Future<List<ShelfEpisode>> _shelf(
     for (final episode in page.items)
       ShelfEpisode(
         episode: episode,
-        progress: byPid[episode.pid] ?? EpisodeProgress.none,
+        progress: byPid[episode.pid] ?? PlayProgress.none,
       ),
   ];
 }

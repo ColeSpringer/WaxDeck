@@ -11,12 +11,18 @@ import (
 // DownloadFile is one downloadable backing file of an item: everything
 // download-info reports and the download handler serves from.
 type DownloadFile struct {
-	FilePID     string
-	Path        string
-	FileName    string
-	MimeType    string
-	Size        int64
-	MTimeNS     int64
+	FilePID  string
+	Path     string
+	FileName string
+	MimeType string
+	Size     int64
+	MTimeNS  int64
+	// DurationMS is this file's own duration, zero when the catalog does
+	// not know it. It is what lets an offline client place a
+	// book-timeline position in one part of a multi-file audiobook
+	// without the server; for a carved item it is the containing file's,
+	// and the span is the item's window inside it.
+	DurationMS  int64
 	EssenceHash string
 	// ETag validates the exact file bytes (size plus mtime, which the
 	// write-temp-then-rename discipline upstream makes a strong pair);
@@ -158,6 +164,7 @@ func (l *Library) downloadFile(ctx context.Context, filePID model.PID) (Download
 		MimeType:    mime,
 		Size:        f.Size,
 		MTimeNS:     f.MTimeNS,
+		DurationMS:  f.DurationMS,
 		EssenceHash: f.EssenceHash,
 		ETag:        fmt.Sprintf("%d-%d", f.Size, f.MTimeNS),
 	}, nil

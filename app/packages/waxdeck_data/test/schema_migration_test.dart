@@ -95,6 +95,63 @@ const _v2Schema = [
       '"catalog_since" TEXT NULL, "server_since" TEXT NULL, PRIMARY KEY ("id"));',
 ];
 
+/// The schema as v3 shipped it. The only version where download_records
+/// carries no per-file duration while everything else is current, which
+/// is the path v4's one-column step actually runs on.
+const _v3Schema = [
+  'CREATE TABLE "artwork_pins" ("pid" TEXT NOT NULL, '
+      '"size_px" INTEGER NOT NULL, "art_url" TEXT NOT NULL, '
+      '"etag" TEXT NOT NULL, "local_path" TEXT NOT NULL, '
+      '"size_bytes" INTEGER NOT NULL, "pinned_at" INTEGER NOT NULL, '
+      'PRIMARY KEY ("pid", "size_px"));',
+  'CREATE TABLE "client_settings" ("key" TEXT NOT NULL, '
+      '"value" TEXT NOT NULL, PRIMARY KEY ("key"));',
+  'CREATE TABLE "download_records" ("pid" TEXT NOT NULL, '
+      '"file_index" INTEGER NOT NULL, "essence_hash" TEXT NOT NULL, '
+      '"etag" TEXT NOT NULL, "file_name" TEXT NOT NULL, '
+      '"local_path" TEXT NOT NULL, "size_bytes" INTEGER NOT NULL, '
+      '"state" TEXT NOT NULL, "span_start_ms" INTEGER NULL, '
+      '"span_end_ms" INTEGER NULL, PRIMARY KEY ("pid", "file_index"));',
+  'CREATE TABLE "mirror_items" ("pid" TEXT NOT NULL, "ulid" TEXT NOT NULL, '
+      '"media_type" TEXT NOT NULL, "title" TEXT NOT NULL, "artist" TEXT NULL, '
+      '"album" TEXT NULL, "duration_ms" INTEGER NOT NULL, '
+      '"sort_key" TEXT NOT NULL, PRIMARY KEY ("pid"), UNIQUE ("ulid"));',
+  'CREATE TABLE "mirror_play_states" ("pid" TEXT NOT NULL, '
+      '"position_ms" INTEGER NOT NULL DEFAULT 0, '
+      '"played" INTEGER NOT NULL DEFAULT 0 CHECK ("played" IN (0, 1)), '
+      '"finished" INTEGER NOT NULL DEFAULT 0 CHECK ("finished" IN (0, 1)), '
+      '"play_count" INTEGER NOT NULL DEFAULT 0, '
+      '"starred" INTEGER NOT NULL DEFAULT 0 CHECK ("starred" IN (0, 1)), '
+      '"rating" INTEGER NULL, "updated_at" INTEGER NULL, PRIMARY KEY ("pid"));',
+  'CREATE TABLE "outbox_listens" ("session_id" TEXT NOT NULL, '
+      '"pid" TEXT NOT NULL, "started_at" INTEGER NOT NULL, '
+      '"ms_played" INTEGER NOT NULL, '
+      '"finished" INTEGER NOT NULL DEFAULT 0 CHECK ("finished" IN (0, 1)), '
+      '"client" TEXT NOT NULL DEFAULT \'\', "skipped_ms" INTEGER NULL, '
+      'PRIMARY KEY ("session_id"));',
+  'CREATE TABLE "outbox_mutations" ("id" INTEGER NOT NULL PRIMARY KEY '
+      'AUTOINCREMENT, "kind" TEXT NOT NULL, "pid" TEXT NOT NULL, '
+      '"position_ms" INTEGER NULL, '
+      '"starred" INTEGER NULL CHECK ("starred" IN (0, 1)), '
+      '"rating" INTEGER NULL, "recorded_at" INTEGER NOT NULL);',
+  'CREATE TABLE "queue_entries" ("queue_id" TEXT NOT NULL, '
+      '"pid" TEXT NOT NULL, "position" INTEGER NOT NULL, '
+      '"source_rank" INTEGER NOT NULL, PRIMARY KEY ("queue_id"));',
+  'CREATE TABLE "queue_meta" ("id" INTEGER NOT NULL DEFAULT 1, '
+      '"current_index" INTEGER NOT NULL DEFAULT 0, '
+      '"shuffled" INTEGER NOT NULL DEFAULT 0 CHECK ("shuffled" IN (0, 1)), '
+      '"repeat" TEXT NOT NULL DEFAULT \'off\', '
+      '"source_kind" TEXT NOT NULL DEFAULT \'unknown\', '
+      '"source_label" TEXT NOT NULL DEFAULT \'\', "source_pid" TEXT NULL, '
+      '"source_rolling" INTEGER NOT NULL DEFAULT 0 '
+      'CHECK ("source_rolling" IN (0, 1)), '
+      '"next_queue_id" INTEGER NOT NULL DEFAULT 0, '
+      '"updated_at" INTEGER NOT NULL, '
+      '"source_cursor" TEXT NOT NULL DEFAULT \'\', PRIMARY KEY ("id"));',
+  'CREATE TABLE "sync_cursors" ("id" INTEGER NOT NULL DEFAULT 1, '
+      '"catalog_since" TEXT NULL, "server_since" TEXT NULL, PRIMARY KEY ("id"));',
+];
+
 /// A database holding what a v1 install would hold, opened through the
 /// current schema so the upgrade path runs on first use.
 MirrorDatabase _upgradedFromV1() {
@@ -150,6 +207,29 @@ MirrorDatabase _upgradedFromV2() {
   );
 }
 
+/// The same, for a v3 install: a downloaded multi-part book already on
+/// disk, whose records carry no per-file durations because v3 had none.
+MirrorDatabase _upgradedFromV3() {
+  return MirrorDatabase(
+    NativeDatabase.memory(
+      setup: (raw) {
+        for (final statement in _v3Schema) {
+          raw.execute(statement);
+        }
+        for (var i = 0; i < 2; i++) {
+          raw.execute(
+            'INSERT INTO download_records (pid, file_index, essence_hash, '
+            'etag, file_name, local_path, size_bytes, state) VALUES '
+            "('bk-A', $i, 'ess$i', '9-9', 'part$i.m4b', "
+            "'/tmp/media/ess$i.m4b', 4194304, 'complete');",
+          );
+        }
+        raw.userVersion = 3;
+      },
+    ),
+  );
+}
+
 /// Every table's columns, as sqlite reports them: name, type, and
 /// whether it is required. What a migration has to end up matching.
 Future<Map<String, List<String>>> _columns(MirrorDatabase db) async {
@@ -180,21 +260,25 @@ void main() {
     // nothing. A dropped column in either one shows up here.
     final upgraded = _upgradedFromV1();
     final fromV2 = _upgradedFromV2();
+    final fromV3 = _upgradedFromV3();
     final fresh = inMemoryMirrorDatabase();
     addTearDown(upgraded.close);
     addTearDown(fromV2.close);
+    addTearDown(fromV3.close);
     addTearDown(fresh.close);
 
     // Touch each database so the create and the upgrade both run.
     await upgraded.select(upgraded.mirrorItems).get();
     await fromV2.select(fromV2.mirrorItems).get();
+    await fromV3.select(fromV3.mirrorItems).get();
     await fresh.select(fresh.mirrorItems).get();
 
     final target = await _columns(fresh);
     expect(await _columns(upgraded), target);
     // Every supported starting point converges on the same schema, so
-    // an install that skipped v2 is not a shape of its own.
+    // an install that skipped a version is not a shape of its own.
     expect(await _columns(fromV2), target);
+    expect(await _columns(fromV3), target);
   });
 
   test('v1 upgrades: rows survive, the new surfaces exist', () async {
@@ -216,7 +300,24 @@ void main() {
     expect(await db.select(db.clientSettings).get(), isEmpty);
 
     final version = await db.customSelect('pragma user_version').getSingle();
-    expect(version.data.values.first, 3);
+    expect(version.data.values.first, 4);
+  });
+
+  test('v3 upgrades: downloaded parts survive without durations', () async {
+    final db = _upgradedFromV3();
+    addTearDown(db.close);
+
+    // The bytes a v3 install already fetched are what an upgrade must
+    // not cost it, and the added column reads null on them — which is
+    // what makes the book unsequenceable rather than misplaced. Asking
+    // for it again is what fills them in.
+    final records = await db.select(db.downloadRecords).get();
+    expect(records, hasLength(2));
+    expect(records.map((r) => r.durationMs), everyElement(isNull));
+    expect(records.first.localPath, '/tmp/media/ess0.m4b');
+
+    final version = await db.customSelect('pragma user_version').getSingle();
+    expect(version.data.values.first, 4);
   });
 
   test('v2 upgrades: the queue survives and gains its cursor', () async {
@@ -236,7 +337,7 @@ void main() {
     expect(await db.select(db.clientSettings).get(), isEmpty);
 
     final version = await db.customSelect('pragma user_version').getSingle();
-    expect(version.data.values.first, 3);
+    expect(version.data.values.first, 4);
   });
 
   test('an upgraded database holds per-device settings', () async {

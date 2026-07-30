@@ -28,14 +28,6 @@ here waits on upstream.
 
 ## Playback and apps
 
-- `[in-repo]` **Offline multi-part audiobooks play only their first file.** The
-  download path stores every part, but offline playback loads
-  `paths.first`, never sequences the rest, and applies the
-  book-timeline resume position to file one. Fixing it needs per-part
-  durations in download-info (small spec addition), offline part
-  resolution mirroring the server's, and advance-on-complete.
-  Surfaced by the direct-playback audit; the offline span-clipping
-  half of that audit's findings is fixed.
 - `[hardware]` **Android UnifiedPush distributor integration.** The server, API,
   and settings surface shipped; the client still needs the
   distributor plugin wrapped behind a WaxDeck-owned interface and a
@@ -84,9 +76,17 @@ here waits on upstream.
   shell owns no app bar, and the screens that do are the ones written
   before the design system existed, so on compact the control takes a
   fixed cell at the trailing end of the tab bar instead. It moves to the
-  bar's trailing slot as the screens are rebuilt on `WaxScaffold`, which
-  is also when the count question lands: a fifth domain tab plus an
-  account cell is six targets on a phone. See ADR-0024.
+  bar's trailing slot once every tab root has a `WaxScaffold` bar to host
+  it, which is home and radio away — the settings and home phases.
+
+  The count question this entry anticipated is settled and is not what is
+  left (ADR-0033): the fifth domain tab hides where the library has
+  nothing behind it, per the layout system's own rule, and the all-five
+  case fits. Five domains plus the account cell gives each tab 59 px at
+  360 px of window against a 54 px selection pill, with every label
+  inside its cell; at 320 px one label ellipsizes and nothing overflows.
+  So the cell is a deviation from where 3.2 puts the avatar, not a
+  crowding problem. See ADR-0024.
 - `[roadmap]` **No wifi-only switch for gapless preloading.** Playback
   prepares the next queue entry 30 seconds before the crossing whenever
   the admission policy allows it (music to music, passthrough stream,
@@ -120,6 +120,18 @@ here waits on upstream.
   It lands with the cast phase, which builds the second condition anyway;
   the radio player face and the keyboard map's volume and mute keys read
   the same state after that. See ADR-0023.
+- `[in-repo]` **The downloads manager reports what WaxDeck holds and not
+  what the device has left.** The storage header adds up used bytes by
+  medium, which is the half a listener can act on; the layout also asks
+  for device free space beside it, and that half is cut rather than faked.
+  Nothing in Dart's own libraries answers how much room a volume has left:
+  `dart:io` has no `statvfs`, `Process.run` is unavailable on iOS
+  altogether, and there is no `df` on Windows, so the subprocess route is
+  broken on the two platforms that matter most for downloads. What it
+  wants is a plugin behind a WaxDeck-owned port per the wrapping rule,
+  which is a pinned dependency and a decision of its own for one number.
+  Worth taking with the next plugin that lands for another reason. See
+  ADR-0033.
 - `[in-repo]` **The web build's per-device settings binding is not covered
   by an automated test.** `BrowserClientSettingsStore` — the probe, the
   fallback to memory, the write-through shadow, the key semantics — is
@@ -599,14 +611,15 @@ here waits on upstream.
   surface the radio slice rebuilds (logo proxy, add-station flow, the
   hub), and building a second one now is work that slice redoes. The chip
   lands with it.
-- `[roadmap]` **Search is one tap further away from a phone's non-music
-  domains.** The layout puts a search control in the top app bar below
-  sidebar width, and the shell owns no top app bar — every screen brings
-  its own — so the control lives on the screens rebuilt so far: the music
-  hub, its indexes and listings, and the library grid, which is the
-  compact landing screen. Podcasts, Radio, and the books screens get it
-  as they are rebuilt, the same way the avatar does; until then search
-  from one of them is Home and then the control.
+- `[roadmap]` **Search is one tap further away from a phone's radio and
+  home screens.** The layout puts a search control in the top app bar
+  below sidebar width, and the shell owns no top app bar — every screen
+  brings its own — so the control lives on the screens rebuilt so far:
+  the music hub with its indexes and listings, the podcast screens, the
+  books hub and book screen, the downloads manager, and the library grid,
+  which is the compact landing screen. Radio gets it with the cast phase
+  and home with the home phase, the same way the avatar does; until then
+  search from radio is Home and then the control.
 - `[in-repo]` **A has-art signal on `FacetBucket`, once artist art
   exists.** The repeated-404 half of this is fixed — `ArtworkStore`
   keeps a negative cache, so a cover the server has answered 404 for is

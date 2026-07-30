@@ -12,6 +12,11 @@ import { SemanticsIds, sem } from './semantics-ids';
 // The audiobook journey: the scanned multi-part fixture book presents
 // one timeline, a position written by another device resolves to the
 // right chapter, and the web client resumes there.
+//
+// Serial, not parallel. Both tests write the fixture book's own play
+// position — one to hand a place over between devices, one to mark it
+// finished — and the suite runs four workers against one server and one
+// account, so the two would otherwise race over the same row.
 
 
 async function fixtureBook(request: APIRequestContext, token: string): Promise<{ pid: string; durationMs: number }> {
@@ -35,76 +40,168 @@ async function fixtureBook(request: APIRequestContext, token: string): Promise<{
   return { pid, durationMs };
 }
 
-test('a multi-part book resumes at the right chapter across devices', async ({ page, request }) => {
-  test.setTimeout(180_000);
-  const token = await ensureAdmin(request);
-  const book = await fixtureBook(request, token);
+test.describe.serial('audiobooks', () => {
+  test('a multi-part book resumes at the right chapter across devices', async ({ page, request }) => {
+    test.setTimeout(180_000);
+    const token = await ensureAdmin(request);
+    const book = await fixtureBook(request, token);
 
-  // The book is one item over three parts with a book-spanning
-  // timeline; chapters cover it end to end.
-  const detailResp = await request.get(`/api/v1/books/${book.pid}`, authed(token));
-  expect(detailResp.ok()).toBeTruthy();
-  const detail = await detailResp.json();
-  expect(detail.parts.length).toBe(3);
-  expect(detail.chapters.length).toBeGreaterThanOrEqual(3);
-  expect(detail.parts[2].startMs).toBeGreaterThan(0);
+    // The book is one item over three parts with a book-spanning
+    // timeline; chapters cover it end to end.
+    const detailResp = await request.get(`/api/v1/books/${book.pid}`, authed(token));
+    expect(detailResp.ok()).toBeTruthy();
+    const detail = await detailResp.json();
+    expect(detail.parts.length).toBe(3);
+    expect(detail.chapters.length).toBeGreaterThanOrEqual(3);
+    expect(detail.parts[2].startMs).toBeGreaterThan(0);
 
-  // Another device leaves off inside the second part.
-  const target = detail.parts[1].startMs + Math.floor(detail.parts[1].durationMs / 2);
-  const checkpoint = await request.put(`/api/v1/items/${book.pid}/play-state`, {
-    ...authed(token),
-    data: { positionMs: target },
+    // Another device leaves off inside the second part.
+    const target = detail.parts[1].startMs + Math.floor(detail.parts[1].durationMs / 2);
+    const checkpoint = await request.put(`/api/v1/items/${book.pid}/play-state`, {
+      ...authed(token),
+      data: { positionMs: target },
+    });
+    expect(checkpoint.ok()).toBeTruthy();
+
+    // The resume endpoint answers with the chapter that position is in.
+    const resumeResp = await request.get(`/api/v1/books/${book.pid}/resume`, authed(token));
+    expect(resumeResp.ok()).toBeTruthy();
+    const resume = await resumeResp.json();
+    expect(resume.positionMs).toBe(target);
+    expect(resume.chapter, 'the resume point carries its chapter').toBeTruthy();
+    expect(resume.chapter.startMs).toBeLessThanOrEqual(target);
+
+    // Play-info resolves the part containing that position.
+    const infoResp = await request.get(
+      `/api/v1/items/${book.pid}/play-info?positionMs=${target}`,
+      authed(token),
+    );
+    expect(infoResp.ok()).toBeTruthy();
+    const info = await infoResp.json();
+    expect(info.partIndex).toBe(1);
+    expect(info.partCount).toBe(3);
+    expect(info.partStartMs).toBe(detail.parts[1].startMs);
+
+    // This device: the book screen shows chapters and resumes there.
+    await page.goto('/');
+    const username = page.getByRole('textbox', { name: 'Username' });
+    await username.waitFor({ timeout: 30_000 });
+    await typeInto(page, username, ADMIN_USER);
+    await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
+    await page.getByRole('button', { name: 'Log in' }).click();
+
+    // Books are their own destination now: the hub, then the book. The
+    // library grid no longer holds them.
+    await clickThrough(
+      page.locator(sem(SemanticsIds.navDestination('books'))),
+      page.locator(sem(SemanticsIds.booksHub)),
+    );
+    const card = page.locator(sem(SemanticsIds.book(book.pid)));
+    await card.waitFor({ timeout: 30_000 });
+    await clickThrough(card, page.locator(sem(SemanticsIds.bookResume)));
+
+    await expect(page.locator(sem(SemanticsIds.chapter(0)))).toBeVisible();
+    await expect(page.locator(sem(SemanticsIds.chapter(2)))).toBeVisible();
+    // A multi-file book says so where a listener is looking at it.
+    await expect(page.locator(sem(SemanticsIds.bookPartsNote))).toBeVisible();
+    await clickThrough(
+      page.locator(sem(SemanticsIds.bookResume)),
+      page.locator(sem(SemanticsIds.playerToggle)),
+    );
+
+    // Playback continues on the book timeline: the next checkpoints land
+    // at or past the cross-device position, never back at zero.
+    await expect
+      .poll(
+        async () => {
+          const resp = await request.get(`/api/v1/items/${book.pid}/play-state`, authed(token));
+          if (!resp.ok()) return 0;
+          return (await resp.json()).positionMs as number;
+        },
+        { timeout: 30_000, message: 'resumed playback should checkpoint past the handoff point' },
+      )
+      .toBeGreaterThanOrEqual(target);
   });
-  expect(checkpoint.ok()).toBeTruthy();
 
-  // The resume endpoint answers with the chapter that position is in.
-  const resumeResp = await request.get(`/api/v1/books/${book.pid}/resume`, authed(token));
-  expect(resumeResp.ok()).toBeTruthy();
-  const resume = await resumeResp.json();
-  expect(resume.positionMs).toBe(target);
-  expect(resume.chapter, 'the resume point carries its chapter').toBeTruthy();
-  expect(resume.chapter.startMs).toBeLessThanOrEqual(target);
+  test('the hub sorts, filters, and marks a book finished', async ({ page, request }) => {
+    test.setTimeout(180_000);
+    const token = await ensureAdmin(request);
+    const book = await fixtureBook(request, token);
 
-  // Play-info resolves the part containing that position.
-  const infoResp = await request.get(
-    `/api/v1/items/${book.pid}/play-info?positionMs=${target}`,
-    authed(token),
-  );
-  expect(infoResp.ok()).toBeTruthy();
-  const info = await infoResp.json();
-  expect(info.partIndex).toBe(1);
-  expect(info.partCount).toBe(3);
-  expect(info.partStartMs).toBe(detail.parts[1].startMs);
+    // Start from nothing heard, so the filters are about a known state.
+    await request.put(`/api/v1/items/${book.pid}/play-state`, {
+      ...authed(token),
+      data: { positionMs: 0 },
+    });
 
-  // This device: the book screen shows chapters and resumes there.
-  await page.goto('/');
-  const username = page.getByRole('textbox', { name: 'Username' });
-  await username.waitFor({ timeout: 30_000 });
-  await typeInto(page, username, ADMIN_USER);
-  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
-  await page.getByRole('button', { name: 'Log in' }).click();
+    await page.goto('/');
+    const username = page.getByRole('textbox', { name: 'Username' });
+    await username.waitFor({ timeout: 30_000 });
+    await typeInto(page, username, ADMIN_USER);
+    await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
+    await page.getByRole('button', { name: 'Log in' }).click();
 
-  const card = page.locator(sem(SemanticsIds.item(book.pid)));
-  await card.waitFor({ timeout: 30_000 });
-  await clickThrough(card, page.locator(sem(SemanticsIds.bookResume)));
+    await clickThrough(
+      page.locator(sem(SemanticsIds.navDestination('books'))),
+      page.locator(sem(SemanticsIds.booksHub)),
+    );
+    const card = page.locator(sem(SemanticsIds.book(book.pid)));
+    await card.waitFor({ timeout: 30_000 });
 
-  await expect(page.locator(sem(SemanticsIds.chapter(0)))).toBeVisible();
-  await expect(page.locator(sem(SemanticsIds.chapter(2)))).toBeVisible();
-  await clickThrough(
-    page.locator(sem(SemanticsIds.bookResume)),
-    page.locator(sem(SemanticsIds.playerToggle)),
-  );
+    // Sort is a standing choice in the overflow, and the shelf redraws
+    // under it rather than reloading.
+    await clickThrough(
+      page.locator(sem(SemanticsIds.booksHubOverflow)),
+      page.locator(sem(SemanticsIds.bookSort('title'))),
+    );
+    await page.locator(sem(SemanticsIds.bookSort('title'))).click({ force: true });
+    await expect(card).toBeVisible();
 
-  // Playback continues on the book timeline: the next checkpoints land
-  // at or past the cross-device position, never back at zero.
-  await expect
-    .poll(
-      async () => {
-        const resp = await request.get(`/api/v1/items/${book.pid}/play-state`, authed(token));
-        if (!resp.ok()) return 0;
-        return (await resp.json()).positionMs as number;
-      },
-      { timeout: 30_000, message: 'resumed playback should checkpoint past the handoff point' },
-    )
-    .toBeGreaterThanOrEqual(target);
+    // Unfinished holds it; finished does not, and says so rather than
+    // leaving an empty grid with no way out.
+    await page
+      .locator(sem(SemanticsIds.bookFinishedFilter('unfinished')))
+      .click({ force: true });
+    await expect(card).toBeVisible();
+    await page
+      .locator(sem(SemanticsIds.bookFinishedFilter('finished')))
+      .click({ force: true });
+    await expect(page.getByText('Nothing matches')).toBeVisible();
+    await expect(card).toBeHidden();
+    await page.getByRole('button', { name: 'Show all books' }).click();
+    await expect(card).toBeVisible();
+
+    // Marking it finished is a position write at the book's own end,
+    // which is what the server derives "finished" from.
+    await clickThrough(card, page.locator(sem(SemanticsIds.bookResume)));
+    await clickThrough(
+      page.locator(sem(SemanticsIds.bookOverflow)),
+      page.locator(sem(SemanticsIds.bookMarkFinished)),
+    );
+    await page.locator(sem(SemanticsIds.bookMarkFinished)).click({ force: true });
+
+    await expect
+      .poll(
+        async () => {
+          const resp = await request.get(`/api/v1/items/${book.pid}/play-state`, authed(token));
+          if (!resp.ok()) return false;
+          return (await resp.json()).finished as boolean;
+        },
+        { timeout: 30_000, message: 'mark finished should be a position write at the end' },
+      )
+      .toBeTruthy();
+
+    // And the undo puts back where the listener was, which was the top.
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect
+      .poll(
+        async () => {
+          const resp = await request.get(`/api/v1/items/${book.pid}/play-state`, authed(token));
+          if (!resp.ok()) return -1;
+          return (await resp.json()).positionMs as number;
+        },
+        { timeout: 30_000, message: 'undo should restore the position it replaced' },
+      )
+      .toBe(0);
+  });
 });
