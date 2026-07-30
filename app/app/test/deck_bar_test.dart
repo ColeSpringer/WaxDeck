@@ -10,7 +10,7 @@ import 'package:waxdeck/src/connect/remote_session.dart';
 import 'package:waxdeck/src/player/autoplay_gate.dart';
 import 'package:waxdeck/src/player/deck_bar_host.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
-import 'package:waxdeck/src/playlists/add_to_playlist_dialog.dart';
+import 'package:waxdeck/src/playlists/add_to_playlist_sheet.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_panel.dart';
@@ -801,7 +801,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.byType(AddToPlaylistDialog), findsOneWidget);
+      expect(find.byType(AddToPlaylistSheet), findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
     });
   });

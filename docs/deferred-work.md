@@ -567,7 +567,13 @@ here waits on upstream.
   feature rather than the shipped playlist artwork: a synced list
   should prefer its source playlist's own thumbnail (the enumeration
   already surfaces one) over the mosaic built from members, which means
-  fetching and storing it on bind and re-checking it on sync.
+  fetching and storing it on bind and re-checking it on sync. The client
+  slots this needs are in place as of the playlists rebuild (ADR-0035):
+  the detail header already draws a chip row under it, so a sync-status
+  chip is a chip rather than a layout, and the overflow is a declared
+  action enum with the cover verbs grouped, so the settings sheet
+  (source binding, sync mode, interval, sync-now with the dry run) is
+  one more case in it.
 
 ## Discovery and stats
 

@@ -1,18 +1,23 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart' show kLongPressTimeout;
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:waxdeck/src/playlists/playlist_cover.dart';
+import 'package:waxdeck/src/artwork/artwork_providers.dart';
+import 'package:waxdeck/src/playlists/add_to_playlist_sheet.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/playlists/rule_editor_screen.dart';
+import 'package:waxdeck/src/playlists/rule_vocabulary.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/routes.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
@@ -23,6 +28,14 @@ const _track = ItemSummary(
   title: 'Prancing Pony Blues',
   artist: 'The Bree Trio',
   durationMs: 214000,
+);
+
+const _second = ItemSummary(
+  pid: 'tr-01JZX5N8QW3F4V9T2B7KD3M9R7',
+  mediaType: MediaType.music,
+  title: 'Barliman Reel',
+  artist: 'The Bree Trio',
+  durationMs: 180000,
 );
 
 Widget _host(FakeRepository repo, Widget home, {FilePickerPort? picker}) =>
@@ -79,6 +92,19 @@ Playlist _covered({
   updatedAt: DateTime.utc(2026),
 );
 
+/// Somebody else's shared list, which this caller may open and not edit.
+Playlist _theirs({String pid = 'pl-THEIRS'}) => Playlist(
+  pid: pid,
+  name: 'House Mix',
+  kind: 'static',
+  visibility: 'shared',
+  ownerName: 'Rosie',
+  isOwner: false,
+  itemCount: 1,
+  createdAt: DateTime.utc(2026),
+  updatedAt: DateTime.utc(2026),
+);
+
 void main() {
   testWidgets('lists playlists and opens the detail screen', (tester) async {
     final repo = FakeRepository(items: const [_track]);
@@ -95,7 +121,53 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Prancing Pony Blues'), findsOneWidget);
-    expect(find.textContaining('Manual playlist'), findsOneWidget);
+    // The header says what the list is, how much is in it, and how long
+    // it runs, summed from the members the wire never totals.
+    expect(
+      find.textContaining('Manual playlist · 1 item · 3 min'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('yours and the server\'s are separate sections', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    await repo.createPlaylist(name: 'Mine', kind: 'static');
+    repo.playlistsByPid['pl-THEIRS'] = _theirs();
+    repo.playlistMembers['pl-THEIRS'] = [_track.pid];
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Yours'), findsOneWidget);
+    expect(find.text('Shared with the server'), findsOneWidget);
+    expect(find.text('Shared by Rosie'), findsOneWidget);
+  });
+
+  testWidgets('one section on its own carries no header', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    await repo.createPlaylist(name: 'Mine', kind: 'static');
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+
+    // A header over the whole screen names nothing.
+    expect(find.text('Yours'), findsNothing);
+    expect(find.text('Shared with the server'), findsNothing);
+  });
+
+  testWidgets('a smart list wears its badge on the card', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    await repo.createPlaylist(
+      name: 'Best of',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'genre', op: 'is', value: 'Rock'),
+        ]),
+      ),
+    );
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Smart'), findsOneWidget);
   });
 
   testWidgets('creates a manual playlist through the dialog', (tester) async {
@@ -103,13 +175,15 @@ void main() {
     await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-add')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistAdd));
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.byKey(const Key('playlist-name-field')),
+      find.bySemanticsIdentifier(SemanticsIds.playlistNameField),
       'Evening',
     );
-    await tester.tap(find.byKey(const Key('playlist-create-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistCreateConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.playlistsByPid.values.map((p) => p.name), contains('Evening'));
@@ -125,10 +199,306 @@ void main() {
     await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-entry-remove-0')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistEntryRemove(0)),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.playlistMembers[created.pid], isEmpty);
+  });
+
+  testWidgets('swiping a member away drops it', (tester) async {
+    final repo = FakeRepository(items: const [_track, _second]);
+    final created = await repo.createPlaylist(
+      name: 'Swipe me',
+      kind: 'static',
+      itemPids: [_track.pid, _second.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    // The row has to leave the tree with the gesture rather than with the
+    // round trip: a Dismissible still built after its own dismissal
+    // throws, which is what an awaited removal would have left it doing.
+    await tester.drag(
+      find.bySemanticsIdentifier(SemanticsIds.playlistEntry(0)),
+      const Offset(500, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.playlistMembers[created.pid], [_second.pid]);
+  });
+
+  testWidgets('dragging a member sends the new order', (tester) async {
+    final repo = FakeRepository(items: const [_track, _second]);
+    final created = await repo.createPlaylist(
+      name: 'Reorder me',
+      kind: 'static',
+      itemPids: [_track.pid, _second.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await _dragUp(tester, 1);
+
+    expect(repo.replacedPlaylistOrders.single, [_second.pid, _track.pid]);
+    expect(repo.playlistMembers[created.pid], [_second.pid, _track.pid]);
+  });
+
+  testWidgets('a row carries the move actions a drag is not', (tester) async {
+    final repo = FakeRepository(items: const [_track, _second]);
+    final created = await repo.createPlaylist(
+      name: 'Reachable',
+      kind: 'static',
+      itemPids: [_track.pid, _second.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    // SliverReorderableList adds none of the move actions
+    // ReorderableListView gives itself, so the rows declare them: a
+    // screen reader and a switch can move an entry without dragging.
+    expect(_moveActionLabels(tester), containsAll(['Move up', 'Move down']));
+  });
+
+  testWidgets('a lost reorder race says so and puts the order back', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track, _second])
+      ..playlistReplaceConflict = true;
+    final created = await repo.createPlaylist(
+      name: 'Contested',
+      kind: 'static',
+      itemPids: [_track.pid, _second.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await _dragUp(tester, 1);
+
+    // The banner carries the server's own sentence: `conflict` covers
+    // three different refusals and only it says which.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistConflict),
+      findsOneWidget,
+    );
+    expect(find.textContaining('changed since'), findsOneWidget);
+    expect(repo.playlistMembers[created.pid], [_track.pid, _second.pid]);
+  });
+
+  testWidgets('the add row searches and appends what is chosen', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track, _second]);
+    repo.searchResults['reel'] = SearchResults(
+      query: 'reel',
+      tracks: [
+        SearchHit(
+          pid: _second.pid,
+          kind: 'track',
+          title: 'Barliman Reel',
+          subtitle: 'The Bree Trio',
+        ),
+      ],
+    );
+    final created = await repo.createPlaylist(
+      name: 'Growing',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistAddField),
+      'reel',
+    );
+    // The search is debounced by 300ms.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistAddResult(0)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.playlistMembers[created.pid], [_track.pid, _second.pid]);
+  });
+
+  testWidgets('a search that finds nothing playable says so', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    // An artist hit and nothing else: a real answer that this row has
+    // nothing to offer from, which is different from not having asked.
+    repo.searchResults['bree'] = const SearchResults(
+      query: 'bree',
+      artists: [SearchHit(pid: 'ar-1', kind: 'artist', title: 'The Bree Trio')],
+    );
+    final created = await repo.createPlaylist(
+      name: 'Empty answer',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistAddField),
+      'bree',
+    );
+    // Nothing while the debounce is still out: an unasked search is not
+    // a search that found nothing.
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('Nothing here to add'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Nothing here to add'), findsOneWidget);
+  });
+
+  testWidgets('a membership write drops the cover it just changed', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track, _second]);
+    repo.playlistsByPid['pl-COVERED'] = _covered();
+    repo.playlistMembers['pl-COVERED'] = [_track.pid, _second.pid];
+    final store = FakeArtworkStore();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          filePickerProvider.overrideWithValue(null),
+          artworkStoreProvider.overrideWithValue(store),
+        ],
+        child: routedHost(
+          const PlaylistScreen(pid: 'pl-COVERED'),
+          pushed: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistEntryRemove(0)),
+    );
+    await tester.pumpAndSettle();
+
+    // The server builds the cover from the first few members and keys it
+    // on their order, so a removal changes it - at the same URL, which
+    // is what every cache keys on.
+    expect(store.evicted, ['/api/v1/items/pl-COVERED/art']);
+  });
+
+  testWidgets('the add-to-playlist sheet appends without opening the list', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    final target = await repo.createPlaylist(name: 'Target', kind: 'static');
+    repo.playlistsByPid[target.pid] = Playlist(
+      pid: target.pid,
+      name: target.name,
+      kind: 'static',
+      visibility: 'private',
+      ownerName: 'me',
+      isOwner: true,
+      itemCount: 0,
+      artUrl: '/api/v1/items/${target.pid}/art',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    final store = FakeArtworkStore();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          filePickerProvider.overrideWithValue(null),
+          artworkStoreProvider.overrideWithValue(store),
+        ],
+        child: routedHost(const AddToPlaylistSheet(item: _track), pushed: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+    repo.playlistItemPageCalls.clear();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.addToPlaylistTarget(target.pid)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.playlistMembers[target.pid], [_track.pid]);
+    // Through the listing rather than the detail: building that notifier
+    // would read the playlist and page its members to add one track.
+    expect(repo.playlistItemPageCalls, isEmpty);
+    // And the cover it just changed is dropped, which needs the artUrl
+    // the listing already holds.
+    expect(store.evicted, ['/api/v1/items/${target.pid}/art']);
+  });
+
+  testWidgets('a smart list shows its rules and no way to reorder', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [_track], total: 1);
+    final created = await repo.createPlaylist(
+      name: 'Recent rock',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode.all([
+          RuleNode.condition(field: 'genre', op: 'is', value: 'Rock'),
+          RuleNode.condition(field: 'addedAt', op: 'inTheLast', value: '90'),
+        ]),
+        limit: 50,
+      ),
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Genre is Rock'), findsOneWidget);
+    expect(find.text('Added at is in the last 90 days'), findsOneWidget);
+    expect(find.text('Limit 50'), findsOneWidget);
+    expect(
+      find.text('Evaluated live, every time this list is opened.'),
+      findsOneWidget,
+    );
+    // Membership is the rule's, so there is nothing to drag and nothing
+    // to remove.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistEntryRemove(0)),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistAddField),
+      findsNothing,
+    );
+  });
+
+  testWidgets('somebody else\'s list offers no edits', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.playlistsByPid['pl-THEIRS'] = _theirs();
+    repo.playlistMembers['pl-THEIRS'] = [_track.pid];
+    await tester.pumpWidget(
+      _host(repo, const PlaylistScreen(pid: 'pl-THEIRS')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Shared by Rosie'), findsOneWidget);
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistRename),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistDelete),
+      findsNothing,
+    );
+    // Exporting somebody else's list is reading it, which this caller may
+    // already do.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportM3u),
+      findsOneWidget,
+    );
   });
 
   testWidgets('rule editor builds a rule, previews, and saves', (tester) async {
@@ -139,26 +509,24 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('rule-add-condition')));
-    await tester.pump();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
+    await tester.pumpAndSettle();
 
-    // The default condition is the first vocabulary field with its
-    // first operator; switch it to a user-state rule.
-    await tester.tap(find.byKey(const Key('rule-field-select')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('rating').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('rule-op-select')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('gte').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('rule-value-field')), '80');
+    // The default condition is the first vocabulary field with its first
+    // operator; switch it to a user-state rule.
+    await _pick(tester, SemanticsIds.ruleField(0), 'Rating');
+    await _pick(tester, SemanticsIds.ruleOp(0), 'is at least');
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.ruleValue(0)),
+      '80',
+    );
 
     // The preview debounce is half a second.
     await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
     expect(find.text('Matches 42 items'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('rule-save')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
     await tester.pumpAndSettle();
 
     final saved = repo.playlistsByPid.values.singleWhere(
@@ -210,8 +578,11 @@ void main() {
     await tester.tap(find.text('edit'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const Key('rule-value-field')), '90');
-    await tester.tap(find.byKey(const Key('rule-save')));
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.ruleValue(0)),
+      '90',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
     await tester.pumpAndSettle();
 
     expect(popped, isNotNull);
@@ -219,6 +590,44 @@ void main() {
     expect(popped!.previousPid, isNull);
     expect(repo.playlistsByPid.containsKey(created.pid), isTrue);
     expect(popped!.rule!.root.nodes.single.value, '90');
+  });
+
+  testWidgets('a negated group round-trips through the not node', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    repo.previewResult = const PlaylistPreview(items: [], total: 0);
+    final created = await repo.createPlaylist(
+      name: 'Not spoken word',
+      kind: 'smart',
+      rule: const SmartRule(
+        root: RuleNode(
+          type: 'not',
+          node: RuleNode.any([
+            RuleNode.condition(
+              field: 'mediaType',
+              op: 'is',
+              value: 'audiobook',
+            ),
+          ]),
+        ),
+      ),
+    );
+    await tester.pumpWidget(_host(repo, RuleEditorScreen(editing: created)));
+    await tester.pumpAndSettle();
+
+    // It opens as an editable group rather than read-only, which is what
+    // a `not` used to get.
+    expect(find.textContaining('read-only'), findsNothing);
+    expect(find.text('None of'), findsWidgets);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
+    await tester.pumpAndSettle();
+
+    final saved = repo.playlistsByPid[created.pid]!;
+    expect(saved.rule!.root.type, 'not');
+    expect(saved.rule!.root.node!.type, 'any');
+    expect(saved.rule!.root.node!.nodes.single.value, 'audiobook');
   });
 
   testWidgets('rule editor sets a random limit mode', (tester) async {
@@ -229,17 +638,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('rule-limit-mode')));
+    await _pick(tester, SemanticsIds.ruleLimitMode, 'at random');
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.ruleLimitValue),
+      '10',
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('at random').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('rule-limit-field')), '10');
-    await tester.pump();
 
     // The sorts card collapses to its random-mode note.
     expect(find.text('A random limit draws its own order.'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('rule-save')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
     await tester.pumpAndSettle();
 
     final saved = repo.playlistsByPid.values.singleWhere(
@@ -257,27 +666,30 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('rule-limit-mode')));
+    await _pick(tester, SemanticsIds.ruleLimitMode, 'by minutes');
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.ruleLimitValue),
+      '60',
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('by minutes').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('rule-limit-field')), '60');
-    await tester.pump();
 
     // A budget without a pinned seed may sort; add one.
-    await tester.tap(find.byKey(const Key('rule-add-sort')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddSort));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('rule-add-sort')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.ruleAddSort),
+      findsOneWidget,
+    );
 
     // Pinning the selection makes the seed supply the order, so the sort
     // card collapses and the staged sort is dropped: the saved rule can
-    // never carry the seed+sort pair the server rejects.
-    await tester.tap(find.byKey(const Key('rule-limit-seed')));
+    // never carry the seed and sort pair the server rejects.
+    await tester.tap(find.byKey(const Key(SemanticsIds.ruleLimitSeed)));
     await tester.pumpAndSettle();
     expect(find.text('A pinned budget draws its own order.'), findsOneWidget);
-    expect(find.byKey(const Key('rule-add-sort')), findsNothing);
+    expect(find.bySemanticsIdentifier(SemanticsIds.ruleAddSort), findsNothing);
 
-    await tester.tap(find.byKey(const Key('rule-save')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
     await tester.pumpAndSettle();
 
     final saved = repo.playlistsByPid.values.singleWhere(
@@ -296,19 +708,23 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('rule-limit-mode')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('at random').last);
-    await tester.pumpAndSettle();
+    await _pick(tester, SemanticsIds.ruleLimitMode, 'at random');
 
     // A random draw needs a positive count; leaving it blank blocks the
     // save so the missing limit is caught here, not as a 400.
-    TextButton saveButton() =>
-        tester.widget<TextButton>(find.byKey(const Key('rule-save')));
+    WaxButton saveButton() => tester.widget<WaxButton>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.ruleSave),
+        matching: find.byType(WaxButton),
+      ),
+    );
     expect(saveButton().onPressed, isNull);
 
-    await tester.enterText(find.byKey(const Key('rule-limit-field')), '10');
-    await tester.pump();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.ruleLimitValue),
+      '10',
+    );
+    await tester.pumpAndSettle();
     expect(saveButton().onPressed, isNotNull);
   });
 
@@ -331,8 +747,8 @@ void main() {
 
     // The condition tree is representable, but the future limit mode is
     // not, so the whole rule opens read-only instead of crashing the
-    // mode dropdown.
-    expect(find.textContaining('opens read-only'), findsOneWidget);
+    // mode picker.
+    expect(find.text('This rule opens read-only'), findsOneWidget);
   });
 
   testWidgets('rule editor builds a relative-date condition', (tester) async {
@@ -343,20 +759,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('rule-add-condition')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('rule-field-select')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleAddCondition));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('addedAt').last);
+    await _pick(tester, SemanticsIds.ruleField(0), 'Added at');
+    await _pick(tester, SemanticsIds.ruleOp(0), 'is in the last');
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.ruleValue(0)),
+      '30',
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('rule-op-select')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('inTheLast').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('rule-value-field')), '30');
-    await tester.pump();
 
-    await tester.tap(find.byKey(const Key('rule-save')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.ruleSave));
     await tester.pumpAndSettle();
 
     final saved = repo.playlistsByPid.values.singleWhere(
@@ -366,37 +779,6 @@ void main() {
     expect(condition.field, 'addedAt');
     expect(condition.op, 'inTheLast');
     expect(condition.value, '30');
-  });
-
-  testWidgets('imports a pasted M3U as a playlist', (tester) async {
-    final repo = FakeRepository(items: const [_track])
-      ..importMatched = 2
-      ..importUnmatched = 1;
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('playlist-import')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('m3u-name-field')),
-      'From Another Player',
-    );
-    await tester.enterText(
-      find.byKey(const Key('m3u-content-field')),
-      '#EXTM3U\n/music/pony.flac\n',
-    );
-    await tester.tap(find.byKey(const Key('m3u-import-confirm')));
-    await tester.pumpAndSettle();
-
-    expect(repo.importedM3uContents.single, contains('/music/pony.flac'));
-    expect(
-      repo.playlistsByPid.values.map((p) => p.name),
-      contains('From Another Player'),
-    );
-    expect(
-      find.textContaining('2 matched, 1 not in the library'),
-      findsOneWidget,
-    );
   });
 
   testWidgets('exports a playlist as M3U with a copy affordance', (
@@ -413,42 +795,30 @@ void main() {
     await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
     await tester.pumpAndSettle();
 
-    // Clipboard rides the platform channel, which has no host in
-    // widget tests; without a mock the copy await never completes.
+    // Clipboard rides the platform channel, which has no host in widget
+    // tests; without a mock the copy await never completes.
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async => null,
     );
 
-    await tester.tap(find.byKey(const Key('playlist-menu')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Export M3U'));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportM3u),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.exportedM3uPids, [created.pid]);
     expect(find.textContaining('Prancing Pony Blues'), findsWidgets);
-    await tester.tap(find.byKey(const Key('m3u-export-copy')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportCopy),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Playlist copied as M3U'), findsOneWidget);
   });
 
-  testWidgets('a playlist with a cover draws it instead of the kind icon', (
-    tester,
-  ) async {
-    final repo = FakeRepository(items: const [_track]);
-    repo.playlistsByPid['pl-COVERED'] = _covered();
-    repo.playlistMembers['pl-COVERED'] = [_track.pid];
-    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
-    await tester.pumpAndSettle();
-
-    // The row hands the cover widget a URL rather than falling through
-    // to the kind icon. (The image itself cannot load in a widget test,
-    // so the drawn result is the error placeholder either way.)
-    final cover = tester.widget<PlaylistCover>(find.byType(PlaylistCover));
-    expect(cover.playlist.artUrl, '/api/v1/items/pl-COVERED/art');
-  });
-
-  testWidgets('a playlist without a cover falls back to the kind icon', (
+  testWidgets('a playlist without a cover falls back to the monogram', (
     tester,
   ) async {
     final repo = FakeRepository(items: const [_track]);
@@ -457,9 +827,10 @@ void main() {
     await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
     await tester.pumpAndSettle();
 
-    final cover = tester.widget<PlaylistCover>(find.byType(PlaylistCover));
-    expect(cover.playlist.artUrl, isNull);
-    expect(find.byIcon(Icons.queue_music), findsOneWidget);
+    // The card is handed no artwork at all, which is what draws the
+    // monogram rather than a broken image.
+    final card = tester.widget<MediaCard>(find.byType(MediaCard));
+    expect(card.data.artwork?.call(64), isNull);
   });
 
   testWidgets('resetting a cover hands the slot back to the generated one', (
@@ -473,9 +844,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-menu')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('playlist-reset-cover')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistResetCover),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -495,13 +868,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-menu')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
     // The hide-when-null port contract is what keeps a platform with no
     // picker from offering a dead action; reset needs no picker and
     // stays.
-    expect(find.byKey(const Key('playlist-set-cover')), findsNothing);
-    expect(find.byKey(const Key('playlist-reset-cover')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistSetCover),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistResetCover),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a picked image is uploaded as the playlist cover', (
@@ -523,9 +902,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-menu')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('playlist-set-cover')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSetCover));
     await tester.pumpAndSettle();
 
     expect(
@@ -559,12 +938,226 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-menu')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('playlist-set-cover')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSetCover));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Could not read that image'), findsOneWidget);
     expect(repo.entityArtworkCalls, isEmpty);
   });
+
+  testWidgets('the add-to-playlist sheet marks the lists already holding it', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    await repo.createPlaylist(
+      name: 'Holds it',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    final empty = await repo.createPlaylist(name: 'Empty', kind: 'static');
+    await tester.pumpWidget(
+      _host(repo, const AddToPlaylistSheet(item: _track)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Already in this list'), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.addToPlaylistTarget(empty.pid)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.playlistMembers[empty.pid], [_track.pid]);
+  });
+
+  testWidgets('the sheet makes a new list and drops the item in it', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    await tester.pumpWidget(
+      _host(repo, const AddToPlaylistSheet(item: _track)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.addToPlaylistNew));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistNameField),
+      'From the player',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistCreateConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    final made = repo.playlistsByPid.values.singleWhere(
+      (p) => p.name == 'From the player',
+    );
+    expect(repo.playlistMembers[made.pid], [_track.pid]);
+  });
+
+  group('rule summaries', () {
+    test('read as phrases rather than as field names', () {
+      expect(
+        describeRule(
+          const SmartRule(
+            root: RuleNode.all([
+              RuleNode.condition(
+                field: 'albumArtist',
+                op: 'isNot',
+                value: 'Various',
+              ),
+              RuleNode.condition(field: 'starred', op: 'is', value: 'true'),
+            ]),
+            sorts: [RuleSort(field: 'playCount', desc: true)],
+            limit: 25,
+            limitMode: 'random',
+          ),
+        ),
+        [
+          'Album artist is not Various',
+          'Starred is yes',
+          'By play count, highest first',
+          '25 at random',
+        ],
+      );
+    });
+
+    test('a date value reads as a day, not as an instant', () {
+      expect(
+        describeCondition(
+          const RuleNode.condition(
+            field: 'addedAt',
+            op: 'after',
+            value: '2026-01-15T00:00:00.000Z',
+          ),
+        ),
+        startsWith('Added at is after 2026-01-1'),
+      );
+    });
+
+    test('a tag key keeps the word its owner typed', () {
+      expect(
+        describeCondition(
+          const RuleNode.condition(
+            field: 'tag.mood',
+            op: 'contains',
+            value: 'rainy',
+          ),
+        ),
+        'Tag: mood contains rainy',
+      );
+    });
+
+    test('a negated group leads with what it excludes', () {
+      expect(
+        describeRule(
+          const SmartRule(
+            root: RuleNode(
+              type: 'not',
+              node: RuleNode.any([
+                RuleNode.condition(
+                  field: 'mediaType',
+                  op: 'is',
+                  value: 'audiobook',
+                ),
+                RuleNode.condition(
+                  field: 'mediaType',
+                  op: 'is',
+                  value: 'podcast',
+                ),
+              ]),
+            ),
+          ),
+        ),
+        ['None of', 'Media type is audiobook', 'Media type is podcast'],
+      );
+    });
+
+    test('a negation over one condition says so rather than heading it', () {
+      expect(
+        describeRule(
+          const SmartRule(
+            root: RuleNode(
+              type: 'not',
+              node: RuleNode.any([
+                RuleNode.condition(field: 'genre', op: 'is', value: 'Ambient'),
+              ]),
+            ),
+          ),
+        ),
+        ['Not', 'Genre is Ambient'],
+      );
+    });
+
+    test('a shape the chip row cannot draw says so instead of lying', () {
+      expect(
+        describeRule(
+          const SmartRule(
+            root: RuleNode.all([
+              RuleNode.any([
+                RuleNode.condition(field: 'genre', op: 'is', value: 'Rock'),
+              ]),
+            ]),
+          ),
+        ),
+        ['Nested conditions'],
+      );
+    });
+  });
+}
+
+/// Drags the row at [index] onto the row above it by its handle.
+///
+/// The target comes from where that row actually is rather than from a
+/// guessed offset: row height moves with the density and the text scale,
+/// and a drag that falls short of the next row reorders nothing.
+Future<void> _dragUp(WidgetTester tester, int index) async {
+  Offset handleAt(int at) => tester.getCenter(
+    find.bySemanticsIdentifier(SemanticsIds.playlistEntryDrag(at)),
+  );
+  final from = handleAt(index);
+  final to = handleAt(index - 1);
+  final gesture = await tester.startGesture(from);
+  // The listener starts the drag on pointer down; the pump lets the list
+  // take it before the move, and the steps let it settle each frame the
+  // way a finger would.
+  await tester.pump(kLongPressTimeout);
+  for (var step = 1; step <= 4; step++) {
+    await gesture.moveTo(Offset.lerp(from, to, step / 4)!);
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  await gesture.up();
+  await tester.pumpAndSettle();
+}
+
+/// Every custom action label the rows declare.
+///
+/// Read off the widgets rather than off the semantics tree: the actions
+/// are what the rows promise, and a test that walks the compiled tree
+/// would be testing the merge rules instead.
+Set<String> _moveActionLabels(WidgetTester tester) => <String>{
+  for (final widget in tester.widgetList<Semantics>(find.byType(Semantics)))
+    for (final action
+        in widget.properties.customSemanticsActions?.keys ??
+            const <CustomSemanticsAction>[])
+      if (action.label != null) action.label!,
+};
+
+/// Chooses [label] in the picker wearing [semanticsId].
+///
+/// A dropdown menu opens into an overlay, so the entry is tapped by its
+/// text; the picker itself is found by its handle, which is what keeps
+/// two pickers on one row apart.
+Future<void> _pick(
+  WidgetTester tester,
+  String semanticsId,
+  String label,
+) async {
+  await tester.tap(find.bySemanticsIdentifier(semanticsId));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
 }

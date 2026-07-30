@@ -131,7 +131,10 @@ class _SubscriptionSettingsSheetState
       await ref
           .read(podcastDetailProvider(widget.pid).notifier)
           .saveSettings(settings);
-      navigator.pop();
+      // Only while this sheet is still up: a save outlives a sheet
+      // somebody swiped away, and popping then takes the show screen
+      // underneath with it.
+      if (mounted) navigator.pop();
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()

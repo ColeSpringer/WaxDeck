@@ -10,7 +10,7 @@ import '../connect/device_picker.dart';
 import '../discovery/discovery_actions.dart';
 import '../library/item_delete.dart';
 import '../media_icons.dart';
-import '../playlists/add_to_playlist_dialog.dart';
+import '../playlists/add_to_playlist_sheet.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/semantics_ids.dart';
 import 'download_action.dart';
@@ -113,10 +113,8 @@ class PlayerScreen extends ConsumerWidget {
                     key: const Key(SemanticsIds.addToPlaylist),
                     tooltip: 'Add to playlist',
                     icon: const Icon(Icons.playlist_add),
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (_) => AddToPlaylistDialog(item: item),
-                    ),
+                    onPressed: () =>
+                        showAddToPlaylistSheet(context, item: item),
                   ),
                 ),
                 Semantics(

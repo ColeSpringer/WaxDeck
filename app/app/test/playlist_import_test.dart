@@ -1,13 +1,16 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/playlists/playlist_import.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 const _track = ItemSummary(
   pid: 'tr-01JZX5N8QW3F4V9T2B7KD3M9R6',
@@ -19,8 +22,21 @@ const _track = ItemSummary(
 
 Widget _host(FakeRepository repo, Widget home) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
-  child: MaterialApp(home: home),
+  child: routedHost(home, pushed: true),
 );
+
+/// Opens the import menu and picks [source].
+Future<void> _openImport(
+  WidgetTester tester,
+  PlaylistImportSource source,
+) async {
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistImport));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.bySemanticsIdentifier(SemanticsIds.playlistImportSource(source.wire)),
+  );
+  await tester.pumpAndSettle();
+}
 
 void main() {
   testWidgets('imports a Spotify CSV and shows the missing report', (
@@ -45,23 +61,18 @@ void main() {
     await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-import')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('playlist-import-source')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Spotify CSV').last);
-    await tester.pumpAndSettle();
-
+    await _openImport(tester, PlaylistImportSource.spotify);
     await tester.enterText(
-      find.byKey(const Key('playlist-import-name')),
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportName),
       'Roadtrip',
     );
     await tester.enterText(
-      find.byKey(const Key('playlist-import-payload')),
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
       'Track Name,Artist Name\nNeon,The Cardinal Waves\n',
     );
-    await tester.tap(find.byKey(const Key('playlist-import-run')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.importPlaylistCalls, hasLength(1));
@@ -70,7 +81,10 @@ void main() {
     expect(call.name, 'Roadtrip');
     expect(call.payload, contains('Neon,The Cardinal Waves'));
 
-    expect(find.byKey(const Key('playlist-import-report')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportReport),
+      findsOneWidget,
+    );
     expect(
       find.text('Created "Roadtrip" with 2 of 3 entries.'),
       findsOneWidget,
@@ -84,21 +98,21 @@ void main() {
     await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-import')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('playlist-import-source')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Text list').last);
-    await tester.pumpAndSettle();
+    await _openImport(tester, PlaylistImportSource.text);
     await tester.enterText(
-      find.byKey(const Key('playlist-import-payload')),
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
       'Nobody - Nothing\n',
     );
-    await tester.tap(find.byKey(const Key('playlist-import-run')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.importPlaylistCalls.single.source, 'text');
-    expect(find.byKey(const Key('playlist-import-report')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportReport),
+      findsOneWidget,
+    );
     expect(find.textContaining('no playlist'), findsOneWidget);
   });
 
@@ -109,18 +123,48 @@ void main() {
     await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-import')));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('m3u-name-field')), 'From M3U');
+    await _openImport(tester, PlaylistImportSource.m3u);
     await tester.enterText(
-      find.byKey(const Key('m3u-content-field')),
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportName),
+      'From M3U',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
       '#EXTM3U\n/music/pony.flac\n',
     );
-    await tester.tap(find.byKey(const Key('m3u-import-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.importedM3uContents, hasLength(1));
     expect(repo.importPlaylistCalls, isEmpty);
+  });
+
+  testWidgets('an M3U import without a name says so and asks again', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+
+    await _openImport(tester, PlaylistImportSource.m3u);
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+      '#EXTM3U\n/music/pony.flac\n',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+    );
+    await tester.pumpAndSettle();
+
+    // Said inside the dialog, which stays open: a snackbar would render
+    // on the scaffold behind the modal route.
+    expect(
+      find.text('An M3U import needs a name for the playlist.'),
+      findsOneWidget,
+    );
+    expect(repo.importedM3uContents, isEmpty);
   });
 
   testWidgets('export portable copies the refs JSON', (tester) async {
@@ -156,9 +200,11 @@ void main() {
     await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-menu')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('playlist-export-portable')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportPortable),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.exportedPortablePids, [created.pid]);
@@ -188,19 +234,15 @@ void main() {
     await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-import')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('playlist-import-source')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Portable JSON').last);
-    await tester.pumpAndSettle();
-
+    await _openImport(tester, PlaylistImportSource.portable);
     await tester.enterText(
-      find.byKey(const Key('playlist-import-payload')),
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
       '{"name":"From Elsewhere","refs":[{"kind":"track","essence":"abc",'
       '"title":"Neon","artist":"The Cardinal Waves","durationMs":180000}]}',
     );
-    await tester.tap(find.byKey(const Key('playlist-import-run')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+    );
     await tester.pumpAndSettle();
 
     // The pasted JSON became structured refs, never a payload, and the
@@ -213,7 +255,10 @@ void main() {
     expect(call.refs, hasLength(1));
     expect(call.refs!.single.title, 'Neon');
     expect(call.refs!.single.essence, 'abc');
-    expect(find.byKey(const Key('playlist-import-report')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportReport),
+      findsOneWidget,
+    );
   });
 
   testWidgets('rejects garbage in the portable source with a message', (
@@ -223,24 +268,36 @@ void main() {
     await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('playlist-import')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('playlist-import-source')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Portable JSON').last);
-    await tester.pumpAndSettle();
-
+    await _openImport(tester, PlaylistImportSource.portable);
     await tester.enterText(
-      find.byKey(const Key('playlist-import-payload')),
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
       'not json at all',
     );
-    await tester.tap(find.byKey(const Key('playlist-import-run')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.importPlaylistCalls, isEmpty);
-    expect(
-      find.text('This is not the copied portable JSON').first,
-      findsOneWidget,
-    );
+    expect(find.text('This is not the copied portable JSON'), findsOneWidget);
+  });
+
+  group('the portable parser', () {
+    test('keeps every ref the export carried', () {
+      final (name, refs) = parsePortablePlaylistJson(
+        '{"name":"Mix","refs":[{"kind":"track","title":"One"},'
+        '{"kind":"track","title":"Two","isrc":"X"}]}',
+      );
+      expect(name, 'Mix');
+      expect(refs.map((r) => r.title), ['One', 'Two']);
+      expect(refs.last.isrc, 'X');
+    });
+
+    test('refuses an export with nothing in it', () {
+      expect(
+        () => parsePortablePlaylistJson('{"name":"Empty","refs":[]}'),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 }

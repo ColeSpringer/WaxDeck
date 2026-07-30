@@ -9,7 +9,7 @@ import '../connect/device_picker.dart';
 import '../connect/remote_session.dart';
 import '../artwork/artwork_providers.dart';
 import '../media_view.dart';
-import '../playlists/add_to_playlist_dialog.dart';
+import '../playlists/add_to_playlist_sheet.dart';
 import '../providers.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_view.dart';
@@ -529,12 +529,7 @@ Future<void> _showActions(
             title: const Text('Add to playlist'),
             onTap: () {
               Navigator.of(sheetContext).pop();
-              unawaited(
-                showDialog<void>(
-                  context: rootContext,
-                  builder: (_) => AddToPlaylistDialog(item: item),
-                ),
-              );
+              unawaited(showAddToPlaylistSheet(rootContext, item: item));
             },
           ),
           ListTile(

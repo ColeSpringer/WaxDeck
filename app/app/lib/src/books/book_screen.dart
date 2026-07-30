@@ -714,7 +714,10 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
             ),
           );
       ref.invalidate(bookDetailProvider(widget.pid));
-      navigator.pop();
+      // Only while this sheet is still up: a save outlives a sheet
+      // somebody swiped away, and popping then takes the book screen
+      // underneath with it.
+      if (mounted) navigator.pop();
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()

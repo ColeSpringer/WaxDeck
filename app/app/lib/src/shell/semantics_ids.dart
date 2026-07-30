@@ -246,23 +246,61 @@ abstract final class SemanticsIds {
   static String starButton(Object scope) => '${scope}star-button';
 
   // playlists: Playlists, their entries, and the smart-rule editor.
-  static const String m3uImportConfirm = 'm3u-import-confirm';
+  static const String addToPlaylistNew = 'add-to-playlist-new';
+  static String addToPlaylistTarget(Object pid) =>
+      'add-to-playlist-target-$pid';
   static String playlist(Object pid) => 'playlist-$pid';
   static const String playlistAdd = 'playlist-add';
+  static const String playlistAddField = 'playlist-add-field';
+  static String playlistAddResult(Object index) => 'playlist-add-result-$index';
+  static const String playlistConflict = 'playlist-conflict';
   static const String playlistCreateConfirm = 'playlist-create-confirm';
+  static String playlistCreateKind(Object kind) => 'playlist-create-kind-$kind';
+  static const String playlistCreateShared = 'playlist-create-shared';
+  static const String playlistDelete = 'playlist-delete';
+  static const String playlistDeleteConfirm = 'playlist-delete-confirm';
   static const String playlistEditRule = 'playlist-edit-rule';
   static String playlistEntry(Object index) => 'playlist-entry-$index';
+  static String playlistEntryDrag(Object index) => 'playlist-entry-drag-$index';
   static String playlistEntryRemove(Object index) =>
       'playlist-entry-remove-$index';
+  static const String playlistExportCopy = 'playlist-export-copy';
+  static const String playlistExportM3u = 'playlist-export-m3u';
   static const String playlistExportPortable = 'playlist-export-portable';
   static const String playlistImport = 'playlist-import';
+  static const String playlistImportName = 'playlist-import-name';
+  static const String playlistImportPayload = 'playlist-import-payload';
+  static const String playlistImportReport = 'playlist-import-report';
   static const String playlistImportRun = 'playlist-import-run';
-  static const String playlistImportSource = 'playlist-import-source';
+  static String playlistImportSource(Object source) =>
+      'playlist-import-source-$source';
+  static const String playlistNameField = 'playlist-name-field';
+  static const String playlistOverflow = 'playlist-overflow';
+  static const String playlistRename = 'playlist-rename';
   static const String playlistResetCover = 'playlist-reset-cover';
+  static const String playlistRuleSummary = 'playlist-rule-summary';
   static const String playlistSetCover = 'playlist-set-cover';
   static const String playlistShareLink = 'playlist-share-link';
+  static const String playlistVisibility = 'playlist-visibility';
   static const String ruleAddCondition = 'rule-add-condition';
+  static const String ruleAddGroup = 'rule-add-group';
+  static const String ruleAddSort = 'rule-add-sort';
+  static String ruleConditionRemove(Object index) =>
+      'rule-condition-remove-$index';
+  static String ruleField(Object index) => 'rule-field-$index';
+  static String ruleGroupMode(Object index) => 'rule-group-mode-$index';
+  static String ruleGroupRemove(Object index) => 'rule-group-remove-$index';
+  static const String ruleLimitMode = 'rule-limit-mode';
+  static const String ruleLimitSeed = 'rule-limit-seed';
+  static const String ruleLimitValue = 'rule-limit-value';
+  static String ruleOp(Object index) => 'rule-op-$index';
+  static const String rulePreviewTotal = 'rule-preview-total';
   static const String ruleSave = 'rule-save';
+  static String ruleSortDirection(Object index) => 'rule-sort-direction-$index';
+  static String ruleSortField(Object index) => 'rule-sort-field-$index';
+  static String ruleSortRemove(Object index) => 'rule-sort-remove-$index';
+  static String ruleValue(Object index) => 'rule-value-$index';
+  static String ruleValueHigh(Object index) => 'rule-value-high-$index';
 
   // podcasts: Podcasts: shows, episodes, and subscription actions.
   static String episode(Object pid) => 'episode-$pid';

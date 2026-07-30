@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_providers.dart';
 import '../providers.dart';
 
 /// The playlists visible to the caller: their own plus every shared
@@ -82,6 +83,32 @@ class PlaylistsController extends AsyncNotifier<List<Playlist>> {
     ref.invalidateSelf();
     return result;
   }
+
+  /// Appends items to [playlist] without opening it.
+  ///
+  /// Not on the detail controller: reaching for its notifier from
+  /// elsewhere builds it, which is a playlist read plus every page of
+  /// its members to add one track.
+  Future<void> appendTo(Playlist playlist, List<String> itemPids) async {
+    if (itemPids.isEmpty) return;
+    await ref.read(repositoryProvider).addPlaylistItems(playlist.pid, itemPids);
+    await evictPlaylistCover(ref, playlist.artUrl);
+    // A no-op while nothing is watching it, which is the case here.
+    ref.invalidate(playlistDetailProvider(playlist.pid));
+    ref.invalidateSelf();
+  }
+}
+
+/// Drops a playlist's cover from every cache holding it.
+///
+/// The server keys the generated cover on a hash of the ordered member
+/// pids, so every membership write regenerates it at the same URL - the
+/// one the caches key on. Pass the URL from before the write. Run even
+/// where the cover may be an upload: the wire does not say which it is,
+/// and being wrong costs one request that answers 304.
+Future<void> evictPlaylistCover(Ref ref, String? artUrl) async {
+  if (artUrl == null) return;
+  await ref.read(artworkStoreProvider).evict(artUrl);
 }
 
 final playlistsProvider =
@@ -97,6 +124,16 @@ class PlaylistView {
 
   final Playlist playlist;
   final List<PlaylistEntry> entries;
+
+  /// How long the whole list runs; the wire carries no playlist
+  /// duration, so it is summed from the members.
+  Duration get duration => Duration(
+    milliseconds: entries.fold(0, (total, e) => total + e.item.durationMs),
+  );
+
+  /// Whether this caller may edit the member list: a smart list's
+  /// membership is its rule, and somebody else's is theirs.
+  bool get isEditable => playlist.isOwner && !playlist.isSmart;
 }
 
 class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
@@ -150,16 +187,60 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
 
   /// Replaces the full member order; this is the reorder primitive. The
   /// stored `updatedAt` rides along as the lost-update guard.
+  ///
+  /// The listing is deliberately not invalidated: a reorder changes
+  /// nothing a card draws. The cover it does change, hence the evict.
   Future<void> reorder(List<String> itemPids) async {
     final base = state.value?.playlist.updatedAt;
+    final cover = state.value?.playlist.artUrl;
     await ref
         .read(repositoryProvider)
         .replacePlaylistItems(pid, itemPids, baseUpdatedAt: base);
+    await evictPlaylistCover(ref, cover);
     ref.invalidateSelf();
   }
 
+  /// Drops the member at [position] in the stored order.
+  ///
+  /// Optimistic: a `Dismissible` still in the tree after its own
+  /// dismissal throws. A refusal puts the list back from the server.
   Future<void> removeAt(int position) async {
-    await ref.read(repositoryProvider).removePlaylistItemAt(pid, position);
+    final current = state.value;
+    final cover = current?.playlist.artUrl;
+    if (current != null) {
+      state = AsyncData<PlaylistView>(
+        PlaylistView(
+          playlist: current.playlist,
+          entries: <PlaylistEntry>[
+            for (final entry in current.entries)
+              if (entry.position != position)
+                // Everything after the hole moves down one, as it does
+                // server-side, so a second removal names a live position.
+                if (entry.position != null && entry.position! > position)
+                  PlaylistEntry(position: entry.position! - 1, item: entry.item)
+                else
+                  entry,
+          ],
+        ),
+      );
+    }
+    try {
+      await ref.read(repositoryProvider).removePlaylistItemAt(pid, position);
+      await evictPlaylistCover(ref, cover);
+    } finally {
+      ref.invalidateSelf();
+      ref.invalidate(playlistsProvider);
+    }
+  }
+
+  /// Appends to the end. The append endpoint rather than a replace:
+  /// adding one track should not stake a claim on the order every other
+  /// device is holding.
+  Future<void> append(List<String> itemPids) async {
+    if (itemPids.isEmpty) return;
+    final cover = state.value?.playlist.artUrl;
+    await ref.read(repositoryProvider).addPlaylistItems(pid, itemPids);
+    await evictPlaylistCover(ref, cover);
     ref.invalidateSelf();
     ref.invalidate(playlistsProvider);
   }
@@ -167,9 +248,11 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
   /// Uploads a cover, which stands in for the one the server generates
   /// from the members until it is reset.
   Future<void> setCover(Uint8List bytes) async {
+    final cover = state.value?.playlist.artUrl;
     await ref
         .read(repositoryProvider)
         .setEntityArtwork('playlist', pid, bytes: bytes);
+    await evictPlaylistCover(ref, cover);
     ref.invalidateSelf();
     ref.invalidate(playlistsProvider);
   }
@@ -177,7 +260,9 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
   /// Drops an uploaded cover, which hands the slot back to the
   /// generated one rather than leaving the playlist bare.
   Future<void> resetCover() async {
+    final cover = state.value?.playlist.artUrl;
     await ref.read(repositoryProvider).clearEntityArtwork('playlist', pid);
+    await evictPlaylistCover(ref, cover);
     ref.invalidateSelf();
     ref.invalidate(playlistsProvider);
   }

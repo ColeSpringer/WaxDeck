@@ -198,7 +198,11 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
               logoUrl: logo.isEmpty ? null : logo,
             );
       }
-      navigator.pop();
+      // Only while this dialog is still up. A save outlives a dialog
+      // somebody dismissed while it was in flight, and popping a
+      // captured navigator then takes whatever is on top instead - the
+      // screen underneath.
+      if (mounted) navigator.pop();
     } on WaxDeckApiException catch (e) {
       // Inline, not a snackbar: this dialog stays open on a refusal, and a
       // snackbar would render behind it. A duplicate stream URL is the
@@ -219,7 +223,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
     final navigator = Navigator.of(context);
     final refusal = await addDirectoryStation(context, ref, entry);
     if (refusal == null) {
-      navigator.pop();
+      if (mounted) navigator.pop();
       return;
     }
     if (mounted) {

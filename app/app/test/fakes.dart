@@ -1285,12 +1285,17 @@ class FakeRepository implements WaxDeckRepository {
     playlistMembers.remove(pid);
   }
 
+  /// Every pid a member page was asked for, so a test can see which
+  /// playlists were opened rather than only written to.
+  final List<String> playlistItemPageCalls = [];
+
   @override
   Future<PlaylistItemsPage> listPlaylistItems(
     String pid, {
     String? cursor,
     int? limit,
   }) async {
+    playlistItemPageCalls.add(pid);
     final pl = await getPlaylist(pid);
     if (pl.isSmart) {
       return PlaylistItemsPage(
@@ -1308,6 +1313,14 @@ class FakeRepository implements WaxDeckRepository {
     );
   }
 
+  /// Makes the next replace answer `conflict`, the way the server does
+  /// when another device edited the list first.
+  var playlistReplaceConflict = false;
+
+  /// The member orders [replacePlaylistItems] was asked for, oldest
+  /// first, refusals included.
+  final List<List<String>> replacedPlaylistOrders = [];
+
   @override
   Future<void> replacePlaylistItems(
     String pid,
@@ -1315,6 +1328,16 @@ class FakeRepository implements WaxDeckRepository {
     DateTime? baseUpdatedAt,
   }) async {
     await getPlaylist(pid);
+    replacedPlaylistOrders.add(List.of(itemPids));
+    if (playlistReplaceConflict) {
+      throw const WaxDeckApiException(
+        code: 'conflict',
+        message:
+            'the playlist changed since this member list was built; '
+            'refetch and retry',
+        statusCode: 409,
+      );
+    }
     playlistMembers[pid] = List.of(itemPids);
   }
 

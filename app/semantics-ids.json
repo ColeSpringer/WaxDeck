@@ -1109,8 +1109,15 @@
       "doc": "Playlists, their entries, and the smart-rule editor.",
       "ids": [
         {
-          "name": "m3uImportConfirm",
-          "id": "m3u-import-confirm"
+          "name": "addToPlaylistNew",
+          "id": "add-to-playlist-new"
+        },
+        {
+          "name": "addToPlaylistTarget",
+          "id": "add-to-playlist-target-{pid}",
+          "params": [
+            "pid"
+          ]
         },
         {
           "name": "playlist",
@@ -1124,8 +1131,42 @@
           "id": "playlist-add"
         },
         {
+          "name": "playlistAddField",
+          "id": "playlist-add-field"
+        },
+        {
+          "name": "playlistAddResult",
+          "id": "playlist-add-result-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "playlistConflict",
+          "id": "playlist-conflict"
+        },
+        {
           "name": "playlistCreateConfirm",
           "id": "playlist-create-confirm"
+        },
+        {
+          "name": "playlistCreateKind",
+          "id": "playlist-create-kind-{kind}",
+          "params": [
+            "kind"
+          ]
+        },
+        {
+          "name": "playlistCreateShared",
+          "id": "playlist-create-shared"
+        },
+        {
+          "name": "playlistDelete",
+          "id": "playlist-delete"
+        },
+        {
+          "name": "playlistDeleteConfirm",
+          "id": "playlist-delete-confirm"
         },
         {
           "name": "playlistEditRule",
@@ -1139,11 +1180,26 @@
           ]
         },
         {
+          "name": "playlistEntryDrag",
+          "id": "playlist-entry-drag-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
           "name": "playlistEntryRemove",
           "id": "playlist-entry-remove-{index}",
           "params": [
             "index"
           ]
+        },
+        {
+          "name": "playlistExportCopy",
+          "id": "playlist-export-copy"
+        },
+        {
+          "name": "playlistExportM3u",
+          "id": "playlist-export-m3u"
         },
         {
           "name": "playlistExportPortable",
@@ -1154,16 +1210,47 @@
           "id": "playlist-import"
         },
         {
+          "name": "playlistImportName",
+          "id": "playlist-import-name"
+        },
+        {
+          "name": "playlistImportPayload",
+          "id": "playlist-import-payload"
+        },
+        {
+          "name": "playlistImportReport",
+          "id": "playlist-import-report"
+        },
+        {
           "name": "playlistImportRun",
           "id": "playlist-import-run"
         },
         {
           "name": "playlistImportSource",
-          "id": "playlist-import-source"
+          "id": "playlist-import-source-{source}",
+          "params": [
+            "source"
+          ]
+        },
+        {
+          "name": "playlistNameField",
+          "id": "playlist-name-field"
+        },
+        {
+          "name": "playlistOverflow",
+          "id": "playlist-overflow"
+        },
+        {
+          "name": "playlistRename",
+          "id": "playlist-rename"
         },
         {
           "name": "playlistResetCover",
           "id": "playlist-reset-cover"
+        },
+        {
+          "name": "playlistRuleSummary",
+          "id": "playlist-rule-summary"
         },
         {
           "name": "playlistSetCover",
@@ -1174,12 +1261,110 @@
           "id": "playlist-share-link"
         },
         {
+          "name": "playlistVisibility",
+          "id": "playlist-visibility"
+        },
+        {
           "name": "ruleAddCondition",
           "id": "rule-add-condition"
         },
         {
+          "name": "ruleAddGroup",
+          "id": "rule-add-group"
+        },
+        {
+          "name": "ruleAddSort",
+          "id": "rule-add-sort"
+        },
+        {
+          "name": "ruleConditionRemove",
+          "id": "rule-condition-remove-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "ruleField",
+          "id": "rule-field-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "ruleGroupMode",
+          "id": "rule-group-mode-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "ruleGroupRemove",
+          "id": "rule-group-remove-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "ruleLimitMode",
+          "id": "rule-limit-mode"
+        },
+        {
+          "name": "ruleLimitSeed",
+          "id": "rule-limit-seed"
+        },
+        {
+          "name": "ruleLimitValue",
+          "id": "rule-limit-value"
+        },
+        {
+          "name": "ruleOp",
+          "id": "rule-op-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "rulePreviewTotal",
+          "id": "rule-preview-total"
+        },
+        {
           "name": "ruleSave",
           "id": "rule-save"
+        },
+        {
+          "name": "ruleSortDirection",
+          "id": "rule-sort-direction-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "ruleSortField",
+          "id": "rule-sort-field-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "ruleSortRemove",
+          "id": "rule-sort-remove-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "ruleValue",
+          "id": "rule-value-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "ruleValueHigh",
+          "id": "rule-value-high-{index}",
+          "params": [
+            "index"
+          ]
         }
       ]
     },

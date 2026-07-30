@@ -58,6 +58,7 @@ class MediaTileData {
     this.progress,
     this.trailingText,
     this.trailingSpoken,
+    this.badge,
     this.starred = false,
     this.downloaded = false,
     this.unplayed = false,
@@ -89,6 +90,13 @@ class MediaTileData {
   /// caption and the wrong thing to read aloud; [spellDuration] is what
   /// belongs here. Defaults to the drawn text.
   final String? trailingSpoken;
+
+  /// A word over the artwork naming what kind of thing this is, where the
+  /// kind changes what the item does rather than only what it holds: a
+  /// smart playlist evaluates itself, so it takes no reorder and no
+  /// removal. One or two words, and only where a caption would be read
+  /// too late - it is announced with the title rather than after it.
+  final String? badge;
 
   final bool starred;
   final bool downloaded;

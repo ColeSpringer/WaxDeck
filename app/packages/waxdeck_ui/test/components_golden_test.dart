@@ -267,6 +267,7 @@ void main() {
                           subtitle: 'Nightjar',
                           progress: 0.62,
                           trailingText: '14 min left',
+                          badge: 'Smart',
                         ),
                         width: 120,
                       ),

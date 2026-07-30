@@ -5,8 +5,9 @@ import { SemanticsIds, sem } from './semantics-ids';
 
 // The playlists slice over the real stack: the rule editor building a
 // smart playlist in the browser, live re-evaluation when user state
-// changes, the manual add-to-playlist flow, and the Subsonic playlist,
-// star, scrobble, and radio surfaces over app passwords.
+// changes, a manual list being filled and reordered by hand, the
+// add-to-playlist sheet, and the Subsonic playlist, star, scrobble, and
+// radio surfaces over app passwords.
 
 
 async function login(page: Page) {
@@ -20,6 +21,14 @@ async function login(page: Page) {
   await openMusicSection(page);
 }
 
+// Opens the playlists listing from the chrome.
+async function openPlaylists(page: Page) {
+  await clickThrough(
+    page.locator(sem(SemanticsIds.navDestination('playlists'))),
+    page.locator(sem(SemanticsIds.playlistAdd)),
+  );
+}
+
 test('the rule editor builds, previews, and saves a smart playlist', async ({
   page,
   request,
@@ -28,15 +37,11 @@ test('the rule editor builds, previews, and saves a smart playlist', async ({
   await waitForLibrary(request, token);
   await login(page);
 
-  // exact: true throughout: role names substring-match by default, and
-  // a playlist row's merged semantics ("Starred Live, Smart | ...")
-  // would satisfy a bare 'Smart' before the dialog even opens.
-  const smartSegment = page.getByRole('button', { name: 'Smart', exact: true });
-  await clickThrough(page.locator(sem(SemanticsIds.navDestination('playlists'))), page.locator(sem(SemanticsIds.playlistAdd)));
-  await clickThrough(page.locator(sem(SemanticsIds.playlistAdd)), smartSegment);
-  await smartSegment.click();
-  const nameField = page.getByRole('textbox', { name: 'Playlist name' });
-  await typeInto(page, nameField, 'All The Music');
+  await openPlaylists(page);
+  const smartChip = page.locator(sem(SemanticsIds.playlistCreateKind('smart')));
+  await clickThrough(page.locator(sem(SemanticsIds.playlistAdd)), smartChip);
+  await smartChip.click();
+  await typeInto(page, page.locator(sem(SemanticsIds.playlistNameField)), 'All The Music');
   await page.locator(sem(SemanticsIds.playlistCreateConfirm)).click();
 
   // The editor's default condition is mediaType is music, which matches
@@ -44,18 +49,30 @@ test('the rule editor builds, previews, and saves a smart playlist', async ({
   const addCondition = page.locator(sem(SemanticsIds.ruleAddCondition));
   await addCondition.waitFor({ timeout: 30_000 });
   await addCondition.click();
-  await expect(page.getByText(/Matches [1-9]\d* items/)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.locator(sem(SemanticsIds.rulePreviewTotal))).toContainText(
+    /Matches [1-9]\d* items/,
+    { timeout: 15_000 },
+  );
   await page.locator(sem(SemanticsIds.ruleSave)).click();
 
   // Back on the listing (the add button proves the editor is gone,
   // so the row text cannot false-positive on the editor's heading),
   // the playlist exists; its detail evaluates.
   await page.locator(sem(SemanticsIds.playlistAdd)).waitFor({ timeout: 15_000 });
-  const row = page.getByText('All The Music').first();
-  await row.waitFor({ timeout: 15_000 });
-  await clickThrough(row, page.getByText(/Smart playlist \| [1-9]\d* items/));
+  const card = page.getByText('All The Music').first();
+  await card.waitFor({ timeout: 15_000 });
+  await clickThrough(card, page.locator(sem(SemanticsIds.playlistRuleSummary)));
+
+  // What the list is and how much it holds, read off the header's own
+  // accessible name: the header merges its subtree into one node, so
+  // that line is what a screen reader hears rather than a text node of
+  // its own.
+  await expect(
+    page.getByRole('banner', { name: /Smart playlist · [1-9]\d* items/ }),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page.getByText('Evaluated live, every time this list is opened.'),
+  ).toBeVisible({ timeout: 15_000 });
 
   // Cleanup so reruns against a warm stack stay idempotent.
   const lists = await (
@@ -122,7 +139,7 @@ test('a smart playlist with user-state rules live-updates', async ({
     );
     await clickThrough(
       page.locator(sem(SemanticsIds.playlist(created.pid))),
-      page.getByText('No items match the rules yet'),
+      page.getByText('Nothing matches yet'),
     );
 
     // Another device stars the track; the open playlist re-evaluates
@@ -139,6 +156,80 @@ test('a smart playlist with user-state rules live-updates', async ({
       ...authed(token),
       data: { starred: false },
     });
+    await request.delete(`/api/v1/playlists/${created.pid}`, authed(token));
+  }
+});
+
+test('a manual playlist is filled from its own search row and reordered by hand', async ({
+  page,
+  request,
+}) => {
+  const token = await ensureAdmin(request);
+  await waitForLibrary(request, token);
+  const created = await (
+    await request.post('/api/v1/playlists', {
+      ...authed(token),
+      data: { name: 'By Hand', kind: 'static' },
+    })
+  ).json();
+
+  try {
+    await login(page);
+    await clickThrough(
+      page.locator(sem(SemanticsIds.navDestination('playlists'))),
+      page.locator(sem(SemanticsIds.playlist(created.pid))),
+    );
+    const addField = page.locator(sem(SemanticsIds.playlistAddField));
+    await clickThrough(page.locator(sem(SemanticsIds.playlist(created.pid))), addField);
+
+    // Two tracks, added through the row that keeps the listener on the
+    // page they are building.
+    for (const title of ['Alpha Song', 'Bravo Song']) {
+      await typeInto(page, addField, title);
+      const hit = page.locator(sem(SemanticsIds.playlistAddResult(0)));
+      await hit.waitFor({ timeout: 15_000 });
+      await hit.click();
+      await expect(page.getByText(`Added "${title}"`).first()).toBeVisible({
+        timeout: 15_000,
+      });
+    }
+
+    const stored = async () => {
+      const page1 = await (
+        await request.get(`/api/v1/playlists/${created.pid}/items`, authed(token))
+      ).json();
+      return page1.entries.map((e: { item: { title: string } }) => e.item.title);
+    };
+    await expect.poll(stored, { timeout: 15_000 }).toEqual([
+      'Alpha Song',
+      'Bravo Song',
+    ]);
+
+    // Drag the second row onto the first. The replace carries the
+    // playlist's own updatedAt as its precondition, so a stored order
+    // that flips is proof the whole round trip landed.
+    const second = page.locator(sem(SemanticsIds.playlistEntryDrag(1)));
+    const first = page.locator(sem(SemanticsIds.playlistEntryDrag(0)));
+    await second.waitFor({ timeout: 15_000 });
+    const from = await second.boundingBox();
+    const to = await first.boundingBox();
+    expect(from && to, 'both drag handles are on screen').toBeTruthy();
+    await page.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to!.x + to!.width / 2, to!.y + to!.height / 2, {
+      steps: 12,
+    });
+    await page.mouse.up();
+
+    await expect.poll(stored, { timeout: 15_000 }).toEqual([
+      'Bravo Song',
+      'Alpha Song',
+    ]);
+
+    // And one row back out, through the affordance a keyboard can reach.
+    await page.locator(sem(SemanticsIds.playlistEntryRemove(0))).click();
+    await expect.poll(stored, { timeout: 15_000 }).toEqual(['Alpha Song']);
+  } finally {
     await request.delete(`/api/v1/playlists/${created.pid}`, authed(token));
   }
 });
@@ -162,17 +253,16 @@ test('the player adds a track to a fresh manual playlist', async ({
   await clickThrough(card, page.locator(sem(SemanticsIds.addToPlaylist)));
   await clickThrough(
     page.locator(sem(SemanticsIds.addToPlaylist)),
-    page.getByRole('button', { name: 'New playlist', exact: true }),
+    page.locator(sem(SemanticsIds.addToPlaylistNew)),
   );
-  await page.getByRole('button', { name: 'New playlist', exact: true }).click();
-  const nameField = page.getByRole('textbox', { name: 'Playlist name' });
-  await typeInto(page, nameField, 'From The Player');
-  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.locator(sem(SemanticsIds.addToPlaylistNew)).click();
+  await typeInto(page, page.locator(sem(SemanticsIds.playlistNameField)), 'From The Player');
+  await page.locator(sem(SemanticsIds.playlistCreateConfirm)).click();
   // The snack text shows twice on flutter web (the visible span and
   // the polite live-region announcement); either one proves delivery.
-  await expect(page.getByText('Added "Alpha Song"').first()).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByText('Added "Alpha Song" to From The Player').first(),
+  ).toBeVisible({ timeout: 15_000 });
 
   const lists = await (
     await request.get('/api/v1/playlists?limit=200', authed(token))

@@ -200,6 +200,29 @@ class _MediaCardState extends State<MediaCard> {
               active: true,
             ),
           ),
+        // Top left, the one corner nothing else claims. Opaque, on a
+        // tested surface pair: the scrim is translucent, so over a dark
+        // cover in light mode it composites to ink on ink.
+        if (data.badge != null)
+          Positioned(
+            left: WaxSpace.s8,
+            top: WaxSpace.s8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: WaxSpace.s8,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: colors.surface1,
+                borderRadius: WaxRadius.chip,
+                border: Border.all(color: colors.hairline),
+              ),
+              child: Text(
+                data.badge!,
+                style: WaxType.caption.copyWith(color: colors.textPrimary),
+              ),
+            ),
+          ),
         if (data.unplayed)
           Positioned(
             right: WaxSpace.s8,
@@ -246,6 +269,7 @@ class _MediaCardState extends State<MediaCard> {
       button: widget.onTap != null,
       label: <String?>[
         if (data.unplayed) 'Unplayed',
+        data.badge,
         data.title,
         data.subtitle,
         // Drawn on the card, so announced too, as a row's is:
