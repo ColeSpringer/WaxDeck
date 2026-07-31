@@ -69,19 +69,29 @@ class LiveInvalidations {
       // invalidations only.
       subscribe: () async => jsonEncode(const <String, Object?>{}),
     );
-    _channel!
-        .connect()
-        .then((_) {
-          _backoffSeconds = 1;
-          onConnectionChanged?.call(true);
-          onConnected?.call();
-          // The socket may have been down across changes; refresh once.
-          onCatalog();
-          onUser();
-        })
-        .catchError((Object _) {
-          _onDown();
-        });
+    // The error handler rides `then` rather than a chained catchError:
+    // chained, it would also catch what the success body throws, and a
+    // fan-out bug would then masquerade as a dropped socket - banner
+    // flipped, backoff armed, a healthy channel abandoned unclosed.
+    // Only the connect itself failing means the link is down; a throw
+    // from the body stays an error worth hearing as itself.
+    _channel!.connect().then(
+      (_) {
+        // A connect can resolve after stop(): the listener was told to
+        // stand down mid-handshake, and a dead session must not hear
+        // "connected" or refresh providers that are being torn down.
+        if (!_running) return;
+        _backoffSeconds = 1;
+        onConnectionChanged?.call(true);
+        onConnected?.call();
+        // The socket may have been down across changes; refresh once.
+        onCatalog();
+        onUser();
+      },
+      onError: (Object _) {
+        _onDown();
+      },
+    );
   }
 
   void _onDown() {

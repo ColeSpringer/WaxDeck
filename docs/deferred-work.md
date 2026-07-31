@@ -393,6 +393,23 @@ here waits on upstream.
   carrying it is the specific trigger to re-check, sharper than "when
   the issue closes": the issue can close on the PR alone, which changes
   nothing here until the pinned engine ships it.
+- `[in-repo]` **The live fan-out's accepted edges (ADR-0036).** The
+  invalidation fan-out defers around in-flight first builds via a
+  `ProviderObserver` ledger; three edges are known, each bounded, none
+  observed outside construction. A first build that never lands (a hung
+  request; no transport deadline exists) keeps its topic's retry timer
+  re-arming every window for the life of the session - a set lookup per
+  tick, no network; closes for free if request deadlines ever land. A
+  watched instance invalidated mid-first-build from outside the fan-out
+  rebuilds into a bare loading the notification gate suppresses, so that
+  one instance rides plain pacing until a differing state lands - the
+  pre-deferral behavior, not a new failure. And a nested `ProviderScope`
+  overriding a fan-out target would sit outside `allProviders`'
+  enumeration (children are excluded), unreachable by sweep and retry
+  alike, as it already was by the plain invalidations before ADR-0036;
+  no such scope exists, and whoever introduces one takes the fan-out's
+  enumeration with it. The reasoning lives in the ADR's consequences
+  section.
 - `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists.

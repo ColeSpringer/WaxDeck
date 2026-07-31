@@ -22,6 +22,7 @@ import '../shell/lifecycle_banners.dart';
 import '../tools/tasks_screen.dart';
 import '../uploads/uploads_controller.dart';
 import 'live_invalidations.dart';
+import 'refresh_pacing.dart';
 import 'sync_providers.dart';
 
 /// Binds the sync machinery to the authenticated subtree: watched by the
@@ -35,7 +36,17 @@ import 'sync_providers.dart';
 /// here leaves that file importing nothing upward, and the one screen
 /// that watches the binder is the only file that reads this one.
 final syncBinderProvider = Provider.autoDispose<void>((ref) {
-  void invalidateCatalog() {
+  // The ledger of in-flight first builds, registered on the root
+  // container in main.dart. Absent (a test container that did not
+  // register one), the fan-outs invalidate unconditionally, which is
+  // the pre-deferral behavior.
+  final firstBuilds = ref.container.observers
+      .whereType<FirstBuildObserver>()
+      .firstOrNull;
+
+  final catalogFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
     // Covers appear as part of the catalog changing - a scan reading
     // embedded art, enrichment landing, another device writing one -
     // and the store has been remembering which ones answered 404 so it
@@ -43,73 +54,94 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     // exactly what a catalog change can falsify, and this is the only
     // signal that sees it: the cover editors call `evict`, and nothing
     // else does.
-    ref.read(artworkStoreProvider).forgetAbsences();
-    ref.invalidate(libraryControllerProvider);
-    ref.invalidate(continueListeningProvider);
-    ref.invalidate(booksProvider);
-    // Whether a domain has anything behind it is a catalog fact, and it
-    // decides whether the chrome offers its tab. This is what turns the
-    // Audiobooks tab on when a first scan finds books, instead of at the
-    // next launch.
-    ref.invalidate(emptyDomainsProvider);
-    // What is downloaded is local, but who each row is comes from the
-    // mirror, so a retitled item has to reach an open manager.
-    ref.invalidate(downloadsProvider);
-    // Shows and episodes are catalog entities too: a server-side fetch
-    // flipping an episode to downloaded must reach an open show screen.
-    ref.invalidate(podcastDetailProvider);
-    ref.invalidate(episodesProvider);
-    ref.invalidate(episodeDetailProvider);
-    // A feed refresh that adds episodes is a catalog change, and the
-    // hub's shelves are the surface that is about what just arrived.
-    ref.invalidate(upNextEpisodesProvider);
-    ref.invalidate(latestEpisodesProvider);
-    // A catalog change can shift any smart playlist's evaluation.
-    ref.invalidate(playlistDetailProvider);
-    // Applied review decisions and enrichment rewrite item metadata
-    // server-side; an open editor must refetch what it shows.
-    ref.invalidate(metadataControllerProvider);
-  }
+    prelude: () => ref.read(artworkStoreProvider).forgetAbsences(),
+    providers: [
+      libraryControllerProvider,
+      continueListeningProvider,
+      booksProvider,
+      // Whether a domain has anything behind it is a catalog fact, and
+      // it decides whether the chrome offers its tab. This is what turns
+      // the Audiobooks tab on when a first scan finds books, instead of
+      // at the next launch.
+      emptyDomainsProvider,
+      // What is downloaded is local, but who each row is comes from the
+      // mirror, so a retitled item has to reach an open manager.
+      downloadsProvider,
+      // A feed refresh that adds episodes is a catalog change, and the
+      // hub's shelves are the surface that is about what just arrived.
+      upNextEpisodesProvider,
+      latestEpisodesProvider,
+    ],
+    families: [
+      // Shows and episodes are catalog entities too: a server-side fetch
+      // flipping an episode to downloaded must reach an open show screen.
+      podcastDetailProvider,
+      episodesProvider,
+      episodeDetailProvider,
+      // A catalog change can shift any smart playlist's evaluation.
+      playlistDetailProvider,
+      // Applied review decisions and enrichment rewrite item metadata
+      // server-side; an open editor must refetch what it shows.
+      metadataControllerProvider,
+    ],
+  );
 
-  void invalidateUserState() {
-    ref.invalidate(playStateControllerProvider);
-    // Entity stars and ratings ride the same user stream, as the
-    // entity-state marker kind.
-    ref.invalidate(entityPlayStateControllerProvider);
-    ref.invalidate(continueListeningProvider);
-    ref.invalidate(prefsControllerProvider);
-    // Subscriptions and their settings ride the user stream, and a
-    // membership change also reshapes the caller's own catalog view
-    // (episodes scope to subscriptions), so the grid refetches too. The
-    // unplayed count on each row and both hub shelves are read against
-    // the caller's positions, so a checkpoint anywhere (this device or
-    // another) is what makes them stale.
-    ref.invalidate(subscriptionsProvider);
-    ref.invalidate(podcastDetailProvider);
-    ref.invalidate(playProgressProvider);
-    ref.invalidate(upNextEpisodesProvider);
-    ref.invalidate(latestEpisodesProvider);
-    ref.invalidate(libraryControllerProvider);
-    // Playlist rows ride the user stream, and play-state changes (a
-    // star, a rating) can shift a user-state smart rule's evaluation.
-    ref.invalidate(playlistsProvider);
-    ref.invalidate(playlistDetailProvider);
-    // Review, upload, and tool-task markers ride the user stream; the
-    // curation screens refetch their lists and open details.
-    ref.invalidate(reviewQueueProvider);
-    ref.invalidate(reviewStatsProvider);
-    ref.invalidate(reviewEntryProvider);
-    ref.invalidate(uploadsProvider);
-    ref.invalidate(toolTasksProvider);
-  }
+  final userFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    providers: [
+      continueListeningProvider,
+      prefsControllerProvider,
+      // Subscriptions and their settings ride the user stream, and a
+      // membership change also reshapes the caller's own catalog view
+      // (episodes scope to subscriptions), so the grid refetches too.
+      // The unplayed count on each row and both hub shelves are read
+      // against the caller's positions, so a checkpoint anywhere (this
+      // device or another) is what makes them stale.
+      subscriptionsProvider,
+      upNextEpisodesProvider,
+      latestEpisodesProvider,
+      libraryControllerProvider,
+      // Playlist rows ride the user stream, and play-state changes (a
+      // star, a rating) can shift a user-state smart rule's evaluation.
+      playlistsProvider,
+      // Review, upload, and tool-task markers ride the user stream; the
+      // curation screens refetch their lists and open details.
+      reviewQueueProvider,
+      reviewStatsProvider,
+      uploadsProvider,
+      toolTasksProvider,
+    ],
+    families: [
+      playStateControllerProvider,
+      // Entity stars and ratings ride the same user stream, as the
+      // entity-state marker kind.
+      entityPlayStateControllerProvider,
+      podcastDetailProvider,
+      playProgressProvider,
+      playlistDetailProvider,
+      reviewEntryProvider,
+    ],
+  );
+
+  // Both transports hand their hints to the same pacers: the fan-out
+  // is what a hint costs, and running it on every one of them is what
+  // starved a screen still on its first build.
+  final catalog = PacedRefresh(
+    fanOut: catalogFanOut.sweep,
+    retry: catalogFanOut.retry,
+  );
+  final user = PacedRefresh(fanOut: userFanOut.sweep, retry: userFanOut.retry);
+  ref.onDispose(() {
+    catalog.dispose();
+    user.dispose();
+  });
 
   final engine = ref.watch(syncEngineProvider);
   final connect = ref.watch(connectBinderProvider);
   if (engine != null) {
-    final catalogSub = engine.catalogChanged.listen((_) => invalidateCatalog());
-    final stateSub = engine.playStateChanged.listen(
-      (_) => invalidateUserState(),
-    );
+    final catalogSub = engine.catalogChanged.listen((_) => catalog.hint());
+    final stateSub = engine.playStateChanged.listen((_) => user.hint());
     connect.bind(
       sender: engine.sendControl,
       routeControl: (handler) => engine.onControlFrame = handler,
@@ -131,8 +163,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         baseUrl: waxDeckBaseUrl,
         token: () => repository.authToken,
       ),
-      onCatalog: invalidateCatalog,
-      onUser: invalidateUserState,
+      onCatalog: catalog.hint,
+      onUser: user.hint,
     );
     connect.bind(
       sender: live.sendControl,
