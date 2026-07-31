@@ -54,4 +54,7 @@ spec changes.
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Same license as the rest of the Wax series.
+GPL-3.0-only. See [LICENSE](LICENSE). WaxDeck is the one copyleft repo in
+the Wax series; the sibling libraries (WaxBin, WaxFlow, WaxTap, WaxLabel)
+are MIT. Contributions are accepted under the project license, no CLA
+(see [CONTRIBUTING.md](CONTRIBUTING.md)).

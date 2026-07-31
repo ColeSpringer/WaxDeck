@@ -75,6 +75,11 @@ RUN groupadd --system --gid 10001 waxdeck \
     && chmod 0777 /data /podcasts
 
 COPY --from=build /out/waxdeck /usr/local/bin/waxdeck
+# The artifact conveys its own terms: the GPL text beside the
+# third-party notices; the binary also prints the latter
+# (--third-party-notices).
+COPY LICENSE /usr/local/share/doc/waxdeck/LICENSE
+COPY --from=build /src/server/internal/notices/third_party_notices.txt /usr/local/share/doc/waxdeck/THIRD-PARTY-NOTICES.txt
 
 ENV WAXDECK_ADDR=0.0.0.0:4420 \
     WAXDECK_DATA_DIR=/data

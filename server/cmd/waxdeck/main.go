@@ -43,6 +43,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/events"
 	"github.com/colespringer/waxdeck/server/internal/metrics"
+	"github.com/colespringer/waxdeck/server/internal/notices"
 	waxproviders "github.com/colespringer/waxdeck/server/internal/providers"
 	"github.com/colespringer/waxdeck/server/internal/restore"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -122,12 +123,17 @@ func run() error {
 		workerTokens     = flag.String("worker-tokens", envOr("WAXDECK_WORKER_TOKENS", ""), "external similarity worker tokens, comma separated (optional; offloads analysis to another machine through the worker API)")
 		workerLocalPaths = flag.Bool("worker-local-paths", envOr("WAXDECK_WORKER_LOCAL_PATHS", "false") == "true", "expose library-relative source paths to similarity workers that mount the library read-only (single-root libraries)")
 
-		showVer = flag.Bool("version", false, "print version and exit")
+		showVer     = flag.Bool("version", false, "print version and exit")
+		showNotices = flag.Bool("third-party-notices", false, "print the third-party license notices bundled in this binary and exit")
 	)
 	flag.Parse()
 
 	if *showVer {
 		fmt.Println(version)
+		return nil
+	}
+	if *showNotices {
+		fmt.Print(notices.Text)
 		return nil
 	}
 
@@ -1272,6 +1278,7 @@ func keyProber(sealer *auth.Sealer) service.KeyProber {
 		if r, err := conn.QueryContext(ctx, `
 			SELECT ap.label, u.username, ap.secret_enc
 			FROM app_passwords ap LEFT JOIN users u ON u.id = ap.user_id`); err == nil {
+			mark := len(rows)
 			for r.Next() {
 				var label, username sql.NullString
 				var blob []byte
@@ -1280,10 +1287,17 @@ func keyProber(sealer *auth.Sealer) service.KeyProber {
 				}
 			}
 			r.Close()
+			// An iteration that broke mid-stream contributes nothing, like
+			// the query failing outright: a half-read table must not pass
+			// for the whole casualty list.
+			if r.Err() != nil {
+				rows = rows[:mark]
+			}
 		}
 		if r, err := conn.QueryContext(ctx, `
 			SELECT sc.service, u.username, sc.sealed_secret
 			FROM scrobble_connections sc LEFT JOIN users u ON u.id = sc.user_id`); err == nil {
+			mark := len(rows)
 			for r.Next() {
 				var svcName, username sql.NullString
 				var blob []byte
@@ -1292,6 +1306,9 @@ func keyProber(sealer *auth.Sealer) service.KeyProber {
 				}
 			}
 			r.Close()
+			if r.Err() != nil {
+				rows = rows[:mark]
+			}
 		}
 		// The err == nil idiom doubles as version tolerance: an archive
 		// from before notification targets simply lacks the table and
@@ -1299,6 +1316,7 @@ func keyProber(sealer *auth.Sealer) service.KeyProber {
 		if r, err := conn.QueryContext(ctx, `
 			SELECT nt.kind, nt.label, u.username, nt.sealed_config
 			FROM notification_targets nt LEFT JOIN users u ON u.id = nt.user_id`); err == nil {
+			mark := len(rows)
 			for r.Next() {
 				var kind, label, username sql.NullString
 				var blob []byte
@@ -1315,6 +1333,9 @@ func keyProber(sealer *auth.Sealer) service.KeyProber {
 				}
 			}
 			r.Close()
+			if r.Err() != nil {
+				rows = rows[:mark]
+			}
 		}
 		if len(rows) == 0 {
 			return true, true, nil

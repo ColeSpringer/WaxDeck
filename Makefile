@@ -8,7 +8,7 @@ APP_WEB_OUT := app/app/build/web
 
 ## --- codegen -----------------------------------------------------------------
 
-generate: gen-go gen-dart gen-semantics gen-mirror
+generate: gen-go gen-dart gen-semantics gen-mirror gen-notices
 
 # The contract is authored as fragments in api/spec/ (one file per API
 # domain); specbundle assembles the single bundled spec that every
@@ -50,6 +50,17 @@ gen-semantics:
 gen-mirror:
 	cd app && dart pub get
 	cd app/packages/waxdeck_data && dart run build_runner build
+
+# The server binary's third-party license notices, embedded so every
+# distributed artifact carries them (waxdeck --third-party-notices).
+# GOWORK=off: the module set and license texts come from the pinned
+# module zips, identical on every machine, not from workspace checkouts.
+# The app's LICENSE is a generated copy of the root text: Flutter
+# bundles a package's own LICENSE into its NOTICES, which is how every
+# app artifact conveys the GPL text.
+gen-notices:
+	cd server && GOWORK=off go run ./cmd/noticegen -out internal/notices/third_party_notices.txt
+	cp LICENSE app/app/LICENSE
 
 # Assets that are generated but rarely regenerated: the bundled type,
 # the icon subsets, and the brand kit. Not part of `generate` (they hit
@@ -98,7 +109,8 @@ test-app:
 drift-check: generate
 	git diff --exit-code -- $(SPEC) server/internal/api app/packages/waxdeck_api_gen \
 		app/app/lib/src/shell/semantics_ids.dart e2e/tests/semantics-ids.ts \
-		app/packages/waxdeck_data/lib/src/database.g.dart
+		app/packages/waxdeck_data/lib/src/database.g.dart \
+		server/internal/notices/third_party_notices.txt app/app/LICENSE
 
 # Breaking-change gate against the base ref (override BASE for CI).
 # api/oasdiff-allow.txt, when present, lists deliberately accepted
