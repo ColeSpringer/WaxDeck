@@ -8,95 +8,176 @@ import { SemanticsIds, sem } from './semantics-ids';
 // converging), offline mutation replay semantics, downloads of original
 // bytes, and the read-only Subsonic surface over app passwords.
 
-test('a mirror snapshots, deltas to quiescence, and follows a change', async ({
+test('a mirror snapshots, deltas from its cursor, and follows a change', async ({
   request,
 }) => {
   const token = await ensureAdmin(request);
   await waitForLibrary(request, token);
 
-  // Snapshot the catalog, paging keyset-style.
-  const mirror = new Map<string, string>();
-  let since = '';
-  let cursor = '';
-  for (;;) {
-    const q = cursor ? `?limit=2&cursor=${encodeURIComponent(cursor)}` : '?limit=2';
-    const page = await (
-      await request.get(`/api/v1/sync/catalog${q}`, authed(token))
-    ).json();
-    expect(page.nextSince).toBeTruthy();
-    since = page.nextSince;
-    for (const e of page.entries) {
-      // The contract: mirrors drop entries whose op they do not
-      // recognize (podcast shows ride the same stream as their own
-      // operation). This mirror only tracks items.
-      if (e.op !== 'upsert') continue;
-      mirror.set(e.pid, e.item.title);
+  // Four workers share this server and account, so nothing here asserts
+  // what the delta contains: it legitimately carries other specs' churn
+  // (episode downloads, uploads, a rescan re-rowing items), and a
+  // sibling subscribe or unsubscribe retires this account's catalog
+  // cursors outright (410 sync-reset). Only presence of a write this
+  // spec just made is parallel-safe to assert - absence never is - so
+  // the catalog half checks protocol mechanics (pages serve, cursors
+  // advance, resets recover) and the owned-write check rides the
+  // server stream below. Single-writer delta arrival is pinned in the
+  // server's sync integration tests.
+  const snapshot = async () => {
+    const mirror = new Map<string, string>();
+    let since = '';
+    let cursor = '';
+    for (;;) {
+      const q = cursor ? `?limit=2&cursor=${encodeURIComponent(cursor)}` : '?limit=2';
+      const res = await request.get(`/api/v1/sync/catalog${q}`, authed(token));
+      // Only the delta path epoch-checks, so a sibling's subscribe
+      // cannot 410 a snapshot page; any non-200 is a real failure.
+      expect(res.status(), 'a snapshot page should serve').toBe(200);
+      const page = await res.json();
+      expect(page.nextSince).toBeTruthy();
+      since = page.nextSince;
+      for (const e of page.entries) {
+        // The contract: mirrors drop entries whose op they do not
+        // recognize (podcast shows ride the same stream as their own
+        // operation). This mirror only tracks items.
+        if (e.op !== 'upsert') continue;
+        mirror.set(e.pid, e.item.title);
+      }
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
     }
-    if (!page.nextCursor) break;
-    cursor = page.nextCursor;
+    return { mirror, since };
+  };
+
+  // Snapshot, then drain the first delta to its current end.
+  let mirror = new Map<string, string>();
+  for (let attempt = 0; ; attempt++) {
+    expect(attempt, 'catalog cursors kept resetting').toBeLessThan(4);
+    const snap = await snapshot();
+    mirror = snap.mirror;
+    let since = snap.since;
+    let reset = false;
+    for (let pages = 0; ; pages++) {
+      expect(pages, 'the delta should drain').toBeLessThan(50);
+      const res = await request.get(
+        `/api/v1/sync/catalog?since=${encodeURIComponent(since)}`,
+        authed(token),
+      );
+      if (res.status() === 410) {
+        console.log('catalog cursor retired mid-drain (sync-reset); re-mirroring');
+        reset = true;
+        break;
+      }
+      expect(res.status(), 'a delta page should serve').toBe(200);
+      const page = await res.json();
+      expect(page.nextSince).toBeTruthy();
+      since = page.nextSince;
+      if (!page.more) break;
+    }
+    if (!reset) break;
   }
   expect(mirror.size).toBeGreaterThanOrEqual(4);
 
-  // A drained stream deltas to nothing and the cursor advances in place.
-  const empty = await (
-    await request.get(
-      `/api/v1/sync/catalog?since=${encodeURIComponent(since)}`,
-      authed(token),
-    )
-  ).json();
-  expect(empty.entries).toHaveLength(0);
+  // The caller's own state flows on the server stream: mint, star,
+  // pull. Events hydrate play state fresh at read time, so a shared
+  // item's star read here would carry whatever a sibling just wrote -
+  // and every music track's star has an owner (identity stars the
+  // first two items, playlists stars Charlie and Delta, the two-client
+  // test below stars Bravo). The book is the one fixture nothing else
+  // stars; audiobooks.spec writes only its position, which the server
+  // merges independently of the star.
+  const own = [...mirror.entries()].find(([, t]) => t === 'The Fixture Book');
+  expect(own, 'The Fixture Book should be in the mirrored catalog').toBeTruthy();
+  const pid = own![0];
 
-  // The caller's own state flows on the server stream: mint, star, pull.
-  const mint = await (
-    await request.get('/api/v1/sync/server', authed(token))
-  ).json();
-  // Specs run in parallel against one stack; each uses its own item so
-  // star state never races another spec's assertions (the audit owns
-  // Alpha, the two-client test owns Bravo).
-  const pid = [...mirror.entries()].find(([, t]) => t === 'Delta Song')![0];
-  await request.put(`/api/v1/items/${pid}/star`, {
-    ...authed(token),
-    data: { starred: true },
-  });
-  const delta = await (
-    await request.get(
-      `/api/v1/sync/server?since=${encodeURIComponent(mint.nextSince)}`,
-      authed(token),
-    )
-  ).json();
-  const ev = delta.events.find(
-    (e: { kind: string; pid?: string }) => e.kind === 'play-state' && e.pid === pid,
-  );
+  // A 410 on this stream (event floor or generation moved) has no
+  // in-suite trigger today, but it is legal, and re-minting and
+  // re-starring is the client-correct recovery, as above.
+  let ev: { kind: string; pid?: string; playState?: { starred?: boolean } } | undefined;
+  for (let attempt = 0; ; attempt++) {
+    expect(attempt, 'server cursors kept resetting').toBeLessThan(4);
+    const mintRes = await request.get('/api/v1/sync/server', authed(token));
+    expect(mintRes.status(), 'minting a server cursor should serve').toBe(200);
+    const mint = await mintRes.json();
+    expect(mint.nextSince).toBeTruthy();
+    const star = await request.put(`/api/v1/items/${pid}/star`, {
+      ...authed(token),
+      data: { starred: true },
+    });
+    // Checked here so a refused write fails as itself, not four steps
+    // later as a missing event.
+    expect(star.status(), 'the star write should succeed').toBe(200);
+    // Other specs' events share the mint-to-pull window, so walk every
+    // page and find our own instead of expecting the first page to
+    // hold it.
+    const events: { kind: string; pid?: string; playState?: { starred?: boolean } }[] = [];
+    let serverSince = mint.nextSince;
+    let reset = false;
+    for (let pages = 0; ; pages++) {
+      expect(pages, 'the server stream should drain').toBeLessThan(50);
+      const res = await request.get(
+        `/api/v1/sync/server?since=${encodeURIComponent(serverSince)}`,
+        authed(token),
+      );
+      if (res.status() === 410) {
+        console.log('server cursor retired mid-drain (sync-reset); re-minting');
+        reset = true;
+        break;
+      }
+      expect(res.status(), 'a server stream page should serve').toBe(200);
+      const page = await res.json();
+      expect(page.nextSince).toBeTruthy();
+      events.push(...page.events);
+      serverSince = page.nextSince;
+      if (!page.more) break;
+    }
+    if (reset) continue;
+    ev = events.find((e) => e.kind === 'play-state' && e.pid === pid);
+    break;
+  }
   expect(ev, 'the star arrived on the server stream').toBeTruthy();
-  expect(ev.playState.starred).toBe(true);
+  expect(ev!.playState!.starred).toBe(true);
 
   // Clean up for other specs: unstar.
-  await request.put(`/api/v1/items/${pid}/star`, {
+  const unstar = await request.put(`/api/v1/items/${pid}/star`, {
     ...authed(token),
     data: { starred: false },
   });
+  expect(unstar.status(), 'the unstar write should succeed').toBe(200);
 });
 
 test('an offline replay reconciles instead of clobbering', async ({ request }) => {
   const token = await ensureAdmin(request);
   await waitForLibrary(request, token);
-  const items = await (
-    await request.get('/api/v1/library/items', authed(token))
+  // Own position only: playback.spec checkpoints Alpha's, so a blind
+  // first-item pick can race it and one side's read loses. Delta
+  // Song's position is this test's alone - playlists.spec stars and
+  // scrobbles Delta, but neither write touches position. Found by
+  // search because the item list pages while a title stays stable.
+  const search = await (
+    await request.get('/api/v1/library/search?q=Delta', authed(token))
   ).json();
-  const pid = items.items[0].pid;
+  const target = search.tracks.find(
+    (t: { title: string }) => t.title === 'Delta Song',
+  );
+  expect(target, 'Delta Song should be searchable').toBeTruthy();
+  const pid = target.pid;
 
   // A live checkpoint, then a stale offline replay from an hour ago:
   // the live state wins (music is furthest-position with a recency
   // guard, and the replay is both nearer and far older).
-  await request.put(`/api/v1/items/${pid}/play-state`, {
+  const live = await request.put(`/api/v1/items/${pid}/play-state`, {
     ...authed(token),
     data: { positionMs: 90_000 },
   });
+  expect(live.status(), 'the live checkpoint should land').toBe(204);
   const staleAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  await request.put(`/api/v1/items/${pid}/play-state`, {
+  const replay = await request.put(`/api/v1/items/${pid}/play-state`, {
     ...authed(token),
     data: { positionMs: 1_000, recordedAt: staleAt },
   });
+  expect(replay.status(), 'the offline replay should land').toBe(204);
   const state = await (
     await request.get(`/api/v1/items/${pid}/play-state`, authed(token))
   ).json();
@@ -169,18 +250,20 @@ test('a server edit reaches a second live client in about a second', async ({
   // Another device stars the item through the API; the watcher's UI
   // follows through the invalidation channel without any interaction.
   const started = Date.now();
-  await request.put(`/api/v1/items/${target.pid}/star`, {
+  const put = await request.put(`/api/v1/items/${target.pid}/star`, {
     ...authed(token),
     data: { starred: true },
   });
+  expect(put.status(), 'the star write should succeed').toBe(200);
   await expect(star).toHaveAccessibleName('Unstar', { timeout: 3_000 });
   const elapsed = Date.now() - started;
   console.log(`cross-client star visible after ${elapsed}ms`);
 
-  await request.put(`/api/v1/items/${target.pid}/star`, {
+  const revert = await request.put(`/api/v1/items/${target.pid}/star`, {
     ...authed(token),
     data: { starred: false },
   });
+  expect(revert.status(), 'the unstar write should succeed').toBe(200);
   await context.close();
 });
 

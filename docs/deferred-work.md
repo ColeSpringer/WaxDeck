@@ -759,16 +759,6 @@ here waits on upstream.
   uploader is usually watching the uploads screen, which updates
   live), but it is a decision: an import-completed user event would
   close the gap for fire-and-forget uploads.
-- `[in-repo]` **The sync spec asserts a delta reached quiescence, which
-  another worker can break.** `sync.spec.ts` polls `/sync/server` until
-  the change list is empty, on a server four workers share: a podcast
-  download in another spec upserts an episode into exactly that list, and
-  the assertion fails on somebody else's work. Seen once in three full
-  runs, and it will keep happening - an empty-delta assertion is not
-  parallel-safe by construction, where a "contains what I just did" one
-  is. The fix is to scope the poll to this spec's own pids rather than to
-  give the suite another serial group; the surrounding scenario (snapshot,
-  deltas, live follow) is worth keeping as it is.
 - `[in-repo]` **The read-only e2e scenario flips a switch the whole suite
   shares.** The two settings scenarios no longer race each other (one
   serial group), but read-only is server-global, so for the one request it
