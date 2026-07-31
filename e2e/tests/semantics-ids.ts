@@ -404,7 +404,9 @@ export const SemanticsIds = {
   searchShowAll: (kind: string | number) => `search-show-all-${kind}`,
   searchTruncated: 'search-truncated',
 
-  // settings: Settings: account, devices, app passwords, notifications, scrobblers, appearance.
+  // settings: Settings: the searchable sections, every leaf control, account, devices, app passwords, notifications, scrobblers.
+  aboutLicenses: 'about-licenses',
+  aboutOpen: 'about-open',
   appPasswordAdd: 'app-password-add',
   appPasswordRevoke: (id: string | number) => `app-password-revoke-${id}`,
   deviceRevoke: (id: string | number) => `device-revoke-${id}`,
@@ -417,10 +419,16 @@ export const SemanticsIds = {
   notifyTargetAdd: 'notify-target-add',
   notifyTargetTest: (pid: string | number) => `notify-target-test-${pid}`,
   openShareLinks: 'open-share-links',
+  radioScrobbleSwitch: 'radio-scrobble-switch',
   scrobbler: (service: string | number) => `scrobbler-${service}`,
   scrobblerConnect: (service: string | number) => `scrobbler-connect-${service}`,
   scrobblerDisconnect: (service: string | number) => `scrobbler-disconnect-${service}`,
   scrobblerSetupLastfm: 'scrobbler-setup-lastfm',
+  setting: (id: string | number) => `setting-${id}`,
+  settingsResult: (id: string | number) => `settings-result-${id}`,
+  settingsScreen: 'settings-screen',
+  settingsSearch: 'settings-search',
+  settingsSection: (section: string | number) => `settings-section-${section}`,
   sharedStatsSwitch: 'shared-stats-switch',
   themeSelect: 'theme-select',
   timezoneEdit: 'timezone-edit',

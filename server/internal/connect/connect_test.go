@@ -135,7 +135,7 @@ func (r *fakeResolver) lastTarget() (EndpointTarget, bool) {
 	return r.targets[len(r.targets)-1], true
 }
 
-func (r *fakeResolver) Timeline(context.Context, string, []QueueEntry, float64, string) (*TimelineMedia, error) {
+func (r *fakeResolver) Timeline(context.Context, string, []QueueEntry, string) (*TimelineMedia, error) {
 	return nil, nil
 }
 

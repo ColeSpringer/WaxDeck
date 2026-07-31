@@ -72,4 +72,21 @@ func TestScrobbleRadioPlayEnqueues(t *testing.T) {
 	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err == nil {
 		t.Fatal("no-connection listener must not scrobble")
 	}
+
+	// Opting out silences radio for a listener who still scrobbles
+	// everything else.
+	if _, err := svc.PutPrefs(ctx, admin, Prefs{RadioScrobbleOptOut: true}); err != nil {
+		t.Fatal(err)
+	}
+	svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
+	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err == nil {
+		t.Fatal("opted-out listener must not scrobble radio")
+	}
+	if _, err := svc.PutPrefs(ctx, admin, Prefs{}); err != nil {
+		t.Fatal(err)
+	}
+	svc.ScrobbleRadioPlay(ctx, admin.ID, st.PID, "Massive Attack - Teardrop", started)
+	if _, err := svc.db.LeaseScrobble(ctx, time.Now().UnixNano(), int64(time.Minute), 3); err != nil {
+		t.Fatalf("opting back in must scrobble again: %v", err)
+	}
 }

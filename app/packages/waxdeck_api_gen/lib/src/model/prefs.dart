@@ -17,6 +17,9 @@ part 'prefs.g.dart';
 /// * [theme] - Preferred app theme.
 /// * [sharedStatsOptOut] - Leave the server-wide aggregate stats (the server year in review). Household members are enrolled by default; opting out removes this user's listening from every server-wide figure. Personal stats are unaffected. 
 /// * [radioFavorites] - Radio stations this user has pinned, in the order the dial presents them. The station library itself is shared by every account, so this is the one piece of per-user station state there is: which of the household's stations are *yours*.  Ordered, and the order is the client's to set - new pins go on the end, so a dial does not reshuffle under a thumb. Entries are station PIDs (`rs-...`) and are not resolved on write: a station deleted by another household member leaves its pid here, and a client renders only the pids it can still find, because failing a whole preference write over one departed station would be worse than a dial one slot shorter.  Capped at 64, which is a bound on the document rather than on the feature: clients present about a dozen, and that cap is theirs. A client presenting fewer than the document holds must still write back what it did not draw - the cap belongs to the dial, not to the list.  Stored in the canonical upper-case form the pattern above declares, whatever case a write used, so a pin always names the station the server named. Absent when nothing is pinned: unpinning everything drops the field rather than storing `[]`, and nothing reads a default set of pins out of an absent list, so absent and empty are one answer on the way back. 
+/// * [crossfadeSeconds] - Equal-power crossfade applied at every seam of a queue the server renders as one stream, in seconds. Zero or absent is a gapless butt join.  Here rather than in a client's own per-device storage because the server is what applies it: a cast session is re-rendered server-side on every queue edit, shuffle, and repeat reload, and those arrive over the control socket carrying no client state at all. A per-device value would reach the first load and none of the reloads, so the queue would change how it sounds halfway through. Local playback does not read this yet, which is why clients label it for casting. 
+/// * [replayGain] - Level a server-rendered queue to a common loudness. The gain is derived from the measured loudness the analyze pass stores per file and applied once to the whole stream, so a queue whose files were never analyzed plays unlevelled whatever this says.  Same reason as `crossfadeSeconds` for living on the account rather than on the device, and the same labeling: nothing local reads it yet. 
+/// * [radioScrobbleOptOut] - Stop scrobbling radio. Listeners with a scrobble connection have their radio segments reported by default, which is right for a music station whose stream titles are honest and wrong for a talk station whose titles happen to parse. Opting out silences radio only; library listening is unaffected. 
 @BuiltValue()
 abstract class Prefs implements Built<Prefs, PrefsBuilder> {
   /// IANA timezone name (for example `Europe/Amsterdam`). Drives streaks, heatmaps, and other calendar-bucketed statistics. 
@@ -39,6 +42,18 @@ abstract class Prefs implements Built<Prefs, PrefsBuilder> {
   /// Radio stations this user has pinned, in the order the dial presents them. The station library itself is shared by every account, so this is the one piece of per-user station state there is: which of the household's stations are *yours*.  Ordered, and the order is the client's to set - new pins go on the end, so a dial does not reshuffle under a thumb. Entries are station PIDs (`rs-...`) and are not resolved on write: a station deleted by another household member leaves its pid here, and a client renders only the pids it can still find, because failing a whole preference write over one departed station would be worse than a dial one slot shorter.  Capped at 64, which is a bound on the document rather than on the feature: clients present about a dozen, and that cap is theirs. A client presenting fewer than the document holds must still write back what it did not draw - the cap belongs to the dial, not to the list.  Stored in the canonical upper-case form the pattern above declares, whatever case a write used, so a pin always names the station the server named. Absent when nothing is pinned: unpinning everything drops the field rather than storing `[]`, and nothing reads a default set of pins out of an absent list, so absent and empty are one answer on the way back. 
   @BuiltValueField(wireName: r'radioFavorites')
   BuiltList<String>? get radioFavorites;
+
+  /// Equal-power crossfade applied at every seam of a queue the server renders as one stream, in seconds. Zero or absent is a gapless butt join.  Here rather than in a client's own per-device storage because the server is what applies it: a cast session is re-rendered server-side on every queue edit, shuffle, and repeat reload, and those arrive over the control socket carrying no client state at all. A per-device value would reach the first load and none of the reloads, so the queue would change how it sounds halfway through. Local playback does not read this yet, which is why clients label it for casting. 
+  @BuiltValueField(wireName: r'crossfadeSeconds')
+  double? get crossfadeSeconds;
+
+  /// Level a server-rendered queue to a common loudness. The gain is derived from the measured loudness the analyze pass stores per file and applied once to the whole stream, so a queue whose files were never analyzed plays unlevelled whatever this says.  Same reason as `crossfadeSeconds` for living on the account rather than on the device, and the same labeling: nothing local reads it yet. 
+  @BuiltValueField(wireName: r'replayGain')
+  bool? get replayGain;
+
+  /// Stop scrobbling radio. Listeners with a scrobble connection have their radio segments reported by default, which is right for a music station whose stream titles are honest and wrong for a talk station whose titles happen to parse. Opting out silences radio only; library listening is unaffected. 
+  @BuiltValueField(wireName: r'radioScrobbleOptOut')
+  bool? get radioScrobbleOptOut;
 
   Prefs._();
 
@@ -98,6 +113,27 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
         specifiedType: const FullType(BuiltList, [FullType(String)]),
       );
     }
+    if (object.crossfadeSeconds != null) {
+      yield r'crossfadeSeconds';
+      yield serializers.serialize(
+        object.crossfadeSeconds,
+        specifiedType: const FullType(double),
+      );
+    }
+    if (object.replayGain != null) {
+      yield r'replayGain';
+      yield serializers.serialize(
+        object.replayGain,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.radioScrobbleOptOut != null) {
+      yield r'radioScrobbleOptOut';
+      yield serializers.serialize(
+        object.radioScrobbleOptOut,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -155,6 +191,27 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
             specifiedType: const FullType(BuiltList, [FullType(String)]),
           ) as BuiltList<String>;
           result.radioFavorites.replace(valueDes);
+          break;
+        case r'crossfadeSeconds':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(double),
+          ) as double;
+          result.crossfadeSeconds = valueDes;
+          break;
+        case r'replayGain':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.replayGain = valueDes;
+          break;
+        case r'radioScrobbleOptOut':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.radioScrobbleOptOut = valueDes;
           break;
         default:
           unhandled.add(key);

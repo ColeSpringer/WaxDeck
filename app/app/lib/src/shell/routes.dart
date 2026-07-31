@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../music/music_controllers.dart';
+import '../settings/settings_registry.dart';
 
 /// Every canonical location in the app, in one place.
 ///
@@ -129,7 +130,20 @@ abstract final class WaxRoute {
   /// Controlling a Connect session on another endpoint.
   static const remote = '/remote';
 
+  /// Settings, and one location per section. A section is a place a
+  /// stranger can open, so "it is under Playback" is a link rather than
+  /// a set of directions.
   static const settings = '/settings';
+
+  static String settingsSection(SettingsSection section) =>
+      '$settings/${section.segment}';
+
+  /// What this build is and what it is talking to. A location like any
+  /// other section: a stranger opening it gets the page, which is the
+  /// question 8.3 asks. Declared ahead of the `:section` pattern in the
+  /// table so the literal wins over it.
+  static const settingsAbout = '$settings/about';
+
   static const shares = '/shares';
   static const uploads = '/uploads';
 

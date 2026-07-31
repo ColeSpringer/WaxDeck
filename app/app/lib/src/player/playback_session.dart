@@ -30,6 +30,7 @@ class PlaybackSession {
     this.checkpointInterval = const Duration(seconds: 5),
     this.initialPositionMs,
     this.skipMapRetryDelay = const Duration(seconds: 30),
+    this.defaultSpeed = 1.0,
   });
 
   final WaxDeckRepository repository;
@@ -51,6 +52,16 @@ class PlaybackSession {
 
   /// How long to wait before the single retry of a pending skip map.
   final Duration skipMapRetryDelay;
+
+  /// The rate a show or a book plays at when it has none stored of its
+  /// own: this device's Playback default. Never applied to music, which
+  /// has no per-item rate to fall back from.
+  ///
+  /// Supplied by the caller rather than read here, because a session
+  /// outlives the frame it was built in: a value read once at start is
+  /// exactly the semantics wanted, since changing the default must not
+  /// re-rate a book somebody is listening to.
+  final double defaultSpeed;
 
   /// Position deltas above this are treated as seeks, not listening.
   static const maxCountedStep = Duration(seconds: 2);
@@ -351,9 +362,17 @@ class PlaybackSession {
         : (_showSettings?.trimSilence ?? false);
   }
 
+  /// The item's own remembered rate, and this device's default behind
+  /// it.
+  ///
+  /// Music is 1x and nothing else. It stores no rate of its own, so a
+  /// default here would be a speed a listener could set and never depart
+  /// from - and the setting is Playback's "spoken word" default, which
+  /// is what a show and a book are and a track is not.
   double _configuredSpeed() {
+    if (item.mediaType == MediaType.music) return 1.0;
     final configured = _isBook ? _bookSettings?.speed : _showSettings?.speed;
-    return configured ?? 1.0;
+    return configured ?? defaultSpeed;
   }
 
   /// Episodes with a skip-intro setting start at the intro end unless the

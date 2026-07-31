@@ -169,9 +169,17 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 // Timeline renders the queue as one gapless HLS stream when the engine
 // supports timelines and every entry is a whole file. A nil result
 // means "use StreamItems".
-func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries []connect.QueueEntry, crossfade float64, base string) (*connect.TimelineMedia, error) {
+func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries []connect.QueueEntry, base string) (*connect.TimelineMedia, error) {
 	if r.Bridge == nil || !r.Bridge.TimelinesSupported() {
 		return nil, nil
+	}
+	// The session owner's, not the caller's: a household member with
+	// permission to drive somebody else's cast session must not have
+	// their own crossfade rewrite how it sounds mid-queue.
+	prefs := r.Svc.PrefsForUser(ctx, userID)
+	opts := flow.TimelineOptions{
+		CrossfadeSeconds: prefs.CrossfadeSeconds,
+		ReplayGain:       prefs.ReplayGain,
 	}
 	members := make([]flow.TimelineMember, 0, len(entries))
 	for _, e := range entries {
@@ -184,9 +192,12 @@ func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries [
 			// sidecar takes member windows; otherwise fall back per item.
 			return nil, nil
 		}
+		if opts.ReplayGain {
+			r.Svc.FillLoudness(ctx, &src)
+		}
 		members = append(members, flow.TimelineMember{PID: e.PID, Src: src})
 	}
-	res, err := r.Bridge.TimelineFor(ctx, userID, members, crossfade)
+	res, err := r.Bridge.TimelineFor(ctx, userID, members, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -538,6 +549,14 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 	if crossfade < 0 || crossfade > 12 {
 		return CreateQueueTimeline400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "crossfadeSeconds must be between 0 and 12"))}, nil
 	}
+	// The crossfade is the request's, since a caller minting its own
+	// timeline is deciding this queue's presentation. Leveling is not on
+	// the request at all: it says whether this listener wants a level
+	// playing field, which is a fact about them and not about a queue.
+	opts := flow.TimelineOptions{
+		CrossfadeSeconds: crossfade,
+		ReplayGain:       s.svc.PrefsForUser(ctx, p.User.ID).ReplayGain,
+	}
 	members := make([]flow.TimelineMember, 0, len(body.ItemPids))
 	for _, pid := range body.ItemPids {
 		if err := s.svc.VisibleItem(ctx, uc, pid); err != nil {
@@ -550,9 +569,12 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 		if src.Virtual && !s.bridge.TimelineMemberWindowsSupported() {
 			return CreateQueueTimeline409JSONResponse{ConflictJSONResponse(errObj("conflict", "virtual tracks cannot join a timeline: "+pid))}, nil
 		}
+		if opts.ReplayGain {
+			s.svc.FillLoudness(ctx, &src)
+		}
 		members = append(members, flow.TimelineMember{PID: pid, Src: src})
 	}
-	res, err := s.bridge.TimelineFor(ctx, p.User.ID, members, crossfade)
+	res, err := s.bridge.TimelineFor(ctx, p.User.ID, members, opts)
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "crossfade") {

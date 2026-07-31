@@ -31,7 +31,16 @@ type MediaResolver interface {
 	// Timeline renders the whole queue as one gapless stream when the
 	// streaming engine supports it and every entry is eligible. A nil
 	// result without error means "not available; use StreamItems".
-	Timeline(ctx context.Context, userID string, entries []QueueEntry, crossfade float64, base string) (*TimelineMedia, error)
+	//
+	// How the render sounds - crossfade, leveling - is the resolver's to
+	// look up from the session owner's preferences, deliberately not a
+	// parameter here. This package re-renders a session on every queue
+	// edit, shuffle, and repeat reload, and those arrive over the
+	// control socket with nobody's preferences attached; a parameter
+	// would be passed correctly on the first load and as a zero on every
+	// reload after it, which is a queue that changes how it sounds
+	// halfway through.
+	Timeline(ctx context.Context, userID string, entries []QueueEntry, base string) (*TimelineMedia, error)
 }
 
 // ProgressSink is the write-through to per-user playback state. Only
@@ -518,7 +527,7 @@ func (s *Service) loadOnDevice(ctx context.Context, sess *session, ep Endpoint, 
 	for _, base := range bases {
 		var tm *TimelineMedia
 		if ep.Kind == KindCast && len(entries) > 1 {
-			tm, err = s.cfg.Resolver.Timeline(ctx, ownerID, entries, 0, base)
+			tm, err = s.cfg.Resolver.Timeline(ctx, ownerID, entries, base)
 			if err != nil {
 				s.cfg.Logger.Warn("timeline mint failed; loading per item", "err", err)
 				tm = nil

@@ -25,6 +25,8 @@ class WaxTextField extends StatefulWidget {
     this.onSubmitted,
     this.autofocus = false,
     this.textInputAction,
+    this.obscureText = false,
+    this.errorText,
     this.semanticsId,
     this.clearSemanticsId,
     super.key,
@@ -47,6 +49,18 @@ class WaxTextField extends StatefulWidget {
   final ValueChanged<String>? onSubmitted;
   final bool autofocus;
   final TextInputAction? textInputAction;
+
+  /// Hides what is typed, for passwords and tokens. Also suppresses the
+  /// clear button: a secret field's contents are not something to glance
+  /// at and decide about, and the button would be a control whose only
+  /// effect is invisible.
+  final bool obscureText;
+
+  /// What went wrong with this value, drawn under the field in the error
+  /// colour. Beneath rather than as a toast, because an error about a
+  /// field belongs where the field is.
+  final String? errorText;
+
   final String? semanticsId;
 
   /// The clear control's own handle. It is a separate control from the
@@ -108,7 +122,8 @@ class _WaxTextFieldState extends State<WaxTextField> {
     final colors = WaxColors.of(context);
     final motion = WaxMotion.of(context);
 
-    return WaxFocusRing(
+    final error = widget.errorText;
+    final field = WaxFocusRing(
       focused: _focused,
       borderRadius: WaxRadius.pill,
       surface: colors.canvas,
@@ -120,7 +135,11 @@ class _WaxTextFieldState extends State<WaxTextField> {
         decoration: BoxDecoration(
           color: colors.surface2,
           borderRadius: WaxRadius.pill,
-          border: Border.all(color: _focused ? colors.accent : colors.hairline),
+          border: Border.all(
+            color: error != null
+                ? colors.error
+                : (_focused ? colors.accent : colors.hairline),
+          ),
         ),
         child: Row(
           children: <Widget>[
@@ -143,6 +162,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
                   focusNode: _focus,
                   autofocus: widget.autofocus,
                   textInputAction: widget.textInputAction,
+                  obscureText: widget.obscureText,
                   onChanged: widget.onChanged,
                   onSubmitted: widget.onSubmitted,
                   style: WaxType.body.copyWith(color: colors.textPrimary),
@@ -175,21 +195,37 @@ class _WaxTextFieldState extends State<WaxTextField> {
             // Built off the controller so it appears with the first
             // character and leaves with the last, without the field
             // rebuilding its ancestors on every keystroke.
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _controller,
-              builder: (context, value, _) => value.text.isEmpty
-                  ? const SizedBox.shrink()
-                  : WaxIconButton(
-                      glyph: WaxIcons.close,
-                      label: 'Clear ${widget.label.toLowerCase()}',
-                      size: 16,
-                      semanticsId: widget.clearSemanticsId,
-                      onPressed: _clear,
-                    ),
-            ),
+            if (!widget.obscureText)
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _controller,
+                builder: (context, value, _) => value.text.isEmpty
+                    ? const SizedBox.shrink()
+                    : WaxIconButton(
+                        glyph: WaxIcons.close,
+                        label: 'Clear ${widget.label.toLowerCase()}',
+                        size: 16,
+                        semanticsId: widget.clearSemanticsId,
+                        onPressed: _clear,
+                      ),
+              ),
           ],
         ),
       ),
+    );
+    if (error == null) return field;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        field,
+        Padding(
+          padding: const EdgeInsets.only(top: WaxSpace.s4, left: WaxSpace.s12),
+          child: Text(
+            error,
+            style: WaxType.bodySmall.copyWith(color: colors.error),
+          ),
+        ),
+      ],
     );
   }
 }

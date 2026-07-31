@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../providers.dart';
+import '../settings/client_prefs.dart';
 import 'test_env/test_env.dart';
 
 /// The local mirror database. Native only: the web SPA stays
@@ -39,6 +40,11 @@ final downloadManagerProvider = Provider<DownloadManagerPort?>((ref) {
     db: db,
     repository: ref.watch(repositoryProvider),
     baseUrl: waxDeckBaseUrl,
+    // Read rather than watched: this provider builds the engine that
+    // owns every in-flight transfer, and rebuilding it because a switch
+    // moved would drop them all. The callback is what makes the setting
+    // reach the next download without that.
+    wifiOnly: () => ref.read(downloadsOnWifiOnlyProvider),
   );
   ref.onDispose(manager.dispose);
   return manager;

@@ -56,6 +56,39 @@ abstract final class ClientSettingKeys {
   /// phone says nothing about what the desktop should offer, and the
   /// server's history is the same list for both.
   static const resumeDeclinedThrough = 'waxdeck.queue.resumeDeclinedThrough';
+
+  /// How far the spoken-word transports jump, in seconds. Two keys and
+  /// not one pair: the two are set independently and a listener who
+  /// changes only the forward jump should not have the other rewritten
+  /// beside it.
+  static const skipBackSeconds = 'waxdeck.playback.skipBackSeconds';
+  static const skipForwardSeconds = 'waxdeck.playback.skipForwardSeconds';
+
+  /// The speed a show or a book plays at when it has none of its own.
+  /// Per device because it is about the ears in front of it; the
+  /// per-show and per-book values it backs are the account's and live on
+  /// their own endpoints.
+  static const podcastSpeed = 'waxdeck.playback.podcastSpeed';
+  static const bookSpeed = 'waxdeck.playback.bookSpeed';
+
+  /// Whether gapless preloading waits for an unmetered connection.
+  static const preloadOnWifiOnly = 'waxdeck.playback.preloadOnWifiOnly';
+
+  /// Whether downloads wait for an unmetered connection.
+  static const downloadsOnWifiOnly = 'waxdeck.downloads.wifiOnly';
+
+  /// Whether codec, bitrate, and provenance chips are drawn.
+  static const technicalDetails = 'waxdeck.library.technicalDetails';
+
+  /// How tightly rows pack, and how large artwork tiles are drawn.
+  static const density = 'waxdeck.appearance.density';
+  static const gridSize = 'waxdeck.appearance.gridSize';
+
+  /// An in-app override for the platform's reduce-motion setting. Only
+  /// ever additive: it can turn animation off where the platform has it
+  /// on, and never the other way, because the platform's answer is an
+  /// accessibility need rather than a preference to overrule.
+  static const reduceMotion = 'waxdeck.a11y.reduceMotion';
 }
 
 /// Per-device settings in the local mirror database (native builds).

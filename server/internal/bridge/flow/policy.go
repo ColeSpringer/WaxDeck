@@ -30,9 +30,17 @@ type Source struct {
 	// SpokenWord marks podcast episodes and audiobooks: the content
 	// voice boost is for.
 	SpokenWord bool
-	// IntegratedLUFS is the source's measured loudness when known (the
-	// analysis cache); voice boost needs it to derive leveling gain.
+	// EssenceHash keys the analysis cache for the backing audio. The
+	// resolver hands it out so a caller that wants loudness for content
+	// StreamSource does not read it for (music, for timeline leveling)
+	// can ask for it without resolving the item a second time.
+	EssenceHash string
+	// IntegratedLUFS and TruePeakDB are the source's measured loudness
+	// when known (the analysis cache). Voice boost derives its leveling
+	// gain from the first; timeline leveling reads both, because a gain
+	// applied to a stream that is already near full scale clips.
 	IntegratedLUFS *float64
+	TruePeakDB     *float64
 }
 
 // voiceTargetLUFS is the spoken-word leveling target. Streaming
@@ -61,6 +69,86 @@ func VoiceBoostParams(src Source, caps *client.Caps, want bool) (gainDB float64,
 	}
 	// Attenuation has no engaged floor worth clamping at speech levels.
 	return gain, true
+}
+
+// replayGainTargetLUFS is the loudness a levelled queue is brought to.
+// ReplayGain 2.0's reference is -18 LUFS, and a household stream that
+// also plays podcasts at -16 sits close enough to it that a queue does
+// not change loudness when the content changes.
+const replayGainTargetLUFS = -18.0
+
+// replayGainCeilingDBTP leaves a decibel of true-peak headroom, the
+// ReplayGain convention: intersample peaks and a lossy re-encode both
+// push the reconstructed waveform above what the samples measure.
+const replayGainCeilingDBTP = -1.0
+
+// replayGainMaxBoostDB bounds how far a quiet queue is lifted. The
+// sidecar clamps requested positive gain at +12 for music anyway; the
+// same bound here means the value in the signed URL is the value that
+// plays, so a log line and a listener's ears agree.
+const replayGainMaxBoostDB = 12.0
+
+// TimelineGainDB derives the single gain a levelled timeline renders
+// at, and whether there was anything to derive it from.
+//
+// One gain for the whole stream is not an approximation of per-track
+// ReplayGain, it is the only thing a timeline can express: the members
+// are rendered into one continuous stream and there is no seam at which
+// a gain could change. That makes this an album gain over whatever the
+// queue happens to be, so it is derived the way album gain is - from
+// the program as a whole - by weighting each measured member's loudness
+// by how long it plays.
+//
+// Members with no stored measurement are carried at the gain the
+// measured ones produced rather than excluded from the stream, which is
+// what an unanalyzed track in the middle of an analyzed album should
+// do. A queue where nothing is measured levels nothing: false here
+// means the mint asks for gain=off rather than for a number invented
+// out of no data.
+func TimelineGainDB(members []TimelineMember) (float64, bool) {
+	var weighted, weight float64
+	var peak *float64
+	for _, m := range members {
+		if p := m.Src.TruePeakDB; p != nil && (peak == nil || *p > *peak) {
+			peak = p
+		}
+		if m.Src.IntegratedLUFS == nil {
+			continue
+		}
+		// A member with no duration would drop out of a weighted mean
+		// entirely; it counts as one unit instead, which is what an
+		// unweighted mean would have done for every member.
+		w := float64(m.Src.DurationMS)
+		if w <= 0 {
+			w = 1
+		}
+		weighted += *m.Src.IntegratedLUFS * w
+		weight += w
+	}
+	if weight <= 0 {
+		return 0, false
+	}
+	db := replayGainTargetLUFS - weighted/weight
+	if db > replayGainMaxBoostDB {
+		db = replayGainMaxBoostDB
+	}
+	// Clipping is the one failure a listener cannot undo by reaching for
+	// the volume, so where a peak is known it wins over the target: a
+	// quiet-but-peaky master is left where it is rather than squared
+	// off. Only ever downward, so this can never turn a cut into more of
+	// one. Where no peak was measured there is nothing to reason from
+	// and the boost stands; the sidecar's limiter is the backstop.
+	if peak != nil {
+		if headroom := replayGainCeilingDBTP - *peak; db > headroom {
+			db = headroom
+		}
+	}
+	// A fraction of a decibel is not audible and would still cost the
+	// whole queue a re-encode, so it counts as nothing to do.
+	if db > -0.05 && db < 0.05 {
+		return 0, false
+	}
+	return db, true
 }
 
 // Shape is the format policy's answer: the stream parameters to

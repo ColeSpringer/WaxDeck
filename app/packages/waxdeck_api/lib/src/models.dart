@@ -230,6 +230,9 @@ class Prefs {
     this.theme,
     this.sharedStatsOptOut,
     this.radioFavorites,
+    this.crossfadeSeconds,
+    this.replayGain,
+    this.radioScrobbleOptOut,
   });
 
   /// IANA timezone name, for example Europe/Amsterdam.
@@ -257,6 +260,23 @@ class Prefs {
   /// the way out, which [copyWith] carries and null does not.
   final List<String>? radioFavorites;
 
+  /// Equal-power crossfade at every seam of a queue the server renders as
+  /// one stream, in seconds. Absent or zero is a gapless butt join.
+  ///
+  /// On the account rather than in a client's own storage because the
+  /// server applies it, and re-applies it on every queue edit a cast
+  /// session takes, when no client is in the loop to supply a value.
+  final double? crossfadeSeconds;
+
+  /// Level a server-rendered queue to a common loudness, from the
+  /// measurements the analyze pass stores. Same reason for living here as
+  /// [crossfadeSeconds].
+  final bool? replayGain;
+
+  /// Stop reporting radio segments to this account's scrobblers. Absent
+  /// means enrolled, the default.
+  final bool? radioScrobbleOptOut;
+
   /// Copy with individual fields replaced. Passing null keeps the current
   /// value; clearing a stored field is not something the UI needs yet.
   Prefs copyWith({
@@ -265,6 +285,9 @@ class Prefs {
     ThemePref? theme,
     bool? sharedStatsOptOut,
     List<String>? radioFavorites,
+    double? crossfadeSeconds,
+    bool? replayGain,
+    bool? radioScrobbleOptOut,
   }) {
     return Prefs(
       timezone: timezone ?? this.timezone,
@@ -272,6 +295,9 @@ class Prefs {
       theme: theme ?? this.theme,
       sharedStatsOptOut: sharedStatsOptOut ?? this.sharedStatsOptOut,
       radioFavorites: radioFavorites ?? this.radioFavorites,
+      crossfadeSeconds: crossfadeSeconds ?? this.crossfadeSeconds,
+      replayGain: replayGain ?? this.replayGain,
+      radioScrobbleOptOut: radioScrobbleOptOut ?? this.radioScrobbleOptOut,
     );
   }
 }

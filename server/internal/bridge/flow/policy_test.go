@@ -287,3 +287,95 @@ func TestDeviceFormat(t *testing.T) {
 		})
 	}
 }
+
+func lufs(v float64) *float64 { return &v }
+
+func TestTimelineGainDB(t *testing.T) {
+	member := func(durationMS int64, integrated, peak *float64) TimelineMember {
+		return TimelineMember{Src: Source{DurationMS: durationMS, IntegratedLUFS: integrated, TruePeakDB: peak}}
+	}
+	cases := []struct {
+		name    string
+		members []TimelineMember
+		want    float64
+		wantOK  bool
+	}{
+		{
+			name:    "nothing measured levels nothing",
+			members: []TimelineMember{member(60000, nil, nil), member(60000, nil, nil)},
+		},
+		{
+			name:    "a loud master is cut to the target",
+			members: []TimelineMember{member(60000, lufs(-8), lufs(-0.2))},
+			want:    -10,
+			wantOK:  true,
+		},
+		{
+			name:    "a quiet master with headroom is lifted",
+			members: []TimelineMember{member(60000, lufs(-24), lufs(-12))},
+			want:    6,
+			wantOK:  true,
+		},
+		{
+			// The mean is weighted by play time, so a ten-minute track
+			// decides more of the queue's level than a one-minute one.
+			name: "measured members are weighted by duration",
+			members: []TimelineMember{
+				member(600000, lufs(-20), lufs(-6)),
+				member(60000, lufs(-9), lufs(-6)),
+			},
+			want:   -18 - (-20*600000+-9*60000)/660000,
+			wantOK: true,
+		},
+		{
+			name:    "an unmeasured member rides the measured ones' gain",
+			members: []TimelineMember{member(60000, lufs(-24), lufs(-12)), member(60000, nil, nil)},
+			want:    6,
+			wantOK:  true,
+		},
+		{
+			// Quiet but already peaking: boosting to the target would
+			// clip, so the peak decides and the queue is nudged down to
+			// the headroom line instead.
+			name:    "a peaking master is held under the ceiling",
+			members: []TimelineMember{member(60000, lufs(-24), lufs(-0.5))},
+			want:    -0.5,
+			wantOK:  true,
+		},
+		{
+			name:    "a very quiet queue stops at the boost ceiling",
+			members: []TimelineMember{member(60000, lufs(-40), nil)},
+			want:    replayGainMaxBoostDB,
+			wantOK:  true,
+		},
+		{
+			// The two measurements come from one analysis row, so a
+			// member with a peak and no loudness is rare - but it must
+			// still bound the boost, because it is going into the same
+			// stream. The peak sweep runs before the loudness check
+			// skips a member, and this is what says so.
+			name: "a peak counts even where its member's loudness does not",
+			members: []TimelineMember{
+				member(60000, lufs(-24), nil),
+				member(60000, nil, lufs(-0.5)),
+			},
+			want:   -0.5,
+			wantOK: true,
+		},
+		{
+			name:    "a queue already at the target is left alone",
+			members: []TimelineMember{member(60000, lufs(-18.01), lufs(-3))},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := TimelineGainDB(tc.members)
+			if ok != tc.wantOK {
+				t.Fatalf("TimelineGainDB ok = %v, want %v", ok, tc.wantOK)
+			}
+			if ok && (got-tc.want > 1e-9 || tc.want-got > 1e-9) {
+				t.Fatalf("TimelineGainDB = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

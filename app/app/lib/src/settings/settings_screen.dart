@@ -1,231 +1,132 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:go_router/go_router.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../admin/server_settings_section.dart';
-import '../auth/auth_controller.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-import 'integrations_sections.dart';
-import 'listening_sections.dart';
-import 'prefs_controller.dart';
-import 'sessions_controller.dart';
+import 'settings_registry.dart';
 
-/// Account surface: the signed-in user, the synced theme preference, the
-/// device list with revocation, and sign out.
-class SettingsScreen extends ConsumerWidget {
+/// The settings home: a search field and the sections behind it.
+///
+/// Nine sections is more than anybody navigates by memory, so the field
+/// is pinned at the top and the sections are what it falls back to. A
+/// query matches leaf settings rather than sections, because "crossfade"
+/// is what somebody types and "Playback" is what they would have to have
+/// guessed.
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
-  static String _themeLabel(ThemePref theme) => switch (theme) {
-    ThemePref.system => 'System',
-    ThemePref.dark => 'Dark',
-    ThemePref.light => 'Light',
-    ThemePref.oled => 'OLED black',
-  };
-
-  // Nothing to unwind by hand: dropping the session moves the auth
-  // redirect, which replaces the whole signed-in stack with login.
-  Future<void> _signOut(WidgetRef ref) =>
-      ref.read(authControllerProvider.notifier).logout();
-
-  Future<void> _revoke(
-    BuildContext context,
-    WidgetRef ref,
-    DeviceSession session,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          session.current ? 'Sign out this device?' : 'Sign out device?',
-        ),
-        content: Text(
-          session.current
-              ? 'This is the device you are using now. Revoking its '
-                    'session signs you out.'
-              : '"${session.label}" will be signed out immediately.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            key: const Key('device-revoke-confirm'),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sign out'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      final wasCurrent = await ref
-          .read(sessionsControllerProvider.notifier)
-          .revoke(session.id);
-      if (wasCurrent) {
-        await ref.read(authControllerProvider.notifier).signOutLocally();
-      }
-    } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    }
-  }
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    final user = ref.watch(authControllerProvider).value?.user;
-    final prefs = ref.watch(prefsControllerProvider).value;
-    final sessions = ref.watch(sessionsControllerProvider);
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text('Account', style: textTheme.titleMedium),
-          const SizedBox(height: 8),
-          ListTile(
-            leading: const Icon(Icons.account_circle),
-            title: Text(user?.label ?? 'Signed in'),
-            subtitle: user == null ? null : Text(user.username),
-          ),
-          const SizedBox(height: 16),
-          Text('Appearance', style: textTheme.titleMedium),
-          const SizedBox(height: 8),
-          ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('Theme'),
-            trailing: Semantics(
-              identifier: SemanticsIds.themeSelect,
-              child: DropdownButton<ThemePref>(
-                key: const Key(SemanticsIds.themeSelect),
-                value: prefs?.theme ?? ThemePref.dark,
-                onChanged: (theme) {
-                  if (theme == null) return;
-                  ref.read(prefsControllerProvider.notifier).setTheme(theme);
-                },
-                items: [
-                  for (final theme in ThemePref.values)
-                    DropdownMenuItem(
-                      value: theme,
-                      child: Text(_themeLabel(theme)),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text('Devices', style: textTheme.titleMedium),
-          const SizedBox(height: 8),
-          switch (sessions) {
-            AsyncData(:final value) => Column(
-              children: [
-                for (final session in value)
-                  _DeviceRow(
-                    session: session,
-                    onRevoke: () => _revoke(context, ref, session),
-                  ),
-              ],
-            ),
-            AsyncError() => Text(
-              'Could not load devices',
-              style: textTheme.bodyMedium?.copyWith(color: colorScheme.error),
-            ),
-            _ => const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(),
-              ),
-            ),
-          },
-          const SizedBox(height: 16),
-          const ListeningSection(),
-          const SizedBox(height: 16),
-          const ScrobblingSection(),
-          const SizedBox(height: 16),
-          const AppPasswordsSection(),
-          const SizedBox(height: 16),
-          const PersonalNotificationTargetsSection(),
-          if (user?.roles.contains('admin') ?? false) ...[
-            const SizedBox(height: 16),
-            const ServerNotificationTargetsSection(),
-            const SizedBox(height: 16),
-            const SimilarityStatusSection(),
-            const SizedBox(height: 16),
-            const ServerSettingsSection(),
-          ],
-          const SizedBox(height: 24),
-          Semantics(
-            identifier: SemanticsIds.logoutButton,
-            child: FilledButton.tonalIcon(
-              key: const Key(SemanticsIds.logoutButton),
-              onPressed: () => _signOut(ref),
-              icon: const Icon(Icons.logout),
-              label: const Text('Sign out'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _DeviceRow extends StatelessWidget {
-  const _DeviceRow({required this.session, required this.onRevoke});
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  final TextEditingController _query = TextEditingController();
 
-  final DeviceSession session;
-  final VoidCallback onRevoke;
-
-  static String _date(DateTime at) {
-    final local = at.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day';
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = StringBuffer('Signed in ${_date(session.createdAt)}');
-    final client = session.client;
-    if (session.deviceName != null && client != null) {
-      subtitle.write(' with $client');
-    }
-    return Semantics(
-      identifier: SemanticsIds.deviceRow(session.id),
-      child: ListTile(
-        key: Key(SemanticsIds.deviceRow(session.id)),
-        leading: Icon(
-          session.kind == SessionKind.web
-              ? Icons.language
-              : Icons.devices_other,
-        ),
-        title: Row(
-          children: [
-            Flexible(
-              child: Text(session.label, overflow: TextOverflow.ellipsis),
+    final sizeClass = WaxSizeClass.of(context);
+    final isAdmin = ref.watch(isAdminProvider);
+    final query = _query.text;
+    final results = searchSettings(query, isAdmin: isAdmin, isNative: !kIsWeb);
+    final sections = <SettingsSection>[
+      for (final section in SettingsSection.values)
+        if (!section.adminOnly || isAdmin) section,
+    ];
+
+    return WaxScaffold(
+      title: 'Settings',
+      semanticsId: SemanticsIds.settingsScreen,
+      slivers: <Widget>[
+        SliverPadding(
+          padding: sizeClass.gutter + const EdgeInsets.only(top: WaxSpace.s8),
+          sliver: SliverToBoxAdapter(
+            child: SearchField(
+              controller: _query,
+              hint: 'Search settings',
+              label: 'Search settings',
+              semanticsId: SemanticsIds.settingsSearch,
+              onChanged: (_) => setState(() {}),
             ),
-            if (session.current) ...[
-              const SizedBox(width: 8),
-              Chip(
-                label: const Text('This device'),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ],
-          ],
-        ),
-        subtitle: Text(subtitle.toString()),
-        trailing: Semantics(
-          identifier: SemanticsIds.deviceRevoke(session.id),
-          child: IconButton(
-            key: Key(SemanticsIds.deviceRevoke(session.id)),
-            tooltip: 'Sign out device',
-            icon: const Icon(Icons.logout),
-            onPressed: onRevoke,
           ),
         ),
+        if (query.trim().isNotEmpty)
+          _Results(results: results, query: query)
+        else
+          SliverPadding(
+            padding: sizeClass.gutter,
+            sliver: SliverList.builder(
+              itemCount: sections.length,
+              itemBuilder: (context, index) {
+                final section = sections[index];
+                return WaxOptionRow(
+                  title: section.title,
+                  subtitle: section.blurb,
+                  glyph: section.glyph,
+                  semanticsId: SemanticsIds.settingsSection(section.segment),
+                  trailing: const WaxIcon(WaxIcons.forward, size: 16),
+                  // A section is a location a stranger can open, so it
+                  // is gone to and takes its place beneath settings in
+                  // the table rather than being pushed as an overlay.
+                  onTap: () => context.go(WaxRoute.settingsSection(section)),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// What a query found, each row saying which section it lives in.
+///
+/// The section is on the row rather than being a heading over a group,
+/// because the useful answer to "where is crossfade" is "Playback" said
+/// next to it, and a result set of three rows under three headings is
+/// mostly headings.
+class _Results extends StatelessWidget {
+  const _Results({required this.results, required this.query});
+
+  final List<SettingEntry> results;
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    final sizeClass = WaxSizeClass.of(context);
+    if (results.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: EmptyState(
+          title: 'No setting matches "${query.trim()}"',
+          message:
+              'Server-wide settings live in the admin console, not here. '
+              'A per-show or per-book setting is on that show or book.',
+          glyph: WaxIcons.search,
+        ),
+      );
+    }
+    return SliverPadding(
+      padding: sizeClass.gutter,
+      sliver: SliverList.builder(
+        itemCount: results.length,
+        itemBuilder: (context, index) {
+          final entry = results[index];
+          return WaxOptionRow(
+            title: entry.title,
+            subtitle: entry.section.title,
+            glyph: entry.section.glyph,
+            semanticsId: SemanticsIds.settingsResult(entry.id),
+            trailing: const WaxIcon(WaxIcons.forward, size: 16),
+            onTap: () => context.go(WaxRoute.settingsSection(entry.section)),
+          );
+        },
       ),
     );
   }

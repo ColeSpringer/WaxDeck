@@ -7,7 +7,9 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 
 import '../connect/connect_controller.dart';
 import '../connect/connect_providers.dart';
+import '../connectivity/connectivity_port.dart';
 import '../providers.dart';
+import '../settings/client_prefs.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_state.dart';
 import '../radio/radio_controller.dart';
@@ -569,6 +571,13 @@ class NowPlayingController extends Notifier<NowPlaying> {
         sync: ref.read(syncEngineProvider),
         downloads: ref.read(downloadManagerProvider),
         initialPositionMs: initialPositionMs,
+        // Read at build, so a default changed mid-book does not re-rate
+        // what is playing. The two domains keep separate defaults
+        // because they are listened to differently: 1.5x is ordinary for
+        // a podcast and unusual for a novel.
+        defaultSpeed: item.mediaType == MediaType.audiobook
+            ? ref.read(bookSpeedProvider)
+            : ref.read(podcastSpeedProvider),
       );
 
   /// Makes [session] the live one: the previous session lets go, Connect
@@ -775,6 +784,15 @@ class NowPlayingController extends Notifier<NowPlaying> {
     // Too early to mint a stream URL, or no length to measure against.
     final remaining = session.mediaDuration - session.displayPosition;
     if (remaining <= Duration.zero || remaining > kPreloadLead) return;
+    // Asked at the moment of arming rather than held as state, and not
+    // recorded as a refusal: a listener who walks indoors mid-track gets
+    // the gapless crossing, and one who walks out does not. Refusing by
+    // queue id would stick to the entry for as long as it stayed next.
+    if (ref.read(preloadOnWifiOnlyProvider) &&
+        await ref.read(connectivityProvider).cost() == ConnectionCost.metered) {
+      return;
+    }
+    if (!ref.mounted) return;
 
     final item = await _resolve(next.pid);
     if (!ref.mounted) return;

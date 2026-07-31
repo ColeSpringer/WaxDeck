@@ -4,6 +4,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
 import '../providers.dart';
+import 'client_prefs.dart';
 
 /// The caller's synced preferences. Empty while signed out; refetched when
 /// the session changes.
@@ -76,8 +77,27 @@ class PrefsController extends AsyncNotifier<Prefs> {
       theme: current.theme,
       sharedStatsOptOut: current.sharedStatsOptOut,
       radioFavorites: current.radioFavorites,
+      crossfadeSeconds: current.crossfadeSeconds,
+      replayGain: current.replayGain,
+      radioScrobbleOptOut: current.radioScrobbleOptOut,
     ),
   );
+
+  /// Stores the crossfade a server-rendered queue is joined with.
+  ///
+  /// Zero is off, and it has to survive: [Prefs.copyWith] keeps the
+  /// current value for null and zero is a value, so turning a crossfade
+  /// back off carries through where clearing it would not.
+  Future<void> setCrossfadeSeconds(double seconds) =>
+      _write((current) => current.copyWith(crossfadeSeconds: seconds));
+
+  /// Stores whether a server-rendered queue is levelled.
+  Future<void> setReplayGain(bool on) =>
+      _write((current) => current.copyWith(replayGain: on));
+
+  /// Stores whether radio stays off this account's scrobblers.
+  Future<void> setRadioScrobbleOptOut(bool optOut) =>
+      _write((current) => current.copyWith(radioScrobbleOptOut: optOut));
 
   /// Stores the pinned radio stations, in dial order.
   ///
@@ -113,8 +133,10 @@ final themeModeProvider = Provider<ThemeMode>((ref) {
 ///
 /// OLED is a parameter of the dark build rather than a third theme, so a
 /// visitor who asked for true black gets it wherever the platform (or
-/// [themeModeProvider]) resolves to dark. Density is a per-device client
-/// setting and rides the store that lands with the settings phase.
+/// [themeModeProvider]) resolves to dark. Density comes from the other
+/// side of the settings line: it describes the screen in front of the
+/// listener, so it is per-device (ADR-0027) where the theme is the
+/// account's.
 class WaxThemeSpec {
   const WaxThemeSpec({
     required this.mode,
@@ -145,6 +167,6 @@ final waxThemeSpecProvider = Provider<WaxThemeSpec>((ref) {
   return WaxThemeSpec(
     mode: ref.watch(themeModeProvider),
     oled: prefs?.theme == ThemePref.oled,
-    density: WaxDensity.comfortable,
+    density: ref.watch(densityProvider),
   );
 });

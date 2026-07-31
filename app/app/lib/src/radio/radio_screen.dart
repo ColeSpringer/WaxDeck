@@ -9,6 +9,7 @@ import '../media_view.dart';
 import '../player/output_volume.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
+import '../settings/client_prefs.dart';
 import '../shell/semantics_ids.dart';
 import 'add_station.dart';
 import 'radio_controller.dart';
@@ -186,7 +187,7 @@ class _StationGrid extends ConsumerWidget {
         builder: (context, constraints) {
           final grid = MediaCard.gridFor(
             constraints.crossAxisExtent,
-            extent: _tileExtent,
+            extent: _tileExtent * ref.watch(gridScaleProvider),
           );
           return SliverGrid.builder(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(

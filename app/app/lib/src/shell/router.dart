@@ -47,7 +47,10 @@ import '../radio/radio_screen.dart';
 import '../review/review_entry_screen.dart';
 import '../review/review_screen.dart';
 import '../search/search_screen.dart';
+import '../settings/about_screen.dart';
+import '../settings/settings_registry.dart';
 import '../settings/settings_screen.dart';
+import '../settings/settings_section_screen.dart';
 import '../sharing/shares_screen.dart';
 import '../stats/listen_log_screen.dart';
 import '../stats/stats_screen.dart';
@@ -494,6 +497,33 @@ List<RouteBase> shellRoutes() => <RouteBase>[
           GoRoute(
             path: WaxRoute.settings,
             builder: (context, state) => const SettingsScreen(),
+            routes: <RouteBase>[
+              // Ahead of the pattern below, which would otherwise match
+              // "about" as a section segment and redirect it away.
+              GoRoute(
+                path: 'about',
+                builder: (context, state) => const AboutScreen(),
+              ),
+              GoRoute(
+                path: ':section',
+                // An unknown segment lands on the settings home rather
+                // than on a blank section: the segments are a closed set,
+                // so anything else is a typo or a link from a build that
+                // named its sections differently.
+                redirect: (context, state) =>
+                    SettingsSection.bySegment(
+                          state.pathParameters['section'] ?? '',
+                        ) ==
+                        null
+                    ? WaxRoute.settings
+                    : null,
+                builder: (context, state) => SettingsSectionScreen(
+                  section: SettingsSection.bySegment(
+                    state.pathParameters['section']!,
+                  )!,
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: WaxRoute.shares,

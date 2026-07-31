@@ -178,7 +178,11 @@ class _WaxTappableState extends State<WaxTappable> {
       onTap: widget.onPressed,
       focusable: enabled,
       focused: _focused,
-      onFocus: _focus.requestFocus,
+      // Gated with the flag beside it. Supplying a focus action marks a
+      // node focusable whatever `focusable` says, so a disabled control
+      // with one advertises itself as a tab stop that does nothing -
+      // which is the opposite of what the line above declares.
+      onFocus: enabled ? _focus.requestFocus : null,
       child: FocusableActionDetector(
         enabled: enabled,
         focusNode: _focus,

@@ -85,6 +85,12 @@ class _$Prefs extends Prefs {
   final bool? sharedStatsOptOut;
   @override
   final BuiltList<String>? radioFavorites;
+  @override
+  final double? crossfadeSeconds;
+  @override
+  final bool? replayGain;
+  @override
+  final bool? radioScrobbleOptOut;
 
   factory _$Prefs([void Function(PrefsBuilder)? updates]) =>
       (PrefsBuilder()..update(updates))._build();
@@ -95,6 +101,9 @@ class _$Prefs extends Prefs {
     this.theme,
     this.sharedStatsOptOut,
     this.radioFavorites,
+    this.crossfadeSeconds,
+    this.replayGain,
+    this.radioScrobbleOptOut,
   }) : super._();
   @override
   Prefs rebuild(void Function(PrefsBuilder) updates) =>
@@ -111,7 +120,10 @@ class _$Prefs extends Prefs {
         locale == other.locale &&
         theme == other.theme &&
         sharedStatsOptOut == other.sharedStatsOptOut &&
-        radioFavorites == other.radioFavorites;
+        radioFavorites == other.radioFavorites &&
+        crossfadeSeconds == other.crossfadeSeconds &&
+        replayGain == other.replayGain &&
+        radioScrobbleOptOut == other.radioScrobbleOptOut;
   }
 
   @override
@@ -122,6 +134,9 @@ class _$Prefs extends Prefs {
     _$hash = $jc(_$hash, theme.hashCode);
     _$hash = $jc(_$hash, sharedStatsOptOut.hashCode);
     _$hash = $jc(_$hash, radioFavorites.hashCode);
+    _$hash = $jc(_$hash, crossfadeSeconds.hashCode);
+    _$hash = $jc(_$hash, replayGain.hashCode);
+    _$hash = $jc(_$hash, radioScrobbleOptOut.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -133,7 +148,10 @@ class _$Prefs extends Prefs {
           ..add('locale', locale)
           ..add('theme', theme)
           ..add('sharedStatsOptOut', sharedStatsOptOut)
-          ..add('radioFavorites', radioFavorites))
+          ..add('radioFavorites', radioFavorites)
+          ..add('crossfadeSeconds', crossfadeSeconds)
+          ..add('replayGain', replayGain)
+          ..add('radioScrobbleOptOut', radioScrobbleOptOut))
         .toString();
   }
 }
@@ -164,6 +182,20 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
   set radioFavorites(ListBuilder<String>? radioFavorites) =>
       _$this._radioFavorites = radioFavorites;
 
+  double? _crossfadeSeconds;
+  double? get crossfadeSeconds => _$this._crossfadeSeconds;
+  set crossfadeSeconds(double? crossfadeSeconds) =>
+      _$this._crossfadeSeconds = crossfadeSeconds;
+
+  bool? _replayGain;
+  bool? get replayGain => _$this._replayGain;
+  set replayGain(bool? replayGain) => _$this._replayGain = replayGain;
+
+  bool? _radioScrobbleOptOut;
+  bool? get radioScrobbleOptOut => _$this._radioScrobbleOptOut;
+  set radioScrobbleOptOut(bool? radioScrobbleOptOut) =>
+      _$this._radioScrobbleOptOut = radioScrobbleOptOut;
+
   PrefsBuilder() {
     Prefs._defaults(this);
   }
@@ -176,6 +208,9 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       _theme = $v.theme;
       _sharedStatsOptOut = $v.sharedStatsOptOut;
       _radioFavorites = $v.radioFavorites?.toBuilder();
+      _crossfadeSeconds = $v.crossfadeSeconds;
+      _replayGain = $v.replayGain;
+      _radioScrobbleOptOut = $v.radioScrobbleOptOut;
       _$v = null;
     }
     return this;
@@ -205,6 +240,9 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
             theme: theme,
             sharedStatsOptOut: sharedStatsOptOut,
             radioFavorites: _radioFavorites?.build(),
+            crossfadeSeconds: crossfadeSeconds,
+            replayGain: replayGain,
+            radioScrobbleOptOut: radioScrobbleOptOut,
           );
     } catch (_) {
       late String _$failedField;

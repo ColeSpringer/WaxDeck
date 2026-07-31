@@ -14,6 +14,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     required WaxDeckRepository repository,
     required String baseUrl,
     TransferEnginePort? engine,
+    bool Function()? wifiOnly,
   }) {
     throw UnsupportedError('downloads are not supported on the web build');
   }

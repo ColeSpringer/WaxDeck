@@ -40,6 +40,7 @@ class BackgroundTransferEngine implements TransferEnginePort {
       updates: Updates.statusAndProgress,
       retries: 3,
       allowPause: true,
+      requiresWiFi: request.wifiOnly,
     );
     _tasks[task.taskId] = task;
     await FileDownloader().enqueue(task);

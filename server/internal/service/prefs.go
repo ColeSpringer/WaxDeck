@@ -25,7 +25,20 @@ type Prefs struct {
 	// order. The station library is shared by the household, so this is
 	// the only per-user station state there is.
 	RadioFavorites []string `json:"radioFavorites,omitempty"`
+	// CrossfadeSeconds and ReplayGain shape a queue the server renders
+	// as one stream (a cast timeline today). They live on the account
+	// rather than on the device because the reload path has no client
+	// in it: a queue edit arrives over the control socket and the
+	// server re-mints from what it holds.
+	CrossfadeSeconds float64 `json:"crossfadeSeconds,omitempty"`
+	ReplayGain       bool    `json:"replayGain,omitempty"`
+	// RadioScrobbleOptOut silences radio scrobbling for this listener.
+	RadioScrobbleOptOut bool `json:"radioScrobbleOptOut,omitempty"`
 }
+
+// maxCrossfadeSeconds matches the timeline endpoint's own bound, since
+// this value is what that endpoint ends up being called with.
+const maxCrossfadeSeconds = 12
 
 var validThemes = map[string]bool{"system": true, "dark": true, "light": true, "oled": true}
 
@@ -41,17 +54,36 @@ func (l *Library) Prefs(ctx context.Context, uc *UserCtx) (Prefs, error) {
 	if err != nil {
 		return Prefs{}, &Error{Kind: KindInternal, Err: err}
 	}
+	return l.decodePrefs(doc, uc.ID), nil
+}
+
+// PrefsForUser reads one user's preferences by ID, for the paths that
+// have no acting caller: the stream proxy reporting a finished radio
+// segment, and a cast session the server re-renders after a queue edit
+// arrived over the control socket. A read that fails answers defaults
+// rather than an error, because both callers are doing something else
+// and neither has an outcome a preference should be able to fail.
+func (l *Library) PrefsForUser(ctx context.Context, userID string) Prefs {
+	doc, err := l.db.PrefsJSON(ctx, userID)
+	if err != nil {
+		l.log.Warn("reading prefs", "user", userID, "err", err)
+		return Prefs{}
+	}
+	return l.decodePrefs(doc, userID)
+}
+
+func (l *Library) decodePrefs(doc, userID string) Prefs {
 	if doc == "" {
-		return Prefs{}, nil
+		return Prefs{}
 	}
 	var p Prefs
 	if err := json.Unmarshal([]byte(doc), &p); err != nil {
 		// A corrupt document reads as empty rather than wedging the
 		// account; the next save replaces it.
-		l.log.Warn("corrupt prefs document", "user", uc.ID, "err", err)
-		return Prefs{}, nil
+		l.log.Warn("corrupt prefs document", "user", userID, "err", err)
+		return Prefs{}
 	}
-	return p, nil
+	return p
 }
 
 // PutPrefs validates and replaces the acting user's preferences,
@@ -72,6 +104,9 @@ func (l *Library) PutPrefs(ctx context.Context, uc *UserCtx, p Prefs) (Prefs, er
 	}
 	if len(p.RadioFavorites) > maxRadioFavorites {
 		return Prefs{}, errInvalid(fmt.Sprintf("at most %d radio favorites", maxRadioFavorites))
+	}
+	if p.CrossfadeSeconds < 0 || p.CrossfadeSeconds > maxCrossfadeSeconds {
+		return Prefs{}, errInvalid(fmt.Sprintf("crossfadeSeconds must be between 0 and %d", maxCrossfadeSeconds))
 	}
 	seen := make(map[string]bool, len(p.RadioFavorites))
 	favorites := make([]string, 0, len(p.RadioFavorites))

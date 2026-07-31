@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../player/play_progress.dart';
 import '../search/search_chrome.dart';
+import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'books_controller.dart';
@@ -282,7 +283,7 @@ class _BookGrid extends ConsumerWidget {
         builder: (context, constraints) {
           final grid = MediaCard.gridFor(
             constraints.crossAxisExtent,
-            extent: kBookTileExtent,
+            extent: kBookTileExtent * ref.watch(gridScaleProvider),
           );
           return SliverGrid.builder(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(

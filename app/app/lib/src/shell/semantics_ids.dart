@@ -411,7 +411,9 @@ abstract final class SemanticsIds {
   static String searchShowAll(Object kind) => 'search-show-all-$kind';
   static const String searchTruncated = 'search-truncated';
 
-  // settings: Settings: account, devices, app passwords, notifications, scrobblers, appearance.
+  // settings: Settings: the searchable sections, every leaf control, account, devices, app passwords, notifications, scrobblers.
+  static const String aboutLicenses = 'about-licenses';
+  static const String aboutOpen = 'about-open';
   static const String appPasswordAdd = 'app-password-add';
   static String appPasswordRevoke(Object id) => 'app-password-revoke-$id';
   static String deviceRevoke(Object id) => 'device-revoke-$id';
@@ -425,12 +427,18 @@ abstract final class SemanticsIds {
   static const String notifyTargetAdd = 'notify-target-add';
   static String notifyTargetTest(Object pid) => 'notify-target-test-$pid';
   static const String openShareLinks = 'open-share-links';
+  static const String radioScrobbleSwitch = 'radio-scrobble-switch';
   static String scrobbler(Object service) => 'scrobbler-$service';
   static String scrobblerConnect(Object service) =>
       'scrobbler-connect-$service';
   static String scrobblerDisconnect(Object service) =>
       'scrobbler-disconnect-$service';
   static const String scrobblerSetupLastfm = 'scrobbler-setup-lastfm';
+  static String setting(Object id) => 'setting-$id';
+  static String settingsResult(Object id) => 'settings-result-$id';
+  static const String settingsScreen = 'settings-screen';
+  static const String settingsSearch = 'settings-search';
+  static String settingsSection(Object section) => 'settings-section-$section';
   static const String sharedStatsSwitch = 'shared-stats-switch';
   static const String themeSelect = 'theme-select';
   static const String timezoneEdit = 'timezone-edit';

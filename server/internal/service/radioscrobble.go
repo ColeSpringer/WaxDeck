@@ -31,6 +31,11 @@ func (l *Library) ScrobbleRadioPlay(ctx context.Context, userID, apiStationPID, 
 	if !ok || prefix != PrefixRadioStation {
 		return
 	}
+	// Read before the station and the title parse, which are the two
+	// reads a listener who wants none of this should not be paying for.
+	if l.PrefsForUser(ctx, userID).RadioScrobbleOptOut {
+		return
+	}
 	station, err := l.db.RadioStationByID(ctx, string(pid))
 	if err != nil {
 		return // deleted mid-listen; nothing to attribute

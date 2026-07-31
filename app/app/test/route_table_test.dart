@@ -33,7 +33,10 @@ import 'package:waxdeck/src/radio/radio_screen.dart';
 import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
+import 'package:waxdeck/src/settings/about_screen.dart';
+import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_screen.dart';
+import 'package:waxdeck/src/settings/settings_section_screen.dart';
 import 'package:waxdeck/src/sharing/shares_screen.dart';
 import 'package:waxdeck/src/shell/adaptive_shell.dart';
 import 'package:waxdeck/src/shell/router.dart';
@@ -112,6 +115,12 @@ final _locations = <String, Type>{
   WaxRoute.listenLog: ListenLogScreen,
   WaxRoute.yearInReview: YearInReviewScreen,
   WaxRoute.settings: SettingsScreen,
+  // One location per section, so "it is under Playback" is a link.
+  for (final section in SettingsSection.values)
+    WaxRoute.settingsSection(section): SettingsSectionScreen,
+  // A literal beside the `:section` pattern, which would otherwise match
+  // it and the redirect would bounce it back to the settings home.
+  WaxRoute.settingsAbout: AboutScreen,
   WaxRoute.shares: SharesScreen,
   WaxRoute.uploads: UploadsScreen,
   WaxRoute.tasks: TasksScreen,
@@ -163,6 +172,9 @@ final _stackedInShell = <String>{
   WaxRoute.playlist('pl-1'),
   WaxRoute.listenLog,
   WaxRoute.yearInReview,
+  for (final section in SettingsSection.values)
+    WaxRoute.settingsSection(section),
+  WaxRoute.settingsAbout,
   WaxRoute.reviewEntry('re-1'),
   WaxRoute.healthRule('missing-artwork'),
 };

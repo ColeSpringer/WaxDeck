@@ -1,5 +1,11 @@
 import { test, expect, Page, APIRequestContext } from './fixtures';
-import { authed, clickThrough, ensureAdmin, loginAsAdmin } from './helpers';
+import {
+  authed,
+  chooseFromMenu,
+  clickThrough,
+  ensureAdmin,
+  loginAsAdmin,
+} from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The radio slice and the Connect surfaces over the real stack: a station
@@ -321,16 +327,18 @@ test.describe.serial('radio and cast', () => {
     // The connection check, one level in: a cast that fails is silent, and
     // this is the surface that says why. It had no UI at all before this,
     // so reading it meant curling the API.
-    // Clicked once, not through `clickThrough`: that helper re-clicks the
-    // trigger while it waits, which is right for a navigation and wrong for
-    // a menu. Under a loaded stack the second click closed the menu the
-    // first had opened, and a third dismissed the sheet under it.
-    await page.locator(sem(SemanticsIds.pickerOverflow)).click({ force: true });
-    const check = page.locator(sem(SemanticsIds.pickerCheck));
-    await check.waitFor({ timeout: 30_000 });
-    await check.click({ force: true });
+    // `chooseFromMenu`, not `clickThrough`: that helper re-clicks its
+    // trigger while it waits, which is right for a navigation and wrong
+    // for a menu - under a loaded stack the second click closed the menu
+    // the first had opened, and a third dismissed the sheet under it. A
+    // single un-retried click is not the answer either, and was failing
+    // about half the time under a full parallel run.
     const preflight = page.locator(sem(SemanticsIds.preflight));
-    await preflight.waitFor({ timeout: 30_000 });
+    await chooseFromMenu(
+      page.locator(sem(SemanticsIds.pickerOverflow)),
+      page.locator(sem(SemanticsIds.pickerCheck)),
+      preflight,
+    );
 
     // The server advertises the configured public base, so there is at
     // least one candidate and it is drawn with its verdict.

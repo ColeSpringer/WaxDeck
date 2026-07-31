@@ -16,6 +16,7 @@ import '../queue/queue_view.dart';
 import '../queue/queue_persistence.dart';
 import '../queue/queue_state.dart';
 import '../radio/radio_controller.dart';
+import '../settings/client_prefs.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -26,10 +27,15 @@ import 'output_volume.dart';
 import 'play_state_controller.dart';
 import 'playback_session.dart';
 
-/// How far the spoken-word skips jump. Configurable per listener when
-/// the settings store lands; these are the defaults every client ships.
-const Duration kSkipBack = Duration(seconds: 15);
-const Duration kSkipForward = Duration(seconds: 30);
+/// How far the spoken-word skips jump, per this device's Playback
+/// settings. Both are read here rather than in the transports, so the
+/// control's label and the seek it performs cannot disagree.
+final skipIntervalsProvider = Provider<({Duration back, Duration forward})>(
+  (ref) => (
+    back: Duration(seconds: ref.watch(skipBackSecondsProvider)),
+    forward: Duration(seconds: ref.watch(skipForwardSecondsProvider)),
+  ),
+);
 
 /// The e2e handles this bar's controls carry. One place, because the
 /// design system emits no identifier strings of its own (ADR-0016).
@@ -166,6 +172,9 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
         : false;
 
     final spokenWord = item != null && item.mediaType != MediaType.music;
+    // Read whatever the bar is showing, so the two controls do not
+    // appear at one distance and jump another after a settings change.
+    final skips = ref.watch(skipIntervalsProvider);
 
     return _EngineTransport(
       builder: (context, playing) => DeckBar(
@@ -207,15 +216,15 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
           onNext: () => unawaited(playback.next()),
           onPrevious: () => unawaited(playback.previous()),
           onSkipBack: spokenWord && session != null
-              ? () => unawaited(_seekBy(session, -kSkipBack))
+              ? () => unawaited(_seekBy(session, -skips.back))
               : null,
           onSkipForward: spokenWord && session != null
-              ? () => unawaited(_seekBy(session, kSkipForward))
+              ? () => unawaited(_seekBy(session, skips.forward))
               : null,
           // The same two durations the seeks use, so the controls
           // announce the distance they actually travel.
-          skipBackBy: kSkipBack,
-          skipForwardBy: kSkipForward,
+          skipBackBy: skips.back,
+          skipForwardBy: skips.forward,
           onShuffle: () =>
               ref.read(queueControllerProvider.notifier).setShuffle(!modes.$1),
           onRepeat: () => ref

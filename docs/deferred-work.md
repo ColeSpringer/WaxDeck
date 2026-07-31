@@ -104,21 +104,24 @@ here waits on upstream.
   inside its cell; at 320 px one label ellipsizes and nothing overflows.
   So the cell is a deviation from where 3.2 puts the avatar, not a
   crowding problem. See ADR-0024.
-- `[roadmap]` **No wifi-only switch for gapless preloading.** Playback
-  prepares the next queue entry 30 seconds before the crossing whenever
-  the admission policy allows it (music to music, passthrough stream,
-  starts at its own head), with no way to hold that back on a metered
-  connection. The per-device store it would be written to now exists
-  (ADR-0027); what is still missing is the control in Settings, Playback
-  and - the larger half - a connectivity port to tell metered from not,
-  since no connectivity plugin is pinned anywhere and wrapping one is its
-  own decision. Until then the cost is one track's worth of buffering
-  ahead. See ADR-0020.
-- `[roadmap]` **Spoken-word skip intervals are not configurable.** The deck
-  bar's minus and plus controls jump 15 seconds back and 30 forward, which
-  are the defaults every client ships, and there is no way to change them.
-  The per-device store exists now (ADR-0027); the setting still needs its
-  control in Settings, Playback, which is all that is left. See ADR-0023.
+- `[in-repo]` **Playback defaults 6.13 asks for that Settings does not
+  offer.** The section ships skip intervals, per-domain speed, casting
+  crossfade and leveling, and the wifi-only preload brake (ADR-0037).
+  Four more are specified and unbuilt, in two groups.
+
+  **Smart rewind on resume, sleep-timer extension gestures, and the web
+  autoplay-overlay preference** each need a mechanism rather than a
+  control: nothing rewinds on resume today, the sleep timer has no
+  extension surface until P19, and the autoplay gate reports a refusal
+  without offering a standing preference about it.
+
+  **Trim-silence and voice-boost defaults** need only a control. The seam
+  is the one the speed defaults already use - `PlaybackSession` resolves
+  the item's own stored value and falls through to a per-device default -
+  and `trimEnabled` reads `settings?.trimSilence ?? false` a few lines
+  away. Left out because a default that silently turns silence trimming
+  on for every show is a decision worth looking at on its own, where a
+  playback speed is not.
 - `[in-repo]` **The downloads manager reports what WaxDeck holds and not
   what the device has left.** The storage header adds up used bytes by
   medium, which is the half a listener can act on; the layout also asks
@@ -131,6 +134,21 @@ here waits on upstream.
   which is a pinned dependency and a decision of its own for one number.
   Worth taking with the next plugin that lands for another reason. See
   ADR-0033.
+- `[in-repo]` **Settings the layout blueprint specifies and Settings does
+  not draw.** Beyond the playback defaults recorded above (ADR-0037):
+  browse defaults (show unknown buckets, per-dimension default sorts),
+  the artwork-glow toggle, always-show captions on cards, and language.
+  The first three have nothing to wire to - no screen reads a browse
+  default, `WaxBackdrop`'s glow is drawn by one screen and takes no
+  parameter, and `MediaCard` has no caption mode to force. Language is
+  further off: `Prefs.locale` is stored and the app has no localization
+  behind it, so a picker there would change nothing.
+
+  Two more are per-section rather than per-setting. **Auto-remove
+  finished episodes**: the manual action exists on the downloads screen,
+  and making it automatic wants a sweep with its own timing rules rather
+  than a switch. **Renaming this device's session**: `DeviceSession`
+  carries the label and no endpoint writes it.
 - `[in-repo]` **The web build's per-device settings binding is not covered
   by an automated test.** `BrowserClientSettingsStore` - the probe, the
   fallback to memory, the write-through shadow, the key semantics - is
@@ -244,13 +262,6 @@ here waits on upstream.
   candidate base; true device-side verification (loading a probe URL
   on the device and watching status) would catch DNS and cert
   failures the server cannot see.
-- `[in-repo]` **Crossfade and ReplayGain settings do not feed
-  timelines yet.** The whole mechanism is built and tested end to
-  end: the mint takes crossfadeSeconds, the identical value rides
-  the signed playlist, and the gain parameter is explicit (off
-  today) exactly as timelines require. What is missing is user
-  configuration wiring: a crossfade setting reaching cast session
-  loads, and stored album gain values passed as the explicit dB.
 - `[in-repo]` **The head unit gets skip controls but no queue
   display.** Next and previous step the active queue from Auto and
   the notification; publishing the queue itself as media items (so
@@ -724,11 +735,6 @@ here waits on upstream.
   mp4/adts/aac) so a real encode never escapes admission. Conservative
   today (it over-counts sessions, never under-counts); worth doing only
   if concurrent-session limits get tight.
-- `[in-repo]` **No radio-scrobbling off switch.** Radio plays scrobble
-  by default for users with scrobble connections, behind the
-  transition-and-parse guards; a per-user preference (and possibly a
-  per-station flag for talk stations) is the obvious follow-up for
-  anyone whose station's metadata is honest but unwanted.
 - `[in-repo]` **Notification provider niceties.** The provider
   surface ships deliberately plain: no webhook custom headers or
   HMAC request signing (receivers that must authenticate WaxDeck can
@@ -739,12 +745,30 @@ here waits on upstream.
   buttons, and no per-target rate limiting (a noisy event source
   rides the outbox's global pacing). Each is an isolated extension
   of one provider file when wanted.
+- `[in-repo]` **Radio scrobbling is off per account, not per station.**
+  The account-wide switch ships (`Prefs.radioScrobbleOptOut`, ADR-0037),
+  which covers the listener who wants none of it. What the original entry
+  also floated is a per-station flag, for the household that scrobbles
+  its music stations and not its talk ones. That wants a per-user
+  per-station bit, and the only per-user station state that exists is the
+  favourites list; whoever adds a second one should decide whether they
+  share a shape.
 - `[in-repo]` **No import-completed notification event.** The
   review-ready event deliberately skips entries that auto-apply, so
   a fully automatic import is silent end to end. Probably right (the
   uploader is usually watching the uploads screen, which updates
   live), but it is a decision: an import-completed user event would
   close the gap for fire-and-forget uploads.
+- `[in-repo]` **The sync spec asserts a delta reached quiescence, which
+  another worker can break.** `sync.spec.ts` polls `/sync/server` until
+  the change list is empty, on a server four workers share: a podcast
+  download in another spec upserts an episode into exactly that list, and
+  the assertion fails on somebody else's work. Seen once in three full
+  runs, and it will keep happening - an empty-delta assertion is not
+  parallel-safe by construction, where a "contains what I just did" one
+  is. The fix is to scope the poll to this spec's own pids rather than to
+  give the suite another serial group; the surrounding scenario (snapshot,
+  deltas, live follow) is worth keeping as it is.
 - `[in-repo]` **The read-only e2e scenario flips a switch the whole suite
   shares.** The two settings scenarios no longer race each other (one
   serial group), but read-only is server-global, so for the one request it

@@ -45,7 +45,11 @@ class TransferEvent {
 
 /// One file to fetch.
 class TransferRequest {
-  const TransferRequest({required this.url, required this.fileName});
+  const TransferRequest({
+    required this.url,
+    required this.fileName,
+    this.wifiOnly = false,
+  });
 
   final String url;
 
@@ -53,6 +57,13 @@ class TransferRequest {
   /// so the same audio is never fetched twice under two names; where they
   /// go is the engine's decision.
   final String fileName;
+
+  /// Whether the platform should hold this transfer until the device is
+  /// on an unmetered connection. A constraint the OS enforces rather
+  /// than a check WaxDeck makes: a download queued on mobile data starts
+  /// by itself once the listener is home, where a refusal here would
+  /// need the app reopened to notice.
+  final bool wifiOnly;
 }
 
 /// The thing that actually moves bytes.

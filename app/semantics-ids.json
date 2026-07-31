@@ -1903,8 +1903,16 @@
     },
     {
       "name": "settings",
-      "doc": "Settings: account, devices, app passwords, notifications, scrobblers, appearance.",
+      "doc": "Settings: the searchable sections, every leaf control, account, devices, app passwords, notifications, scrobblers.",
       "ids": [
+        {
+          "name": "aboutLicenses",
+          "id": "about-licenses"
+        },
+        {
+          "name": "aboutOpen",
+          "id": "about-open"
+        },
         {
           "name": "appPasswordAdd",
           "id": "app-password-add"
@@ -1966,6 +1974,10 @@
           "id": "open-share-links"
         },
         {
+          "name": "radioScrobbleSwitch",
+          "id": "radio-scrobble-switch"
+        },
+        {
           "name": "scrobbler",
           "id": "scrobbler-{service}",
           "params": [
@@ -1989,6 +2001,35 @@
         {
           "name": "scrobblerSetupLastfm",
           "id": "scrobbler-setup-lastfm"
+        },
+        {
+          "name": "setting",
+          "id": "setting-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "settingsResult",
+          "id": "settings-result-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "settingsScreen",
+          "id": "settings-screen"
+        },
+        {
+          "name": "settingsSearch",
+          "id": "settings-search"
+        },
+        {
+          "name": "settingsSection",
+          "id": "settings-section-{section}",
+          "params": [
+            "section"
+          ]
         },
         {
           "name": "sharedStatsSwitch",

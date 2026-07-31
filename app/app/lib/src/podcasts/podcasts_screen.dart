@@ -11,6 +11,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
+import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/file_picker_port.dart';
@@ -424,7 +425,7 @@ class _ShowGrid extends ConsumerWidget {
       builder: (context, constraints) {
         final grid = MediaCard.gridFor(
           constraints.crossAxisExtent,
-          extent: kShowTileExtent,
+          extent: kShowTileExtent * ref.watch(gridScaleProvider),
         );
         return SliverGrid.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -455,7 +456,7 @@ class _ShowGridBox extends ConsumerWidget {
       builder: (context, constraints) {
         final grid = MediaCard.gridFor(
           constraints.maxWidth,
-          extent: kShowTileExtent,
+          extent: kShowTileExtent * ref.watch(gridScaleProvider),
         );
         return GridView.builder(
           shrinkWrap: true,

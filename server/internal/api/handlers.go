@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
@@ -932,6 +931,13 @@ func deref(p *string) string {
 
 func derefBool(p *bool) bool { return p != nil && *p }
 
+func derefFloat(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
 func derefInt64(p *int64) int64 {
 	if p == nil {
 		return 0
@@ -1085,19 +1091,10 @@ func remoteIP(r *http.Request) string {
 	return host
 }
 
-// clientHint is a compact client label for the device list, truncated
-// on a rune boundary so an exotic user agent never persists as invalid
-// UTF-8.
+// clientHint is the compact client label stored with a session; see
+// summarizeClient for what it does with a browser's user agent and why.
 func clientHint(r *http.Request) string {
-	ua := r.Header.Get("User-Agent")
-	if len(ua) <= 128 {
-		return ua
-	}
-	ua = ua[:128]
-	for len(ua) > 0 && !utf8.ValidString(ua) {
-		ua = ua[:len(ua)-1]
-	}
-	return ua
+	return summarizeClient(r.Header.Get("User-Agent"))
 }
 
 func principalFromContext(ctx context.Context) (*auth.Principal, bool) {

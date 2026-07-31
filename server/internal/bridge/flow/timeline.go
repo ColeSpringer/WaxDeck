@@ -39,6 +39,21 @@ type TimelineMember struct {
 	Src Source
 }
 
+// TimelineOptions are the listener's preferences for how a queue is
+// rendered. They are a struct rather than two arguments because the
+// call sites that get this wrong get it wrong by passing a zero: a cast
+// reload that forgot the crossfade sounded like a different queue from
+// the load before it, which is exactly what carrying the whole set
+// together prevents.
+type TimelineOptions struct {
+	// CrossfadeSeconds is the equal-power fade at every seam, 0 to 12.
+	CrossfadeSeconds float64
+	// ReplayGain asks for the stream to be levelled. What that costs is
+	// decided at the mint: with nothing measured, the render is asked
+	// for gain=off and the listener hears the queue as it was mastered.
+	ReplayGain bool
+}
+
 // TimelineBoundary places one member on the minted timeline.
 type TimelineBoundary struct {
 	PID             string
@@ -195,11 +210,11 @@ func (b *Bridge) timelineFormat() string {
 // its backing file when the sidecar advertises member windows; without
 // that support a virtual member has no timeline-member form, so the
 // mint is refused and the caller treats the pid as timeline-ineligible.
-func (b *Bridge) TimelineFor(ctx context.Context, user string, members []TimelineMember, crossfadeSeconds float64) (*TimelineResult, error) {
+func (b *Bridge) TimelineFor(ctx context.Context, user string, members []TimelineMember, opts TimelineOptions) (*TimelineResult, error) {
 	if !b.TimelinesSupported() {
 		return nil, fmt.Errorf("flow: sidecar mints no timelines")
 	}
-	req := client.TimelineRequest{CrossfadeSeconds: crossfadeSeconds}
+	req := client.TimelineRequest{CrossfadeSeconds: opts.CrossfadeSeconds}
 	var totalMS int64
 	for _, m := range members {
 		if m.Src.Virtual && !b.TimelineMemberWindowsSupported() {
@@ -240,18 +255,24 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	if ttl < 30*time.Minute {
 		ttl = 30 * time.Minute
 	}
-	// Timelines refuse tag-driven gain modes upstream (many sources,
-	// one stream), so the gain is always explicit here: off today, an
-	// explicit-dB album gain when the ReplayGain wiring lands.
+	// Timelines refuse tag-driven gain modes upstream (many sources, one
+	// stream), so the gain is always explicit: a number the queue's own
+	// stored measurements produced, or off.
+	gain := "off"
+	if opts.ReplayGain {
+		if db, ok := TimelineGainDB(members); ok {
+			gain = trimFloat(db)
+		}
+	}
 	params := map[string]string{
 		"tl":     tl.Tl,
 		"format": format,
-		"gain":   "off",
+		"gain":   gain,
 	}
-	if crossfadeSeconds > 0 {
+	if opts.CrossfadeSeconds > 0 {
 		// The identical value must ride the render, or the minted
 		// boundaries describe a different presentation.
-		params["crossfadeSeconds"] = trimFloat(crossfadeSeconds)
+		params["crossfadeSeconds"] = trimFloat(opts.CrossfadeSeconds)
 	}
 	signed, err := b.client.Sign(ctx, client.SignRequest{
 		Path:       "/hls/master.m3u8",
@@ -289,7 +310,7 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 		DurationMS:       int64(tl.DurationSeconds * 1000),
 		ExpiresAt:        exp,
 		EnvelopeRate:     tl.EnvelopeRate,
-		CrossfadeSeconds: crossfadeSeconds,
+		CrossfadeSeconds: opts.CrossfadeSeconds,
 	}
 	for i, bd := range tl.Boundaries {
 		pid := ""

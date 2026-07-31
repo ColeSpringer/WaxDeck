@@ -392,7 +392,7 @@ func (s *Service) reloadRemote(ctx context.Context, sess *session, index int, po
 		var tm *TimelineMedia
 		var err error
 		if ep.Kind == KindCast && len(entries) > 1 {
-			tm, err = s.cfg.Resolver.Timeline(ctx, ownerID, entries, 0, base)
+			tm, err = s.cfg.Resolver.Timeline(ctx, ownerID, entries, base)
 			if err != nil {
 				tm = nil
 			}

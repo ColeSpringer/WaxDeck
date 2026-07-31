@@ -1098,9 +1098,17 @@ abstract interface class WaxDeckRepository {
   /// `DELETE /users/{userId}`: deletes an account (administrators).
   Future<void> deleteUser(String userId);
 
-  /// `PUT /users/{userId}/password`: administrator password reset;
-  /// no current password required.
-  Future<void> setUserPassword(String userId, String newPassword);
+  /// `PUT /users/{userId}/password`: sets an account's password.
+  ///
+  /// [currentPassword] is required when changing your own (administrators
+  /// included) and omitted when an administrator resets somebody else's.
+  /// A wrong value answers `forbidden`, which is the distinction the
+  /// settings form shows against the field rather than as a failure.
+  Future<void> setUserPassword(
+    String userId,
+    String newPassword, {
+    String? currentPassword,
+  });
 
   /// `DELETE /users/{userId}/sessions`: revokes every live session of
   /// one account (administrators).
@@ -3511,14 +3519,20 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<void> setUserPassword(String userId, String newPassword) => _guard(
-    () async {
-      await _gen.getUsersApi().setPassword(
-        userId: userId,
-        passwordChange: gen.PasswordChange((b) => b..newPassword = newPassword),
-      );
-    },
-  );
+  Future<void> setUserPassword(
+    String userId,
+    String newPassword, {
+    String? currentPassword,
+  }) => _guard(() async {
+    await _gen.getUsersApi().setPassword(
+      userId: userId,
+      passwordChange: gen.PasswordChange(
+        (b) => b
+          ..newPassword = newPassword
+          ..currentPassword = currentPassword,
+      ),
+    );
+  });
 
   @override
   Future<void> revokeUserSessions(String userId) => _guard(() async {

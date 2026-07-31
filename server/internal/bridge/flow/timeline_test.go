@@ -136,7 +136,7 @@ func TestTimelineForMintsProxiedURL(t *testing.T) {
 		{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}},
 		{PID: "tr-two", Src: Source{Path: path, DurationMS: 90000}},
 	}
-	res, err := b.TimelineFor(context.Background(), "us-alice", members, 0)
+	res, err := b.TimelineFor(context.Background(), "us-alice", members, TimelineOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestTimelineForMintsProxiedURL(t *testing.T) {
 		t.Fatalf("expiry too soon: %v", res.ExpiresAt)
 	}
 	if _, err := b.TimelineFor(context.Background(), "us-alice",
-		[]TimelineMember{{PID: "tr-v", Src: Source{Path: path, Virtual: true}}}, 0); err == nil {
+		[]TimelineMember{{PID: "tr-v", Src: Source{Path: path, Virtual: true}}}, TimelineOptions{}); err == nil {
 		t.Fatal("virtual member accepted")
 	}
 }
@@ -240,7 +240,7 @@ func TestTimelineForVirtualMemberWindows(t *testing.T) {
 	res, err := b.TimelineFor(context.Background(), "us-alice", []TimelineMember{
 		{PID: "tr-whole", Src: Source{Path: path, DurationMS: 60000}},
 		{PID: "tr-carved", Src: Source{Path: path, DurationMS: 30000, Virtual: true, FromSample: 100, ToSample: 200}},
-	}, 0)
+	}, TimelineOptions{})
 	if err != nil {
 		t.Fatalf("windowed virtual member refused: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestTimelineForVirtualMemberWindows(t *testing.T) {
 func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 	b, path := newTimelineBridge(t)
 	res, err := b.TimelineFor(context.Background(), "us-alice",
-		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}, {PID: "tr-two", Src: Source{Path: path, DurationMS: 90000}}}, 0)
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}, {PID: "tr-two", Src: Source{Path: path, DurationMS: 90000}}}, TimelineOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +372,7 @@ func TestTimelineStashSurvivesRestart(t *testing.T) {
 
 	first := newBridge()
 	res, err := first.TimelineFor(context.Background(), "us-alice",
-		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}, 0)
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}, TimelineOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +408,7 @@ func TestTimelineStashSurvivesRestart(t *testing.T) {
 	for _, dead := range []int{http.StatusNotFound, http.StatusForbidden} {
 		// Each pass re-mints, since the previous one evicted the row.
 		res, err := second.TimelineFor(context.Background(), "us-alice",
-			[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}, 0)
+			[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}, TimelineOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -471,5 +471,69 @@ func TestRewritePlaylist(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in %s", want, out)
 		}
+	}
+}
+
+// TestTimelineForCarriesCrossfadeAndGain pins the two listener
+// preferences onto the render the signed master actually names. Both
+// have to reach the URL: a mint whose boundaries describe a crossfade
+// the stream does not apply reports positions nothing can seek by, and a
+// leveling preference that stops at the mint levels nothing.
+func TestTimelineForCarriesCrossfadeAndGain(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	quiet, peak := -24.0, -12.0
+	members := []TimelineMember{
+		{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000, IntegratedLUFS: &quiet, TruePeakDB: &peak}},
+		{PID: "tr-two", Src: Source{Path: path, DurationMS: 60000, IntegratedLUFS: &quiet, TruePeakDB: &peak}},
+	}
+
+	signedFor := func(opts TimelineOptions) string {
+		t.Helper()
+		res, err := b.TimelineFor(context.Background(), "us-alice", members, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.JobPID != "" {
+			t.Fatal("unexpected job")
+		}
+		b.tl.mu.Lock()
+		defer b.tl.mu.Unlock()
+		st, ok := b.tl.stash["digest123"]
+		if !ok {
+			t.Fatal("nothing stashed for the minted digest")
+		}
+		return st.signedMaster
+	}
+
+	off := signedFor(TimelineOptions{})
+	if !strings.Contains(off, "gain=off") || strings.Contains(off, "crossfadeSeconds") {
+		t.Fatalf("plain mint: %s", off)
+	}
+
+	// -24 LUFS against the -18 target is a 6 dB lift, and -12 dBTP has
+	// room for it.
+	on := signedFor(TimelineOptions{CrossfadeSeconds: 4.5, ReplayGain: true})
+	if !strings.Contains(on, "gain=6") {
+		t.Fatalf("levelled mint did not carry the derived gain: %s", on)
+	}
+	if !strings.Contains(on, "crossfadeSeconds=4.5") {
+		t.Fatalf("levelled mint did not carry the crossfade: %s", on)
+	}
+
+	// Asking to level a queue nothing has measured is not an error and
+	// not a guess: it renders as mastered.
+	unmeasured := []TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}
+	res, err := b.TimelineFor(context.Background(), "us-alice", unmeasured, TimelineOptions{ReplayGain: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.JobPID != "" {
+		t.Fatal("unexpected job")
+	}
+	b.tl.mu.Lock()
+	st := b.tl.stash["digest123"]
+	b.tl.mu.Unlock()
+	if !strings.Contains(st.signedMaster, "gain=off") {
+		t.Fatalf("unmeasured queue levelled anyway: %s", st.signedMaster)
 	}
 }

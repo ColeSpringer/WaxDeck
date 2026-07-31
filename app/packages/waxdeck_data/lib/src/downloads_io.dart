@@ -23,9 +23,18 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     required this.repository,
     required this.baseUrl,
     TransferEnginePort? engine,
+    this.wifiOnly = _never,
   }) : engine = engine ?? BackgroundTransferEngine() {
     _events = this.engine.events.listen(_onEvent);
   }
+
+  static bool _never() => false;
+
+  /// Whether transfers should wait for an unmetered connection, asked
+  /// each time one is started rather than captured once: this is a
+  /// setting a listener changes, and the answer that matters is the one
+  /// at the tap that queued the download.
+  final bool Function() wifiOnly;
 
   final MirrorDatabase db;
   final WaxDeckRepository repository;
@@ -106,7 +115,7 @@ class BackgroundDownloadManager implements DownloadManagerPort {
             ),
           );
       final taskId = await engine.start(
-        TransferRequest(url: f.url, fileName: fileName),
+        TransferRequest(url: f.url, fileName: fileName, wifiOnly: wifiOnly()),
       );
       _taskPids[taskId] = pid;
       _taskFiles[taskId] = fileName;

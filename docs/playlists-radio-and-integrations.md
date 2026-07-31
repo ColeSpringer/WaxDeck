@@ -92,7 +92,7 @@ and delete calls.
 
 ## Scrobbling
 
-Each user connects their own accounts under Settings, Scrobbling:
+Each user connects their own accounts under Settings, Integrations:
 
 - **ListenBrainz**: paste the user token from your profile page. A
   compatible server (Maloja and friends) can be set as the API URL.
@@ -108,6 +108,13 @@ Each user connects their own accounts under Settings, Scrobbling:
   accounts through the standard browser authorization. Changing the
   API key invalidates existing links (session keys belong to the
   application that minted them); reconnecting fixes them.
+
+Radio scrobbles too, where a station's stream titles parse as
+"Artist - Title" and a segment played long enough to count. That is
+right for a music station with honest metadata and wrong for a talk
+station whose titles happen to fit, so **Scrobble radio** in the same
+section turns it off for your account without touching library
+listening.
 
 **Radio plays scrobble too.** While you listen to a station through
 the proxy, the in-stream title's transitions bound the tracks: a
@@ -131,7 +138,7 @@ the slate.
 
 ## Notifications
 
-Every user picks where their events go under Settings, My
+Every user picks where their events go under Settings, Integrations, My
 notifications. A target is one destination: native Pushover, ntfy,
 or Gotify delivery, a Discord or generic webhook, an
 [Apprise](https://github.com/caronc/apprise) API server (one
@@ -146,7 +153,7 @@ sealed at rest and round-trips verbatim to its owner for editing.
 
 Server operations events (account requests, backup outcomes) are a
 separate scope: administrators manage server-wide destinations under
-Settings, Server notifications, and can additionally subscribe their
+Settings, Integrations, Server notifications, and can additionally subscribe their
 own personal targets to server events, so a signup request reaching
 an administrator's phone is a personal choice, not server
 configuration.

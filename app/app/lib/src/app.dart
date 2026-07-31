@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'auth/auth_controller.dart';
+import 'settings/client_prefs.dart';
 import 'settings/prefs_controller.dart';
 import 'shell/router.dart';
 
@@ -27,7 +28,34 @@ class WaxDeckApp extends ConsumerWidget {
       // router does not get to run until they answer. Withholding the
       // child leaves the Router unmounted rather than routing on a
       // guess and correcting a frame later.
-      builder: (context, child) => _BootGate(child: child!),
+      builder: (context, child) =>
+          _ReducedMotion(child: _BootGate(child: child!)),
+    );
+  }
+}
+
+/// Applies the in-app reduce-motion override.
+///
+/// Everything that animates reads `MediaQuery.disableAnimationsOf`
+/// through `WaxMotion`, so the override belongs on the query rather than
+/// on a second flag every animating widget would have to be taught. Set
+/// above the router, which is where the query every screen inherits is
+/// established.
+///
+/// One-way: it can turn animation off and never on. The platform's flag
+/// is an accessibility need, and a preference that could clear it would
+/// let a shared device's setting overrule the person who set it.
+class _ReducedMotion extends ConsumerWidget {
+  const _ReducedMotion({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(reduceMotionProvider)) return child;
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: child,
     );
   }
 }

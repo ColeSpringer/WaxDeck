@@ -20,6 +20,10 @@ dependencies:
   # Community plugins are pinned exact and only ever used behind WaxDeck-owned
   # ports (CredentialStorePort, UrlOpenerPort, DeepLinkPort, FilePickerPort).
   app_links: 7.2.1
+  # Whether this device is on a connection worth spending, behind
+  # ConnectivityPort. It reports the transport rather than the platform's
+  # own metered flag, which is what the wifi-only settings ask about.
+  connectivity_plus: 7.3.1
   crypto: 3.0.7
   # File pickers behind FilePickerPort; drag-and-drop behind AudioDropArea.
   desktop_drop: 0.7.1

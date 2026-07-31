@@ -13,11 +13,16 @@ import (
 // StreamSource resolves an API item PID to everything the WaxFlow
 // bridge needs: the backing file's path and identity pin, the
 // virtual-track window when the item is a CUE-backed span, the source
-// codec facts the format policy reads, and the spoken-word loudness
-// facts voice boost derives its gain from. It re-resolves on every
-// call, which is what makes organize-moves invisible to streaming.
-// filePID selects one part of a multi-file book; empty means the
-// item's own backing file.
+// codec facts the format policy reads, and the essence hash that keys
+// the analysis cache. It re-resolves on every call, which is what makes
+// organize-moves invisible to streaming. filePID selects one part of a
+// multi-file book; empty means the item's own backing file.
+//
+// Loudness is read here for spoken word only, which voice boost derives
+// its gain from. Every stream request runs through this, so a caller
+// that wants it for music - timeline leveling - asks by hash through
+// FillLoudness rather than making the whole library pay a second query
+// per play.
 func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, error) {
 	it, err := l.getItem(ctx, apiItemPID)
 	if err != nil {
@@ -79,15 +84,39 @@ func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) 
 	}
 	src.Size = f.Size
 	src.MTimeNS = f.MTimeNS
+	src.EssenceHash = f.EssenceHash
 
+	// Read here only for the content voice boost is for. Every stream
+	// request runs through this, and a caller that wants music loudness
+	// (timeline leveling) is rare enough to ask for it by hash rather
+	// than to make the whole library pay a second query per play.
 	if src.SpokenWord && f.EssenceHash != "" {
-		if m, err := l.db.SilenceMapFor(ctx, f.EssenceHash); err == nil {
-			src.IntegratedLUFS = m.IntegratedLUFS
-		} else if !errors.Is(err, wdb.ErrNotFound) {
-			l.log.Warn("reading loudness cache", "err", err)
-		}
+		l.fillLoudness(ctx, &src)
 	}
 	return src, nil
+}
+
+// FillLoudness attaches the stored measurements for a source's essence,
+// for callers that need them on content StreamSource does not read them
+// for. Absent measurements leave the fields nil, which every reader
+// already treats as "not analyzed".
+func (l *Library) FillLoudness(ctx context.Context, src *flow.Source) {
+	if src == nil || src.EssenceHash == "" {
+		return
+	}
+	l.fillLoudness(ctx, src)
+}
+
+func (l *Library) fillLoudness(ctx context.Context, src *flow.Source) {
+	m, err := l.db.SilenceMapFor(ctx, src.EssenceHash)
+	if err != nil {
+		if !errors.Is(err, wdb.ErrNotFound) {
+			l.log.Warn("reading loudness cache", "err", err)
+		}
+		return
+	}
+	src.IntegratedLUFS = m.IntegratedLUFS
+	src.TruePeakDB = m.TruePeakDB
 }
 
 // fileByPID reads one file row, classified.

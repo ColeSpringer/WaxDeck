@@ -85,6 +85,36 @@ export async function clickThrough(trigger: Locator, appears: Locator) {
   }).toPass({ timeout: 30_000 });
 }
 
+// Open a menu and choose a row from it, as one retried unit.
+//
+// `clickThrough` is wrong for a menu and this is the difference: it
+// re-clicks its trigger whenever the destination is not showing, and on
+// a retry that click lands on the modal barrier and closes the menu the
+// previous attempt opened. So the trigger is clicked only when the row
+// is not already visible, and the whole open-and-choose repeats from a
+// closed menu when a click is swallowed.
+//
+// `settled` is what proves the choice took: a sheet the row opens, or -
+// by default - the menu going away, which is what a value picker does.
+export async function chooseFromMenu(
+  trigger: Locator,
+  item: Locator,
+  settled?: Locator,
+) {
+  await expect(async () => {
+    if (!(await item.isVisible())) {
+      await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
+      await item.waitFor({ timeout: 5_000 });
+    }
+    await item.click({ force: true });
+    if (settled) {
+      await settled.waitFor({ timeout: 5_000 });
+    } else {
+      await expect(item).toBeHidden({ timeout: 5_000 });
+    }
+  }).toPass({ timeout: 45_000 });
+}
+
 // The startup scan is asynchronous; poll until the fixture library shows up.
 export async function waitForLibrary(request: APIRequestContext, token: string) {
   await expect

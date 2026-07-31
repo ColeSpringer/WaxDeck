@@ -833,6 +833,48 @@ components:
             pattern: "^rs-[0-9A-HJKMNP-TV-Z]{26}$"
           maxItems: 64
           example: [rs-01JZX5N8QW3F4V9T2B7KD3M9R6]
+        crossfadeSeconds:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 12
+          description: >
+            Equal-power crossfade applied at every seam of a queue the
+            server renders as one stream, in seconds. Zero or absent is a
+            gapless butt join.
+
+
+            Here rather than in a client's own per-device storage because
+            the server is what applies it: a cast session is re-rendered
+            server-side on every queue edit, shuffle, and repeat reload,
+            and those arrive over the control socket carrying no client
+            state at all. A per-device value would reach the first load
+            and none of the reloads, so the queue would change how it
+            sounds halfway through. Local playback does not read this
+            yet, which is why clients label it for casting.
+          example: 4
+        replayGain:
+          type: boolean
+          description: >
+            Level a server-rendered queue to a common loudness. The
+            gain is derived from the measured loudness the analyze pass
+            stores per file and applied once to the whole stream, so a
+            queue whose files were never analyzed plays unlevelled
+            whatever this says.
+
+
+            Same reason as `crossfadeSeconds` for living on the account
+            rather than on the device, and the same labeling: nothing
+            local reads it yet.
+        radioScrobbleOptOut:
+          type: boolean
+          description: >
+            Stop scrobbling radio. Listeners with a scrobble connection
+            have their radio segments reported by default, which is
+            right for a music station whose stream titles are honest
+            and wrong for a talk station whose titles happen to parse.
+            Opting out silences radio only; library listening is
+            unaffected.
 
     AppPassword:
       type: object

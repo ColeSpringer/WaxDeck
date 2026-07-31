@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
 import 'auth/credential_store.dart';
+import 'connectivity/connectivity_port.dart';
 import 'fonts_warmup.dart';
 import 'auth/loopback/loopback.dart';
 import 'auth/oidc_flow.dart';
@@ -44,6 +45,12 @@ final credentialStoreProvider = Provider<CredentialStorePort>(
 /// Browser opening, wrapped so widget code never touches url_launcher.
 final urlOpenerProvider = Provider<UrlOpenerPort>(
   (ref) => const LauncherUrlOpener(),
+);
+
+/// What this device's connection costs, wrapped so widget code never
+/// touches connectivity_plus. Read by the two wifi-only settings.
+final connectivityProvider = Provider<ConnectivityPort>(
+  (ref) => createConnectivityPort(),
 );
 
 /// Incoming deep links, wrapped so widget code never touches app_links.

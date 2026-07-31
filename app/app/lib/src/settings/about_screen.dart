@@ -1,0 +1,143 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
+
+import '../providers.dart';
+import '../shell/app_version.dart';
+import '../shell/routes.dart';
+import '../shell/semantics_ids.dart';
+
+/// The server's own version, read once per settings visit.
+///
+/// `GET /health` is unauthenticated and cheap, and the numbers on it are
+/// the first thing anybody filing a bug is asked for.
+final serverHealthProvider = FutureProvider<ServerHealth>(
+  (ref) => ref.watch(repositoryProvider).health(),
+);
+
+/// The row that opens About, for the two places that offer it.
+///
+/// Account has it because that is where the blueprint puts it and where a
+/// listener looks; the Server section has it because an administrator
+/// reading about this instance wants the version without going back.
+class AboutRow extends ConsumerWidget {
+  const AboutRow({required this.semanticsId, super.key});
+
+  final String semanticsId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final health = ref.watch(serverHealthProvider).value;
+    return WaxOptionRow(
+      title: 'About WaxDeck',
+      subtitle: health == null
+          ? 'Version $kAppVersion'
+          : 'App $kAppVersion, server ${health.version}',
+      glyph: WaxIcons.info,
+      semanticsId: SemanticsIds.setting(semanticsId),
+      trailing: const WaxIcon(WaxIcons.forward, size: 16),
+      // Gone to, not pushed. About answers 8.3's question the same way a
+      // section does - a stranger opening the location gets the page -
+      // so it is a link, it survives a reload, and the route table
+      // covers it. Back lands on the settings home rather than on the
+      // section it was opened from, which is what a location declared
+      // beneath `/settings` means and is true of every section too.
+      onTap: () => context.go(WaxRoute.settingsAbout),
+    );
+  }
+}
+
+/// What this build is, what it is talking to, and what it is made of.
+///
+/// Self-hosters check this page: when something misbehaves, the two
+/// versions and the API number are the whole of what a bug report needs,
+/// and a page that reports them costs an hour to write and saves an
+/// exchange every time.
+class AboutScreen extends ConsumerWidget {
+  const AboutScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sizeClass = WaxSizeClass.of(context);
+    final health = ref.watch(serverHealthProvider);
+    return WaxScaffold(
+      title: 'About',
+      largeTitle: false,
+      semanticsId: SemanticsIds.aboutOpen,
+      onBack: () => context.leave(fallback: WaxRoute.settings),
+      slivers: <Widget>[
+        SliverPadding(
+          padding: sizeClass.gutter,
+          sliver: SliverToBoxAdapter(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: WaxSpace.readingWidth,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const SizedBox(height: WaxSpace.s24),
+                  const WaxWordmark(),
+                  const SizedBox(height: WaxSpace.s8),
+                  Text(
+                    'A player, library manager, and metadata completer for '
+                    'music, podcasts, and audiobooks.',
+                    style: WaxType.body.copyWith(
+                      color: WaxColors.of(context).textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: WaxSpace.s24),
+                  SectionHeader(title: 'Versions'),
+                  MonoDetailRow(label: 'App', value: appVersionLabel),
+                  switch (health) {
+                    AsyncData(:final value) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        MonoDetailRow(label: 'Server', value: value.version),
+                        MonoDetailRow(
+                          label: 'API',
+                          value: 'v${value.apiVersion}',
+                        ),
+                      ],
+                    ),
+                    // Not an error state: this page's job is to report
+                    // the app's own version, and it still can.
+                    AsyncError() => const MonoDetailRow(
+                      label: 'Server',
+                      value: 'unreachable',
+                    ),
+                    _ => const MonoDetailRow(label: 'Server', value: '...'),
+                  },
+                  const SizedBox(height: WaxSpace.s24),
+                  SectionHeader(title: 'Licensing'),
+                  WaxOptionRow(
+                    title: 'Open-source licenses',
+                    subtitle:
+                        'WaxDeck is GPL-3.0-only. This page also lists the '
+                        'bundled type and icon notices.',
+                    glyph: WaxIcons.info,
+                    semanticsId: SemanticsIds.aboutLicenses,
+                    trailing: const WaxIcon(WaxIcons.forward, size: 16),
+                    // Flutter's own license page, which reads the NOTICES
+                    // every package's LICENSE is folded into at build
+                    // time - so the OFL texts for the bundled faces and
+                    // the icon set's MIT notice arrive here without this
+                    // screen collecting them: they are in waxdeck_ui's
+                    // package LICENSE, which is what conveys them.
+                    onTap: () => showLicensePage(
+                      context: context,
+                      applicationName: 'WaxDeck',
+                      applicationVersion: appVersionLabel,
+                    ),
+                  ),
+                  const SizedBox(height: WaxSpace.s32),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

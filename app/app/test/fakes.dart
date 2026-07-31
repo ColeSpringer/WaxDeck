@@ -694,10 +694,15 @@ class FakeRepository implements WaxDeckRepository {
   /// (a rejected timezone, for instance).
   WaxDeckApiException? putPrefsError;
 
+  /// Every document written, in order. Its emptiness is the assertion a
+  /// per-device setting wants: nothing about it reached the account.
+  final List<Prefs> putPrefsCalls = [];
+
   @override
   Future<Prefs> putPrefs(Prefs next) async {
     final error = putPrefsError;
     if (error != null) throw error;
+    putPrefsCalls.add(next);
     return prefs = next;
   }
 
@@ -3134,7 +3139,30 @@ class FakeRepository implements WaxDeckRepository {
   final List<({String userId, String newPassword})> setUserPasswordCalls = [];
 
   @override
-  Future<void> setUserPassword(String userId, String newPassword) async {
+  Future<void> setUserPassword(
+    String userId,
+    String newPassword, {
+    String? currentPassword,
+  }) async {
+    // The server's own order, which is what makes the two refusals
+    // reachable together: the new password's policy is checked before
+    // the current one is verified, so a correct current password and a
+    // short new one answers `invalid-request` and not `forbidden`.
+    if (newPassword.length < 8) {
+      throw const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'password must be at least 8 characters',
+      );
+    }
+    // The self-service form always sends one and the administrator reset
+    // never does, so a wrong value here is the refusal the form's error
+    // line exists for.
+    if (currentPassword != null && currentPassword != 'password123') {
+      throw const WaxDeckApiException(
+        code: 'forbidden',
+        message: 'That is not your current password',
+      );
+    }
     setUserPasswordCalls.add((userId: userId, newPassword: newPassword));
   }
 

@@ -24,6 +24,19 @@ Albums and queues cast to a Chromecast play gapless when the
 streaming engine is configured: the whole queue renders as one
 continuous stream with sample-exact seams.
 
+Two settings shape that stream, both under Settings, Playback, and both
+on your account rather than on one device - the server re-renders a cast
+queue whenever you edit it, and it does that from what it holds.
+
+- **Casting crossfade** fades each seam instead of butting the tracks
+  together. Zero is the gapless default.
+- **Level casting volume** plays the whole queue at one loudness. It
+  reads the measurements the analyze pass stores per file, so a library
+  that has never been analyzed plays unlevelled whatever this says; run
+  the analyze pass first if you want it. One level applies to the whole
+  queue, because there is no seam in a rendered stream at which it could
+  change.
+
 ## Casting setup
 
 Cast devices fetch media from the server themselves, so the one thing

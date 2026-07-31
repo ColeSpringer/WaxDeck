@@ -124,6 +124,9 @@ Prefs prefsFromGen(gen.Prefs prefs) {
     radioFavorites: favorites == null
         ? null
         : favorites.toList(growable: false),
+    crossfadeSeconds: prefs.crossfadeSeconds,
+    replayGain: prefs.replayGain,
+    radioScrobbleOptOut: prefs.radioScrobbleOptOut,
   );
 }
 
@@ -142,7 +145,10 @@ gen.Prefs prefsToGen(Prefs prefs) {
       // here has to invent one shape for the other.
       ..radioFavorites = favorites == null
           ? null
-          : ListBuilder<String>(favorites),
+          : ListBuilder<String>(favorites)
+      ..crossfadeSeconds = prefs.crossfadeSeconds
+      ..replayGain = prefs.replayGain
+      ..radioScrobbleOptOut = prefs.radioScrobbleOptOut,
   );
 }
 

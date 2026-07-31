@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
-import 'package:waxdeck/src/settings/settings_screen.dart';
+import 'package:waxdeck/src/settings/settings_registry.dart';
+import 'package:waxdeck/src/settings/settings_section_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
@@ -15,12 +16,18 @@ const _user = WaxDeckUser(
   roles: ['admin'],
 );
 
-Widget _host(FakeRepository repo) => ProviderScope(
+/// These controls live in the Account section now (the similarity
+/// readout in Server), which is where the settings rebuild put them; the
+/// widgets themselves are unchanged.
+Widget _host(
+  FakeRepository repo, {
+  SettingsSection section = SettingsSection.account,
+}) => ProviderScope(
   overrides: [
     repositoryProvider.overrideWithValue(repo),
     credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
   ],
-  child: routedHost(const SettingsScreen()),
+  child: routedHost(SettingsSectionScreen(section: section)),
 );
 
 FakeRepository _signedInRepo() => FakeRepository(
@@ -137,7 +144,7 @@ void main() {
         coveragePct: 80,
         queueDepth: 5,
       );
-    await tester.pumpWidget(_host(repo));
+    await tester.pumpWidget(_host(repo, section: SettingsSection.server));
     await tester.pumpAndSettle();
 
     await _show(tester, const Key('similarity-status'));

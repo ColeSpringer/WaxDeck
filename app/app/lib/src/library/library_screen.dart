@@ -12,6 +12,7 @@ import '../media_icons.dart';
 import '../player/now_playing_controller.dart';
 import '../search/search_chrome.dart';
 import '../queue/queue_state.dart';
+import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../sync/sync_providers.dart';
@@ -175,6 +176,11 @@ class LibraryScreen extends ConsumerWidget {
       return const Center(child: Text('Nothing here yet'));
     }
     final precacher = ref.watch(artworkPrecacherProvider);
+    // One value for the delegate and for the arithmetic that mirrors it:
+    // the precache window is computed from the same geometry the grid
+    // lays out with, so a scale applied to one and not the other would
+    // warm the wrong rows.
+    final extent = _gridExtent * ref.watch(gridScaleProvider);
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         // The delegate's own arithmetic, including its clamp: a pane too
@@ -183,11 +189,8 @@ class LibraryScreen extends ConsumerWidget {
         // after it infinite.
         final pane = constraints.hasBoundedWidth
             ? math.max(0.0, constraints.maxWidth - 32)
-            : _gridExtent;
-        final columns = math.max(
-          1,
-          (pane / (_gridExtent + _gridSpacing)).ceil(),
-        );
+            : extent;
+        final columns = math.max(1, (pane / (extent + _gridSpacing)).ceil());
         final cell = math.max(
           1.0,
           (pane - _gridSpacing * (columns - 1)) / columns,
@@ -229,8 +232,8 @@ class LibraryScreen extends ConsumerWidget {
           },
           child: GridView.builder(
             padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: _gridExtent,
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: extent,
               mainAxisSpacing: _gridSpacing,
               crossAxisSpacing: _gridSpacing,
               childAspectRatio: _gridRatio,

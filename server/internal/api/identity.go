@@ -147,8 +147,12 @@ func deviceSessionJSON(row *wdb.Session, current bool) DeviceSession {
 	if row.DeviceName != "" {
 		out.DeviceName = ptr(row.DeviceName)
 	}
-	if row.Client != "" {
-		out.Client = ptr(row.Client)
+	// Summarized on the way out as well as on the way in, so a session
+	// stored before this server learned to do it reads the same as one
+	// stored after. Idempotent by construction: a summary carries no
+	// browser token, so it falls through unchanged.
+	if client := summarizeClient(row.Client); client != "" {
+		out.Client = ptr(client)
 	}
 	if !row.LastSeenAt.IsZero() {
 		out.LastSeenAt = ptr(row.LastSeenAt)
@@ -427,9 +431,12 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 		return PutPrefs400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
 	}
 	in := service.Prefs{
-		Timezone:          deref(req.Body.Timezone),
-		Locale:            deref(req.Body.Locale),
-		SharedStatsOptOut: derefBool(req.Body.SharedStatsOptOut),
+		Timezone:            deref(req.Body.Timezone),
+		Locale:              deref(req.Body.Locale),
+		SharedStatsOptOut:   derefBool(req.Body.SharedStatsOptOut),
+		CrossfadeSeconds:    derefFloat(req.Body.CrossfadeSeconds),
+		ReplayGain:          derefBool(req.Body.ReplayGain),
+		RadioScrobbleOptOut: derefBool(req.Body.RadioScrobbleOptOut),
 	}
 	if req.Body.Theme != nil {
 		in.Theme = string(*req.Body.Theme)
@@ -464,6 +471,15 @@ func prefsJSON(p service.Prefs) Prefs {
 	}
 	if len(p.RadioFavorites) > 0 {
 		out.RadioFavorites = &p.RadioFavorites
+	}
+	if p.CrossfadeSeconds > 0 {
+		out.CrossfadeSeconds = ptr(p.CrossfadeSeconds)
+	}
+	if p.ReplayGain {
+		out.ReplayGain = ptr(true)
+	}
+	if p.RadioScrobbleOptOut {
+		out.RadioScrobbleOptOut = ptr(true)
 	}
 	return out
 }

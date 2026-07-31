@@ -9,6 +9,7 @@ import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
+import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'entity_facts.dart';
@@ -258,7 +259,14 @@ class _ReleaseDetail extends ConsumerWidget {
     // Asked for rather than guarded on the codec: a release with a
     // sample rate and no codec still has something to say, and one with
     // neither answers empty and draws no chip at all.
-    final codec = codecChipLabel(detail);
+    //
+    // The codec is the only chip here the technical-details switch
+    // governs. A year and a genre are what a release is about; the
+    // format is what the file is, which is the distinction the switch
+    // draws.
+    final codec = ref.watch(technicalDetailsProvider)
+        ? codecChipLabel(detail)
+        : '';
     final chips = <String>[
       if (codec.isNotEmpty) codec,
       if (detail.year != null) '${detail.year}',

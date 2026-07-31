@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../media_view.dart';
 import '../search/search_chrome.dart';
+import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'playlist_create.dart';
@@ -132,7 +133,7 @@ class _PlaylistGrid extends ConsumerWidget {
       builder: (context, constraints) {
         final grid = MediaCard.gridFor(
           constraints.crossAxisExtent,
-          extent: sizeClass.gridExtent,
+          extent: sizeClass.gridExtent * ref.watch(gridScaleProvider),
         );
         return SliverGrid.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
