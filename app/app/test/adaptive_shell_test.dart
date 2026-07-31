@@ -7,7 +7,7 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
-import 'package:waxdeck/src/library/library_screen.dart';
+import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/player/deck_bar_host.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
@@ -163,7 +163,7 @@ void main() {
     ) async {
       await _pumpShell(tester, size: size);
       expect(find.byType(chrome), findsOneWidget);
-      expect(find.byType(LibraryScreen), findsOneWidget);
+      expect(find.byType(HomeScreen), findsOneWidget);
     });
   }
 
@@ -368,7 +368,7 @@ void main() {
     router.go(WaxRoute.show(_showPid));
     await tester.pumpAndSettle();
     await _tapNav(tester, WaxNavTarget.home.name);
-    expect(find.byType(LibraryScreen), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
 
     await _tapNav(tester, WaxNavTarget.podcasts.name);
     expect(find.byType(ShowScreen), findsOneWidget);
@@ -400,7 +400,7 @@ void main() {
     expect(_location(container), WaxRoute.settings);
 
     await _tapNav(tester, WaxNavTarget.home.name);
-    expect(find.byType(LibraryScreen), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
     expect(find.byType(SettingsScreen), findsNothing);
   });
 
@@ -594,7 +594,7 @@ void main() {
 
     await _tapNav(tester, WaxNavTarget.radio.name);
     await _systemBack(tester);
-    expect(find.byType(LibraryScreen), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
 
     // Home's own root has nothing behind it, so the press falls through to
     // the platform and the app closes.
@@ -634,7 +634,7 @@ void main() {
 
     await _systemBack(tester);
 
-    expect(find.byType(LibraryScreen), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
     expect(_location(container), WaxRoute.home);
   });
 

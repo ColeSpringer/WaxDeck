@@ -41,6 +41,8 @@ gen.DiscoveryList discoveryListToGen(DiscoveryList list) {
     DiscoveryList.random => gen.DiscoveryList.random,
     DiscoveryList.starred => gen.DiscoveryList.starred,
     DiscoveryList.alphabetical => gen.DiscoveryList.alphabetical,
+    DiscoveryList.neverPlayed => gen.DiscoveryList.neverPlayed,
+    DiscoveryList.rediscover => gen.DiscoveryList.rediscover,
   };
 }
 

@@ -1,121 +1,148 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'share_dialog.dart';
 import 'shares_controller.dart';
 
-/// The caller's share links: target, kind, plays, and expiry per row,
-/// with copy and revoke, cursor paged with infinite scroll.
-class SharesScreen extends ConsumerWidget {
+/// The caller's share links: what each one opens, how often it has been
+/// played, and when it stops working, with copy and revoke per row.
+///
+/// A place beneath settings rather than beside it, so the Account
+/// section's own row goes here rather than pushing: a stranger opening
+/// this location gets the page with settings underneath, and back lands
+/// where the tap came from.
+class SharesScreen extends ConsumerStatefulWidget {
   const SharesScreen({super.key});
 
-  Future<void> _copy(BuildContext context, Share share) async {
-    final messenger = ScaffoldMessenger.of(context);
-    await Clipboard.setData(ClipboardData(text: shareAbsoluteUrl(share.url)));
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('Link copied')));
+  @override
+  ConsumerState<SharesScreen> createState() => _SharesScreenState();
+}
+
+class _SharesScreenState extends ConsumerState<SharesScreen> {
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_maybeLoadMore);
   }
 
-  Future<void> _revoke(BuildContext context, WidgetRef ref, Share share) async {
-    final messenger = ScaffoldMessenger.of(context);
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _maybeLoadMore() {
+    if (!_scroll.hasClients) return;
+    final position = _scroll.position;
+    if (position.pixels < position.maxScrollExtent - 400) return;
+    ref.read(sharesProvider.notifier).loadMore();
+  }
+
+  void _report(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _copy(Share share) async {
+    await Clipboard.setData(ClipboardData(text: shareAbsoluteUrl(share.url)));
+    if (!mounted) return;
+    _report('Link copied');
+  }
+
+  Future<void> _revoke(Share share) async {
     try {
       await ref.read(sharesProvider.notifier).revoke(share.pid);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Link revoked')));
+      if (!mounted) return;
+      _report('Link revoked');
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      if (!mounted) return;
+      _report(e.message);
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final shares = ref.watch(sharesProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Share links')),
-      body: switch (shares) {
-        AsyncData(:final value) => _list(context, ref, value),
-        AsyncError(:final error) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                error is WaxDeckApiException
-                    ? error.message
-                    : 'Could not load share links',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => ref.invalidate(sharesProvider),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
-    );
-  }
+    final rows = shares.value?.shares ?? const <Share>[];
 
-  Widget _list(BuildContext context, WidgetRef ref, SharesState state) {
-    if (state.shares.isEmpty) {
-      return const Center(child: Text('No share links yet'));
-    }
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        final metrics = notification.metrics;
-        if (metrics.pixels >= metrics.maxScrollExtent - 400) {
-          ref.read(sharesProvider.notifier).loadMore();
-        }
-        return false;
-      },
-      child: ListView.builder(
-        itemCount: state.shares.length + (state.loadingMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= state.shares.length) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(),
-              ),
-            );
-          }
-          final share = state.shares[index];
-          return _ShareRow(
-            share: share,
-            onCopy: () => _copy(context, share),
-            onRevoke: () => _revoke(context, ref, share),
-          );
+    return WaxScaffold(
+      title: 'Share links',
+      largeTitle: false,
+      controller: _scroll,
+      onBack: () => context.leave(fallback: WaxRoute.settings),
+      slivers: <Widget>[
+        switch (shares) {
+          AsyncData() when rows.isEmpty => const SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              title: 'No share links yet',
+              message:
+                  'Share a track, an episode, a book, or a playlist and the '
+                  'link turns up here, with how often it has been played and '
+                  'a way to switch it off.',
+              glyph: WaxIcons.share,
+              semanticsId: SemanticsIds.sharesEmpty,
+            ),
+          ),
+          AsyncData() => _ShareList(
+            rows: rows,
+            onCopy: _copy,
+            onRevoke: _revoke,
+          ),
+          AsyncError(:final error) => SliverFillRemaining(
+            hasScrollBody: false,
+            child: ErrorState(
+              title: 'Could not load your share links',
+              message: error is WaxDeckApiException
+                  ? error.message
+                  : 'The server did not answer.',
+              onRetry: () => ref.invalidate(sharesProvider),
+            ),
+          ),
+          _ => const SliverToBoxAdapter(
+            child: SkeletonShapes(shape: SkeletonShape.list),
+          ),
         },
-      ),
+        if (shares.value?.loadingMore ?? false)
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(WaxSpace.s16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
+      ],
     );
   }
 }
 
-class _ShareRow extends StatelessWidget {
-  const _ShareRow({
-    required this.share,
+class _ShareList extends StatelessWidget {
+  const _ShareList({
+    required this.rows,
     required this.onCopy,
     required this.onRevoke,
   });
 
-  final Share share;
-  final VoidCallback onCopy;
-  final VoidCallback onRevoke;
+  final List<Share> rows;
+  final Future<void> Function(Share share) onCopy;
+  final Future<void> Function(Share share) onRevoke;
 
-  static IconData _kindIcon(String kind) => switch (kind) {
-    'album' => Icons.album,
-    'playlist' => Icons.queue_music,
-    'book' => Icons.menu_book,
-    'episode' => Icons.podcasts,
-    _ => Icons.music_note,
+  /// A share's target reads as its own medium, so the row's glyph says
+  /// what the link opens rather than that it is a link. A playlist has
+  /// no domain of its own and takes the music glyph, which is what it is
+  /// made of.
+  static WaxGlyph _glyph(String kind) => switch (kind) {
+    'episode' => WaxIcons.podcasts,
+    'book' => WaxIcons.audiobooks,
+    'playlist' => WaxIcons.playlists,
+    _ => WaxIcons.music,
   };
 
   static String _date(DateTime at) {
@@ -125,52 +152,58 @@ class _ShareRow extends StatelessWidget {
     return '${local.year}-$month-$day';
   }
 
+  /// What a row says under its title: what it opens, how much it has been
+  /// used, and when it dies. Three facts, in that order, because that is
+  /// the order somebody auditing their own links reads them in.
+  static String _caption(Share share) {
+    final expiresAt = share.expiresAt;
+    final expired = expiresAt != null && expiresAt.isBefore(DateTime.now());
+    return <String>[
+      share.targetKind,
+      share.plays == 1 ? '1 play' : '${share.plays} plays',
+      if (expiresAt == null)
+        'never expires'
+      else if (expired)
+        'expired ${_date(expiresAt)}'
+      else
+        'expires ${_date(expiresAt)}',
+      if (share.allowDownload) 'download allowed',
+    ].join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final expiresAt = share.expiresAt;
-    final details = [
-      share.targetKind,
-      '${share.plays} plays',
-      expiresAt == null ? 'never expires' : 'expires ${_date(expiresAt)}',
-    ];
-    return Semantics(
-      identifier: SemanticsIds.shareRow(share.pid),
-      child: ListTile(
-        key: Key(SemanticsIds.shareRow(share.pid)),
-        leading: Icon(_kindIcon(share.targetKind)),
-        title: Text(
-          share.targetTitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Text(details.join(' | ')),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Semantics(
-              identifier: SemanticsIds.shareCopy(share.pid),
-              label: 'Copy link',
-              button: true,
-              child: IconButton(
-                key: Key(SemanticsIds.shareCopy(share.pid)),
-                tooltip: 'Copy link',
-                icon: const Icon(Icons.copy),
-                onPressed: onCopy,
-              ),
+    final sizeClass = WaxSizeClass.of(context);
+    return SliverPadding(
+      padding: sizeClass.gutter,
+      sliver: SliverList.builder(
+        itemCount: rows.length,
+        itemBuilder: (context, index) {
+          final share = rows[index];
+          return WaxOptionRow(
+            glyph: _glyph(share.targetKind),
+            title: share.targetTitle,
+            subtitle: _caption(share),
+            semanticsId: SemanticsIds.shareRow(share.pid),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                WaxIconButton(
+                  glyph: WaxIcons.share,
+                  label: 'Copy link',
+                  semanticsId: SemanticsIds.shareCopy(share.pid),
+                  onPressed: () => onCopy(share),
+                ),
+                WaxIconButton(
+                  glyph: WaxIcons.close,
+                  label: 'Revoke link',
+                  semanticsId: SemanticsIds.shareRevoke(share.pid),
+                  onPressed: () => onRevoke(share),
+                ),
+              ],
             ),
-            Semantics(
-              identifier: SemanticsIds.shareRevoke(share.pid),
-              label: 'Revoke link',
-              button: true,
-              child: IconButton(
-                key: Key(SemanticsIds.shareRevoke(share.pid)),
-                tooltip: 'Revoke link',
-                icon: const Icon(Icons.link_off),
-                onPressed: onRevoke,
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

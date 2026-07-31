@@ -144,7 +144,16 @@ abstract final class WaxRoute {
   /// table so the literal wins over it.
   static const settingsAbout = '$settings/about';
 
-  static const shares = '/shares';
+  /// The caller's public links, beneath settings.
+  ///
+  /// Its ancestry is real: it is opened from the Account section's own
+  /// row and nowhere else, so a stranger arriving here gets the page with
+  /// settings underneath and back lands where the tap came from. It was
+  /// declared beside settings before that, which is why it could only be
+  /// pushed. Declared ahead of the `:section` pattern so the literal wins
+  /// over it, the same way [settingsAbout] is.
+  static const shares = '$settings/shares';
+
   static const uploads = '/uploads';
 
   /// Background tool tasks. Not under [admin]: whoever starts a task is

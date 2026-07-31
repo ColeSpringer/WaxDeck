@@ -9,6 +9,7 @@ import '../media_view.dart';
 import '../player/output_volume.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
+import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
 import '../shell/semantics_ids.dart';
 import 'add_station.dart';
@@ -40,6 +41,7 @@ class RadioScreen extends ConsumerWidget {
           onPressed: () => unawaited(showAddStationDialog(context)),
         ),
         const SearchAction(),
+        const AccountAction(),
       ],
       slivers: <Widget>[
         if (dial.isNotEmpty)

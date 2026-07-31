@@ -176,3 +176,22 @@ export async function openMusicSection(page: Page) {
     page.locator(sem(SemanticsIds.navDestination('playlists'))),
   );
 }
+
+// The tracks index: every item in the library, each row addressed by its
+// pid. Home is shelves now, and a shelf is a dozen cards drawn from a
+// list rather than an enumeration, so a spec that wants one known track
+// comes here - which is what the deleted library grid was doing for it.
+export async function itemRow(page: Page, pid: string): Promise<Locator> {
+  const row = page.locator(sem(SemanticsIds.item(pid)));
+  if (await row.count()) return row;
+  // The chrome first. Several callers reach here straight off a login
+  // click, and a goto issued while that request is in flight aborts it -
+  // the app never signs in and the row never arrives, which reads as a
+  // missing track rather than as a cancelled login.
+  await page
+    .locator(sem(SemanticsIds.navDestination('music')))
+    .waitFor({ timeout: 30_000 });
+  await page.goto('/#/music/tracks');
+  await row.waitFor({ timeout: 30_000 });
+  return row;
+}

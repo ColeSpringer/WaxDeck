@@ -794,8 +794,62 @@
       ]
     },
     {
+      "name": "home",
+      "doc": "Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.",
+      "ids": [
+        {
+          "name": "homeMix",
+          "id": "home-mix-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "homeScreen",
+          "id": "home-screen"
+        },
+        {
+          "name": "notificationRow",
+          "id": "notification-row-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "notificationsBell",
+          "id": "notifications-bell"
+        },
+        {
+          "name": "notificationsClear",
+          "id": "notifications-clear"
+        },
+        {
+          "name": "shelf",
+          "id": "shelf-{shelf}",
+          "params": [
+            "shelf"
+          ]
+        },
+        {
+          "name": "shelfAll",
+          "id": "shelf-{shelf}-all",
+          "params": [
+            "shelf"
+          ]
+        },
+        {
+          "name": "shelfCard",
+          "id": "shelf-{shelf}-{pid}",
+          "params": [
+            "shelf",
+            "pid"
+          ]
+        }
+      ]
+    },
+    {
       "name": "library",
-      "doc": "The library grid and the per-item cards the sync specs drive.",
+      "doc": "The complete item listings and the per-item rows the sync specs drive.",
       "ids": [
         {
           "name": "addToLibrary",
@@ -819,10 +873,6 @@
         {
           "name": "offlineBanner",
           "id": "offline-banner"
-        },
-        {
-          "name": "resumeBanner",
-          "id": "resume-banner"
         }
       ]
     },
@@ -1008,6 +1058,10 @@
         {
           "name": "instantMix",
           "id": "instant-mix"
+        },
+        {
+          "name": "playerBack",
+          "id": "player-back"
         },
         {
           "name": "playerChapter",
@@ -2054,6 +2108,10 @@
       "doc": "Shares and share links.",
       "ids": [
         {
+          "name": "shareAllowDownload",
+          "id": "share-allow-download"
+        },
+        {
           "name": "shareCopy",
           "id": "share-copy-{pid}",
           "params": [
@@ -2081,6 +2139,14 @@
           "params": [
             "pid"
           ]
+        },
+        {
+          "name": "shareStartAt",
+          "id": "share-start-at"
+        },
+        {
+          "name": "sharesEmpty",
+          "id": "shares-empty"
         }
       ]
     },
@@ -2156,10 +2222,7 @@
         },
         {
           "name": "statsBucket",
-          "id": "stats-bucket-{bucket}",
-          "params": [
-            "bucket"
-          ]
+          "id": "stats-bucket"
         },
         {
           "name": "statsRange",
@@ -2173,6 +2236,13 @@
           "id": "top-kind-{kind}",
           "params": [
             "kind"
+          ]
+        },
+        {
+          "name": "topEntry",
+          "id": "top-entry-{index}",
+          "params": [
+            "index"
           ]
         },
         {

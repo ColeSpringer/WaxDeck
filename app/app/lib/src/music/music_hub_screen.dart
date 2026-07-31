@@ -2,7 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../home/home_shelves.dart';
+import '../home/item_shelf.dart';
 import '../search/search_chrome.dart';
+import '../shell/account_chrome.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'music_controllers.dart';
@@ -67,12 +70,13 @@ final _tiles = <_HubTile>[
   ),
 ];
 
-/// The music domain's front door: the ways into the collection.
+/// The music domain's front door: the ways into the collection, and what
+/// is worth opening in it.
 ///
-/// The shelves section 6.3 asks for (recently added, most played, starred,
-/// mixes) rides the phase that builds the home shelves they share a
-/// component with; what lands here is the part the indexes need, which is
-/// the way in to each of them.
+/// The shelves are home's, scoped to music by the browse endpoint's
+/// media-type filter. The same component and the same reads: a shelf of
+/// covers is a shelf of covers, and two implementations would drift on
+/// which of them draws a resume ring.
 class MusicHubScreen extends ConsumerWidget {
   const MusicHubScreen({super.key});
 
@@ -85,7 +89,7 @@ class MusicHubScreen extends ConsumerWidget {
 
     return WaxScaffold(
       title: 'Music',
-      actions: const <Widget>[SearchAction()],
+      actions: const <Widget>[SearchAction(), AccountAction()],
       slivers: <Widget>[
         SliverPadding(
           padding: sizeClass.gutter + const EdgeInsets.only(top: WaxSpace.s8),
@@ -100,6 +104,27 @@ class MusicHubScreen extends ConsumerWidget {
             itemBuilder: (context, index) => _IndexTile(tile: _tiles[index]),
           ),
         ),
+        const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s24)),
+        ItemShelf(
+          shelf: 'music-recent',
+          title: 'Recently added',
+          overline: 'New to the collection',
+          provider: musicRecentlyAddedShelfProvider,
+          allLocation: WaxRoute.musicTracks,
+        ),
+        ItemShelf(
+          shelf: 'music-most-played',
+          title: 'Most played',
+          overline: 'What you come back to',
+          provider: musicMostPlayedShelfProvider,
+        ),
+        ItemShelf(
+          shelf: 'music-starred',
+          title: 'Starred',
+          overline: 'Kept on purpose',
+          provider: musicStarredShelfProvider,
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
     );
   }

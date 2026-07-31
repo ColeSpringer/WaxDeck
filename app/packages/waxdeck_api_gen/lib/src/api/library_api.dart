@@ -33,10 +33,11 @@ class LibraryApi {
   const LibraryApi(this._dio, this._serializers);
 
   /// Browse a discovery list
-  /// Keyset-paginated discovery lists over the whole library: newest, recently added, most played, recently played, random, starred, and alphabetical. Play-derived lists reflect the calling user&#39;s own listening state. 
+  /// Keyset-paginated discovery lists over the whole library: newest, recently added, most played, recently played, random, starred, alphabetical, never played, and rediscover. Play-derived lists reflect the calling user&#39;s own listening state. 
   ///
   /// Parameters:
   /// * [list] - Which discovery list to page through.
+  /// * [mediaType] - Restrict the list to one media type, for a domain-scoped shelf (\"recently added albums\" on the music hub). Composes with every list. `limit` still bounds how much of the list one request walks, so a filtered page is usually short: asking for 20 music items walks 20 rows of a list that also holds books and episodes, and returns the music among them with a `nextCursor` for the rest. That is the same short-page-plus-cursor shape a caller with restricted library visibility already gets, and `nextCursor` is absent only when the list itself is exhausted. A caller drawing a shelf of a dozen cards should ask for a generous limit and take what it draws from the answer, rather than page for an exact count. 
   /// * [seed] - Shuffle seed for the `random` list. The same seed pages through the same shuffled order, so paging stays stable. When omitted the server picks a fresh seed and returns it as the page's `seed`; pass that value back with the cursor for later pages. A cursor is only valid together with the same `list` and `seed` it was issued for. 
   /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. 
   /// * [limit] - Maximum items per page.
@@ -51,6 +52,7 @@ class LibraryApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<ItemPage>> browseList({ 
     required DiscoveryList list,
+    MediaType? mediaType,
     int? seed,
     String? cursor,
     int? limit = 100,
@@ -87,6 +89,7 @@ class LibraryApi {
 
     final _queryParameters = <String, dynamic>{
       r'list': encodeQueryParameter(_serializers, list, const FullType(DiscoveryList)),
+      if (mediaType != null) r'mediaType': encodeQueryParameter(_serializers, mediaType, const FullType(MediaType)),
       if (seed != null) r'seed': encodeQueryParameter(_serializers, seed, const FullType(int)),
       if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
       if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),

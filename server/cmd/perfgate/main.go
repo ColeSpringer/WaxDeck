@@ -174,11 +174,11 @@ func run(library string, runs int) error {
 			return err
 		}},
 		{"browse-starred", func() error {
-			_, err := svc.Browse(ctx, uc, "starred", 0, "", 100)
+			_, err := svc.Browse(ctx, uc, "starred", "", 0, "", 100)
 			return err
 		}},
 		{"browse-mostplayed", func() error {
-			_, err := svc.Browse(ctx, uc, "most-played", 0, "", 100)
+			_, err := svc.Browse(ctx, uc, "most-played", "", 0, "", 100)
 			return err
 		}},
 		{"search-common", func() error {

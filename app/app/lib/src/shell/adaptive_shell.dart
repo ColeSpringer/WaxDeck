@@ -430,6 +430,113 @@ enum WaxAccountVerb {
   }
 }
 
+/// What the chrome offers this session, in one declaration.
+///
+/// The shell frame is not the only thing that draws it: the account menu
+/// lives in each tab root's own top app bar below rail width (3.2), and
+/// there it is the only route to the destinations that are not domains.
+/// Two places computing "which targets is this account allowed, and what
+/// does its menu carry" would be two places to get role gating wrong, so
+/// they read this.
+class ShellChrome {
+  const ShellChrome({
+    required this.visible,
+    required this.byName,
+    required this.destinations,
+    required this.secondary,
+    required this.account,
+  });
+
+  /// Every target this account may be offered, in declaration order.
+  final List<WaxNavTarget> visible;
+
+  final Map<String, WaxNavTarget> byName;
+
+  /// The domains, as the tabs, rail, and sidebar draw them.
+  final List<WaxDestination> destinations;
+
+  /// Everything that is not a domain, as menu entries.
+  final List<WaxNavEntry> secondary;
+
+  final WaxAccount account;
+}
+
+/// The chrome for the signed-in account.
+///
+/// Never withholds the account menu for want of a name. `SessionInfo`
+/// requires only `authenticated`, so a session with no user payload is a
+/// legal answer, and the redirect that decides what is reachable gates on
+/// that flag alone. Hiding the menu there would leave a phone with no
+/// route to settings and no way to sign out, which is a worse answer than
+/// a disc with no initial on it.
+final shellChromeProvider = Provider.autoDispose<ShellChrome>((ref) {
+  final user = ref.watch(authControllerProvider).value?.user;
+  final hasDownloads = ref.watch(downloadManagerProvider) != null;
+  final empty = ref.watch(emptyDomainsProvider).value ?? const <WaxNavTarget>{};
+  final visible = WaxNavTarget.values
+      .where(
+        (target) => target.visibleTo(
+          user,
+          hasDownloads: hasDownloads,
+          emptyDomains: empty,
+        ),
+      )
+      .toList();
+  final curation = visible
+      .where((target) => target.section == WaxNavSection.curation)
+      .toList();
+  return ShellChrome(
+    visible: visible,
+    byName: <String, WaxNavTarget>{
+      for (final target in visible) target.name: target,
+    },
+    destinations: <WaxDestination>[
+      for (final target in visible)
+        if (target.section == WaxNavSection.primary) target.destination,
+    ],
+    secondary: <WaxNavEntry>[
+      for (final target in visible)
+        if (target.section == WaxNavSection.secondary)
+          WaxNavLink(target.destination),
+      if (curation.isNotEmpty)
+        WaxNavGroup(
+          label: 'Curation',
+          glyph: WaxIcons.admin,
+          semanticsId: SemanticsIds.navGroup('curation'),
+          children: <WaxDestination>[
+            for (final target in curation) target.destination,
+          ],
+        ),
+    ],
+    account: WaxAccount(
+      name: user?.username ?? '',
+      actions: <WaxAccountAction>[
+        for (final verb in WaxAccountVerb.values) verb.action,
+      ],
+      semanticsId: SemanticsIds.navAccount,
+    ),
+  );
+});
+
+/// Runs an account verb, from whichever chrome reported it.
+void runAccountVerb(WidgetRef ref, WaxAccountVerb verb) {
+  switch (verb) {
+    // Nothing to unwind by hand: dropping the session moves the auth
+    // redirect, which replaces the whole signed-in stack with login.
+    case WaxAccountVerb.signOut:
+      ref.read(authControllerProvider.notifier).logout();
+  }
+}
+
+/// Goes to a target the account menu named.
+///
+/// A plain `go`, never `goBranch`: the menu only ever carries what is not
+/// a domain, and everything that is not a domain shares one branch, so
+/// the domain the visitor came from keeps the stack it had.
+void goToNavTarget(BuildContext context, WaxNavTarget? target) {
+  if (target != null) context.go(target.location);
+}
+
 /// The shell: navigation chrome around the branch navigator that renders
 /// the active screen.
 ///
@@ -466,88 +573,33 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
     );
   }
 
-  void _runAccountVerb(WaxAccountVerb verb) {
-    switch (verb) {
-      // Nothing to unwind by hand: dropping the session moves the auth
-      // redirect, which replaces the whole signed-in stack with login.
-      case WaxAccountVerb.signOut:
-        ref.read(authControllerProvider.notifier).logout();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authControllerProvider).value?.user;
-    final hasDownloads = ref.watch(downloadManagerProvider) != null;
-    final empty =
-        ref.watch(emptyDomainsProvider).value ?? const <WaxNavTarget>{};
-    final visible = WaxNavTarget.values
-        .where(
-          (target) => target.visibleTo(
-            user,
-            hasDownloads: hasDownloads,
-            emptyDomains: empty,
-          ),
-        )
-        .toList();
-    final byName = <String, WaxNavTarget>{
-      for (final target in visible) target.name: target,
-    };
-    final curation = visible
-        .where((target) => target.section == WaxNavSection.curation)
-        .toList();
+    final chrome = ref.watch(shellChromeProvider);
 
     final router = GoRouter.of(context);
     final frame = WaxShellFrame(
-      destinations: <WaxDestination>[
-        for (final target in visible)
-          if (target.section == WaxNavSection.primary) target.destination,
-      ],
-      secondary: <WaxNavEntry>[
-        for (final target in visible)
-          if (target.section == WaxNavSection.secondary)
-            WaxNavLink(target.destination),
-        if (curation.isNotEmpty)
-          WaxNavGroup(
-            label: 'Curation',
-            glyph: WaxIcons.admin,
-            semanticsId: SemanticsIds.navGroup('curation'),
-            children: <WaxDestination>[
-              for (final target in curation) target.destination,
-            ],
-          ),
-      ],
+      destinations: chrome.destinations,
+      secondary: chrome.secondary,
       selected: activeNavTarget(
         widget.location,
-        visible,
+        chrome.visible,
         // The branch on screen, so a location no destination claims by
         // prefix still lights the domain that is showing it.
         branchIndex: widget.shell.currentIndex,
       )?.name,
       onSelect: (name) {
-        final target = byName[name];
+        final target = chrome.byName[name];
         if (target != null) _select(target);
       },
-      // Who is signed in, and - on compact, where the tab bar has room
-      // for the domains and nothing else - the only way to everything
-      // that is not one.
-      //
-      // Never withheld for want of a name. `SessionInfo` requires only
-      // `authenticated`, so a session with no user payload is a legal
-      // answer, and the redirect that decides what is reachable gates on
-      // that flag alone. Hiding the menu there would leave a phone with
-      // no route to settings and no way to sign out, which is a worse
-      // answer than a disc with no initial on it.
-      account: WaxAccount(
-        name: user?.username ?? '',
-        actions: <WaxAccountAction>[
-          for (final verb in WaxAccountVerb.values) verb.action,
-        ],
-        semanticsId: SemanticsIds.navAccount,
-      ),
+      // Who is signed in, for the rail's footer and the sidebar's. The
+      // frame draws none at compact: below rail width the avatar is in
+      // the screen's own top app bar (`AccountAction`), where the layout
+      // system puts it and where it carries the secondary destinations.
+      account: chrome.account,
       onAccountAction: (name) {
         final verb = WaxAccountVerb.named(name);
-        if (verb != null) _runAccountVerb(verb);
+        if (verb != null) runAccountVerb(ref, verb);
       },
       // The search field, where the layout system puts it. A launcher
       // rather than a live field: the search screen owns the query and

@@ -51,8 +51,18 @@ test('login, browse, and play are completable through roles and names', async ({
   await expect(page).toHaveURL(/settings/, { timeout: 15_000 });
   await page.goBack();
 
-  // Browse: the item is reachable by its accessible text, not a
-  // test hook.
+  // Browse: through the chrome by accessible name, to the listing that
+  // enumerates the library, and the item is reachable by its own text
+  // rather than by a test hook. Home is shelves, which are a dozen cards
+  // drawn off a discovery list - a fine landing surface and the wrong
+  // place to look for one named track.
+  const music = page.getByRole('button', { name: 'Music', exact: true });
+  await music.waitFor({ timeout: 30_000 });
+  await music.click();
+  const tracks = page.getByRole('button', { name: /^Tracks/ }).first();
+  await tracks.waitFor({ timeout: 30_000 });
+  await tracks.click();
+
   const card = page.getByText('Alpha Song').first();
   await card.waitFor({ timeout: 30_000 });
   await card.click();

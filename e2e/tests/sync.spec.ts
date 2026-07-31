@@ -1,6 +1,6 @@
 import { test, expect, APIRequestContext } from './fixtures';
 import crypto from 'node:crypto';
-import { authed, ensureAdmin, typeInto, waitForLibrary } from './helpers';
+import { authed, ensureAdmin, itemRow, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The live-sync slice over the real stack: the delta-sync endpoints, the
@@ -240,7 +240,7 @@ test('a server edit reaches a second live client in about a second', async ({
   await typeInto(page, username, 'admin');
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
   await page.getByRole('button', { name: 'Log in' }).click();
-  const card = page.locator(sem(SemanticsIds.item(target.pid)));
+  const card = await itemRow(page, target.pid);
   await card.waitFor({ timeout: 30_000 });
   await card.click();
   const star = page.locator(sem(SemanticsIds.starButton('')));

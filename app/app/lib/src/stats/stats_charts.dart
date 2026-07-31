@@ -1,22 +1,32 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-/// A single-series bar chart drawn with a painter: thin bars in one hue
-/// with rounded data ends, a recessive baseline, and sparse labels
-/// under the axis. Values are milliseconds (or any magnitude); identity
-/// comes from the surrounding section title, so there is no legend.
+/// A single-series bar chart drawn with a painter: thin bars in the
+/// accent with rounded data ends, a hairline baseline, and sparse
+/// captions under the axis. Values are milliseconds (or any magnitude);
+/// identity comes from the surrounding section title, so there is no
+/// legend.
+///
+/// A canvas says nothing to a screen reader, so the chart carries
+/// [summary]: one sentence with the shape of the data in it. Required
+/// rather than optional, because a chart that announces nothing is a
+/// blank rectangle to anybody not looking at it.
 class ListeningBarChart extends StatelessWidget {
   const ListeningBarChart({
     super.key,
     required this.values,
+    required this.summary,
     this.labels = const {},
     this.height = 140,
   });
 
   /// One magnitude per bar, in axis order.
   final List<int> values;
+
+  /// What the chart says out loud.
+  final String summary;
 
   /// Sparse axis labels by bar index.
   final Map<int, String> labels;
@@ -25,20 +35,23 @@ class ListeningBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final labelStyle = Theme.of(
-      context,
-    ).textTheme.labelSmall?.copyWith(color: colorScheme.onSurfaceVariant);
-    return SizedBox(
-      height: height,
-      width: double.infinity,
-      child: CustomPaint(
-        painter: BarChartPainter(
-          values: values,
-          labels: labels,
-          barColor: colorScheme.primary,
-          axisColor: colorScheme.outlineVariant,
-          labelStyle: labelStyle,
+    final colors = WaxColors.of(context);
+    return Semantics(
+      label: summary,
+      readOnly: true,
+      child: ExcludeSemantics(
+        child: SizedBox(
+          height: height,
+          width: double.infinity,
+          child: CustomPaint(
+            painter: BarChartPainter(
+              values: values,
+              labels: labels,
+              barColor: colors.accent,
+              axisColor: colors.hairline,
+              labelStyle: WaxType.caption.copyWith(color: colors.textTertiary),
+            ),
+          ),
         ),
       ),
     );
@@ -120,9 +133,13 @@ class BarChartPainter extends CustomPainter {
 /// hue stepping light to dark carries the magnitude; empty days stay on
 /// the neutral surface tint.
 class YearHeatmap extends StatelessWidget {
-  const YearHeatmap({super.key, required this.heatmap});
+  const YearHeatmap({super.key, required this.heatmap, required this.summary});
 
   final ListeningHeatmap heatmap;
+
+  /// What the grid says out loud. Same rule as the bar chart: 365 cells
+  /// on a canvas are nothing at all to a screen reader.
+  final String summary;
 
   /// Per-day quartile levels (1 to 4) keyed by day-of-year index; days
   /// without listening are absent. Quartiles are computed over the
@@ -157,32 +174,38 @@ class YearHeatmap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final start = DateTime.utc(heatmap.year, 1, 1);
-        final days = DateTime.utc(
-          heatmap.year + 1,
-          1,
-          1,
-        ).difference(start).inDays;
-        final offset = start.weekday - 1;
-        final weeks = (offset + days + 6) ~/ 7;
-        final cell = constraints.maxWidth / weeks;
-        return SizedBox(
-          width: constraints.maxWidth,
-          height: cell * 7,
-          child: CustomPaint(
-            painter: HeatmapPainter(
-              dayCount: days,
-              weekdayOffset: offset,
-              levels: quartileLevels(heatmap),
-              emptyColor: colorScheme.surfaceContainerHighest,
-              fillColor: colorScheme.primary,
-            ),
-          ),
-        );
-      },
+    final colors = WaxColors.of(context);
+    return Semantics(
+      label: summary,
+      readOnly: true,
+      child: ExcludeSemantics(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final start = DateTime.utc(heatmap.year, 1, 1);
+            final days = DateTime.utc(
+              heatmap.year + 1,
+              1,
+              1,
+            ).difference(start).inDays;
+            final offset = start.weekday - 1;
+            final weeks = (offset + days + 6) ~/ 7;
+            final cell = constraints.maxWidth / weeks;
+            return SizedBox(
+              width: constraints.maxWidth,
+              height: cell * 7,
+              child: CustomPaint(
+                painter: HeatmapPainter(
+                  dayCount: days,
+                  weekdayOffset: offset,
+                  levels: quartileLevels(heatmap),
+                  emptyColor: colors.surface2,
+                  fillColor: colors.accent,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

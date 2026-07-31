@@ -431,23 +431,21 @@ class _NavItemState extends State<_NavItem> {
 /// Bottom tabs: the compact shell's navigation.
 ///
 /// It sits below the deck bar and above the system inset, and it never
-/// scrolls away.
+/// scrolls away, and it carries the domains and nothing else. The account
+/// menu - which is the compact route to everything that is not a domain -
+/// is in the top app bar, where the layout system puts it; it took a
+/// fixed cell here for as long as the tab roots were screens with no bar
+/// of their own to host it.
 class WaxNavBar extends StatelessWidget {
   const WaxNavBar({
     required this.destinations,
     required this.selected,
     required this.onSelect,
-    this.trailing,
     this.semanticsId,
     super.key,
   });
 
   final List<WaxDestination> destinations;
-
-  /// The account control, which is the compact shell's only route to the
-  /// destinations that are not domains. It takes a fixed cell rather than
-  /// an equal share, so it does not shrink as domains are added.
-  final Widget? trailing;
 
   /// The name of the active destination, or null when the visitor is
   /// somewhere that is not one.
@@ -508,8 +506,6 @@ class WaxNavBar extends StatelessWidget {
                       onTap: () => onSelect(destination.name),
                     ),
                   ),
-                if (trailing != null)
-                  SizedBox(width: WaxSpace.s64, child: trailing),
               ],
             ),
           ),
@@ -1223,8 +1219,9 @@ class WaxShellFrame extends StatefulWidget {
   ///
   /// The sidebar lists them and the rail reaches them through one
   /// overflow menu. Compact's tab bar has room for the domains and
-  /// nothing else, so there they are carried by the account menu, which
-  /// is the whole reason [account] is not optional in practice.
+  /// nothing else, and the frame draws no account control there at all:
+  /// below rail width the avatar belongs in the screen's own top app bar,
+  /// which is where the caller puts it, and it carries these with it.
   final List<WaxNavEntry> secondary;
 
   final Widget? sidebarHeader;
@@ -1250,9 +1247,10 @@ class WaxShellFrame extends StatefulWidget {
   /// scrolls must not be able to scroll one out of sight.
   final List<Widget> banners;
 
-  /// The signed-in account. The frame decides what its menu carries: on
-  /// compact and medium it is the only way to the secondary
-  /// destinations, and the sidebar already lists those itself.
+  /// The signed-in account, for the chrome that draws one: the rail's
+  /// footer and the sidebar's. Compact draws none - the screen's app bar
+  /// has it - so a frame given an account below rail width simply does
+  /// not use it.
   final WaxAccount? account;
 
   final ValueChanged<String>? onAccountAction;
@@ -1402,7 +1400,6 @@ class _WaxShellFrameState extends State<WaxShellFrame> {
             destinations: destinations,
             selected: selected,
             onSelect: onSelect,
-            trailing: _accountButton(labelled: true, listsSecondary: false),
             semanticsId: widget.navSemanticsId,
           ),
         ],

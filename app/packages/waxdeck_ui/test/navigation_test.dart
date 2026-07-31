@@ -92,6 +92,36 @@ Future<List<String>> _pumpFrame(
   return selections;
 }
 
+/// Mounts the account control on its own, which is where it lives below
+/// rail width: in a screen's top app bar rather than in the shell's
+/// chrome. Returns the destinations it reported.
+Future<List<String>> _pumpButton(
+  WidgetTester tester, {
+  WaxAccount account = _account,
+  List<WaxNavEntry> entries = const <WaxNavEntry>[],
+  ValueChanged<String>? onAction,
+}) async {
+  final selections = <String>[];
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: buildWaxTheme(),
+      home: Scaffold(
+        appBar: AppBar(
+          actions: <Widget>[
+            WaxAccountButton(
+              account: account,
+              onAction: onAction ?? (_) {},
+              entries: entries,
+              onSelect: selections.add,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  return selections;
+}
+
 void main() {
   group('shell frame', () {
     // The four size classes, and the one piece of chrome each is
@@ -576,17 +606,23 @@ void main() {
   });
 
   group('account menu', () {
-    testWidgets('is the compact shell\'s only route to the rest', (
+    testWidgets('the compact frame draws none: the app bar has it', (
       tester,
     ) async {
-      // A phone's tab bar holds the domains and nothing else, so deleting
-      // the screens' own app-bar rows leaves this control as the way to
-      // settings and curation. It has to carry them.
-      final selections = await _pumpFrame(
-        tester,
-        size: const Size(400, 800),
-        account: _account,
-      );
+      // The tab bar carries the domains and nothing else. The avatar is
+      // in the screen's own top app bar at this width, which is where
+      // the layout system puts it and which the frame owns none of - so
+      // a frame handed an account below rail width simply does not draw
+      // one, and its `secondary` travels with the caller's control.
+      await _pumpFrame(tester, size: const Size(400, 800), account: _account);
+      expect(find.bySemanticsLabel('Account'), findsNothing);
+      expect(find.text('Settings'), findsNothing);
+    });
+
+    testWidgets('carries the destinations it is handed', (tester) async {
+      // What the app-bar control does at compact, where this menu is the
+      // only route to everything that is not a domain.
+      final selections = await _pumpButton(tester, entries: _secondary);
       expect(find.text('Settings'), findsNothing);
 
       await tester.tap(find.bySemanticsLabel('Account'));
@@ -601,11 +637,10 @@ void main() {
 
     testWidgets('reports an action apart from a destination', (tester) async {
       final actions = <String>[];
-      final selections = await _pumpFrame(
+      final selections = await _pumpButton(
         tester,
-        size: const Size(400, 800),
-        account: _account,
-        onAccountAction: actions.add,
+        entries: _secondary,
+        onAction: actions.add,
       );
 
       await tester.tap(find.bySemanticsLabel('Account'));
@@ -646,8 +681,10 @@ void main() {
       });
     }
 
-    testWidgets('is absent when nobody is signed in', (tester) async {
-      await _pumpFrame(tester, size: const Size(400, 800));
+    testWidgets('is absent from the chrome when nobody is signed in', (
+      tester,
+    ) async {
+      await _pumpFrame(tester, size: const Size(700, 900));
       expect(find.bySemanticsLabel('Account'), findsNothing);
     });
 
@@ -670,16 +707,11 @@ void main() {
         '': null,
         '\u{1F3B5} nightjar': null,
       }.entries) {
-        await _pumpFrame(
-          tester,
-          size: const Size(400, 800),
-          account: WaxAccount(name: entry.key),
-          onAccountAction: (_) {},
-        );
+        await _pumpButton(tester, account: WaxAccount(name: entry.key));
 
-        // The cell draws its own "Account" label besides, so the glyph
-        // is what tells the two branches apart rather than the absence
-        // of text.
+        // The control carries its own "Account" label besides, so the
+        // glyph is what tells the two branches apart rather than the
+        // absence of text.
         final glyph = find.descendant(
           of: find.bySemanticsLabel('Account'),
           matching: find.byType(WaxIcon),
@@ -699,15 +731,15 @@ void main() {
       }
     });
 
-    testWidgets('stays inside the system insets on a small phone', (
+    testWidgets('stays inside the system insets on a short window', (
       tester,
     ) async {
-      // The trigger sits at the very bottom of the window, so the menu
-      // has to open upward and clear the gesture bar. Flutter's own
-      // layout deflates by MediaQuery.padding; this pins that the frame
-      // hands it a padding to work with rather than swallowing it.
+      // At rail width the trigger sits at the very foot of the rail, so
+      // the menu has to open upward and clear the gesture bar. Flutter's
+      // own layout deflates by MediaQuery.padding; this pins that the
+      // frame hands it a padding to work with rather than swallowing it.
       const inset = EdgeInsets.only(top: 24, bottom: 48);
-      tester.view.physicalSize = const Size(360, 640);
+      tester.view.physicalSize = const Size(700, 640);
       tester.view.devicePixelRatio = 1;
       tester.view.viewPadding = FakeViewPadding(
         top: inset.top,

@@ -68,9 +68,9 @@ paths:
       summary: Browse a discovery list
       description: >
         Keyset-paginated discovery lists over the whole library: newest,
-        recently added, most played, recently played, random, starred, and
-        alphabetical. Play-derived lists reflect the calling user's own
-        listening state.
+        recently added, most played, recently played, random, starred,
+        alphabetical, never played, and rediscover. Play-derived lists
+        reflect the calling user's own listening state.
       tags: [library]
       parameters:
         - name: list
@@ -79,6 +79,24 @@ paths:
           description: Which discovery list to page through.
           schema:
             $ref: "#/components/schemas/DiscoveryList"
+        - name: mediaType
+          in: query
+          description: >
+            Restrict the list to one media type, for a domain-scoped shelf
+            ("recently added albums" on the music hub). Composes with every
+            list.
+
+            `limit` still bounds how much of the list one request walks, so
+            a filtered page is usually short: asking for 20 music items walks
+            20 rows of a list that also holds books and episodes, and returns
+            the music among them with a `nextCursor` for the rest. That is
+            the same short-page-plus-cursor shape a caller with restricted
+            library visibility already gets, and `nextCursor` is absent only
+            when the list itself is exhausted. A caller drawing a shelf of a
+            dozen cards should ask for a generous limit and take what it
+            draws from the answer, rather than page for an exact count.
+          schema:
+            $ref: "#/components/schemas/MediaType"
         - name: seed
           in: query
           description: >
@@ -476,8 +494,22 @@ components:
     DiscoveryList:
       type: string
       description: >
-        Discovery lists for browsing. `most-played`, `recently-played`, and
-        `starred` reflect the calling user's own listening state.
+        Discovery lists for browsing. `most-played`, `recently-played`,
+        `starred`, `never-played`, and `rediscover` reflect the calling
+        user's own listening state.
+
+        `never-played` is what the caller has never counted a play of, and
+        `rediscover` is what they starred or rated at least 80 and have not
+        played in six months (never counts as six months, so something
+        starred and never reached belongs there). "Played" on both is the
+        same threshold `playCount` counts, so an item abandoned early
+        enough to have never crossed it is still sealed.
+
+        Both come back A to Z, since neither is ordered by anything a
+        listener would recognize: there is no play stamp to sort a
+        never-played item by, and sorting the other by how stale it is
+        would put the most forgotten thing first every time the shelf is
+        drawn. The other seven keep the orders their names describe.
       enum:
         - newest
         - recently-added
@@ -486,6 +518,8 @@ components:
         - random
         - starred
         - alphabetical
+        - never-played
+        - rediscover
 
     BrowseDimension:
       type: string

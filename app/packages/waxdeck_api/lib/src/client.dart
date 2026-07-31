@@ -107,8 +107,14 @@ abstract interface class WaxDeckRepository {
 
   /// `GET /library/browse`: keyset-paginated discovery lists. [seed] keeps
   /// paging through the random list stable.
+  /// [mediaType] narrows the list to one medium, for a domain-scoped
+  /// shelf. The server filters the window it walked rather than the whole
+  /// list, so a narrowed page comes back short of [limit] with a cursor
+  /// for the rest: a caller drawing a shelf asks for a generous limit and
+  /// takes what it draws.
   Future<ItemPage> browse(
     DiscoveryList list, {
+    MediaType? mediaType,
     String? cursor,
     int? limit,
     int? seed,
@@ -1541,12 +1547,14 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<ItemPage> browse(
     DiscoveryList list, {
+    MediaType? mediaType,
     String? cursor,
     int? limit,
     int? seed,
   }) => _guard(() async {
     final response = await _gen.getLibraryApi().browseList(
       list: discoveryListToGen(list),
+      mediaType: mediaType == null ? null : mediaTypeToGen(mediaType),
       cursor: cursor,
       limit: limit,
       seed: seed,

@@ -71,10 +71,10 @@ class ListeningSection extends ConsumerWidget {
             title: const Text('Share links'),
             subtitle: const Text('Public links you have handed out'),
             trailing: const Icon(Icons.chevron_right),
-            // Pushed rather than gone to: this is a drill-in from a
-            // settings row, and the location is declared beside settings
-            // rather than beneath it, so `go` would leave the row behind.
-            onTap: () => context.push(WaxRoute.shares),
+            // Gone to, not pushed: the location is declared beneath
+            // settings now, so `go` builds this row's own screen under
+            // it and the address bar follows the hop (8.3).
+            onTap: () => context.go(WaxRoute.shares),
           ),
         ),
       ],

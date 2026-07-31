@@ -345,18 +345,44 @@ class FakeRepository implements WaxDeckRepository {
   /// carry the first page's seed, and this is what lets a test say so.
   final List<({int? seed, String? cursor})> randomBrowses = [];
 
+  /// What each discovery list answers, for the shelves that ask for one
+  /// by name. An unlisted list falls through to the whole listing, which
+  /// is what most callers want and what every list did before shelves
+  /// existed.
+  final Map<DiscoveryList, List<ItemSummary>> browseLists = {};
+
+  /// Every browse this fake answered, so a test can say which lists a
+  /// screen asked for and how it scoped them.
+  final List<({DiscoveryList list, MediaType? mediaType})> browseCalls = [];
+
   @override
   Future<ItemPage> browse(
     DiscoveryList list, {
+    MediaType? mediaType,
     String? cursor,
     int? limit,
     int? seed,
   }) async {
-    if (list == DiscoveryList.recentlyPlayed) {
+    browseCalls.add((list: list, mediaType: mediaType));
+    if (list == DiscoveryList.recentlyPlayed &&
+        !browseLists.containsKey(list)) {
       final item = recentlyPlayed;
       return ItemPage(items: item == null ? const [] : [item]);
     }
-    final page = await listItems(cursor: cursor, limit: limit);
+    final scripted = browseLists[list];
+    if (scripted != null) {
+      return ItemPage(
+        items: <ItemSummary>[
+          for (final item in scripted)
+            if (mediaType == null || item.mediaType == mediaType) item,
+        ],
+      );
+    }
+    final page = await listItems(
+      mediaType: mediaType,
+      cursor: cursor,
+      limit: limit,
+    );
     if (list != DiscoveryList.random) return page;
     randomBrowses.add((seed: seed, cursor: cursor));
     return ItemPage(

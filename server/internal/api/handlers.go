@@ -354,7 +354,11 @@ func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (B
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.svc.Browse(ctx, uc, string(req.Params.List), seed, deref(req.Params.Cursor), limit)
+	var mediaType string
+	if req.Params.MediaType != nil {
+		mediaType = string(*req.Params.MediaType)
+	}
+	page, err := s.svc.Browse(ctx, uc, string(req.Params.List), mediaType, seed, deref(req.Params.Cursor), limit)
 	if err != nil {
 		if kind := service.KindOf(err); kind == service.KindInvalid {
 			return BrowseList400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil

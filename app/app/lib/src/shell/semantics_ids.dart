@@ -174,13 +174,22 @@ abstract final class SemanticsIds {
   static String upgradeGroup(Object itemPid) => 'upgrade-group-$itemPid';
   static String upgradeResolve(Object itemPid) => 'upgrade-resolve-$itemPid';
 
-  // library: The library grid and the per-item cards the sync specs drive.
+  // home: Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.
+  static String homeMix(Object index) => 'home-mix-$index';
+  static const String homeScreen = 'home-screen';
+  static String notificationRow(Object index) => 'notification-row-$index';
+  static const String notificationsBell = 'notifications-bell';
+  static const String notificationsClear = 'notifications-clear';
+  static String shelf(Object shelf) => 'shelf-$shelf';
+  static String shelfAll(Object shelf) => 'shelf-$shelf-all';
+  static String shelfCard(Object shelf, Object pid) => 'shelf-$shelf-$pid';
+
+  // library: The complete item listings and the per-item rows the sync specs drive.
   static const String addToLibrary = 'add-to-library';
   static String item(Object pid) => 'item-$pid';
   static const String itemDelete = 'item-delete';
   static const String itemDeleteConfirm = 'item-delete-confirm';
   static const String offlineBanner = 'offline-banner';
-  static const String resumeBanner = 'resume-banner';
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
   static const String creditsRole = 'credits-role';
@@ -224,6 +233,7 @@ abstract final class SemanticsIds {
   static const String addToPlaylist = 'add-to-playlist';
   static const String downloadButton = 'download-button';
   static const String instantMix = 'instant-mix';
+  static const String playerBack = 'player-back';
   static String playerChapter(Object index) => 'player-chapter-$index';
   static const String playerChapters = 'player-chapters';
   static const String playerDevices = 'player-devices';
@@ -445,11 +455,14 @@ abstract final class SemanticsIds {
   static const String timezoneSave = 'timezone-save';
 
   // sharing: Shares and share links.
+  static const String shareAllowDownload = 'share-allow-download';
   static String shareCopy(Object pid) => 'share-copy-$pid';
   static const String shareCreate = 'share-create';
   static const String shareExpiry = 'share-expiry';
   static String shareRevoke(Object pid) => 'share-revoke-$pid';
   static String shareRow(Object pid) => 'share-row-$pid';
+  static const String shareStartAt = 'share-start-at';
+  static const String sharesEmpty = 'shares-empty';
 
   // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.
   static const String navAccount = 'nav-account';
@@ -466,9 +479,10 @@ abstract final class SemanticsIds {
   static const String listenLogClientFilter = 'listen-log-client-filter';
   static const String openListenLog = 'open-listen-log';
   static const String openYearInReview = 'open-year-in-review';
-  static String statsBucket(Object bucket) => 'stats-bucket-$bucket';
+  static const String statsBucket = 'stats-bucket';
   static String statsRange(Object range) => 'stats-range-$range';
   static String top(Object kind) => 'top-kind-$kind';
+  static String topEntry(Object index) => 'top-entry-$index';
   static const String yirNextYear = 'yir-next-year';
   static const String yirPersonal = 'yir-personal';
   static const String yirPrevYear = 'yir-prev-year';

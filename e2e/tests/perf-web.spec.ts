@@ -33,9 +33,19 @@ const budgets = {
 const CORPUS_USER = 'admin';
 const CORPUS_PASS = 'wax-e2e-pass';
 
-// Any item tile, whichever the grid drew first.
-const anyItemTile = (page: Page): Locator =>
+// Any item row, whichever the tracks index drew first. Home is shelves
+// now, so the surface that enumerates the whole catalog - the one whose
+// paging this gate is about - is the tracks index.
+const anyItemRow = (page: Page): Locator =>
   page.locator(`[flt-semantics-identifier^="${SemanticsIds.item('')}"]`).first();
+
+// The tracks index over the corpus. Reached by location rather than
+// through the chrome where nothing is playing, which is every use but
+// the playing-scroll scenario's second visit.
+async function openTracks(page: Page): Promise<void> {
+  await page.goto(base + '/#/music/tracks');
+  await anyItemRow(page).waitFor({ timeout: 60_000 });
+}
 
 // The corpus scan is asynchronous on a fresh stack; nothing is worth
 // measuring until a deep corpus track is searchable. Takes the factory
@@ -138,27 +148,33 @@ test.describe('large-library web gate', () => {
       await page.getByRole('textbox', { name: 'Username' }).waitFor({ timeout: 60_000 });
       const warmTti = Date.now() - warmStart;
 
-      // Login, then time to a populated grid over the 100k catalog.
+      // Login, then time to a populated home over the 100k catalog:
+      // eight shelves, each one a browse read, which is what a listener
+      // now waits on before the app is usable.
       await typeInto(page, page.getByRole('textbox', { name: 'Username' }), CORPUS_USER);
       await typeInto(page, page.getByRole('textbox', { name: 'Password' }), CORPUS_PASS);
       const gridStart = Date.now();
       await page.getByRole('button', { name: 'Log in' }).click();
-      await anyItemTile(page).waitFor({ timeout: 60_000 });
+      await page
+        .locator(sem(SemanticsIds.shelf('recent')))
+        .waitFor({ timeout: 60_000 });
       const gridMs = Date.now() - gridStart;
 
-      // Scroll pacing over the grid, which pages more items in as it goes.
+      // Scroll pacing over the tracks index, which pages more items in
+      // as it goes: the enumeration the library grid used to be.
+      await openTracks(page);
       const pacing = await measureScrollPacing(page);
 
       console.log(`perf-web verdicts against ${base}`);
       console.log(`  cold TTI        ${coldTti}ms (budget ${budgets.coldTtiMs}ms)`);
       console.log(`  warm TTI        ${warmTti}ms (budget ${budgets.warmTtiMs}ms)`);
-      console.log(`  login->grid     ${gridMs}ms (budget ${budgets.gridMs}ms)`);
-      reportScrollPacing('grid scroll', pacing);
+      console.log(`  login->home     ${gridMs}ms (budget ${budgets.gridMs}ms)`);
+      reportScrollPacing('tracks scroll', pacing);
 
       expect(coldTti).toBeLessThanOrEqual(budgets.coldTtiMs);
       expect(warmTti).toBeLessThanOrEqual(budgets.warmTtiMs);
       expect(gridMs).toBeLessThanOrEqual(budgets.gridMs);
-      expectPacing('grid scroll', pacing);
+      expectPacing('tracks scroll', pacing);
     });
   });
 
@@ -212,24 +228,25 @@ test.describe('large-library web gate', () => {
     await waitForCorpus(() => playwright.request.newContext({ baseURL: base }));
     await measuring(browser, async (page) => {
       await login(page);
-      await anyItemTile(page).waitFor({ timeout: 60_000 });
+      await openTracks(page);
 
       // Opening an item plays it and raises the deck bar.
-      await clickThrough(anyItemTile(page), page.locator(sem(SemanticsIds.playerToggle)));
+      await clickThrough(anyItemRow(page), page.locator(sem(SemanticsIds.playerToggle)));
 
-      // Back to the grid the player screen covered, through the chrome
-      // rather than by URL: a goto here would reload the client and take
-      // the playback this scenario exists to measure with it.
+      // Back to the listing the player screen covered, through the
+      // chrome rather than by URL: a goto here would reload the client
+      // and take the playback this scenario exists to measure with it.
       await clickThrough(
-        page.locator(sem(SemanticsIds.navDestination('home'))),
-        anyItemTile(page),
+        page.locator(sem(SemanticsIds.navDestination('music'))),
+        page.locator(sem(SemanticsIds.musicTile('tracks'))),
       );
+      await anyItemRow(page).waitFor({ timeout: 60_000 });
       await expect(page.locator(sem(SemanticsIds.deckBar))).toBeVisible({ timeout: 30_000 });
 
       const pacing = await measureScrollPacing(page);
       console.log(`perf-web playing-scroll verdict against ${base}`);
-      reportScrollPacing('grid + deck bar', pacing);
-      expectPacing('grid + deck bar', pacing);
+      reportScrollPacing('tracks + deck bar', pacing);
+      expectPacing('tracks + deck bar', pacing);
     });
   });
 });

@@ -25,6 +25,7 @@ class WaxScaffold extends StatelessWidget {
     this.bottom,
     this.floating,
     this.controller,
+    this.onRefresh,
     this.semanticsId,
     super.key,
   }) : assert(
@@ -65,6 +66,13 @@ class WaxScaffold extends StatelessWidget {
   /// only scroll by hand leave it null and let the scaffold own one.
   final ScrollController? controller;
 
+  /// Pull to refresh, on the screens whose content is a live read of
+  /// somebody else's state. Absent everywhere else: a gesture that
+  /// refetches what the invalidation channel already keeps current is a
+  /// control with nothing to do, and drawing one implies the page goes
+  /// stale.
+  final Future<void> Function()? onRefresh;
+
   final String? semanticsId;
 
   /// How much of the top of the page the pinned bar occupies.
@@ -86,6 +94,20 @@ class WaxScaffold extends StatelessWidget {
     final colors = WaxColors.of(context);
     final sizeClass = WaxSizeClass.of(context);
 
+    // The indicator wraps the scroll view rather than riding as a sliver
+    // so it hangs below the pinned bar rather than under it, and it is
+    // absent entirely without a handler: an always-present
+    // RefreshIndicator with a no-op callback still swallows an overscroll
+    // and draws an arrow that resolves into nothing.
+    Widget scrollable(Widget child) => onRefresh == null
+        ? child
+        : RefreshIndicator(
+            onRefresh: onRefresh!,
+            color: colors.accent,
+            backgroundColor: colors.surface1,
+            child: child,
+          );
+
     return Semantics(
       identifier: semanticsId,
       child: Scaffold(
@@ -93,60 +115,69 @@ class WaxScaffold extends StatelessWidget {
         body: Column(
           children: <Widget>[
             Expanded(
-              child: CustomScrollView(
-                controller: controller,
-                slivers: <Widget>[
-                  SliverAppBar(
-                    pinned: true,
-                    expandedHeight: largeTitle ? _largeTitleHeight : null,
-                    backgroundColor: colors.canvas,
-                    surfaceTintColor: Colors.transparent,
-                    automaticallyImplyLeading: false,
-                    leading: onBack == null
-                        ? null
-                        : WaxIconButton(
-                            glyph: WaxIcons.back,
-                            label: 'Back',
-                            onPressed: onBack,
-                            semanticsId: backSemanticsId,
-                          ),
-                    titleSpacing: onBack == null
-                        ? sizeClass.gutter.horizontal / 2
-                        : 0,
-                    title: largeTitle
-                        ? null
-                        : Text(
-                            title,
-                            style: WaxType.titleScreen.copyWith(
-                              color: colors.textPrimary,
+              child: scrollable(
+                CustomScrollView(
+                  controller: controller,
+                  // A pull needs somewhere to pull from: a page shorter
+                  // than its viewport does not scroll, and a scroll view
+                  // that cannot scroll never reports the overscroll the
+                  // indicator arms on. An empty home is exactly that page.
+                  physics: onRefresh == null
+                      ? null
+                      : const AlwaysScrollableScrollPhysics(),
+                  slivers: <Widget>[
+                    SliverAppBar(
+                      pinned: true,
+                      expandedHeight: largeTitle ? _largeTitleHeight : null,
+                      backgroundColor: colors.canvas,
+                      surfaceTintColor: Colors.transparent,
+                      automaticallyImplyLeading: false,
+                      leading: onBack == null
+                          ? null
+                          : WaxIconButton(
+                              glyph: WaxIcons.back,
+                              label: 'Back',
+                              onPressed: onBack,
+                              semanticsId: backSemanticsId,
                             ),
-                          ),
-                    flexibleSpace: largeTitle
-                        ? FlexibleSpaceBar(
-                            titlePadding: EdgeInsets.only(
-                              left: onBack == null
-                                  ? sizeClass.gutter.horizontal / 2
-                                  : WaxSpace.s48,
-                              bottom: WaxSpace.s12,
-                            ),
-                            title: Text(
+                      titleSpacing: onBack == null
+                          ? sizeClass.gutter.horizontal / 2
+                          : 0,
+                      title: largeTitle
+                          ? null
+                          : Text(
                               title,
-                              style:
-                                  (sizeClass.hasSidebar
-                                          ? WaxType.titleScreenDesktop
-                                          : WaxType.titleScreen)
-                                      .copyWith(color: colors.textPrimary),
+                              style: WaxType.titleScreen.copyWith(
+                                color: colors.textPrimary,
+                              ),
                             ),
-                          )
-                        : null,
-                    actions: <Widget>[
-                      ...actions,
-                      SizedBox(width: sizeClass.gutter.horizontal / 2),
-                    ],
-                  ),
-                  if (body != null) SliverToBoxAdapter(child: body),
-                  ...?slivers,
-                ],
+                      flexibleSpace: largeTitle
+                          ? FlexibleSpaceBar(
+                              titlePadding: EdgeInsets.only(
+                                left: onBack == null
+                                    ? sizeClass.gutter.horizontal / 2
+                                    : WaxSpace.s48,
+                                bottom: WaxSpace.s12,
+                              ),
+                              title: Text(
+                                title,
+                                style:
+                                    (sizeClass.hasSidebar
+                                            ? WaxType.titleScreenDesktop
+                                            : WaxType.titleScreen)
+                                        .copyWith(color: colors.textPrimary),
+                              ),
+                            )
+                          : null,
+                      actions: <Widget>[
+                        ...actions,
+                        SizedBox(width: sizeClass.gutter.horizontal / 2),
+                      ],
+                    ),
+                    if (body != null) SliverToBoxAdapter(child: body),
+                    ...?slivers,
+                  ],
+                ),
               ),
             ),
             ?bottom,

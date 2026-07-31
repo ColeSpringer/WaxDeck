@@ -60,7 +60,14 @@ enum DiscoveryList {
   recentlyPlayed('recently-played'),
   random('random'),
   starred('starred'),
-  alphabetical('alphabetical');
+  alphabetical('alphabetical'),
+
+  /// Owned and never counted a play of: the collection shelf no
+  /// streaming service can draw.
+  neverPlayed('never-played'),
+
+  /// Starred or well rated and not heard in six months.
+  rediscover('rediscover');
 
   const DiscoveryList(this.wireName);
 

@@ -13,6 +13,8 @@ const DiscoveryList _$recentlyPlayed = const DiscoveryList._('recentlyPlayed');
 const DiscoveryList _$random = const DiscoveryList._('random');
 const DiscoveryList _$starred = const DiscoveryList._('starred');
 const DiscoveryList _$alphabetical = const DiscoveryList._('alphabetical');
+const DiscoveryList _$neverPlayed = const DiscoveryList._('neverPlayed');
+const DiscoveryList _$rediscover = const DiscoveryList._('rediscover');
 
 DiscoveryList _$valueOf(String name) {
   switch (name) {
@@ -30,6 +32,10 @@ DiscoveryList _$valueOf(String name) {
       return _$starred;
     case 'alphabetical':
       return _$alphabetical;
+    case 'neverPlayed':
+      return _$neverPlayed;
+    case 'rediscover':
+      return _$rediscover;
     default:
       throw ArgumentError(name);
   }
@@ -44,6 +50,8 @@ final BuiltSet<DiscoveryList> _$values =
       _$random,
       _$starred,
       _$alphabetical,
+      _$neverPlayed,
+      _$rediscover,
     ]);
 
 class _$DiscoveryListMeta {
@@ -55,6 +63,8 @@ class _$DiscoveryListMeta {
   DiscoveryList get random => _$random;
   DiscoveryList get starred => _$starred;
   DiscoveryList get alphabetical => _$alphabetical;
+  DiscoveryList get neverPlayed => _$neverPlayed;
+  DiscoveryList get rediscover => _$rediscover;
   DiscoveryList valueOf(String name) => _$valueOf(name);
   BuiltSet<DiscoveryList> get values => _$values;
 }
@@ -76,6 +86,8 @@ class _$DiscoveryListSerializer implements PrimitiveSerializer<DiscoveryList> {
     'random': 'random',
     'starred': 'starred',
     'alphabetical': 'alphabetical',
+    'neverPlayed': 'never-played',
+    'rediscover': 'rediscover',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'newest': 'newest',
@@ -85,6 +97,8 @@ class _$DiscoveryListSerializer implements PrimitiveSerializer<DiscoveryList> {
     'random': 'random',
     'starred': 'starred',
     'alphabetical': 'alphabetical',
+    'never-played': 'neverPlayed',
+    'rediscover': 'rediscover',
   };
 
   @override

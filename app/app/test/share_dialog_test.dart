@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
@@ -28,6 +29,8 @@ List<String> _captureClipboard(WidgetTester tester) {
   return copied;
 }
 
+Finder _byId(String id) => find.bySemanticsIdentifier(id);
+
 void main() {
   testWidgets('creates a share with the chosen expiry and copies the URL', (
     tester,
@@ -44,17 +47,17 @@ void main() {
 
     await tester.tap(find.byKey(const Key('share-link')));
     await tester.pumpAndSettle();
-    // Music offers no start-at checkbox.
-    expect(find.byKey(const Key('share-start-at')), findsNothing);
+    // Music offers no start-at switch.
+    expect(_byId(SemanticsIds.shareStartAt), findsNothing);
 
-    await tester.tap(find.byKey(const Key('share-expiry')));
+    await tester.tap(_byId(SemanticsIds.shareExpiry));
     await tester.pumpAndSettle();
     await tester.tap(find.text('1 week').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('share-allow-download')));
+    await tester.tap(_byId(SemanticsIds.shareAllowDownload));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('share-create')));
+    await tester.tap(_byId(SemanticsIds.shareCreate));
     await tester.pumpAndSettle();
 
     expect(repo.createShareCalls, hasLength(1));
@@ -96,9 +99,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Start at 1:35'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('share-start-at')));
+    await tester.tap(_byId(SemanticsIds.shareStartAt));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('share-create')));
+    await tester.tap(_byId(SemanticsIds.shareCreate));
     await tester.pumpAndSettle();
 
     expect(repo.createShareCalls.single.pid, _episodePid);

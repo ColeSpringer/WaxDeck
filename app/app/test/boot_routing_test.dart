@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 
 import 'fakes.dart';
 
@@ -65,7 +66,12 @@ void main() {
     expect(repo.bootstrapCalls.single.username, 'admin');
     expect(repo.bootstrapCalls.single.password, 'wax-setup-pass');
     expect(find.byKey(const Key('setup-username')), findsNothing);
-    expect(find.text('Prancing Pony Blues'), findsOneWidget);
+    // Landed on home, with the library on its shelves. `findsWidgets`
+    // rather than `findsOneWidget`: the shelves overlap by construction,
+    // so a fresh unplayed track is on Recently added and on Never played
+    // at once, and counting titles would be counting shelves.
+    expect(find.bySemanticsIdentifier(SemanticsIds.homeScreen), findsOneWidget);
+    expect(find.text('Prancing Pony Blues'), findsWidgets);
     // Native path: the bearer token is persisted for the next launch.
     expect(store.token, 'test-token');
   });

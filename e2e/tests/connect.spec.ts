@@ -6,7 +6,7 @@ import {
   Browser,
   APIRequestContext,
 } from './fixtures';
-import { ensureAdmin, authed, typeInto, waitForLibrary } from './helpers';
+import { authed, ensureAdmin, itemRow, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // Connect: every signed-in client is a controller and a controllable
@@ -82,7 +82,7 @@ test('a session mirrors to the server and relays remote control', async ({
 
   // Client A: plays the track on its own player.
   const a = await loginWeb(browser);
-  const card = locate(a.page, SemanticsIds.item(target.pid));
+  const card = await itemRow(a.page, target.pid);
   await card.waitFor({ timeout: 30_000 });
   await card.click();
   const toggle = locate(a.page, SemanticsIds.playerToggle);
@@ -120,9 +120,9 @@ test('a session mirrors to the server and relays remote control', async ({
   // Client B: opens its own player screen on another item, then the
   // device picker, and finds A's session listed.
   const b = await loginWeb(browser);
-  const otherCard = locate(
+  const otherCard = await itemRow(
     b.page,
-    SemanticsIds.item(items.items.find((it: { title: string }) => it.title === 'Bravo Song').pid),
+    items.items.find((it: { title: string }) => it.title === 'Bravo Song').pid,
   );
   await otherCard.waitFor({ timeout: 30_000 });
   await otherCard.click();

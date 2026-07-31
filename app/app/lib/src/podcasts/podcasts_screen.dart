@@ -11,6 +11,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
+import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -43,6 +44,7 @@ class PodcastsScreen extends ConsumerWidget {
         ),
         const _HubOverflow(),
         const SearchAction(),
+        const AccountAction(),
       ],
       slivers: <Widget>[
         const SliverToBoxAdapter(child: _UpNextShelf()),

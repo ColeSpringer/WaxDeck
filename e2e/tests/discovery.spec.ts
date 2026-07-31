@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext, Page } from './fixtures';
-import { authed, clickThrough, ensureAdmin, typeInto, waitForLibrary } from './helpers';
+import { authed, clickThrough, ensureAdmin, itemRow, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The discovery slice over the real stack: an instant mix started from
@@ -82,7 +82,7 @@ test('an instant mix starts from any playing track', async ({ page, request }) =
   // The browser journey: play the track, open Discover, run the mix
   // with the default adventurousness.
   await login(page);
-  const card = page.locator(sem(SemanticsIds.item(pid)));
+  const card = await itemRow(page, pid);
   await card.waitFor({ timeout: 30_000 });
   await clickThrough(card, page.locator(sem(SemanticsIds.playerToggle)));
   await clickThrough(page.locator(sem(SemanticsIds.playerDiscover)), page.locator(sem(SemanticsIds.instantMix)));

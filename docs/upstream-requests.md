@@ -97,6 +97,19 @@ sidecar injection seam) all landed and are not repeated here.
   500. Complete coverage, no repeats, an order that is more local than
   it should be.
 
+  A second consumer arrived with the shelf home (ADR-0038):
+  `GET /library/browse` now takes a `mediaType`, for a domain-scoped
+  shelf ("recently added albums" on the music hub). With no query on
+  `BrowseOptions` the filter runs over the page the catalog answered, so
+  a narrowed page comes back short of its limit while still carrying a
+  cursor - the same short-page-plus-cursor shape a restricted caller
+  already gets, documented in the contract, and correct. Walking further
+  per request is not available as a workaround: a page's cursor names its
+  own end, `read.Page` carries no per-item order values, and there is no
+  `EncodeCursor` input to mint one mid-window, so filling a page would
+  mean consuming rows the answer could not report having consumed. The
+  same `Query` field closes this half too.
+
 - **A peaks read scoped to a file, not an item.** `Library.Peaks` takes
   an item pid and `LoadPeaks` joins `item_file` on `role = 'primary'`,
   which for a multi-file audiobook is part one by construction (the

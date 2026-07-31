@@ -173,13 +173,22 @@ export const SemanticsIds = {
   upgradeGroup: (itemPid: string | number) => `upgrade-group-${itemPid}`,
   upgradeResolve: (itemPid: string | number) => `upgrade-resolve-${itemPid}`,
 
-  // library: The library grid and the per-item cards the sync specs drive.
+  // home: Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.
+  homeMix: (index: string | number) => `home-mix-${index}`,
+  homeScreen: 'home-screen',
+  notificationRow: (index: string | number) => `notification-row-${index}`,
+  notificationsBell: 'notifications-bell',
+  notificationsClear: 'notifications-clear',
+  shelf: (shelf: string | number) => `shelf-${shelf}`,
+  shelfAll: (shelf: string | number) => `shelf-${shelf}-all`,
+  shelfCard: (shelf: string | number, pid: string | number) => `shelf-${shelf}-${pid}`,
+
+  // library: The complete item listings and the per-item rows the sync specs drive.
   addToLibrary: 'add-to-library',
   item: (pid: string | number) => `item-${pid}`,
   itemDelete: 'item-delete',
   itemDeleteConfirm: 'item-delete-confirm',
   offlineBanner: 'offline-banner',
-  resumeBanner: 'resume-banner',
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
   creditsRole: 'credits-role',
@@ -223,6 +232,7 @@ export const SemanticsIds = {
   addToPlaylist: 'add-to-playlist',
   downloadButton: 'download-button',
   instantMix: 'instant-mix',
+  playerBack: 'player-back',
   playerChapter: (index: string | number) => `player-chapter-${index}`,
   playerChapters: 'player-chapters',
   playerDevices: 'player-devices',
@@ -435,11 +445,14 @@ export const SemanticsIds = {
   timezoneSave: 'timezone-save',
 
   // sharing: Shares and share links.
+  shareAllowDownload: 'share-allow-download',
   shareCopy: (pid: string | number) => `share-copy-${pid}`,
   shareCreate: 'share-create',
   shareExpiry: 'share-expiry',
   shareRevoke: (pid: string | number) => `share-revoke-${pid}`,
   shareRow: (pid: string | number) => `share-row-${pid}`,
+  shareStartAt: 'share-start-at',
+  sharesEmpty: 'shares-empty',
 
   // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.
   navAccount: 'nav-account',
@@ -456,9 +469,10 @@ export const SemanticsIds = {
   listenLogClientFilter: 'listen-log-client-filter',
   openListenLog: 'open-listen-log',
   openYearInReview: 'open-year-in-review',
-  statsBucket: (bucket: string | number) => `stats-bucket-${bucket}`,
+  statsBucket: 'stats-bucket',
   statsRange: (range: string | number) => `stats-range-${range}`,
   top: (kind: string | number) => `top-kind-${kind}`,
+  topEntry: (index: string | number) => `top-entry-${index}`,
   yirNextYear: 'yir-next-year',
   yirPersonal: 'yir-personal',
   yirPrevYear: 'yir-prev-year',

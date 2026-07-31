@@ -76,6 +76,14 @@ class PlayerScreen extends ConsumerWidget {
     int positionMs() => session?.displayPosition.inMilliseconds ?? 0;
     return Scaffold(
       appBar: AppBar(
+        // The player is pushed over whatever was underneath, and what is
+        // underneath now has a back control of its own (a drilled-in
+        // listing does). Two buttons named "Back" is one too many for a
+        // spec to steer by document order, so this one has a handle.
+        leading: Semantics(
+          identifier: SemanticsIds.playerBack,
+          child: const BackButton(key: Key(SemanticsIds.playerBack)),
+        ),
         title: Text(item?.title ?? 'Now playing'),
         // Every one of these acts on an item; until there is one to act
         // on, the bar carries the title alone.

@@ -47,6 +47,7 @@ class SyncEngine {
   final _status = StreamController<SyncStatus>.broadcast();
   final _catalogChanged = StreamController<void>.broadcast();
   final _playStateChanged = StreamController<String>.broadcast();
+  final _serverEvents = StreamController<ServerSyncEvent>.broadcast();
 
   SyncStatus _current = const SyncStatus(connection: SyncConnection.offline);
   EventsChannel? _channel;
@@ -72,6 +73,29 @@ class SyncEngine {
   /// as an invalidation signal, not a payload.
   Stream<String> get playStateChanged => _playStateChanged.stream;
 
+  /// Every server-state change this engine pulled *while running*, as it
+  /// arrived.
+  ///
+  /// The engine already reads and discriminates these to keep its mirror
+  /// current; publishing them costs nothing and saves a second consumer
+  /// (the notifications bell) from running its own cursor over the same
+  /// stream. Broadcast and not replayed: a listener attached later hears
+  /// what happens next, which is what a session-scoped surface means.
+  ///
+  /// The catch-up walk is deliberately silent. This engine's cursor is
+  /// persisted, so its first pull of a session covers everything since
+  /// the last launch - a week of it, if the app has been closed a week -
+  /// and announcing that as it arrives would report a backlog as though
+  /// it had just happened. A client with no engine mints its cursor and
+  /// reports nothing from its first pull for exactly the same reason;
+  /// this is that rule on the other transport, rather than a difference
+  /// decided by which build somebody is running.
+  Stream<ServerSyncEvent> get serverEvents => _serverEvents.stream;
+
+  /// Whether the first walk of this session has been made, after which
+  /// what arrives is news rather than backlog.
+  bool _caughtUp = false;
+
   /// Starts the engine: reconcile now, then follow invalidations.
   Future<void> start() async {
     if (_running) return;
@@ -92,6 +116,7 @@ class SyncEngine {
     _status.close();
     _catalogChanged.close();
     _playStateChanged.close();
+    _serverEvents.close();
   }
 
   void _setStatus(SyncConnection c) {
@@ -342,6 +367,7 @@ class SyncEngine {
       while (true) {
         final page = await repository.syncServer(since: since);
         for (final ev in page.events) {
+          if (_caughtUp) _serverEvents.add(ev);
           if (ev.kind == 'play-state' && ev.playState != null) {
             await _storePlayState(ev.playState!);
             _playStateChanged.add(ev.playState!.pid);
@@ -359,6 +385,7 @@ class SyncEngine {
         if (!page.more) break;
       }
       await _saveServerCursor(since);
+      _caughtUp = true;
     } on WaxDeckApiException catch (e) {
       if (e.code == 'sync-reset') {
         await _remintServer();
@@ -374,6 +401,10 @@ class SyncEngine {
   Future<void> _remintServer() async {
     final page = await repository.syncServer();
     await _saveServerCursor(page.nextSince);
+    // A minted cursor has nothing behind it, so everything after this is
+    // news: without this the walk *after* a fresh install or a reset
+    // would be swallowed as though it were the backlog.
+    _caughtUp = true;
     final held =
         await (db.selectOnly(db.downloadRecords, distinct: true)
               ..addColumns([db.downloadRecords.pid]))

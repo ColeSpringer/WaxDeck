@@ -58,9 +58,79 @@ var browseLists = map[string]read.DiscoveryList{
 	"alphabetical":    read.ListAlphabetical,
 }
 
+// rediscoverAfter is how long an item has to have gone unplayed to count
+// as forgotten. Six months, so a shelf redrawn in the spring does not
+// offer back what was on it in the winter.
+const rediscoverAfter = 182 * 24 * time.Hour
+
+// rediscoverRating is the rating that stands in for a star. The contract
+// runs ratings 0..100, so this is four stars out of five.
+const rediscoverRating = 80
+
+// collectionLists are the two discovery lists WaxBin has no name for.
+// They are selections rather than orderings, so they are expressed as
+// queries over the same per-user play state every other play-derived
+// list reads, and paged by the same keyset the item listing uses. Both
+// come back A to Z, which is what QueryPage orders by; the contract
+// says so, and says why neither has a more meaningful order.
+var collectionLists = map[string]func() query.Node{
+	// Owned and never opened. play_count coalesces to 0, so an item with
+	// no play_state row at all matches, which is the whole population
+	// this list is about.
+	"never-played": func() query.Node {
+		return query.Cond{Field: "play_count", Op: query.OpIs, Value: 0}
+	},
+	// Starred or rated well, and not heard in months. notInTheLast
+	// matches NULL by contract, so something starred and never played
+	// belongs here too - which is right: it is exactly what a listener
+	// meant to get back to.
+	"rediscover": func() query.Node {
+		return query.And{Nodes: []query.Node{
+			query.Or{Nodes: []query.Node{
+				query.Cond{Field: "starred", Op: query.OpIs, Value: 1},
+				query.Cond{Field: "rating", Op: query.OpGte, Value: rediscoverRating},
+			}},
+			query.Cond{
+				Field: "last_played",
+				Op:    query.OpNotInTheLast,
+				Value: int64(rediscoverAfter),
+			},
+		}}
+	},
+}
+
 // Browse pages one discovery list; play-derived lists reflect the
-// acting user's own state.
-func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, seed int64, cursor string, limit int) (Page, error) {
+// acting user's own state. A mediaType narrows the list to one medium,
+// for a domain-scoped shelf.
+//
+// The narrowing is a post-filter on the catalog's own window, so a
+// filtered page comes back short of limit while still carrying a cursor
+// - the same shape a restricted caller's page already has, and the
+// contract documents it. It is not pushed down because BrowseOptions
+// takes no query at all (the standing upstream ask); walking further
+// per request is not an option either, since the cursor a page carries
+// names its own end and there is no way to mint one mid-window, so
+// filling a page would mean consuming rows this answer could not report
+// having consumed.
+func (l *Library) Browse(ctx context.Context, uc *UserCtx, list, mediaType string, seed int64, cursor string, limit int) (Page, error) {
+	var kind model.Kind
+	if mediaType != "" {
+		var ok bool
+		if kind, ok = kindForMediaType(mediaType); !ok {
+			return Page{}, errInvalid("unknown mediaType " + mediaType)
+		}
+	}
+	if where, ok := collectionLists[list]; ok {
+		b := query.New(query.EntityItems).WhereNode(where())
+		if kind != "" {
+			b = b.Where("kind", query.OpIs, string(kind))
+		}
+		page, err := l.lib.QueryPage(ctx, b.Build(), read.Cursor(cursor), limit, false, model.PID(uc.CatalogPID))
+		if err != nil {
+			return Page{}, classify(err)
+		}
+		return l.pageDTO(ctx, uc, page), nil
+	}
 	dl, ok := browseLists[list]
 	if !ok {
 		return Page{}, errInvalid("unknown list " + list)
@@ -74,7 +144,21 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, seed int
 	if err != nil {
 		return Page{}, classify(err)
 	}
-	return l.pageDTO(ctx, uc, page), nil
+	out := l.pageDTO(ctx, uc, page)
+	if kind == "" {
+		return out, nil
+	}
+	// Matched on the API media type rather than on the resolved kind:
+	// the summary carries the former, and resolving the kind above was
+	// the validation, not the comparison.
+	kept := make([]ItemSummary, 0, len(out.Items))
+	for _, it := range out.Items {
+		if it.MediaType == mediaType {
+			kept = append(kept, it)
+		}
+	}
+	out.Items = kept
+	return out, nil
 }
 
 // pageDTO converts a catalog page, dropping items outside the caller's

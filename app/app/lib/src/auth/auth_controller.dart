@@ -189,3 +189,15 @@ class AuthController extends AsyncNotifier<SessionState> {
 
 final authControllerProvider =
     AsyncNotifierProvider<AuthController, SessionState>(AuthController.new);
+
+/// Who is signed in, as a value that changes exactly when the account
+/// does.
+///
+/// The session state carries a whole user and a probe's loading and
+/// error states, so a provider watching it rebuilds on a refresh that
+/// changed nothing about who this is. Anything that has to reset per
+/// account (the notifications bell's session-scoped list) watches this
+/// instead. Null while signed out.
+final signedInAccountProvider = Provider<String?>(
+  (ref) => ref.watch(authControllerProvider).value?.user?.id,
+);

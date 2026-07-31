@@ -21,7 +21,7 @@ import '../discovery/track_list_screen.dart';
 import '../downloads/downloads_screen.dart';
 import '../health/diagnostics_screen.dart';
 import '../health/health_screen.dart';
-import '../library/library_screen.dart';
+import '../home/home_screen.dart';
 import '../metadata/metadata_screen.dart';
 import '../music/album_screen.dart';
 import '../music/artist_screen.dart';
@@ -29,6 +29,7 @@ import '../music/index_screen.dart';
 import '../music/listing_screen.dart';
 import '../music/music_controllers.dart';
 import '../music/music_hub_screen.dart';
+import '../notifications/notifications_binder.dart';
 import '../organize/organize_screen.dart';
 import '../player/autoplay_gate.dart';
 import '../player/now_playing_controller.dart';
@@ -347,7 +348,7 @@ List<RouteBase> shellRoutes() => <RouteBase>[
         routes: <RouteBase>[
           GoRoute(
             path: WaxRoute.home,
-            builder: (context, state) => const LibraryScreen(),
+            builder: (context, state) => const HomeScreen(),
           ),
         ],
       ),
@@ -504,6 +505,12 @@ List<RouteBase> shellRoutes() => <RouteBase>[
                 path: 'about',
                 builder: (context, state) => const AboutScreen(),
               ),
+              // Also ahead of the pattern: "shares" is a literal segment,
+              // not a section name.
+              GoRoute(
+                path: 'shares',
+                builder: (context, state) => const SharesScreen(),
+              ),
               GoRoute(
                 path: ':section',
                 // An unknown segment lands on the settings home rather
@@ -524,10 +531,6 @@ List<RouteBase> shellRoutes() => <RouteBase>[
                 ),
               ),
             ],
-          ),
-          GoRoute(
-            path: WaxRoute.shares,
-            builder: (context, state) => const SharesScreen(),
           ),
           GoRoute(
             path: WaxRoute.uploads,
@@ -651,6 +654,12 @@ class _SignedInScope extends ConsumerWidget {
     ref.watch(syncBinderProvider);
     ref.watch(queuePersistenceProvider);
     ref.watch(queueRefillProvider);
+    // The bell promises what this client saw while it was running, so it
+    // collects for as long as the session does. Watched from the bell
+    // instead it would collect only once home had been built, which a
+    // cold arrival on a deep link never does - and which of the two you
+    // got would be decided by a rendering detail.
+    ref.watch(notificationsBinderProvider);
     // The notifier, not its state: playback has to be listening to the
     // queue for the whole session, but what it is playing changes
     // constantly and nothing under here should rebuild for that. The

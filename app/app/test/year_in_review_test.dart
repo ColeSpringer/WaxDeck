@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/stats/year_in_review_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
@@ -66,7 +67,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.yearInReviewCalls.last, thisYear);
-    await tester.tap(find.byKey(const Key('yir-prev-year')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.yirPrevYear));
     await tester.pumpAndSettle();
 
     expect(find.text('${thisYear - 1}'), findsOneWidget);
@@ -89,7 +90,7 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('yir-server')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.yirServer));
     await tester.pumpAndSettle();
 
     expect(repo.serverYearInReviewCalls.last, thisYear);

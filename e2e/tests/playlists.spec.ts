@@ -1,6 +1,6 @@
 import { test, expect, APIRequestContext, Page } from './fixtures';
 import crypto from 'node:crypto';
-import { authed, clickThrough, ensureAdmin, openMusicSection, typeInto, waitForLibrary } from './helpers';
+import { authed, clickThrough, ensureAdmin, itemRow, openMusicSection, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The playlists slice over the real stack: the rule editor building a
@@ -248,7 +248,7 @@ test('the player adds a track to a fresh manual playlist', async ({
   );
 
   await login(page);
-  const card = page.locator(sem(SemanticsIds.item(target.pid)));
+  const card = await itemRow(page, target.pid);
   await card.waitFor({ timeout: 30_000 });
   await clickThrough(card, page.locator(sem(SemanticsIds.addToPlaylist)));
   await clickThrough(

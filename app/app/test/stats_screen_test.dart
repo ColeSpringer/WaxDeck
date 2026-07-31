@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/stats/stats_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
@@ -89,7 +90,7 @@ void main() {
     expect(find.byKey(const Key('stats-chart')), findsOneWidget);
     expect(find.byKey(const Key('stats-heatmap')), findsOneWidget);
     expect(
-      find.text('Current streak: 3 days | Longest: 9 days'),
+      find.text('Current streak: 3 days · Longest: 9 days'),
       findsOneWidget,
     );
     // The whole screen laid out without overflow exceptions.
@@ -106,7 +107,7 @@ void main() {
     expect(repo.listeningStatsCalls.last, (range: '30d', bucket: 'day'));
     expect(repo.topListCalls.last.range, '30d');
 
-    await tester.tap(find.byKey(const Key('stats-range-7d')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.statsRange('7d')));
     await tester.pumpAndSettle();
 
     expect(repo.listeningStatsCalls.last, (range: '7d', bucket: 'day'));
@@ -120,7 +121,11 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('stats-bucket-week')));
+    // The bucket is a picker rather than a segmented row: three values
+    // on the trailing edge of a chart, not a filter over the page.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.statsBucket));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Week').last);
     await tester.pumpAndSettle();
 
     expect(repo.listeningStatsCalls.last, (range: '30d', bucket: 'week'));
@@ -132,13 +137,13 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.byKey(const Key('top-kind-albums')),
+      find.bySemanticsIdentifier(SemanticsIds.top('albums')),
       200,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('The Bree Trio'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('top-kind-albums')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.top('albums')));
     await tester.pumpAndSettle();
 
     expect(repo.topListCalls.last.kind, 'albums');
@@ -176,17 +181,19 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.byKey(const Key('open-listen-log')),
+      find.bySemanticsIdentifier(SemanticsIds.openListenLog),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.byKey(const Key('open-listen-log')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.openListenLog));
     await tester.pumpAndSettle();
 
     expect(find.text('Prancing Pony Blues'), findsOneWidget);
     expect(find.text('Pipeweed Economics'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('listen-log-client-filter')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.listenLogClientFilter),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('waxdeck-flutter-web').last);
     await tester.pumpAndSettle();

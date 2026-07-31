@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
@@ -45,6 +46,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('login-username')), findsNothing);
-    expect(find.text('Prancing Pony Blues'), findsOneWidget);
+    // Landed on home, with the library on its shelves. `findsWidgets`
+    // rather than `findsOneWidget`: the shelves overlap by construction,
+    // so a fresh unplayed track is on Recently added and on Never played
+    // at once, and counting titles would be counting shelves.
+    expect(find.bySemanticsIdentifier(SemanticsIds.homeScreen), findsOneWidget);
+    expect(find.text('Prancing Pony Blues'), findsWidgets);
   });
 }

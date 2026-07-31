@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../player/play_progress.dart';
 import '../search/search_chrome.dart';
+import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -60,7 +61,11 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
       title: 'Audiobooks',
       semanticsId: SemanticsIds.booksHub,
       controller: _scroll,
-      actions: <Widget>[const _HubOverflow(), const SearchAction()],
+      actions: <Widget>[
+        const _HubOverflow(),
+        const SearchAction(),
+        const AccountAction(),
+      ],
       slivers: <Widget>[
         SliverToBoxAdapter(
           child: _ContinueShelf(books: loaded, states: states),

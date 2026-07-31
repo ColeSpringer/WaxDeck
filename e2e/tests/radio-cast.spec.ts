@@ -1,11 +1,5 @@
 import { test, expect, Page, APIRequestContext } from './fixtures';
-import {
-  authed,
-  chooseFromMenu,
-  clickThrough,
-  ensureAdmin,
-  loginAsAdmin,
-} from './helpers';
+import { authed, chooseFromMenu, clickThrough, ensureAdmin, itemRow, loginAsAdmin } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The radio slice and the Connect surfaces over the real stack: a station
@@ -299,16 +293,18 @@ test.describe.serial('radio and cast', () => {
     // there is no device to send silence to. A grid tap plays and pushes
     // the player over the chrome, so the bar is behind it until that is
     // left - and the bar's own cast control is what this phase changed.
-    const card = page.locator(sem(SemanticsIds.item(target.pid)));
+    const card = await itemRow(page, target.pid);
     await card.waitFor({ timeout: 30_000 });
     await card.click();
     await page.locator(sem(SemanticsIds.playerToggle)).waitFor({ timeout: 30_000 });
-    // Forced, like every canvas-rendered click in this suite: a semantics
-    // node laid over the content pane reports itself as intercepting the
-    // pointer, and playwright's actionability check believes it.
+    // The player's own back control, by handle: the listing underneath
+    // has a back button too, and picking one of two by document order is
+    // how this scenario started popping the wrong screen. Forced, like
+    // every canvas-rendered click in this suite: a semantics node laid
+    // over the content pane reports itself as intercepting the pointer,
+    // and playwright's actionability check believes it.
     await page
-      .getByRole('button', { name: 'Back' })
-      .first()
+      .locator(sem(SemanticsIds.playerBack))
       .click({ force: true });
     await page.locator(sem(SemanticsIds.deckBar)).waitFor({ timeout: 30_000 });
 

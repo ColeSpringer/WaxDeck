@@ -13,7 +13,7 @@ import 'package:waxdeck/src/books/books_screen.dart';
 import 'package:waxdeck/src/downloads/downloads_screen.dart';
 import 'package:waxdeck/src/health/diagnostics_screen.dart';
 import 'package:waxdeck/src/health/health_screen.dart';
-import 'package:waxdeck/src/library/library_screen.dart';
+import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/index_screen.dart';
@@ -66,7 +66,7 @@ String _entityHandle(MusicDimension dimension) =>
 /// (go_router answers an unmatched location with the error screen, not
 /// an exception).
 final _locations = <String, Type>{
-  WaxRoute.home: LibraryScreen,
+  WaxRoute.home: HomeScreen,
   WaxRoute.search: SearchScreen,
   WaxRoute.searchFor('nightjar'): SearchScreen,
   WaxRoute.music: MusicHubScreen,
@@ -175,6 +175,10 @@ final _stackedInShell = <String>{
   for (final section in SettingsSection.values)
     WaxRoute.settingsSection(section),
   WaxRoute.settingsAbout,
+  // Beneath settings now, so `go` builds settings under it and back
+  // lands on the row that opened it - which is what let the Account
+  // section stop pushing.
+  WaxRoute.shares,
   WaxRoute.reviewEntry('re-1'),
   WaxRoute.healthRule('missing-artwork'),
 };

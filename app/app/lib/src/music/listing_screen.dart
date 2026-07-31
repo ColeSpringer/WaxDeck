@@ -320,7 +320,12 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
             trailingText: formatTimecode(
               Duration(milliseconds: item.durationMs),
             ),
-            semanticsId: SemanticsIds.indexItem(index),
+            // Addressed by pid rather than by position, unlike the
+            // album and artist screens: this is the complete
+            // enumeration a caller reaches for one known item in, which
+            // is what the deleted library grid was for. Those two are
+            // running orders, where the position is the point.
+            semanticsId: SemanticsIds.item(item.pid),
           ),
           onTap: () => _play(state, index),
         );

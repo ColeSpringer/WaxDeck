@@ -71,6 +71,15 @@ here waits on upstream.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
+- `[in-repo]` **Nothing can be pinned to home.** Section 6.1's second
+  shelf is user-curated - long-press any entity, "Pin to Home" - and is
+  marked optional there, which is why the shelf home shipped without it
+  (ADR-0038). It wants two things neither of which is a shelf: a list of
+  pids that follows the account rather than the device, which is a
+  `Prefs` field and a spec delta (the shape radio favourites already
+  took), and a pin affordance on every entity surface in the app, which
+  is where the work actually is. The shelf itself is one more `ItemShelf`
+  over a provider that resolves pids to items.
 - `[roadmap]` **The full player's volume row is Material, not `WaxSlider`.**
   Every other surface that draws local output (the deck bar's right
   cluster, the radio hub, the remote screen) uses the design system's
@@ -88,22 +97,6 @@ here waits on upstream.
   `PlayerScaffold` - the scaffold exists in `waxdeck_ui` and the app does
   not use it yet, and it has no volume slot, so that rebuild is where both
   belong.
-- `[roadmap]` **The account menu is in the tab bar, not the app bar.** The
-  layout system puts the avatar in the top app bar at every width; the
-  shell owns no app bar, and the screens that do are the ones written
-  before the design system existed, so on compact the control takes a
-  fixed cell at the trailing end of the tab bar instead. It moves to the
-  bar's trailing slot once every tab root has a `WaxScaffold` bar to host
-  it, which is home and radio away - the settings and home phases.
-
-  The count question this entry anticipated is settled and is not what is
-  left (ADR-0033): the fifth domain tab hides where the library has
-  nothing behind it, per the layout system's own rule, and the all-five
-  case fits. Five domains plus the account cell gives each tab 59 px at
-  360 px of window against a 54 px selection pill, with every label
-  inside its cell; at 320 px one label ellipsizes and nothing overflows.
-  So the cell is a deviation from where 3.2 puts the avatar, not a
-  crowding problem. See ADR-0024.
 - `[in-repo]` **Playback defaults 6.13 asks for that Settings does not
   offer.** The section ships skip intervals, per-domain speed, casting
   crossfade and leveling, and the wifi-only preload brake (ADR-0037).
@@ -169,9 +162,16 @@ here waits on upstream.
   with its own synthesized cover (`corpusgen`, `-covers=false` for the
   comparison without art), the rAF collector and wheel loop are a
   reusable helper (`e2e/tests/scroll-pacing.ts`), and `perf-web.spec.ts`
-  measures the music indexes, a bucket listing, and the grid with a track
-  playing alongside the original grid scenario. What is left is running
-  it and recording the numbers.
+  measures the music indexes, a bucket listing, and the tracks index with
+  a track playing alongside the plain tracks-index scenario. What is left
+  is running it and recording the numbers.
+
+  The scenarios moved with the shelf home (ADR-0038): the landing wait is
+  login-to-home, which is eight browse reads rather than one grid page,
+  and every scroll scenario is over a listing rather than over the
+  deleted grid. The `gridMs` budget is unchanged and is now about a
+  different thing, so the first run is the one that says whether 2.5
+  seconds is still the right number.
 
   Two things to know before starting it. The corpus with covers is about
   half a gigabyte on disk (covers are roughly 400 KB each against 86 KB
@@ -605,6 +605,17 @@ here waits on upstream.
 
 ## Discovery and stats
 
+- `[in-repo]` **The bell reports markers, not the three events 6.19
+  names.** What the notifications bell lists is the user stream's marker
+  kinds (`review`, `upload`, `task`), each naming a surface that moved
+  (ADR-0038). Two of the three examples the section gives have no signal
+  on the wire at all. "Episode downloaded" is a server-side fetch, which
+  is a catalog change and emits no user event; the local download manager
+  does know when its own transfers finish, so the native half of it is a
+  listener away and the web half is not. "Feed disabled" is the feed
+  auto-disable the refresh endpoint documents, and `SubscriptionSettings`
+  carries no flag for it, so a client cannot tell a disabled feed from a
+  quiet one - that half needs a contract field before it needs a row.
 - `[in-repo]` **Virtual tracks are not sonically analyzed.** A track
   carved out of a shared single-file rip by a cue sheet shares its
   backing file's audio essence, and embeddings are keyed by essence,

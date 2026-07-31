@@ -846,6 +846,7 @@ class ShelfRow extends StatelessWidget {
     this.overline,
     this.actionLabel,
     this.onAction,
+    this.actionSemanticsId,
     this.onTapItem,
     this.onPlayItem,
     this.cardWidth,
@@ -858,6 +859,10 @@ class ShelfRow extends StatelessWidget {
   final List<MediaTileData> items;
   final String? actionLabel;
   final VoidCallback? onAction;
+
+  /// The handle for the "Show all" control. The shelf itself is not a
+  /// control and has none; this is.
+  final String? actionSemanticsId;
   final void Function(MediaTileData item)? onTapItem;
   final void Function(MediaTileData item)? onPlayItem;
   final double? cardWidth;
@@ -878,6 +883,7 @@ class ShelfRow extends StatelessWidget {
             overline: overline,
             actionLabel: actionLabel,
             onAction: onAction,
+            semanticsId: actionSemanticsId,
           ),
         ),
         SizedBox(

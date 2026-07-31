@@ -1,7 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart'
+    show
+        FilterChipRow,
+        WaxColors,
+        WaxFilterChip,
+        WaxIconButton,
+        WaxIcons,
+        WaxScaffold,
+        WaxSizeClass,
+        WaxSpace,
+        WaxType;
 
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'stats_charts.dart';
 import 'stats_controller.dart';
@@ -38,85 +50,74 @@ class _YearInReviewScreenState extends ConsumerState<YearInReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Year in review')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Semantics(
-                identifier: SemanticsIds.yirPrevYear,
-                label: 'Previous year',
-                button: true,
-                child: IconButton(
-                  key: const Key(SemanticsIds.yirPrevYear),
-                  tooltip: 'Previous year',
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: () => setState(() => _year--),
-                ),
+    final colors = WaxColors.of(context);
+    final sizeClass = WaxSizeClass.of(context);
+    return WaxScaffold(
+      title: 'Year in review',
+      largeTitle: false,
+      onBack: () => context.leave(fallback: WaxRoute.stats),
+      slivers: <Widget>[
+        SliverPadding(
+          padding: sizeClass.gutter,
+          sliver: SliverList.list(
+            children: <Widget>[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  WaxIconButton(
+                    glyph: WaxIcons.back,
+                    label: 'Previous year',
+                    semanticsId: SemanticsIds.yirPrevYear,
+                    onPressed: () => setState(() => _year--),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: WaxSpace.s16,
+                    ),
+                    child: Text(
+                      '$_year',
+                      key: const Key('yir-year-label'),
+                      style: WaxType.display.copyWith(
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  WaxIconButton(
+                    glyph: WaxIcons.forward,
+                    label: 'Next year',
+                    semanticsId: SemanticsIds.yirNextYear,
+                    onPressed: () => setState(() => _year++),
+                  ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  '$_year',
-                  key: const Key('yir-year-label'),
-                  style: textTheme.headlineMedium,
-                ),
+              const SizedBox(height: WaxSpace.s8),
+              FilterChipRow(
+                padding: EdgeInsets.zero,
+                selected: _server ? 'server' : 'personal',
+                chips: const <WaxFilterChip>[
+                  WaxFilterChip(
+                    name: 'personal',
+                    label: 'My year',
+                    semanticsId: SemanticsIds.yirPersonal,
+                  ),
+                  WaxFilterChip(
+                    name: 'server',
+                    label: 'Whole server',
+                    semanticsId: SemanticsIds.yirServer,
+                  ),
+                ],
+                onSelect: (name) => setState(() => _server = name == 'server'),
               ),
-              Semantics(
-                identifier: SemanticsIds.yirNextYear,
-                label: 'Next year',
-                button: true,
-                child: IconButton(
-                  key: const Key(SemanticsIds.yirNextYear),
-                  tooltip: 'Next year',
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: () => setState(() => _year++),
-                ),
-              ),
+              const SizedBox(height: WaxSpace.s24),
+              if (_server)
+                _ServerRecap(year: _year)
+              else
+                _PersonalRecap(year: _year, monthLabels: _monthLabels),
+              const SizedBox(height: WaxSpace.s32),
             ],
           ),
-          const SizedBox(height: 8),
-          Center(
-            child: SegmentedButton<bool>(
-              showSelectedIcon: false,
-              segments: [
-                ButtonSegment(
-                  value: false,
-                  label: Semantics(
-                    identifier: SemanticsIds.yirPersonal,
-                    child: const Text(
-                      'My year',
-                      key: Key(SemanticsIds.yirPersonal),
-                    ),
-                  ),
-                ),
-                ButtonSegment(
-                  value: true,
-                  label: Semantics(
-                    identifier: SemanticsIds.yirServer,
-                    child: const Text(
-                      'Whole server',
-                      key: Key(SemanticsIds.yirServer),
-                    ),
-                  ),
-                ),
-              ],
-              selected: {_server},
-              onSelectionChanged: (selection) =>
-                  setState(() => _server = selection.first),
-            ),
-          ),
-          const SizedBox(height: 24),
-          if (_server)
-            _ServerRecap(year: _year)
-          else
-            _PersonalRecap(year: _year, monthLabels: _monthLabels),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -126,6 +127,20 @@ class _PersonalRecap extends ConsumerWidget {
 
   final int year;
   final Map<int, String> monthLabels;
+
+  /// What the year's bar chart says out loud. A canvas announces
+  /// nothing, and "your biggest month" is the one fact somebody reads a
+  /// recap chart for.
+  String _monthSummary(List<MonthListening> months) {
+    if (months.isEmpty) return 'No listening recorded in $year.';
+    var peak = months.first;
+    for (final month in months) {
+      if (month.ms > peak.ms) peak = month;
+    }
+    return 'Listening month by month through $year. The most was '
+        '${formatListenTime(peak.ms)} in '
+        '${monthLabels[peak.month - 1] ?? 'month ${peak.month}'}.';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -181,6 +196,7 @@ class _PersonalRecap extends ConsumerWidget {
                     key: const Key('yir-month-chart'),
                     values: [for (final m in value.byMonth) m.ms],
                     labels: monthLabels,
+                    summary: _monthSummary(value.byMonth),
                   ),
                   const SizedBox(height: 16),
                   _TopFive(

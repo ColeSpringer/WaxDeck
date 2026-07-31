@@ -5,7 +5,7 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
-import 'offline_library_test.dart' show deadChannelFactory;
+import 'offline_home_test.dart' show deadChannelFactory;
 
 void main() {
   const unreachable = WaxDeckApiException(

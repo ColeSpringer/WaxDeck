@@ -6,8 +6,9 @@ import '../artwork/artwork_providers.dart';
 import '../books/books_controller.dart';
 import '../connect/connect_providers.dart';
 import '../downloads/downloads_controller.dart';
-import '../library/library_controller.dart';
+import '../home/home_shelves.dart';
 import '../metadata/metadata_controller.dart';
+import '../notifications/notifications_binder.dart';
 import '../player/entity_play_state_controller.dart';
 import '../player/play_progress.dart';
 import '../player/play_state_controller.dart';
@@ -56,8 +57,12 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     // else does.
     prelude: () => ref.read(artworkStoreProvider).forgetAbsences(),
     providers: [
-      libraryControllerProvider,
-      continueListeningProvider,
+      // The home shelves are all catalog reads: what was added, what is
+      // sealed, what is worth going back to. A scan lands on every one
+      // of them at once.
+      ...homeShelfProviders,
+      // The music hub's shelves are the same reads scoped to one medium.
+      ...musicShelfProviders,
       booksProvider,
       // Whether a domain has anything behind it is a catalog fact, and
       // it decides whether the chrome offers its tab. This is what turns
@@ -90,7 +95,13 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     container: ref.container,
     firstBuilds: firstBuilds,
     providers: [
-      continueListeningProvider,
+      // The shelves that are per-user selections: what the caller
+      // played, starred, rated, or has never opened. A checkpoint
+      // anywhere - this device or another - is what makes them stale.
+      // The catalog-only ones are not here; a checkpoint says nothing
+      // about what the library gained.
+      ...homeUserShelfProviders,
+      ...musicUserShelfProviders,
       prefsControllerProvider,
       // Subscriptions and their settings ride the user stream, and a
       // membership change also reshapes the caller's own catalog view
@@ -101,7 +112,6 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       subscriptionsProvider,
       upNextEpisodesProvider,
       latestEpisodesProvider,
-      libraryControllerProvider,
       // Playlist rows ride the user stream, and play-state changes (a
       // star, a rating) can shift a user-state smart rule's evaluation.
       playlistsProvider,
@@ -139,6 +149,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
 
   final engine = ref.watch(syncEngineProvider);
   final connect = ref.watch(connectBinderProvider);
+  final tick = ref.read(userStreamTickProvider.notifier);
   if (engine != null) {
     final catalogSub = engine.catalogChanged.listen((_) => catalog.hint());
     final stateSub = engine.playStateChanged.listen((_) => user.hint());
@@ -164,7 +175,20 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         token: () => repository.authToken,
       ),
       onCatalog: catalog.hint,
-      onUser: user.hint,
+      // Two consumers of the same signal. The pacer refetches whatever
+      // is on screen; the tick is what lets the notifications bell walk
+      // the user stream for itself, which is the only way a build with
+      // no sync engine learns what a change was about (an invalidation
+      // frame carries no detail).
+      //
+      // Held rather than read from the callback, for the reason the
+      // link below is: a frame can arrive between `stop()` and the
+      // socket actually closing, and `ref` on a disposed element throws
+      // into a container that swallows it.
+      onUser: () {
+        user.hint();
+        tick.bump();
+      },
     );
     connect.bind(
       sender: live.sendControl,

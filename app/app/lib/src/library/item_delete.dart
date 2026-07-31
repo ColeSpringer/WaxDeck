@@ -4,9 +4,10 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../auth/auth_controller.dart';
 import '../providers.dart';
-import '../shell/semantics_ids.dart';
-import 'library_controller.dart';
 import '../format_bytes.dart';
+import '../home/home_shelves.dart';
+import '../music/music_controllers.dart';
+import '../shell/semantics_ids.dart';
 
 /// The "Delete files..." overflow on an item screen. Rendered for
 /// administrators; the server enforces the permission either way. The
@@ -22,7 +23,12 @@ class ItemDeleteAction extends ConsumerWidget {
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    final repo = ref.read(repositoryProvider);
+    // The container rather than `ref`, for the same reason the mark-older
+    // dialog holds one: the deletion happens whether or not the screen
+    // that offered it is still mounted when the server answers, and the
+    // listings showing what just went have to be told regardless.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final repo = container.read(repositoryProvider);
     try {
       final plan = await repo.deleteLibraryItems(pids: [pid], dryRun: true);
       if (!context.mounted) return;
@@ -32,7 +38,15 @@ class ItemDeleteAction extends ConsumerWidget {
       );
       if (mode == null) return;
       final result = await repo.deleteLibraryItems(pids: [pid], mode: mode);
-      ref.invalidate(libraryControllerProvider);
+      // The listings that could be showing what just went: the music
+      // listing this was opened from, and the home shelves, which draw
+      // the same items from the other side. The catalog invalidation is
+      // on its way too, and arrives whenever the socket does; this is
+      // what makes the row leave now rather than shortly.
+      container.invalidate(musicItemsProvider);
+      for (final provider in homeShelfProviders) {
+        container.invalidate(provider);
+      }
       messenger.showSnackBar(
         SnackBar(
           content: Text(

@@ -1,17 +1,18 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import 'shares_controller.dart';
 
 /// Expiry choices the share dialog offers.
 enum ShareExpiry {
-  never(null, 'Never'),
   day(24, '1 day'),
   week(168, '1 week'),
-  month(720, '30 days');
+  month(720, '30 days'),
+  never(null, 'Never');
 
   const ShareExpiry(this.hours, this.label);
 
@@ -50,6 +51,10 @@ Future<void> showShareLinkDialog(
 /// The allow-download switch stays enabled regardless of the account's
 /// download permission: the caller's own permissions are not visible
 /// client-side, so the server is the one to refuse.
+///
+/// Minting and copying are one step, which is 6.18's own wording and is
+/// what a share is for: a link nobody copied is a capability handed to
+/// nobody, still valid, still counting against the list.
 class ShareLinkDialog extends ConsumerStatefulWidget {
   const ShareLinkDialog({super.key, required this.pid, this.positionMs});
 
@@ -68,23 +73,18 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
   var _startAtPosition = false;
   var _busy = false;
 
-  static String _stamp(int ms) {
-    final d = Duration(milliseconds: ms);
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    if (d.inHours > 0) {
-      final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-      return '${d.inHours}:$m:$s';
-    }
-    return '${d.inMinutes}:$s';
-  }
-
   Future<void> _create() async {
     if (_busy) return;
     setState(() => _busy = true);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    // The container rather than `ref`: the link is minted whether or not
+    // this dialog is still on screen when the server answers, and the
+    // list it joined has to hear about it either way. `ref` is dead the
+    // moment this State is disposed; the container is not.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      final share = await ref
+      final share = await container
           .read(repositoryProvider)
           .createShare(
             pid: widget.pid,
@@ -93,6 +93,13 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
             positionMs: _startAtPosition ? widget.positionMs : null,
           );
       await Clipboard.setData(ClipboardData(text: shareAbsoluteUrl(share.url)));
+      // The list this link just joined, so a shares screen left open
+      // behind the dialog is not a list missing its newest row.
+      container.invalidate(sharesProvider);
+      // Dismissed while the link was being minted: the link exists and
+      // is on the clipboard, but popping again would take the screen
+      // underneath with it.
+      if (!mounted) return;
       navigator.pop();
       messenger
         ..hideCurrentSnackBar()
@@ -108,62 +115,71 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
     final positionMs = widget.positionMs;
     return AlertDialog(
-      title: const Text('Share link'),
+      backgroundColor: colors.surface1,
+      title: Text(
+        'Share link',
+        style: WaxType.headline.copyWith(color: colors.textPrimary),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Expires'),
-            trailing: Semantics(
-              identifier: SemanticsIds.shareExpiry,
-              child: DropdownButton<ShareExpiry>(
-                key: const Key(SemanticsIds.shareExpiry),
-                value: _expiry,
-                onChanged: (choice) {
-                  if (choice != null) setState(() => _expiry = choice);
-                },
-                items: [
-                  for (final choice in ShareExpiry.values)
-                    DropdownMenuItem(value: choice, child: Text(choice.label)),
-                ],
-              ),
+        children: <Widget>[
+          Text(
+            'Anyone with the link can play this. It goes on your clipboard '
+            'as soon as it is made.',
+            style: WaxType.body.copyWith(color: colors.textSecondary),
+          ),
+          const SizedBox(height: WaxSpace.s16),
+          WaxSettingRow(
+            title: 'Expires',
+            help: 'When the link stops working',
+            control: WaxChoice<ShareExpiry>(
+              value: _expiry,
+              options: ShareExpiry.values,
+              labelFor: (choice) => choice.label,
+              label: 'Expires',
+              semanticsId: SemanticsIds.shareExpiry,
+              onChanged: (choice) => setState(() => _expiry = choice),
             ),
           ),
-          SwitchListTile(
-            key: const Key('share-allow-download'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Allow download'),
-            value: _allowDownload,
-            onChanged: (v) => setState(() => _allowDownload = v),
+          WaxSettingRow(
+            title: 'Allow download',
+            help: 'The page offers the original file, not just playback',
+            control: WaxSwitch(
+              value: _allowDownload,
+              label: 'Allow download',
+              semanticsId: SemanticsIds.shareAllowDownload,
+              onChanged: (value) => setState(() => _allowDownload = value),
+            ),
           ),
           if (positionMs != null && positionMs > 0)
-            CheckboxListTile(
-              key: const Key('share-start-at'),
-              contentPadding: EdgeInsets.zero,
-              title: Text('Start at ${_stamp(positionMs)}'),
-              value: _startAtPosition,
-              onChanged: (v) => setState(() => _startAtPosition = v ?? false),
+            WaxSettingRow(
+              title:
+                  'Start at '
+                  '${formatTimecode(Duration(milliseconds: positionMs))}',
+              help: 'The link opens where you are now',
+              control: WaxSwitch(
+                value: _startAtPosition,
+                label: 'Start at this position',
+                semanticsId: SemanticsIds.shareStartAt,
+                onChanged: (value) => setState(() => _startAtPosition = value),
+              ),
             ),
         ],
       ),
-      actions: [
-        TextButton(
+      actions: <Widget>[
+        WaxButton(
+          label: 'Cancel',
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
-        Semantics(
-          identifier: SemanticsIds.shareCreate,
+        WaxButton(
           label: 'Create link',
-          button: true,
-          child: FilledButton(
-            key: const Key(SemanticsIds.shareCreate),
-            onPressed: _busy ? null : _create,
-            child: const Text('Create link'),
-          ),
+          semanticsId: SemanticsIds.shareCreate,
+          onPressed: _busy ? null : _create,
         ),
       ],
     );

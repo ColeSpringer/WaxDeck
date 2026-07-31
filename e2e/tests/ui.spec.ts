@@ -1,11 +1,5 @@
 import { test, expect, APIRequestContext } from './fixtures';
-import {
-  ADMIN_PASS,
-  ADMIN_USER,
-  clickThrough,
-  ensureAdmin,
-  typeInto,
-} from './helpers';
+import { ADMIN_PASS, ADMIN_USER, clickThrough, ensureAdmin, itemRow, typeInto } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The first-party web UI journey: log in through the real login form,
@@ -70,9 +64,8 @@ test('login, browse the grid, and play a track', async ({ page, request }) => {
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
   await page.getByRole('button', { name: 'Log in' }).click();
 
-  // The library grid renders the scanned fixture album.
-  const card = page.locator(sem(SemanticsIds.item(pid)));
-  await card.waitFor({ timeout: 30_000 });
+  // The tracks index enumerates the scanned fixture album.
+  const card = await itemRow(page, pid);
 
   // Opening the item starts playback through the single-origin media
   // proxy. The rendered duration proves the stream's metadata decoded.

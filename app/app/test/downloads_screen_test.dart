@@ -11,7 +11,7 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
-import 'offline_library_test.dart' show deadChannelFactory;
+import 'offline_home_test.dart' show deadChannelFactory;
 import 'routed_host.dart';
 
 const _track = 'tr-01JZX5N8QW3F4V9T2B7KDTRACK1';
