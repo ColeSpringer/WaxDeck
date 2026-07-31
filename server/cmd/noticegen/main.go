@@ -3,8 +3,8 @@
 // of every module in the build graph of ./cmd/waxdeck, plus the Go
 // toolchain's, concatenated into one text file that internal/notices
 // embeds and `waxdeck --third-party-notices` prints. Permissive
-// licenses (all of them, per ADR-0037) require exactly this: their
-// text accompanying binary distributions.
+// licenses (all of them) require exactly this: their text accompanying
+// binary distributions.
 //
 // The module set is unioned across every OS a binary is built for,
 // because build constraints make the linked set GOOS-conditional and

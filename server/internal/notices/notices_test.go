@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// The dependency posture of ADR-0037: everything linked into the server
-// binary is currently permissive, and this pins that state so a
+// The licensing posture: everything linked into the server binary is
+// currently permissive, and this pins that state so a
 // copyleft or non-free license entering the graph is a deliberate,
 // reviewed decision rather than an accident (conveyance obligations and
 // F-Droid eligibility change with it). The strings are the license
@@ -28,7 +28,7 @@ func TestNoticesArePermissiveOnly(t *testing.T) {
 		"Creative Commons Attribution-NonCommercial",
 	} {
 		if strings.Contains(Text, banned) {
-			t.Errorf("notices contain %q: a linked dependency is no longer permissive (ADR-0037)", banned)
+			t.Errorf("notices contain %q: a linked dependency is no longer permissive", banned)
 		}
 	}
 }
