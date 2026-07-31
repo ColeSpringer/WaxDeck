@@ -3,6 +3,7 @@ package waxtapsource
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -37,6 +38,7 @@ type fakeTap struct {
 	payload     []byte
 	downloadErr error
 	downloads   int
+	warnings    []waxtap.Warning // emitted as events, and echoed on a successful Result
 }
 
 var _ tap = (*fakeTap)(nil)
@@ -69,6 +71,14 @@ func (f *fakeTap) Info(_ context.Context, url string, _ waxtap.InfoDepth, _ ...w
 
 func (f *fakeTap) Download(_ context.Context, req waxtap.Request) (*waxtap.Result, error) {
 	f.downloads++
+	// Warnings reach the event stream as the conditions occur, ahead of any
+	// failure. The real client also copies them onto a successful Result (below),
+	// and only onto a successful one -- that asymmetry is the thing under test.
+	for i := range f.warnings {
+		if req.Events != nil {
+			req.Events(waxtap.Event{Stage: waxtap.StageWarning, Warning: &f.warnings[i]})
+		}
+	}
 	if f.downloadErr != nil {
 		return nil, f.downloadErr
 	}
@@ -86,6 +96,7 @@ func (f *fakeTap) Download(_ context.Context, req waxtap.Request) (*waxtap.Resul
 		Title:        "video " + id,
 		OutputPath:   path,
 		OutputFormat: waxtap.Format{Extension: strings.TrimPrefix(filepath.Ext(path), ".")},
+		Warnings:     f.warnings,
 	}, nil
 }
 
@@ -448,6 +459,68 @@ func TestFetchStreamsBytesAndCleansUp(t *testing.T) {
 	// Provenance is best effort: the unparseable payload is logged, not fatal.
 	if !strings.Contains(logs.String(), "provenance stamp skipped") {
 		t.Errorf("expected a best-effort provenance log line, got: %s", logs.String())
+	}
+}
+
+// TestFetchLogsWarningsOnFailedDownload is the reason the provider reads the
+// event stream instead of Result.Warnings. WaxTap copies its accumulated warnings
+// onto the Result only when the job succeeds, so a failed download returns a nil
+// Result and takes them with it -- losing them from exactly the run that needed
+// explaining (a Seal sidecar answering 401 warns about the context fallback, then
+// fails). The error still propagates untouched.
+func TestFetchLogsWarningsOnFailedDownload(t *testing.T) {
+	f := channelFake(1)
+	f.infos[vid(1)].Formats = audioFormats()
+	f.downloadErr = errors.New("player-context sidecar: 401")
+	f.warnings = []waxtap.Warning{
+		{Code: waxtap.WarnWebContextFallback, Detail: "set or verify --api-key"},
+	}
+	var logs bytes.Buffer
+	p := testProvider(t, f, &logs)
+
+	var sink bytes.Buffer
+	_, err := p.Fetch(context.Background(), source.FetchRequest{URL: "https://www.youtube.com/watch?v=" + vid(1)}, &sink)
+	if err == nil {
+		t.Fatal("Fetch succeeded, want the download error")
+	}
+	if !strings.Contains(err.Error(), "401") {
+		t.Errorf("err = %v, want the download error unwrapped through", err)
+	}
+	for _, want := range []string{`level=WARN msg="youtube download degraded"`, `code=web-context-fallback`} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("missing %q in logs:\n%s", want, logs.String())
+		}
+	}
+}
+
+// TestFetchLogsDownloadWarnings pins the split: WaxTap reports its non-fatal
+// conditions rather than failing, so a degraded delivery is indistinguishable
+// from a clean one unless the provider surfaces them. A condition WaxTap
+// recovered from is informational; one that changed what was delivered warns.
+func TestFetchLogsDownloadWarnings(t *testing.T) {
+	f := channelFake(1)
+	f.infos[vid(1)].Formats = audioFormats()
+	f.payload = []byte("deterministic bytes")
+	f.warnings = []waxtap.Warning{
+		{Code: waxtap.WarnSessionRotated, Detail: "continuing with a new session"},
+		{Code: waxtap.WarnProceedUncut, Detail: "sponsorblock unreachable"},
+	}
+	var logs bytes.Buffer
+	p := testProvider(t, f, &logs)
+
+	var sink bytes.Buffer
+	if _, err := p.Fetch(context.Background(), source.FetchRequest{URL: "https://www.youtube.com/watch?v=" + vid(1)}, &sink); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	for _, want := range []string{
+		`level=INFO msg="youtube download recovered" url=`,
+		`code=session-rotated`,
+		`level=WARN msg="youtube download degraded" url=`,
+		`code=proceed-uncut`,
+	} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("missing %q in logs:\n%s", want, logs.String())
+		}
 	}
 }
 

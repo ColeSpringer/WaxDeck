@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,6 +74,7 @@ func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writ
 			Cut:            cut,
 			EmbedThumbnail: p.cfg.EmbedThumbnail,
 			EmbedMetadata:  p.cfg.EmbedMetadata,
+			Events:         p.warningEvents(ctx, req.URL),
 		},
 	})
 	if err != nil {
@@ -112,6 +114,51 @@ func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writ
 		// the output path's container), so it names the delivered content exactly.
 		ContentType: contentTypeFor(ext, path),
 	}, nil
+}
+
+// recoveredWarnings are the WaxTap conditions that resolved themselves: the
+// delivered audio is still what was asked for, so they are context rather than a
+// problem. Everything else, including a code a later WaxTap adds, describes a
+// degraded delivery and warns.
+var recoveredWarnings = map[waxtap.WarningCode]bool{
+	waxtap.WarnSponsorBlockEmpty:  true, // nothing matched, so nothing to cut
+	waxtap.WarnURLReResolved:      true, // the signed URL expired and was re-signed
+	waxtap.WarnRateLimitedRetried: true,
+	waxtap.WarnThrottled:          true,
+	waxtap.WarnWebContextRetry:    true, // the attested context was capped; a fresh one worked
+	waxtap.WarnSessionRotated:     true, // googlevideo capped the identity; a fresh one worked
+}
+
+// warningEvents returns the hook that surfaces a download's non-fatal conditions.
+// WaxTap reports them instead of failing, so without this a SponsorBlock outage,
+// an untagged embed, or a WaxSeal session googlevideo capped all look exactly like
+// a clean acquisition.
+//
+// It reads the event stream rather than Result.Warnings because the Result only
+// carries them on success: waxtap copies the accumulated warnings onto the Result
+// when the job finishes, and a failed download has no Result to copy them onto.
+// That drops them from the run whose warnings explain the failure, which is the
+// one worth reading. Nothing is lost by the switch, since both places waxtap
+// records a warning emit the same StageWarning event.
+//
+// The message tracks the level rather than naming WaxTap's "warning" both times:
+// a recovery and a degraded delivery are different events, and anything grouping
+// by message text would otherwise read every routine retry as a problem. The code
+// attribute is what joins the two back together.
+//
+// Callbacks run synchronously on the worker, so this stays a log line and ignores
+// every other stage.
+func (p *Provider) warningEvents(ctx context.Context, url string) func(waxtap.Event) {
+	return func(e waxtap.Event) {
+		if e.Stage != waxtap.StageWarning || e.Warning == nil {
+			return
+		}
+		level, msg := slog.LevelWarn, "youtube download degraded"
+		if recoveredWarnings[e.Warning.Code] {
+			level, msg = slog.LevelInfo, "youtube download recovered"
+		}
+		p.log.Log(ctx, level, msg, "url", url, "code", e.Warning.Code.String(), "detail", e.Warning.Detail)
+	}
 }
 
 // stampProvenance writes SOURCE_URL/SOURCE_ID/ACQUISITION_DATE tags onto the

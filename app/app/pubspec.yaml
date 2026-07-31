@@ -11,8 +11,12 @@ dependencies:
   flutter:
     sdk: flutter
   # Riverpod is pinned exact: state-management idioms shift between minors and
-  # this codebase tracks v3 idioms only.
-  flutter_riverpod: 3.3.2
+  # this codebase tracks v3 idioms only. Note that 3.4 added a dependency on
+  # `listen`, whose only release is 1.0.0-beta.4, so a prerelease sits in the
+  # graph transitively. It is riverpod's own upstream choice and the lockfile
+  # pins it exactly; the alternative is holding riverpod at 3.3.2 until `listen`
+  # ships stable, which is not worth forgoing riverpod fixes for.
+  flutter_riverpod: 3.4.2
   # Community plugins are pinned exact and only ever used behind WaxDeck-owned
   # ports (CredentialStorePort, UrlOpenerPort, DeepLinkPort, FilePickerPort).
   app_links: 7.2.1
@@ -24,19 +28,19 @@ dependencies:
   # transitive dependency (audio_service already ships it) to a direct
   # exact pin: it is load-bearing for every cover the app draws, and its
   # disk-cache and ETag behaviour is what the store is built on.
-  flutter_cache_manager: 3.4.1
+  flutter_cache_manager: 3.4.2
   flutter_secure_storage: 10.3.1
   # Both already resolve transitively through waxdeck_data; direct here
   # because the artwork store joins paths and finds the support
   # directory itself.
   path: 1.9.1
   path_provider: 2.1.6
+  # Direct dependency for the font-warmup interceptor on the API
+  # transport (waxdeck_api already rides this exact version).
+  dio: 5.11.0
   # Routing. Published by flutter.dev and pure Dart, but pinned exact like
   # every other dependency: the route table is the app's navigation
   # contract and a minor bump has moved redirect semantics before.
-  # Direct dependency for the font-warmup interceptor on the API
-  # transport (waxdeck_api already rides this exact version).
-  dio: 5.10.0
   go_router: 17.3.0
   url_launcher: 6.3.2
   web: 1.1.1
