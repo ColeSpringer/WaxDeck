@@ -421,6 +421,12 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
         child: Semantics(
           identifier: widget.ids.surface,
           container: true,
+          // A handle on the surface, not a description of it. Without
+          // this the title, the artist, and both timecodes fold into
+          // this node's label: the player is one string that counts up
+          // once a second, and its text is addressable nowhere else.
+          // Same guard, same reason, as the deck bar.
+          explicitChildNodes: true,
           // Direct manipulation, so it tracks the finger even under
           // reduced motion: what that setting turns off is decoration,
           // not the ability to put something back where it came from.

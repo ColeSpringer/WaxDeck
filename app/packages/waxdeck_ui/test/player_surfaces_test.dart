@@ -318,6 +318,47 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('the surface is a handle on the player, not a sink for it', (
+      tester,
+    ) async {
+      // A container that leaves its children implicit swallows their
+      // text: the title, the artist, and both timecodes fold into the
+      // surface's own label, addressable nowhere else, and a screen
+      // reader gets one string that counts up once a second.
+      final handle = tester.ensureSemantics();
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            ids: const PlayerIds(surface: 'player-surface'),
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 880),
+      );
+
+      expect(
+        tester
+            .getSemantics(find.bySemanticsIdentifier('player-surface'))
+            .getSemanticsData()
+            .label,
+        isEmpty,
+      );
+      for (final label in <String>[
+        'Salt Harbour',
+        'Nightjar',
+        '2:41',
+        '4:05',
+      ]) {
+        expect(find.bySemanticsLabel(label), findsOneWidget, reason: label);
+      }
+      handle.dispose();
+    });
+
     testWidgets('a short drag springs back rather than collapsing', (
       tester,
     ) async {
