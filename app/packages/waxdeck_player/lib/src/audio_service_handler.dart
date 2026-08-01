@@ -7,7 +7,7 @@ import 'media_session_port.dart';
 /// session (lock screen, Bluetooth, Android Auto) and serves the browse
 /// tree. This is the only file that touches audio_service types, per
 /// the wrap-don't-call policy.
-class WaxDeckAudioHandler extends BaseAudioHandler {
+class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   WaxDeckAudioHandler({
     required this.engine,
     required this.browse,
@@ -39,7 +39,31 @@ class WaxDeckAudioHandler extends BaseAudioHandler {
   final Future<void> Function()? onSkipNext;
   final Future<void> Function()? onSkipPrevious;
 
+  /// The one extra control the app has raised, when it has.
+  MediaSessionExtra? _extra;
+
+  @override
+  void showExtra(MediaSessionExtra? extra) {
+    if (_extra?.action == extra?.action) return;
+    _extra = extra;
+    // Republished immediately: the control is raised for a window that
+    // is measured in seconds, and waiting for the next state change
+    // would be waiting for the pause it exists to prevent.
+    _publishState(engine.playing);
+  }
+
+  @override
+  Future<void> customAction(String name, [Map<String, dynamic>? extras]) async {
+    final extra = _extra;
+    if (extra != null && extra.action == name) {
+      extra.onPressed();
+      return;
+    }
+    return super.customAction(name, extras);
+  }
+
   void _publishState(bool playing) {
+    final extra = _extra;
     playbackState.add(
       PlaybackState(
         controls: [
@@ -49,6 +73,17 @@ class WaxDeckAudioHandler extends BaseAudioHandler {
           MediaControl.fastForward,
           if (onSkipNext != null) MediaControl.skipToNext,
           MediaControl.stop,
+          if (extra != null)
+            MediaControl.custom(
+              // A bundled drawable: audio_service resolves the icon in
+              // the Android resource table, so an app-supplied name
+              // would need an asset in the host project. The extra is
+              // an extension of playback and the forward glyph says
+              // so; the label carries the meaning.
+              androidIcon: 'drawable/audio_service_fast_forward',
+              label: extra.label,
+              name: extra.action,
+            ),
         ],
         processingState: switch (engine.processingState) {
           EngineProcessingState.idle => AudioProcessingState.idle,

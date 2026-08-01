@@ -351,8 +351,11 @@ Class | Method | HTTP request | Description
 [*AuthApi*](doc/AuthApi.md) | [**revokeSession**](doc/AuthApi.md#revokesession) | **DELETE** /auth/sessions/{sessionId} | Revoke one of the caller&#39;s sessions
 [*AuthApi*](doc/AuthApi.md) | [**signup**](doc/AuthApi.md#signup) | **POST** /auth/signup | Request an account
 [*AuthApi*](doc/AuthApi.md) | [**startOidc**](doc/AuthApi.md#startoidc) | **GET** /auth/oidc/start | Start an OIDC login
+[*BooksApi*](doc/BooksApi.md) | [**createBookmark**](doc/BooksApi.md#createbookmark) | **POST** /books/{pid}/bookmarks | Mark a place in a book
+[*BooksApi*](doc/BooksApi.md) | [**deleteBookmark**](doc/BooksApi.md#deletebookmark) | **DELETE** /books/{pid}/bookmarks/{bookmarkId} | Remove one bookmark
 [*BooksApi*](doc/BooksApi.md) | [**getBook**](doc/BooksApi.md#getbook) | **GET** /books/{pid} | Get one audiobook&#39;s detail
 [*BooksApi*](doc/BooksApi.md) | [**getBookResume**](doc/BooksApi.md#getbookresume) | **GET** /books/{pid}/resume | Where the caller left off in a book
+[*BooksApi*](doc/BooksApi.md) | [**listBookmarks**](doc/BooksApi.md#listbookmarks) | **GET** /books/{pid}/bookmarks | List the caller&#39;s bookmarks in a book
 [*BooksApi*](doc/BooksApi.md) | [**putBookSettings**](doc/BooksApi.md#putbooksettings) | **PUT** /books/{pid}/settings | Replace the caller&#39;s playback settings for a book
 [*DiscoveryApi*](doc/DiscoveryApi.md) | [**createInstantMix**](doc/DiscoveryApi.md#createinstantmix) | **POST** /mixes/instant | Instant mix
 [*DiscoveryApi*](doc/DiscoveryApi.md) | [**getSimilarTracks**](doc/DiscoveryApi.md#getsimilartracks) | **GET** /items/{pid}/similar | Similar tracks
@@ -566,6 +569,9 @@ Class | Method | HTTP request | Description
  - [BookResume](doc/BookResume.md)
  - [BookSettings](doc/BookSettings.md)
  - [BookSplitRequest](doc/BookSplitRequest.md)
+ - [Bookmark](doc/Bookmark.md)
+ - [BookmarkCreate](doc/BookmarkCreate.md)
+ - [BookmarkList](doc/BookmarkList.md)
  - [BootstrapRequest](doc/BootstrapRequest.md)
  - [BootstrapStatus](doc/BootstrapStatus.md)
  - [BulkEdit](doc/BulkEdit.md)

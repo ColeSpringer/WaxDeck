@@ -1053,7 +1053,7 @@
     },
     {
       "name": "player",
-      "doc": "Playback surfaces: transport, stars and ratings, chapters, sleep timer, transcript.",
+      "doc": "Playback surfaces: transport, stars and ratings, speed, chapters, bookmarks, sleep timer, notes and transcript.",
       "ids": [
         {
           "name": "addToPlaylist",
@@ -1070,6 +1070,36 @@
         {
           "name": "playerBack",
           "id": "player-back"
+        },
+        {
+          "name": "playerBookmark",
+          "id": "player-bookmark-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "playerBookmarkAdd",
+          "id": "player-bookmark-add"
+        },
+        {
+          "name": "playerBookmarkDelete",
+          "id": "player-bookmark-delete-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "playerBookmarkNote",
+          "id": "player-bookmark-note"
+        },
+        {
+          "name": "playerBookmarkSheet",
+          "id": "player-bookmark-sheet"
+        },
+        {
+          "name": "playerBookmarks",
+          "id": "player-bookmarks"
         },
         {
           "name": "playerChapter",
@@ -1089,6 +1119,22 @@
         {
           "name": "playerDiscover",
           "id": "player-discover"
+        },
+        {
+          "name": "playerFindInLibrary",
+          "id": "player-find-in-library"
+        },
+        {
+          "name": "playerFunding",
+          "id": "player-funding"
+        },
+        {
+          "name": "playerGoToShow",
+          "id": "player-go-to-show"
+        },
+        {
+          "name": "playerMarkPlayed",
+          "id": "player-mark-played"
         },
         {
           "name": "playerMore",
@@ -1111,6 +1157,13 @@
           "id": "player-queue"
         },
         {
+          "name": "playerRegion",
+          "id": "player-region-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
           "name": "playerRepeat",
           "id": "player-repeat"
         },
@@ -1121,6 +1174,10 @@
         {
           "name": "playerSeek",
           "id": "player-seek"
+        },
+        {
+          "name": "playerShow",
+          "id": "player-show"
         },
         {
           "name": "playerShuffle",
@@ -1139,8 +1196,38 @@
           "id": "player-speed"
         },
         {
+          "name": "playerSpeedFaster",
+          "id": "player-speed-faster"
+        },
+        {
+          "name": "playerSpeedPreset",
+          "id": "player-speed-{percent}",
+          "params": [
+            "percent"
+          ]
+        },
+        {
+          "name": "playerSpeedSheet",
+          "id": "player-speed-sheet"
+        },
+        {
+          "name": "playerSpeedSlower",
+          "id": "player-speed-slower"
+        },
+        {
+          "name": "playerStationInfo",
+          "id": "player-station-info"
+        },
+        {
           "name": "playerSurface",
           "id": "player-surface"
+        },
+        {
+          "name": "playerTimeline",
+          "id": "player-timeline-{name}",
+          "params": [
+            "name"
+          ]
         },
         {
           "name": "playerToggle",
@@ -1153,6 +1240,10 @@
         {
           "name": "playerUpNext",
           "id": "player-up-next"
+        },
+        {
+          "name": "playerVoiceBoost",
+          "id": "player-voice-boost"
         },
         {
           "name": "playerVolume",
@@ -1196,6 +1287,10 @@
         {
           "name": "sleepTimerCustomStart",
           "id": "sleep-timer-custom-start"
+        },
+        {
+          "name": "sleepTimerExtend",
+          "id": "sleep-timer-extend"
         },
         {
           "name": "sleepTimerOpen",

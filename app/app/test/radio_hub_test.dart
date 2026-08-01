@@ -426,10 +426,10 @@ void main() {
   testWidgets('the hub carries the level while a station is on', (
     tester,
   ) async {
-    // The compact deck bar has no right cluster to hold a track, and this
-    // hub is what that bar expands to: without a level here, live radio
-    // was the one thing playing with no way to set its loudness below
-    // sidebar width.
+    // The compact deck bar has no right cluster to hold a track, so the
+    // level lives on the surfaces that have the room: this hub and the
+    // player's radio face. Without one here, a listener on the hub
+    // below sidebar width had no way to set a station's loudness.
     final engine = FakeEngine();
     final container = _container(
       _repo(),

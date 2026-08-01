@@ -204,4 +204,93 @@ test.describe.serial('audiobooks', () => {
       )
       .toBe(0);
   });
+
+  test('the book player spans a chapter, and bookmarks keep a place', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const token = await ensureAdmin(request);
+    const book = await fixtureBook(request, token);
+
+    // From the top, so the chapter the bar spans is a known one.
+    await request.put(`/api/v1/items/${book.pid}/play-state`, {
+      ...authed(token),
+      data: { positionMs: 0 },
+    });
+    // And with no marks left over from a previous run: the account is
+    // shared by the whole suite, so this test owns what it makes and
+    // nothing else.
+    const existing = await request.get(`/api/v1/books/${book.pid}/bookmarks`, authed(token));
+    for (const mark of ((await existing.json()).bookmarks ?? []) as Array<{ id: string }>) {
+      await request.delete(`/api/v1/books/${book.pid}/bookmarks/${mark.id}`, authed(token));
+    }
+
+    await page.goto('/');
+    const username = page.getByRole('textbox', { name: 'Username' });
+    await username.waitFor({ timeout: 30_000 });
+    await typeInto(page, username, ADMIN_USER);
+    await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
+    await page.getByRole('button', { name: 'Log in' }).click();
+
+    await clickThrough(
+      page.locator(sem(SemanticsIds.navDestination('books'))),
+      page.locator(sem(SemanticsIds.booksHub)),
+    );
+    const card = page.locator(sem(SemanticsIds.book(book.pid)));
+    await card.waitFor({ timeout: 30_000 });
+    await clickThrough(card, page.locator(sem(SemanticsIds.bookResume)));
+    await clickThrough(
+      page.locator(sem(SemanticsIds.bookResume)),
+      page.locator(sem(SemanticsIds.playerToggle)),
+    );
+
+    // The chapter is the unit the bar spans, and the whole book is one
+    // press away: a nine-hour bar moves a pixel a minute, and "how far
+    // through the book am I" is the question the chapter view cannot
+    // answer on its own.
+    await expect(page.locator(sem(SemanticsIds.playerTimeline('chapter')))).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.locator(sem(SemanticsIds.playerTimeline('book'))).click({ force: true });
+    await expect(page.getByText(/percent/).first()).toBeVisible();
+
+    // The chapter list is the player's own bottom region since P19, not
+    // a button that opens a sheet.
+    await expect(page.locator(sem(SemanticsIds.playerChapter(0)))).toBeVisible();
+
+    // A bookmark keeps a place on purpose, which is a different thing
+    // from the resume position the transport writes on its own.
+    await clickThrough(
+      page.locator(sem(SemanticsIds.playerBookmarks)),
+      page.locator(sem(SemanticsIds.playerBookmarkSheet)),
+    );
+    await typeInto(page, page.locator(sem(SemanticsIds.playerBookmarkNote)), 'the riddle');
+    await page.locator(sem(SemanticsIds.playerBookmarkAdd)).click({ force: true });
+
+    await expect(page.locator(sem(SemanticsIds.playerBookmark(0)))).toBeVisible({
+      timeout: 15_000,
+    });
+    const marks = await request.get(`/api/v1/books/${book.pid}/bookmarks`, authed(token));
+    const stored = ((await marks.json()).bookmarks ?? []) as Array<{
+      id: string;
+      note?: string;
+    }>;
+    expect(stored, 'the mark should belong to the account, on the server').toHaveLength(1);
+    expect(stored[0].note).toBe('the riddle');
+
+    // And removing it is the listener's, not a side effect of listening
+    // past it.
+    await page.locator(sem(SemanticsIds.playerBookmarkDelete(0))).click({ force: true });
+    await expect
+      .poll(
+        async () => {
+          const resp = await request.get(`/api/v1/books/${book.pid}/bookmarks`, authed(token));
+          if (!resp.ok()) return -1;
+          return ((await resp.json()).bookmarks ?? []).length as number;
+        },
+        { timeout: 30_000, message: 'deleting a bookmark should remove it server-side' },
+      )
+      .toBe(0);
+  });
 });

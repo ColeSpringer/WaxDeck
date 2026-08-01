@@ -9,6 +9,7 @@ import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../connect/cast_preflight.dart';
 import '../connect/device_picker.dart';
+import '../player/smart_rewind.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'about_screen.dart';
@@ -167,6 +168,21 @@ class _PlaybackBody extends ConsumerWidget {
                 label: 'Audiobook speed',
                 semanticsId: SemanticsIds.setting('book-speed'),
                 onChanged: ref.read(bookSpeedProvider.notifier).set,
+              ),
+            ),
+            WaxSettingRow(
+              title: 'Rewind on resume',
+              help:
+                  'Steps back a little when you come back to a show or a '
+                  'book after a break, so you land before the sentence you '
+                  'lost',
+              control: WaxChoice<SmartRewind>(
+                value: ref.watch(smartRewindProvider),
+                options: SmartRewind.values,
+                labelFor: (value) => value.label,
+                label: 'Rewind on resume',
+                semanticsId: SemanticsIds.setting('smart-rewind'),
+                onChanged: ref.read(smartRewindProvider.notifier).set,
               ),
             ),
           ],

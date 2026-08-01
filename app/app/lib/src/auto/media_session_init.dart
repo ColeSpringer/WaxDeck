@@ -21,11 +21,14 @@ Future<void> initMediaSession(ProviderContainer container) async {
   final db = container.read(mirrorDatabaseProvider);
   if (db == null) return;
   final queue = container.read(queueGatewayProvider);
-  await initWaxDeckAudioService(
+  final handler = await initWaxDeckAudioService(
     engine: container.read(audioEngineProvider),
     browse: MirrorBrowseSource(db),
     onSkipNext: queue.next,
     onSkipPrevious: queue.previous,
     onPlayFromMediaId: queue.playItem,
   );
+  // The sleep timer's extension button, and anything else that raises a
+  // control on the notification, reaches the session through this.
+  container.read(mediaSessionProvider).bind(handler);
 }

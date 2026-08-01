@@ -11,7 +11,7 @@ const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
 
 void main() {
-  testWidgets('the speed button steps the engine and persists per show', (
+  testWidgets('the speed sheet reaches any rate in one tap and persists it', (
     tester,
   ) async {
     final repo = FakeRepository()
@@ -30,14 +30,92 @@ void main() {
     expect(engine.speed, closeTo(1.0, 0.001));
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerSpeed));
     await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playerSpeedSheet),
+      findsOneWidget,
+    );
 
-    expect(engine.speed, closeTo(1.25, 0.001));
+    // 1.75x from 1x without walking through what is between: the whole
+    // point of replacing the cycling button.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playerSpeedPreset(175)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(engine.speed, closeTo(1.75, 0.001));
     expect(repo.putSubscriptionSettingsCalls, hasLength(1));
     expect(repo.putSubscriptionSettingsCalls.single.pid, showPid);
     expect(
       repo.putSubscriptionSettingsCalls.single.settings.speed,
-      closeTo(1.25, 0.001),
+      closeTo(1.75, 0.001),
     );
+
+    // A preset is a decision, so it lands and the sheet leaves: the
+    // chip behind it is what a listener looks at next.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playerSpeedSheet),
+      findsNothing,
+    );
+    expect(
+      tester
+          .getSemantics(find.bySemanticsIdentifier(SemanticsIds.playerSpeed))
+          .label,
+      contains('1.75x'),
+    );
+
+    // The stepper reaches what the presets do not, one step at a time,
+    // and keeps the sheet up while it is being walked.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerSpeed));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playerSpeedSlower),
+    );
+    await tester.pumpAndSettle();
+    expect(engine.speed, closeTo(1.70, 0.001));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playerSpeedSheet),
+      findsOneWidget,
+    );
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('the stepper stops at the band the contract allows', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(
+        testShow(showPid),
+        settings: const SubscriptionSettings(speed: 3.5),
+      )
+      ..episodesByShow[showPid] = [testEpisode(episodePid)];
+    final engine = FakeEngine();
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testEpisode(episodePid),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerSpeed));
+    await tester.pumpAndSettle();
+
+    // The top of the band is where the stepper stops. The server
+    // refuses anything past 3.5, so a press that appeared to work and
+    // then failed to persist would be the worst of both.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playerSpeedFaster),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(engine.speed, closeTo(3.5, 0.001));
+
+    // And down from there is a real step, so the control is disabled
+    // rather than inert.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playerSpeedSlower),
+    );
+    await tester.pumpAndSettle();
+    expect(engine.speed, closeTo(3.45, 0.001));
     await harness.endPlayback(tester);
   });
 

@@ -333,13 +333,12 @@ class _RadioDeckBar extends ConsumerWidget {
         actions: DeckBarActions(
           // Stop, not pause: a paused live stream resumes at the live
           // edge anyway, and the transport should not pretend otherwise.
-          // Unless the platform refused the start, where the one thing
-          // to do is ask again with a gesture behind it.
-          onPlayPause: () => unawaited(
-            blocked
-                ? ref.read(radioPlaybackProvider.notifier).resume()
-                : ref.read(radioPlaybackProvider.notifier).stop(),
-          ),
+          // Which of stop and start it is belongs to the controller,
+          // which is the one thing that can see why a station is
+          // silent - a refused start, or a stream that ended on its
+          // own.
+          onPlayPause: () =>
+              unawaited(ref.read(radioPlaybackProvider.notifier).toggle()),
           onVolume: localVolume
               ? (level) => unawaited(
                   ref.read(outputVolumeProvider.notifier).set(level),
@@ -350,7 +349,11 @@ class _RadioDeckBar extends ConsumerWidget {
                   ref.read(outputVolumeProvider.notifier).toggleMute(),
                 )
               : null,
-          onExpand: () => context.go(WaxRoute.radio),
+          // The player, like every other face of this bar: expanding
+          // means "show me what is playing", and since P19 that is a
+          // station's own face rather than the hub it was tuned from.
+          // The hub is still one row away, in the face's overflow.
+          onExpand: () => context.push(WaxRoute.nowPlaying),
         ),
       ),
     );

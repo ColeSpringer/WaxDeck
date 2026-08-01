@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/oklog/ulid/v2"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -166,6 +169,103 @@ func (l *Library) PutBookSettings(ctx context.Context, uc *UserCtx, apiBookPID s
 	return s, nil
 }
 
+// Bookmark is one place a listener marked in a book, on the book
+// timeline.
+type Bookmark struct {
+	ID          string
+	PositionMS  int64
+	Note        string
+	CreatedAtNS int64
+}
+
+// bookmarkNoteMax bounds a note, matching the contract's maxLength. A
+// note is a reminder of what a passage was, not a document.
+const bookmarkNoteMax = 500
+
+// BookmarksFor lists the caller's marks in one book, in timeline order.
+func (l *Library) BookmarksFor(ctx context.Context, uc *UserCtx, apiBookPID string) ([]Bookmark, error) {
+	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := l.db.BookmarksFor(ctx, uc.ID, string(bd.Item.PID))
+	if err != nil {
+		return nil, &Error{Kind: KindInternal, Err: err}
+	}
+	out := make([]Bookmark, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Bookmark{
+			ID:          apiPID(PrefixBookmark, model.PID(r.ID)),
+			PositionMS:  r.PositionMS,
+			Note:        r.Note,
+			CreatedAtNS: r.CreatedAtNS,
+		})
+	}
+	return out, nil
+}
+
+// CreateBookmark records a mark at a book-timeline position.
+//
+// The position is checked against the book's own length rather than
+// taken on trust: a bookmark past the end is one nothing can seek to,
+// and the two ways to get one - a stale client and an arithmetic slip
+// on a multi-part book - both produce a mark that silently does
+// nothing.
+func (l *Library) CreateBookmark(ctx context.Context, uc *UserCtx, apiBookPID string, positionMS int64, note string) (Bookmark, error) {
+	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
+	if err != nil {
+		return Bookmark{}, err
+	}
+	if positionMS < 0 {
+		return Bookmark{}, errInvalid("positionMs must not be negative")
+	}
+	if total := bd.TotalDurationMS; total > 0 && positionMS > total {
+		return Bookmark{}, errInvalid("positionMs is past the end of the book")
+	}
+	note = strings.TrimSpace(note)
+	if len([]rune(note)) > bookmarkNoteMax {
+		return Bookmark{}, errInvalid("note is too long")
+	}
+	row := wdb.Bookmark{
+		ID:          ulid.Make().String(),
+		UserID:      uc.ID,
+		BookPID:     string(bd.Item.PID),
+		PositionMS:  positionMS,
+		Note:        note,
+		CreatedAtNS: time.Now().UnixNano(),
+	}
+	if err := l.db.CreateBookmark(ctx, row); err != nil {
+		if errors.Is(err, wdb.ErrConflict) {
+			return Bookmark{}, &Error{Kind: KindConflict, Msg: "this book already holds as many bookmarks as it can"}
+		}
+		return Bookmark{}, &Error{Kind: KindInternal, Err: err}
+	}
+	return Bookmark{
+		ID:          apiPID(PrefixBookmark, model.PID(row.ID)),
+		PositionMS:  row.PositionMS,
+		Note:        row.Note,
+		CreatedAtNS: row.CreatedAtNS,
+	}, nil
+}
+
+// DeleteBookmark removes one of the caller's marks. Removing one that
+// is already gone succeeds, so a retry after a lost answer is not an
+// error.
+func (l *Library) DeleteBookmark(ctx context.Context, uc *UserCtx, apiBookPID, apiBookmarkID string) error {
+	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
+	if err != nil {
+		return err
+	}
+	prefix, id, ok := parseAPIPID(apiBookmarkID)
+	if !ok || prefix != PrefixBookmark {
+		return errNotFound("no bookmark with id " + apiBookmarkID)
+	}
+	if err := l.db.DeleteBookmark(ctx, uc.ID, string(bd.Item.PID), string(id)); err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	return nil
+}
+
 // getBookDetail resolves an API book PID with the visibility check.
 func (l *Library) getBookDetail(ctx context.Context, uc *UserCtx, apiBookPID string) (*model.BookDetail, error) {
 	prefix, pid, ok := parseAPIPID(apiBookPID)
@@ -174,6 +274,16 @@ func (l *Library) getBookDetail(ctx context.Context, uc *UserCtx, apiBookPID str
 	}
 	bd, err := l.lib.Book(ctx, pid)
 	if err != nil {
+		// A catalog miss becomes this layer's own sentence rather than
+		// the store's. Every other book route constructs that message in
+		// its handler and never looks at this one, so the difference has
+		// never shown; a handler that answers with the error it was
+		// given - which the bookmark delete does, having two things that
+		// can be missing - would otherwise put "store.ItemByPID: no such
+		// item" on the wire.
+		if KindOf(err) == KindNotFound {
+			return nil, errNotFound("no book with pid " + apiBookPID)
+		}
 		return nil, classify(err)
 	}
 	if !l.itemVisible(ctx, uc, pid) {

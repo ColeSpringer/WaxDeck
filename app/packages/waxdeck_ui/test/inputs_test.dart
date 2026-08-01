@@ -347,4 +347,58 @@ void main() {
       expect(fastScrollLetter('Ólafur Arnalds'), '#');
     });
   });
+
+  group('WaxPill', () {
+    testWidgets('announces the whole label and draws the short one', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          WaxPill(
+            label: 'Playback speed 1.5x',
+            text: '1.5x',
+            mono: true,
+            onPressed: () {},
+          ),
+          height: 80,
+        ),
+      );
+
+      // A pill is a word in an outline, and the word is often shorter
+      // than what it means: the rate reads "1.5x" and is announced as
+      // the control it is.
+      expect(find.text('1.5x'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Playback speed 1.5x')),
+        isSemantics(label: 'Playback speed 1.5x', isButton: true),
+      );
+    });
+
+    testWidgets('reports on and off rather than leaving it to colour', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          WaxPill(label: 'Trim silence', selected: true, onPressed: () {}),
+          height: 80,
+        ),
+      );
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Trim silence')),
+        isSemantics(isSelected: true),
+      );
+    });
+
+    testWidgets('a null press disables it in the tree, not only in ink', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(const WaxPill(label: 'Voice boost', onPressed: null), height: 80),
+      );
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Voice boost')),
+        isSemantics(hasEnabledState: true, isEnabled: false),
+      );
+    });
+  });
 }

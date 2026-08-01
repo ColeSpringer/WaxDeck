@@ -1301,6 +1301,26 @@ class BookResume {
   final DateTime? updatedAt;
 }
 
+/// One place a listener marked in a book, on the book timeline.
+///
+/// Not the resume point: a book has one of those and any number of
+/// these, and nothing here moves as playback does.
+class Bookmark {
+  const Bookmark({
+    required this.id,
+    required this.positionMs,
+    this.note,
+    required this.createdAt,
+  });
+
+  final String id;
+
+  /// Book-timeline position, spanning every part.
+  final int positionMs;
+  final String? note;
+  final DateTime createdAt;
+}
+
 /// One silence span, in the mapped file's own timeline.
 class SkipSpan {
   const SkipSpan({required this.startMs, required this.endMs});

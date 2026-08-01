@@ -13,10 +13,15 @@ import '../discovery/discovery_actions.dart';
 import '../library/item_delete.dart';
 import '../media_view.dart';
 import '../playlists/add_to_playlist_sheet.dart';
+import '../player/play_progress.dart';
+import '../podcasts/episode_actions.dart';
+import '../podcasts/podcasts_controller.dart';
+import '../providers.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_item.dart';
 import '../queue/queue_state.dart';
 import '../queue/queue_view.dart';
+import '../radio/radio_controller.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -26,31 +31,20 @@ import 'item_star_rating_row.dart';
 import 'now_playing_controller.dart';
 import 'output_volume.dart';
 import 'playback_session.dart';
+import 'radio_face.dart';
 import 'sleep_timer.dart';
+import 'spoken_face.dart';
 import 'waveform.dart';
 
-/// Speed presets the player button cycles through.
-const playerSpeedSteps = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
-
-/// The next speed after [current] in the preset cycle.
-double nextPlayerSpeed(double current) {
-  for (final step in playerSpeedSteps) {
-    if (step > current + 0.001) return step;
-  }
-  return playerSpeedSteps.first;
-}
-
-String formatPlayerSpeed(double speed) {
-  var text = speed.toStringAsFixed(2);
-  while (text.endsWith('0')) {
-    text = text.substring(0, text.length - 1);
-  }
-  if (text.endsWith('.')) text = text.substring(0, text.length - 1);
-  return '${text}x';
-}
-
 /// The verbs behind the player's one overflow menu.
-enum _PlayerMenuAction { addToPlaylist, share, delete }
+enum _PlayerMenuAction {
+  addToPlaylist,
+  share,
+  delete,
+  goToShow,
+  markPlayed,
+  funding,
+}
 
 /// The e2e handles the player's own controls carry. One place, because
 /// the design system emits no identifier strings of its own (ADR-0016),
@@ -69,19 +63,16 @@ const _ids = PlayerIds(
   seek: SemanticsIds.playerSeek,
 );
 
-/// The full player: one scaffold, configured by what is playing.
+/// The full player: one scaffold, four faces.
 ///
 /// A viewer, deliberately: nothing here starts, stops, or outlives
 /// playback, so leaving this screen keeps the music on. The session and
 /// the queue own the state; this draws it and sends verbs back.
 ///
-/// The music face is whole here. Podcasts, books, and radio get the
-/// scaffold and the controls they had before it - speed, silence
-/// trimming, the sleep timer, chapters - which is deliberately less than
-/// 5.3 asks of them: the speed sheet, smart rewind, bookmarks, and the
-/// chapter and transcript regions are P19's, and their controls are
-/// hosted through the same slots meanwhile rather than left on a screen
-/// of their own.
+/// Which face is decided by what holds the engine: a station when live
+/// radio has taken it, otherwise the medium of the item the queue is
+/// standing on. The scaffold is the same in every case; what differs is
+/// which of its slots are filled, and with what.
 class PlayerScreen extends ConsumerWidget {
   const PlayerScreen({super.key});
 
@@ -102,6 +93,18 @@ class PlayerScreen extends ConsumerWidget {
   }
 
   Widget _body(BuildContext context, WidgetRef ref) {
+    // Radio first, and for the same reason the deck bar reads it first:
+    // a station has taken the engine, so whatever the queue still names
+    // is not what is coming out of the speakers.
+    final radio = ref.watch(radioPlaybackProvider);
+    if (radio.station != null) {
+      return ArtworkAccent(
+        artUrl: null,
+        domain: WaxDomain.radio,
+        child: RadioFace(playback: radio),
+      );
+    }
+
     final nowPlaying = ref.watch(nowPlayingProvider);
     // The queue is what decides whether anything is playing. An item
     // still resolving, or one whose start failed before it could be
@@ -277,6 +280,14 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   ItemSummary get _item => widget.item;
   PlaybackSession get _session => widget.session;
   bool get _music => _item.mediaType == MediaType.music;
+  bool get _book => _item.mediaType == MediaType.audiobook;
+
+  /// The episode being played, when the layer above resolved one. The
+  /// show pid hangs off it, and the per-show controls hang off that.
+  EpisodeSummary? get _episode {
+    final item = _item;
+    return item is EpisodeSummary ? item : null;
+  }
 
   /// Read at tap time, never at build time: this rebuilds when what is
   /// playing changes, not as it plays, so a captured position would be
@@ -349,13 +360,32 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           ids: _ids,
           onCollapse: () => leavePlayer(context),
           trailingHeaderActions: _headerActions(context, canDelete: canDelete),
+          // The show an episode is from, above its title and tappable
+          // (5.3). Books and tracks name their maker under the title
+          // instead, which is what the subtitle already is.
+          titleOverline: _episode == null
+              ? null
+              : ShowOverline(episode: _episode!),
+          subtitleOverride:
+              _book && (_session.book?.chapters.isNotEmpty ?? false)
+              ? BookSubtitle(
+                  chapters: _session.book!.chapters,
+                  position: _position,
+                )
+              : null,
           titleTrailing: ItemStarRatingRow(pid: _item.pid),
-          seek: _Seek(
-            session: _session,
-            item: _item,
-            position: _position,
-            playing: playing,
-          ),
+          seek: _book
+              ? BookSeek(
+                  session: _session,
+                  position: _position,
+                  chapters: _session.book?.chapters ?? const <ChapterMark>[],
+                )
+              : _Seek(
+                  session: _session,
+                  item: _item,
+                  position: _position,
+                  playing: playing,
+                ),
           transport: TransportCluster(
             ids: _ids,
             playing: playing,
@@ -377,7 +407,9 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           ),
           volume: const _VolumeRow(),
           actionRow: _actionRow(context),
-          bottomRegion: _music ? const _UpNextPeek() : null,
+          bottomRegion: _music
+              ? const _UpNextPeek()
+              : SpokenBottomRegion(session: _session, position: _position),
         );
       },
     );
@@ -420,6 +452,32 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
       WaxMenuButton<_PlayerMenuAction>(
         semanticsId: SemanticsIds.playerMore,
         items: <WaxMenuItem<_PlayerMenuAction>>[
+          // The episode rows first: they are what a listener reaches
+          // this menu for on a podcast, and 5.3 names them.
+          if (_episode != null) ...<WaxMenuItem<_PlayerMenuAction>>[
+            const WaxMenuItem(
+              value: _PlayerMenuAction.markPlayed,
+              label: 'Mark as played',
+              glyph: WaxIcons.check,
+              semanticsId: SemanticsIds.playerMarkPlayed,
+            ),
+            const WaxMenuItem(
+              value: _PlayerMenuAction.goToShow,
+              label: 'Go to show',
+              glyph: WaxIcons.podcasts,
+              // Not the overline's handle: the show name above the
+              // title is a second control that does the same thing, and
+              // both stand in the tree while this menu is open.
+              semanticsId: SemanticsIds.playerGoToShow,
+            ),
+            if (_funding != null)
+              WaxMenuItem(
+                value: _PlayerMenuAction.funding,
+                label: _funding!.message ?? 'Support the show',
+                glyph: WaxIcons.star,
+                semanticsId: SemanticsIds.playerFunding,
+              ),
+          ],
           const WaxMenuItem(
             value: _PlayerMenuAction.addToPlaylist,
             label: 'Add to playlist',
@@ -460,20 +518,46 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             pid: _item.pid,
             onDeleted: () => leaveWith(router),
           ),
+          _PlayerMenuAction.markPlayed => EpisodeActions(
+            ref: ref,
+          ).markPlayed(context, _episode!, playPidsKey(<String>[_item.pid])),
+          _PlayerMenuAction.goToShow => Future<void>.sync(
+            () => context.push(WaxRoute.show(_episode!.showPid)),
+          ),
+          _PlayerMenuAction.funding =>
+            ref.read(urlOpenerProvider).open(_funding!.url),
         }),
       ),
     ];
   }
 
+  /// The show's support pointer, when its feed declares one.
+  PodcastFunding? get _funding {
+    final episode = _episode;
+    if (episode == null) return null;
+    return ref
+        .watch(podcastDetailProvider(episode.showPid))
+        .value
+        ?.show
+        .funding;
+  }
+
   /// The per-medium verbs.
   ///
   /// Music gets the queue and the discovery menu 5.3 calls "More like
-  /// this"; spoken word keeps the speed, silence-trim, sleep-timer, and
-  /// chapter controls it has always had, which P19 replaces with the
-  /// faces they belong to.
+  /// this"; spoken word gets rate, the two effects, and a book's
+  /// bookmarks. The chapter list is no longer a button here: it is the
+  /// bottom region, where 5.3 puts it.
   Widget _actionRow(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    // A wrap rather than a row: the spoken-word faces carry four
+    // labelled chips, which do not fit a phone in one line, and a Row
+    // answers that by overflowing. The hero above gives up the height a
+    // second line takes.
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: WaxSpace.s8,
+      runSpacing: WaxSpace.s8,
       children: <Widget>[
         if (_music) ...<Widget>[
           WaxIconButton(
@@ -503,105 +587,13 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
               _ => openSimilarTracks(context, ref, _item),
             }),
           ),
-        ] else ...<Widget>[
-          _SpeedButton(session: _session),
-          _TrimChip(session: _session),
-          if (_item.mediaType == MediaType.audiobook)
-            _ChapterButton(session: _session, position: _position),
-        ],
+        ] else
+          ...spokenActionChips(_session),
         // Every face, not only the spoken-word ones 5.3 lists it under:
         // falling asleep to a record is what the control is for, and it
         // is about the device rather than the medium.
-        _SleepTimerButton(session: _session),
+        SleepTimerButton(session: _session),
       ],
-    );
-  }
-}
-
-/// Which chapter is playing, and the way to any other one.
-///
-/// A button and a sheet, which is what the book face had before the
-/// scaffold and less than 5.3 asks for: the chapter list belongs in the
-/// bottom region beside the book-versus-chapter timeline toggle, and
-/// that is the book face P19 builds.
-class _ChapterButton extends StatelessWidget {
-  const _ChapterButton({required this.session, required this.position});
-
-  final PlaybackSession session;
-  final ValueListenable<Duration> position;
-
-  static ChapterMark? chapterAt(BookDetail book, Duration position) {
-    final positionMs = position.inMilliseconds;
-    ChapterMark? current;
-    for (final chapter in book.chapters) {
-      if (chapter.startMs <= positionMs) current = chapter;
-    }
-    return current ?? (book.chapters.isEmpty ? null : book.chapters.first);
-  }
-
-  static String chapterTitle(ChapterMark? chapter) =>
-      chapter?.title ?? (chapter == null ? '' : 'Chapter ${chapter.index + 1}');
-
-  @override
-  Widget build(BuildContext context) {
-    final book = session.book;
-    if (book == null || book.chapters.isEmpty) return const SizedBox.shrink();
-    return ValueListenableBuilder<Duration>(
-      valueListenable: position,
-      builder: (context, at, _) => WaxIconButton(
-        glyph: WaxIcons.audiobooks,
-        label: 'Chapters, current: ${chapterTitle(chapterAt(book, at))}',
-        semanticsId: SemanticsIds.playerChapters,
-        onPressed: () => unawaited(
-          showModalBottomSheet<void>(
-            context: context,
-            builder: (_) => _ChapterSheet(session: session, book: book),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ChapterSheet extends StatelessWidget {
-  const _ChapterSheet({required this.session, required this.book});
-
-  final PlaybackSession session;
-  final BookDetail book;
-
-  @override
-  Widget build(BuildContext context) {
-    String stamp(int ms) {
-      final d = Duration(milliseconds: ms);
-      final h = d.inHours;
-      final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-      final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-      return h > 0 ? '$h:$m:$s' : '$m:$s';
-    }
-
-    return SafeArea(
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          for (final chapter in book.chapters)
-            Semantics(
-              identifier: SemanticsIds.playerChapter(chapter.index),
-              button: true,
-              child: ListTile(
-                key: ValueKey(SemanticsIds.playerChapter(chapter.index)),
-                dense: true,
-                leading: Text(stamp(chapter.startMs)),
-                title: Text(chapter.title ?? 'Chapter ${chapter.index + 1}'),
-                onTap: () {
-                  unawaited(
-                    session.seek(Duration(milliseconds: chapter.startMs)),
-                  );
-                  Navigator.of(context).pop();
-                },
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
@@ -808,141 +800,16 @@ class _VolumeRow extends ConsumerWidget {
   }
 }
 
-/// Cycles the playback speed through the presets, persisting the choice
-/// per show or book (music stays at whatever it is set to for the
-/// session and never persists).
-///
-/// The cycle is what P19 replaces with the speed sheet 5.3 specifies:
-/// one tap should reach every speed rather than walking to it.
-class _SpeedButton extends StatelessWidget {
-  const _SpeedButton({required this.session});
-
-  final PlaybackSession session;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
-    return StreamBuilder<double>(
-      stream: session.engine.speedStream,
-      initialData: session.engine.speed,
-      builder: (context, snapshot) {
-        final speed = snapshot.data ?? 1.0;
-        return WaxTappable(
-          semanticsId: SemanticsIds.playerSpeed,
-          label: 'Playback speed ${formatPlayerSpeed(speed)}',
-          borderRadius: WaxRadius.pill,
-          onPressed: () => session.setSpeed(nextPlayerSpeed(speed)),
-          // WaxTappable adds semantics, focus, and a ring, and no
-          // gesture of its own, so the chip carries the tap. Ink rather
-          // than a decorated Container, or the splash paints under an
-          // opaque fill and the press has no feedback at all.
-          child: Ink(
-            decoration: BoxDecoration(
-              color: colors.surface2,
-              borderRadius: WaxRadius.pill,
-              border: Border.all(color: colors.hairline),
-            ),
-            child: InkWell(
-              borderRadius: WaxRadius.pill,
-              onTap: () => session.setSpeed(nextPlayerSpeed(speed)),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: WaxSpace.s12,
-                  vertical: WaxSpace.s8,
-                ),
-                child: Text(
-                  formatPlayerSpeed(speed),
-                  style: WaxType.monoData.copyWith(color: colors.textPrimary),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Silence-trimming toggle with the time-saved badge.
-///
-/// The label says "silence trimming" and not "time saved" on purpose:
-/// the client counts trim jumps only, and the seek-aware accounting that
-/// would make the larger claim true is P20's.
-class _TrimChip extends StatelessWidget {
-  const _TrimChip({required this.session});
-
-  final PlaybackSession session;
-
-  static String savedLabel(int savedMs) {
-    final d = Duration(milliseconds: savedMs);
-    final m = d.inMinutes;
-    final s = d.inSeconds.remainder(60);
-    if (m > 0) return 'saved ${m}m ${s}s';
-    return 'saved ${s}s';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
-    return ValueListenableBuilder<bool>(
-      valueListenable: session.trimEnabled,
-      builder: (context, enabled, _) {
-        return ValueListenableBuilder<int>(
-          valueListenable: session.hoursSavedMs,
-          builder: (context, savedMs, _) {
-            final label = savedMs > 0
-                ? 'Trim silence (${savedLabel(savedMs)})'
-                : 'Trim silence';
-            // A chip with its readout drawn rather than an icon with the
-            // readout only spoken: what the session has saved is the
-            // reason to leave the toggle on, and a glyph says none of it.
-            return WaxTappable(
-              semanticsId: SemanticsIds.playerTrim,
-              label: label,
-              selected: enabled,
-              borderRadius: WaxRadius.pill,
-              onPressed: () => session.setTrimEnabled(!enabled),
-              child: Ink(
-                decoration: BoxDecoration(
-                  color: enabled ? colors.accentContainer : colors.surface2,
-                  borderRadius: WaxRadius.pill,
-                  border: Border.all(
-                    color: enabled ? colors.accent : colors.hairline,
-                  ),
-                ),
-                child: InkWell(
-                  borderRadius: WaxRadius.pill,
-                  onTap: () => session.setTrimEnabled(!enabled),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: WaxSpace.s12,
-                      vertical: WaxSpace.s8,
-                    ),
-                    child: Text(
-                      label,
-                      style: WaxType.caption.copyWith(
-                        color: enabled
-                            ? colors.onAccentContainer
-                            : colors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
 /// Sleep timer button plus its options sheet. When a timer runs, the
 /// remaining time shows as a badge on the button.
-class _SleepTimerButton extends ConsumerWidget {
-  const _SleepTimerButton({required this.session});
+///
+/// [session] is null on the radio face, which has no item and therefore
+/// no chapter to end on. Everything else about the control is the same
+/// there: the timer is about the device, not about what it is playing.
+class SleepTimerButton extends ConsumerWidget {
+  const SleepTimerButton({required this.session, super.key});
 
-  final PlaybackSession session;
+  final PlaybackSession? session;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -966,7 +833,7 @@ class _SleepTimerButton extends ConsumerWidget {
 class _SleepTimerSheet extends ConsumerStatefulWidget {
   const _SleepTimerSheet({required this.session});
 
-  final PlaybackSession session;
+  final PlaybackSession? session;
 
   @override
   ConsumerState<_SleepTimerSheet> createState() => _SleepTimerSheetState();
@@ -984,18 +851,12 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
   /// Where the current chapter ends on the book timeline, for
   /// end-of-chapter mode; null when the book has no chapters.
   int? _currentChapterEndMs() {
-    final book = widget.session.book;
-    if (book == null || book.chapters.isEmpty) return null;
-    final positionMs = widget.session.displayPosition.inMilliseconds;
-    ChapterMark current = book.chapters.first;
-    ChapterMark? next;
-    for (var i = 0; i < book.chapters.length; i++) {
-      if (book.chapters[i].startMs <= positionMs) {
-        current = book.chapters[i];
-        next = i + 1 < book.chapters.length ? book.chapters[i + 1] : null;
-      }
-    }
-    return current.endMs ?? next?.startMs ?? book.durationMs;
+    final session = widget.session;
+    final book = session?.book;
+    if (session == null || book == null || book.chapters.isEmpty) return null;
+    final current = chapterAt(book.chapters, session.displayPosition);
+    if (current == null) return null;
+    return chapterEndMs(book.chapters, current, book.durationMs);
   }
 
   void _startMinutes(int minutes) {
@@ -1005,8 +866,8 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final active = ref.watch(sleepTimerProvider).active;
-    final chapterEndMs = widget.session.item.mediaType == MediaType.audiobook
+    final timer = ref.watch(sleepTimerProvider);
+    final chapterEndMs = widget.session?.item.mediaType == MediaType.audiobook
         ? _currentChapterEndMs()
         : null;
     return SafeArea(
@@ -1014,6 +875,41 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Both of the running timer's own verbs first, and together:
+            // a listener who opened this sheet with a timer on came to
+            // change that timer, not to set a new one, and the presets
+            // below are long enough to push a row at the bottom out of
+            // a half-height sheet.
+            if (timer.active) ...[
+              Semantics(
+                identifier: SemanticsIds.sleepTimerExtend,
+                button: true,
+                child: ListTile(
+                  key: const Key(SemanticsIds.sleepTimerExtend),
+                  leading: const WaxIcon(WaxIcons.add),
+                  title: const Text('Extend 10 minutes'),
+                  subtitle: Text('${timer.label} left'),
+                  onTap: () {
+                    ref.read(sleepTimerProvider.notifier).extend();
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ),
+              Semantics(
+                identifier: SemanticsIds.sleepTimerCancel,
+                button: true,
+                child: ListTile(
+                  key: const Key(SemanticsIds.sleepTimerCancel),
+                  leading: const WaxIcon(WaxIcons.close),
+                  title: const Text('Cancel timer'),
+                  onTap: () {
+                    ref.read(sleepTimerProvider.notifier).cancel();
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ),
+              const Divider(height: WaxSpace.s16),
+            ],
             for (final minutes in const [5, 15, 30, 60])
               Semantics(
                 identifier: SemanticsIds.sleepTimer(minutes),
@@ -1078,20 +974,6 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 ],
               ),
             ),
-            if (active)
-              Semantics(
-                identifier: SemanticsIds.sleepTimerCancel,
-                button: true,
-                child: ListTile(
-                  key: const Key(SemanticsIds.sleepTimerCancel),
-                  leading: const WaxIcon(WaxIcons.close),
-                  title: const Text('Cancel timer'),
-                  onTap: () {
-                    ref.read(sleepTimerProvider.notifier).cancel();
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ),
             const SizedBox(height: 8),
           ],
         ),

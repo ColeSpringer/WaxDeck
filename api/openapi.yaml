@@ -1937,6 +1937,97 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /books/{pid}/bookmarks:
+    get:
+      operationId: listBookmarks
+      summary: List the caller's bookmarks in a book
+      description: >
+        The calling user's bookmarks for one book, ordered by position on
+        the book timeline. Bookmarks are places a listener marked on
+        purpose, which is a different thing from the resume point: a book
+        has one resume position and any number of bookmarks, and nothing
+        here moves as playback does. The whole set comes back in one
+        answer - a book holds a handful of these, not a catalog - so
+        there is no cursor.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The caller's bookmarks in this book.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookmarkList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    post:
+      operationId: createBookmark
+      summary: Mark a place in a book
+      description: >
+        Records a bookmark at a book-timeline position, with an optional
+        note. Positions past the book's own duration are rejected. A
+        book holds at most 200 bookmarks per user; the request is
+        refused rather than silently evicting the oldest, because what
+        would be dropped is something the listener wrote.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookmarkCreate"
+      responses:
+        "201":
+          description: The stored bookmark.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bookmark"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /books/{pid}/bookmarks/{bookmarkId}:
+    delete:
+      operationId: deleteBookmark
+      summary: Remove one bookmark
+      description: >
+        Deletes one of the caller's bookmarks. Deleting a bookmark that
+        is already gone answers 204: the outcome the caller asked for
+        holds either way, and an offline client replaying its queue must
+        not stall on one it already removed.
+      tags: [books]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: bookmarkId
+          in: path
+          required: true
+          description: The bookmark's PID.
+          schema:
+            type: string
+            example: bm-01JZX5N8QW3F4V9T2B7KD3M9R6
+      responses:
+        "204":
+          description: Bookmark removed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /items/{pid}/similar:
     get:
       operationId: getSimilarTracks
@@ -10228,6 +10319,53 @@ components:
           description: >
             `pending` awaits an administrator's approval before it
             can log in; `active` (invited) can log in immediately.
+
+    Bookmark:
+      type: object
+      description: One place a listener marked in a book.
+      required: [id, positionMs, createdAt]
+      properties:
+        id:
+          type: string
+          description: Bookmark PID.
+          example: bm-01JZX5N8QW3F4V9T2B7KD3M9R6
+        positionMs:
+          type: integer
+          format: int64
+          description: Book-timeline position in milliseconds.
+        note:
+          type: string
+          description: The listener's note, when they wrote one.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the bookmark was made.
+
+    BookmarkList:
+      type: object
+      description: The caller's bookmarks in one book.
+      required: [bookmarks]
+      properties:
+        bookmarks:
+          type: array
+          description: Bookmarks ordered by `positionMs`, earliest first.
+          items:
+            $ref: "#/components/schemas/Bookmark"
+
+    BookmarkCreate:
+      type: object
+      description: A new bookmark on the book timeline.
+      required: [positionMs]
+      properties:
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Book-timeline position in milliseconds.
+        note:
+          type: string
+          maxLength: 500
+          description: An optional note.
 
     BookPart:
       type: object

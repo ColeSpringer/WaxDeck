@@ -329,6 +329,133 @@ class SearchField extends StatelessWidget {
   }
 }
 
+/// One option in a [WaxSegmented].
+@immutable
+class WaxSegment {
+  const WaxSegment({required this.name, required this.label, this.semanticsId});
+
+  /// The value the control reports when this segment is chosen. Stable
+  /// across label changes and translations.
+  final String name;
+
+  final String label;
+  final String? semanticsId;
+}
+
+/// A joined, equal-width control for switching between two or three
+/// readings of the same thing.
+///
+/// Not a filter row and not a set of chips: the segments partition one
+/// state, so they share a frame, divide the width evenly, and always
+/// have exactly one of them chosen. [FilterChipRow] is what a choice
+/// becomes when it outgrows this - a scrolling row of independent pills
+/// that can also be none of the above.
+class WaxSegmented extends StatelessWidget {
+  const WaxSegmented({
+    required this.segments,
+    required this.selected,
+    required this.onSelect,
+    this.label,
+    this.semanticsId,
+    super.key,
+  });
+
+  final List<WaxSegment> segments;
+
+  /// The chosen segment's [WaxSegment.name].
+  final String selected;
+
+  final ValueChanged<String> onSelect;
+
+  /// What the control as a whole is for, spoken before the segment
+  /// names. A segmented control reads as a row of nouns otherwise, and
+  /// "Chapter" on its own says nothing about what it switches.
+  final String? label;
+
+  final String? semanticsId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Semantics(
+      identifier: semanticsId,
+      container: true,
+      label: label,
+      // The frame names the group; the segments inside it are the
+      // controls. Without this the labels fold into one node and
+      // neither segment can be reached on its own.
+      explicitChildNodes: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface2,
+          borderRadius: WaxRadius.pill,
+          border: Border.all(color: colors.hairline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            for (final segment in segments)
+              _Segment(
+                segment: segment,
+                selected: segment.name == selected,
+                onTap: () => onSelect(segment.name),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Segment extends StatelessWidget {
+  const _Segment({
+    required this.segment,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final WaxSegment segment;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final motion = WaxMotion.of(context);
+    return WaxTappable(
+      label: segment.label,
+      selected: selected,
+      onPressed: onTap,
+      semanticsId: segment.semanticsId,
+      borderRadius: WaxRadius.pill,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: motion.quick,
+          curve: WaxMotion.emphasized,
+          constraints: const BoxConstraints(
+            minHeight: WaxSpace.pointerTarget,
+            minWidth: WaxSpace.s64,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? colors.accentContainer : Colors.transparent,
+            borderRadius: WaxRadius.pill,
+          ),
+          child: Text(
+            segment.label,
+            style: WaxType.label.copyWith(
+              color: selected ? colors.onAccentContainer : colors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// One chip in a [FilterChipRow].
 @immutable
 class WaxFilterChip {

@@ -3,6 +3,7 @@ import 'package:waxdeck_data/waxdeck_data.dart' show ClientSettingKeys;
 import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxDensity;
 
 import '../auth/auth_controller.dart';
+import '../player/smart_rewind.dart';
 import 'client_settings_providers.dart';
 
 /// The per-device preferences (ADR-0027), one notifier each.
@@ -181,6 +182,56 @@ final podcastSpeedProvider = NotifierProvider<PodcastSpeed, double>(
   PodcastSpeed.new,
 );
 final bookSpeedProvider = NotifierProvider<BookSpeed, double>(BookSpeed.new);
+
+/// Whether each spoken-word effect has explained itself once (5.3).
+///
+/// Not settings, and deliberately absent from the settings registry:
+/// nothing offers these as a control, because "show me that hint again"
+/// is not a preference anybody has. They are a note that a sentence has
+/// been said, kept per device because the hint is about the first time
+/// somebody presses the chip on this machine.
+class TrimSilenceExplained extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.trimSilenceExplained;
+
+  @override
+  bool get defaultValue => false;
+}
+
+class VoiceBoostExplained extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.voiceBoostExplained;
+
+  @override
+  bool get defaultValue => false;
+}
+
+final trimSilenceExplainedProvider =
+    NotifierProvider<TrimSilenceExplained, bool>(TrimSilenceExplained.new);
+final voiceBoostExplainedProvider = NotifierProvider<VoiceBoostExplained, bool>(
+  VoiceBoostExplained.new,
+);
+
+/// How far a spoken-word resume steps back for context.
+///
+/// On by default, at the gentler of the two ladders: three seconds
+/// after a break is a correction most listeners never notice and every
+/// one of them benefits from, and the listeners who would rather have
+/// none are the ones who go looking for the switch.
+class SmartRewindSetting extends EnumSetting<SmartRewind> {
+  @override
+  String get settingKey => ClientSettingKeys.smartRewind;
+
+  @override
+  SmartRewind get defaultValue => SmartRewind.short;
+
+  @override
+  List<SmartRewind> get options => SmartRewind.values;
+}
+
+final smartRewindProvider = NotifierProvider<SmartRewindSetting, SmartRewind>(
+  SmartRewindSetting.new,
+);
 
 /// Whether gapless preloading waits for an unmetered connection.
 ///

@@ -162,6 +162,20 @@ class FakeRepository implements WaxDeckRepository {
   List<PlaybackSessionInfo> playbackSessions = [];
   final List<String> removeDownloadCalls = [];
   final List<({String pid, BookSettings settings})> putBookSettingsCalls = [];
+
+  /// Bookmarks by book pid, in the order they were made. The listing
+  /// orders them by position, which is what the contract promises and
+  /// what the server's own `ORDER BY position_ms` does; the controller's
+  /// job is to keep that order when it places a new mark rather than
+  /// refetching, which is what `spoken_face_test` presses on.
+  final Map<String, List<Bookmark>> bookmarks = {};
+  final List<({String pid, int positionMs, String? note})> createBookmarkCalls =
+      [];
+  final List<({String pid, String id})> deleteBookmarkCalls = [];
+
+  /// What the next create should throw instead of landing (a full book).
+  WaxDeckApiException? createBookmarkError;
+  int _bookmarkCounter = 0;
   final List<({String pid, int? positionMs})> playInfoCalls = [];
   final List<String> importedOpml = [];
   int refreshCalls = 0;
@@ -1183,6 +1197,38 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
+  Future<List<Bookmark>> listBookmarks(String pid) async {
+    final marks = [...?bookmarks[pid]]
+      ..sort((a, b) => a.positionMs.compareTo(b.positionMs));
+    return marks;
+  }
+
+  @override
+  Future<Bookmark> createBookmark(
+    String pid,
+    int positionMs, {
+    String? note,
+  }) async {
+    createBookmarkCalls.add((pid: pid, positionMs: positionMs, note: note));
+    final error = createBookmarkError;
+    if (error != null) throw error;
+    final mark = Bookmark(
+      id: 'bm-${++_bookmarkCounter}',
+      positionMs: positionMs,
+      note: note,
+      createdAt: DateTime.utc(2026, 8, 1),
+    );
+    (bookmarks[pid] ??= <Bookmark>[]).add(mark);
+    return mark;
+  }
+
+  @override
+  Future<void> deleteBookmark(String pid, String bookmarkId) async {
+    deleteBookmarkCalls.add((pid: pid, id: bookmarkId));
+    bookmarks[pid]?.removeWhere((mark) => mark.id == bookmarkId);
+  }
+
+  @override
   Future<SkipMap> getSkipMap(String pid, {int? partIndex}) async {
     final keyed = partIndex == null ? null : skipMaps['$pid#$partIndex'];
     return keyed ?? skipMaps[pid] ?? const SkipMap(state: 'unavailable');
@@ -1675,8 +1721,15 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<RadioPlayInfo> getRadioPlayInfo(String pid) async {
     await radioPlayInfoGates[pid]?.future;
-    return RadioPlayInfo(url: '/media/radio/$pid?mt=fake');
+    return RadioPlayInfo(
+      url: '/media/radio/$pid?mt=fake',
+      nowPlaying: radioNowPlaying[pid],
+    );
   }
+
+  /// What each station's stream announces it is playing, when it
+  /// announces anything.
+  final Map<String, String> radioNowPlaying = {};
 
   @override
   String radioLogoUrlFor(String pid) => '/api/v1/radio/stations/$pid/logo';

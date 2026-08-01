@@ -237,6 +237,12 @@ const settingsRegistry = <SettingEntry>[
     keywords: <String>['rate', 'faster', 'default', 'narration'],
   ),
   SettingEntry(
+    id: 'smart-rewind',
+    title: 'Rewind on resume',
+    section: SettingsSection.playback,
+    keywords: <String>['smart rewind', 'back', 'context', 'podcast', 'book'],
+  ),
+  SettingEntry(
     id: 'crossfade',
     title: 'Casting crossfade',
     section: SettingsSection.playback,

@@ -34,6 +34,9 @@ import 'package:waxdeck_api_gen/src/model/book_part.dart';
 import 'package:waxdeck_api_gen/src/model/book_resume.dart';
 import 'package:waxdeck_api_gen/src/model/book_settings.dart';
 import 'package:waxdeck_api_gen/src/model/book_split_request.dart';
+import 'package:waxdeck_api_gen/src/model/bookmark.dart';
+import 'package:waxdeck_api_gen/src/model/bookmark_create.dart';
+import 'package:waxdeck_api_gen/src/model/bookmark_list.dart';
 import 'package:waxdeck_api_gen/src/model/bootstrap_request.dart';
 import 'package:waxdeck_api_gen/src/model/bootstrap_status.dart';
 import 'package:waxdeck_api_gen/src/model/bulk_edit.dart';
@@ -356,6 +359,9 @@ part 'serializers.g.dart';
   BookResume,
   BookSettings,
   BookSplitRequest,
+  Bookmark,
+  BookmarkCreate,
+  BookmarkList,
   BootstrapRequest,
   BootstrapStatus,
   BulkEdit,

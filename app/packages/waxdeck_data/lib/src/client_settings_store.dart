@@ -71,6 +71,18 @@ abstract final class ClientSettingKeys {
   static const podcastSpeed = 'waxdeck.playback.podcastSpeed';
   static const bookSpeed = 'waxdeck.playback.bookSpeed';
 
+  /// Whether the one-line explanation behind each spoken-word effect
+  /// has been shown on this device. Not a preference anybody sets: a
+  /// note that a thing has been said once, so it is not said again.
+  static const trimSilenceExplained = 'waxdeck.playback.trimExplained';
+  static const voiceBoostExplained = 'waxdeck.playback.boostExplained';
+
+  /// How far a spoken-word resume steps back for context after a long
+  /// enough pause. Per device because it is about how this listener
+  /// listens on this machine: a phone picked up on a commute and a
+  /// desktop left running overnight lose the thread differently.
+  static const smartRewind = 'waxdeck.playback.smartRewind';
+
   /// Whether gapless preloading waits for an unmetered connection.
   static const preloadOnWifiOnly = 'waxdeck.playback.preloadOnWifiOnly';
 

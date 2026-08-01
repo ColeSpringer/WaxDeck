@@ -79,6 +79,15 @@ final audioEngineProvider = Provider<AudioEnginePort>((ref) {
   return engine;
 });
 
+/// The app's handle on the OS media session's extra control.
+///
+/// Bound by `initMediaSession` where the platform registers one, and a
+/// no-op everywhere else, so a caller raising a control never has to
+/// ask which platform it is on.
+final mediaSessionProvider = Provider<MediaSessionHandle>(
+  (ref) => MediaSessionHandle(),
+);
+
 /// Client identifier reported with listen sessions.
 String get listenClientId {
   if (kIsWeb) return 'waxdeck-flutter-web';

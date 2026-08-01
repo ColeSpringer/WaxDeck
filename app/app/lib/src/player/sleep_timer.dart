@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:waxdeck_player/waxdeck_player.dart';
 
 import '../providers.dart';
 import 'output_volume.dart';
@@ -42,6 +43,11 @@ final sleepClockProvider = Provider<DateTime Function()>((_) => DateTime.now);
 /// ramp there would fade the next chapter, and pre-arming one would fade
 /// the end of the chapter the listener stayed awake for.
 class SleepTimerController extends Notifier<SleepTimerState> {
+  /// Read once and held: this notifier drops its control from its own
+  /// disposal, where reading a provider is not allowed. Nothing here
+  /// watches anything, so build runs once per instance.
+  late final MediaSessionHandle _media;
+
   Timer? _tick;
   DateTime? _deadline;
 
@@ -56,27 +62,65 @@ class SleepTimerController extends Notifier<SleepTimerState> {
 
   static const fadeStep = Duration(milliseconds: 250);
 
+  /// What one press of "Extend" buys. One value rather than a menu: the
+  /// press happens in the dark, half asleep, and the answer to "not yet"
+  /// is another ten minutes, however many times it takes.
+  static const extension = Duration(minutes: 10);
+
+  /// The platform action name behind the notification's extend button.
+  static const extendAction = 'waxdeck.sleep.extend';
+
   @override
   SleepTimerState build() {
+    _media = ref.read(mediaSessionProvider);
     ref.onDispose(() {
       _tick?.cancel();
       _generation++;
+      // The notification outlives this container (a sign-out rebuilds
+      // it and the media session is registered once, at launch), so a
+      // control left standing would extend a timer nothing is running.
+      _media.showExtra(null);
     });
     return const SleepTimerState();
   }
 
   /// Starts (or restarts) a countdown of [minutes].
-  void startMinutes(int minutes) {
+  void startMinutes(int minutes) => _countDownTo(
+    ref.read(sleepClockProvider)().add(Duration(minutes: minutes)),
+  );
+
+  /// Buys another [extension] on a running timer.
+  ///
+  /// From wherever it stood, not from now: extending with four minutes
+  /// left is asking for fourteen, and a listener who presses it twice
+  /// while the fade runs means twenty. A fade in flight is a timer that
+  /// already fired, so this re-arms it - the generation bump inside
+  /// [_countDownTo] is what tells the ramp to put the level back and
+  /// stop rather than pause under a timer that is running again.
+  ///
+  /// End-of-chapter mode extends to a countdown: there is no next
+  /// boundary to move to, and a listener pressing "extend" as the
+  /// chapter ends wants more time, not the following chapter.
+  void extend() {
+    if (!state.active) return;
+    final now = ref.read(sleepClockProvider)();
+    final standing = _deadline;
+    final from = standing != null && standing.isAfter(now) ? standing : now;
+    _countDownTo(from.add(extension));
+  }
+
+  void _countDownTo(DateTime deadline) {
     _tick?.cancel();
     _generation++;
+    _showExtend(true);
     // The countdown is a wall-clock deadline, never a decremented
     // remainder: mobile systems throttle or freeze background timers,
     // and a stretched tick cadence must not stretch the countdown.
     // The first tick after a wake-up snaps remaining back to truth,
     // or fires immediately when the deadline passed while asleep.
     final now = ref.read(sleepClockProvider);
-    _deadline = now().add(Duration(minutes: minutes));
-    state = SleepTimerState(remaining: Duration(minutes: minutes));
+    _deadline = deadline;
+    state = SleepTimerState(remaining: deadline.difference(now()));
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       final deadline = _deadline;
       if (deadline == null) return;
@@ -89,6 +133,25 @@ class SleepTimerController extends Notifier<SleepTimerState> {
     });
   }
 
+  /// Raises or drops the notification's extend button.
+  ///
+  /// Up for the whole time a timer runs rather than only during the
+  /// fade 5.6 names: a listener who wants another ten minutes usually
+  /// knows before the sound starts going, and a control that appears
+  /// only in the last ten seconds is one most of them never see. It
+  /// costs one button on a notification that is already there.
+  void _showExtend(bool show) {
+    _media.showExtra(
+      show
+          ? MediaSessionExtra(
+              action: extendAction,
+              label: 'Extend 10 min',
+              onPressed: extend,
+            )
+          : null,
+    );
+  }
+
   /// Arms end-of-chapter mode: pause when the book position crosses
   /// [chapterEndMs]. Books only; the caller supplies the boundary.
   void startEndOfChapter(int chapterEndMs) {
@@ -96,6 +159,7 @@ class SleepTimerController extends Notifier<SleepTimerState> {
     _tick = null;
     _deadline = null;
     _generation++;
+    _showExtend(true);
     state = SleepTimerState(endOfChapterEndMs: chapterEndMs);
   }
 
@@ -116,6 +180,7 @@ class SleepTimerController extends Notifier<SleepTimerState> {
   /// belongs to the listener, not to any item, so it stays.
   void clearEndOfChapter() {
     if (state.endOfChapterEndMs == null) return;
+    _showExtend(false);
     state = const SleepTimerState();
   }
 
@@ -124,6 +189,7 @@ class SleepTimerController extends Notifier<SleepTimerState> {
     _tick = null;
     _deadline = null;
     _generation++;
+    _showExtend(false);
     state = const SleepTimerState();
   }
 
@@ -191,6 +257,7 @@ class SleepTimerController extends Notifier<SleepTimerState> {
     // level lowered and still owned, so it unwinds like any other end.
     await unwind();
     if (!ref.mounted || generation != _generation) return;
+    _showExtend(false);
     state = const SleepTimerState();
   }
 

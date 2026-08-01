@@ -609,6 +609,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
         defaultSpeed: item.mediaType == MediaType.audiobook
             ? ref.read(bookSpeedProvider)
             : ref.read(podcastSpeedProvider),
+        smartRewind: ref.read(smartRewindProvider),
       );
 
   /// Makes [session] the live one: the previous session lets go, Connect

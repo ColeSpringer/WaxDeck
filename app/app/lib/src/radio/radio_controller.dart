@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
+import '../player/autoplay_gate.dart';
 import '../player/session_registry.dart';
 import '../providers.dart';
 import '../settings/prefs_controller.dart';
@@ -301,6 +302,40 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     if (state.station == null) return;
     state = const RadioPlayback();
     await ref.read(audioEngineProvider).stop();
+  }
+
+  /// What the one transport control means, wherever it is drawn.
+  ///
+  /// Stop while sound is coming out, and start again otherwise. The
+  /// second half is the part worth spelling out: a live stream ends on
+  /// its own - a host that went away, a network that dropped, a
+  /// playlist that ran out - and the engine simply stops. Both surfaces
+  /// read that as "not playing", drew a play glyph, and called [stop] on
+  /// it, so the one control on a dead station said play and tore the
+  /// station down.
+  ///
+  /// Told apart by why it is not playing: a refused start still has the
+  /// media loaded and wants the gesture the browser was waiting for,
+  /// and anything else is a stream that has to be opened again.
+  Future<void> toggle() async {
+    final station = state.station;
+    if (station == null) return;
+    if (ref.read(audioEngineProvider).playing || state.starting) {
+      await stop();
+      return;
+    }
+    if (ref.read(autoplayBlockedProvider)) {
+      await resume();
+      return;
+    }
+    try {
+      await play(station);
+    } on Object {
+      // A re-tune that fails leaves no station on the bar, which is the
+      // truthful answer and the only one these two surfaces can give:
+      // neither has anywhere to put a message. The hub is where a tune
+      // reports why it did not work.
+    }
   }
 
   /// Starts the loaded station's stream again after the platform turned

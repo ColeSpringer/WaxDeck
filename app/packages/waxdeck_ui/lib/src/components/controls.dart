@@ -323,6 +323,99 @@ class WaxButton extends StatelessWidget {
 
 /// An icon-only control. Always has an accessible name, and a tooltip on
 /// pointer platforms, because the glyph is the whole meaning.
+/// A labelled pill that can be on or off.
+///
+/// The player's effects and rates are all this shape: a word or a
+/// number in a rounded outline that fills when it is on. It is a
+/// control rather than a filter, so it is not [WaxFilterChip] - the
+/// chips in a filter row are one choice among several and this is a
+/// switch or a preset - and it carries text rather than a glyph, so it
+/// is not [WaxIconButton].
+///
+/// Ink outside, InkWell in, once and here: the surfaces these sit on
+/// are transparent Materials (the player draws its own backdrop), so a
+/// splash under an opaquely decorated Container paints beneath it and
+/// never appears. Every caller had to know that; now none of them do.
+class WaxPill extends StatelessWidget {
+  const WaxPill({
+    required this.label,
+    required this.onPressed,
+    this.text,
+    this.selected = false,
+    this.mono = false,
+    this.surface,
+    this.semanticsId,
+    super.key,
+  });
+
+  /// The accessible name, which is the whole sentence a screen reader
+  /// hears: "Trim silence (saved 2m 4s)", not "Trim silence".
+  final String label;
+
+  /// What is drawn, when it is shorter than the name. Defaults to
+  /// [label].
+  final String? text;
+
+  /// Null disables it, which is what a control with a round trip in
+  /// flight is.
+  final VoidCallback? onPressed;
+
+  final bool selected;
+
+  /// Numbers set in the mono face: a rate that changes under a thumb
+  /// should not move the pill's width with it.
+  final bool mono;
+
+  /// The pill's own unselected fill. Defaults to [WaxColors.surface2],
+  /// which lifts off the canvas the player draws over; a caller on a
+  /// raised surface passes the step above its own.
+  final Color? surface;
+
+  final String? semanticsId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final drawn = text ?? label;
+    final enabled = onPressed != null;
+    final foreground = selected
+        ? colors.onAccentContainer
+        : (enabled ? colors.textSecondary : colors.textDisabled);
+    return WaxTappable(
+      semanticsId: semanticsId,
+      label: label,
+      selected: selected,
+      borderRadius: WaxRadius.pill,
+      onPressed: onPressed,
+      child: Ink(
+        decoration: BoxDecoration(
+          color: selected
+              ? colors.accentContainer
+              : (surface ?? colors.surface2),
+          borderRadius: WaxRadius.pill,
+          border: Border.all(color: selected ? colors.accent : colors.hairline),
+        ),
+        child: InkWell(
+          borderRadius: WaxRadius.pill,
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: WaxSpace.s12,
+              vertical: WaxSpace.s8,
+            ),
+            child: Text(
+              drawn,
+              style: (mono ? WaxType.monoData : WaxType.caption).copyWith(
+                color: foreground,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class WaxIconButton extends StatelessWidget {
   const WaxIconButton({
     required this.glyph,

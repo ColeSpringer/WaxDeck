@@ -254,6 +254,9 @@ class PlayerScaffold extends StatefulWidget {
     required this.seek,
     this.onCollapse,
     this.actionRow,
+    this.heroOverlay,
+    this.titleOverline,
+    this.subtitleOverride,
     this.titleTrailing,
     this.volume,
     this.bottomRegion,
@@ -270,6 +273,23 @@ class PlayerScaffold extends StatefulWidget {
 
   /// Lyrics, queue, mix, overflow: the per-medium verbs.
   final Widget? actionRow;
+
+  /// Drawn over the artwork at its own extent: radio's platter ring.
+  /// Decoration rather than a control, so it is expected to ignore
+  /// pointers and the hero keeps its own gestures.
+  final Widget? heroOverlay;
+
+  /// What the title belongs to, above it: the show an episode is from.
+  /// Its own slot because it is a link rather than a caption, and
+  /// because the line under the title is already spoken for (an
+  /// artist, a chapter).
+  final Widget? titleOverline;
+
+  /// The line under the title, when it is live rather than fixed: a
+  /// book's chapter changes while the title does not, and the face that
+  /// draws it must be able to tick without rebuilding the hero. Takes
+  /// the place of [NowPlayingData.subtitle].
+  final Widget? subtitleOverride;
 
   /// Star and rating, which sit with the title rather than in the row of
   /// verbs.
@@ -498,51 +518,73 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
         constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s24),
-          child: Column(
-            children: <Widget>[
-              // The hero takes what the clusters below do not want,
-              // rather than a fraction of the window. Both readings were
-              // in this file at once - a width clamp and a height
-              // fraction, added the second time this overflowed - and
-              // neither can be right while what sits under the artwork
-              // varies by face: the music face carries a volume row and
-              // an action row that the first sketch of this did not.
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    // The gutter above and below the artwork is taken
-                    // out of the extent rather than wrapped around it: a
-                    // Padding inside this Expanded demands its 32 px
-                    // even after the flex has been squeezed to nothing,
-                    // which is an overflow of exactly that padding on a
-                    // window with no room left.
-                    final extent = math.min(
-                      constraints.maxWidth,
-                      constraints.maxHeight - WaxSpace.s32,
-                    );
-                    // Nothing left to draw art in: a very short window
-                    // gives its height to the controls, which are what
-                    // the surface is for.
-                    if (extent < 96) return const SizedBox.shrink();
-                    return Center(child: _hero(extent.clamp(96.0, 420.0)));
-                  },
+          child: LayoutBuilder(
+            builder: (context, outer) => Column(
+              children: <Widget>[
+                // The hero takes what the clusters below do not want,
+                // rather than a fraction of the window. Both readings
+                // were in this file at once - a width clamp and a height
+                // fraction, added the second time this overflowed - and
+                // neither can be right while what sits under the artwork
+                // varies by face: the music face carries a volume row
+                // and an action row that the first sketch of this did
+                // not.
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // The gutter above and below the artwork is taken
+                      // out of the extent rather than wrapped around it:
+                      // a Padding inside this Expanded demands its 32 px
+                      // even after the flex has been squeezed to
+                      // nothing, which is an overflow of exactly that
+                      // padding on a window with no room left.
+                      final extent = math.min(
+                        constraints.maxWidth,
+                        constraints.maxHeight - WaxSpace.s32,
+                      );
+                      // Nothing left to draw art in: a very short window
+                      // gives its height to the controls, which are what
+                      // the surface is for.
+                      if (extent < 96) return const SizedBox.shrink();
+                      return Center(child: _hero(extent.clamp(96.0, 420.0)));
+                    },
+                  ),
                 ),
-              ),
-              _titleBlock(colors),
-              const SizedBox(height: WaxSpace.s20),
-              widget.seek,
-              const SizedBox(height: WaxSpace.s16),
-              widget.transport,
-              if (widget.volume != null) ...<Widget>[
-                const SizedBox(height: WaxSpace.s8),
-                widget.volume!,
+                // Bounded to the whole slot and scrollable inside it,
+                // which is what keeps the flex above honest. As a
+                // free-height child the clusters simply took what they
+                // wanted, and a face whose action row wrapped to a
+                // second line - or a large text scale, or a short
+                // window - overflowed by whatever it wanted past the
+                // end. Under the cap they take their natural height
+                // while there is room, and the hero yields first;
+                // past it they scroll and the hero is gone.
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: outer.maxHeight),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        _titleBlock(colors),
+                        const SizedBox(height: WaxSpace.s20),
+                        widget.seek,
+                        const SizedBox(height: WaxSpace.s16),
+                        widget.transport,
+                        if (widget.volume != null) ...<Widget>[
+                          const SizedBox(height: WaxSpace.s8),
+                          widget.volume!,
+                        ],
+                        if (widget.actionRow != null) ...<Widget>[
+                          const SizedBox(height: WaxSpace.s16),
+                          widget.actionRow!,
+                        ],
+                        const SizedBox(height: WaxSpace.s16),
+                      ],
+                    ),
+                  ),
+                ),
               ],
-              if (widget.actionRow != null) ...<Widget>[
-                const SizedBox(height: WaxSpace.s16),
-                widget.actionRow!,
-              ],
-              const SizedBox(height: WaxSpace.s16),
-            ],
+            ),
           ),
         ),
       ),
@@ -554,18 +596,33 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
   /// Podcast art is smaller by design (5.3): a show's cover is the same
   /// square on every episode, so it says less the larger it gets, and
   /// the room goes to the episode title and the chapter list instead.
-  Widget _hero(double extent) => Hero(
-    tag: 'deck-artwork',
-    child: ArtworkImage(
-      size: widget.now.domain == WaxDomain.podcasts
-          ? math.min(extent, 200)
-          : extent,
-      artwork: widget.now.artwork,
-      monogram: widget.now.title,
-      shape: widget.now.shape,
-      domain: widget.now.domain,
-    ),
-  );
+  Widget _hero(double extent) {
+    final size = widget.now.domain == WaxDomain.podcasts
+        ? math.min(extent, 200.0)
+        : extent;
+    final art = Hero(
+      tag: 'deck-artwork',
+      child: ArtworkImage(
+        size: size,
+        artwork: widget.now.artwork,
+        monogram: widget.now.title,
+        shape: widget.now.shape,
+        domain: widget.now.domain,
+      ),
+    );
+    if (widget.heroOverlay == null) return art;
+    // Sized to the artwork rather than to the slot: the overlay is a
+    // ring around the cover, and a stack that filled the extent would
+    // draw it around the gutter on a podcast, whose art is smaller than
+    // the room it is given.
+    return SizedBox.square(
+      dimension: size,
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[art, widget.heroOverlay!],
+      ),
+    );
+  }
 
   /// Under this height a stacked face does not fit its own clusters, so
   /// the arrangement goes side by side whatever the width class says.
@@ -584,8 +641,25 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
   /// here so the four faces inherit it rather than each inventing a
   /// letterboxed portrait layout.
   Widget _landscape(BuildContext context, WaxColors colors) {
-    final height = MediaQuery.sizeOf(context).height;
-    final width = MediaQuery.sizeOf(context).width;
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          _landscapeRow(context, colors, constraints),
+    );
+  }
+
+  Widget _landscapeRow(
+    BuildContext context,
+    WaxColors colors,
+    BoxConstraints constraints,
+  ) {
+    // Both axes of the slot this is drawn in, not of the window. The
+    // window was what this measured, and the slot is the window less the
+    // header, the system insets, and the bottom region - which was
+    // nothing until the spoken-word faces gained one, and is a third of
+    // the difference now. A hero sized from the window overflowed a
+    // short landscape window by whatever the region took.
+    final height = constraints.maxHeight;
+    final width = constraints.maxWidth;
     // Sized by both axes. The height it can fill is the obvious bound
     // and it was the only one here, which is how a 568x320 window ended
     // up drawing 256 px of artwork beside a column with 240 px for
@@ -640,6 +714,11 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
         ? CrossAxisAlignment.start
         : CrossAxisAlignment.center,
     children: <Widget>[
+      if (widget.titleOverline != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: WaxSpace.s4),
+          child: widget.titleOverline!,
+        ),
       Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
@@ -658,7 +737,12 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
           ],
         ],
       ),
-      if (widget.now.subtitle != null)
+      if (widget.subtitleOverride != null)
+        Padding(
+          padding: const EdgeInsets.only(top: WaxSpace.s4),
+          child: widget.subtitleOverride!,
+        )
+      else if (widget.now.subtitle != null)
         Padding(
           padding: const EdgeInsets.only(top: WaxSpace.s4),
           child: Text(

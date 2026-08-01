@@ -94,14 +94,13 @@ here waits on upstream.
   change, and then the row and its two callers convert together.
 - `[in-repo]` **Playback defaults 6.13 asks for that Settings does not
   offer.** The section ships skip intervals, per-domain speed, casting
-  crossfade and leveling, and the wifi-only preload brake (ADR-0037).
-  Four more are specified and unbuilt, in two groups.
+  crossfade and leveling, the wifi-only preload brake (ADR-0037), and
+  rewind-on-resume (ADR-0041). Three more are specified and unbuilt, in
+  two groups.
 
-  **Smart rewind on resume, sleep-timer extension gestures, and the web
-  autoplay-overlay preference** each need a mechanism rather than a
-  control: nothing rewinds on resume today, the sleep timer has no
-  extension surface until P19, and the autoplay gate reports a refusal
-  without offering a standing preference about it.
+  **The web autoplay-overlay preference** needs a mechanism rather than a
+  control: the autoplay gate reports a refusal without offering a
+  standing preference about it.
 
   **Trim-silence and voice-boost defaults** need only a control. The seam
   is the one the speed defaults already use - `PlaybackSession` resolves
@@ -110,6 +109,16 @@ here waits on upstream.
   away. Left out because a default that silently turns silence trimming
   on for every show is a decision worth looking at on its own, where a
   playback speed is not.
+- `[in-repo]` **A place cannot be marked offline.** Audiobook bookmarks
+  are a live read against the server (ADR-0041): the sheet fetches on
+  open and marking one needs a round trip. Everything else a listener
+  does to a book while offline is mirrored - the position checkpoints
+  through the outbox, the audio plays from the download - so a plane is
+  exactly where this shows. Making it work is the shape the checkpoint
+  queue already has: a sync kind, a delta, a mirror table, and a queued
+  create with a client-minted id the server accepts. Left out because a
+  book holds a handful of these and nothing else about them wants a
+  mirror, so the machinery would be built entirely for this one gap.
 - `[in-repo]` **The downloads manager reports what WaxDeck holds and not
   what the device has left.** The storage header adds up used bytes by
   medium, which is the half a listener can act on; the layout also asks

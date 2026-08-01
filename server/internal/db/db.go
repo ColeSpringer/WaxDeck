@@ -233,6 +233,20 @@ const baselineSchema = `
 		updated_at_ns INTEGER NOT NULL,
 		PRIMARY KEY (user_id, book_pid)
 	);
+	-- Places a listener marked in a book on purpose, which is a
+	-- different thing from the resume point in play_state: a book has
+	-- one position and any number of bookmarks, and nothing here moves
+	-- as playback does. The index is the read: every query is one
+	-- user's marks in one book, in timeline order.
+	CREATE TABLE book_bookmarks (
+		id            TEXT    PRIMARY KEY,
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		book_pid      TEXT    NOT NULL,
+		position_ms   INTEGER NOT NULL,
+		note          TEXT    NOT NULL DEFAULT '',
+		created_at_ns INTEGER NOT NULL
+	);
+	CREATE INDEX book_bookmarks_by_book ON book_bookmarks (user_id, book_pid, position_ms, id);
 	CREATE TABLE feed_state (
 		show_pid             TEXT    PRIMARY KEY,
 		consecutive_failures INTEGER NOT NULL DEFAULT 0,

@@ -691,6 +691,13 @@ BookResume bookResumeFromGen(gen.BookResume resume) {
   );
 }
 
+Bookmark bookmarkFromGen(gen.Bookmark mark) => Bookmark(
+  id: mark.id,
+  positionMs: mark.positionMs,
+  note: mark.note,
+  createdAt: mark.createdAt,
+);
+
 SkipMap skipMapFromGen(gen.SkipMap map) {
   return SkipMap(
     state: map.state,

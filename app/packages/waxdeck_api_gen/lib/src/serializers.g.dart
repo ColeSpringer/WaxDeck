@@ -33,6 +33,9 @@ Serializers _$serializers =
           ..add(BookResume.serializer)
           ..add(BookSettings.serializer)
           ..add(BookSplitRequest.serializer)
+          ..add(Bookmark.serializer)
+          ..add(BookmarkCreate.serializer)
+          ..add(BookmarkList.serializer)
           ..add(BootstrapRequest.serializer)
           ..add(BootstrapStatus.serializer)
           ..add(BulkEdit.serializer)
@@ -361,6 +364,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(Backup)]),
             () => ListBuilder<Backup>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Bookmark)]),
+            () => ListBuilder<Bookmark>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [

@@ -231,31 +231,51 @@ abstract final class SemanticsIds {
   static const String organizeProfile = 'organize-profile';
   static const String organizeReport = 'organize-report';
 
-  // player: Playback surfaces: transport, stars and ratings, chapters, sleep timer, transcript.
+  // player: Playback surfaces: transport, stars and ratings, speed, chapters, bookmarks, sleep timer, notes and transcript.
   static const String addToPlaylist = 'add-to-playlist';
   static const String downloadButton = 'download-button';
   static const String instantMix = 'instant-mix';
   static const String playerBack = 'player-back';
+  static String playerBookmark(Object index) => 'player-bookmark-$index';
+  static const String playerBookmarkAdd = 'player-bookmark-add';
+  static String playerBookmarkDelete(Object index) =>
+      'player-bookmark-delete-$index';
+  static const String playerBookmarkNote = 'player-bookmark-note';
+  static const String playerBookmarkSheet = 'player-bookmark-sheet';
+  static const String playerBookmarks = 'player-bookmarks';
   static String playerChapter(Object index) => 'player-chapter-$index';
   static const String playerChapters = 'player-chapters';
   static const String playerDevices = 'player-devices';
   static const String playerDiscover = 'player-discover';
+  static const String playerFindInLibrary = 'player-find-in-library';
+  static const String playerFunding = 'player-funding';
+  static const String playerGoToShow = 'player-go-to-show';
+  static const String playerMarkPlayed = 'player-mark-played';
   static const String playerMore = 'player-more';
   static const String playerMute = 'player-mute';
   static const String playerNext = 'player-next';
   static const String playerPrevious = 'player-previous';
   static const String playerQueue = 'player-queue';
+  static String playerRegion(Object name) => 'player-region-$name';
   static const String playerRepeat = 'player-repeat';
   static const String playerRetry = 'player-retry';
   static const String playerSeek = 'player-seek';
+  static const String playerShow = 'player-show';
   static const String playerShuffle = 'player-shuffle';
   static const String playerSkipBack = 'player-skip-back';
   static const String playerSkipForward = 'player-skip-forward';
   static const String playerSpeed = 'player-speed';
+  static const String playerSpeedFaster = 'player-speed-faster';
+  static String playerSpeedPreset(Object percent) => 'player-speed-$percent';
+  static const String playerSpeedSheet = 'player-speed-sheet';
+  static const String playerSpeedSlower = 'player-speed-slower';
+  static const String playerStationInfo = 'player-station-info';
   static const String playerSurface = 'player-surface';
+  static String playerTimeline(Object name) => 'player-timeline-$name';
   static const String playerToggle = 'player-toggle';
   static const String playerTrim = 'player-trim';
   static const String playerUpNext = 'player-up-next';
+  static const String playerVoiceBoost = 'player-voice-boost';
   static const String playerVolume = 'player-volume';
   static String rating(Object scope, Object value) => '${scope}rating-$value';
   static const String shareLink = 'share-link';
@@ -265,6 +285,7 @@ abstract final class SemanticsIds {
   static const String sleepTimerChapter = 'sleep-timer-chapter';
   static const String sleepTimerCustomField = 'sleep-timer-custom-field';
   static const String sleepTimerCustomStart = 'sleep-timer-custom-start';
+  static const String sleepTimerExtend = 'sleep-timer-extend';
   static const String sleepTimerOpen = 'sleep-timer-open';
   static String starButton(Object scope) => '${scope}star-button';
 

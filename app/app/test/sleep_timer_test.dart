@@ -5,6 +5,7 @@ import 'package:waxdeck/src/player/sleep_timer.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
@@ -461,4 +462,99 @@ void main() {
     expect(engine.volume, closeTo(0.25, 0.001));
     await harness.endPlayback(tester);
   });
+
+  testWidgets('extending buys ten more minutes from where it stood', (
+    tester,
+  ) async {
+    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
+    final repo = FakeRepository(items: [testItem(pid)]);
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final clock = _FakeClock();
+    final container = _container(repo, engine, clock);
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+      container: container,
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(5)));
+    await tester.pumpAndSettle();
+
+    clock.advance(const Duration(minutes: 4));
+    await tester.pump(const Duration(minutes: 4));
+    expect(container.read(sleepTimerProvider).remaining!.inSeconds, 60);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerExtend));
+    await tester.pumpAndSettle();
+
+    // From where it stood, not from now: one minute left plus ten is
+    // eleven, which is what "not yet" means at that point.
+    expect(container.read(sleepTimerProvider).remaining!.inSeconds, 11 * 60);
+
+    clock.advance(const Duration(minutes: 10));
+    await tester.pump(const Duration(minutes: 10));
+    expect(engine.playing, isTrue);
+    container.read(sleepTimerProvider.notifier).cancel();
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('the notification carries the extension while a timer runs', (
+    tester,
+  ) async {
+    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
+    final repo = FakeRepository(items: [testItem(pid)]);
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final clock = _FakeClock();
+    final container = _container(repo, engine, clock);
+    final session = _FakeMediaSession();
+    container.read(mediaSessionProvider).bind(session);
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+      container: container,
+    );
+    expect(session.extra, isNull);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(5)));
+    await tester.pumpAndSettle();
+
+    // The whole time a timer runs rather than only during the fade: a
+    // listener who wants another ten minutes usually knows before the
+    // sound starts going.
+    expect(session.extra?.label, 'Extend 10 min');
+
+    // And it is a real control, not a label: pressing it extends.
+    session.extra!.onPressed();
+    await tester.pump();
+    expect(container.read(sleepTimerProvider).remaining!.inSeconds, 15 * 60);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerCancel));
+    await tester.pumpAndSettle();
+    expect(session.extra, isNull);
+    await harness.endPlayback(tester);
+  });
+}
+
+/// A media session that records the one extra control the app raises.
+class _FakeMediaSession implements MediaSessionPort {
+  MediaSessionExtra? extra;
+
+  @override
+  void showExtra(MediaSessionExtra? value) => extra = value;
 }

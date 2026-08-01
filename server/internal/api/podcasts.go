@@ -516,6 +516,82 @@ func (s *Server) PutBookSettings(ctx context.Context, req PutBookSettingsRequest
 	return PutBookSettings200JSONResponse(bookSettingsJSON(stored)), nil
 }
 
+func (s *Server) ListBookmarks(ctx context.Context, req ListBookmarksRequestObject) (ListBookmarksResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	marks, err := s.svc.BookmarksFor(ctx, uc, req.Pid)
+	if err != nil {
+		if service.KindOf(err) == service.KindNotFound {
+			return ListBookmarks404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no book with pid "+req.Pid))}, nil
+		}
+		return nil, err
+	}
+	out := BookmarkList{Bookmarks: make([]Bookmark, 0, len(marks))}
+	for _, m := range marks {
+		out.Bookmarks = append(out.Bookmarks, bookmarkJSON(m))
+	}
+	return ListBookmarks200JSONResponse(out), nil
+}
+
+func (s *Server) CreateBookmark(ctx context.Context, req CreateBookmarkRequestObject) (CreateBookmarkResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return CreateBookmark400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a request body is required"))}, nil
+	}
+	var note string
+	if req.Body.Note != nil {
+		note = *req.Body.Note
+	}
+	mark, err := s.svc.CreateBookmark(ctx, uc, req.Pid, req.Body.PositionMs, note)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid, service.KindConflict:
+			// The cap is a refusal the listener can act on ("delete one
+			// first"), which is what an invalid-request message is for;
+			// a conflict code would send a client looking for a
+			// concurrent write that never happened.
+			return CreateBookmark400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindNotFound:
+			return CreateBookmark404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no book with pid "+req.Pid))}, nil
+		}
+		return nil, err
+	}
+	return CreateBookmark201JSONResponse(bookmarkJSON(mark)), nil
+}
+
+func (s *Server) DeleteBookmark(ctx context.Context, req DeleteBookmarkRequestObject) (DeleteBookmarkResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.DeleteBookmark(ctx, uc, req.Pid, req.BookmarkId); err != nil {
+		if service.KindOf(err) == service.KindNotFound {
+			// The service's own sentence: two things can be missing
+			// here, the book and the bookmark, and a fixed message
+			// tells a caller its bookmark is gone when what it named
+			// was a book it cannot see.
+			return DeleteBookmark404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return DeleteBookmark204Response{}, nil
+}
+
+func bookmarkJSON(m service.Bookmark) Bookmark {
+	out := Bookmark{
+		Id:         m.ID,
+		PositionMs: m.PositionMS,
+		CreatedAt:  time.Unix(0, m.CreatedAtNS).UTC(),
+	}
+	setOpt(&out.Note, m.Note)
+	return out
+}
+
 func (s *Server) GetSkipMap(ctx context.Context, req GetSkipMapRequestObject) (GetSkipMapResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {

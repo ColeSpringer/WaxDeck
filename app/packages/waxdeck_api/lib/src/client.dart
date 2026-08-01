@@ -382,6 +382,18 @@ abstract interface class WaxDeckRepository {
   /// playback settings.
   Future<BookSettings> putBookSettings(String pid, BookSettings settings);
 
+  /// `GET /books/{pid}/bookmarks`: the caller's marks in one book, in
+  /// timeline order. A live read rather than mirrored state: a book
+  /// holds a handful of these and the sheet that shows them fetches on
+  /// open.
+  Future<List<Bookmark>> listBookmarks(String pid);
+
+  /// `POST /books/{pid}/bookmarks`: mark a place on the book timeline.
+  Future<Bookmark> createBookmark(String pid, int positionMs, {String? note});
+
+  /// `DELETE /books/{pid}/bookmarks/{bookmarkId}`: remove one mark.
+  Future<void> deleteBookmark(String pid, String bookmarkId);
+
   /// `GET /items/{pid}/skip-map`: precomputed silence spans for
   /// client-side trimming; [partIndex] selects one part of a multi-file
   /// audiobook, with spans in that part's own timeline.
@@ -2071,6 +2083,33 @@ class WaxDeckClient implements WaxDeckRepository {
         );
         return bookSettingsFromGen(_require(response.data));
       });
+
+  @override
+  Future<List<Bookmark>> listBookmarks(String pid) => _guard(() async {
+    final response = await _gen.getBooksApi().listBookmarks(pid: pid);
+    return _require(response.data).bookmarks.map(bookmarkFromGen).toList();
+  });
+
+  @override
+  Future<Bookmark> createBookmark(String pid, int positionMs, {String? note}) =>
+      _guard(() async {
+        final response = await _gen.getBooksApi().createBookmark(
+          pid: pid,
+          bookmarkCreate: gen.BookmarkCreate(
+            (b) => b
+              ..positionMs = positionMs
+              ..note = note,
+          ),
+        );
+        return bookmarkFromGen(_require(response.data));
+      });
+
+  @override
+  Future<void> deleteBookmark(String pid, String bookmarkId) => _guard(
+    () async {
+      await _gen.getBooksApi().deleteBookmark(pid: pid, bookmarkId: bookmarkId);
+    },
+  );
 
   @override
   Future<SkipMap> getSkipMap(String pid, {int? partIndex}) => _guard(() async {

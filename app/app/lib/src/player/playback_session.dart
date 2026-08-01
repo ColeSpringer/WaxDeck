@@ -5,6 +5,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
+import 'smart_rewind.dart';
+
 /// Drives one item's playback through the engine port and owns the server
 /// bookkeeping around it: resume on open, position checkpoints, and listen
 /// session accounting.
@@ -31,7 +33,9 @@ class PlaybackSession {
     this.initialPositionMs,
     this.skipMapRetryDelay = const Duration(seconds: 30),
     this.defaultSpeed = 1.0,
-  });
+    this.smartRewind = SmartRewind.off,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
 
   final WaxDeckRepository repository;
   final AudioEnginePort engine;
@@ -62,6 +66,26 @@ class PlaybackSession {
   /// exactly the semantics wanted, since changing the default must not
   /// re-rate a book somebody is listening to.
   final double defaultSpeed;
+
+  /// How far a resume steps back for context, per this device's
+  /// Playback setting. Read once at build for the same reason
+  /// [defaultSpeed] is: a session outlives the frame it was made in.
+  final SmartRewind smartRewind;
+
+  /// Wall clock behind the rewind's "how long ago", injectable so tests
+  /// can put a pause in the past without waiting one out.
+  final DateTime Function() _clock;
+
+  /// When playback last stopped under this session, for the rewind on
+  /// the next play. Null while playing, and while nothing has played
+  /// yet: a session that has never started has no pause to measure.
+  DateTime? _pausedAt;
+
+  /// When the listener last left this item, for a session that loaded
+  /// without playing (a queue put back at launch). Spent by the first
+  /// play and null from then on, so the step is never applied twice and
+  /// never applied to a checkpoint nobody listened past.
+  DateTime? _restedSince;
 
   /// Position deltas above this are treated as seeks, not listening.
   static const maxCountedStep = Duration(seconds: 2);
@@ -141,6 +165,13 @@ class PlaybackSession {
   /// Whether silence trimming is currently on, for the player chip.
   final ValueNotifier<bool> trimEnabled = ValueNotifier(false);
 
+  /// Whether spoken-word loudness normalization is on, for its chip.
+  ///
+  /// Unlike trimming, this one is the server's to apply: the stream is
+  /// minted with it, so the chip persists the setting and reopens the
+  /// stream rather than changing anything locally.
+  final ValueNotifier<bool> voiceBoost = ValueNotifier(false);
+
   /// Milliseconds of silence skipped so far, for the hours-saved badge.
   final ValueNotifier<int> hoursSavedMs = ValueNotifier(0);
 
@@ -214,6 +245,18 @@ class PlaybackSession {
         // it is asked to begin past, so this is the difference between
         // starting over and an error pane.
         resumeMs = saved.finished ? 0 : saved.positionMs;
+        if (autoplay) {
+          // Applied to the load rather than as a seek after it, so the
+          // ordinary case has no stutter at the seam.
+          resumeMs = _rewound(resumeMs, since: saved.updatedAt);
+        } else {
+          // A queue put back at launch stands at its checkpoint and may
+          // never be played at all. Rewinding it here would move the
+          // position this session goes on to write back, so ten cold
+          // starts nobody listened to would walk a book backwards; the
+          // step is owed to the first play and spent there.
+          _restedSince = saved.updatedAt;
+        }
       }
       // Let go while this was resolving: a tap on something else, or the
       // queue emptying. Loading here would put this item's media over
@@ -263,6 +306,11 @@ class PlaybackSession {
       var resumeMs = initialPositionMs ?? 0;
       if (initialPositionMs == null && saved != null && !saved.finished) {
         resumeMs = saved.positionMs;
+        if (autoplay) {
+          resumeMs = _rewound(resumeMs, since: saved.updatedAt);
+        } else {
+          _restedSince = saved.updatedAt;
+        }
       }
       // A downloaded book whose parts can be placed on its own timeline
       // resolves the part the resume position falls in, exactly as
@@ -360,6 +408,9 @@ class PlaybackSession {
     trimEnabled.value = _isBook
         ? (_bookSettings?.trimSilence ?? false)
         : (_showSettings?.trimSilence ?? false);
+    voiceBoost.value = _isBook
+        ? (_bookSettings?.voiceBoost ?? false)
+        : (_showSettings?.voiceBoost ?? false);
   }
 
   /// The item's own remembered rate, and this device's default behind
@@ -488,6 +539,46 @@ class PlaybackSession {
     }
   }
 
+  /// Steps back a little when the play that just started followed a
+  /// break long enough to have lost the thread.
+  ///
+  /// Hung off the engine's own play transition rather than off a
+  /// control, for the reason the pause is: a play arrives from the lock
+  /// screen, a headset button, a media key, and a routed Connect
+  /// command as well as from a button on a WaxDeck screen, and the
+  /// overnight resume this exists for is most often one of those. A
+  /// control-side step would have covered the one path that is hardest
+  /// to reach and none of the ones a phone in a pocket actually uses.
+  ///
+  /// The cost is a seek just after the sound starts rather than just
+  /// before, which is the same shape the silence-trim jump already has.
+  void _rewindForBreak() {
+    final since = _pausedAt ?? _restedSince;
+    _pausedAt = null;
+    _restedSince = null;
+    if (!isSpokenWord || since == null) return;
+    final back = smartRewind.rewindFor(_clock().difference(since));
+    if (back <= Duration.zero) return;
+    final target = displayPosition - back;
+    unawaited(seek(target < Duration.zero ? Duration.zero : target));
+  }
+
+  /// The same for a resume that is a fresh start rather than a play:
+  /// [positionMs] is the stored checkpoint and [since] is when it was
+  /// written, which is when this listener stopped.
+  ///
+  /// Never past the head of the item, and never applied to an explicit
+  /// position - a chapter tap or a shared timestamp is a request for a
+  /// place, not a resume, and moving it would put the listener before
+  /// the thing they asked for. That guard is the caller's: this only
+  /// runs on the branch that read a checkpoint.
+  int _rewound(int positionMs, {DateTime? since}) {
+    if (!isSpokenWord || positionMs <= 0 || since == null) return positionMs;
+    final back = smartRewind.rewindFor(_clock().difference(since));
+    final rewound = positionMs - back.inMilliseconds;
+    return rewound > 0 ? rewound : 0;
+  }
+
   /// Seeks to a display-timeline position: the book timeline for books
   /// (crossing into another part re-resolves play-info), the media
   /// timeline otherwise.
@@ -548,6 +639,110 @@ class PlaybackSession {
     if (on && _skipSpans.isEmpty) {
       unawaited(_loadSkipMap());
     }
+  }
+
+  /// Turns spoken-word loudness normalization on or off for this show or
+  /// book, and reopens the stream where it stands so the change is
+  /// audible now rather than next time.
+  ///
+  /// The reopen is the part that makes the control honest: the boost is
+  /// applied when the server mints the stream, so persisting alone would
+  /// be a toggle that does nothing until the item is loaded again. A
+  /// downloaded original carries no boost at all and cannot be given
+  /// one, which is why the offline branch is left alone: the setting is
+  /// stored for the next online play and the local file keeps playing.
+  /// Answers whether the change took: false when there was nothing to
+  /// store it on, which is a show whose settings this session could not
+  /// fetch. The chip puts itself back for that, rather than reporting a
+  /// state nothing holds and a reload that changed nothing.
+  Future<bool> setVoiceBoost(bool on) async {
+    voiceBoost.value = on;
+    if (!await _persistVoiceBoost(on)) {
+      voiceBoost.value = !on;
+      return false;
+    }
+    if (_disposed || _localParts != null) return true;
+    try {
+      await _reopenForEffects();
+    } on Object {
+      // Best effort, and broader than an API failure on purpose: the
+      // reopen crosses the engine too, and a platform that refuses the
+      // media must not take playback down with it. The stored setting
+      // stands and the next load applies it.
+    }
+    return true;
+  }
+
+  Future<bool> _persistVoiceBoost(bool on) async {
+    try {
+      final it = item;
+      if (item.mediaType == MediaType.podcast && it is EpisodeSummary) {
+        final current = _showSettings;
+        if (current == null) return false;
+        final updated = SubscriptionSettings(
+          retentionKeep: current.retentionKeep,
+          autoDownload: current.autoDownload,
+          folder: current.folder,
+          private: current.private,
+          speed: current.speed,
+          trimSilence: current.trimSilence,
+          voiceBoost: on,
+          skipIntroSeconds: current.skipIntroSeconds,
+          skipOutroSeconds: current.skipOutroSeconds,
+        );
+        _showSettings = updated;
+        await repository.putSubscriptionSettings(it.showPid, updated);
+      } else if (_isBook) {
+        final current = _bookSettings ?? const BookSettings();
+        final updated = BookSettings(
+          speed: current.speed,
+          voiceBoost: on,
+          trimSilence: current.trimSilence,
+        );
+        _bookSettings = updated;
+        await repository.putBookSettings(item.pid, updated);
+      }
+      return true;
+    } on WaxDeckApiException {
+      // Best effort, like the speed memory beside it. Reported rather
+      // than swallowed, because unlike a rate this one changes nothing
+      // audible on its own: the server applies it when it mints the
+      // stream, so a write that did not land is a control with no
+      // effect at all.
+      return false;
+    }
+  }
+
+  /// Reopens the loaded media where it stands, for a change only a
+  /// freshly minted stream can carry.
+  Future<void> _reopenForEffects() async {
+    var at = displayPosition.inMilliseconds;
+    final playing = engine.playing;
+    if (_isBook) {
+      await _loadPartFor(at, autoplay: playing);
+      return;
+    }
+    final info = await repository.getPlayInfo(item.pid);
+    if (_disposed) return;
+    _loadedDurationMs = info.durationMs;
+    // The same guard the first load carries: web answers "no supported
+    // source" for a source it is asked to begin at or past the end, and
+    // an episode toggled at its own end is exactly where this lands.
+    if (info.durationMs > 0 && at >= info.durationMs) at = 0;
+    await engine.load(
+      info.url,
+      mimeType: info.mimeType,
+      initialPosition: at > 0 ? Duration(milliseconds: at) : null,
+      clipStart: info.spanStartMs == null
+          ? null
+          : Duration(milliseconds: info.spanStartMs!),
+      clipEnd: info.spanEndMs == null
+          ? null
+          : Duration(milliseconds: info.spanEndMs!),
+    );
+    if (_disposed) return;
+    _lastPosition = engine.position;
+    if (playing) await engine.play();
   }
 
   /// Fetches the skip map for the loaded file. Pending maps get exactly
@@ -659,6 +854,7 @@ class PlaybackSession {
     await _reportSession(finished: finished);
     await _flushRetry();
     trimEnabled.dispose();
+    voiceBoost.dispose();
     hoursSavedMs.dispose();
     if (identical(_engineOwners[engine], this)) {
       _engineOwners[engine] = null;
@@ -721,6 +917,7 @@ class PlaybackSession {
   void _onPlayingChanged(bool playing) {
     if (_disposed) return;
     if (playing) {
+      _rewindForBreak();
       _ensureSession();
       _checkpointTimer?.cancel();
       _checkpointTimer = Timer.periodic(
@@ -728,6 +925,12 @@ class PlaybackSession {
         (_) => _checkpoint(),
       );
     } else {
+      // Stamped from the engine's own transition rather than from the
+      // control that caused it: a pause arrives from the lock screen,
+      // a headset button, a routed Connect command, and an interruption
+      // the platform made on its own, and all of them are a listener
+      // who stopped listening.
+      _pausedAt ??= _clock();
       _checkpointTimer?.cancel();
       _checkpointTimer = null;
       unawaited(_checkpoint());

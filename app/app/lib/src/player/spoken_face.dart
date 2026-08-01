@@ -1,0 +1,988 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
+
+import '../podcasts/podcasts_controller.dart';
+import '../podcasts/show_notes.dart';
+import '../providers.dart';
+import '../settings/client_prefs.dart';
+import '../shell/routes.dart';
+import '../shell/semantics_ids.dart';
+import 'bookmarks.dart';
+import 'playback_session.dart';
+import 'speed_sheet.dart';
+
+/// Rebuilds only when the live position crosses into a new [T].
+///
+/// The player's position ticks several times a second, and the lists
+/// under it change on a chapter or a cue boundary. A plain
+/// `ValueListenableBuilder` would rebuild them per tick for a highlight
+/// that moves once every few minutes.
+class WhenChanged<T> extends StatefulWidget {
+  const WhenChanged({
+    required this.listenable,
+    required this.select,
+    required this.builder,
+    super.key,
+  });
+
+  final ValueListenable<Duration> listenable;
+  final T Function(Duration at) select;
+  final Widget Function(BuildContext context, T value) builder;
+
+  @override
+  State<WhenChanged<T>> createState() => _WhenChangedState<T>();
+}
+
+class _WhenChangedState<T> extends State<WhenChanged<T>> {
+  late T _value = widget.select(widget.listenable.value);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.listenable.addListener(_tick);
+  }
+
+  @override
+  void didUpdateWidget(covariant WhenChanged<T> old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.listenable, widget.listenable)) {
+      old.listenable.removeListener(_tick);
+      widget.listenable.addListener(_tick);
+    }
+    // The selector closes over what the caller drew from (a chapter
+    // list, a set of cues), so a rebuild with a new one re-selects
+    // rather than holding a value the old list produced.
+    _value = widget.select(widget.listenable.value);
+  }
+
+  @override
+  void dispose() {
+    widget.listenable.removeListener(_tick);
+    super.dispose();
+  }
+
+  void _tick() {
+    final next = widget.select(widget.listenable.value);
+    if (next == _value) return;
+    setState(() => _value = next);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _value);
+}
+
+/// Which chapter [position] falls in, or null when the book has none.
+///
+/// The latest start at or before the position, taken by comparison
+/// rather than by walking to the end of the list. The contract says
+/// chapters arrive ordered by `startMs` and they always have; these
+/// marks come out of file metadata through a third-party reader, and a
+/// helper that reads the same either way costs nothing to write.
+///
+/// A position before the first chapter answers the first one: the book
+/// is in its opening chapter as far as anything that names one is
+/// concerned, which is what the title block and the chapter list want.
+/// The seek cluster is what holds that position inside the span it
+/// draws.
+ChapterMark? chapterAt(List<ChapterMark> chapters, Duration position) {
+  final positionMs = position.inMilliseconds;
+  ChapterMark? current;
+  for (final chapter in chapters) {
+    if (chapter.startMs > positionMs) continue;
+    if (current == null || chapter.startMs > current.startMs) current = chapter;
+  }
+  return current ?? (chapters.isEmpty ? null : chapters.first);
+}
+
+/// A chapter's own name, or its number when the source named none.
+String chapterTitle(ChapterMark chapter) =>
+    chapter.title ?? 'Chapter ${chapter.index + 1}';
+
+/// Where a chapter ends on the timeline it lives on.
+///
+/// The mark's own end when it carries one, the *nearest* later start
+/// when it does not, and the item's end for the last one. Nearest by
+/// comparison rather than first-encountered, for the reason [chapterAt]
+/// compares: an end taken from the first later mark in an unordered
+/// list is a chapter bar drawn twice its width and a sleep timer that
+/// stops a chapter late.
+int chapterEndMs(List<ChapterMark> chapters, ChapterMark chapter, int totalMs) {
+  if (chapter.endMs != null) return chapter.endMs!;
+  int? nearest;
+  for (final other in chapters) {
+    if (other.startMs <= chapter.startMs) continue;
+    if (nearest == null || other.startMs < nearest) nearest = other.startMs;
+  }
+  return nearest ?? totalMs;
+}
+
+/// The show an episode is from, above its title and tappable.
+class ShowOverline extends ConsumerWidget {
+  const ShowOverline({required this.episode, super.key});
+
+  final EpisodeSummary episode;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = WaxColors.of(context);
+    // The summary's own artist line is the show's name and arrives with
+    // the item; the detail is watched only so a show renamed elsewhere
+    // corrects itself without a reload.
+    final name =
+        ref.watch(podcastDetailProvider(episode.showPid)).value?.show.title ??
+        episode.artist;
+    if (name == null) return const SizedBox.shrink();
+    return WaxTappable(
+      semanticsId: SemanticsIds.playerShow,
+      label: 'Go to $name',
+      borderRadius: WaxRadius.chip,
+      onPressed: () => context.push(WaxRoute.show(episode.showPid)),
+      child: InkWell(
+        borderRadius: WaxRadius.chip,
+        onTap: () => context.push(WaxRoute.show(episode.showPid)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: WaxSpace.s8,
+            vertical: WaxSpace.s4,
+          ),
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: WaxType.overline.copyWith(color: colors.accent),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The chapter a book stands in, under its title.
+class BookSubtitle extends StatelessWidget {
+  const BookSubtitle({
+    required this.chapters,
+    required this.position,
+    super.key,
+  });
+
+  final List<ChapterMark> chapters;
+  final ValueListenable<Duration> position;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return WhenChanged<ChapterMark?>(
+      listenable: position,
+      select: (at) => chapterAt(chapters, at),
+      builder: (context, chapter) {
+        if (chapter == null) return const SizedBox.shrink();
+        return Text(
+          chapterTitle(chapter),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: WaxType.body.copyWith(color: colors.textSecondary),
+        );
+      },
+    );
+  }
+}
+
+/// A book's seek cluster: the chapter by default, the whole book on
+/// request.
+///
+/// The chapter is the unit a listener thinks in, and a nine-hour bar
+/// moves a pixel a minute; the toggle is there because "how far through
+/// the book am I" is a real question the chapter view cannot answer, and
+/// the caption answers it either way.
+class BookSeek extends StatefulWidget {
+  const BookSeek({
+    required this.session,
+    required this.position,
+    required this.chapters,
+    super.key,
+  });
+
+  final PlaybackSession session;
+  final ValueListenable<Duration> position;
+  final List<ChapterMark> chapters;
+
+  @override
+  State<BookSeek> createState() => _BookSeekState();
+}
+
+class _BookSeekState extends State<BookSeek> {
+  static const _chapterView = 'chapter';
+  static const _bookView = 'book';
+
+  var _view = _chapterView;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.session.mediaDuration;
+    return ValueListenableBuilder<Duration>(
+      valueListenable: widget.position,
+      builder: (context, at, _) {
+        final chapter = _view == _chapterView
+            ? chapterAt(widget.chapters, at)
+            : null;
+        final start = chapter == null
+            ? Duration.zero
+            : Duration(milliseconds: chapter.startMs);
+        final span = chapter == null
+            ? total
+            : Duration(
+                milliseconds:
+                    chapterEndMs(
+                      widget.chapters,
+                      chapter,
+                      total.inMilliseconds,
+                    ) -
+                    chapter.startMs,
+              );
+        return Column(
+          children: <Widget>[
+            if (widget.chapters.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+                child: WaxSegmented(
+                  label: 'Seek bar spans',
+                  selected: _view,
+                  segments: <WaxSegment>[
+                    WaxSegment(
+                      name: _chapterView,
+                      label: 'Chapter',
+                      semanticsId: SemanticsIds.playerTimeline(_chapterView),
+                    ),
+                    WaxSegment(
+                      name: _bookView,
+                      label: 'Book',
+                      semanticsId: SemanticsIds.playerTimeline(_bookView),
+                    ),
+                  ],
+                  onSelect: (view) => setState(() => _view = view),
+                ),
+              ),
+            SeekCluster(
+              now: NowPlayingData(
+                title: widget.session.item.title,
+                // Chapter-relative, so both timecodes read as the
+                // chapter's own rather than as book positions the bar
+                // is not drawing. Held inside the chapter, because a
+                // book whose first chapter starts after zero - an
+                // intro, a credits region - stands before its own
+                // opening chapter for as long as that lasts, and the
+                // bare subtraction is negative there. `formatTimecode`
+                // does not draw a negative as one: minus five seconds
+                // reads "0:55".
+                position: _within(at - start, span),
+                duration: span,
+                playing: true,
+              ),
+              // Always the whole book, whichever bar is drawn: it is the
+              // answer the chapter view cannot give, and the reason the
+              // toggle is not needed most of the time.
+              remainingLabel: _bookProgress(total, at),
+              onSeek: (to) => unawaited(widget.session.seek(start + to)),
+              semanticsId: SemanticsIds.playerSeek,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// A position held inside the span the bar is drawing.
+  static Duration _within(Duration at, Duration span) {
+    if (at < Duration.zero) return Duration.zero;
+    return at > span ? span : at;
+  }
+
+  /// "42 percent, 6 hr 12 min left" (5.3). Percent and a span, because
+  /// each answers a question the other does not: how far in, and how
+  /// much of the evening this is.
+  String? _bookProgress(Duration total, Duration at) {
+    final totalMs = total.inMilliseconds;
+    if (totalMs <= 0) return null;
+    final percent = ((at.inMilliseconds / totalMs) * 100).clamp(0, 100).round();
+    final left = total - at;
+    if (left <= Duration.zero) return '$percent percent';
+    return '$percent percent, ${formatSpan(left)} left';
+  }
+}
+
+/// The spoken-word verbs: rate, the two effects, bookmarks on a book.
+///
+/// A list rather than a row, because the player composes one wrapping
+/// row out of these and the sleep timer: four labelled chips do not fit
+/// a phone in one line, and the row they belong to has to be able to
+/// take a second one.
+///
+/// The sleep timer is not here - it is on every face and the player owns
+/// it, because falling asleep to a record is what the control is for.
+List<Widget> spokenActionChips(PlaybackSession session) => <Widget>[
+  SpeedChip(session: session),
+  TrimChip(session: session),
+  VoiceBoostChip(session: session),
+  if (session.item.mediaType == MediaType.audiobook)
+    BookmarkButton(session: session),
+];
+
+/// The rate, as the door to the speed sheet.
+class SpeedChip extends StatelessWidget {
+  const SpeedChip({required this.session, super.key});
+
+  final PlaybackSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<double>(
+      stream: session.engine.speedStream,
+      initialData: session.engine.speed,
+      builder: (context, snapshot) {
+        final speed = snapshot.data ?? 1.0;
+        return WaxPill(
+          semanticsId: SemanticsIds.playerSpeed,
+          label: 'Playback speed ${formatPlayerSpeed(speed)}',
+          text: formatPlayerSpeed(speed),
+          mono: true,
+          onPressed: () => unawaited(showSpeedSheet(context, session)),
+        );
+      },
+    );
+  }
+}
+
+/// Says what an effect does, the first time somebody presses it.
+///
+/// Once per device, and only on the way on: an effect that is being
+/// turned off has already explained itself, and a sentence that
+/// appears every time is one nobody reads. The flag is written before
+/// the message so a double press cannot say it twice.
+void explainOnce(
+  BuildContext context,
+  WidgetRef ref,
+  NotifierProvider<BoolSetting, bool> seen,
+  String message,
+) {
+  if (ref.read(seen)) return;
+  ref.read(seen.notifier).set(true);
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
+}
+
+/// Silence-trimming toggle with the time-saved badge.
+///
+/// The label says "silence trimming" and not "time saved" on purpose:
+/// the client counts trim jumps only, and the seek-aware accounting that
+/// would make the larger claim true is P20's.
+class TrimChip extends ConsumerWidget {
+  const TrimChip({required this.session, super.key});
+
+  final PlaybackSession session;
+
+  static String savedLabel(int savedMs) {
+    final d = Duration(milliseconds: savedMs);
+    final m = d.inMinutes;
+    final s = d.inSeconds.remainder(60);
+    if (m > 0) return 'saved ${m}m ${s}s';
+    return 'saved ${s}s';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: session.trimEnabled,
+      builder: (context, enabled, _) {
+        return ValueListenableBuilder<int>(
+          valueListenable: session.hoursSavedMs,
+          builder: (context, savedMs, _) {
+            final label = savedMs > 0
+                ? 'Trim silence (${savedLabel(savedMs)})'
+                : 'Trim silence';
+            // A chip with its readout drawn rather than an icon with the
+            // readout only spoken: what the session has saved is the
+            // reason to leave the toggle on, and a glyph says none of it.
+            return WaxPill(
+              semanticsId: SemanticsIds.playerTrim,
+              label: label,
+              text: label,
+              selected: enabled,
+              onPressed: () {
+                if (!enabled) {
+                  explainOnce(
+                    context,
+                    ref,
+                    trimSilenceExplainedProvider,
+                    'Silence trimming skips the mapped quiet parts of an '
+                    'episode. Positions stay honest; the chip counts what '
+                    'it skipped.',
+                  );
+                }
+                session.setTrimEnabled(!enabled);
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Spoken-word loudness normalization, per show or per book.
+///
+/// The server applies it when it mints the stream, so pressing this
+/// reopens what is playing. That is why it is a chip that can be busy: a
+/// round trip and a reload stand between the press and the sound
+/// changing, and a control that looked instant would read as broken on a
+/// slow link.
+class VoiceBoostChip extends ConsumerStatefulWidget {
+  const VoiceBoostChip({required this.session, super.key});
+
+  final PlaybackSession session;
+
+  @override
+  ConsumerState<VoiceBoostChip> createState() => _VoiceBoostChipState();
+}
+
+class _VoiceBoostChipState extends ConsumerState<VoiceBoostChip> {
+  var _busy = false;
+
+  Future<void> _toggle(bool to) async {
+    if (_busy) return;
+    if (to) {
+      explainOnce(
+        context,
+        ref,
+        voiceBoostExplainedProvider,
+        'Voice boost evens out a quiet or uneven recording. The server '
+        'applies it, so what is playing reopens.',
+      );
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      // The chip puts itself back when there was nothing to store the
+      // choice on, so the refusal is visible; saying why is this
+      // surface's half of it.
+      if (!await widget.session.setVoiceBoost(to)) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text(
+                'The settings for this show could not be reached, so '
+                'voice boost was not changed.',
+              ),
+            ),
+          );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: widget.session.voiceBoost,
+      builder: (context, enabled, _) => WaxPill(
+        semanticsId: SemanticsIds.playerVoiceBoost,
+        label: 'Voice boost',
+        text: 'Voice boost',
+        selected: enabled,
+        onPressed: _busy ? null : () => unawaited(_toggle(!enabled)),
+      ),
+    );
+  }
+}
+
+/// The bottom region of a spoken-word player: what the episode or book
+/// says about itself, under the transport.
+///
+/// Bounded rather than free: the region shares a window with the hero
+/// and the clusters, so it takes a share of the height and scrolls
+/// inside it. On a window with nothing to spare it draws nothing at all,
+/// the same rule the hero follows.
+class SpokenBottomRegion extends ConsumerStatefulWidget {
+  const SpokenBottomRegion({
+    required this.session,
+    required this.position,
+    super.key,
+  });
+
+  final PlaybackSession session;
+  final ValueListenable<Duration> position;
+
+  @override
+  ConsumerState<SpokenBottomRegion> createState() => _SpokenBottomRegionState();
+}
+
+class _SpokenBottomRegionState extends ConsumerState<SpokenBottomRegion> {
+  String? _region;
+
+  ItemSummary get _item => widget.session.item;
+  bool get _isBook => _item.mediaType == MediaType.audiobook;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final height = MediaQuery.sizeOf(context).height;
+    // A fifth of the window, capped: three or four rows, and small
+    // enough that the clusters above keep their room. The region is
+    // what the item says about itself and the transport is what the
+    // screen is for, so this is the half that gives - a taller panel
+    // scrolls the play button off a phone, which is how it was first
+    // built and what the sleep-timer tests caught.
+    final extent = math.min(200.0, height * 0.22);
+    if (extent < 100) return const SizedBox.shrink();
+
+    final regions = _regions();
+    if (regions.isEmpty) return const SizedBox.shrink();
+    final selected = regions.any((r) => r.name == _region)
+        ? _region!
+        : regions.first.name;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface1.withValues(alpha: 0.92),
+        borderRadius: WaxRadius.sheetTop,
+        border: Border(top: BorderSide(color: colors.hairline)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (regions.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: WaxSpace.s8),
+              child: FilterChipRow(
+                padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+                chips: <WaxFilterChip>[
+                  for (final region in regions)
+                    WaxFilterChip(
+                      name: region.name,
+                      label: region.label,
+                      semanticsId: SemanticsIds.playerRegion(region.name),
+                    ),
+                ],
+                selected: selected,
+                onSelect: (name) => setState(() => _region = name),
+              ),
+            ),
+          SizedBox(
+            height: extent,
+            child: regions.firstWhere((r) => r.name == selected).build(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<_Region> _regions() {
+    if (_isBook) {
+      final book = widget.session.book;
+      if (book == null || book.chapters.isEmpty) return const <_Region>[];
+      return <_Region>[
+        _Region(
+          'chapters',
+          'Chapters',
+          (context) => _ChapterList(
+            session: widget.session,
+            position: widget.position,
+            chapters: book.chapters,
+            parts: book.parts,
+            totalMs: book.durationMs,
+          ),
+        ),
+      ];
+    }
+    final episode = ref.watch(episodeDetailProvider(_item.pid)).value;
+    if (episode == null) return const <_Region>[];
+    return <_Region>[
+      if (episode.chapters.isNotEmpty)
+        _Region(
+          'chapters',
+          'Chapters',
+          (context) => _ChapterList(
+            session: widget.session,
+            position: widget.position,
+            chapters: episode.chapters,
+            parts: const <BookPart>[],
+            totalMs: episode.durationMs,
+          ),
+        ),
+      if (episode.descriptionHtml?.isNotEmpty ?? false)
+        _Region(
+          'notes',
+          'Notes',
+          (context) => SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              WaxSpace.s16,
+              WaxSpace.s8,
+              WaxSpace.s16,
+              WaxSpace.s16,
+            ),
+            child: ShowNotesView(
+              html: episode.descriptionHtml!,
+              onOpenLink: ref.read(urlOpenerProvider).open,
+            ),
+          ),
+        ),
+      if (episode.hasTranscript)
+        _Region(
+          'transcript',
+          'Transcript',
+          (context) => _TranscriptRegion(
+            session: widget.session,
+            position: widget.position,
+          ),
+        ),
+    ];
+  }
+}
+
+class _Region {
+  const _Region(this.name, this.label, this.build);
+
+  final String name;
+  final String label;
+  final Widget Function(BuildContext context) build;
+}
+
+/// Chapters on whatever timeline they belong to, with the one playing
+/// marked and part boundaries drawn where a book has several files.
+class _ChapterList extends StatelessWidget {
+  const _ChapterList({
+    required this.session,
+    required this.position,
+    required this.chapters,
+    required this.parts,
+    required this.totalMs,
+  });
+
+  final PlaybackSession session;
+  final ValueListenable<Duration> position;
+  final List<ChapterMark> chapters;
+  final List<BookPart> parts;
+  final int totalMs;
+
+  /// Which parts each chapter opens, by chapter index.
+  ///
+  /// Chapters and file boundaries rarely line up to the millisecond -
+  /// a book's chapters are as often derived as authored - so the
+  /// chapter that opens a part is the first one at or after its start
+  /// rather than one landing exactly on it. Part one opens the book and
+  /// needs no line, and a single-file book has no boundaries at all.
+  ///
+  /// Built once per draw rather than asked per row: the row builder runs
+  /// on every scroll, and a search over every part crossed with a search
+  /// over every chapter is thousands of comparisons per row on a book
+  /// with three hundred of them. A list per chapter rather than one
+  /// part, because a part that contains no chapter start at all shares
+  /// its opener with the part before it, and the header it would
+  /// otherwise never get is the one that says a file boundary passed.
+  Map<int, List<int>> _partHeaders() {
+    final headers = <int, List<int>>{};
+    if (parts.length < 2 || chapters.isEmpty) return headers;
+    for (var i = 1; i < parts.length; i++) {
+      final part = parts[i];
+      var opener = -1;
+      for (var c = 0; c < chapters.length; c++) {
+        final start = chapters[c].startMs;
+        if (start < part.startMs) continue;
+        if (opener < 0 || start < chapters[opener].startMs) opener = c;
+      }
+      if (opener < 0) continue;
+      (headers[opener] ??= <int>[]).add(part.index);
+    }
+    return headers;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final headers = _partHeaders();
+    return Semantics(
+      identifier: SemanticsIds.playerChapters,
+      container: true,
+      explicitChildNodes: true,
+      label: 'Chapters',
+      // On chapter changes, not on position ticks: the highlight moves
+      // once every few minutes and the position moves several times a
+      // second, and rebuilding a list for the second is the most
+      // repeated frame work a book player could do.
+      child: WhenChanged<ChapterMark?>(
+        listenable: position,
+        select: (at) => chapterAt(chapters, at),
+        builder: (context, current) {
+          return ListView.builder(
+            padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+            itemCount: chapters.length,
+            itemBuilder: (context, index) {
+              final chapter = chapters[index];
+              final playing = current?.index == chapter.index;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  for (final part in headers[index] ?? const <int>[])
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        WaxSpace.s16,
+                        WaxSpace.s8,
+                        WaxSpace.s16,
+                        WaxSpace.s4,
+                      ),
+                      child: Text(
+                        'Part ${part + 1}',
+                        style: WaxType.overline.copyWith(
+                          color: colors.textTertiary,
+                        ),
+                      ),
+                    ),
+                  WaxTappable(
+                    semanticsId: SemanticsIds.playerChapter(chapter.index),
+                    label: playing
+                        ? '${chapterTitle(chapter)}, playing'
+                        : chapterTitle(chapter),
+                    selected: playing,
+                    onPressed: () => unawaited(
+                      session.seek(Duration(milliseconds: chapter.startMs)),
+                    ),
+                    child: InkWell(
+                      onTap: () => unawaited(
+                        session.seek(Duration(milliseconds: chapter.startMs)),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: WaxSpace.s16,
+                          vertical: WaxSpace.s8,
+                        ),
+                        child: Row(
+                          children: <Widget>[
+                            Text(
+                              formatTimecode(
+                                Duration(milliseconds: chapter.startMs),
+                              ),
+                              style: WaxType.monoTime.copyWith(
+                                color: colors.textTertiary,
+                              ),
+                            ),
+                            const SizedBox(width: WaxSpace.s12),
+                            Expanded(
+                              child: Text(
+                                chapterTitle(chapter),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: WaxType.body.copyWith(
+                                  color: playing
+                                      ? colors.accent
+                                      : colors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// The transcript, following playback until somebody scrolls.
+class _TranscriptRegion extends ConsumerStatefulWidget {
+  const _TranscriptRegion({required this.session, required this.position});
+
+  final PlaybackSession session;
+  final ValueListenable<Duration> position;
+
+  @override
+  ConsumerState<_TranscriptRegion> createState() => _TranscriptRegionState();
+}
+
+class _TranscriptRegionState extends ConsumerState<_TranscriptRegion> {
+  static const _rowExtent = 56.0;
+
+  final _scroll = ScrollController();
+  late final Future<Transcript> _loading;
+  var _following = true;
+
+  /// The cues, once they arrive, so the position listener can say which
+  /// one is current without waiting for a build.
+  List<TranscriptCue> _cues = const <TranscriptCue>[];
+
+  /// Which cue is being spoken, or -1 before the first one.
+  var _current = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _loading = ref
+        .read(repositoryProvider)
+        .getEpisodeTranscript(widget.session.item.pid)
+        .then((transcript) {
+          if (!mounted) return transcript;
+          _cues = transcript.cues;
+          // Placed once here as well as on every tick: a transcript
+          // opened while playback is paused gets no ticks at all, and
+          // without this it would draw from the top with nothing
+          // highlighted until somebody pressed play.
+          _onPosition();
+          return transcript;
+        });
+    widget.position.addListener(_onPosition);
+  }
+
+  @override
+  void dispose() {
+    widget.position.removeListener(_onPosition);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// On cue boundaries, not on ticks: the position moves several times
+  /// a second and the highlight moves every few seconds at most, and
+  /// rebuilding the list for the first is work nobody sees.
+  void _onPosition() {
+    if (!mounted) return;
+    final at = widget.position.value.inMilliseconds;
+    var next = -1;
+    for (var i = 0; i < _cues.length; i++) {
+      if (_cues[i].startMs <= at) next = i;
+    }
+    if (next == _current) return;
+    setState(() => _current = next);
+    if (_following && next >= 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _following) _followCue(next);
+      });
+    }
+  }
+
+  /// A manual scroll turns following off; the pill turns it back on.
+  ///
+  /// Told apart by who moved it: a programmatic jump is this widget's
+  /// own and arrives with no user scroll behind it, so only a drag or a
+  /// wheel gesture counts.
+  bool _onScrollNotification(Notification note) {
+    if (note is UserScrollNotification && _following) {
+      setState(() => _following = false);
+    }
+    return false;
+  }
+
+  void _followCue(int index) {
+    if (!_scroll.hasClients) return;
+    final target = (index * _rowExtent - _rowExtent).clamp(
+      0.0,
+      _scroll.position.maxScrollExtent,
+    );
+    unawaited(
+      _scroll.animateTo(
+        target,
+        duration: WaxMotion.of(context).standard,
+        curve: WaxMotion.emphasized,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return FutureBuilder<Transcript>(
+      future: _loading,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          final error = snapshot.error;
+          return Padding(
+            padding: const EdgeInsets.all(WaxSpace.s16),
+            child: Text(
+              error is WaxDeckApiException
+                  ? error.message
+                  : 'Could not load the transcript.',
+              style: WaxType.caption.copyWith(color: colors.textTertiary),
+            ),
+          );
+        }
+        final transcript = snapshot.data;
+        if (transcript == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final cues = transcript.cues;
+        final current = _current;
+        return Stack(
+          children: <Widget>[
+            NotificationListener<Notification>(
+              onNotification: _onScrollNotification,
+              child: ListView.builder(
+                controller: _scroll,
+                itemExtent: _rowExtent,
+                padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+                itemCount: cues.length,
+                itemBuilder: (context, index) {
+                  final cue = cues[index];
+                  final spoken = cue.speaker == null
+                      ? cue.text
+                      : '${cue.speaker}: ${cue.text}';
+                  return WaxTappable(
+                    semanticsId: SemanticsIds.transcriptCue(index),
+                    label: spoken,
+                    selected: index == current,
+                    onPressed: () => unawaited(
+                      widget.session.seek(Duration(milliseconds: cue.startMs)),
+                    ),
+                    child: InkWell(
+                      onTap: () => unawaited(
+                        widget.session.seek(
+                          Duration(milliseconds: cue.startMs),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: WaxSpace.s16,
+                          vertical: WaxSpace.s8,
+                        ),
+                        child: Text(
+                          spoken,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: WaxType.body.copyWith(
+                            color: index == current
+                                ? colors.textPrimary
+                                : colors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (!_following)
+              Positioned(
+                right: WaxSpace.s12,
+                bottom: WaxSpace.s12,
+                child: WaxButton(
+                  label: 'Follow along',
+                  kind: WaxButtonKind.tonal,
+                  onPressed: () => setState(() => _following = true),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}

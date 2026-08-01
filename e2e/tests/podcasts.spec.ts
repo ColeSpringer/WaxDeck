@@ -167,6 +167,29 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
     timeout: 30_000,
   });
 
+  // The speed sheet reaches any rate in one tap and remembers it for the
+  // show. 1.5x from 1x is two presets away, which the cycling button it
+  // replaced could only walk to.
+  await clickThrough(
+    page.locator(sem(SemanticsIds.playerSpeed)),
+    page.locator(sem(SemanticsIds.playerSpeedSheet)),
+  );
+  await page.locator(sem(SemanticsIds.playerSpeedPreset(150))).click({ force: true });
+  await expect(page.locator(sem(SemanticsIds.playerSpeed))).toHaveAccessibleName(/1\.5x/, {
+    timeout: 15_000,
+  });
+  // Per show, on the server, not just for this session.
+  await expect
+    .poll(
+      async () => {
+        const resp = await request.get(`/api/v1/podcasts/${showPid}`, authed(token));
+        if (!resp.ok()) return 0;
+        return ((await resp.json()).settings?.speed ?? 0) as number;
+      },
+      { timeout: 30_000, message: 'the chosen speed should be remembered for the show' },
+    )
+    .toBeCloseTo(1.5, 2);
+
   // Playback is deliberately left running through the rest of this
   // spec. Stopping it was tried and is not worth it: the pause control
   // sits under a sibling semantics node that intercepts the click for as
