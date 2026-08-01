@@ -64,6 +64,29 @@ sidecar injection seam) all landed and are not repeated here.
   identity work. The field is optional in the contract, so the gap is a
   missing link rather than a broken read.
 
+## WaxTap
+
+- **Square cover art from the embed pass.** The thumbnail embed takes
+  `videoDetails`' largest thumbnail and embeds the bytes verbatim
+  (`youtube/playerresponse.go` sorts largest-first, `embed.go`'s
+  `thumbnailImage` fetches `Thumbnails[0]`), and for music that image
+  is never square: player-response thumbnails are frame-shaped, the
+  square art composited onto a 16:9 canvas and letterboxed again into
+  the 4:3 variants, so the bars are burned into the pixels. A verified
+  example: an Art Track acquisition delivered a 640x480 JPEG front
+  cover - the square release art centered, black bars above and below,
+  background-color pillars beside. Wanted, either or both: crop the
+  fetched frame to its centered square when uniform-color borders
+  surround one (the standard remedy), or source genuinely square art
+  where a surface offers it (square music thumbnails live in other
+  innertube surfaces, not in `videoDetails`). WaxDeck's side is a
+  pass-through by design - `waxtapsource` only toggles
+  `EmbedThumbnail`, the scan stores the embedded picture as delivered,
+  and the art pipeline resizes without cropping - so the shipped
+  mitigation is enrichment: a matched release's official art replaces
+  the front cover, leaving the bars on unmatched and kept-as-is
+  content only.
+
 ## Recorded upstream non-goals
 
 Deliberate upstream decisions WaxDeck designs around; listed so they

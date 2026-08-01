@@ -162,6 +162,31 @@ func (d *DB) ListUploads(ctx context.Context, userID string, beforeNS int64, bef
 	return out, rows.Err()
 }
 
+// ListUploadsByReviewEntry returns every session linked to one review
+// entry, oldest first. The settle and discard paths walk an entry's own
+// sessions through this rather than a capped newest-first page of the
+// uploader's whole history, which would miss rows past the cap.
+func (d *DB) ListUploadsByReviewEntry(ctx context.Context, entryID string) ([]Upload, error) {
+	if entryID == "" {
+		return nil, nil // '' is the column default, not a real entry
+	}
+	rows, err := d.r.QueryContext(ctx, `SELECT `+uploadCols+` FROM uploads
+		WHERE review_entry_id = ? ORDER BY created_at_ns, id`, entryID)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing entry uploads: %w", err)
+	}
+	defer rows.Close()
+	var out []Upload
+	for rows.Next() {
+		u, err := scanUpload(rows)
+		if err != nil {
+			return nil, fmt.Errorf("db: scanning upload: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 // UploadOwnsItem reports whether one of the user's sessions produced
 // the catalog item, which grants item-scoped editing rights.
 func (d *DB) UploadOwnsItem(ctx context.Context, userID, itemPID string) (bool, error) {

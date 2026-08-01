@@ -516,6 +516,10 @@ func (l *Library) DeleteUpload(ctx context.Context, uc *UserCtx, id string) erro
 	if u.State == uploadImported {
 		return &Error{Kind: KindConflict, Msg: "the upload already entered the library; delete the item there"}
 	}
+	if l.pendingEntryHasLanded(ctx, u.ReviewEntryID) {
+		return &Error{Kind: KindConflict,
+			Msg: "part of this upload's review unit is already in the library; retry the decision, or delete the imported items first"}
+	}
 	if err := os.RemoveAll(filepath.Join(l.stagingDir, u.ID)); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
@@ -528,68 +532,190 @@ func (l *Library) DeleteUpload(ctx context.Context, uc *UserCtx, id string) erro
 }
 
 // importEntryFiles moves an import entry's staged files into the
-// library and fills in the resulting item pids.
+// library and fills in the resulting item pids. A file that fails to
+// enter the library keeps its staged bytes and session, whatever did
+// import is settled and persisted on the entry, and the returned error
+// carries the import's own reason - so the caller leaves the decision
+// unmade and it can be retried once the cause is fixed.
 func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) ([]string, error) {
-	var warnings []string
+	var warnings, failures []string
+	// Staging path -> item pid for every file that entered the library
+	// ("" when the imported item did not resolve). Settling keys on
+	// membership, and a failed decide persists the pids that did land:
+	// staged copies are moved rather than copied, so a retry must skip
+	// them or it would re-import files that are no longer staged.
+	imported := map[string]string{}
+	fail := func(err error) ([]string, error) {
+		// Persist against the freshest row: identification may have
+		// completed mid-decide, and a stale full-row write would revert
+		// its candidates and flag on an entry that stays pending.
+		row := *entry
+		if fresh, ferr := l.db.ReviewEntryByID(ctx, entry.ID); ferr == nil {
+			var fp reviewPayload
+			if json.Unmarshal([]byte(fresh.Payload), &fp) == nil && len(fp.Candidates) > 0 {
+				payload.Candidates = fp.Candidates
+			}
+			row = fresh
+		}
+		row.Payload = marshalJSON(*payload)
+		if uerr := l.db.UpdateReviewEntry(ctx, row); uerr != nil {
+			l.log.Warn("persisting partial import", "entry", entry.ID, "err", uerr)
+		}
+		*entry = row
+		l.settleImportedUploads(ctx, entry, imported)
+		return warnings, err
+	}
 	for i := range payload.Tracks {
 		doc := &payload.Tracks[i]
-		if doc.PID != "" {
-			continue // already in the library
+		if doc.PID != "" || doc.Imported {
+			imported[doc.Path] = doc.PID // already in the library
+			continue
 		}
 		kind, _ := kindForMediaType(entry.MediaType)
 		res, err := l.lib.ImportAcquired(ctx, waxbin.AcquiredFile{Path: doc.Path}, kind, waxbin.AcquiredMeta{
 			SourceType: model.SourceManual, Copy: false, DupPolicy: model.DupAllow,
 		})
 		if err != nil {
-			return warnings, classify(err)
+			return fail(classify(err))
 		}
 		switch {
 		case res.EpisodePID != "":
 			doc.PID = string(res.EpisodePID)
+			imported[doc.Path] = doc.PID
 		case res.Plan != nil:
 			report, err := l.lib.ApplyImport(ctx, res.Plan)
 			if err != nil {
-				return warnings, classify(err)
+				return fail(classify(err))
 			}
 			if report.Imported == 0 {
-				warnings = append(warnings, fmt.Sprintf("%s: the import planner quarantined the file", filepath.Base(doc.Path)))
+				failures = append(failures, fmt.Sprintf("%s: %s", filepath.Base(doc.Path),
+					l.scrubStoragePaths(importFailureReason(res.Plan, report))))
 				continue
 			}
+			doc.Imported = true
+			imported[doc.Path] = ""
 			pid, err := l.resolveImportedItem(ctx, res.Plan, doc)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("%s: imported but not yet resolvable: %v", filepath.Base(doc.Path), err))
 				continue
 			}
 			doc.PID = pid
+			imported[doc.Path] = pid
 		default:
-			warnings = append(warnings, fmt.Sprintf("%s: the import produced nothing", filepath.Base(doc.Path)))
+			failures = append(failures, fmt.Sprintf("%s: the import produced nothing", filepath.Base(doc.Path)))
 		}
 	}
-	// Mark the backing sessions imported and remember which item each
-	// staged file became: that link is what grants the uploader
-	// item-scoped editing rights afterward.
-	if entry.Origin == reviewOriginUpload || entry.Origin == reviewOriginAcquire {
-		itemByPath := make(map[string]string, len(payload.Tracks))
-		for _, doc := range payload.Tracks {
-			if doc.PID != "" {
-				itemByPath[doc.Path] = doc.PID
-			}
+	if len(failures) > 0 {
+		msg := failures[0]
+		if len(failures) > 1 {
+			msg = fmt.Sprintf("%s (and %d more)", msg, len(failures)-1)
 		}
-		if rows, err := l.db.ListUploads(ctx, entry.UploadedBy, 0, "", 200); err == nil {
-			for _, r := range rows {
-				if r.ReviewEntryID == entry.ID && r.State == uploadStaged {
-					r.State = uploadImported
-					r.ItemPID = itemByPath[r.StagingPath]
-					if err := l.db.UpdateUpload(ctx, r); err != nil {
-						l.log.Warn("marking upload imported", "upload", r.ID, "err", err)
-					}
-					_ = os.RemoveAll(filepath.Join(l.stagingDir, r.ID))
-					l.emitUserEvent(ctx, r.UserID, eventUpload, r.ID)
-				}
-			}
-		}
+		return fail(&Error{Kind: KindConflict, Msg: msg})
 	}
+	l.settleImportedUploads(ctx, entry, imported)
 	return warnings, nil
+}
+
+// settleImportedUploads marks the upload sessions whose staged files
+// entered the library and reclaims their staging space; every other
+// session stays staged so its bytes survive for a retry. The recorded
+// item pid is what grants the uploader item-scoped editing rights
+// afterward.
+func (l *Library) settleImportedUploads(ctx context.Context, entry *wdb.ReviewEntry, imported map[string]string) {
+	if entry.Origin != reviewOriginUpload && entry.Origin != reviewOriginAcquire {
+		return
+	}
+	rows, err := l.db.ListUploadsByReviewEntry(ctx, entry.ID)
+	if err != nil {
+		return
+	}
+	for _, r := range rows {
+		if r.State != uploadStaged {
+			continue
+		}
+		pid, ok := imported[r.StagingPath]
+		if !ok {
+			continue
+		}
+		r.State = uploadImported
+		r.ItemPID = pid
+		if err := l.db.UpdateUpload(ctx, r); err != nil {
+			l.log.Warn("marking upload imported", "upload", r.ID, "err", err)
+		}
+		_ = os.RemoveAll(filepath.Join(l.stagingDir, r.ID))
+		l.emitUserEvent(ctx, r.UserID, eventUpload, r.ID)
+	}
+}
+
+// scrubStoragePaths strips server filesystem layout from a message
+// bound for a client, matching the read surface's base-name posture:
+// staging and library-root prefixes reduce to the path's own tail.
+func (l *Library) scrubStoragePaths(s string) string {
+	if l.stagingDir != "" {
+		s = strings.ReplaceAll(s, l.stagingDir+string(filepath.Separator), "")
+	}
+	for _, r := range l.libraryRoots() {
+		p := cleanRootPath(r.Path)
+		if p == "" || p == "." {
+			continue
+		}
+		s = strings.ReplaceAll(s, p+string(filepath.Separator), "")
+		s = strings.ReplaceAll(s, p, "the library")
+	}
+	return s
+}
+
+// pendingEntryHasLanded reports whether an upload's linked review entry
+// is still pending with tracks already in the library. Such an entry's
+// staged bytes must survive (a retried decision needs them), and
+// discarding it would orphan the landed items.
+func (l *Library) pendingEntryHasLanded(ctx context.Context, reviewEntryID string) bool {
+	if reviewEntryID == "" {
+		return false
+	}
+	entry, err := l.db.ReviewEntryByID(ctx, reviewEntryID)
+	if err != nil || entry.Status != reviewPending {
+		return false
+	}
+	var payload reviewPayload
+	if json.Unmarshal([]byte(entry.Payload), &payload) != nil {
+		return false
+	}
+	return l.landedTracks(ctx, &payload) > 0
+}
+
+// landedTracks counts a payload's tracks that entered the library and
+// still exist there: pid-resolving docs, plus imported docs whose pid
+// never resolved (those cannot be re-checked, so they count).
+func (l *Library) landedTracks(ctx context.Context, payload *reviewPayload) int {
+	n := 0
+	for _, doc := range payload.Tracks {
+		if doc.PID == "" {
+			if doc.Imported {
+				n++
+			}
+			continue
+		}
+		if it, err := l.lib.Get(ctx, model.PID(doc.PID)); err == nil && it != nil {
+			n++
+		}
+	}
+	return n
+}
+
+// importFailureReason names why an applied plan imported nothing: the
+// executor's recorded failure when one ran, else the planner's own
+// verdict on the file.
+func importFailureReason(plan *inbox.Plan, report *inbox.Report) string {
+	if len(report.Failures) > 0 {
+		return report.Failures[0].Err
+	}
+	for _, a := range plan.Actions {
+		if a.Outcome != inbox.OutcomeImport && a.Reason != "" {
+			return a.Reason
+		}
+	}
+	return "the import planner produced no importable action"
 }
 
 // CanCurateItem reports whether the caller may run item-scoped
@@ -672,6 +798,17 @@ func (l *Library) DrainExpiredUploads(ctx context.Context) bool {
 	}
 	progress := false
 	for _, u := range rows {
+		if l.pendingEntryHasLanded(ctx, u.ReviewEntryID) {
+			// Keep the bytes: the pending entry needs them for a
+			// retried decision, and discarding it would orphan its
+			// landed items. Push the expiry forward so the row leaves
+			// the expired set instead of clogging every drain round.
+			u.ExpiresAtNS = time.Now().Add(l.uploadRetention).UnixNano()
+			if err := l.db.UpdateUpload(ctx, u); err != nil {
+				l.log.Warn("deferring partially imported upload", "upload", u.ID, "err", err)
+			}
+			continue
+		}
 		if err := os.RemoveAll(filepath.Join(l.stagingDir, u.ID)); err != nil {
 			l.log.Warn("reclaiming expired upload", "upload", u.ID, "err", err)
 			continue

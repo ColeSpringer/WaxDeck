@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -230,6 +231,15 @@ func (l *Library) DecideReviewEntry(ctx context.Context, uc *UserCtx, id, action
 		if e.Kind != reviewKindImport {
 			return ReviewEntryDTO{}, nil, errInvalid("only entries staging new files can discard them")
 		}
+		// A failed decide may have already moved part of the unit into
+		// the library; discarding the rest must not silently orphan
+		// those items there. Refuse while any still exists (deleting
+		// them, or a decide that finishes the unit, unblocks).
+		landed := l.landedTracks(ctx, &payload)
+		if landed > 0 {
+			return ReviewEntryDTO{}, nil, &Error{Kind: KindConflict,
+				Msg: fmt.Sprintf("%d of the files already entered the library; delete the items there first", landed)}
+		}
 		if err := l.discardEntryFiles(ctx, &e, uc); err != nil {
 			return ReviewEntryDTO{}, nil, err
 		}
@@ -269,12 +279,12 @@ func (l *Library) discardEntryFiles(ctx context.Context, e *wdb.ReviewEntry, uc 
 	if e.Origin != reviewOriginUpload && e.Origin != reviewOriginAcquire {
 		return errInvalid("only upload and acquisition entries hold discardable files")
 	}
-	rows, err := l.db.ListUploads(ctx, e.UploadedBy, 0, "", 200)
+	rows, err := l.db.ListUploadsByReviewEntry(ctx, e.ID)
 	if err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
 	for _, u := range rows {
-		if u.ReviewEntryID != e.ID || u.State != uploadStaged {
+		if u.State != uploadStaged {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(l.stagingDir, u.ID)); err != nil {

@@ -65,9 +65,13 @@ const (
 	matchingOff    = "off"
 )
 
-// reviewTrackDoc is one file in a stored review unit.
+// reviewTrackDoc is one file in a stored review unit. Imported records
+// that the file physically entered the library even when its item pid
+// never resolved: a retried decision must not re-import it (the staged
+// copy was moved), and a discard must count it as landed.
 type reviewTrackDoc struct {
 	PID         string            `json:"pid,omitempty"`
+	Imported    bool              `json:"imported,omitempty"`
 	Path        string            `json:"path"`
 	Title       string            `json:"title"`
 	Artist      string            `json:"artist,omitempty"`

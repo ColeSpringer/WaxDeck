@@ -431,6 +431,198 @@ func TestUploadIdentifyReviewImport(t *testing.T) {
 	}
 }
 
+// TestDecideImportFailureKeepsEntryAndBytes pins the failure contract
+// of a decide whose import cannot land (here: an unwritable library
+// root). The decide must answer a conflict naming the real reason, the
+// entry must stay pending, and the staged bytes must survive - so the
+// same decision succeeds once the cause is fixed. The regression it
+// guards: a failed import was reported as "the planner quarantined the
+// file" while the entry was marked decided, the session marked
+// imported, and the staged bytes deleted.
+func TestDecideImportFailureKeepsEntryAndBytes(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions, so the unwritable-library setup cannot fail")
+	}
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+
+	paths, err := fixtures.Generate(t.TempDir(), fixtures.Spec{
+		Name: "stuck-signal", Codec: fixtures.CodecMP3, Duration: 4 * time.Second,
+		Tags: map[string]string{"TITLE": "Stuck Signal", "ARTIST": "Beacon Row", "ALBUM": "Stuck Signal"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := uploadFile(t, h, h.token, paths[0], "music", "")
+	if up.ReviewEntryId == nil {
+		t.Fatalf("upload has no review entry: %+v", up)
+	}
+	drainMatches(t, h)
+
+	if err := os.Chmod(h.library, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(h.library, 0o755) })
+
+	resp := h.postJSON(t, "/api/v1/review/queue/"+*up.ReviewEntryId+"/decide",
+		map[string]any{"action": "as-is"})
+	if resp.StatusCode != 409 {
+		t.Fatalf("decide with unwritable library status = %d, want 409", resp.StatusCode)
+	}
+	apiErr := decode[Error](t, resp)
+	if !strings.Contains(apiErr.Message, "permission denied") {
+		t.Fatalf("conflict message = %q, want the import's own reason", apiErr.Message)
+	}
+
+	entry := getReview(t, h, *up.ReviewEntryId)
+	if entry.Status != "pending" {
+		t.Fatalf("entry status after failed decide = %q, want pending", entry.Status)
+	}
+	mid := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+up.Id, h.token))
+	if mid.State != "staged" {
+		t.Fatalf("upload state after failed decide = %q, want staged", mid.State)
+	}
+
+	if err := os.Chmod(h.library, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resp = h.postJSON(t, "/api/v1/review/queue/"+*up.ReviewEntryId+"/decide",
+		map[string]any{"action": "as-is"})
+	if resp.StatusCode != 200 {
+		t.Fatalf("retried decide status = %d, want 200", resp.StatusCode)
+	}
+	final := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+up.Id, h.token))
+	if final.State != "imported" {
+		t.Fatalf("upload state after retry = %q, want imported", final.State)
+	}
+	h.rescanAndWait(t)
+	found := false
+	for _, it := range h.items(t, "?limit=200").Items {
+		if it.Title == "Stuck Signal" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("retried decide did not land the track in the library")
+	}
+}
+
+// TestDiscardRefusedAfterPartialImport drives a unit where one track
+// imports and its sibling cannot (its rendered destination is already
+// occupied): the decide must fail carrying the planner's own verdict,
+// the imported half must settle while the failed half keeps its staged
+// bytes, and discarding the pending entry must be refused while the
+// imported item still exists - discard would otherwise orphan it.
+func TestDiscardRefusedAfterPartialImport(t *testing.T) {
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+	staging := t.TempDir()
+
+	// Occupy the destination: import a track, then stage a same-tagged
+	// sibling whose path renders identically.
+	paths, err := fixtures.Generate(staging,
+		batchTrackSpec("occupant", "First Half", "Split Decision", "Beacon Row", "1", 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	occ := uploadFile(t, h, h.token, paths[0], "music", "")
+	drainMatches(t, h)
+	resp := h.postJSON(t, "/api/v1/review/queue/"+*occ.ReviewEntryId+"/decide",
+		map[string]any{"action": "as-is"})
+	if resp.StatusCode != 200 {
+		t.Fatalf("occupant as-is status = %d", resp.StatusCode)
+	}
+
+	member, err := fixtures.Generate(staging,
+		batchTrackSpec("collider", "First Half", "Split Decision", "Beacon Row", "1", 5),
+		batchTrackSpec("survivor", "Second Half", "Split Decision", "Beacon Row", "2", 4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch := createBatch(t, h, h.token, "album", "music")
+	collider := uploadBatchMember(t, h, h.token, member[0], "music", batch.Id, "")
+	survivor := uploadBatchMember(t, h, h.token, member[1], "music", batch.Id, "")
+	done := finalizeBatch(t, h, h.token, batch.Id)
+	if len(done.ReviewEntryIds) != 1 {
+		t.Fatalf("batch entries = %d, want 1", len(done.ReviewEntryIds))
+	}
+	entryID := done.ReviewEntryIds[0]
+	drainMatches(t, h)
+
+	resp = h.postJSON(t, "/api/v1/review/queue/"+entryID+"/decide",
+		map[string]any{"action": "as-is"})
+	if resp.StatusCode != 409 {
+		t.Fatalf("partial decide status = %d, want 409", resp.StatusCode)
+	}
+	apiErr := decode[Error](t, resp)
+	if !strings.Contains(apiErr.Message, "destination already exists") {
+		t.Fatalf("conflict message = %q, want the planner's verdict", apiErr.Message)
+	}
+	if e := getReview(t, h, entryID); e.Status != "pending" {
+		t.Fatalf("entry status after partial decide = %q, want pending", e.Status)
+	}
+	if u := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+collider.Id, h.token)); u.State != "staged" {
+		t.Fatalf("collider state = %q, want staged", u.State)
+	}
+	if u := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+survivor.Id, h.token)); u.State != "imported" {
+		t.Fatalf("survivor state = %q, want imported", u.State)
+	}
+
+	resp = h.postJSON(t, "/api/v1/review/queue/"+entryID+"/decide",
+		map[string]any{"action": "discard"})
+	if resp.StatusCode != 409 {
+		t.Fatalf("discard after partial import status = %d, want 409", resp.StatusCode)
+	}
+	apiErr = decode[Error](t, resp)
+	if !strings.Contains(apiErr.Message, "already entered the library") {
+		t.Fatalf("discard refusal message = %q", apiErr.Message)
+	}
+
+	// Deleting the still-staged half must be refused the same way: it
+	// would discard the pending entry and orphan the landed items.
+	req, _ := http.NewRequest("DELETE", h.ts.URL+"/api/v1/uploads/"+collider.Id, nil)
+	req.Header.Set("Authorization", "Bearer "+h.token)
+	dresp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dresp.Body.Close()
+	if dresp.StatusCode != 409 {
+		t.Fatalf("delete of partial unit's staged upload status = %d, want 409", dresp.StatusCode)
+	}
+
+	// The expiry janitor must defer the row, not reclaim it: bytes kept,
+	// expiry re-armed, entry still pending.
+	row, err := h.store.UploadByID(context.Background(), collider.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row.ExpiresAtNS = 1
+	if err := h.store.UpdateUpload(context.Background(), row); err != nil {
+		t.Fatal(err)
+	}
+	h.svc.DrainExpiredUploads(context.Background())
+	row, err = h.store.UploadByID(context.Background(), collider.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.State != "staged" {
+		t.Fatalf("expired collider state = %q, want staged", row.State)
+	}
+	if row.ExpiresAtNS <= time.Now().UnixNano() {
+		t.Fatal("collider expiry was not re-armed")
+	}
+	if e := getReview(t, h, entryID); e.Status != "pending" {
+		t.Fatalf("entry status after expiry sweep = %q, want pending", e.Status)
+	}
+}
+
 // TestUploadPermissionsAndQuota covers the grant and the quota gates.
 func TestUploadPermissionsAndQuota(t *testing.T) {
 	h := newHarness(t)

@@ -511,6 +511,7 @@ const baselineSchema = `
 	CREATE INDEX uploads_user ON uploads (user_id, created_at_ns DESC, id);
 	CREATE INDEX uploads_item ON uploads (item_pid, user_id);
 	CREATE INDEX uploads_batch ON uploads (batch_id) WHERE batch_id != '';
+	CREATE INDEX uploads_entry ON uploads (review_entry_id) WHERE review_entry_id != '';
 
 	-- Upload batches group several sessions into review units by a
 	-- declared grouping intent (one album, separate tracks, or

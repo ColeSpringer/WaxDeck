@@ -181,8 +181,26 @@ COMPOSE := docker compose -f deploy/compose.yaml
 # waxflow streaming sidecar, wired over the internal network. Generates
 # deploy/.env with fresh internal keys on first run; set WAXDECK_LIBRARY
 # in it to point at your music (defaults to an empty deploy/library).
+# The preflight creates the configured library path and proves it is
+# writable before compose runs: docker creates a missing bind source
+# itself, root-owned, and every import then fails inside the container.
+# The value is resolved the way compose resolves it: an exported
+# WAXDECK_LIBRARY wins over deploy/.env, surrounding quotes strip, and
+# a leading ~ expands to $HOME.
 up: deploy/.env deploy/waxflow-config/waxflow.json
-	@mkdir -p deploy/library deploy/podcasts
+	@lib="$${WAXDECK_LIBRARY-}"; \
+	 if [ -z "$$lib" ]; then \
+	   lib=$$(sed -n 's/^WAXDECK_LIBRARY=//p' deploy/.env | tail -n 1 | tr -d '\r' \
+	     | sed -e 's/^"\(.*\)"$$/\1/' -e "s/^'\(.*\)'$$/\1/"); \
+	 fi; \
+	 lib=$${lib:-./library}; \
+	 case "$$lib" in "~") lib="$$HOME" ;; "~/"*) lib="$$HOME/$${lib#\~/}" ;; /*) ;; *) lib="deploy/$${lib#./}" ;; esac; \
+	 mkdir -p "$$lib" || { echo "make up: cannot create WAXDECK_LIBRARY=$$lib" >&2; exit 1; }; \
+	 if ! touch "$$lib/.write-probe" 2>/dev/null; then \
+	   echo "make up: WAXDECK_LIBRARY=$$lib is not writable by $$(id -un); imports in the container would fail. Fix its ownership or point deploy/.env at another path." >&2; \
+	   exit 1; \
+	 fi; \
+	 rm -f "$$lib/.write-probe"
 	WAXDECK_UID=$$(id -u) WAXDECK_GID=$$(id -g) $(COMPOSE) up --build -d
 	@echo "WaxDeck is up on http://localhost:4420  (make logs / make down)"
 

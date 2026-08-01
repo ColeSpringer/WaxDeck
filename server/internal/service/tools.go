@@ -778,7 +778,8 @@ func (l *Library) importToolFile(ctx context.Context, path string, kind model.Ki
 		return "", classify(err)
 	}
 	if report.Imported == 0 {
-		return "", fmt.Errorf("%w: the import planner quarantined the result", errToolPermanent)
+		return "", fmt.Errorf("%w: the import did not land the result: %s", errToolPermanent,
+			l.scrubStoragePaths(importFailureReason(res.Plan, report)))
 	}
 	return l.resolveToolImport(ctx, res.Plan, path)
 }
@@ -799,7 +800,8 @@ func (l *Library) importToolDir(ctx context.Context, dir string, srcs []string) 
 		return nil, classify(err)
 	}
 	if report.Imported == 0 {
-		return nil, fmt.Errorf("%w: the import planner quarantined every piece", errToolPermanent)
+		return nil, fmt.Errorf("%w: the import landed no piece: %s", errToolPermanent,
+			l.scrubStoragePaths(importFailureReason(plan, report)))
 	}
 	pids := make([]model.PID, len(srcs))
 	resolved := 0
