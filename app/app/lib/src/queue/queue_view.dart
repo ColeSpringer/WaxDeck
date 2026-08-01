@@ -8,6 +8,7 @@ import '../artwork/artwork_providers.dart';
 import '../media_view.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/side_panel.dart';
 import 'queue_controller.dart';
 import 'queue_item.dart';
 import 'queue_state.dart';
@@ -24,6 +25,21 @@ String? queueProvenance(QueueSource source) {
     QueueSourceKind.single || QueueSourceKind.unknown => null,
     _ => 'Playing from ${source.label}',
   };
+}
+
+/// Opens the queue wherever this width keeps it.
+///
+/// The panel where there is room for one, the queue's own screen where
+/// there is not. The same queue either way, and one place that decides
+/// so: the deck bar, the player's action row, and the up-next peek all
+/// ask for it, and three copies of the condition is three places to fix
+/// when the answer changes.
+void openQueue(BuildContext context, WidgetRef ref) {
+  if (WaxSizeClass.of(context).hasSidebar) {
+    ref.read(sidePanelProvider.notifier).toggle(WaxPanel.queue);
+    return;
+  }
+  context.push(WaxRoute.queue);
 }
 
 /// The next repeat mode in the cycle the transport walks.

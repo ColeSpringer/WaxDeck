@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../connect/remote_session.dart';
 import '../providers.dart';
@@ -169,6 +170,7 @@ class AuthController extends AsyncNotifier<SessionState> {
     // Artwork is the other: cached covers and the pins beside the
     // downloads outlive the session that was allowed to see them.
     await ref.read(artworkStoreProvider).forgetEverything();
+    ref.read(paletteCacheProvider).clear();
     // And the recent searches, which are the same kind of thing: strings
     // the departing listener typed, naming things in their library, in a
     // browser store the next account on this machine can read back.

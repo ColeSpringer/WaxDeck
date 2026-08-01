@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -38,9 +39,19 @@ void main() {
     expect(engine.loadedUrl, '/media/stream?pid=$pid&mt=test-token');
     expect(engine.position, const Duration(seconds: 60));
     expect(engine.playing, isTrue);
-    expect(find.byKey(const Key('player-toggle')), findsOneWidget);
-    expect(find.byKey(const Key('player-seek')), findsOneWidget);
-    expect(find.byIcon(Icons.pause), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playerToggle),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsIdentifier(SemanticsIds.playerSeek), findsOneWidget);
+    // The transport says which way it goes next, and that is the
+    // whole of its state: one node, one name, flipped by playback.
+    expect(
+      tester
+          .getSemantics(find.bySemanticsIdentifier(SemanticsIds.playerToggle))
+          .label,
+      'Pause',
+    );
     await harness.endPlayback(tester);
   });
 
@@ -258,7 +269,7 @@ void main() {
     // one button away from playing - from where it was asked to start,
     // not from wherever the item was last checkpointed.
     repo.playInfoError = null;
-    await tester.tap(find.byKey(const Key('player-retry')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerRetry));
     await tester.pumpAndSettle();
 
     expect(engine.loadedUrl, contains(pid));

@@ -104,8 +104,11 @@ test('an instant mix starts from any playing track', async ({ page, request }) =
   await expect(page.getByText('Bravo Song', { exact: true })).toHaveCount(0, {
     timeout: 15_000,
   });
+  // The player's own control, by handle: it is a collapse chevron named
+  // "Collapse player" since the rebuild onto the scaffold, so a match on
+  // "Back" finds the mix list's button underneath and pops that instead.
   await clickThrough(
-    page.getByRole('button', { name: 'Back' }).first(),
+    page.locator(sem(SemanticsIds.playerBack)),
     page.locator(sem(SemanticsIds.scopedItem('mix', 0))),
   );
   await expect(page.getByText('Instant mix', { exact: true }).first()).toBeVisible();

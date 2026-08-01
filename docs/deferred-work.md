@@ -57,17 +57,6 @@ here waits on upstream.
   an enrichment field nothing writes yet - the same provider gap that
   keeps artist artwork from existing. Both are additive sections on a
   screen that is otherwise complete.
-- `[in-repo]` **The client half of the waveform seek bar.** The server
-  side landed ahead of P18 (`GET /items/{pid}/waveform`, ADR-0031 for the
-  pass that fills it), and the generated Dart model exists, but nothing
-  reads it: there is no `waxdeck_api` repository wrapper and no seek bar
-  drawing it. P18 is the phase this landed ahead of. Two things it has to
-  handle beyond `ready`: `unavailable` is final and means draw the plain
-  slider, never a spinner, and it is the answer for every podcast
-  episode, every cue-carved track, and every multi-file audiobook; and
-  `resolution` is read from the response rather than assumed, since the
-  1000 buckets are a catalog constant that an analysis-version bump may
-  change.
 - `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
   grew setVolume for remote volume control, so the fade is a timer
   loop away.
@@ -80,23 +69,17 @@ here waits on upstream.
   took), and a pin affordance on every entity surface in the app, which
   is where the work actually is. The shelf itself is one more `ItemShelf`
   over a provider that resolves pids to items.
-- `[roadmap]` **The full player's volume row is Material, not `WaxSlider`.**
-  Every other surface that draws local output (the deck bar's right
-  cluster, the radio hub, the remote screen) uses the design system's
-  slider; `PlayerScreen` predates the package and still imports Material
-  directly for its app bar, seek slider, chips, and menus, so a lone
-  `WaxSlider` there would convert nothing (the file's Material import is
-  what the `material_ui` split cares about) and would sit under a seek bar
-  drawn a different way. `buildWaxTheme`'s `sliderTheme` already paints
-  Material sliders in the same accent, hairline, and 4 px track, so the
-  two read alike today. What does differ is the drag: `WaxSlider` holds a
-  local `_dragValue` so the knob follows the finger until the gesture
-  ends, where the Material one is fully controlled, so a write the
-  platform refuses mid-drag snaps the knob back to the engine's level
-  under the finger. It converts with the screen, which is the rebuild onto
-  `PlayerScaffold` - the scaffold exists in `waxdeck_ui` and the app does
-  not use it yet, and it has no volume slot, so that rebuild is where both
-  belong.
+- `[in-repo]` **The star and rating row is still Material.** Everything
+  else the player draws came onto the design system with the rebuild onto
+  `PlayerScaffold` (ADR-0039); `StarRatingRow` did not, and it is shared
+  with the artist, album, and book headers, so it is one conversion for
+  four surfaces rather than a leftover of one. What blocks it is the
+  glyph set, not the widget: the row tells a starred item from a rated
+  one by drawing a heart for the first and stars for the second, and
+  `WaxIcons` carries only `star`, so converting today would give the
+  toggle and the five rating stars the same mark. It wants a heart added
+  to the vendored subset, which is a `make icons` run rather than a code
+  change, and then the row and its two callers convert together.
 - `[in-repo]` **Playback defaults 6.13 asks for that Settings does not
   offer.** The section ships skip intervals, per-domain speed, casting
   crossfade and leveling, and the wifi-only preload brake (ADR-0037).

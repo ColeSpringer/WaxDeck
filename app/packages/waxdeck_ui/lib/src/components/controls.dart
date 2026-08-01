@@ -949,8 +949,39 @@ class WaxSeekBar extends StatefulWidget {
   State<WaxSeekBar> createState() => _WaxSeekBarState();
 }
 
+/// One waveform bar every this many logical pixels: a 2 px bar and a
+/// 1 px gap, which is the coarsest reading that still shows a track's
+/// shape and the finest that still reads as bars rather than as a smear.
+const double _barPitch = 3;
+
 class _WaxSeekBarState extends State<WaxSeekBar> {
   double? _dragFraction;
+
+  /// The peaks reduced to the number of bars this width draws.
+  ///
+  /// Held rather than recomputed in `paint`: the playhead moves several
+  /// times a second and the peaks do not, so reducing a thousand buckets
+  /// per frame would be a thousand comparisons and a fresh list to draw
+  /// a shape that has not changed since the track started.
+  List<double>? _heights;
+  List<double>? _heightsFrom;
+  int _heightsBars = 0;
+
+  List<double>? _resolvedHeights(double width) {
+    final peaks = widget.peaks;
+    if (peaks == null || peaks.isEmpty) return null;
+    // An unbounded width has no bar count to derive; a fixed reading is
+    // better than none, and the constrained case is every real one.
+    final bars = width.isFinite
+        ? math.max(1, (width / _barPitch).floor())
+        : 120;
+    if (!identical(_heightsFrom, peaks) || _heightsBars != bars) {
+      _heightsFrom = peaks;
+      _heightsBars = bars;
+      _heights = downsamplePeaks(peaks, bars);
+    }
+    return _heights;
+  }
 
   double get _fraction {
     if (_dragFraction != null) return _dragFraction!;
@@ -1041,7 +1072,11 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
                         : ((widget.buffered ?? Duration.zero).inMilliseconds /
                                   widget.duration.inMilliseconds)
                               .clamp(0, 1),
-                    peaks: widget.peaks,
+                    // Resolved against the width the bar was given
+                    // rather than handed over raw: the reduction is a
+                    // property of this layout, and it outlives every
+                    // frame the playhead moves through.
+                    heights: _resolvedHeights(constraints.maxWidth),
                     track: colors.hairline,
                     bufferTint: colors.textTertiary.withValues(alpha: 0.4),
                     fill: colors.accent,
@@ -1057,11 +1092,33 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
   }
 }
 
+/// [peaks] reduced to [bars] values, each the loudest of the range it
+/// covers.
+///
+/// The catalog stores a fixed thousand buckets and a seek bar is
+/// whatever width it was given, so the two are reconciled at paint time.
+/// Loudest rather than mean, because an averaged envelope loses exactly
+/// the transients that make a track recognisable: the shape a listener
+/// aims a scrub at is its peaks, not its energy. Fewer peaks than bars
+/// is fine and repeats values rather than inventing them.
+List<double> downsamplePeaks(List<double> peaks, int bars) {
+  if (peaks.isEmpty || bars <= 0) return const <double>[];
+  return List<double>.generate(bars, (i) {
+    final from = (i * peaks.length) ~/ bars;
+    final to = math.max(from + 1, ((i + 1) * peaks.length) ~/ bars);
+    var peak = 0.0;
+    for (var j = from; j < to && j < peaks.length; j++) {
+      if (peaks[j] > peak) peak = peaks[j];
+    }
+    return peak.clamp(0.0, 1.0);
+  }, growable: false);
+}
+
 class _SeekPainter extends CustomPainter {
   _SeekPainter({
     required this.fraction,
     required this.buffered,
-    required this.peaks,
+    required this.heights,
     required this.track,
     required this.bufferTint,
     required this.fill,
@@ -1070,7 +1127,11 @@ class _SeekPainter extends CustomPainter {
 
   final double fraction;
   final double buffered;
-  final List<double>? peaks;
+
+  /// One value per bar, already reduced to this bar's width by the
+  /// state that owns it. Null draws the plain track.
+  final List<double>? heights;
+
   final Color track;
   final Color bufferTint;
   final Color fill;
@@ -1078,13 +1139,14 @@ class _SeekPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final peaks = this.peaks;
-    if (peaks != null && peaks.isNotEmpty) {
-      final barWidth = size.width / peaks.length;
+    final heights = this.heights;
+    if (heights != null && heights.isNotEmpty) {
+      final bars = heights.length;
+      final barWidth = size.width / bars;
       final mid = size.height / 2;
-      for (var i = 0; i < peaks.length; i++) {
-        final played = (i + 0.5) / peaks.length <= fraction;
-        final height = math.max(2.0, peaks[i].clamp(0, 1) * size.height * 0.92);
+      for (var i = 0; i < bars; i++) {
+        final centre = (i + 0.5) / bars;
+        final height = math.max(2.0, heights[i] * size.height * 0.92);
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromLTWH(
@@ -1095,7 +1157,10 @@ class _SeekPainter extends CustomPainter {
             ),
             const Radius.circular(1),
           ),
-          Paint()..color = played ? fill : track,
+          Paint()
+            ..color = centre <= fraction
+                ? fill
+                : (centre <= buffered ? bufferTint : track),
         );
       }
       return;
@@ -1138,6 +1203,15 @@ class _SeekPainter extends CustomPainter {
   bool shouldRepaint(_SeekPainter old) =>
       old.fraction != fraction ||
       old.buffered != buffered ||
-      old.peaks != peaks ||
-      old.fill != fill;
+      // Identity, because the state hands back the same list until the
+      // peaks or the width change; comparing a few hundred doubles
+      // every frame is the cost this reduction exists to avoid.
+      !identical(old.heights, heights) ||
+      old.fill != fill ||
+      // The rest of the palette moves on a theme flip, which changes no
+      // other field here: without them the bar keeps the dark set's
+      // track and knob on a light canvas.
+      old.track != track ||
+      old.bufferTint != bufferTint ||
+      old.knob != knob;
 }

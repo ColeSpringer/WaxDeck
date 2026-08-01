@@ -20,7 +20,6 @@ import '../settings/client_prefs.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-import '../shell/side_panel.dart';
 import 'autoplay_gate.dart';
 import 'now_playing_controller.dart';
 import 'output_volume.dart';
@@ -245,11 +244,7 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
           onMore: item == null
               ? null
               : () => unawaited(_showActions(context, ref, item, session)),
-          // The panel where there is room for one, the queue's own
-          // screen where there is not. The same queue either way.
-          onQueue: () => wide
-              ? ref.read(sidePanelProvider.notifier).toggle(WaxPanel.queue)
-              : context.push(WaxRoute.queue),
+          onQueue: () => openQueue(context, ref),
           onVolume: localVolume
               ? (level) => unawaited(
                   ref.read(outputVolumeProvider.notifier).set(level),

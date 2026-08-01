@@ -380,6 +380,11 @@ abstract interface class WaxDeckRepository {
   /// audiobook, with spans in that part's own timeline.
   Future<SkipMap> getSkipMap(String pid, {int? partIndex});
 
+  /// `GET /items/{pid}/waveform`: the item's amplitude envelope, or the
+  /// state saying there is not one to draw. A pure read of what the
+  /// analyze pass stored; nothing is computed or queued by asking.
+  Future<Waveform> getWaveform(String pid);
+
   /// `GET /podcasts/opml`: the caller's subscriptions as an OPML 2.0
   /// document.
   Future<String> exportOpml();
@@ -2060,6 +2065,12 @@ class WaxDeckClient implements WaxDeckRepository {
       partIndex: partIndex,
     );
     return skipMapFromGen(_require(response.data));
+  });
+
+  @override
+  Future<Waveform> getWaveform(String pid) => _guard(() async {
+    final response = await _gen.getPlaybackApi().getWaveform(pid: pid);
+    return waveformFromGen(_require(response.data));
   });
 
   @override

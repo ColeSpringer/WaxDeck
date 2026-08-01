@@ -1,24 +1,33 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../artwork/artwork_box.dart';
+import '../artwork/artwork_palette.dart';
+import '../artwork/artwork_providers.dart';
 import '../connect/device_picker.dart';
 import '../discovery/discovery_actions.dart';
 import '../library/item_delete.dart';
-import '../media_icons.dart';
+import '../media_view.dart';
 import '../playlists/add_to_playlist_sheet.dart';
+import '../queue/queue_controller.dart';
+import '../queue/queue_item.dart';
+import '../queue/queue_state.dart';
+import '../queue/queue_view.dart';
 import '../sharing/share_dialog.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import 'deck_bar_host.dart';
 import 'download_action.dart';
 import 'item_star_rating_row.dart';
 import 'now_playing_controller.dart';
 import 'output_volume.dart';
 import 'playback_session.dart';
 import 'sleep_timer.dart';
+import 'waveform.dart';
 
 /// Speed presets the player button cycles through.
 const playerSpeedSteps = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
@@ -40,333 +49,722 @@ String formatPlayerSpeed(double speed) {
   return '${text}x';
 }
 
-/// Full-screen view of what is playing: artwork, transport controls, and
-/// a seek bar, with resume and listen accounting handled by the
-/// [PlaybackSession] the [NowPlayingController] owns. Spoken-word items
-/// add speed, silence trimming, a sleep timer, and (for books) chapter
-/// navigation.
+/// The verbs behind the player's one overflow menu.
+enum _PlayerMenuAction { addToPlaylist, share, delete }
+
+/// The e2e handles the player's own controls carry. One place, because
+/// the design system emits no identifier strings of its own (ADR-0016),
+/// and because the scaffold and the transport each take their own copy:
+/// two literals would be two chances to disagree.
+const _ids = PlayerIds(
+  surface: SemanticsIds.playerSurface,
+  collapse: SemanticsIds.playerBack,
+  play: SemanticsIds.playerToggle,
+  next: SemanticsIds.playerNext,
+  previous: SemanticsIds.playerPrevious,
+  skipBack: SemanticsIds.playerSkipBack,
+  skipForward: SemanticsIds.playerSkipForward,
+  shuffle: SemanticsIds.playerShuffle,
+  repeat: SemanticsIds.playerRepeat,
+  seek: SemanticsIds.playerSeek,
+);
+
+/// The full player: one scaffold, configured by what is playing.
 ///
 /// A viewer, deliberately: nothing here starts, stops, or outlives
-/// playback, so leaving this screen keeps the music on.
+/// playback, so leaving this screen keeps the music on. The session and
+/// the queue own the state; this draws it and sends verbs back.
+///
+/// The music face is whole here. Podcasts, books, and radio get the
+/// scaffold and the controls they had before it - speed, silence
+/// trimming, the sleep timer, chapters - which is deliberately less than
+/// 5.3 asks of them: the speed sheet, smart rewind, bookmarks, and the
+/// chapter and transcript regions are P19's, and their controls are
+/// hosted through the same slots meanwhile rather than left on a screen
+/// of their own.
 class PlayerScreen extends ConsumerWidget {
   const PlayerScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // A Scaffold with nothing in it but the body, for the thing a
+    // Scaffold does that no other widget does: it is what
+    // `ScaffoldMessenger` presents into. The player is a route of its
+    // own over the shell, so the chrome's Scaffold is not an ancestor,
+    // and every refusal raised from here - a star that would not stick,
+    // a routed command an endpoint declined, a delete the server
+    // refused - asserts without one. The backdrop underneath paints the
+    // canvas, hence transparent.
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: _body(context, ref),
+    );
+  }
+
+  Widget _body(BuildContext context, WidgetRef ref) {
     final nowPlaying = ref.watch(nowPlayingProvider);
     // The queue is what decides whether anything is playing. An item
     // still resolving, or one whose start failed before it could be
     // named, is not nothing: saying so would hide the failure and the
     // button that retries it.
     if (nowPlaying.entry == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Now playing')),
-        body: const Center(
-          child: Text('Nothing is playing', key: Key('player-idle')),
+      return _PlayerShell(
+        child: EmptyState(
+          key: const Key('player-idle'),
+          glyph: WaxIcons.headphones,
+          title: 'Nothing is playing',
+          message: 'Pick something from your library and it shows up here.',
+          semanticsId: SemanticsIds.playerSurface,
         ),
       );
     }
+
     final item = nowPlaying.item;
-    final session = nowPlaying.session;
-    // Read at tap time, never at build time: this screen rebuilds when
-    // what is playing changes, not as it plays, so a captured position
-    // would be where the item stood when it started. Actions fall back
-    // to the top of the item while it loads, when the transport is not
-    // up either.
-    int positionMs() => session?.displayPosition.inMilliseconds ?? 0;
-    return Scaffold(
-      appBar: AppBar(
-        // The player is pushed over whatever was underneath, and what is
-        // underneath now has a back control of its own (a drilled-in
-        // listing does). Two buttons named "Back" is one too many for a
-        // spec to steer by document order, so this one has a handle.
-        leading: Semantics(
-          identifier: SemanticsIds.playerBack,
-          child: const BackButton(key: Key(SemanticsIds.playerBack)),
+    return switch (nowPlaying) {
+      NowPlaying(:final Object error) => _PlayerShell(
+        artUrl: item?.artUrl,
+        domain: waxDomainOf(item?.mediaType ?? MediaType.music),
+        child: ErrorState(
+          key: const Key('player-error'),
+          title: 'Playback stopped',
+          message: error is WaxDeckApiException
+              ? error.message
+              : 'Playback failed to start',
+          // The queue still holds the entry, and nothing else will try
+          // it again: without this the failure is where playback stops
+          // until something rebuilds the queue.
+          onRetry: ref.read(nowPlayingProvider.notifier).resume,
+          semanticsId: SemanticsIds.playerSurface,
+          retrySemanticsId: SemanticsIds.playerRetry,
         ),
-        title: Text(item?.title ?? 'Now playing'),
-        // Every one of these acts on an item; until there is one to act
-        // on, the bar carries the title alone.
-        actions: item == null
-            ? const []
-            : [
-                Semantics(
-                  identifier: SemanticsIds.playerDevices,
-                  label: 'Play on',
-                  button: true,
-                  excludeSemantics: true,
-                  onTap: () => showDevicePicker(
-                    context,
-                    from: CastSource.here,
-                    currentPid: item.pid,
-                    positionMs: positionMs(),
-                  ),
-                  child: IconButton(
-                    key: const Key(SemanticsIds.playerDevices),
-                    tooltip: 'Play on',
-                    icon: const Icon(Icons.cast),
-                    onPressed: () => showDevicePicker(
-                      context,
-                      from: CastSource.here,
-                      currentPid: item.pid,
-                      positionMs: positionMs(),
-                    ),
-                  ),
-                ),
-                Semantics(
-                  identifier: SemanticsIds.addToPlaylist,
-                  label: 'Add to playlist',
-                  button: true,
-                  child: IconButton(
-                    key: const Key(SemanticsIds.addToPlaylist),
-                    tooltip: 'Add to playlist',
-                    icon: const Icon(Icons.playlist_add),
-                    onPressed: () =>
-                        showAddToPlaylistSheet(context, item: item),
-                  ),
-                ),
-                Semantics(
-                  identifier: SemanticsIds.shareLink,
-                  label: 'Share link',
-                  button: true,
-                  child: IconButton(
-                    key: const Key(SemanticsIds.shareLink),
-                    tooltip: 'Share link',
-                    icon: const Icon(Icons.share_outlined),
-                    // Episodes offer the current position as the share's
-                    // start point; other media share from the top.
-                    onPressed: () => showShareLinkDialog(
-                      context,
-                      pid: item.pid,
-                      positionMs: item.mediaType == MediaType.podcast
-                          ? positionMs()
-                          : null,
-                    ),
-                  ),
-                ),
-                if (item.mediaType == MediaType.music)
-                  Semantics(
-                    identifier: SemanticsIds.playerDiscover,
-                    label: 'Discover',
-                    button: true,
-                    child: PopupMenuButton<String>(
-                      key: const Key(SemanticsIds.playerDiscover),
-                      tooltip: 'Discover',
-                      icon: const Icon(Icons.auto_awesome_outlined),
-                      onSelected: (choice) => switch (choice) {
-                        'mix' => showInstantMixSheet(context, item),
-                        'similar' => openSimilarTracks(context, ref, item),
-                        _ => Future<void>.value(),
-                      },
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: 'mix',
-                          child: Semantics(
-                            identifier: SemanticsIds.instantMix,
-                            child: const Text(
-                              'Instant mix',
-                              key: Key(SemanticsIds.instantMix),
-                            ),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 'similar',
-                          child: Semantics(
-                            identifier: SemanticsIds.similarTracks,
-                            child: const Text(
-                              'Similar tracks',
-                              key: Key(SemanticsIds.similarTracks),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                DownloadAction(
-                  pid: item.pid,
-                  artUrl: item.artUrl,
-                  semanticsId: SemanticsIds.downloadButton,
-                ),
-                ItemDeleteAction(pid: item.pid, onDeleted: () => context.pop()),
-              ],
       ),
-      body: switch (nowPlaying) {
-        NowPlaying(:final Object error) => Center(
+      // Both, always: the state publishes a session and the item it is
+      // for together.
+      NowPlaying(:final PlaybackSession session, :final ItemSummary item) =>
+        ArtworkAccent(
+          artUrl: item.artUrl,
+          domain: waxDomainOf(item.mediaType),
+          child: PlayerFace(session: session, item: item),
+        ),
+      _ => _PlayerShell(
+        artUrl: item?.artUrl,
+        domain: waxDomainOf(item?.mediaType ?? MediaType.music),
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+    };
+  }
+}
+
+/// The backdrop and the way out, for the states with no item to draw.
+///
+/// The scaffold proper needs a session; these do not, and they still
+/// have to be leaveable and still have to look like the player rather
+/// than like a blank route.
+class _PlayerShell extends ConsumerWidget {
+  const _PlayerShell({
+    required this.child,
+    this.artUrl,
+    this.domain = WaxDomain.music,
+  });
+
+  final Widget child;
+  final String? artUrl;
+  final WaxDomain domain;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ArtworkAccent(
+      artUrl: artUrl,
+      domain: domain,
+      child: WaxBackdrop(
+        domain: domain,
+        child: SafeArea(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                error is WaxDeckApiException
-                    ? error.message
-                    : 'Playback failed to start',
-                key: const Key('player-error'),
-                textAlign: TextAlign.center,
+            children: <Widget>[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
+                  child: WaxIconButton(
+                    glyph: WaxIcons.collapse,
+                    label: 'Collapse player',
+                    onPressed: () => leavePlayer(context),
+                    semanticsId: SemanticsIds.playerBack,
+                  ),
+                ),
               ),
-              const SizedBox(height: 12),
-              // The queue still holds the entry, and nothing else will
-              // try it again: without this the failure is where playback
-              // stops until something rebuilds the queue.
-              OutlinedButton(
-                key: const Key('player-retry'),
-                onPressed: ref.read(nowPlayingProvider.notifier).resume,
-                child: const Text('Try again'),
-              ),
+              Expanded(child: child),
             ],
           ),
         ),
-        // Both, always: the state publishes a session and the item it
-        // is for together.
-        NowPlaying(:final PlaybackSession session, :final ItemSummary item) =>
-          _PlayerBody(session: session, item: item),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+      ),
     );
   }
 }
 
-class _PlayerBody extends ConsumerWidget {
-  const _PlayerBody({required this.session, required this.item});
+/// Leaves the player, however it was opened.
+///
+/// The player is pushed over whatever was underneath, so popping is
+/// right nearly always; a cold arrival on `/now-playing` has nothing
+/// under it, and there the way out is home rather than a dead control.
+/// `maybeOf`, matching what the overflow's delete does with the router it
+/// captures: one policy for a player mounted outside a router, rather
+/// than a menu row that shrugs and a collapse button that throws.
+void leavePlayer(BuildContext context) => leaveWith(GoRouter.maybeOf(context));
+
+/// The same, for a caller that has to leave after work it awaited.
+///
+/// The router outlives this screen and a `BuildContext` does not:
+/// deleting the playing item finishes whenever the server answers, and
+/// by then the surface that asked may be gone. Null where the player is
+/// mounted outside a router at all, which is a test host rather than a
+/// running app, and where there is nowhere to leave to.
+void leaveWith(GoRouter? router) {
+  if (router == null) return;
+  if (router.canPop()) {
+    router.pop();
+    return;
+  }
+  router.go(WaxRoute.home);
+}
+
+/// One item playing, drawn through the scaffold.
+class PlayerFace extends ConsumerStatefulWidget {
+  const PlayerFace({required this.session, required this.item, super.key});
 
   final PlaybackSession session;
   final ItemSummary item;
 
-  String _format(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '${d.inMinutes.remainder(60)}:$s';
+  @override
+  ConsumerState<PlayerFace> createState() => _PlayerFaceState();
+}
+
+class _PlayerFaceState extends ConsumerState<PlayerFace> {
+  /// The live position, fed into the one leaf that draws it. The face
+  /// itself never rebuilds for it: it holds the artwork hero, and
+  /// rebuilding that several times a second would re-ask the artwork
+  /// store for a cover per frame.
+  final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
+  StreamSubscription<Duration>? _feed;
+
+  @override
+  void initState() {
+    super.initState();
+    _follow();
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final engine = session.engine;
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    final artUrl = item.artUrl;
-    final placeholder = ColoredBox(
-      color: colorScheme.surfaceContainerHighest,
-      child: Center(
-        child: Icon(
-          mediaFallbackIcon(item.mediaType),
-          size: 96,
-          color: colorScheme.onSurfaceVariant,
+  void didUpdateWidget(covariant PlayerFace old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.session, widget.session)) _follow();
+  }
+
+  void _follow() {
+    unawaited(_feed?.cancel());
+    _position.value = widget.session.displayPosition;
+    _feed = widget.session.displayPositionStream.listen((position) {
+      _position.value = position;
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_feed?.cancel());
+    _position.dispose();
+    super.dispose();
+  }
+
+  ItemSummary get _item => widget.item;
+  PlaybackSession get _session => widget.session;
+  bool get _music => _item.mediaType == MediaType.music;
+
+  /// Read at tap time, never at build time: this rebuilds when what is
+  /// playing changes, not as it plays, so a captured position would be
+  /// where the item stood when it started.
+  int get _positionMs => _session.displayPosition.inMilliseconds;
+
+  /// What the scaffold draws from: the identity half of the item.
+  ///
+  /// The scaffold reads the title, the subtitle, the provenance, the
+  /// artwork, its shape, and the domain. The playback half is filled
+  /// truthfully because the struct asks for it, and only [position] is a
+  /// snapshot rather than a stream - the clusters that tick take the
+  /// notifier directly, so anything added here that wants a live
+  /// position has to take it the same way rather than reading this.
+  NowPlayingData _now({
+    required bool playing,
+    required bool shuffled,
+    required QueueRepeat repeat,
+    required QueueSource source,
+  }) {
+    return NowPlayingData(
+      title: _item.title,
+      subtitle: _item.artist,
+      provenance: queueProvenance(source),
+      artwork: waxArtwork(ref.read(artworkStoreProvider), _item.artUrl),
+      domain: waxDomainOf(_item.mediaType),
+      shape: waxShapeOf(_item.mediaType),
+      position: _position.value,
+      duration: _session.mediaDuration,
+      playing: playing,
+      shuffled: shuffled,
+      repeat: switch (repeat) {
+        QueueRepeat.off => WaxRepeat.off,
+        QueueRepeat.all => WaxRepeat.all,
+        QueueRepeat.one => WaxRepeat.one,
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The two standing modes plus where the queue came from, and nothing
+    // else about it: watching the whole queue rebuilds this face on
+    // every edit, and a drag reorder in the panel beside it emits one
+    // per frame.
+    final modes = ref.watch(
+      queueControllerProvider.select((q) => (q.shuffled, q.repeat, q.source)),
+    );
+    final skips = ref.watch(skipIntervalsProvider);
+    // Read here rather than inside the transport's builder: everything
+    // below runs when the engine's playing stream ticks, which is a
+    // build of that leaf and not of this widget, and a `watch` from
+    // there would be registering a dependency out of phase.
+    final canDelete = canDeleteItems(ref);
+    final playback = ref.read(nowPlayingProvider.notifier);
+    final queue = ref.read(queueControllerProvider.notifier);
+
+    return StreamBuilder<bool>(
+      stream: _session.engine.playingStream,
+      initialData: _session.engine.playing,
+      builder: (context, snapshot) {
+        final playing = snapshot.data ?? false;
+        return PlayerScaffold(
+          now: _now(
+            playing: playing,
+            shuffled: modes.$1,
+            repeat: modes.$2,
+            source: modes.$3,
+          ),
+          ids: _ids,
+          onCollapse: () => leavePlayer(context),
+          trailingHeaderActions: _headerActions(context, canDelete: canDelete),
+          titleTrailing: ItemStarRatingRow(pid: _item.pid),
+          seek: _Seek(
+            session: _session,
+            item: _item,
+            position: _position,
+            playing: playing,
+          ),
+          transport: TransportCluster(
+            ids: _ids,
+            playing: playing,
+            shuffled: modes.$1,
+            repeat: modes.$2 != QueueRepeat.off,
+            onPlayPause: _session.toggle,
+            onPrevious: _music ? () => unawaited(playback.previous()) : null,
+            onNext: _music ? () => unawaited(playback.next()) : null,
+            onSkipBack: _music ? null : () => unawaited(_seekBy(-skips.back)),
+            onSkipForward: _music
+                ? null
+                : () => unawaited(_seekBy(skips.forward)),
+            onShuffle: _music ? () => queue.setShuffle(!modes.$1) : null,
+            onRepeat: _music
+                ? () => queue.setRepeat(nextQueueRepeat(modes.$2))
+                : null,
+            skipBackSeconds: skips.back.inSeconds,
+            skipForwardSeconds: skips.forward.inSeconds,
+          ),
+          volume: const _VolumeRow(),
+          actionRow: _actionRow(context),
+          bottomRegion: _music ? const _UpNextPeek() : null,
+        );
+      },
+    );
+  }
+
+  Future<void> _seekBy(Duration delta) {
+    final target = _session.displayPosition + delta;
+    return _session.seek(target < Duration.zero ? Duration.zero : target);
+  }
+
+  /// Cast and the one overflow. Everything else that acts on the item
+  /// lives inside that menu: 5.3 gives the header two controls, and a
+  /// player whose chrome is a row of glyphs is a toolbar with artwork.
+  List<Widget> _headerActions(BuildContext context, {required bool canDelete}) {
+    // Captured while the surface is still standing: a delete finishes
+    // when the server answers, and what it leaves behind is a player
+    // whose item no longer exists. `maybeOf` because this runs during
+    // build, where a widget test mounting the player on its own has no
+    // router to find and no reason to need one.
+    final router = GoRouter.maybeOf(context);
+    return <Widget>[
+      WaxIconButton(
+        glyph: WaxIcons.cast,
+        label: 'Play on',
+        semanticsId: SemanticsIds.playerDevices,
+        onPressed: () => unawaited(
+          showDevicePicker(
+            context,
+            from: CastSource.here,
+            currentPid: _item.pid,
+            positionMs: _positionMs,
+          ),
+        ),
+      ),
+      DownloadAction(
+        pid: _item.pid,
+        artUrl: _item.artUrl,
+        semanticsId: SemanticsIds.downloadButton,
+      ),
+      WaxMenuButton<_PlayerMenuAction>(
+        semanticsId: SemanticsIds.playerMore,
+        items: <WaxMenuItem<_PlayerMenuAction>>[
+          const WaxMenuItem(
+            value: _PlayerMenuAction.addToPlaylist,
+            label: 'Add to playlist',
+            glyph: WaxIcons.playlists,
+            semanticsId: SemanticsIds.addToPlaylist,
+          ),
+          const WaxMenuItem(
+            value: _PlayerMenuAction.share,
+            label: 'Share link',
+            glyph: WaxIcons.share,
+            semanticsId: SemanticsIds.shareLink,
+          ),
+          if (canDelete)
+            const WaxMenuItem(
+              value: _PlayerMenuAction.delete,
+              label: 'Delete files...',
+              glyph: WaxIcons.delete,
+              destructive: true,
+              semanticsId: SemanticsIds.itemDelete,
+            ),
+        ],
+        onSelected: (action) => unawaited(switch (action) {
+          _PlayerMenuAction.addToPlaylist => showAddToPlaylistSheet(
+            context,
+            item: _item,
+          ),
+          // Episodes offer the current position as the share's start
+          // point; other media share from the top.
+          _PlayerMenuAction.share => showShareLinkDialog(
+            context,
+            pid: _item.pid,
+            positionMs: _item.mediaType == MediaType.podcast
+                ? _positionMs
+                : null,
+          ),
+          _PlayerMenuAction.delete => confirmDeleteItem(
+            context,
+            pid: _item.pid,
+            onDeleted: () => leaveWith(router),
+          ),
+        }),
+      ),
+    ];
+  }
+
+  /// The per-medium verbs.
+  ///
+  /// Music gets the queue and the discovery menu 5.3 calls "More like
+  /// this"; spoken word keeps the speed, silence-trim, sleep-timer, and
+  /// chapter controls it has always had, which P19 replaces with the
+  /// faces they belong to.
+  Widget _actionRow(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        if (_music) ...<Widget>[
+          WaxIconButton(
+            glyph: WaxIcons.queue,
+            label: 'Queue',
+            semanticsId: SemanticsIds.playerQueue,
+            onPressed: () => openQueue(context, ref),
+          ),
+          WaxMenuButton<String>(
+            glyph: WaxIcons.waveform,
+            label: 'More like this',
+            semanticsId: SemanticsIds.playerDiscover,
+            items: const <WaxMenuItem<String>>[
+              WaxMenuItem(
+                value: 'mix',
+                label: 'Instant mix',
+                semanticsId: SemanticsIds.instantMix,
+              ),
+              WaxMenuItem(
+                value: 'similar',
+                label: 'Similar tracks',
+                semanticsId: SemanticsIds.similarTracks,
+              ),
+            ],
+            onSelected: (choice) => unawaited(switch (choice) {
+              'mix' => showInstantMixSheet(context, _item),
+              _ => openSimilarTracks(context, ref, _item),
+            }),
+          ),
+        ] else ...<Widget>[
+          _SpeedButton(session: _session),
+          _TrimChip(session: _session),
+          if (_item.mediaType == MediaType.audiobook)
+            _ChapterButton(session: _session, position: _position),
+        ],
+        // Every face, not only the spoken-word ones 5.3 lists it under:
+        // falling asleep to a record is what the control is for, and it
+        // is about the device rather than the medium.
+        _SleepTimerButton(session: _session),
+      ],
+    );
+  }
+}
+
+/// Which chapter is playing, and the way to any other one.
+///
+/// A button and a sheet, which is what the book face had before the
+/// scaffold and less than 5.3 asks for: the chapter list belongs in the
+/// bottom region beside the book-versus-chapter timeline toggle, and
+/// that is the book face P19 builds.
+class _ChapterButton extends StatelessWidget {
+  const _ChapterButton({required this.session, required this.position});
+
+  final PlaybackSession session;
+  final ValueListenable<Duration> position;
+
+  static ChapterMark? chapterAt(BookDetail book, Duration position) {
+    final positionMs = position.inMilliseconds;
+    ChapterMark? current;
+    for (final chapter in book.chapters) {
+      if (chapter.startMs <= positionMs) current = chapter;
+    }
+    return current ?? (book.chapters.isEmpty ? null : book.chapters.first);
+  }
+
+  static String chapterTitle(ChapterMark? chapter) =>
+      chapter?.title ?? (chapter == null ? '' : 'Chapter ${chapter.index + 1}');
+
+  @override
+  Widget build(BuildContext context) {
+    final book = session.book;
+    if (book == null || book.chapters.isEmpty) return const SizedBox.shrink();
+    return ValueListenableBuilder<Duration>(
+      valueListenable: position,
+      builder: (context, at, _) => WaxIconButton(
+        glyph: WaxIcons.audiobooks,
+        label: 'Chapters, current: ${chapterTitle(chapterAt(book, at))}',
+        semanticsId: SemanticsIds.playerChapters,
+        onPressed: () => unawaited(
+          showModalBottomSheet<void>(
+            context: context,
+            builder: (_) => _ChapterSheet(session: session, book: book),
+          ),
         ),
       ),
     );
+  }
+}
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
+class _ChapterSheet extends StatelessWidget {
+  const _ChapterSheet({required this.session, required this.book});
+
+  final PlaybackSession session;
+  final BookDetail book;
+
+  @override
+  Widget build(BuildContext context) {
+    String stamp(int ms) {
+      final d = Duration(milliseconds: ms);
+      final h = d.inHours;
+      final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+      return h > 0 ? '$h:$m:$s' : '$m:$s';
+    }
+
+    return SafeArea(
+      child: ListView(
+        shrinkWrap: true,
         children: [
-          Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: 360,
-                  maxHeight: 360,
-                ),
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: ArtworkBox(artUrl: artUrl, placeholder: placeholder),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            item.title,
-            style: textTheme.titleLarge,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (item.artist != null)
-            Text(
-              item.artist!,
-              style: textTheme.bodyLarge?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          if (item.mediaType == MediaType.audiobook)
-            _ChapterIndicator(session: session),
-          ItemStarRatingRow(pid: item.pid),
-          const SizedBox(height: 8),
-          StreamBuilder<Duration>(
-            stream: session.displayPositionStream,
-            initialData: session.displayPosition,
-            builder: (context, positionSnapshot) {
-              final duration = session.mediaDuration;
-              final position = positionSnapshot.data ?? Duration.zero;
-              final maxMs = duration.inMilliseconds;
-              final valueMs = position.inMilliseconds.clamp(
-                0,
-                maxMs > 0 ? maxMs : 1,
-              );
-              return Column(
-                children: [
-                  Semantics(
-                    identifier: SemanticsIds.playerSeek,
-                    label: 'Seek bar',
-                    child: Slider(
-                      key: const Key(SemanticsIds.playerSeek),
-                      value: valueMs.toDouble(),
-                      max: (maxMs > 0 ? maxMs : 1).toDouble(),
-                      onChanged: (value) =>
-                          session.seek(Duration(milliseconds: value.round())),
-                    ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(_format(position), style: textTheme.labelMedium),
-                      Text(_format(duration), style: textTheme.labelMedium),
-                    ],
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _SpeedButton(session: session),
-              const SizedBox(width: 8),
-              StreamBuilder<bool>(
-                stream: engine.playingStream,
-                initialData: engine.playing,
-                builder: (context, playingSnapshot) {
-                  final playing = playingSnapshot.data ?? false;
-                  return Semantics(
-                    identifier: SemanticsIds.playerToggle,
-                    label: playing ? 'Pause' : 'Play',
-                    button: true,
-                    child: IconButton.filled(
-                      key: const Key(SemanticsIds.playerToggle),
-                      iconSize: 48,
-                      onPressed: session.toggle,
-                      icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                    ),
+          for (final chapter in book.chapters)
+            Semantics(
+              identifier: SemanticsIds.playerChapter(chapter.index),
+              button: true,
+              child: ListTile(
+                key: ValueKey(SemanticsIds.playerChapter(chapter.index)),
+                dense: true,
+                leading: Text(stamp(chapter.startMs)),
+                title: Text(chapter.title ?? 'Chapter ${chapter.index + 1}'),
+                onTap: () {
+                  unawaited(
+                    session.seek(Duration(milliseconds: chapter.startMs)),
                   );
+                  Navigator.of(context).pop();
                 },
               ),
-              const SizedBox(width: 8),
-              _SleepTimerButton(session: session),
-            ],
-          ),
-          const _VolumeRow(),
-          if (session.isSpokenWord) ...[
-            const SizedBox(height: 8),
-            _TrimChip(session: session),
-          ],
-          const SizedBox(height: 16),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+/// The seek cluster and nothing else, rebuilt as the item plays.
+///
+/// Its own widget so the position ticks here rather than through the
+/// face: the artwork hero, the title block, and the transport are
+/// unchanged between one second and the next.
+class _Seek extends ConsumerWidget {
+  const _Seek({
+    required this.session,
+    required this.item,
+    required this.position,
+    required this.playing,
+  });
+
+  final PlaybackSession session;
+  final ItemSummary item;
+  final ValueListenable<Duration> position;
+
+  /// The seek cluster draws from the position, the duration, and the
+  /// live flag, and reads this one not at all. Passed through anyway
+  /// because it is cheap and true, where a hardcoded `true` would be
+  /// neither - but nothing here depends on it today.
+  final bool playing;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Music only, and the caller rather than the provider decides that:
+    // a podcast episode is never analyzed, and a book's bar is a
+    // chapter's rather than the file's, so both would be a request that
+    // answers "no" at best.
+    final peaks = item.mediaType == MediaType.music
+        ? ref.watch(waveformProvider(item.pid)).value
+        : null;
+    return ValueListenableBuilder<Duration>(
+      valueListenable: position,
+      builder: (context, at, _) => SeekCluster(
+        now: NowPlayingData(
+          title: item.title,
+          position: at,
+          duration: session.mediaDuration,
+          playing: playing,
+        ),
+        peaks: peaks,
+        onSeek: (to) => unawaited(session.seek(to)),
+        semanticsId: SemanticsIds.playerSeek,
+      ),
+    );
+  }
+}
+
+/// What is next in the queue, as the drag-up handle for the queue
+/// itself.
+///
+/// A peek rather than a list: the queue has a surface of its own on both
+/// sides of the sidebar breakpoint, and this is the line that says
+/// whether it is worth opening.
+class _UpNextPeek extends ConsumerWidget {
+  const _UpNextPeek();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = WaxColors.of(context);
+    final queue = ref.watch(queueControllerProvider);
+    // The queue's own answer, not a second reading of it. Repeat-one
+    // plays this item again and has no next; repeat-all on the last
+    // entry wraps to the first. Deriving it from the index here named
+    // the following track under repeat-one and showed nothing at the end
+    // of a repeating queue - both wrong, and both already decided by the
+    // state the engine preloads from.
+    final next = queue.nextEntry;
+    if (next == null) return const SizedBox.shrink();
+    final item = ref.watch(queueItemProvider(next.pid)).value;
+    // Zero where the next entry is a wrap rather than a step forward:
+    // "0 left" beside a named track is a count of what has not played,
+    // and on a repeating queue that is the honest number.
+    final remaining = queue.unplayed;
+    final left = remaining > 0 ? ', $remaining left' : '';
+
+    return WaxTappable(
+      semanticsId: SemanticsIds.playerUpNext,
+      label: item == null ? 'Up next$left' : 'Up next, ${item.title}$left',
+      borderRadius: WaxRadius.sheetTop,
+      onPressed: () => openQueue(context, ref),
+      // Ink outside, InkWell in: the scaffold's only Material is
+      // transparent, so a splash under an opaquely decorated Container
+      // paints beneath it and never appears. Ink puts the decoration
+      // into the Material instead, which is what the splash draws on.
+      child: Ink(
+        decoration: BoxDecoration(
+          color: colors.surface1.withValues(alpha: 0.92),
+          borderRadius: WaxRadius.sheetTop,
+          border: Border(top: BorderSide(color: colors.hairline)),
+        ),
+        child: InkWell(
+          onTap: () => openQueue(context, ref),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              WaxSpace.s16,
+              WaxSpace.s8,
+              WaxSpace.s16,
+              WaxSpace.s16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: WaxSpace.s8),
+                  decoration: BoxDecoration(
+                    color: colors.textTertiary,
+                    borderRadius: WaxRadius.pill,
+                  ),
+                ),
+                Row(
+                  children: <Widget>[
+                    Text(
+                      'UP NEXT',
+                      style: WaxType.overline.copyWith(
+                        color: colors.textTertiary,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (remaining > 0)
+                      Text(
+                        '$remaining left',
+                        style: WaxType.caption.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: WaxSpace.s4),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        item?.title ?? 'Loading...',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: WaxType.body.copyWith(color: colors.textPrimary),
+                      ),
+                    ),
+                    if (item?.artist != null) ...<Widget>[
+                      const SizedBox(width: WaxSpace.s8),
+                      Text(
+                        item!.artist!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: WaxType.caption.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -396,40 +794,16 @@ class _VolumeRow extends ConsumerWidget {
     }
     final level = ref.watch(outputVolumeProvider).clamp(0.0, 1.0);
     final volume = ref.read(outputVolumeProvider.notifier);
-    // A level of zero is muted whatever else is true, and the glyph is
-    // the only part of this that has to read right without colour.
-    final muted = level == 0;
-    final muteLabel = muted ? 'Unmute' : 'Mute';
-    return Row(
-      children: [
-        Semantics(
-          identifier: SemanticsIds.playerMute,
-          label: muteLabel,
-          button: true,
-          // The label moves with the state, so the wrapper carries it and
-          // the button's own node is folded in: two nodes would leave
-          // assertions reading whichever one they found first.
-          excludeSemantics: true,
-          onTap: () => unawaited(volume.toggleMute()),
-          child: IconButton(
-            key: const Key(SemanticsIds.playerMute),
-            tooltip: muteLabel,
-            icon: Icon(muted ? Icons.volume_off : Icons.volume_up),
-            onPressed: () => unawaited(volume.toggleMute()),
-          ),
-        ),
-        Expanded(
-          child: Semantics(
-            identifier: SemanticsIds.playerVolume,
-            label: 'Volume',
-            child: Slider(
-              key: const Key(SemanticsIds.playerVolume),
-              value: level,
-              onChanged: (value) => unawaited(volume.set(value)),
-            ),
-          ),
-        ),
-      ],
+    return WaxSlider(
+      value: level,
+      label: 'Volume',
+      glyph: WaxIcons.volume,
+      mutedGlyph: WaxIcons.volumeMuted,
+      trackWidth: 220,
+      semanticsId: SemanticsIds.playerVolume,
+      muteSemanticsId: SemanticsIds.playerMute,
+      onChanged: (value) => unawaited(volume.set(value)),
+      onMute: () => unawaited(volume.toggleMute()),
     );
   }
 }
@@ -437,6 +811,9 @@ class _VolumeRow extends ConsumerWidget {
 /// Cycles the playback speed through the presets, persisting the choice
 /// per show or book (music stays at whatever it is set to for the
 /// session and never persists).
+///
+/// The cycle is what P19 replaces with the speed sheet 5.3 specifies:
+/// one tap should reach every speed rather than walking to it.
 class _SpeedButton extends StatelessWidget {
   const _SpeedButton({required this.session});
 
@@ -444,21 +821,41 @@ class _SpeedButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
     return StreamBuilder<double>(
       stream: session.engine.speedStream,
       initialData: session.engine.speed,
       builder: (context, snapshot) {
         final speed = snapshot.data ?? 1.0;
-        return Semantics(
-          identifier: SemanticsIds.playerSpeed,
+        return WaxTappable(
+          semanticsId: SemanticsIds.playerSpeed,
           label: 'Playback speed ${formatPlayerSpeed(speed)}',
-          button: true,
-          excludeSemantics: true,
-          onTap: () => session.setSpeed(nextPlayerSpeed(speed)),
-          child: TextButton(
-            key: const Key(SemanticsIds.playerSpeed),
-            onPressed: () => session.setSpeed(nextPlayerSpeed(speed)),
-            child: Text(formatPlayerSpeed(speed)),
+          borderRadius: WaxRadius.pill,
+          onPressed: () => session.setSpeed(nextPlayerSpeed(speed)),
+          // WaxTappable adds semantics, focus, and a ring, and no
+          // gesture of its own, so the chip carries the tap. Ink rather
+          // than a decorated Container, or the splash paints under an
+          // opaque fill and the press has no feedback at all.
+          child: Ink(
+            decoration: BoxDecoration(
+              color: colors.surface2,
+              borderRadius: WaxRadius.pill,
+              border: Border.all(color: colors.hairline),
+            ),
+            child: InkWell(
+              borderRadius: WaxRadius.pill,
+              onTap: () => session.setSpeed(nextPlayerSpeed(speed)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: WaxSpace.s12,
+                  vertical: WaxSpace.s8,
+                ),
+                child: Text(
+                  formatPlayerSpeed(speed),
+                  style: WaxType.monoData.copyWith(color: colors.textPrimary),
+                ),
+              ),
+            ),
           ),
         );
       },
@@ -466,7 +863,11 @@ class _SpeedButton extends StatelessWidget {
   }
 }
 
-/// Silence-trimming toggle with the hours-saved badge.
+/// Silence-trimming toggle with the time-saved badge.
+///
+/// The label says "silence trimming" and not "time saved" on purpose:
+/// the client counts trim jumps only, and the seek-aware accounting that
+/// would make the larger claim true is P20's.
 class _TrimChip extends StatelessWidget {
   const _TrimChip({required this.session});
 
@@ -482,6 +883,7 @@ class _TrimChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
     return ValueListenableBuilder<bool>(
       valueListenable: session.trimEnabled,
       builder: (context, enabled, _) {
@@ -491,20 +893,41 @@ class _TrimChip extends StatelessWidget {
             final label = savedMs > 0
                 ? 'Trim silence (${savedLabel(savedMs)})'
                 : 'Trim silence';
-            // excludeSemantics with a mirrored tap: without it the
-            // wrapper mints a second node beside the chip's own and
-            // the label rides an attribute assertions cannot read.
-            return Semantics(
-              identifier: SemanticsIds.playerTrim,
+            // A chip with its readout drawn rather than an icon with the
+            // readout only spoken: what the session has saved is the
+            // reason to leave the toggle on, and a glyph says none of it.
+            return WaxTappable(
+              semanticsId: SemanticsIds.playerTrim,
               label: label,
-              button: true,
-              excludeSemantics: true,
-              onTap: () => session.setTrimEnabled(!enabled),
-              child: FilterChip(
-                key: const Key(SemanticsIds.playerTrim),
-                selected: enabled,
-                label: Text(label),
-                onSelected: session.setTrimEnabled,
+              selected: enabled,
+              borderRadius: WaxRadius.pill,
+              onPressed: () => session.setTrimEnabled(!enabled),
+              child: Ink(
+                decoration: BoxDecoration(
+                  color: enabled ? colors.accentContainer : colors.surface2,
+                  borderRadius: WaxRadius.pill,
+                  border: Border.all(
+                    color: enabled ? colors.accent : colors.hairline,
+                  ),
+                ),
+                child: InkWell(
+                  borderRadius: WaxRadius.pill,
+                  onTap: () => session.setTrimEnabled(!enabled),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: WaxSpace.s12,
+                      vertical: WaxSpace.s8,
+                    ),
+                    child: Text(
+                      label,
+                      style: WaxType.caption.copyWith(
+                        color: enabled
+                            ? colors.onAccentContainer
+                            : colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             );
           },
@@ -524,22 +947,18 @@ class _SleepTimerButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final timer = ref.watch(sleepTimerProvider);
-    final button = IconButton(
-      key: const Key(SemanticsIds.sleepTimerOpen),
-      tooltip: timer.active ? 'Sleep timer (${timer.label})' : 'Sleep timer',
-      icon: Icon(timer.active ? Icons.bedtime : Icons.bedtime_outlined),
-      onPressed: () => showModalBottomSheet<void>(
-        context: context,
-        builder: (_) => _SleepTimerSheet(session: session),
-      ),
-    );
-    return Semantics(
-      identifier: SemanticsIds.sleepTimerOpen,
+    return WaxIconButton(
+      glyph: WaxIcons.sleepTimer,
       label: timer.active ? 'Sleep timer, ${timer.label} left' : 'Sleep timer',
-      button: true,
-      child: timer.active
-          ? Badge(label: Text(timer.label), child: button)
-          : button,
+      active: timer.active,
+      badge: timer.active ? timer.label : null,
+      semanticsId: SemanticsIds.sleepTimerOpen,
+      onPressed: () => unawaited(
+        showModalBottomSheet<void>(
+          context: context,
+          builder: (_) => _SleepTimerSheet(session: session),
+        ),
+      ),
     );
   }
 }
@@ -601,7 +1020,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 button: true,
                 child: ListTile(
                   key: ValueKey(SemanticsIds.sleepTimer(minutes)),
-                  leading: const Icon(Icons.timer_outlined),
+                  leading: const WaxIcon(WaxIcons.sleepTimer),
                   title: Text('$minutes minutes'),
                   onTap: () => _startMinutes(minutes),
                 ),
@@ -612,7 +1031,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 button: true,
                 child: ListTile(
                   key: const Key(SemanticsIds.sleepTimerChapter),
-                  leading: const Icon(Icons.auto_stories_outlined),
+                  leading: const WaxIcon(WaxIcons.audiobooks),
                   title: const Text('End of chapter'),
                   onTap: () {
                     ref
@@ -665,7 +1084,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 button: true,
                 child: ListTile(
                   key: const Key(SemanticsIds.sleepTimerCancel),
-                  leading: const Icon(Icons.close),
+                  leading: const WaxIcon(WaxIcons.close),
                   title: const Text('Cancel timer'),
                   onTap: () {
                     ref.read(sleepTimerProvider.notifier).cancel();
@@ -676,96 +1095,6 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
             const SizedBox(height: 8),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Current chapter title for books; tapping opens the chapter sheet for
-/// direct seeks.
-class _ChapterIndicator extends StatelessWidget {
-  const _ChapterIndicator({required this.session});
-
-  final PlaybackSession session;
-
-  static ChapterMark? chapterAt(BookDetail book, Duration position) {
-    final positionMs = position.inMilliseconds;
-    ChapterMark? current;
-    for (final chapter in book.chapters) {
-      if (chapter.startMs <= positionMs) current = chapter;
-    }
-    return current ?? (book.chapters.isEmpty ? null : book.chapters.first);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final book = session.book;
-    if (book == null || book.chapters.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return StreamBuilder<Duration>(
-      stream: session.displayPositionStream,
-      initialData: session.displayPosition,
-      builder: (context, snapshot) {
-        final chapter = chapterAt(book, snapshot.data ?? Duration.zero);
-        final title =
-            chapter?.title ??
-            (chapter == null ? '' : 'Chapter ${chapter.index + 1}');
-        return Semantics(
-          identifier: SemanticsIds.playerChapters,
-          label: 'Chapters, current: $title',
-          button: true,
-          child: TextButton.icon(
-            key: const Key(SemanticsIds.playerChapters),
-            icon: const Icon(Icons.list, size: 18),
-            label: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              builder: (_) => _ChapterSheet(session: session, book: book),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _ChapterSheet extends StatelessWidget {
-  const _ChapterSheet({required this.session, required this.book});
-
-  final PlaybackSession session;
-  final BookDetail book;
-
-  @override
-  Widget build(BuildContext context) {
-    String stamp(int ms) {
-      final d = Duration(milliseconds: ms);
-      final h = d.inHours;
-      final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-      final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-      return h > 0 ? '$h:$m:$s' : '$m:$s';
-    }
-
-    return SafeArea(
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          for (final chapter in book.chapters)
-            Semantics(
-              identifier: SemanticsIds.playerChapter(chapter.index),
-              button: true,
-              child: ListTile(
-                key: ValueKey(SemanticsIds.playerChapter(chapter.index)),
-                dense: true,
-                leading: Text(stamp(chapter.startMs)),
-                title: Text(chapter.title ?? 'Chapter ${chapter.index + 1}'),
-                onTap: () {
-                  session.seek(Duration(milliseconds: chapter.startMs));
-                  Navigator.of(context).pop();
-                },
-              ),
-            ),
-        ],
       ),
     );
   }

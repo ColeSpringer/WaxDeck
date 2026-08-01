@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -27,7 +28,7 @@ void main() {
     );
 
     expect(engine.speed, closeTo(1.0, 0.001));
-    await tester.tap(find.byKey(const Key('player-speed')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerSpeed));
     await tester.pumpAndSettle();
 
     expect(engine.speed, closeTo(1.25, 0.001));
@@ -59,7 +60,7 @@ void main() {
     await harness.endPlayback(tester);
   });
 
-  testWidgets('music speed changes are session-only, never persisted', (
+  testWidgets('music has no speed chip, and its speed never persists', (
     tester,
   ) async {
     const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
@@ -72,7 +73,15 @@ void main() {
       item: testItem(pid),
     );
 
-    await tester.tap(find.byKey(const Key('player-speed')));
+    // The music face carries no speed control (5.3): a rate belongs to
+    // spoken word, where it is a per-show or per-book setting, and the
+    // per-domain default is a Settings row rather than a player chip.
+    expect(find.bySemanticsIdentifier(SemanticsIds.playerSpeed), findsNothing);
+
+    // Set through the session, which is the seam anything else that
+    // changes a rate goes through, and nothing is written back: a music
+    // item has no per-entity settings to write to.
+    await harness.container.read(nowPlayingProvider).session!.setSpeed(1.25);
     await tester.pumpAndSettle();
 
     expect(engine.speed, closeTo(1.25, 0.001));

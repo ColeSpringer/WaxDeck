@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -119,7 +119,7 @@ void main() {
       item: testEpisode(episodePid),
     );
 
-    await tester.tap(find.byKey(const Key('player-trim')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerTrim));
     await tester.pumpAndSettle();
 
     await _listen(tester, engine, 5);

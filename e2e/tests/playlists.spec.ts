@@ -1,6 +1,6 @@
 import { test, expect, APIRequestContext, Page } from './fixtures';
 import crypto from 'node:crypto';
-import { authed, clickThrough, ensureAdmin, itemRow, openMusicSection, typeInto, waitForLibrary } from './helpers';
+import { authed, chooseFromMenu, clickThrough, ensureAdmin, itemRow, openMusicSection, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The playlists slice over the real stack: the rule editor building a
@@ -250,8 +250,12 @@ test('the player adds a track to a fresh manual playlist', async ({
   await login(page);
   const card = await itemRow(page, target.pid);
   await card.waitFor({ timeout: 30_000 });
-  await clickThrough(card, page.locator(sem(SemanticsIds.addToPlaylist)));
-  await clickThrough(
+  // Add-to-playlist is a row of the player's one overflow menu since the
+  // rebuild onto the scaffold: 5.3 gives the header two controls, and
+  // every verb that acts on the item is behind the second of them.
+  await clickThrough(card, page.locator(sem(SemanticsIds.playerMore)));
+  await chooseFromMenu(
+    page.locator(sem(SemanticsIds.playerMore)),
     page.locator(sem(SemanticsIds.addToPlaylist)),
     page.locator(sem(SemanticsIds.addToPlaylistNew)),
   );

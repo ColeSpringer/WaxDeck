@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -45,7 +44,11 @@ void main() {
       item: testItem(_trackPid),
     );
 
-    await tester.tap(find.byKey(const Key('share-link')));
+    // Share is a row of the player's one overflow menu now, not a
+    // control of its own on the header.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerMore));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.shareLink));
     await tester.pumpAndSettle();
     // Music offers no start-at switch.
     expect(_byId(SemanticsIds.shareStartAt), findsNothing);
@@ -95,7 +98,11 @@ void main() {
     engine.advance(const Duration(seconds: 5));
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('share-link')));
+    // Share is a row of the player's one overflow menu now, not a
+    // control of its own on the header.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerMore));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.shareLink));
     await tester.pumpAndSettle();
 
     expect(find.text('Start at 1:35'), findsOneWidget);

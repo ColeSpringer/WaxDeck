@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/sleep_timer.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -52,9 +52,9 @@ void main() {
     );
     expect(engine.playing, isTrue);
 
-    await tester.tap(find.byKey(const Key('sleep-timer-open')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('sleep-timer-15')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(15)));
     await tester.pumpAndSettle();
 
     // Not yet: one minute short.
@@ -85,9 +85,9 @@ void main() {
       container: _container(repo, engine, clock),
     );
 
-    await tester.tap(find.byKey(const Key('sleep-timer-open')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('sleep-timer-15')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(15)));
     await tester.pumpAndSettle();
 
     // The device sleeps past the deadline: wall time races ahead while
@@ -114,14 +114,14 @@ void main() {
       container: _container(repo, engine, clock),
     );
 
-    await tester.tap(find.byKey(const Key('sleep-timer-open')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('sleep-timer-5')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(5)));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('sleep-timer-open')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('sleep-timer-cancel')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerCancel));
     await tester.pumpAndSettle();
 
     clock.advance(const Duration(minutes: 6));
@@ -156,10 +156,15 @@ void main() {
       positionMs: 0,
     );
 
-    await tester.tap(find.byKey(const Key('sleep-timer-open')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('sleep-timer-chapter')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('sleep-timer-chapter')));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+    );
     await tester.pumpAndSettle();
 
     engine.advance(const Duration(seconds: 59));

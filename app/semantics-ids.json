@@ -1083,16 +1083,56 @@
           "id": "player-discover"
         },
         {
+          "name": "playerMore",
+          "id": "player-more"
+        },
+        {
           "name": "playerMute",
           "id": "player-mute"
+        },
+        {
+          "name": "playerNext",
+          "id": "player-next"
+        },
+        {
+          "name": "playerPrevious",
+          "id": "player-previous"
+        },
+        {
+          "name": "playerQueue",
+          "id": "player-queue"
+        },
+        {
+          "name": "playerRepeat",
+          "id": "player-repeat"
+        },
+        {
+          "name": "playerRetry",
+          "id": "player-retry"
         },
         {
           "name": "playerSeek",
           "id": "player-seek"
         },
         {
+          "name": "playerShuffle",
+          "id": "player-shuffle"
+        },
+        {
+          "name": "playerSkipBack",
+          "id": "player-skip-back"
+        },
+        {
+          "name": "playerSkipForward",
+          "id": "player-skip-forward"
+        },
+        {
           "name": "playerSpeed",
           "id": "player-speed"
+        },
+        {
+          "name": "playerSurface",
+          "id": "player-surface"
         },
         {
           "name": "playerToggle",
@@ -1101,6 +1141,10 @@
         {
           "name": "playerTrim",
           "id": "player-trim"
+        },
+        {
+          "name": "playerUpNext",
+          "id": "player-up-next"
         },
         {
           "name": "playerVolume",

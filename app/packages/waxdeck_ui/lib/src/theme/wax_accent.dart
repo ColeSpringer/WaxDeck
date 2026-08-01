@@ -38,7 +38,5 @@ class WaxAccent extends InheritedWidget {
 
   @override
   bool updateShouldNotify(WaxAccent oldWidget) =>
-      oldWidget.palette.glow != palette.glow ||
-      oldWidget.palette.wash != palette.wash ||
-      oldWidget.domain != domain;
+      oldWidget.palette != palette || oldWidget.domain != domain;
 }

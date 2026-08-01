@@ -124,6 +124,17 @@ class FakeRepository implements WaxDeckRepository {
   /// Skip maps by pid (single file) or 'pid#partIndex' (book parts).
   final Map<String, SkipMap> skipMaps = {};
 
+  /// Waveforms by pid. Unseeded pids answer `pending`, which is what a
+  /// server whose analyze pass has never run says about everything.
+  final Map<String, Waveform> waveforms = {};
+
+  /// Pids [getWaveform] was asked about, so a test can pin that a face
+  /// with no use for peaks does not ask.
+  final List<String> waveformCalls = [];
+
+  /// Thrown by [getWaveform] when set.
+  WaxDeckApiException? waveformError;
+
   final List<({String username, String password, String? deviceName})>
   loginCalls = [];
   final List<({String username, String password, String? displayName})>
@@ -1129,6 +1140,14 @@ class FakeRepository implements WaxDeckRepository {
   Future<SkipMap> getSkipMap(String pid, {int? partIndex}) async {
     final keyed = partIndex == null ? null : skipMaps['$pid#$partIndex'];
     return keyed ?? skipMaps[pid] ?? const SkipMap(state: 'unavailable');
+  }
+
+  @override
+  Future<Waveform> getWaveform(String pid) async {
+    waveformCalls.add(pid);
+    final error = waveformError;
+    if (error != null) throw error;
+    return waveforms[pid] ?? const Waveform(state: 'pending');
   }
 
   @override

@@ -94,6 +94,20 @@ Future<PlayerHarness> pumpPlayer(
     container ?? playbackContainer(repo: repo, engine: engine),
   );
   harness.play([item], positionMs: positionMs);
+  await pumpPlayerInto(tester, harness, host: host);
+  return harness;
+}
+
+/// Mounts the player over a queue a test built itself.
+///
+/// For the cases where one item played on its own is the wrong setup: an
+/// up-next peek needs something after the current entry, and a
+/// provenance line needs a source that is not a single tap.
+Future<void> pumpPlayerInto(
+  WidgetTester tester,
+  PlayerHarness harness, {
+  Widget Function(Widget player)? host,
+}) async {
   const player = PlayerScreen();
   await tester.pumpWidget(
     UncontrolledProviderScope(
@@ -102,5 +116,4 @@ Future<PlayerHarness> pumpPlayer(
     ),
   );
   await tester.pumpAndSettle();
-  return harness;
 }

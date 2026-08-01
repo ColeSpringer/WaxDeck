@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -68,9 +68,14 @@ void main() {
     expect(engine.loadedUrl, contains('part=0'));
 
     // Seek to 90s on the book timeline (part 1 at 30s in) through the
-    // seek bar, which speaks book-timeline positions for books.
-    final slider = tester.widget<Slider>(find.byKey(const Key('player-seek')));
-    slider.onChanged!(90000);
+    // seek bar, which speaks book-timeline positions for books. Driven
+    // as a press on the bar rather than through a widget's callback:
+    // the bar is a painted track, so three quarters along it is what a
+    // reader would do and what the fraction means.
+    final bar = tester.getRect(
+      find.bySemanticsIdentifier(SemanticsIds.playerSeek),
+    );
+    await tester.tapAt(Offset(bar.left + bar.width * 0.75, bar.center.dy));
     await tester.pumpAndSettle();
 
     expect(engine.loadedUrl, contains('part=1'));

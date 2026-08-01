@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -32,9 +33,9 @@ void main() {
       host: routedHost,
     );
 
-    await tester.tap(find.byKey(const Key('player-discover')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerDiscover));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('instant-mix')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMix));
     await tester.pumpAndSettle();
 
     // The sheet: slide fully right for maximum adventurousness, then mix.
@@ -59,7 +60,7 @@ void main() {
     expect(find.text('Mix Opener'), findsWidgets);
 
     // Popping the player lands on the mix list for the rest of the mix.
-    await tester.pageBack();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerBack));
     await tester.pumpAndSettle();
     expect(find.text('Instant mix'), findsOneWidget);
     expect(find.byKey(const Key('mix-item-1')), findsOneWidget);
@@ -83,9 +84,9 @@ void main() {
       host: routedHost,
     );
 
-    await tester.tap(find.byKey(const Key('player-discover')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerDiscover));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('instant-mix')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMix));
     await tester.pumpAndSettle();
     await tester.drag(
       find.byKey(const Key('mix-adventurousness')),
@@ -96,13 +97,13 @@ void main() {
     await tester.pumpAndSettle();
 
     // Back out of the mix player and list, then open the sheet again.
-    await tester.pageBack();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerBack));
     await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('player-discover')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerDiscover));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('instant-mix')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMix));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('instant-mix-run')));
     await tester.pumpAndSettle();
@@ -125,9 +126,9 @@ void main() {
       host: routedHost,
     );
 
-    await tester.tap(find.byKey(const Key('player-discover')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerDiscover));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('instant-mix')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMix));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('instant-mix-run')));
     await tester.pumpAndSettle();

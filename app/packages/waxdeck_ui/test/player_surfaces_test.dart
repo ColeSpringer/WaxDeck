@@ -170,6 +170,276 @@ void main() {
       );
       expect(find.text('Playing from Salt Harbour'), findsOneWidget);
     });
+
+    // The face with the most under its artwork: the volume slot and the
+    // action row are what the music rebuild added, and they are what a
+    // hero sized off a fraction of the window overflows on.
+    for (final size in <Size>[
+      Size(360, 640),
+      Size(412, 732),
+      Size(320, 480),
+      Size(900, 600),
+      Size(1280, 800),
+    ]) {
+      testWidgets(
+        'a full face fits ${size.width.toInt()}x${size.height.toInt()}',
+        (tester) async {
+          await _pumpAt(
+            tester,
+            SizedBox(
+              width: size.width,
+              height: size.height,
+              child: PlayerScaffold(
+                now: _music,
+                transport: TransportCluster(
+                  playing: true,
+                  onPlayPause: () {},
+                  onPrevious: () {},
+                  onNext: () {},
+                  onShuffle: () {},
+                  onRepeat: () {},
+                ),
+                seek: SeekCluster(now: _music, onSeek: (_) {}),
+                volume: WaxSlider(
+                  value: 0.6,
+                  onChanged: (_) {},
+                  label: 'Volume',
+                ),
+                actionRow: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    WaxIconButton(
+                      glyph: WaxIcons.queue,
+                      label: 'Queue',
+                      onPressed: () {},
+                    ),
+                    WaxIconButton(
+                      glyph: WaxIcons.more,
+                      label: 'More',
+                      onPressed: () {},
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            size: size,
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
+    // Compact landscape takes the other arrangement entirely, and every
+    // size in the sweep above takes the portrait one - which is how a
+    // volume row and an action row were added to a column with no room
+    // for them and nothing said so. 568x320 is a phone on its side.
+    for (final size in <Size>[
+      Size(568, 320),
+      Size(480, 320),
+      Size(740, 360),
+      Size(844, 390),
+    ]) {
+      testWidgets('a full face fits landscape ${size.width.toInt()}x'
+          '${size.height.toInt()}', (tester) async {
+        await _pumpAt(
+          tester,
+          SizedBox(
+            width: size.width,
+            height: size.height,
+            child: PlayerScaffold(
+              now: _music,
+              transport: TransportCluster(
+                playing: true,
+                onPlayPause: () {},
+                onPrevious: () {},
+                onNext: () {},
+                onShuffle: () {},
+                onRepeat: () {},
+              ),
+              seek: SeekCluster(now: _music, onSeek: (_) {}),
+              volume: WaxSlider(value: 0.6, onChanged: (_) {}, label: 'Volume'),
+              actionRow: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  WaxIconButton(
+                    glyph: WaxIcons.queue,
+                    label: 'Queue',
+                    onPressed: () {},
+                  ),
+                  WaxIconButton(
+                    glyph: WaxIcons.more,
+                    label: 'More',
+                    onPressed: () {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+          size: size,
+        );
+        expect(tester.takeException(), isNull);
+        // The transport is the widest thing that does not wrap, so it
+        // is what says whether the column got the room it needs.
+        expect(find.byType(TransportCluster), findsOneWidget);
+      });
+    }
+
+    testWidgets('the surface offers a screen reader no scroll to fall out of', (
+      tester,
+    ) async {
+      // A vertical drag left in the semantics tree publishes scrollUp
+      // and scrollDown on the surface, and a screen-reader scroll
+      // synthesises a drag long enough to cross the dismiss threshold:
+      // swiping to read the player would close it.
+      final handle = tester.ensureSemantics();
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            ids: const PlayerIds(surface: 'player-surface'),
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 880),
+      );
+
+      final data = tester
+          .getSemantics(find.bySemanticsIdentifier('player-surface'))
+          .getSemanticsData();
+      expect(data.actions & SemanticsAction.scrollDown.index, 0);
+      expect(data.actions & SemanticsAction.scrollUp.index, 0);
+      expect(collapsed, 0);
+      handle.dispose();
+    });
+
+    testWidgets('a short drag springs back rather than collapsing', (
+      tester,
+    ) async {
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 880),
+      );
+
+      // From the title block, which is not a control: a drag started on
+      // the seek bar belongs to the seek bar.
+      await tester.drag(find.text('Nightjar'), const Offset(0, 60));
+      await tester.pumpAndSettle();
+      expect(collapsed, 0);
+      // And it comes back: a surface left 60 px down is the gesture
+      // half-applied.
+      expect(
+        tester.getTopLeft(find.text('Nightjar')).dy,
+        closeTo(tester.getTopLeft(find.text('Salt Harbour')).dy + 30, 30),
+      );
+    });
+
+    testWidgets('a long drag collapses the player', (tester) async {
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 880),
+      );
+
+      await tester.drag(find.text('Nightjar'), const Offset(0, 400));
+      await tester.pumpAndSettle();
+      expect(collapsed, 1);
+    });
+
+    testWidgets('the space around the artwork drags too', (tester) async {
+      // Most of a player is backdrop, and a dismissal that only worked
+      // where a widget happened to be drawn would read as broken.
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 880),
+      );
+
+      // Hard against the left gutter, beside the hero rather than on it.
+      await tester.dragFrom(const Offset(8, 300), const Offset(0, 400));
+      await tester.pumpAndSettle();
+      expect(collapsed, 1);
+    });
+
+    testWidgets('a flick collapses it without the distance', (tester) async {
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 880),
+      );
+
+      await tester.fling(find.text('Nightjar'), const Offset(0, 80), 1600);
+      await tester.pumpAndSettle();
+      expect(collapsed, 1);
+    });
+
+    testWidgets('a player with nowhere to collapse to takes no drag', (
+      tester,
+    ) async {
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 880),
+      );
+      final before = tester.getTopLeft(find.text('Nightjar'));
+      await tester.drag(find.text('Nightjar'), const Offset(0, 200));
+      await tester.pump();
+      expect(tester.getTopLeft(find.text('Nightjar')), before);
+    });
   });
 
   group('seek bar', () {

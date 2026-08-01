@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../player/session_registry.dart';
 import '../providers.dart';
@@ -55,6 +56,7 @@ class RadioStationsController extends AsyncNotifier<List<RadioStation>> {
     // server drops its copy; this drops ours, including the note that the
     // station had no logo, or the fix draws the old picture all session.
     await ref.read(artworkStoreProvider).evict(repository.radioLogoUrlFor(pid));
+    ref.read(paletteCacheProvider).forget(repository.radioLogoUrlFor(pid));
     ref.invalidateSelf();
     await future;
     return updated;

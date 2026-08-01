@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../admin/server_settings_section.dart';
+import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../connect/cast_preflight.dart';
 import '../connect/device_picker.dart';
@@ -360,6 +361,7 @@ class _ArtworkCacheRowState extends ConsumerState<_ArtworkCacheRow> {
     setState(() => _clearing = true);
     try {
       await ref.read(artworkStoreProvider).forgetEverything();
+      ref.read(paletteCacheProvider).clear();
       messenger.showSnackBar(
         const SnackBar(content: Text('Artwork cache cleared')),
       );

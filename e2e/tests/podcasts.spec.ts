@@ -178,8 +178,14 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   // the poll below is where that is handled.
 
   // Show notes were sanitized server-side and render as text.
+  // The player's own way out, by handle. It used to be an app-bar back
+  // button called "Back" and it is a collapse chevron called "Collapse
+  // player" since the rebuild onto the scaffold, so a name match here
+  // walks past the player onto the screen underneath - which is the
+  // failure radio-cast.spec records as "how this scenario started
+  // popping the wrong screen".
   await clickThrough(
-    page.getByRole('button', { name: 'Back' }).first(),
+    page.locator(sem(SemanticsIds.playerBack)),
     page.locator(sem(SemanticsIds.episodeInfo(episode.pid))),
   );
   await clickThrough(
@@ -281,9 +287,10 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
 
   // Unsubscribing while an episode sits fetched asks about the server
   // files; keeping them ends the subscription and leaves the download
-  // governed by whoever subscribes next.
+  // governed by whoever subscribes next. The player is still up from the
+  // passthrough check, so leaving it is the player's control (see above).
   await clickThrough(
-    page.getByRole('button', { name: 'Back' }).first(),
+    page.locator(sem(SemanticsIds.playerBack)),
     page.locator(sem(SemanticsIds.podcastUnsubscribe)),
   );
   await expect(async () => {

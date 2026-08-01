@@ -705,6 +705,15 @@ SkipMap skipMapFromGen(gen.SkipMap map) {
   );
 }
 
+Waveform waveformFromGen(gen.Waveform waveform) {
+  return Waveform(
+    state: waveform.state,
+    peaks: waveform.peaks?.toList() ?? const [],
+    resolution: waveform.resolution,
+    essenceHash: waveform.essenceHash,
+  );
+}
+
 RuleNode ruleNodeFromGen(gen.RuleNode node) {
   final inner = node.node;
   return RuleNode(

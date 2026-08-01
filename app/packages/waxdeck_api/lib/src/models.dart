@@ -1329,6 +1329,43 @@ class SkipMap {
   bool get ready => state == 'ready';
 }
 
+/// One item's amplitude envelope, for the seek bar to paint.
+///
+/// The three states are not interchangeable. `ready` carries [peaks];
+/// `pending` means the analyze pass has not reached this file, so asking
+/// again later may answer differently; `unavailable` is final, and the
+/// four populations that get it (podcast episodes, cue-carved tracks,
+/// multi-file audiobooks, files the pass could not measure) will never
+/// have one. A client draws its plain seek bar for the last of those
+/// rather than spinning at it.
+class Waveform {
+  const Waveform({
+    required this.state,
+    this.peaks = const [],
+    this.resolution,
+    this.essenceHash,
+  });
+
+  /// `ready`, `pending`, or `unavailable`. An open set: anything else
+  /// reads as unavailable.
+  final String state;
+
+  /// One amplitude per bucket in playback order, 0 silence and 255 full
+  /// scale. Empty unless [ready].
+  final List<int> peaks;
+
+  /// How many buckets [peaks] carries, read rather than assumed: the
+  /// catalog's 1000 is a constant an analysis-version bump may change.
+  final int? resolution;
+
+  final String? essenceHash;
+
+  bool get ready => state == 'ready';
+
+  /// Whether asking again could ever answer differently.
+  bool get pending => state == 'pending';
+}
+
 /// One node of a smart rule's condition tree. [type] selects the shape:
 /// `all` and `any` carry [nodes], `not` carries [node], `condition`
 /// compares [field] with [op] against [value] (or [values] for

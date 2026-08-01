@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -28,9 +29,9 @@ void main() {
       host: routedHost,
     );
 
-    await tester.tap(find.byKey(const Key('player-discover')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerDiscover));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('similar-tracks')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.similarTracks));
     await tester.pumpAndSettle();
 
     expect(repo.similarTracksCalls.single.pid, _seedPid);
@@ -63,9 +64,9 @@ void main() {
       host: routedHost,
     );
 
-    await tester.tap(find.byKey(const Key('player-discover')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerDiscover));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('similar-tracks')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.similarTracks));
     await tester.pumpAndSettle();
 
     expect(

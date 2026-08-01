@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../providers.dart';
 
@@ -109,6 +110,8 @@ class PlaylistsController extends AsyncNotifier<List<Playlist>> {
 Future<void> evictPlaylistCover(Ref ref, String? artUrl) async {
   if (artUrl == null) return;
   await ref.read(artworkStoreProvider).evict(artUrl);
+  // The colour read off those bytes is as stale as the bytes are.
+  ref.read(paletteCacheProvider).forget(artUrl);
 }
 
 final playlistsProvider =
