@@ -218,7 +218,6 @@ test('accounts without upload rights see no upload affordances', async ({
   page,
   request,
 }) => {
-  test.setTimeout(120_000);
   const token = await ensureAdmin(request);
   await waitForLibrary(request, token);
 

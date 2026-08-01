@@ -66,7 +66,6 @@ test('the audit log answers who deleted a playlist', async ({ request }) => {
 });
 
 test('a backup archive is written, downloadable, and stageable', async ({ request }) => {
-  test.setTimeout(120_000);
   const token = await ensureAdmin(request);
 
   const started = await request.post('/api/v1/admin/backups', authed(token));
@@ -240,7 +239,6 @@ test.describe.serial('server-global switches', () => {
 });
 
 test('deleted items land in the trash and restore cleanly', async ({ request }) => {
-  test.setTimeout(120_000);
   const token = await ensureAdmin(request);
   await waitForLibrary(request, token);
   const pid = await lastItemPid(request, token);

@@ -64,7 +64,6 @@ async function waitForSonicCoverage(request: APIRequestContext, token: string) {
 }
 
 test('an instant mix starts from any playing track', async ({ page, request }) => {
-  test.setTimeout(120_000);
   const token = await ensureAdmin(request);
   await waitForLibrary(request, token);
   const pid = await trackPid(request, token, 'Bravo Song');

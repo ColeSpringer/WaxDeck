@@ -58,11 +58,35 @@ test('a shelf\'s Show all opens the enumeration behind it', async ({
   // Its own scenario rather than a step after the shelf sweep above:
   // that one wheels down to reach the shelves below the fold, and this
   // control is above it. Two tests, each failing for one reason.
-  await clickThrough(
-    page.locator(sem(SemanticsIds.shelfAll('recent'))),
-    page.locator(`[flt-semantics-identifier^="${SemanticsIds.item('')}"]`).first(),
-  );
-  await expect(page).toHaveURL(/#\/music\/tracks$/);
+  //
+  // Clicked and checked as one unit rather than through clickThrough.
+  // The shelves above this one arrive on their own schedule, and each
+  // one that resolves pushes this control down a shelf's height: a
+  // forced click skips the stability wait, so one dispatched into that
+  // gap lands wherever the old rect now is. Under a full suite that is
+  // the episodes shelf's own "Show all" and a trip to Podcasts, which
+  // is why the click is answered by where it actually went rather than
+  // by waiting out an enumeration that was never coming.
+  const showAll = page.locator(sem(SemanticsIds.shelfAll('recent')));
+  const tracks = /#\/music\/tracks$/;
+  const anyItem = page
+    .locator(`[flt-semantics-identifier^="${SemanticsIds.item('')}"]`)
+    .first();
+  await expect(async () => {
+    if (await anyItem.isVisible()) return;
+    // Clicked again only when nothing is already on its way: an
+    // enumeration still drawing is not a failed attempt, and navigating
+    // home out from under it is the one thing this must not do.
+    if (!tracks.test(page.url())) {
+      // Home first where the last attempt left the app somewhere with no
+      // handle on it; the handle only exists here.
+      if (!(await showAll.isVisible())) await page.goto('/#/');
+      await showAll.click({ timeout: 5_000, force: true });
+      await expect(page).toHaveURL(tracks, { timeout: 5_000 });
+    }
+    await anyItem.waitFor({ timeout: 20_000 });
+  }).toPass({ timeout: 60_000 });
+  await expect(page).toHaveURL(tracks);
 });
 
 test('the account menu is in the app bar and still reaches settings', async ({

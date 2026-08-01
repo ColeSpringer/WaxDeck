@@ -39,7 +39,6 @@ async function openSettings(page: Page) {
 test('the sections are locations, and search finds a setting inside one', async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await openSettings(page);
 
   // Every section is a link a stranger can open, which is what makes
@@ -68,7 +67,6 @@ test('a per-device setting survives a reload without reaching the account', asyn
   page,
   request,
 }) => {
-  test.setTimeout(120_000);
   const token = await ensureAdmin(request);
 
   await openSettings(page);
@@ -104,7 +102,6 @@ test('a per-device setting survives a reload without reaching the account', asyn
 });
 
 test('About reports both versions', async ({ page, request }) => {
-  test.setTimeout(120_000);
   const health = await (await request.get('/api/v1/health')).json();
   await openSettings(page);
   // Opened from Server rather than from Account. Both offer the same
@@ -130,7 +127,6 @@ test('About reports both versions', async ({ page, request }) => {
 // whichever key the other one just set.
 test.describe.serial('account preferences', () => {
   test('an account setting reaches the preference document', async ({ page, request }) => {
-    test.setTimeout(120_000);
     const token = await ensureAdmin(request);
     await openSettings(page);
     await clickThrough(
@@ -166,7 +162,6 @@ test.describe.serial('account preferences', () => {
     page,
     request,
   }) => {
-    test.setTimeout(120_000);
     const token = await ensureAdmin(request);
     await openSettings(page);
     await clickThrough(

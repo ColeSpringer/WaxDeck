@@ -12,6 +12,15 @@ export default defineConfig({
   // OS focus; too many concurrent pages makes both flaky. Four workers
   // keeps the suite fast without the contention.
   workers: 4,
+  // Playwright's 30s default is a budget for a page; a spec here boots
+  // the real Flutter web client against the real stack, and the one that
+  // signs two of them in takes 15s on an idle workstation. Four workers
+  // on a four-vCPU runner roughly doubles that, which is how connect
+  // came to fail every CI run while passing locally in half the time.
+  // 120s is what the heavy specs were already asking for one
+  // `test.setTimeout` at a time; the ones that need longer than that
+  // still say so themselves.
+  timeout: 120_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',

@@ -6,7 +6,14 @@ import {
   Browser,
   APIRequestContext,
 } from './fixtures';
-import { authed, ensureAdmin, itemRow, typeInto, waitForLibrary } from './helpers';
+import {
+  authed,
+  clickThrough,
+  ensureAdmin,
+  itemRow,
+  typeInto,
+  waitForLibrary,
+} from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // Connect: every signed-in client is a controller and a controllable
@@ -128,11 +135,23 @@ test('a session mirrors to the server and relays remote control', async ({
   await otherCard.click();
   const devices = locate(b.page, SemanticsIds.playerDevices);
   await devices.waitFor({ timeout: 30_000 });
-  await devices.click({ force: true });
 
+  // The sheet is opened on its own terms and then left standing. Not
+  // `chooseFromMenu`: that helper re-clicks its trigger whenever the row
+  // it wants is missing, and here the trigger is behind the sheet's own
+  // modal barrier, so a picker still fetching its sessions would be
+  // closed by the very retry waiting on it.
+  await clickThrough(devices, locate(b.page, SemanticsIds.picker));
+
+  // The picker relists whenever any session anywhere changes and A plays
+  // throughout, so the row is waited for with the sheet standing rather
+  // than on a budget shared with anything that could dismiss it.
   const sessionRow = locate(b.page, SemanticsIds.session(session!.id));
   await sessionRow.waitFor({ timeout: 15_000 });
-  await sessionRow.scrollIntoViewIfNeeded();
+  // Clicked without scrolling to it first: that is a second action
+  // against a list relisting under it, and the node it resolved can be
+  // gone by the time it runs, which is how this failed in CI. A click
+  // scrolls as part of itself and re-resolves when the node goes away.
   await sessionRow.click({ force: true });
 
   // The remote screen renders A's playback and pauses it; the pause

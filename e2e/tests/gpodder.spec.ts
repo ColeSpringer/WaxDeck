@@ -13,7 +13,6 @@ function basic(user: string, secret: string) {
 }
 
 test('a gpodder client syncs subscriptions and play positions', async ({ request }) => {
-  test.setTimeout(120_000);
   const token = await ensureAdmin(request);
 
   // App passwords are the only credential the compatibility surfaces

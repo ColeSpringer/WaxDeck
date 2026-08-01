@@ -153,7 +153,6 @@ test.describe.serial('radio and cast', () => {
     page,
     request,
   }) => {
-    test.setTimeout(120_000);
     const token = await ensureAdmin(request);
     const bare = await station(
       request,
@@ -279,7 +278,6 @@ test.describe.serial('radio and cast', () => {
     page,
     request,
   }) => {
-    test.setTimeout(120_000);
     const token = await ensureAdmin(request);
     const items = await (
       await request.get('/api/v1/library/items', authed(token))

@@ -96,12 +96,21 @@ export async function clickThrough(trigger: Locator, appears: Locator) {
 //
 // `settled` is what proves the choice took: a sheet the row opens, or -
 // by default - the menu going away, which is what a value picker does.
+// It is also checked before anything else, for the choice that took and
+// then outran its own wait: the menu is gone by the next attempt, so
+// every one after it re-opens the menu over the surface the choice
+// already reached and none of them ever look at what they were waiting
+// for - a helper that fails its whole budget after having succeeded.
+// That check is why `settled` has to be something only the chosen row
+// can produce: one already on screen when this is called reads as a
+// choice that already happened, and the menu is never opened at all.
 export async function chooseFromMenu(
   trigger: Locator,
   item: Locator,
   settled?: Locator,
 ) {
   await expect(async () => {
+    if (settled && (await settled.isVisible())) return;
     if (!(await item.isVisible())) {
       await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
       await item.waitFor({ timeout: 5_000 });
