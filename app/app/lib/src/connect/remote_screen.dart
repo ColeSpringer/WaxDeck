@@ -158,15 +158,17 @@ class _Remote extends ConsumerWidget {
                   const SizedBox(height: WaxSpace.s8),
                   Center(
                     child: WaxSlider(
-                      value: session.volume ?? 1.0,
+                      value: remote.volume ?? 1.0,
                       label: 'Volume on ${remote.endpointName}',
                       glyph: WaxIcons.volume,
                       mutedGlyph: WaxIcons.volumeMuted,
                       trackWidth: 200,
                       semanticsId: SemanticsIds.remoteVolume,
-                      onChanged: (level) => unawaited(
-                        _report(context, controller.setVolume(level)),
-                      ),
+                      // No _report: the level fires per step crossed and
+                      // the controller swallows refusals - the knob
+                      // following the frames is the report.
+                      onChanged: (level) =>
+                          unawaited(controller.setVolume(level)),
                     ),
                   ),
                 ],

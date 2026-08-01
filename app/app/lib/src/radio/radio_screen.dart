@@ -136,8 +136,10 @@ class _Dial extends ConsumerWidget {
 /// hold a track, and this hub is what that bar expands to: the level a
 /// wide window reads on the bar is one tap away on every narrower one,
 /// which is the arrangement the remote session already uses for its own
-/// endpoint. Above sidebar width both are drawn, over the same engine
-/// gain, so neither can show a loudness the other does not.
+/// endpoint. Exactly one local control exists per width - the deck bar's
+/// cluster wherever the bar has one, this row where it does not - so the
+/// gate is the same size-class rule the bar's host reads, and toggling
+/// device emulation adds and removes the row with the class it changes.
 ///
 /// Absent on a phone and a tablet, where the hardware buttons own local
 /// volume and a software slider would fight the OS volume stack.
@@ -146,12 +148,17 @@ class _StationVolume extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(localVolumeAvailableProvider)) {
+    if (WaxSizeClass.of(context).hasSidebar ||
+        !ref.watch(localVolumeAvailableProvider)) {
       return const SizedBox.shrink();
     }
     final volume = ref.read(outputVolumeProvider.notifier);
     return Padding(
-      padding: const EdgeInsets.only(bottom: WaxSpace.s16),
+      // The scaffold gutter, so the row sits on the same left edge as
+      // the grid and the title instead of against the window.
+      padding: WaxSizeClass.of(
+        context,
+      ).gutter.add(const EdgeInsets.only(bottom: WaxSpace.s16)),
       child: Align(
         alignment: Alignment.centerLeft,
         child: WaxSlider(

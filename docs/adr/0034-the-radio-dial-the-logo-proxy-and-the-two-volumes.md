@@ -182,6 +182,14 @@ every width, which is one tap from the bar and already existed. Both of
 5.2's conditions are built; where each is reachable is stated rather than
 left to be discovered.
 
+*Amended 2026-08-01: local volume follows the same exactly-one rule.*
+The radio hub's own volume row (added with the radio face) was gated only
+on the platform, so above sidebar width it drew stacked over the bar's
+cluster - two live controls over one gain, and a device-emulation toggle
+left the extra one behind. The hub row is now gated on the same
+size-class rule the bar's host reads: the bar's cluster carries the level
+wherever the bar has one, the hub row only where it does not.
+
 The three-zone bar's own budget moved too: the slider is the largest thing
 ever added to the right cluster, and at 840 px it took the left zone below
 what its artwork, star, and needle need. The track scales with the bar's

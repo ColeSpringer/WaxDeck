@@ -58,6 +58,44 @@ void main() {
     await harness.endPlayback(tester);
   });
 
+  testWidgets('the level moves under the finger, not on release', (
+    tester,
+  ) async {
+    // The filed bug: volume only changed when the finger let go. The
+    // slider now reports live, one value per step crossed, and the
+    // optimistic controller writes each one straight to the engine.
+    final repo = FakeRepository(items: [testItem('tr-A')]);
+    final engine = FakeEngine();
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem('tr-A'),
+      container: playbackContainer(
+        repo: repo,
+        engine: engine,
+        extra: [localVolumeAvailableProvider.overrideWithValue(true)],
+      ),
+    );
+
+    final before = engine.volume;
+    final slider = find.bySemanticsIdentifier(SemanticsIds.playerVolume);
+    final gesture = await tester.startGesture(tester.getCenter(slider));
+    await gesture.moveBy(Offset(-tester.getSize(slider).width / 4, 0));
+    await tester.pump();
+    expect(
+      engine.volume,
+      lessThan(before),
+      reason: 'the gain must follow the drag, not wait for release',
+    );
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(engine.volume, closeTo(0.25, 0.1));
+
+    await harness.endPlayback(tester);
+  });
+
   testWidgets('the level follows a change nothing on screen made', (
     tester,
   ) async {

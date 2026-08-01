@@ -8,6 +8,10 @@ const _stations = <DialStation>[
   DialStation(name: 'Night Jazz'),
 ];
 
+void _ignoreTune(int index) {}
+
+void _ignoreStop() {}
+
 Future<void> _pump(
   WidgetTester tester,
   Widget child, {
@@ -76,6 +80,73 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Stop'));
       await tester.pumpAndSettle();
       expect(stopped, isTrue);
+    });
+
+    testWidgets('starting playback does not shift the cluster', (tester) async {
+      // The ICY line only exists while something plays, and a slot that
+      // appeared with it used to shove the name, the button, and the
+      // grid below down the moment a stream started.
+      await _pump(
+        tester,
+        const StationDial(
+          stations: <DialStation>[DialStation(name: 'Coastal FM')],
+          onTune: _ignoreTune,
+        ),
+        reducedMotion: true,
+      );
+      final idleHeight = tester.getSize(find.byType(StationDial)).height;
+      final idleButton = tester.getTopLeft(find.bySemanticsLabel('Tune in'));
+
+      await _pump(
+        tester,
+        const StationDial(
+          stations: <DialStation>[
+            DialStation(
+              name: 'Coastal FM',
+              playing: true,
+              nowPlaying: 'Ora Lune - Bell Tower',
+            ),
+          ],
+          onTune: _ignoreTune,
+          onStop: _ignoreStop,
+        ),
+        reducedMotion: true,
+      );
+
+      expect(
+        tester.getSize(find.byType(StationDial)).height,
+        idleHeight,
+        reason: 'the ICY slot is reserved, so the flip moves nothing',
+      );
+      expect(
+        tester.getTopLeft(find.bySemanticsLabel('Stop')).dy,
+        idleButton.dy,
+        reason: 'the transport stays put through the playing flip',
+      );
+    });
+
+    testWidgets('the live pill stays inside the station slot', (tester) async {
+      await _pump(
+        tester,
+        const StationDial(
+          stations: <DialStation>[
+            DialStation(name: 'Coastal FM', playing: true),
+          ],
+          onTune: _ignoreTune,
+          onStop: _ignoreStop,
+        ),
+        reducedMotion: true,
+      );
+
+      final logo = tester.getRect(find.byType(ArtworkImage).first);
+      final pill = tester.getRect(
+        find.ancestor(of: find.text('LIVE'), matching: find.byType(Container)),
+      );
+      expect(
+        pill.bottom,
+        lessThanOrEqualTo(logo.bottom + 0.01),
+        reason: 'the pill is contained by the slot, not hung below it',
+      );
     });
 
     testWidgets('keeps the logo band out of the traversal order', (

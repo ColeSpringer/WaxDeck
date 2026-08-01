@@ -427,6 +427,42 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    testWidgets('the level moves under the finger, not on release', (
+      tester,
+    ) async {
+      // The filed bug: the gain only changed when the finger let go.
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: engine,
+        container: playbackContainer(
+          repo: repo,
+          engine: engine,
+          extra: [localVolumeAvailableProvider.overrideWithValue(true)],
+        ),
+      );
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+
+      final slider = find.bySemanticsIdentifier(SemanticsIds.deckVolume);
+      final before = engine.volume;
+      final gesture = await tester.startGesture(tester.getCenter(slider));
+      await gesture.moveBy(Offset(-tester.getSize(slider).width / 2 + 4, 0));
+      await tester.pump();
+      expect(
+        engine.volume,
+        lessThan(before),
+        reason: 'the gain must follow the drag, not wait for release',
+      );
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('a level set from elsewhere becomes the one to come back to', (
       tester,
     ) async {

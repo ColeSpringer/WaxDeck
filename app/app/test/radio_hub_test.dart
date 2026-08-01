@@ -464,6 +464,44 @@ void main() {
     expect(_byId(SemanticsIds.radioVolume), findsNothing);
   });
 
+  testWidgets('above sidebar width the level belongs to the deck bar', (
+    tester,
+  ) async {
+    // The out-of-place slider: the hub row was gated only on the
+    // platform, so at sidebar widths it stacked a second control over
+    // the deck bar's own cluster - and toggling device emulation left
+    // the extra one behind. The gate reads the size class, so a resize
+    // adds and removes the row with the class it changes.
+    final engine = FakeEngine();
+    final container = _container(
+      _repo(),
+      engine: engine,
+      extra: [localVolumeAvailableProvider.overrideWithValue(true)],
+    );
+    await _pumpHub(tester, container, size: const Size(700, 900));
+
+    await tester.tap(_byId(SemanticsIds.radio('rs-1')));
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.radioVolume), findsOneWidget);
+
+    // Device emulation off: the window is a desktop's again.
+    tester.view.physicalSize = const Size(1200, 900);
+    await tester.pumpAndSettle();
+    expect(
+      _byId(SemanticsIds.radioVolume),
+      findsNothing,
+      reason: 'the deck bar cluster carries the level at this width',
+    );
+
+    // And back on: the hub row returns with the width that needs it.
+    tester.view.physicalSize = const Size(700, 900);
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.radioVolume), findsOneWidget);
+
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('removing a station drops the pin that named it', (tester) async {
     final repo = _repoWithFavorites(<String>['rs-1', 'rs-2']);
     final container = _container(repo);

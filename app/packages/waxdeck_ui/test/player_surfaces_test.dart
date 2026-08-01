@@ -483,6 +483,33 @@ void main() {
     });
   });
 
+  group('deck bar title block', () {
+    testWidgets('the needle sits beside the title, not adrift in the bar', (
+      tester,
+    ) async {
+      // The subtitle row defaulted to MainAxisSize.max, which stretched
+      // the title block to the zone's width and pushed the playing
+      // indicator to the middle of the bar - the stray tonearm both bug
+      // screenshots show.
+      await _pumpAt(
+        tester,
+        DeckBar(
+          now: _music,
+          actions: DeckBarActions(onPlayPause: () {}),
+        ),
+        size: const Size(1280, 200),
+      );
+
+      final title = tester.getRect(find.text('Salt Harbour'));
+      final needle = tester.getRect(find.byType(PlayingIndicator));
+      expect(
+        needle.left - title.right,
+        lessThan(40),
+        reason: 'the needle rides with the text, not with the zone edge',
+      );
+    });
+  });
+
   group('seek bar', () {
     testWidgets('a track with no length offers no seek', (tester) async {
       // Every position is a fraction of the duration, so at zero a scrub or

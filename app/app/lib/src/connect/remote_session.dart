@@ -16,6 +16,7 @@ class RemoteSession {
     required this.entries,
     this.volumeControl = false,
     this.rateControl = false,
+    this.sentVolume,
   });
 
   final PlaybackSessionInfo session;
@@ -34,6 +35,17 @@ class RemoteSession {
   /// every use is an error toast.
   final bool volumeControl;
   final bool rateControl;
+
+  /// The level this client last sent and has not yet seen come back in a
+  /// frame. Without it a released drag snapped to the previous frame's
+  /// level for the whole round trip; the controller drops it once its
+  /// sends have settled and a fresh frame carries the endpoint's own
+  /// answer.
+  final double? sentVolume;
+
+  /// The level the surfaces draw: the optimistic beat while a send is
+  /// out, the endpoint's own report otherwise.
+  double? get volume => sentVolume ?? session.volume;
 
   String get id => session.id;
 
@@ -55,11 +67,13 @@ class RemoteSession {
     List<PlaybackSessionEntry>? entries,
     bool? volumeControl,
     bool? rateControl,
+    double? sentVolume,
   }) => RemoteSession(
     session: session ?? this.session,
     entries: entries ?? this.entries,
     volumeControl: volumeControl ?? this.volumeControl,
     rateControl: rateControl ?? this.rateControl,
+    sentVolume: sentVolume ?? this.sentVolume,
   );
 }
 
@@ -82,6 +96,40 @@ class RemoteSessionController extends Notifier<RemoteSession?> {
   StreamSubscription<PlaybackSessionInfo>? _frames;
   Timer? _ticker;
 
+  /// The pacing for routed volume. The slider reports a value per step
+  /// crossed, and each one here is a round trip another device has to
+  /// apply, so sends are throttled leading-plus-trailing: the first
+  /// change goes now - that first response is the moment the user judges
+  /// whether the control works - then at most one per gap, always ending
+  /// on the final value.
+  static const Duration _volumeGapLength = Duration(milliseconds: 150);
+  Timer? _volumeGap;
+  double? _volumeTrailing;
+
+  /// Whether a set-volume is still waiting on its ack. The trailing send
+  /// waits on this as well as the gap: the gap bounds the rate, and the
+  /// ack bounds the backlog to one command in flight, so a link slower
+  /// than the gap queues one level instead of stacking un-acked
+  /// commands against their ten-second timeouts.
+  bool _volumeSending = false;
+
+  /// Which session's pacing the in-flight completions belong to. A
+  /// command can outlive the session it was sent for - release, then
+  /// adopt, with the old ack still out - and its completion must not
+  /// clear the new session's in-flight flag or flush a level meant for
+  /// the old device.
+  int _volumeEpoch = 0;
+
+  /// Forgets everything the pacing knows. The queued level was a slider
+  /// position on the session being left, meaningless to the next one.
+  void _resetVolumePacing() {
+    _volumeEpoch++;
+    _volumeGap?.cancel();
+    _volumeGap = null;
+    _volumeTrailing = null;
+    _volumeSending = false;
+  }
+
   /// The extrapolated position, ticking while the remote plays.
   ///
   /// Its own listenable for the reason local playback's is: the deck bar
@@ -100,6 +148,9 @@ class RemoteSessionController extends Notifier<RemoteSession?> {
     ref.onDispose(() {
       _frames?.cancel();
       _ticker?.cancel();
+      // The epoch bump keeps a still-outstanding ack from flushing a
+      // level - or reading state - on a disposed notifier.
+      _resetVolumePacing();
       _endpoints?.close();
       position.dispose();
     });
@@ -128,6 +179,7 @@ class RemoteSessionController extends Notifier<RemoteSession?> {
     _frames?.cancel();
     _frames = _bus.watchFrames.listen(_onFrame);
     _followEndpoints();
+    _resetVolumePacing();
     _bus.watch(session.id);
     final endpoints =
         ref.read(playerEndpointsProvider).value ?? const <PlayerEndpoint>[];
@@ -155,6 +207,9 @@ class RemoteSessionController extends Notifier<RemoteSession?> {
     _frames = null;
     _ticker?.cancel();
     _ticker = null;
+    // A level still queued for a session no longer driven is a command
+    // to a device this client has let go of.
+    _resetVolumePacing();
     // Let the endpoint list go with the session; see _followEndpoints.
     _endpoints?.close();
     _endpoints = null;
@@ -208,8 +263,85 @@ class RemoteSessionController extends Notifier<RemoteSession?> {
   /// Sets the endpoint's own output level. Refused server-side on an
   /// endpoint with no volume control, which is why [RemoteSession] carries
   /// the capability and the surfaces draw no slider without it.
-  Future<void> setVolume(double volume) =>
-      _send('set-volume', volume: volume.clamp(0.0, 1.0));
+  ///
+  /// Optimistic and throttled, on the local controller's contract. The
+  /// state's [RemoteSession.sentVolume] moves now, so the knob holds the
+  /// level through the round trip instead of snapping to the previous
+  /// frame; sends go leading-plus-trailing per [_volumeGapLength], with
+  /// a call landing inside a gap - or while the previous send is still
+  /// un-acked - queued as the trailing level. Failures are not raised:
+  /// the slider fires once per step crossed, and a refusing endpoint
+  /// would turn a drag into a snackbar per step. Dropping the optimistic
+  /// level and letting the next frame carry the endpoint's own answer is
+  /// the report.
+  Future<void> setVolume(double volume) async {
+    final level = volume.clamp(0.0, 1.0);
+    final current = state;
+    if (current == null) return;
+    state = current.copyWith(sentVolume: level);
+    if (_volumeGap != null || _volumeSending) {
+      _volumeTrailing = level;
+      return;
+    }
+    _volumeGap = Timer(_volumeGapLength, _volumeGapClosed);
+    _volumeSending = true;
+    final epoch = _volumeEpoch;
+    try {
+      await _send('set-volume', volume: level);
+    } on Object catch (failure) {
+      debugPrint('the endpoint would not take the level: $failure');
+      _dropSentVolume(epoch);
+    } finally {
+      if (epoch == _volumeEpoch) {
+        _volumeSending = false;
+        _flushTrailingVolume();
+      }
+    }
+  }
+
+  void _volumeGapClosed() {
+    _volumeGap = null;
+    _flushTrailingVolume();
+  }
+
+  /// Sends the queued trailing level once both brakes are off: the gap
+  /// has closed and the previous command has its answer.
+  void _flushTrailingVolume() {
+    if (_volumeGap != null || _volumeSending) return;
+    final trailing = _volumeTrailing;
+    if (trailing == null) return;
+    _volumeTrailing = null;
+    _volumeGap = Timer(_volumeGapLength, _volumeGapClosed);
+    _volumeSending = true;
+    final epoch = _volumeEpoch;
+    unawaited(
+      _send('set-volume', volume: trailing)
+          .catchError((Object failure) {
+            debugPrint('the endpoint would not take the level: $failure');
+            _dropSentVolume(epoch);
+          })
+          .whenComplete(() {
+            if (epoch != _volumeEpoch) return;
+            _volumeSending = false;
+            _flushTrailingVolume();
+          }),
+    );
+  }
+
+  /// Lets go of the optimistic level after a refused send, so the next
+  /// paint reads the endpoint's own report rather than a loudness it
+  /// never took.
+  void _dropSentVolume(int epoch) {
+    if (epoch != _volumeEpoch) return;
+    final current = state;
+    if (current == null || current.sentVolume == null) return;
+    state = RemoteSession(
+      session: current.session,
+      entries: current.entries,
+      volumeControl: current.volumeControl,
+      rateControl: current.rateControl,
+    );
+  }
 
   Future<void> _send(String verb, {int? positionMs, double? volume}) async {
     final current = state;
@@ -229,11 +361,20 @@ class RemoteSessionController extends Notifier<RemoteSession?> {
       release();
       return;
     }
-    state = current.copyWith(
+    // The optimistic beat ends where truth resumes: while a send is out
+    // a frame may still predate it, so the sent level holds; once every
+    // send has settled, the frame is the endpoint's own answer and the
+    // override is dropped rather than left to shadow somebody else's
+    // change forever.
+    final settled = !_volumeSending && _volumeTrailing == null;
+    state = RemoteSession(
       session: session,
       // A frame carrying no queue is a frame saying the queue did not
       // change, per the mirror contract.
-      entries: session.entries.isEmpty ? null : session.entries,
+      entries: session.entries.isEmpty ? current.entries : session.entries,
+      volumeControl: current.volumeControl,
+      rateControl: current.rateControl,
+      sentVolume: settled ? null : current.sentVolume,
     );
     position.value = _extrapolate();
     _tick();

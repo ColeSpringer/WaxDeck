@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../icons/wax_icon.dart';
@@ -566,6 +567,128 @@ class WaxFab extends StatelessWidget {
   }
 }
 
+/// A vertical drag claim for mouse pointers only.
+///
+/// The device set is fixed here rather than left to the caller because
+/// the set is the point: a finger dragging vertically over a track is
+/// scrolling and must stay a scroll. Mouse alone covers trackpads too -
+/// a trackpad click-drag reports itself as a mouse (the trackpad kind
+/// exists only on pan-zoom events, which the framework asserts never
+/// carry it on ordinary pointer events) - and pan-zoom sequences are
+/// refused below, so two-finger scrolling over a slider still scrolls.
+class _PreciseVerticalDragRecognizer extends VerticalDragGestureRecognizer {
+  _PreciseVerticalDragRecognizer()
+    : super(
+        supportedDevices: const <PointerDeviceKind>{PointerDeviceKind.mouse},
+      );
+
+  @override
+  bool isPointerPanZoomAllowed(PointerPanZoomStartEvent event) => false;
+}
+
+/// The pointer pipeline the slider and the seek bar share.
+///
+/// One recogniser set, three rules. A tap previews on press and commits
+/// on release, so a press that loses the arena (a touch scroll that
+/// started on the track) applies nothing. A horizontal drag is the
+/// gesture both controls exist for, on every device. And a vertical drag
+/// from a precise pointer belongs to the track too: a mouse click drifts
+/// a pixel or two between press and release, which is past the
+/// precise-pointer slop, so without a claim here the click loses the
+/// arena to whatever scrolls or dismisses behind the control and
+/// silently does nothing.
+///
+/// Disabling this mid-gesture disposes the recognisers during the
+/// rebuild, and their cancel callbacks land mid-build where setState
+/// must not - so the owning states clear their drag fields in
+/// didUpdateWidget first, and their abandons no-op when there is
+/// nothing left to let go of.
+class _TrackGestures extends StatelessWidget {
+  const _TrackGestures({
+    required this.enabled,
+    required this.width,
+    required this.inset,
+    required this.onPress,
+    required this.onDrag,
+    required this.onCommit,
+    required this.onAbandon,
+    required this.child,
+  });
+
+  final bool enabled;
+
+  /// The gesture box's width, which every caller already knows - the
+  /// slider sizes its own box and the seek bar has measured its row - so
+  /// no LayoutBuilder is spent rediscovering it.
+  final double width;
+
+  /// How far the drawn track sits inside each end of the gesture box, so
+  /// a press just past either end still lands and clamps.
+  final double inset;
+
+  /// A press that may yet be cancelled: paint, but apply nothing.
+  final ValueChanged<double> onPress;
+
+  /// Movement after the arena is won: paint and, where the control is
+  /// live, apply.
+  final ValueChanged<double> onDrag;
+
+  final VoidCallback onCommit;
+  final VoidCallback onAbandon;
+
+  final Widget child;
+
+  double _fraction(Offset local) {
+    final track = width - 2 * inset;
+    if (track <= 0) return 0;
+    return ((local.dx - inset) / track).clamp(0.0, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: !enabled
+          ? const <Type, GestureRecognizerFactory>{}
+          : <Type, GestureRecognizerFactory>{
+              TapGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+                    TapGestureRecognizer.new,
+                    (recognizer) {
+                      recognizer.onTapDown = (d) =>
+                          onPress(_fraction(d.localPosition));
+                      recognizer.onTapUp = (_) => onCommit();
+                      recognizer.onTapCancel = onAbandon;
+                    },
+                  ),
+              HorizontalDragGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<
+                    HorizontalDragGestureRecognizer
+                  >(HorizontalDragGestureRecognizer.new, (recognizer) {
+                    recognizer.onStart = (d) =>
+                        onDrag(_fraction(d.localPosition));
+                    recognizer.onUpdate = (d) =>
+                        onDrag(_fraction(d.localPosition));
+                    recognizer.onEnd = (_) => onCommit();
+                    recognizer.onCancel = onAbandon;
+                  }),
+              _PreciseVerticalDragRecognizer:
+                  GestureRecognizerFactoryWithHandlers<
+                    _PreciseVerticalDragRecognizer
+                  >(_PreciseVerticalDragRecognizer.new, (recognizer) {
+                    recognizer.onStart = (d) =>
+                        onDrag(_fraction(d.localPosition));
+                    recognizer.onUpdate = (d) =>
+                        onDrag(_fraction(d.localPosition));
+                    recognizer.onEnd = (_) => onCommit();
+                    recognizer.onCancel = onAbandon;
+                  }),
+            },
+      child: child,
+    );
+  }
+}
+
 /// A horizontal level control: a glyph that mutes, and a track that sets.
 ///
 /// The house's general-purpose slider, which the deck bar's volume is the
@@ -573,7 +696,7 @@ class WaxFab extends StatelessWidget {
 /// widget: it draws a buffered band and an optional waveform, announces a
 /// spoken time rather than a level, and is the one control on the bar
 /// whose value moves several times a second on its own. What they share
-/// is drag handling, and that is a dozen lines.
+/// is the pointer pipeline, and that is [_TrackGestures].
 ///
 /// A semantic slider, so a screen reader can set it: increase and
 /// decrease step by [step], and the announced value is a percentage,
@@ -594,17 +717,39 @@ class WaxSlider extends StatefulWidget {
     this.muted = false,
     this.step = 0.05,
     this.trackWidth = 96,
+    this.endSlop = defaultEndSlop,
     this.semanticsId,
     this.muteSemanticsId,
     super.key,
-  });
+  }) : assert(
+         step > 0,
+         'step is the semantic and live-report increment; zero would '
+         'silence both',
+       );
+
+  /// The ordinary [endSlop].
+  static const double defaultEndSlop = 12;
+
+  /// How far the gesture surface extends past each end of the drawn
+  /// track. A level is grabbed at its ends more than anywhere else -
+  /// full and silent - and a press a few pixels past the knob's travel
+  /// used to fall through to whatever was behind the bar. [trackWidth]
+  /// stays the drawn width; the row's footprint is wider by twice this.
+  /// A caller on a hard width budget passes a smaller slop rather than
+  /// giving the whole default up out of its drawn track.
+  final double endSlop;
 
   /// 0 to 1. Values outside are clamped rather than asserted: this draws
   /// live state, and a platform reporting 1.0000001 is not a bug worth
   /// crashing a bar over.
   final double value;
 
-  /// Null disables the control: the track greys and the semantics say so.
+  /// Fired live while a drag moves, once per [step] boundary crossed,
+  /// and once more with the exact value on release. Callers therefore
+  /// hear the level as the finger moves it, which is what a level is
+  /// for; a caller with a round trip behind each write paces itself.
+  /// Null disables the control: the track greys and the semantics say
+  /// so.
   final ValueChanged<double>? onChanged;
 
   /// The accessible name of the level itself ("Volume").
@@ -646,6 +791,25 @@ class _WaxSliderState extends State<WaxSlider> {
   /// back. Cleared when the gesture ends.
   double? _dragValue;
 
+  /// The last step boundary reported while dragging, so the live stream
+  /// is one event per step crossed rather than one per frame - the
+  /// natural throttle - while the painted knob keeps following the raw
+  /// fraction. Null outside a gesture.
+  int? _reportedStep;
+
+  @override
+  void didUpdateWidget(WaxSlider old) {
+    super.didUpdateWidget(old);
+    // Disabling mid-gesture disposes the recognisers during the rebuild,
+    // and their cancel callbacks land mid-build where setState must not.
+    // The flip lets go of the preview here, before the build, so the
+    // late cancels find nothing to do.
+    if (widget.onChanged == null) {
+      _dragValue = null;
+      _reportedStep = null;
+    }
+  }
+
   double get _value => (_dragValue ?? widget.value).clamp(0.0, 1.0);
 
   /// A level of zero *is* muted, whatever the caller said.
@@ -661,6 +825,53 @@ class _WaxSliderState extends State<WaxSlider> {
   double _stepped(double delta) => (_value + delta).clamp(0.0, 1.0);
 
   void _nudge(double delta) => widget.onChanged?.call(_stepped(delta));
+
+  int _stepIndex(double value) =>
+      widget.step <= 0 ? 0 : (value / widget.step).round();
+
+  /// A press previews only: it can still lose the arena to a scroll,
+  /// and a level applied on press would survive its own cancellation.
+  void _press(double fraction) {
+    setState(() {
+      _dragValue = fraction;
+      _reportedStep ??= _stepIndex(widget.value);
+    });
+  }
+
+  /// Movement with the arena won: the knob follows the raw fraction and
+  /// the caller hears one value per step boundary crossed.
+  void _drag(double fraction) {
+    setState(() => _dragValue = fraction);
+    _reportedStep ??= _stepIndex(widget.value);
+    final step = _stepIndex(fraction);
+    if (step == _reportedStep) return;
+    _reportedStep = step;
+    widget.onChanged!((step * widget.step).clamp(0.0, 1.0));
+  }
+
+  void _commit() {
+    // The exact fraction, deliberately not the stepped one: the release
+    // lands the level where the finger left it, and the step stays what
+    // it is for - the keyboard and screen-reader increment.
+    widget.onChanged!(_value);
+    setState(() {
+      _dragValue = null;
+      _reportedStep = null;
+    });
+  }
+
+  /// A press that loses the arena to a scroll never ends, and a level
+  /// left mid-drag would pin the knob where the finger passed. Same
+  /// reasoning as the seek bar's own abandon. No-ops when there is
+  /// nothing held: a disable's late cancel arrives mid-build, after
+  /// didUpdateWidget already let go, where setState must not run.
+  void _abandon() {
+    if (_dragValue == null && _reportedStep == null) return;
+    setState(() {
+      _dragValue = null;
+      _reportedStep = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -681,50 +892,29 @@ class _WaxSliderState extends State<WaxSlider> {
       onIncrease: enabled ? () => _nudge(widget.step) : null,
       onDecrease: enabled ? () => _nudge(-widget.step) : null,
       child: ExcludeSemantics(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            void update(Offset local) {
-              final width = constraints.maxWidth;
-              if (width <= 0) return;
-              setState(() => _dragValue = (local.dx / width).clamp(0.0, 1.0));
-            }
-
-            void commit() {
-              widget.onChanged!(_value);
-              setState(() => _dragValue = null);
-            }
-
-            // A press that loses the arena to a scroll never ends, and a
-            // level left mid-drag would pin the knob where the finger
-            // passed. Same reasoning as the seek bar's own abandon.
-            void abandon() => setState(() => _dragValue = null);
-
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: enabled ? (d) => update(d.localPosition) : null,
-              onTapUp: enabled ? (_) => commit() : null,
-              onTapCancel: enabled ? abandon : null,
-              onHorizontalDragUpdate: enabled
-                  ? (d) => update(d.localPosition)
-                  : null,
-              onHorizontalDragEnd: enabled ? (_) => commit() : null,
-              onHorizontalDragCancel: enabled ? abandon : null,
-              child: SizedBox(
-                width: double.infinity,
-                // The touch target, not the drawn track: a 4 px bar is
-                // unhittable, and the paint is centred inside this.
-                height: WaxSpace.touchTarget,
-                child: CustomPaint(
-                  painter: _LevelPainter(
-                    fraction: _value,
-                    track: colors.hairline,
-                    fill: enabled ? colors.accent : colors.textDisabled,
-                    knob: enabled ? colors.accent : colors.textDisabled,
-                  ),
-                ),
+        child: _TrackGestures(
+          enabled: enabled,
+          width: widget.trackWidth + 2 * widget.endSlop,
+          inset: widget.endSlop,
+          onPress: _press,
+          onDrag: _drag,
+          onCommit: _commit,
+          onAbandon: _abandon,
+          child: SizedBox(
+            width: double.infinity,
+            // The touch target, not the drawn track: a 4 px bar is
+            // unhittable, and the paint is centred inside this.
+            height: WaxSpace.touchTarget,
+            child: CustomPaint(
+              painter: _LevelPainter(
+                fraction: _value,
+                inset: widget.endSlop,
+                track: colors.hairline,
+                fill: enabled ? colors.accent : colors.textDisabled,
+                knob: enabled ? colors.accent : colors.textDisabled,
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
@@ -746,18 +936,16 @@ class _WaxSliderState extends State<WaxSlider> {
             // Decoration, so it is excluded rather than announced: the
             // track beside it already carries the label and the level,
             // and a second node saying "volume" is one more stop for a
-            // screen reader with nothing behind it.
-            Padding(
-              padding: const EdgeInsets.only(right: WaxSpace.s4),
-              child: ExcludeSemantics(
-                child: WaxIcon(
-                  glyph,
-                  size: 18,
-                  color: enabled ? colors.textSecondary : colors.textDisabled,
-                ),
+            // screen reader with nothing behind it. The end slop is the
+            // gap now, so no padding rides on top of it.
+            ExcludeSemantics(
+              child: WaxIcon(
+                glyph,
+                size: 18,
+                color: enabled ? colors.textSecondary : colors.textDisabled,
               ),
             ),
-        SizedBox(width: widget.trackWidth, child: track),
+        SizedBox(width: widget.trackWidth + 2 * widget.endSlop, child: track),
       ],
     );
   }
@@ -766,12 +954,19 @@ class _WaxSliderState extends State<WaxSlider> {
 class _LevelPainter extends CustomPainter {
   _LevelPainter({
     required this.fraction,
+    required this.inset,
     required this.track,
     required this.fill,
     required this.knob,
   });
 
   final double fraction;
+
+  /// The end slop: the drawn track starts and ends this far inside the
+  /// box, and the gesture surface maps the same rectangle back to the
+  /// level, so a press past either end clamps instead of missing.
+  final double inset;
+
   final Color track;
   final Color fill;
   final Color knob;
@@ -780,23 +975,21 @@ class _LevelPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     const height = 4.0;
     final top = (size.height - height) / 2;
+    final width = math.max(0.0, size.width - 2 * inset);
     const radius = Radius.circular(2);
     canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, top, size.width, height),
-        radius,
-      ),
+      RRect.fromRectAndRadius(Rect.fromLTWH(inset, top, width, height), radius),
       Paint()..color = track,
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, top, size.width * fraction, height),
+        Rect.fromLTWH(inset, top, width * fraction, height),
         radius,
       ),
       Paint()..color = fill,
     );
     canvas.drawCircle(
-      Offset(size.width * fraction, size.height / 2),
+      Offset(inset + width * fraction, size.height / 2),
       5,
       Paint()..color = knob,
     );
@@ -804,7 +997,13 @@ class _LevelPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_LevelPainter old) =>
-      old.fraction != fraction || old.fill != fill || old.track != track;
+      old.fraction != fraction ||
+      old.inset != inset ||
+      old.fill != fill ||
+      old.track != track ||
+      // The knob moves on a theme flip that changes no other field here;
+      // same reasoning as the seek painter's palette comparisons.
+      old.knob != knob;
 }
 
 /// One row of a [WaxMenuButton].
@@ -1076,6 +1275,18 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
     return _heights;
   }
 
+  @override
+  void didUpdateWidget(WaxSeekBar old) {
+    super.didUpdateWidget(old);
+    // Disabling mid-scrub disposes the recognisers during the rebuild,
+    // and their cancel callbacks land mid-build where setState must not.
+    // A frame arriving with no duration lets go of the scrub here,
+    // before the build, so the late cancels find nothing to do.
+    if (widget.onSeek == null || widget.duration <= Duration.zero) {
+      _dragFraction = null;
+    }
+  }
+
   double get _fraction {
     if (_dragFraction != null) return _dragFraction!;
     final total = widget.duration.inMilliseconds;
@@ -1123,40 +1334,44 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
       child: ExcludeSemantics(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            void update(Offset local) {
-              final fraction = (local.dx / constraints.maxWidth).clamp(
-                0.0,
-                1.0,
-              );
-              setState(() => _dragFraction = fraction);
-            }
+            // The scrub is a preview until release, deliberately: a live
+            // seek per drag frame would spam stream loads, so the drag
+            // paints and only the commit seeks.
+            void preview(double fraction) =>
+                setState(() => _dragFraction = fraction);
 
             void commit() {
               widget.onSeek!(_at(_fraction));
               setState(() => _dragFraction = null);
             }
 
-            void abandon() => setState(() => _dragFraction = null);
+            // A press that loses the arena to a scroll never ends, and
+            // a scrub position left behind would pin the playhead
+            // there for good. No-ops when nothing is held: a disable's
+            // late cancel arrives mid-build, after didUpdateWidget
+            // already let go, where setState must not run.
+            void abandon() {
+              if (_dragFraction == null) return;
+              setState(() => _dragFraction = null);
+            }
 
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: enabled ? (d) => update(d.localPosition) : null,
-              onTapUp: enabled ? (_) => commit() : null,
-              // A press that loses the arena to a scroll never ends, and
-              // a scrub position left behind would pin the playhead
-              // there for good.
-              onTapCancel: enabled ? abandon : null,
-              onHorizontalDragUpdate: enabled
-                  ? (d) => update(d.localPosition)
-                  : null,
-              onHorizontalDragEnd: enabled ? (_) => commit() : null,
-              onHorizontalDragCancel: enabled ? abandon : null,
+            return _TrackGestures(
+              enabled: enabled,
+              width: constraints.maxWidth,
+              inset: 0,
+              onPress: preview,
+              onDrag: preview,
+              onCommit: commit,
+              onAbandon: abandon,
               child: SizedBox(
                 // Width has to be claimed explicitly: inside a centred
                 // Column the constraints are loose, and a CustomPaint
-                // with no size collapses to nothing.
+                // with no size collapses to nothing. The height is the
+                // touch target whatever is drawn: a 24 px box over a
+                // 4 px track demanded the accuracy the bug report
+                // named.
                 width: double.infinity,
-                height: widget.peaks == null ? 24 : 44,
+                height: WaxSpace.touchTarget,
                 child: CustomPaint(
                   painter: _SeekPainter(
                     fraction: _fraction,

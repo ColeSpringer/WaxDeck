@@ -355,6 +355,275 @@ void main() {
     expect(container.read(remoteSessionProvider), isNull);
   });
 
+  testWidgets('routed volume is paced leading and trailing', (tester) async {
+    // The slider reports a value per step crossed, and each one here is
+    // a WS round trip another device has to apply: the first goes now -
+    // that first response is how the user judges the control works -
+    // then at most one per gap, always ending on the final value.
+    final repo = FakeRepository(items: [testItem('tr-x')])
+      ..playerEndpoints = [_endpoint];
+    final sent = <Map<String, Object?>>[];
+    late ConnectBus bus;
+    final container = _container(
+      repo: repo,
+      extra: [
+        connectBusProvider.overrideWith((ref) {
+          bus = ConnectBus(
+            send: (f) {
+              sent.add(Map.of(f));
+              // Self-acking, so no command future is left on the 10 s
+              // timeout timer.
+              if (f['type'] == 'cmd') {
+                bus.handleFrame({'type': 'ack', 'id': f['id']});
+              }
+              return true;
+            },
+          );
+          ref.onDispose(bus.dispose);
+          return bus;
+        }),
+      ],
+    );
+    final controller = container.read(remoteSessionProvider.notifier);
+    controller.adopt(_session());
+
+    List<Object?> volumes() => sent
+        .where((f) => f['type'] == 'cmd' && f['verb'] == 'set-volume')
+        .map((f) => f['volume'])
+        .toList();
+
+    // A swipe: a burst of live step values.
+    unawaited(controller.setVolume(0.6));
+    unawaited(controller.setVolume(0.55));
+    unawaited(controller.setVolume(0.5));
+    expect(volumes(), [0.6], reason: 'the first change goes now');
+
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(
+      volumes(),
+      [0.6, 0.5],
+      reason: 'the gap closes on the newest level, skipping the stale one',
+    );
+
+    // Nothing pending: the follow-up gap closes silently.
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(volumes(), [0.6, 0.5]);
+
+    // A level still queued when the session is let go stays unsent.
+    unawaited(controller.setVolume(0.4));
+    unawaited(controller.setVolume(0.3));
+    controller.release();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(volumes(), [
+      0.6,
+      0.5,
+      0.4,
+    ], reason: 'a released session gets no trailing level');
+  });
+
+  testWidgets('a slow ack holds the trailing level to one in flight', (
+    tester,
+  ) async {
+    // The gap bounds the rate and the ack bounds the backlog: with the
+    // leading send still un-acked past the gap, the trailing level waits
+    // for the answer instead of stacking a second command against its
+    // ten-second timeout.
+    final repo = FakeRepository(items: [testItem('tr-x')])
+      ..playerEndpoints = [_endpoint];
+    final sent = <Map<String, Object?>>[];
+    late ConnectBus bus;
+    final container = _container(
+      repo: repo,
+      extra: [
+        connectBusProvider.overrideWith((ref) {
+          bus = ConnectBus(
+            send: (f) {
+              sent.add(Map.of(f));
+              return true;
+            },
+          );
+          ref.onDispose(bus.dispose);
+          return bus;
+        }),
+      ],
+    );
+    final controller = container.read(remoteSessionProvider.notifier);
+    controller.adopt(_session());
+
+    List<Object?> volumes() => sent
+        .where((f) => f['type'] == 'cmd' && f['verb'] == 'set-volume')
+        .map((f) => f['volume'])
+        .toList();
+
+    void ackLastCmd() => bus.handleFrame({
+      'type': 'ack',
+      'id': sent.lastWhere((f) => f['type'] == 'cmd')['id'],
+    });
+
+    unawaited(controller.setVolume(0.6));
+    unawaited(controller.setVolume(0.5));
+    expect(volumes(), [0.6]);
+
+    // The gap closes with the ack still outstanding: nothing new goes
+    // out.
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(volumes(), [0.6], reason: 'one command in flight at a time');
+
+    // The ack lands; the trailing level follows at once.
+    ackLastCmd();
+    await tester.pump();
+    expect(volumes(), [0.6, 0.5]);
+
+    // Settle the trailing command too, so no future is left on its
+    // timeout, and let the session go with its pacing timer.
+    ackLastCmd();
+    await tester.pump();
+    controller.release();
+    // One more advance for the provider disposal the release schedules.
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  testWidgets('the routed level is optimistic and settles on frames', (
+    tester,
+  ) async {
+    // Without the optimistic beat a released drag snapped to the previous
+    // frame's level for the whole round trip. The sent level holds while
+    // a send is out - a stale frame must not bounce the knob - and the
+    // frames take over once every send has settled.
+    final repo = FakeRepository(items: [testItem('tr-x')])
+      ..playerEndpoints = [_endpoint];
+    final sent = <Map<String, Object?>>[];
+    late ConnectBus bus;
+    final container = _container(
+      repo: repo,
+      extra: [
+        connectBusProvider.overrideWith((ref) {
+          bus = ConnectBus(
+            send: (f) {
+              sent.add(Map.of(f));
+              return true;
+            },
+          );
+          ref.onDispose(bus.dispose);
+          return bus;
+        }),
+      ],
+    );
+    final controller = container.read(remoteSessionProvider.notifier);
+    controller.adopt(_session());
+    expect(container.read(remoteSessionProvider)?.volume, 0.8);
+
+    void frameWithVolume(double volume) => bus.handleFrame({
+      'type': 'session',
+      'session': <String, dynamic>{
+        'id': 'ps-remote',
+        'endpointId': 'pe-speaker',
+        'playing': true,
+        'volume': volume,
+        'positionAt': DateTime.now().toUtc().toIso8601String(),
+      },
+    });
+
+    unawaited(controller.setVolume(0.5));
+    expect(
+      container.read(remoteSessionProvider)?.volume,
+      0.5,
+      reason: 'the knob holds the sent level through the round trip',
+    );
+
+    // A frame that predates the send carries the old level; the sent one
+    // holds until the command settles.
+    frameWithVolume(0.8);
+    await tester.pump();
+    expect(container.read(remoteSessionProvider)?.volume, 0.5);
+
+    // The ack lands; the next frame is the endpoint's own answer and the
+    // override lets go - including of a change somebody else made.
+    bus.handleFrame({
+      'type': 'ack',
+      'id': sent.lastWhere((f) => f['type'] == 'cmd')['id'],
+    });
+    await tester.pump();
+    frameWithVolume(0.7);
+    await tester.pump();
+    expect(container.read(remoteSessionProvider)?.volume, 0.7);
+
+    controller.release();
+    await tester.pump(const Duration(milliseconds: 200));
+  });
+
+  testWidgets('a new session is not gated behind the old one\'s ack', (
+    tester,
+  ) async {
+    // A command can outlive the session it was sent for. Release, adopt,
+    // and the first slider move on the new device must lead immediately
+    // rather than queue behind a stale command's ten-second timeout - and
+    // the stale ack, landing later, must not disturb the new pacing.
+    final repo = FakeRepository(items: [testItem('tr-x')])
+      ..playerEndpoints = [_endpoint];
+    final sent = <Map<String, Object?>>[];
+    late ConnectBus bus;
+    final container = _container(
+      repo: repo,
+      extra: [
+        connectBusProvider.overrideWith((ref) {
+          bus = ConnectBus(
+            send: (f) {
+              sent.add(Map.of(f));
+              return true;
+            },
+          );
+          ref.onDispose(bus.dispose);
+          return bus;
+        }),
+      ],
+    );
+    final controller = container.read(remoteSessionProvider.notifier);
+
+    List<Object?> volumes() => sent
+        .where((f) => f['type'] == 'cmd' && f['verb'] == 'set-volume')
+        .map((f) => f['volume'])
+        .toList();
+    List<Object?> cmdIds() => sent
+        .where((f) => f['type'] == 'cmd' && f['verb'] == 'set-volume')
+        .map((f) => f['id'])
+        .toList();
+
+    controller.adopt(_session());
+    unawaited(controller.setVolume(0.6));
+    expect(volumes(), [0.6]);
+
+    controller.release();
+    await tester.pump(const Duration(milliseconds: 1));
+    controller.adopt(_session());
+
+    unawaited(controller.setVolume(0.4));
+    expect(volumes(), [
+      0.6,
+      0.4,
+    ], reason: 'the new session leads at once, not behind the stale ack');
+
+    // The stale ack lands late: the new session's in-flight command must
+    // keep its place (no double-send of a queued level).
+    unawaited(controller.setVolume(0.3));
+    bus.handleFrame({'type': 'ack', 'id': cmdIds().first});
+    await tester.pump();
+    expect(
+      volumes(),
+      [0.6, 0.4],
+      reason: 'the stale ack does not flush the new session\'s trailing',
+    );
+
+    bus.handleFrame({'type': 'ack', 'id': cmdIds().last});
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(volumes(), [0.6, 0.4, 0.3]);
+
+    bus.handleFrame({'type': 'ack', 'id': cmdIds().last});
+    await tester.pump();
+    controller.release();
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
   testWidgets('leaving a session playing stops controlling and nothing else', (
     tester,
   ) async {

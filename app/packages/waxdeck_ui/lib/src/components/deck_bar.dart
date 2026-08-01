@@ -259,7 +259,14 @@ class DeckBar extends StatelessWidget {
     );
   }
 
-  /// How wide the volume track is, given the room the bar has.
+  /// The end slop this bar can afford its volume slider. Half the
+  /// primitive's default: the slop rides inside the cluster's measured
+  /// budget - the drawn track gives it up rather than the cluster
+  /// growing back into the left zone - and twelve a side would halve
+  /// the track.
+  static const double _volumeSlop = 8;
+
+  /// How wide the volume track is drawn, given the room the bar has.
   ///
   /// The right cluster is sized to its contents and the other two zones
   /// share what is left, so the newest thing in the cluster is the thing
@@ -267,7 +274,14 @@ class DeckBar extends StatelessWidget {
   /// below what its artwork, star, and needle need, and five pixels came
   /// out the side. Measured from the bar's own width rather than the
   /// window's, because the bar sits in a shell slot beside a sidebar.
-  static double _volumeTrack(double available) => available >= 1000 ? 80 : 52;
+  static double _volumeTrack(double available) =>
+      (available >= 1000 ? 80 : 52) - 2 * _volumeSlop;
+
+  /// The layout slot the old centred column reserved for the drawn seek
+  /// line. The transport centres in the band above it, and the seek
+  /// surface's full touch target overlaps up from the bar's bottom edge,
+  /// so the drawn track keeps the centre line this slot gave it.
+  static const double _seekSlot = 24;
 
   Widget _zones(BuildContext context, WaxColors colors, double available) {
     return Padding(
@@ -312,54 +326,82 @@ class DeckBar extends StatelessWidget {
               ),
             ),
           ),
-          // Centre zone: transport over the seek bar.
+          // Centre zone: transport over the seek bar. The seek bar's box
+          // is the full touch target, which the fixed-height bar has no
+          // room to stack under the transport - so the two are layered,
+          // the seek surface beneath and bottom-anchored, its extra
+          // height overlapping the padding under the buttons, and the
+          // transport centred in the band above the seek's visual slot.
+          // The buttons are hit-tested first and keep their taps.
           Expanded(
             flex: 2,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: _transport(context, colors, compact: false),
-                ),
-                if (!now.live)
-                  _Ticking(
-                    ticker: positionTicker,
-                    fallback: now.position,
-                    builder: (context, position) => Row(
-                      children: <Widget>[
-                        ExcludeSemantics(
-                          child: Text(
-                            formatTimecode(position),
-                            style: WaxType.monoTime.copyWith(
-                              color: colors.textTertiary,
+            child: now.live
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: _transport(context, colors, compact: false),
+                  )
+                : Stack(
+                    children: <Widget>[
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: WaxSpace.touchTarget,
+                        child: _Ticking(
+                          ticker: positionTicker,
+                          fallback: now.position,
+                          builder: (context, position) => Row(
+                            children: <Widget>[
+                              ExcludeSemantics(
+                                child: Text(
+                                  formatTimecode(position),
+                                  style: WaxType.monoTime.copyWith(
+                                    color: colors.textTertiary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: WaxSpace.s8),
+                              Expanded(
+                                child: WaxSeekBar(
+                                  position: position,
+                                  duration: now.duration,
+                                  buffered: now.buffered,
+                                  onSeek: actions.onSeek,
+                                  semanticsId: ids.seek,
+                                ),
+                              ),
+                              const SizedBox(width: WaxSpace.s8),
+                              ExcludeSemantics(
+                                child: Text(
+                                  formatTimecode(now.duration),
+                                  style: WaxType.monoTime.copyWith(
+                                    color: colors.textTertiary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height:
+                            WaxShellMetrics.deckBarExpandedHeight - _seekSlot,
+                        child: Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: _transport(
+                              context,
+                              colors,
+                              compact: false,
                             ),
                           ),
                         ),
-                        const SizedBox(width: WaxSpace.s8),
-                        Expanded(
-                          child: WaxSeekBar(
-                            position: position,
-                            duration: now.duration,
-                            buffered: now.buffered,
-                            onSeek: actions.onSeek,
-                            semanticsId: ids.seek,
-                          ),
-                        ),
-                        const SizedBox(width: WaxSpace.s8),
-                        ExcludeSemantics(
-                          child: Text(
-                            formatTimecode(now.duration),
-                            style: WaxType.monoTime.copyWith(
-                              color: colors.textTertiary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-              ],
-            ),
           ),
           // Right zone: where playback goes and what it shows. Sized to
           // its contents rather than to a share of the width: four icon
@@ -412,6 +454,7 @@ class DeckBar extends StatelessWidget {
                   mutedGlyph: WaxIcons.volumeMuted,
                   onMute: actions.onMute,
                   trackWidth: _volumeTrack(available),
+                  endSlop: _volumeSlop,
                   semanticsId: ids.volume,
                   muteSemanticsId: ids.mute,
                 ),
@@ -466,6 +509,11 @@ class DeckBar extends StatelessWidget {
           style: WaxType.titleItem.copyWith(color: colors.textPrimary),
         ),
         Row(
+          // Sized to its content: at max this row stretched the whole
+          // title block to the zone's width, which pushed the star and
+          // the needle beside it to the middle of the bar instead of
+          // beside the text.
+          mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             if (now.live) ...<Widget>[
               _livePill(colors),

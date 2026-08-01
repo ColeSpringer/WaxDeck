@@ -398,7 +398,7 @@ class _RemoteDeckBar extends ConsumerWidget {
     // holding 48 px of artwork, a title block, and a transport has no
     // room for a track, and squeezing one in is how that bar stops being
     // one line.
-    final volume = remote.volumeControl ? (session.volume ?? 1.0) : null;
+    final volume = remote.volumeControl ? (remote.volume ?? 1.0) : null;
 
     return DeckBar(
       ids: _ids,
@@ -417,10 +417,12 @@ class _RemoteDeckBar extends ConsumerWidget {
         onNext: () => unawaited(_report(context, controller.next())),
         onPrevious: () => unawaited(_report(context, controller.previous())),
         onSeek: (at) => unawaited(_report(context, controller.seek(at))),
+        // No _report: the level fires per step crossed and the
+        // controller swallows refusals - the knob following the frames
+        // is the report.
         onVolume: volume == null
             ? null
-            : (level) =>
-                  unawaited(_report(context, controller.setVolume(level))),
+            : (level) => unawaited(controller.setVolume(level)),
         // No mute: the level lives on the other endpoint and this client
         // has nowhere to remember what it silenced, so the glyph stays a
         // label rather than becoming a control that cannot undo itself.

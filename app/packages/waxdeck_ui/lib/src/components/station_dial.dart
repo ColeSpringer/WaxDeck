@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../icons/wax_icon.dart';
+import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
@@ -37,6 +38,11 @@ class DialStation {
 
 /// The dial: pinned stations as circular logos on a tick-marked band,
 /// under a fixed needle.
+///
+/// Mounted full bleed, deliberately: the band sweeping the window's full
+/// width is the dial's identity, and the readout under it applies the
+/// scaffold gutter itself - a padded parent would clip the band and
+/// double-indent the text.
 ///
 /// A visual shortcut and never the only path - every station on it is
 /// also a row in the grid below, which is what makes the two decisions
@@ -242,40 +248,64 @@ class _StationDialState extends State<StationDial> {
             ),
           ),
           const SizedBox(height: WaxSpace.s8),
-          Text(
-            centred.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: WaxType.titleItem.copyWith(color: colors.textPrimary),
-          ),
-          // The ICY line, under the dial and only while the centred
-          // station is the one playing: a title belongs to a stream, and
-          // drawing the playing station's song under a station nobody is
-          // listening to would attach it to the wrong name.
-          if (centred.playing && centred.nowPlaying != null)
-            Semantics(
-              identifier: widget.nowPlayingSemanticsId,
-              liveRegion: true,
-              child: Text(
-                centred.nowPlaying!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: WaxType.caption.copyWith(color: colors.textSecondary),
-              ),
+          // The readout cluster sits on the scaffold gutter while the
+          // tick band above stays full bleed: the band sweeping the full
+          // width like real hardware is the dial's identity, and the
+          // text under it is content like any other row. The gutter is
+          // applied here because the dial is mounted full bleed for the
+          // band's sake - a caller that padded it would double-indent
+          // this and clip the band, so it does not get padded.
+          Padding(
+            padding: WaxSizeClass.of(context).gutter,
+            child: Column(
+              children: <Widget>[
+                Text(
+                  centred.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+                ),
+                // The ICY line, only while the centred station is the one
+                // playing: a title belongs to a stream, and drawing the
+                // playing station's song under a station nobody is
+                // listening to would attach it to the wrong name. The
+                // slot's height is reserved either way - an empty line of
+                // the same style - so starting playback does not shift
+                // the name, the button, and everything below them.
+                if (centred.playing && centred.nowPlaying != null)
+                  Semantics(
+                    identifier: widget.nowPlayingSemanticsId,
+                    liveRegion: true,
+                    child: Text(
+                      centred.nowPlaying!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: WaxType.caption.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  )
+                else
+                  ExcludeSemantics(child: Text('', style: WaxType.caption)),
+                const SizedBox(height: WaxSpace.s8),
+                // One control, naming what it will do. Stop rather than
+                // pause, because a paused live stream resumes at the live
+                // edge anyway.
+                WaxButton(
+                  label: centred.playing ? 'Stop' : 'Tune in',
+                  kind: centred.playing
+                      ? WaxButtonKind.tonal
+                      : WaxButtonKind.filled,
+                  icon: centred.playing ? WaxIcons.stop : WaxIcons.play,
+                  semanticsId: widget.tuneSemanticsId,
+                  onPressed: centred.playing
+                      ? widget.onStop
+                      : () => widget.onTune(_centred),
+                ),
+              ],
             ),
-          const SizedBox(height: WaxSpace.s8),
-          // One control, naming what it will do. Stop rather than pause,
-          // because a paused live stream resumes at the live edge anyway.
-          WaxButton(
-            label: centred.playing ? 'Stop' : 'Tune in',
-            kind: centred.playing ? WaxButtonKind.tonal : WaxButtonKind.filled,
-            icon: centred.playing ? WaxIcons.stop : WaxIcons.play,
-            semanticsId: widget.tuneSemanticsId,
-            onPressed: centred.playing
-                ? widget.onStop
-                : () => widget.onTune(_centred),
           ),
         ],
       ),
@@ -330,6 +360,10 @@ class _Slot extends StatelessWidget {
         child: Center(
           child: Stack(
             alignment: Alignment.center,
+            // The stack is the logo's size, and the pill is centred on
+            // it: at a large text scale the pill outgrows the logo, and
+            // a hard clip would truncate the word at both ends where an
+            // overhang into the slot's own margin harms nothing.
             clipBehavior: Clip.none,
             children: <Widget>[
               // Dimmed off-centre, so which one the needle has is legible
@@ -345,11 +379,11 @@ class _Slot extends StatelessWidget {
                 ),
               ),
               if (station.playing)
-                // The platter ring, which is what says "this is on" from
-                // across a room. Under reduced motion PlayingIndicator
-                // parks rather than sweeping, which it handles itself.
+                // Inside the logo's own box rather than hanging below
+                // it: an overhang painted outside the slot collided
+                // with the band the moment playback started.
                 Positioned(
-                  bottom: -2,
+                  bottom: 0,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: WaxSpace.s4,
