@@ -160,7 +160,7 @@ func TestSweeperFoldsSynonymsOntoOneBucket(t *testing.T) {
 		}
 	}
 
-	page, err := f.svc.Facets(f.ctx, f.uc, "genre", "", "", 100)
+	page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 100})
 	if err != nil {
 		t.Fatalf("enumerating genres: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestCanonicalLabelBeatsScanOrder(t *testing.T) {
 
 	// The stored entity really is the lowercase spelling: without the
 	// canonical label this assertion would be what the browse tab shows.
-	res, err := f.svc.lib.Facet(f.ctx, f.svc.facetScopeQuery(f.uc), "genre", model.PID(f.uc.CatalogPID))
+	res, err := f.svc.lib.Facet(f.ctx, f.svc.facetScopeQuery(f.uc), "genre", "", 0, model.PID(f.uc.CatalogPID))
 	if err != nil {
 		t.Fatalf("raw facet: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestCanonicalLabelBeatsScanOrder(t *testing.T) {
 		t.Fatalf("the catalog's genre row is named %q; the fixture meant it to keep the first-scanned spelling", stored)
 	}
 
-	page, err := f.svc.Facets(f.ctx, f.uc, "genre", "", "", 100)
+	page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: "genre", Limit: 100})
 	if err != nil {
 		t.Fatalf("enumerating genres: %v", err)
 	}

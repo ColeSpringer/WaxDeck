@@ -223,16 +223,25 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   // it ends in a delete under the shared file-mutation job lease, and
   // this suite runs four workers against one server, so a sibling spec's
   // upload, rescan, or trash round trip can be holding it. That refusal
-  // clears on its own and is retried; the in-use refusal, which is the
-  // one this step is actually about, is not, and fails here with the
-  // server's own message and the play state that produced it.
+  // carries `catalog-busy`, clears on its own, and is retried; the
+  // in-use refusal, which is the one this step is actually about,
+  // carries `conflict`, does not clear, and fails here with the server's
+  // own message and the play state that produced it.
   await expect
     .poll(
       async () => {
         const resp = await request.delete(`/api/v1/episodes/${second.pid}/fetch`, authed(token));
         if (resp.status() === 204) return 204;
         const body = await resp.text();
-        if (resp.status() === 409 && body.includes('conflicting catalog job')) return 409;
+        // Parsed defensively: anything that is not the structured error
+        // body falls through to the failure below with its text intact.
+        let code = '';
+        try {
+          code = (JSON.parse(body) as { code?: string }).code ?? '';
+        } catch {
+          code = '';
+        }
+        if (resp.status() === 409 && code === 'catalog-busy') return 409;
         const state = await request.get(
           `/api/v1/items/${second.pid}/play-state`,
           authed(token),

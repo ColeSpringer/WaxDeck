@@ -93,6 +93,9 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       pid: widget.segment,
       rolling: page.hasMore,
       cursor: page.nextCursor ?? '',
+      // Carried so the refill keeps walking the permutation this page
+      // came from; null for a plain play, which is the bucket's order.
+      seed: page.seed,
     );
   }
 
@@ -168,9 +171,17 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
     final repository = ref.read(repositoryProvider);
     final ItemPage page;
     try {
+      // A bucket shuffles through the random list scoped to itself, so
+      // the window is one permutation over the whole bucket rather than
+      // a shuffle of each arriving page among itself (ADR-0028).
       page = dimension == null
-          ? await repository.browse(DiscoveryList.random, limit: kQueueCap)
-          : await repository.listItems(
+          ? await repository.browse(
+              DiscoveryList.random,
+              mediaType: MediaType.music,
+              limit: kQueueCap,
+            )
+          : await repository.browse(
+              DiscoveryList.random,
               facet: dimension.wireName,
               facetKey: musicFacetKey(dimension, widget.segment),
               limit: kQueueCap,

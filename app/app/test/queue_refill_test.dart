@@ -344,5 +344,145 @@ void main() {
 
       expect(draw, isNull);
     });
+
+    // Persisted cursors outlive a server upgrade, so a rejected one
+    // reaches clients. Without the fallback the window blocks and the
+    // rolling queue silently ends at its last entry.
+    // ADR-0028's gap: paging the bucket's listing shuffled each page
+    // among itself. Scoped, it is one permutation over the whole.
+    test('a seeded bucket draws the random list scoped to itself', () async {
+      final repository = FakeRepository();
+      repository.facetItems['genre ge-1'] = [
+        for (var i = 0; i < 250; i++) testItem('tr-$i'),
+      ];
+      final draw = await pagerOver(repository).draw(
+        const QueueSource(
+          kind: QueueSourceKind.genre,
+          label: 'Jazz',
+          pid: 'ge-1',
+          rolling: true,
+          cursor: '0',
+          seed: 42,
+        ),
+      );
+
+      expect(draw, isNotNull);
+      expect(repository.scopedBrowses.single, (
+        facet: 'genre',
+        facetKey: 'ge-1',
+        seed: 42,
+      ));
+    });
+
+    test('an unseeded bucket still pages its own listing', () async {
+      // No seed is no shuffle.
+      final repository = FakeRepository();
+      repository.facetItems['genre ge-1'] = [
+        for (var i = 0; i < 250; i++) testItem('tr-$i'),
+      ];
+      await pagerOver(repository).draw(
+        const QueueSource(
+          kind: QueueSourceKind.genre,
+          label: 'Jazz',
+          pid: 'ge-1',
+          rolling: true,
+          cursor: '0',
+        ),
+      );
+
+      expect(repository.scopedBrowses, isEmpty);
+      expect(repository.facetDrills.last, ('genre', 'ge-1'));
+    });
+
+    test('a refused cursor falls through to a placed draw', () async {
+      final repository = FakeRepository();
+      repository.facetItems['genre ge-1'] = [
+        for (var i = 0; i < 900; i++) testItem('tr-$i'),
+      ];
+      repository.rejectedCursors.add('stale-cursor');
+      final draw = await pagerOver(repository).draw(
+        const QueueSource(
+          kind: QueueSourceKind.genre,
+          label: 'Jazz',
+          pid: 'ge-1',
+          rolling: true,
+          cursor: 'stale-cursor',
+        ),
+        afterPid: 'tr-620',
+      );
+
+      expect(draw, isNotNull);
+      expect(draw!.pids.first, 'tr-621');
+    });
+
+    test('a refused cursor on a browse-backed source places too', () async {
+      // The seeded library window reads through browse rather than
+      // listItems, and persists its cursor the same way.
+      final repository = FakeRepository(
+        items: [for (var i = 0; i < 900; i++) testItem('tr-$i')],
+      );
+      repository.rejectedCursors.add('stale-cursor');
+      final draw = await pagerOver(repository).draw(
+        const QueueSource(
+          kind: QueueSourceKind.library,
+          label: 'All music',
+          rolling: true,
+          cursor: 'stale-cursor',
+          seed: 99,
+        ),
+        afterPid: 'tr-620',
+      );
+
+      expect(draw, isNotNull);
+      expect(draw!.pids.first, 'tr-621');
+    });
+
+    test(
+      'a refused cursor with no frontier seals rather than retries',
+      () async {
+        // A rejected cursor is permanently rejected, so rethrowing would
+        // block the window and retry per track forever while it kept
+        // claiming there was more. Null is what the no-cursor path answers
+        // in the same spot, and it seals.
+        final repository = FakeRepository();
+        repository.facetItems['genre ge-1'] = [testItem('tr-1')];
+        repository.rejectedCursors.add('stale-cursor');
+        final draw = await pagerOver(repository).draw(
+          const QueueSource(
+            kind: QueueSourceKind.genre,
+            label: 'Jazz',
+            pid: 'ge-1',
+            rolling: true,
+            cursor: 'stale-cursor',
+          ),
+        );
+
+        expect(draw, isNull);
+      },
+    );
+
+    test('any other failure still throws', () async {
+      // Only a rejected cursor is recoverable. Swallowing a transport
+      // failure would seal a window that is merely offline.
+      final repository = FakeRepository();
+      repository.facetItems['genre ge-1'] = [testItem('tr-1')];
+      repository.listError = const WaxDeckApiException(
+        code: 'internal',
+        message: 'the catalog is busy',
+      );
+      await expectLater(
+        pagerOver(repository).draw(
+          const QueueSource(
+            kind: QueueSourceKind.genre,
+            label: 'Jazz',
+            pid: 'ge-1',
+            rolling: true,
+            cursor: 'c-1',
+          ),
+          afterPid: 'tr-1',
+        ),
+        throwsA(isA<WaxDeckApiException>()),
+      );
+    });
   });
 }

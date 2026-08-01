@@ -37,9 +37,11 @@ class LibraryApi {
   ///
   /// Parameters:
   /// * [list] - Which discovery list to page through.
-  /// * [mediaType] - Restrict the list to one media type, for a domain-scoped shelf (\"recently added albums\" on the music hub). Composes with every list. `limit` still bounds how much of the list one request walks, so a filtered page is usually short: asking for 20 music items walks 20 rows of a list that also holds books and episodes, and returns the music among them with a `nextCursor` for the rest. That is the same short-page-plus-cursor shape a caller with restricted library visibility already gets, and `nextCursor` is absent only when the list itself is exhausted. A caller drawing a shelf of a dozen cards should ask for a generous limit and take what it draws from the answer, rather than page for an exact count. 
-  /// * [seed] - Shuffle seed for the `random` list. The same seed pages through the same shuffled order, so paging stays stable. When omitted the server picks a fresh seed and returns it as the page's `seed`; pass that value back with the cursor for later pages. A cursor is only valid together with the same `list` and `seed` it was issued for. 
-  /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. 
+  /// * [mediaType] - Restrict the list to one media type, for a domain-scoped shelf (\"recently added albums\" on the music hub). Composes with every list, and narrows the list itself rather than the page, so a filtered page comes back full. A caller with restricted library visibility can still get a short page that carries a cursor, which is the contract's standing rule everywhere. 
+  /// * [facet] - Restrict the list to one bucket of a browse dimension, taking the same dimension names `/library/facets` enumerates and the same bucket keys `/library/items` drills. Composes with `mediaType` and with every list, so a shuffle can be scoped to one artist, genre, or year, and it is the same filter the bucket's own listing uses: a bucket's count, the list it opens, and a shuffle over it can never disagree. Keyed on `facet` alone, exactly as on `/library/items`: an absent or empty `facetKey` selects the dimension's unknown bucket. 
+  /// * [facetKey] - The bucket to scope to, as returned in the enumeration's `key`. Send it empty to select the dimension's unknown bucket; `kind` and custom tag dimensions have no unknown bucket and reject an empty key. Ignored without `facet`. 
+  /// * [seed] - Shuffle seed for the `random` list. The same seed pages through the same shuffled order, so paging stays stable. When omitted the server picks a fresh seed and returns it as the page's `seed`; pass that value back with the cursor for later pages. 
+  /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. A cursor carries the scope it was issued under - the list, the seed, and the `mediaType`/`facet`/`facetKey` filter - and reusing one under a different scope is `invalid-request`. It names a position in a seeded permutation, so under another seed it would name a position in a different permutation entirely; refusing it is the only honest answer. 
   /// * [limit] - Maximum items per page.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
@@ -53,6 +55,8 @@ class LibraryApi {
   Future<Response<ItemPage>> browseList({ 
     required DiscoveryList list,
     MediaType? mediaType,
+    String? facet,
+    String? facetKey,
     int? seed,
     String? cursor,
     int? limit = 100,
@@ -90,6 +94,8 @@ class LibraryApi {
     final _queryParameters = <String, dynamic>{
       r'list': encodeQueryParameter(_serializers, list, const FullType(DiscoveryList)),
       if (mediaType != null) r'mediaType': encodeQueryParameter(_serializers, mediaType, const FullType(MediaType)),
+      if (facet != null) r'facet': encodeQueryParameter(_serializers, facet, const FullType(String)),
+      if (facetKey != null) r'facetKey': encodeQueryParameter(_serializers, facetKey, const FullType(String)),
       if (seed != null) r'seed': encodeQueryParameter(_serializers, seed, const FullType(int)),
       if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
       if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
@@ -606,6 +612,7 @@ class LibraryApi {
   /// * [dimension] - Which browse dimension to enumerate.
   /// * [sort] - Bucket order. `count` (the default) is biggest first, ties broken by label then key. `label` is A to Z by the bucket's display label, ties broken by key; the unknown bucket sorts last under it, since a sentinel has no place in an alphabet. 
   /// * [cursor] - Opaque cursor from a previous page's `nextCursor`. Omit for the first page. Valid only with the `sort` it was issued under. 
+  /// * [startsAt] - Start the page at the first bucket whose display label sorts at or after this prefix, folded the same way `sort=label` folds (case, and leading whitespace ignored). This is what an alphabet rail taps: `startsAt=m` on a library that jumps from L to N answers the first N bucket rather than nothing, since the comparison is at-or-after and not equality. Requires `sort=label`; with the default `count` order it is `invalid-request`, because a prefix names no position in a biggest-first list. Sending it together with `cursor` is `invalid-request` too: a cursor already names a position. A prefix past the last bucket is an empty page with no `nextCursor`, not an error. The unknown bucket is not seekable, since it sorts last whatever its sentinel spells; paging to the end still reaches it. 
   /// * [limit] - Maximum buckets per page.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
@@ -620,6 +627,7 @@ class LibraryApi {
     required String dimension,
     FacetSort? sort,
     String? cursor,
+    String? startsAt,
     int? limit = 100,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -656,6 +664,7 @@ class LibraryApi {
       r'dimension': encodeQueryParameter(_serializers, dimension, const FullType(String)),
       if (sort != null) r'sort': encodeQueryParameter(_serializers, sort, const FullType(FacetSort)),
       if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
+      if (startsAt != null) r'startsAt': encodeQueryParameter(_serializers, startsAt, const FullType(String)),
       if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
     };
 
@@ -704,9 +713,9 @@ class LibraryApi {
   ///
   /// Parameters:
   /// * [mediaType] - Restrict results to one media type.
-  /// * [facet] - Restrict results to one bucket of a browse dimension. Requires `facetKey`, and takes the same dimension names `/library/facets` enumerates. Composes with `mediaType`. 
+  /// * [facet] - Restrict results to one bucket of a browse dimension, taking the same dimension names `/library/facets` enumerates. Composes with `mediaType`. The pair is keyed on `facet` alone: an absent or empty `facetKey` selects the dimension's unknown bucket, which is a real bucket the enumeration returns, so it is a drill rather than a missing argument. 
   /// * [facetKey] - The bucket to drill, as returned in the enumeration's `key`. Send it empty to select the dimension's unknown bucket (the items the dimension is absent from, such as `[Non-Album]`); `kind` and custom tag dimensions have no unknown bucket and reject an empty key. Ignored without `facet`. 
-  /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. 
+  /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. A cursor carries the scope it was issued under, so reusing one with a changed `mediaType` or `facet` is `invalid-request` rather than a quietly wrong window. 
   /// * [limit] - Maximum items per page.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request

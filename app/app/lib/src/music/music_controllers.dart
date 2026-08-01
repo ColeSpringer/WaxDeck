@@ -146,18 +146,26 @@ class MusicIndexState {
     required this.buckets,
     this.nextCursor,
     this.loadingMore = false,
+    this.anchoredAt,
   });
 
   final List<FacetBucket> buckets;
   final String? nextCursor;
   final bool loadingMore;
 
+  /// The rail letter this window was re-anchored on; null when it starts
+  /// at the head. Non-null means the window has a floor.
+  final String? anchoredAt;
+
   bool get hasMore => nextCursor != null;
+
+  bool get hasFloor => anchoredAt != null;
 
   MusicIndexState copyWith({bool? loadingMore}) => MusicIndexState(
     buckets: buckets,
     nextCursor: nextCursor,
     loadingMore: loadingMore ?? this.loadingMore,
+    anchoredAt: anchoredAt,
   );
 }
 
@@ -169,10 +177,7 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
 
   final MusicIndexKey key;
 
-  /// The A-to-Z index is what the alphabet rail scrolls, and a jump to a
-  /// letter pages forward until it finds one. Big pages are what keep
-  /// that from being a dozen round trips; the server computes the whole
-  /// enumeration either way and serves it from one cache.
+  /// Big enough that the common index arrives whole in one round trip.
   static const pageSize = 500;
 
   /// Bumped by every [build] so an in-flight [loadMore] can tell its
@@ -212,6 +217,9 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
         MusicIndexState(
           buckets: <FacetBucket>[...current.buckets, ...page.buckets],
           nextCursor: page.nextCursor,
+          // An append does not drop the floor: losing it here would take
+          // the way back to the head away mid-scroll.
+          anchoredAt: current.anchoredAt,
         ),
       );
       return page.buckets.isNotEmpty;
@@ -233,6 +241,65 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
       }
       rethrow;
     }
+  }
+
+  /// Re-anchors the listing on [letter], replacing what was loaded with
+  /// a window starting at the server's seek. Only for a letter not
+  /// already on the list. The window then has a floor, which [reset]
+  /// drops. The rail's `#` never reaches here; no prefix names it.
+  Future<bool> anchorAt(String letter) async {
+    if (key.sort != FacetSort.label) return false;
+    // A loadMore in flight is abandoned without clearing its own guard,
+    // so the snapshot this may restore has to clear it or paging wedges
+    // for the provider's life.
+    final settled = state.value;
+    final previous = settled == null
+        ? state
+        : AsyncData(settled.copyWith(loadingMore: false));
+    final generation = ++_generation;
+    // Replaced, not extended, so this reads as a load rather than
+    // loadMore's trailing spinner - the same state a sort flip shows.
+    state = const AsyncLoading<MusicIndexState>();
+    try {
+      final page = await ref
+          .read(repositoryProvider)
+          .listFacets(
+            key.dimension.wireName,
+            sort: key.sort,
+            startsAt: letter,
+            limit: pageSize,
+          );
+      if (generation != _generation) return false;
+      if (page.buckets.isEmpty) {
+        // Past the last bucket is a legitimately empty page. Committing
+        // it would trade the listing, and the rail with it, for nothing.
+        state = previous;
+        return false;
+      }
+      state = AsyncData(
+        MusicIndexState(
+          buckets: page.buckets,
+          nextCursor: page.nextCursor,
+          anchoredAt: letter,
+        ),
+      );
+      return true;
+    } on WaxDeckApiException {
+      // Keep the listing rather than trading it for an error screen.
+      if (generation == _generation) state = previous;
+      return false;
+    } catch (_) {
+      // A defect. Put a usable listing back first, or the screen is a
+      // permanent skeleton with no retry on it.
+      if (generation == _generation) state = previous;
+      rethrow;
+    }
+  }
+
+  /// Drops any floor and reloads from the head.
+  void reset() {
+    _generation++;
+    ref.invalidateSelf();
   }
 }
 

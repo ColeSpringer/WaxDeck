@@ -194,6 +194,22 @@ func TestMetadataEditorLifecycle(t *testing.T) {
 	if len(md.LockedFields) != 0 || len(md.CustomTags) != 0 {
 		t.Fatalf("fresh item carries locks or tags: %+v", md)
 	}
+	// Declared by the contract all along; the server sent neither, while
+	// the same handles rode every item listing beside it.
+	if md.ArtistPid == nil || !strings.HasPrefix(*md.ArtistPid, "ar-") {
+		t.Errorf("metadata artistPid = %v, want the item's artist entity", md.ArtistPid)
+	}
+	if md.AlbumPid == nil || !strings.HasPrefix(*md.AlbumPid, "al-") {
+		t.Errorf("metadata albumPid = %v, want the item's album entity", md.AlbumPid)
+	}
+	// And they agree with the listing's.
+	if got := page.Items[0]; got.ArtistPid == nil || *got.ArtistPid != *md.ArtistPid {
+		t.Errorf("listing artistPid = %v, editor %v", got.ArtistPid, md.ArtistPid)
+	}
+	// No release-group handle on the item view, so it stays absent.
+	if md.ReleaseGroupPid != nil {
+		t.Errorf("metadata releaseGroupPid = %v, want absent", *md.ReleaseGroupPid)
+	}
 
 	// A scalar edit persists and locks by default.
 	resp := h.patchJSON(t, "/api/v1/items/"+alpha+"/metadata", map[string]any{

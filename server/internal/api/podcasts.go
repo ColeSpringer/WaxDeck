@@ -360,6 +360,10 @@ func (s *Server) RemoveEpisodeDownload(ctx context.Context, req RemoveEpisodeDow
 			return RemoveEpisodeDownload403JSONResponse(errObj("forbidden", err.Error())), nil
 		case service.KindConflict:
 			return RemoveEpisodeDownload409JSONResponse(errObj("conflict", err.Error())), nil
+		case service.KindCatalogBusy:
+			// Same status, different code: only this one is worth an
+			// unattended retry.
+			return RemoveEpisodeDownload409JSONResponse(errObj(string(service.KindCatalogBusy), err.Error())), nil
 		}
 		return nil, err
 	}
@@ -573,14 +577,23 @@ func (s *Server) GetWaveform(ctx context.Context, req GetWaveformRequestObject) 
 	if err != nil {
 		return nil, err
 	}
-	wf, err := s.svc.WaveformFor(ctx, uc, req.Pid)
+	partIndex := 0
+	if req.Params.PartIndex != nil {
+		partIndex = *req.Params.PartIndex
+	}
+	wf, err := s.svc.WaveformFor(ctx, uc, req.Pid, partIndex)
 	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
 			return GetWaveform404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		case service.KindInvalid:
+			// No 400 declared here, as on the skip map: a partIndex range
+			// error answers not-found rather than leaking a 500.
+			return GetWaveform404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
 		}
 		return nil, err
 	}
-	out := Waveform{State: wf.State}
+	out := Waveform{State: wf.State, PartIndex: wf.PartIndex}
 	setOpt(&out.EssenceHash, wf.EssenceHash)
 	if wf.State != "ready" {
 		// Both non-ready states are waiting to be contradicted: pending

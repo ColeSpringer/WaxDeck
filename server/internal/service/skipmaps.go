@@ -71,21 +71,9 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 		return SkipMapResult{State: skipStateUnavailable}, nil
 	}
 
-	filePID := ""
-	var partOut *int
-	if it.Kind == model.KindBook {
-		bd, err := l.lib.Book(ctx, it.PID)
-		if err != nil {
-			return SkipMapResult{}, classify(err)
-		}
-		if len(bd.Files) >= 2 {
-			if partIndex < 0 || partIndex >= len(bd.Files) {
-				return SkipMapResult{}, errInvalid("partIndex is out of range")
-			}
-			filePID = string(bd.Files[partIndex].FilePID)
-			idx := partIndex
-			partOut = &idx
-		}
+	filePID, partOut, err := l.resolvePart(ctx, it, partIndex)
+	if err != nil {
+		return SkipMapResult{}, err
 	}
 
 	f, err := l.streamFile(ctx, it, filePID)
@@ -157,6 +145,30 @@ func (l *Library) silenceMapStale(m wdb.SilenceMap) bool {
 	}
 	live := l.flowJobs.SilenceDetectorVersion()
 	return live != "" && m.DetectorVersion != live
+}
+
+// resolvePart maps a requested part onto the file that holds it, for
+// the two per-file reads a multi-file book has (silence spans and
+// peaks). Single-file items and non-books answer an empty file pid and
+// no part, so they read through the item as they always did: two or
+// more files is the whole condition, and both callers have to agree on
+// it or one would echo a part the other refuses.
+func (l *Library) resolvePart(ctx context.Context, it *model.ItemView, partIndex int) (string, *int, error) {
+	if it.Kind != model.KindBook {
+		return "", nil, nil
+	}
+	bd, err := l.lib.Book(ctx, it.PID)
+	if err != nil {
+		return "", nil, classify(err)
+	}
+	if len(bd.Files) < 2 {
+		return "", nil, nil
+	}
+	if partIndex < 0 || partIndex >= len(bd.Files) {
+		return "", nil, errInvalid("partIndex is out of range")
+	}
+	idx := partIndex
+	return string(bd.Files[partIndex].FilePID), &idx, nil
 }
 
 // streamFile resolves the file a skip map describes: the named part,

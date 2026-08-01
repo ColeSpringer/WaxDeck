@@ -266,20 +266,11 @@ func (s *Server) ListItems(ctx context.Context, req ListItemsRequestObject) (Lis
 	if !ok {
 		return ListItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 500"))}, nil
 	}
-	filter := service.ItemFilter{}
-	if req.Params.MediaType != nil {
-		filter.MediaType = string(*req.Params.MediaType)
-	}
-	if req.Params.Facet != nil {
-		// facetKey is legitimately empty (the unknown bucket), so the
-		// pair is keyed on facet alone; an absent key reads as that
-		// bucket rather than as "no filter".
-		filter.Facet, filter.FacetKey = string(*req.Params.Facet), deref(req.Params.FacetKey)
-	}
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
+	filter := itemFilterOf(req.Params.MediaType, req.Params.Facet, req.Params.FacetKey)
 	page, err := s.svc.Items(ctx, uc, filter, deref(req.Params.Cursor), limit)
 	if err != nil {
 		if kind := service.KindOf(err); kind == service.KindInvalid {
@@ -307,7 +298,13 @@ func (s *Server) ListFacets(ctx context.Context, req ListFacetsRequestObject) (L
 	if err != nil {
 		return ListFacets400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 	}
-	page, err := s.svc.Facets(ctx, uc, string(req.Params.Dimension), order, deref(req.Params.Cursor), limit)
+	page, err := s.svc.Facets(ctx, uc, service.FacetQuery{
+		Dimension: string(req.Params.Dimension),
+		Order:     order,
+		Cursor:    deref(req.Params.Cursor),
+		StartsAt:  deref(req.Params.StartsAt),
+		Limit:     limit,
+	})
 	if err != nil {
 		if kind := service.KindOf(err); kind == service.KindInvalid {
 			return ListFacets400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
@@ -346,19 +343,19 @@ func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (B
 	// An omitted seed on the random list gets a fresh one, returned on
 	// the page so later pages keep the same shuffled order. Seed zero
 	// would otherwise be a fixed order silently posing as a shuffle.
+	// Not when a cursor came with it: minting one there would refuse the
+	// cursor for a difference the caller never made, and the contract
+	// says to send back the seed the first page answered with.
 	seed := derefInt64(req.Params.Seed)
-	if req.Params.List == Random && req.Params.Seed == nil {
+	if req.Params.List == Random && req.Params.Seed == nil && req.Params.Cursor == nil {
 		seed = rand.Int64()
 	}
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var mediaType string
-	if req.Params.MediaType != nil {
-		mediaType = string(*req.Params.MediaType)
-	}
-	page, err := s.svc.Browse(ctx, uc, string(req.Params.List), mediaType, seed, deref(req.Params.Cursor), limit)
+	filter := itemFilterOf(req.Params.MediaType, req.Params.Facet, req.Params.FacetKey)
+	page, err := s.svc.Browse(ctx, uc, string(req.Params.List), filter, seed, deref(req.Params.Cursor), limit)
 	if err != nil {
 		if kind := service.KindOf(err); kind == service.KindInvalid {
 			return BrowseList400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
@@ -1161,6 +1158,8 @@ func ResponseErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 		writeError(w, http.StatusBadRequest, "invalid-request", kindMessage(err, "invalid request"))
 	case service.KindConflict:
 		writeError(w, http.StatusConflict, "conflict", kindMessage(err, "a conflicting operation is running"))
+	case service.KindCatalogBusy:
+		writeError(w, http.StatusConflict, "catalog-busy", kindMessage(err, "another catalog job holds the file-mutation scope; retry shortly"))
 	case service.KindGone:
 		writeError(w, http.StatusGone, "sync-reset", kindMessage(err, "re-mirror from a fresh snapshot"))
 	case service.KindForbidden:
@@ -1210,4 +1209,19 @@ func kindMessage(err error, fallback string) string {
 
 func errObj(code, message string) Error {
 	return Error{Code: code, Message: message}
+}
+
+// itemFilterOf maps the media-type and facet parameters the item listing
+// and the discovery lists both take. Keyed on facet alone: an absent
+// facetKey drills the dimension's unknown bucket rather than reading as
+// no filter.
+func itemFilterOf(mediaType *MediaType, facet *BrowseDimension, facetKey *string) service.ItemFilter {
+	out := service.ItemFilter{}
+	if mediaType != nil {
+		out.MediaType = string(*mediaType)
+	}
+	if facet != nil {
+		out.Facet, out.FacetKey = string(*facet), deref(facetKey)
+	}
+	return out
 }

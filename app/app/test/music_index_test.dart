@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
@@ -213,6 +215,41 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('shuffling a bucket seeds a permutation over the whole bucket', (
+    tester,
+  ) async {
+    // ADR-0028's gap: without a seed on the source the refill pages the
+    // bucket's own listing and shuffles each arriving page among itself.
+    final repository = FakeRepository()
+      ..facetItems['genre ge-1'] = <ItemSummary>[
+        for (var i = 0; i < 900; i++) _track('Track $i'),
+      ];
+    final container = await _pump(
+      tester,
+      const MusicListingScreen(
+        dimension: MusicDimension.genres,
+        segment: 'ge-1',
+      ),
+      repository,
+      engine: true,
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.listingShuffle));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(repository.scopedBrowses.last.facet, 'genre');
+    expect(repository.scopedBrowses.last.facetKey, 'ge-1');
+    final source = container.read(queueControllerProvider).source;
+    expect(
+      source.seed,
+      isNotNull,
+      reason: 'without a seed the refill pages the listing, not the shuffle',
+    );
+    container.read(queueControllerProvider.notifier).clear();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('shuffling all music walks one seeded permutation', (
     tester,
   ) async {
@@ -408,6 +445,227 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a rail tap to a loaded letter costs no request', (tester) async {
+    // Everything is loaded, so the tap is a scroll.
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[
+        _artist('Abba'),
+        _artist('Mogwai'),
+        _artist('Zebra'),
+      ];
+    await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+    );
+    final before = repository.facetStartsAt.length;
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.indexRailLetter('M')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.facetStartsAt, hasLength(before));
+  });
+
+  testWidgets('a rail tap to an unloaded letter re-anchors on the server', (
+    tester,
+  ) async {
+    // Larger than one page, so Z is genuinely not loaded - the whole
+    // condition this branch turns on.
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[
+        for (var i = 0; i <= MusicIndexController.pageSize; i++)
+          _artist('Abba $i'),
+        _artist('Zebra'),
+      ];
+    await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+    );
+    expect(find.text('Zebra'), findsNothing);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.indexRailLetter('Z')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.facetStartsAt.last, 'Z');
+    expect(find.text('Zebra'), findsOneWidget);
+  });
+
+  testWidgets('an anchored window offers the way back to the start', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[_artist('Abba'), _artist('Zebra')];
+    final container = await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+    );
+    const key = (dimension: MusicDimension.artists, sort: FacetSort.label);
+
+    // Directly: a rail tap only re-anchors an unloaded letter.
+    await container.read(musicIndexProvider(key).notifier).anchorAt('z');
+    await tester.pumpAndSettle();
+
+    expect(repository.facetStartsAt.last, 'z');
+    expect(find.text('Abba'), findsNothing);
+    // The floor is not a dead end.
+    final start = find.bySemanticsIdentifier(SemanticsIds.indexRailStart);
+    expect(start, findsOneWidget);
+
+    await tester.tap(start);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Abba'), findsOneWidget);
+    expect(start, findsNothing);
+  });
+
+  testWidgets('a rail tap below the floor re-anchors backwards', (
+    tester,
+  ) async {
+    // at-or-after means every loaded bucket matches a letter sorting
+    // before the window, so a floored window would answer index 0 and
+    // never ask for the A's.
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[_artist('Abba'), _artist('Zebra')];
+    final container = await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+    );
+    const key = (dimension: MusicDimension.artists, sort: FacetSort.label);
+    await container.read(musicIndexProvider(key).notifier).anchorAt('z');
+    await tester.pumpAndSettle();
+    expect(find.text('Abba'), findsNothing);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.indexRailLetter('A')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.facetStartsAt.last, 'A');
+    expect(find.text('Abba'), findsOneWidget);
+  });
+
+  testWidgets('a seek past the last bucket keeps the listing', (tester) async {
+    // The server answers an empty page, correctly. Committing it would
+    // trade the whole index - and the rail, which needs a bucket to
+    // draw - for nothing.
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[_artist('Abba'), _artist('Mogwai')];
+    final container = await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+    );
+    const key = (dimension: MusicDimension.artists, sort: FacetSort.label);
+
+    final moved = await container
+        .read(musicIndexProvider(key).notifier)
+        .anchorAt('z');
+    await tester.pumpAndSettle();
+
+    expect(moved, isFalse);
+    expect(find.text('Abba'), findsOneWidget);
+    expect(find.byType(FastScrollRail), findsOneWidget);
+  });
+
+  testWidgets('a failed re-anchor leaves paging usable', (tester) async {
+    // The generation bump abandons an in-flight loadMore without
+    // clearing its guard, so a snapshot restored with it still set would
+    // wedge every later page for the provider's life.
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[
+        for (var i = 0; i <= MusicIndexController.pageSize; i++)
+          _artist('Abba $i'),
+      ];
+    final container = await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+    );
+    const key = (dimension: MusicDimension.artists, sort: FacetSort.label);
+    final notifier = container.read(musicIndexProvider(key).notifier);
+
+    // A page genuinely in flight, so the snapshot the failed anchor
+    // restores is the one carrying loadingMore.
+    final gate = Completer<void>();
+    repository.facetGate = gate;
+    final paging = notifier.loadMore();
+    await tester.pump();
+
+    repository.listError = const WaxDeckApiException(
+      code: 'internal',
+      message: 'the catalog is busy',
+    );
+    final anchored = notifier.anchorAt('m');
+    gate.complete();
+    repository.facetGate = null;
+    expect(await paging, isFalse);
+    expect(await anchored, isFalse);
+    repository.listError = null;
+    await tester.pumpAndSettle();
+
+    expect(await notifier.loadMore(), isTrue);
+  });
+
+  testWidgets('an append keeps the floor', (tester) async {
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[
+        for (var i = 0; i <= MusicIndexController.pageSize; i++)
+          _artist('Mogwai $i'),
+      ];
+    final container = await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+    );
+    const key = (dimension: MusicDimension.artists, sort: FacetSort.label);
+    final notifier = container.read(musicIndexProvider(key).notifier);
+
+    await notifier.anchorAt('m');
+    await tester.pumpAndSettle();
+    expect(container.read(musicIndexProvider(key)).value!.hasFloor, isTrue);
+
+    await notifier.loadMore();
+    await tester.pumpAndSettle();
+
+    expect(container.read(musicIndexProvider(key)).value!.hasFloor, isTrue);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.indexRailStart),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the # row starts at the head rather than seeking', (
+    tester,
+  ) async {
+    // `#` members sort both before A and after Z, so no prefix names
+    // them and it never becomes a startsAt.
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[_artist('Abba'), _artist('Zebra')];
+    final container = await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+    );
+    const key = (dimension: MusicDimension.artists, sort: FacetSort.label);
+    await container.read(musicIndexProvider(key).notifier).anchorAt('z');
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.indexRailLetter('#')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.facetStartsAt.last, isNull);
+    expect(find.text('Abba'), findsOneWidget);
   });
 
   testWidgets('dragging the sort chips does not fetch a page', (tester) async {

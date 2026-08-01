@@ -120,7 +120,9 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	// release-group count (that total stays zero, meaning unknown), and
 	// per-track lyrics coverage is not reported upstream, so lyrics
 	// shows zero enriched over the music track count.
-	if fr, ferr := l.lib.Facet(ctx, query.New(query.EntityItems).Build(), read.GroupArtist, ""); ferr == nil {
+	// Order does not matter to a count of buckets, and no top-N: the
+	// whole enumeration is the answer.
+	if fr, ferr := l.lib.Facet(ctx, query.New(query.EntityItems).Build(), read.GroupArtist, "", 0, ""); ferr == nil {
 		n := 0
 		for _, b := range fr.Buckets {
 			if !b.IsUnknown {

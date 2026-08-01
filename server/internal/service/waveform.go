@@ -16,6 +16,9 @@ import (
 type WaveformResult struct {
 	State       string
 	EssenceHash string
+	// PartIndex echoes the described part, multi-file books only, so a
+	// client can tell a part answer from a whole-item one.
+	PartIndex *int
 	// Version is the stored peaks format/algorithm revision. It scopes
 	// the endpoint's validator: re-analysis under a bumped version
 	// rewrites the peaks for audio whose essence never changed, so the
@@ -32,14 +35,16 @@ const (
 	waveformStateUnavailable = "unavailable"
 )
 
-// WaveformFor answers one item's waveform.
+// WaveformFor answers one item's waveform. partIndex selects a
+// multi-file book's part (ignored elsewhere), exactly as SkipMapFor
+// takes it.
 //
 // The three states are not "found, queued, refused": they are three
 // populations that all read as an absent peaks row upstream, and telling
 // them apart is the whole of this function. Getting it wrong ships a
 // spinner that never resolves, because a client polling `pending` has
 // been told to wait for something that will never arrive.
-func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID string) (WaveformResult, error) {
+func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID string, partIndex int) (WaveformResult, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return WaveformResult{}, err
@@ -61,25 +66,15 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 	if it.Kind == model.KindEpisode {
 		return WaveformResult{State: waveformStateUnavailable}, nil
 	}
-	// A multi-file book has one peaks row, hanging off the file the
-	// catalog calls primary, which is part one. Answering it for the
-	// book would draw part one's envelope under part five: the same
-	// convincing wrong answer the virtual-track branch refuses, and the
-	// reason the skip-map endpoint takes a partIndex. Serving this
-	// honestly needs a peaks read scoped to a file rather than an item,
-	// which the catalog does not expose; the ask is recorded in
-	// docs/upstream-requests.md.
-	if it.Kind == model.KindBook {
-		bd, err := l.lib.Book(ctx, it.PID)
-		if err != nil {
-			return WaveformResult{}, classify(err)
-		}
-		if len(bd.Files) >= 2 {
-			return WaveformResult{State: waveformStateUnavailable}, nil
-		}
+	// Each part has its own peaks row. Reading through the item answers
+	// the primary's, and the primary is not part one - it is whichever
+	// part was attached first.
+	filePID, partOut, err := l.resolvePart(ctx, it, partIndex)
+	if err != nil {
+		return WaveformResult{}, err
 	}
 
-	f, err := l.streamFile(ctx, it, "")
+	f, err := l.streamFile(ctx, it, filePID)
 	if err != nil {
 		return WaveformResult{}, err
 	}
@@ -88,10 +83,17 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 	// present, so this file is never picked up and never gains peaks.
 	// Pending would be a promise nothing keeps.
 	if f.EssenceHash == "" {
-		return WaveformResult{State: waveformStateUnavailable}, nil
+		return WaveformResult{State: waveformStateUnavailable, PartIndex: partOut}, nil
 	}
 
-	pk, err := l.lib.Peaks(ctx, it.PID)
+	// A track and a single-file book have one file, so the item read is
+	// the same row and stays the simpler call.
+	var pk *model.PeaksData
+	if filePID != "" {
+		pk, err = l.lib.PeaksForFile(ctx, model.PID(filePID))
+	} else {
+		pk, err = l.lib.Peaks(ctx, it.PID)
+	}
 	if err == nil && pk != nil && pk.Buckets > 0 && len(pk.Data) >= pk.Buckets*2 {
 		return WaveformResult{
 			State: waveformStateReady,
@@ -103,6 +105,7 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 			Version:     pk.Version,
 			Resolution:  pk.Buckets,
 			Peaks:       narrowPeaks(pk.Data, pk.Buckets),
+			PartIndex:   partOut,
 		}, nil
 	}
 	if err != nil && kindFromWaxErr(err) != KindNotFound {
@@ -123,10 +126,13 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 	// writes peaks. That resolves itself, and the alternative (reading a
 	// stale stamp as pending) is the failure this whole branch exists to
 	// avoid.
+	//
+	// The stamp is the requested part's file, so a partly analyzed book
+	// reads ready for some parts and pending for others.
 	if f.AnalyzedEssence == f.EssenceHash {
-		return WaveformResult{State: waveformStateUnavailable, EssenceHash: f.EssenceHash}, nil
+		return WaveformResult{State: waveformStateUnavailable, EssenceHash: f.EssenceHash, PartIndex: partOut}, nil
 	}
-	return WaveformResult{State: waveformStatePending, EssenceHash: f.EssenceHash}, nil
+	return WaveformResult{State: waveformStatePending, EssenceHash: f.EssenceHash, PartIndex: partOut}, nil
 }
 
 // narrowPeaks converts the stored little-endian uint16 buckets to the

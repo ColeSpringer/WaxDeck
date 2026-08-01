@@ -14,116 +14,55 @@ sidecar injection seam) all landed and are not repeated here.
 
 ## WaxBin
 
-- **Changed flag on play-state mutations.** `SetStar`/`SetRating` take
-  a recorded-time `asOf` now and enforce recorded-time
-  last-writer-wins, which is exactly what WaxDeck asked for and it has
-  adopted it (the star and rating half of the `play_state_stamps`
-  mirror is gone; the resume shelf keeps the position half). The store's
-  `playStateWrite` already computes whether the write changed anything
-  and suppresses its change-feed delta when it did not, but the facade
-  returns only `error`, so a consumer cannot learn the same thing
-  without a follow-up state read comparing `StarredChangedAt` against
-  the `asOf` it sent. A `changed bool` return would carry it for free.
-  Today WaxDeck emits its own `play-state` sync event unconditionally:
-  a replay the catalog skipped still announces itself, which is a
-  redundant event, not a wrong one (the client reconciles from the
-  state it fetches), and one read per write is the more expensive
-  alternative.
+- **An `explicit` item query field.** `podcast_pid` landed and the
+  subscription tile's three numbers are two counting queries and a
+  one-row read now, but only for a caller who may see explicit content.
+  The walk it replaced dropped episodes the caller cannot see
+  (`ep.Explicit && !uc.Explicit`), and no item query field expresses
+  that flag, so `countShow` still walks for a restricted account
+  (`server/internal/service/podcasts.go`). The flag is on the episode
+  row already; a presence-style `explicit` field (`is 0` / `is 1`, like
+  `has_art`) would retire the second path. This is the rare branch -
+  `permissionsOf` grants Explicit by default and every admin holds it -
+  so the workaround is shipped, correct, and cheap meanwhile.
 
-- **A `podcast_pid` item query field, so an episode count can be a
-  count.** The item field map carries `podcast`, which is the show's
-  *title* (`COALESCE(pod.title, '')`), and no handle for the show
-  itself. Every other entity dimension has one (`artist_pid`,
-  `album_pid`, `genre_pid`). So WaxDeck cannot express "how many of this
-  show's episodes has this user not played" as a `CountItems` over
-  `kind is episode AND podcast_pid is <pid> AND played is 0`, which is
-  what the query surface is otherwise shaped for. Instead it walks the
-  show's episodes and batch-reads their play states, two queries per
-  subscription, to answer `unplayedCount` on a subscription row
-  (`server/internal/service/podcasts.go`, ADR-0032). The same gap makes
+- **A publication-ordered cross-show listing primitive.**
   `GET /podcasts/episodes`, episodes across everything the caller
-  follows, assemble every subscribed show's episodes in Go, sort them,
-  and page the slice, per request; with a pid field it would be one
-  keyset query over an indexed join, which is what every other listing
-  in this contract already is. A listener follows tens of shows, so both
-  are correct and affordable today, and both are the wrong layer for a
-  power user's OPML import. The workaround is shipped and correct
-  meanwhile.
+  follows, assembles every subscribed show's episodes in Go, sorts them,
+  and pages the slice, per request (`SubscribedEpisodes`,
+  `server/internal/service/podcasts.go`). An earlier version of this
+  entry claimed `podcast_pid` would make it "one keyset query over an
+  indexed join". It does not, and the correction is the ask: `QueryPage`
+  owns `sort_key` ordering and ignores a query's own sort, and no
+  discovery list orders by publication date, so a cross-show listing in
+  newest-published order has no keyset primitive behind it at all.
+  Either a publication-ordered discovery list or sort-aware keyset
+  paging would give it one. The `in-progress` filter needs a second
+  thing besides: it selects on `PositionMS > 0` and there is no position
+  field. A listener follows tens of shows, so the slice is correct and
+  affordable today, and it is the wrong layer for a power user's OPML
+  import.
 
-- **Keyset pagination on `Library.Facet`.** Every other read surface
-  pages: `QueryPage` takes a cursor and a limit and answers a `read.Page`
-  with `HasMore`/`Next`, and `Browse` does the same. `Facet` does not --
-  it takes a query and a group-by and returns one `FacetResult` holding
-  every bucket, with no cursor and no bound. WaxDeck's first-party
-  browse-dimension endpoint is keyset-paged like the rest of its
-  contract, so it computes the whole enumeration, sorts it, and runs its
-  own keyset over that slice -- the cursor carries the last bucket's
-  (count, label, key) and the next page resumes strictly after it, since
-  counts are the leading sort term and an offset would skip or repeat
-  buckets whenever one moved (`server/internal/service/facets.go`). It
-  also caches the unfiltered full-visibility answer per dimension and
-  order against `CatalogTailSeq()` to keep a browse index from
-  recomputing every artist in the library per page. An
-  artist or album dimension over a large catalog is exactly the case that
-  wants a cursor. A `FacetPage(ctx, q, groupBy, order, cursor, limit, userPID)`
-  beside the existing one would retire both the in-memory window and the
-  cache; the workaround is shipped and correct meanwhile.
+- **A file handle on `DiagnosticFilter`.** `FileDiagnostics` landed and
+  is the query surface the earlier "per-file diagnostics" ask wanted;
+  `model.FileDiagnostic` maps onto WaxDeck's `WriteBackIssueDTO` field
+  for field. What it cannot answer is "this item's issues": the filter
+  is origin, code, severity, and library pid, so a per-item read means
+  pulling a whole library's diagnostics and scanning them on every
+  editor open. A `FilePID` dimension (WaxDeck resolves an item's files
+  through `ItemFiles`) would close it. Until then
+  `GET /items/{pid}/metadata` answers an empty `writeBackIssues`, which
+  the contract already allows.
 
-  The `order` in that signature is part of the ask, not a nicety. The
-  endpoint serves two orders now: biggest-first (the `sortExpr` the
-  aggregation already sorts on) and A-to-Z by display label, which is
-  what the artist and album index screens' alphabet rail scrolls. The
-  label order is case-folded and puts the unknown bucket last, neither
-  of which falls out of the count order's collation, and its cursor
-  carries the order it was issued under so the two cannot be crossed. A
-  paged `Facet` that could only walk the count order would leave the
-  A-to-Z half on the in-memory window, so the window and its cache would
-  survive the very change meant to retire them.
-
-- **A filter on `Browse`.** `read.BrowseOptions` carries a user, a seed,
-  a cursor, and a limit, and the two list-shaped fields `ListByYear` and
-  `ListByGenre` need. It takes no query, so the random list is over the
-  whole catalog and nothing else. WaxDeck's queue windows any scope
-  larger than 500 entries and draws more as it drains (ADR-0028); for a
-  shuffled window that draw wants a random order over the *scope*, which
-  is usually one facet bucket - a giant artist, a giant genre. A
-  `Query query.Query` field on `BrowseOptions`, applied the way
-  `QueryPage` applies one, would give every discovery list a scope and
-  make this exact. The shipped workaround: a shuffled window over the
-  whole music library uses `ListRandom` and is a real shuffle, and a
-  shuffled window over a bucket pages that bucket's own listing and
-  shuffles each arriving page among itself - so a shuffled 5,000-track
-  genre hears a shuffle of its first 500 before a shuffle of its second
-  500. Complete coverage, no repeats, an order that is more local than
-  it should be.
-
-  A second consumer arrived with the shelf home (ADR-0038):
-  `GET /library/browse` now takes a `mediaType`, for a domain-scoped
-  shelf ("recently added albums" on the music hub). With no query on
-  `BrowseOptions` the filter runs over the page the catalog answered, so
-  a narrowed page comes back short of its limit while still carrying a
-  cursor - the same short-page-plus-cursor shape a restricted caller
-  already gets, documented in the contract, and correct. Walking further
-  per request is not available as a workaround: a page's cursor names its
-  own end, `read.Page` carries no per-item order values, and there is no
-  `EncodeCursor` input to mint one mid-window, so filling a page would
-  mean consuming rows the answer could not report having consumed. The
-  same `Query` field closes this half too.
-
-- **A peaks read scoped to a file, not an item.** `Library.Peaks` takes
-  an item pid and `LoadPeaks` joins `item_file` on `role = 'primary'`,
-  which for a multi-file audiobook is part one by construction (the
-  first part is written as the representative primary and the rest as
-  parts). So a twelve-part book has exactly one waveform, describing its
-  first file. `PeaksForFile(ctx, filePID)`, or a file pid on the
-  existing call, is all it would take; the rows are already keyed by
-  file. The shipped workaround: `GET /items/{pid}/waveform` answers
-  `unavailable` for a multi-file book rather than the wrong part's
-  envelope, so a client draws its plain seek bar. Single-file books and
-  tracks are unaffected and read `ready` normally, and the skip-map
-  endpoint already takes a `partIndex` because silence analysis is
-  WaxDeck-side and keyed by essence, so the shape a part-aware waveform
-  would take is already settled.
+- **A release-group handle on the item view.** `model.ItemView` projects
+  `ArtistPID`, `AlbumArtistPID`, and `AlbumPID`, and WaxDeck reads all
+  three - the item listing and the metadata editor both carry the artist
+  and album pids now. There is no release-group equivalent, and no
+  facade read that resolves one from an item, so `ItemMetadata`'s
+  declared `releaseGroupPid` is permanently absent. The enrichment spine
+  already keys release groups, so this is a projection rather than new
+  identity work. The field is optional in the contract, so the gap is a
+  missing link rather than a broken read.
 
 ## Recorded upstream non-goals
 
@@ -148,3 +87,19 @@ are not re-filed as asks:
   cover directive, so the playlist art entity stores and serves a cover
   everywhere else (the REST art endpoint, the Subsonic `coverArt`) and
   the export stays text. Do not re-file it as a gap.
+- Facet paging is refused. `Library.Facet` takes an order and a top-N
+  limit and will never take a cursor: paging one would re-run the whole
+  `GROUP BY` and `COUNT(DISTINCT)` per page. The answer offered for a
+  large-dimension index is `EntityPage(kind, cursor, limit)`, a keyset
+  walk of an entity table's `sort_key` index - and WaxDeck does not
+  adopt it, because it enumerates the entities that exist rather than
+  the entities matching a query. ADR-0040 records the four mismatches
+  (library scoping, orphan entities, the unknown bucket, rollup counts)
+  and the `startsAt` seek that scales the index instead. So
+  `/library/facets` computing and caching a whole enumeration is
+  permanent, not a workaround.
+- `read.GroupPodcast`, a facet dimension bucketing episodes by feed, is
+  shipped upstream and deliberately unused here: `/podcasts/subscriptions`
+  answers the per-user view, and a catalog-wide dimension would
+  enumerate shows nobody follows while the subscription scoping that
+  hides them is a per-item decision no aggregation can express.

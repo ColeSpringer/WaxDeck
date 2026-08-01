@@ -8,15 +8,10 @@ package service
 // visibility scope, and the labels. Three things are worth knowing
 // before changing this file.
 //
-// Paging is in memory. The facade's Facet takes no cursor and returns
-// every bucket of a dimension in one result, so a page is a window over
-// a sorted slice using the same opaque offset cursor the smart-playlist
-// listings page with. Keyset pagination on Facet is filed upstream
-// (docs/upstream-requests.md); when it lands, this becomes a passthrough
-// like every other listing and the cache below can go. The ask names an
-// ordering parameter for the same reason this file has one: the A-to-Z
-// index depends on it, and an upstream Facet that only ever sorts by
-// count would not retire the window.
+// Paging is in memory, permanently: upstream declined facet paging, so
+// a page is a window over a sorted slice and the cache below keeps that
+// affordable. EntityPage is not a substitute; ADR-0040 says why, since
+// the next agent looking at a large artist index will find it first.
 //
 // Caching is narrow on purpose. Only the unfiltered enumeration, only
 // per dimension and order, only for full-visibility callers, keyed on
@@ -41,6 +36,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
@@ -160,8 +156,12 @@ type FacetBucket struct {
 // scripts outside ASCII still land after z, the same way the catalog's
 // own tie-break does - and a proper locale collation is a bigger change
 // than an index screen justifies.
+//
+// Left-trimmed because fastScrollLetter takes the rail letter after a
+// trim: untrimmed, " Weeknd" sorts before every A while the rail files
+// it under W. One fold decides the sort, the seek, and the letter.
 func facetFolded(b FacetBucket) FacetBucket {
-	b.fold = strings.ToLower(b.Label)
+	b.fold = strings.ToLower(strings.TrimLeftFunc(b.Label, unicode.IsSpace))
 	return b
 }
 
@@ -202,10 +202,24 @@ type facetGeneration struct {
 	vocab int64
 }
 
+// FacetQuery is one request for a dimension's buckets. A struct because
+// Cursor and StartsAt are two strings naming two different positions,
+// and a transposed pair would fail silently.
+type FacetQuery struct {
+	Dimension string
+	Order     FacetSort
+	Cursor    string
+	// StartsAt seeks the first bucket at or after a display-label
+	// prefix, which is what an alphabet rail taps. Requires
+	// FacetSortLabel and refuses a Cursor.
+	StartsAt string
+	Limit    int
+}
+
 // Facets enumerates one browse dimension's buckets, paged: most items
 // first by default, A to Z under FacetSortLabel.
-func (l *Library) Facets(ctx context.Context, uc *UserCtx, dimension string, order FacetSort, cursor string, limit int) (FacetPage, error) {
-	group, canonical, err := facetGroupFor(dimension)
+func (l *Library) Facets(ctx context.Context, uc *UserCtx, q FacetQuery) (FacetPage, error) {
+	group, canonical, err := facetGroupFor(q.Dimension)
 	if err != nil {
 		return FacetPage{}, err
 	}
@@ -214,11 +228,11 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, dimension string, ord
 	// serves must not fall through to the default - answering
 	// biggest-first to a caller who asked for A to Z puts the wrong
 	// letters under the rail.
-	order, err = ParseFacetSort(string(order))
+	order, err := ParseFacetSort(string(q.Order))
 	if err != nil {
 		return FacetPage{}, err
 	}
-	after, err := decodeFacetCursor(cursor)
+	after, err := decodeFacetCursor(q.Cursor)
 	if err != nil {
 		return FacetPage{}, err
 	}
@@ -230,6 +244,18 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, dimension string, ord
 	if after != nil && after.order() != order {
 		return FacetPage{}, errInvalid("cursor was issued for sort " + string(after.order()))
 	}
+	if after != nil && after.Dim != "" && after.Dim != canonical {
+		return FacetPage{}, errInvalid("cursor was issued for dimension " + after.Dim)
+	}
+	if q.StartsAt != "" {
+		if order != FacetSortLabel {
+			return FacetPage{}, errInvalid("startsAt needs sort=label")
+		}
+		if after != nil {
+			return FacetPage{}, errInvalid("startsAt and cursor both name a position")
+		}
+	}
+	limit := q.Limit
 	if limit <= 0 {
 		// The handler bounds this, but a limit of zero would emit an empty
 		// page carrying a cursor to the same place: a caller paging on it
@@ -247,15 +273,35 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, dimension string, ord
 	if err != nil {
 		return FacetPage{}, err
 	}
+	from := facetSeek(buckets, after, order)
+	if q.StartsAt != "" {
+		from = facetSeekPrefix(buckets, q.StartsAt)
+	}
 	out := FacetPage{Dimension: canonical, Buckets: []FacetBucket{}}
-	for i := facetSeek(buckets, after, order); i < len(buckets); i++ {
+	for i := from; i < len(buckets); i++ {
 		if len(out.Buckets) == limit {
-			out.Next = encodeFacetCursor(buckets[i-1], order)
+			out.Next = encodeFacetCursor(buckets[i-1], canonical, order)
 			break
 		}
 		out.Buckets = append(out.Buckets, buckets[i])
 	}
 	return out, nil
+}
+
+// facetSeekPrefix returns the first bucket sorting at or after the
+// folded prefix, or len(buckets) when it sorts past every real one.
+//
+// At-or-after, not equality, so startsAt=m lands on the first N when a
+// library jumps L to N. Real buckets only: the unknown bucket sorts
+// last whatever its sentinel spells and the rail has no row for it.
+func facetSeekPrefix(buckets []FacetBucket, prefix string) int {
+	real := sort.Search(len(buckets), func(i int) bool { return buckets[i].Unknown })
+	fold := facetFolded(FacetBucket{Label: prefix}).fold
+	at := sort.Search(real, func(i int) bool { return buckets[i].fold >= fold })
+	if at == real {
+		return len(buckets)
+	}
+	return at
 }
 
 // facetBuckets computes (or serves from cache) a dimension's whole
@@ -273,7 +319,11 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 		l.facets.mu.Unlock()
 	}
 
-	res, err := l.lib.Facet(ctx, l.facetScopeQuery(uc), group, model.PID(uc.CatalogPID))
+	// No top-N: paging a window needs the whole enumeration. The order
+	// is applied here because facetFolded folds the display label while
+	// FacetOrderLabel collates sort_key, so "The Beatles" files under B
+	// there and T here, and the rail follows this file.
+	res, err := l.lib.Facet(ctx, l.facetScopeQuery(uc), group, read.FacetOrderLabel, 0, model.PID(uc.CatalogPID))
 	if err != nil {
 		return nil, classify(err)
 	}
@@ -399,6 +449,11 @@ type facetCursor struct {
 	// the encoding of the order this endpoint has always served does not
 	// change.
 	Sort string `json:"s,omitempty"`
+	// Dim is the canonical dimension. Without it a genre cursor replayed
+	// on artist seeks among the wrong buckets and answers an empty page
+	// with no error, which is the silent wrong window every other cursor
+	// in this service refuses.
+	Dim string `json:"d,omitempty"`
 }
 
 // order is the sort the cursor was issued under.
@@ -409,8 +464,10 @@ func (c *facetCursor) order() FacetSort {
 	return FacetSort(c.Sort)
 }
 
-func encodeFacetCursor(b FacetBucket, order FacetSort) string {
-	cur := facetCursor{Count: b.Count, Label: b.Label, Key: b.Key, Unknown: b.Unknown}
+func encodeFacetCursor(b FacetBucket, dimension string, order FacetSort) string {
+	cur := facetCursor{
+		Count: b.Count, Label: b.Label, Key: b.Key, Unknown: b.Unknown, Dim: dimension,
+	}
 	if order != FacetSortCount {
 		cur.Sort = string(order)
 	}

@@ -524,7 +524,9 @@ paths:
         space). Removing an episode that is not fetched is a no-op
         success that also cancels a queued fetch; an episode someone is
         listening to right now answers `conflict` (retry when playback
-        stops).
+        stops), and one whose delete cannot start because another
+        catalog job holds the file-mutation scope answers `catalog-busy`
+        (retry shortly).
       tags: [podcasts]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -545,13 +547,13 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The removal was refused (code `conflict`), for one of two
-            reasons the message distinguishes. Either the episode is
-            being listened to right now and removing the file would kill
-            the stream, which clears when playback stops; or a
+            The removal was refused, for one of two reasons the code
+            distinguishes. `conflict`: the episode is being listened to
+            right now and removing the file would kill the stream, which
+            clears only when playback stops. `catalog-busy`: a
             conflicting catalog job (a scan, an import, another delete)
-            holds the file-mutation lease, which clears on its own and
-            is worth retrying.
+            holds the file-mutation scope, which clears on its own, so an
+            unattended retry is worth something.
           content:
             application/json:
               schema:

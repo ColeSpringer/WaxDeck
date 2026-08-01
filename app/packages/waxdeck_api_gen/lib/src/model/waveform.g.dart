@@ -10,6 +10,8 @@ class _$Waveform extends Waveform {
   @override
   final String state;
   @override
+  final int? partIndex;
+  @override
   final BuiltList<int>? peaks;
   @override
   final int? resolution;
@@ -21,6 +23,7 @@ class _$Waveform extends Waveform {
 
   _$Waveform._({
     required this.state,
+    this.partIndex,
     this.peaks,
     this.resolution,
     this.essenceHash,
@@ -37,6 +40,7 @@ class _$Waveform extends Waveform {
     if (identical(other, this)) return true;
     return other is Waveform &&
         state == other.state &&
+        partIndex == other.partIndex &&
         peaks == other.peaks &&
         resolution == other.resolution &&
         essenceHash == other.essenceHash;
@@ -46,6 +50,7 @@ class _$Waveform extends Waveform {
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, state.hashCode);
+    _$hash = $jc(_$hash, partIndex.hashCode);
     _$hash = $jc(_$hash, peaks.hashCode);
     _$hash = $jc(_$hash, resolution.hashCode);
     _$hash = $jc(_$hash, essenceHash.hashCode);
@@ -57,6 +62,7 @@ class _$Waveform extends Waveform {
   String toString() {
     return (newBuiltValueToStringHelper(r'Waveform')
           ..add('state', state)
+          ..add('partIndex', partIndex)
           ..add('peaks', peaks)
           ..add('resolution', resolution)
           ..add('essenceHash', essenceHash))
@@ -70,6 +76,10 @@ class WaveformBuilder implements Builder<Waveform, WaveformBuilder> {
   String? _state;
   String? get state => _$this._state;
   set state(String? state) => _$this._state = state;
+
+  int? _partIndex;
+  int? get partIndex => _$this._partIndex;
+  set partIndex(int? partIndex) => _$this._partIndex = partIndex;
 
   ListBuilder<int>? _peaks;
   ListBuilder<int> get peaks => _$this._peaks ??= ListBuilder<int>();
@@ -91,6 +101,7 @@ class WaveformBuilder implements Builder<Waveform, WaveformBuilder> {
     final $v = _$v;
     if ($v != null) {
       _state = $v.state;
+      _partIndex = $v.partIndex;
       _peaks = $v.peaks?.toBuilder();
       _resolution = $v.resolution;
       _essenceHash = $v.essenceHash;
@@ -123,6 +134,7 @@ class WaveformBuilder implements Builder<Waveform, WaveformBuilder> {
               r'Waveform',
               'state',
             ),
+            partIndex: partIndex,
             peaks: _peaks?.build(),
             resolution: resolution,
             essenceHash: essenceHash,

@@ -542,26 +542,42 @@ paths:
         low bits are dropped rather than rounded; that is invisible at
         any width a seek bar is drawn at.
 
+        Waveforms are per audio file: for a multi-file audiobook, pass
+        `partIndex` to get the envelope of one part, in that part's own
+        timeline, and the answer echoes the `partIndex` it describes. An
+        omitted `partIndex` is part zero, so a client that does not know
+        about parts gets the first one rather than nothing.
+
         `state` is `ready`, `pending` (this item is analyzable and has
         not been analyzed yet; poll again after an analyze pass), or
         `unavailable` (there will never be a waveform for this item).
-        Read `unavailable` as final. Four populations answer it: podcast
+        Read `unavailable` as final. Three populations answer it: podcast
         episodes, which are deliberately never analyzed; a track carved
         out of a shared file by a cue sheet, which has no envelope of
-        its own to report; a multi-file audiobook, whose stored waveform
-        describes only its first part and would be the wrong audio under
-        any other one; and a file the pass analyzed but could not
+        its own to report; and a file the pass analyzed but could not
         measure, which is not retried until its audio changes. A client
         should draw its plain seek bar for `unavailable` rather than
-        spinning.
+        spinning. A book part whose file has simply not been analyzed
+        yet is `pending`, not `unavailable`, so a partly analyzed book
+        can report the two states across its parts.
 
-        A `ready` answer is content-addressed by the item's audio essence
-        and cacheable for a day; revalidate with `If-None-Match`.
-        `pending` and `unavailable` are `no-store`, since both are
-        expected to change.
+        A `ready` answer is content-addressed by the audio essence of
+        the file being described (so a multi-file book's parts carry
+        different validators) and cacheable for a day; revalidate with
+        `If-None-Match`. `pending` and `unavailable` are `no-store`,
+        since both are expected to change.
       tags: [playback]
       parameters:
         - $ref: "#/components/parameters/Pid"
+        - name: partIndex
+          in: query
+          description: >
+            Zero-based part of a multi-file audiobook to describe.
+            Ignored for single-file items. Out of range is `not-found`,
+            matching the skip map.
+          schema:
+            type: integer
+            minimum: 0
         - name: If-None-Match
           in: header
           description: Previously returned `ETag`; a match answers 304 with no body.
@@ -573,8 +589,10 @@ paths:
           headers:
             ETag:
               description: >
-                Validator derived from the item's audio essence. Present
-                on `ready` only; the other two states are not cacheable.
+                Validator derived from the audio essence of the file
+                being described, which for a multi-file book is the
+                requested part. Present on `ready` only; the other two
+                states are not cacheable.
               schema:
                 type: string
             Cache-Control:
@@ -1240,6 +1258,11 @@ components:
             for this item). Open set; treat unknown values as
             `unavailable`.
           example: ready
+        partIndex:
+          type: integer
+          description: >
+            The described part of a multi-file audiobook. Present only
+            for multi-file books.
         peaks:
           type: array
           description: >

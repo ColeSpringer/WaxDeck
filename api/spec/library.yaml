@@ -18,9 +18,12 @@ paths:
         - name: facet
           in: query
           description: >
-            Restrict results to one bucket of a browse dimension. Requires
-            `facetKey`, and takes the same dimension names
-            `/library/facets` enumerates. Composes with `mediaType`.
+            Restrict results to one bucket of a browse dimension, taking
+            the same dimension names `/library/facets` enumerates.
+            Composes with `mediaType`. The pair is keyed on `facet`
+            alone: an absent or empty `facetKey` selects the dimension's
+            unknown bucket, which is a real bucket the enumeration
+            returns, so it is a drill rather than a missing argument.
           schema:
             $ref: "#/components/schemas/BrowseDimension"
         - name: facetKey
@@ -37,7 +40,9 @@ paths:
           in: query
           description: >
             Opaque keyset cursor from a previous page's `nextCursor`. Omit for
-            the first page.
+            the first page. A cursor carries the scope it was issued
+            under, so reusing one with a changed `mediaType` or `facet`
+            is `invalid-request` rather than a quietly wrong window.
           schema:
             type: string
         - name: limit
@@ -84,28 +89,44 @@ paths:
           description: >
             Restrict the list to one media type, for a domain-scoped shelf
             ("recently added albums" on the music hub). Composes with every
-            list.
-
-            `limit` still bounds how much of the list one request walks, so
-            a filtered page is usually short: asking for 20 music items walks
-            20 rows of a list that also holds books and episodes, and returns
-            the music among them with a `nextCursor` for the rest. That is
-            the same short-page-plus-cursor shape a caller with restricted
-            library visibility already gets, and `nextCursor` is absent only
-            when the list itself is exhausted. A caller drawing a shelf of a
-            dozen cards should ask for a generous limit and take what it
-            draws from the answer, rather than page for an exact count.
+            list, and narrows the list itself rather than the page, so a
+            filtered page comes back full. A caller with restricted library
+            visibility can still get a short page that carries a cursor,
+            which is the contract's standing rule everywhere.
           schema:
             $ref: "#/components/schemas/MediaType"
+        - name: facet
+          in: query
+          description: >
+            Restrict the list to one bucket of a browse dimension, taking
+            the same dimension names `/library/facets` enumerates and the
+            same bucket keys `/library/items` drills. Composes with
+            `mediaType` and with every list, so a shuffle can be scoped to
+            one artist, genre, or year, and it is the same filter the
+            bucket's own listing uses: a bucket's count, the list it opens,
+            and a shuffle over it can never disagree.
+
+            Keyed on `facet` alone, exactly as on `/library/items`: an
+            absent or empty `facetKey` selects the dimension's unknown
+            bucket.
+          schema:
+            $ref: "#/components/schemas/BrowseDimension"
+        - name: facetKey
+          in: query
+          description: >
+            The bucket to scope to, as returned in the enumeration's
+            `key`. Send it empty to select the dimension's unknown bucket;
+            `kind` and custom tag dimensions have no unknown bucket and
+            reject an empty key. Ignored without `facet`.
+          schema:
+            type: string
         - name: seed
           in: query
           description: >
             Shuffle seed for the `random` list. The same seed pages through
             the same shuffled order, so paging stays stable. When omitted the
             server picks a fresh seed and returns it as the page's `seed`;
-            pass that value back with the cursor for later pages. A cursor is
-            only valid together with the same `list` and `seed` it was issued
-            for.
+            pass that value back with the cursor for later pages.
           schema:
             type: integer
             format: int64
@@ -114,6 +135,13 @@ paths:
           description: >
             Opaque keyset cursor from a previous page's `nextCursor`. Omit for
             the first page.
+
+            A cursor carries the scope it was issued under - the list, the
+            seed, and the `mediaType`/`facet`/`facetKey` filter - and
+            reusing one under a different scope is `invalid-request`. It
+            names a position in a seeded permutation, so under another
+            seed it would name a position in a different permutation
+            entirely; refusing it is the only honest answer.
           schema:
             type: string
         - name: limit
@@ -198,6 +226,26 @@ paths:
             Opaque cursor from a previous page's `nextCursor`. Omit for
             the first page. Valid only with the `sort` it was issued
             under.
+          schema:
+            type: string
+        - name: startsAt
+          in: query
+          description: >
+            Start the page at the first bucket whose display label sorts
+            at or after this prefix, folded the same way `sort=label`
+            folds (case, and leading whitespace ignored). This is what an
+            alphabet rail taps: `startsAt=m` on a library that jumps from
+            L to N answers the first N bucket rather than nothing, since
+            the comparison is at-or-after and not equality.
+
+            Requires `sort=label`; with the default `count` order it is
+            `invalid-request`, because a prefix names no position in a
+            biggest-first list. Sending it together with `cursor` is
+            `invalid-request` too: a cursor already names a position.
+            A prefix past the last bucket is an empty page with no
+            `nextCursor`, not an error. The unknown bucket is not
+            seekable, since it sorts last whatever its sentinel spells;
+            paging to the end still reaches it.
           schema:
             type: string
         - name: limit
@@ -485,7 +533,16 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/ReadOnly"
+          description: >
+            The delete was refused. `read-only`: the target library, or
+            the whole server, is in read-only mode. `catalog-busy`:
+            another job holds the catalog's shared file-mutation scope,
+            which clears on its own, so an unattended retry is worth
+            something.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 

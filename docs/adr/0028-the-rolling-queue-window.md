@@ -85,6 +85,13 @@ The fix is a facet filter on the browse endpoint, which needs WaxBin's
 `read.BrowseOptions` to take one; it is filed in
 `docs/upstream-requests.md` with this workaround recorded beside it.
 
+*Amended 2026-07-31: it landed.* `read.BrowseOptions.Query` arrived
+upstream, `GET /library/browse` took `facet`/`facetKey` scoped by the
+same filter the bucket's own listing uses, and a seeded bucket source
+now draws `browse(random, facet:, facetKey:, seed:)` instead of paging
+the listing. A shuffled bucket is one permutation over the whole of it,
+whatever its size. See ADR-0040.
+
 The first window is a page the Shuffle button draws for itself, not the
 list the screen happens to have scrolled into memory. Sampling an
 accumulated list drops whatever it did not sample - the queue cannot

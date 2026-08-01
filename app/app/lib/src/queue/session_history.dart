@@ -127,7 +127,7 @@ class SessionHistorySection extends ConsumerWidget {
   ) {
     final playback = ref.read(nowPlayingProvider.notifier);
     final displaced = ref.read(queueControllerProvider).isNotEmpty;
-    playback.restore(queueFromSession(session));
+    playback.restore(queueFromSession(session), offerUndo: displaced);
     if (!displaced) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()

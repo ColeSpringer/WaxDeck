@@ -60,11 +60,10 @@ Future<HomeShelfItems> readShelf(
   final page = await repository.browse(
     list,
     mediaType: mediaType,
-    // A shelf that throws rows away has to read past what it draws; one
-    // that does not, does not.
-    limit: keep != null || mediaType != null
-        ? kHomeShelfWindow
-        : kHomeShelfSlack,
+    // A shelf that throws rows away has to read past what it draws. The
+    // media type is not one of those: the server narrows the list itself
+    // now, so a filtered page comes back full.
+    limit: keep != null ? kHomeShelfWindow : kHomeShelfSlack,
   );
   if (page.items.isEmpty) return _emptyShelf;
   var progress = PlayProgressView.empty;

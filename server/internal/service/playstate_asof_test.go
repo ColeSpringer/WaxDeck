@@ -88,7 +88,7 @@ func TestReplayedStarLosesToLaterOutOfBandChange(t *testing.T) {
 
 	// The user then unstars from a surface that never touches WaxDeck's
 	// own state. This is the write the retired mirror could not see.
-	if err := svc.lib.Playback().SetStar(ctx, model.PID(uc.CatalogPID), catalogPID, false, nil); err != nil {
+	if _, err := svc.lib.Playback().SetStar(ctx, model.PID(uc.CatalogPID), catalogPID, false, nil); err != nil {
 		t.Fatalf("out-of-band unstar: %v", err)
 	}
 
@@ -120,7 +120,7 @@ func TestReplayedRatingLosesToLaterOutOfBandChange(t *testing.T) {
 	}
 
 	ninety := 90
-	if err := svc.lib.Playback().SetRating(ctx, model.PID(uc.CatalogPID), catalogPID, &ninety, nil); err != nil {
+	if _, err := svc.lib.Playback().SetRating(ctx, model.PID(uc.CatalogPID), catalogPID, &ninety, nil); err != nil {
 		t.Fatalf("out-of-band rating: %v", err)
 	}
 

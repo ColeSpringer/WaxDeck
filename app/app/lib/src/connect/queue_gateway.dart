@@ -156,6 +156,7 @@ class LocalQueueGateway implements QueueGateway {
       startIndex: index.clamp(0, pids.length - 1),
       positionMs: positionMs > 0 ? positionMs : null,
       autoplay: play,
+      offerUndo: false,
     );
     _throwOnFailedStart(began);
   }
@@ -163,9 +164,11 @@ class LocalQueueGateway implements QueueGateway {
   @override
   Future<void> playItem(String pid) async {
     final began = _playback.startGeneration;
-    await _playback.playPids([
-      pid,
-    ], source: const QueueSource(kind: QueueSourceKind.single, label: ''));
+    await _playback.playPids(
+      [pid],
+      source: const QueueSource(kind: QueueSourceKind.single, label: ''),
+      offerUndo: false,
+    );
     _throwOnFailedStart(began);
   }
 

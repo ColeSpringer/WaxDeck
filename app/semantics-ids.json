@@ -597,6 +597,10 @@
           ]
         },
         {
+          "name": "queueReplaceUndo",
+          "id": "queue-replace-undo"
+        },
+        {
           "name": "queueEntryRemove",
           "id": "queue-entry-remove-{queueId}",
           "params": [
@@ -995,6 +999,10 @@
           "params": [
             "letter"
           ]
+        },
+        {
+          "name": "indexRailStart",
+          "id": "index-rail-start"
         },
         {
           "name": "indexSort",

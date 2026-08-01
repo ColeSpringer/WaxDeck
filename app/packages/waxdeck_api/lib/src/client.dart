@@ -98,23 +98,30 @@ abstract interface class WaxDeckRepository {
   /// A [cursor] belongs to the [sort] it was issued under: flipping the
   /// order restarts the listing, and pairing the two is a request error
   /// rather than a quietly wrong page.
+  ///
+  /// [startsAt] opens the page at the first bucket sorting at or after a
+  /// display-label prefix, which is what an alphabet rail taps. Needs
+  /// [FacetSort.label] and refuses a [cursor].
   Future<FacetPage> listFacets(
     String dimension, {
     FacetSort? sort,
     String? cursor,
+    String? startsAt,
     int? limit,
   });
 
   /// `GET /library/browse`: keyset-paginated discovery lists. [seed] keeps
   /// paging through the random list stable.
-  /// [mediaType] narrows the list to one medium, for a domain-scoped
-  /// shelf. The server filters the window it walked rather than the whole
-  /// list, so a narrowed page comes back short of [limit] with a cursor
-  /// for the rest: a caller drawing a shelf asks for a generous limit and
-  /// takes what it draws.
+  ///
+  /// [mediaType] narrows the list to one medium and [facet]/[facetKey]
+  /// to one browse-dimension bucket, taking the same values [listItems]
+  /// drills. Both narrow the list rather than the page. A cursor carries
+  /// the scope it was issued under and is refused under another.
   Future<ItemPage> browse(
     DiscoveryList list, {
     MediaType? mediaType,
+    String? facet,
+    String? facetKey,
     String? cursor,
     int? limit,
     int? seed,
@@ -1538,12 +1545,14 @@ class WaxDeckClient implements WaxDeckRepository {
     String dimension, {
     FacetSort? sort,
     String? cursor,
+    String? startsAt,
     int? limit,
   }) => _guard(() async {
     final response = await _gen.getLibraryApi().listFacets(
       dimension: dimension,
       sort: sort == null ? null : facetSortToGen(sort),
       cursor: cursor,
+      startsAt: startsAt,
       limit: limit,
     );
     return facetPageFromGen(_require(response.data));
@@ -1553,6 +1562,8 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<ItemPage> browse(
     DiscoveryList list, {
     MediaType? mediaType,
+    String? facet,
+    String? facetKey,
     String? cursor,
     int? limit,
     int? seed,
@@ -1560,6 +1571,9 @@ class WaxDeckClient implements WaxDeckRepository {
     final response = await _gen.getLibraryApi().browseList(
       list: discoveryListToGen(list),
       mediaType: mediaType == null ? null : mediaTypeToGen(mediaType),
+      facet: facet,
+      // Empty included: an empty key is the unknown bucket.
+      facetKey: facet == null ? null : facetKey ?? '',
       cursor: cursor,
       limit: limit,
       seed: seed,

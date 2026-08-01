@@ -141,6 +141,10 @@ type ItemMetadataDTO struct {
 	HasArtwork      bool
 	HasOwnArtwork   bool
 	WriteBackIssues []WriteBackIssueDTO
+	// The entity handles behind the display text, as ItemSummary carries
+	// them. Empty when absent; AlbumPID is track-only.
+	ArtistPID string
+	AlbumPID  string
 }
 
 // MetadataEditParams carries the shared edit switches.
@@ -1187,17 +1191,15 @@ func (l *Library) ItemMetadataFor(ctx context.Context, uc *UserCtx, apiPID strin
 		Credits:      []CreditDTO{},
 		CustomTags:   []CustomTagDTO{},
 		VirtualTrack: it.Virtual,
-		// Per-file diagnostics have no per-item query surface on the
-		// facade yet (the library-wide Audit sweep is the only reader),
-		// so write-back issues stay empty here. The upstream ask is
-		// already filed in docs/upstream-requests.md ("A query surface
-		// for per-file diagnostics").
+		ArtistPID:    entityAPIPID(PrefixArtist, it.ArtistPID),
+		AlbumPID:     entityAPIPID(PrefixAlbum, it.AlbumPID),
+		// Empty: FileDiagnostics has no file or item handle to filter
+		// by, so a per-item read would scan a library per editor open.
+		// Filed in docs/upstream-requests.md.
 		WriteBackIssues: []WriteBackIssueDTO{},
 	}
-	// The item's album, artist, and release-group entity pids are also
-	// omitted: the facade exposes no item-to-entity link read (the
-	// filed "Entity facets in the item query grammar" ask is the same
-	// gap seen from the query side).
+	// releaseGroupPid stays absent for the same kind of reason: the item
+	// view projects no release-group handle. Also filed.
 	for _, r := range prov {
 		dto := FieldProvenanceDTO{
 			Field: r.Field, Source: string(r.Source), Provider: r.Provider, Locked: r.Locked,

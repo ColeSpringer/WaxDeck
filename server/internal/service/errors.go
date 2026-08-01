@@ -61,7 +61,27 @@ const (
 	// the caller's concurrent transcode session limit is reached (429
 	// transcode-limited at the API).
 	KindTranscodeLimit ErrorKind = "transcode-limited"
+	// KindCatalogBusy marks a request refused because another job holds
+	// the shared file-mutation scope (409 catalog-busy at the API).
+	// Unlike KindConflict it clears on its own.
+	KindCatalogBusy ErrorKind = "catalog-busy"
 )
+
+// classifyMutation is classify for a call that takes the catalog's
+// shared file-mutation scope. A conflict there is another job holding
+// the scope, which clears on its own, so it answers catalog-busy rather
+// than the conflict that means the caller has to change something.
+func classifyMutation(err error) error {
+	out := classify(err)
+	if KindOf(out) != KindConflict {
+		return out
+	}
+	return &Error{
+		Kind: KindCatalogBusy,
+		Msg:  "a conflicting catalog job is already running; retry when it finishes",
+		Err:  err,
+	}
+}
 
 // Error is a classified service failure.
 type Error struct {

@@ -90,7 +90,10 @@ info:
       matches the file on disk, a metadata-only retag included since the
       pin is byte identity; re-request the info endpoint that minted it), `catalog-maintenance`
       (the catalog is temporarily handed to a maintenance operation; retry
-      shortly), `sync-reset` (a sync cursor predates the retained change
+      shortly), `catalog-busy` (another job holds the catalog's shared
+      file-mutation scope, so this file-moving request cannot start; unlike
+      a plain `conflict` it clears on its own, so retrying it unattended is
+      worth something), `sync-reset` (a sync cursor predates the retained change
       history; drop the local mirror and re-mirror from a fresh snapshot),
       `feed-unreachable` (an upstream feed could not be fetched or parsed;
       the feed's own server answered an error, timed out, or returned

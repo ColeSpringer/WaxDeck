@@ -40,16 +40,6 @@ here waits on upstream.
   into the panel. Both are additions to `queueSlivers`, which is the one
   body the panel and the `/queue` screen share, so either lands in both
   at once. See ADR-0029.
-- `[in-repo]` **A tap that replaces the queue offers no undo except from
-  the session-history rows.** The queue layer records what a replacement
-  displaced and where it stood (`QueueUndo`), and playback can put it
-  back (`NowPlayingController.undoReplace`), but the "Playing from
-  [source]" toast the plan asks for on every replacing tap exists only
-  on the "EARLIER" rows of the queue surface, which is where a mis-tap
-  is most destructive. Every other play verb - a track row, an album's
-  Play, a Shuffle - replaces silently. The mechanism is built and
-  tested; what is missing is one toast, raised from wherever the play
-  verbs converge rather than added per call site.
 - `[in-repo]` **An artist screen has no "Appears on" and no biography.**
   The screen shows the artist's own releases and tracks. Albums they are
   credited on without being the album artist would need a credits-shaped
@@ -57,9 +47,6 @@ here waits on upstream.
   an enrichment field nothing writes yet - the same provider gap that
   keeps artist artwork from existing. Both are additive sections on a
   screen that is otherwise complete.
-- `[in-repo]` **Sleep-timer fade.** Now unblocked: the engine port
-  grew setVolume for remote volume control, so the fade is a timer
-  loop away.
 - `[in-repo]` **Nothing can be pinned to home.** Section 6.1's second
   shelf is user-curated - long-press any entity, "Pin to Home" - and is
   marked optional there, which is why the shelf home shipped without it
@@ -69,6 +56,31 @@ here waits on upstream.
   took), and a pin affordance on every entity surface in the app, which
   is where the work actually is. The shelf itself is one more `ItemShelf`
   over a provider that resolves pids to items.
+- `[in-repo]` **The first refill after a cursor-encoding change walks
+  the source from its head.** A rejected cursor falls through to
+  placement, which reads up to 40 pages of 500 looking for the queue's
+  frontier before it seals. That cap was sized for the rare restore, not
+  for every stored queue at once, which is what a scope-encoding change
+  produces (ADR-0040). It is bounded and one-off per queue, but a
+  cheaper answer would be a version byte in the envelope that tells a
+  stale cursor from a mismatched scope, so only the second walks.
+- `[in-repo]` **The metadata editor does not link its entities.** The
+  read carries `artistPid` and `albumPid` now, and nothing on the screen
+  uses them: the artist and album stay plain text where they could open
+  their own screens. `releaseGroupPid` is still absent, so a release-group
+  link waits on the upstream ask.
+- `[in-repo]` **The book player draws no waveform.** The server half
+  landed: `GET /items/{pid}/waveform` takes a `partIndex` and answers
+  the requested part's own envelope, so a multi-file audiobook is
+  `ready` per part rather than `unavailable` whole (ADR-0040). The
+  client still asks for one only when `mediaType == MediaType.music`
+  (`player_screen.dart`), because a book's seek bar is a chapter's
+  timeline rather than a file's, and deciding what a book scrubber
+  draws is a player-face question rather than a contract one. A
+  whole-book scrubber would not want the per-part endpoint at all: the
+  catalog exposes `PeaksForItem(itemPID) []model.ItemPeaks`, every
+  part's envelope in one read, which is the shape a book-timeline
+  waveform is built from.
 - `[in-repo]` **The star and rating row is still Material.** Everything
   else the player draws came onto the design system with the rebuild onto
   `PlayerScaffold` (ADR-0039); `StarRatingRow` did not, and it is shared
@@ -261,15 +273,6 @@ here waits on upstream.
 
 - `[in-repo]` **PodPing update notifications.** Polling is the only feed refresh
   trigger.
-- `[upstream]` **`unplayedCount` costs a walk per subscription.** The
-  count on a subscription row loads the show's episodes and batch-reads
-  their play states, so listing subscriptions is two queries per show
-  (ADR-0032). It is opt-in per caller, so the Subsonic adapter does not
-  pay it, and a listener follows tens of shows rather than thousands.
-  but the durable shape is a counting query upstream, which would want a
-  `podcast_pid` field on WaxBin's item query surface (there is a
-  `podcast` field, and it is the show's title). Filed in
-  `docs/upstream-requests.md`; the walk is correct meanwhile.
 - `[in-repo]` **No concurrency or byte bound on the media relays.**
   `/s/{token}` caps concurrent anonymous streams; `/media/enclosure` and
   `/media/radio/{pid}` cap nothing, and both deliberately carry no
@@ -280,16 +283,6 @@ here waits on upstream.
   request, so this is resource use rather than an open proxy. Fix both
   together when it is worth a bound, since they have the same shape: a
   per-user cap plus an idle-read deadline, not an overall one.
-- `[in-repo]` **The unfetch conflict is told apart by message, not
-  code.** `RemoveEpisodeDownload` answers 409 for two unrelated reasons:
-  someone is listening (wait for them) and a busy file-mutation job lease
-  (retry shortly). Both carry `conflict`, so only the prose distinguishes
-  them, and `podcasts.spec.ts` matches on that prose to decide what to
-  retry. The durable form is a second code added to the defined-code list
-  in `api/spec/_root.yaml` (`Error.code` is a plain string there, not an
-  enum, so the list is the contract). Left out of the batch that
-  introduced the split because it is a contract change and the two
-  messages are stable in the meantime.
 - `[in-repo]` **An analysis entry that exhausts its attempts is
   permanent.** The queue is keyed by essence hash, `EnqueueAnalysis`
   ignores a key it already holds, and only success deletes a row, so five
@@ -668,14 +661,6 @@ here waits on upstream.
   and the sync channel is down stays a monogram until the channel
   reconnects and invalidates. That is the same window every other cached
   view has, and it closes the same way.
-- `[upstream]` **The alphabet rail pages toward a letter rather than
-  seeking to one.** `GET /library/facets` has no seek-to-letter, so
-  tapping S on a long index asks for successive pages until an S-shaped
-  bucket is loaded. Pages are 500 buckets served from one cached
-  enumeration, so a long walk is a handful of cheap requests rather than
-  a slow one - but it is still O(pages) round trips where a `startsAt`
-  parameter (or the upstream `FacetPage` this endpoint's window is
-  waiting on) would be one.
 - `[in-repo]` **Share-card image export.** The year-in-review surface
   answers data; rendering shareable image cards from it (and clip
   cards for episode shares) is client work on top of the existing

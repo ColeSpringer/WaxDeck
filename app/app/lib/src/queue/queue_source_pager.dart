@@ -78,7 +78,19 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
     final listing = _listing(source);
     if (listing == null) return null;
     if (source.cursor.isNotEmpty || source.seed != null) {
-      return _read(listing, source.cursor, kQueueDrawSize);
+      try {
+        return await _read(listing, source.cursor, kQueueDrawSize);
+      } on WaxDeckApiException catch (error) {
+        // Source cursors are persisted, so a stored queue carries one
+        // across a server upgrade. Without this the refiller blocks the
+        // window and the rolling queue silently ends at its last entry.
+        // A rejected cursor is treated as exactly no cursor, including
+        // the seal when there is no frontier to place against: it is
+        // permanently invalid, so rethrowing would retry it per track
+        // forever while the window kept claiming there was more.
+        if (error.code != 'invalid-request') rethrow;
+        return afterPid == null ? null : _place(listing, afterPid);
+      }
     }
     return afterPid == null ? null : _place(listing, afterPid);
   }
@@ -132,19 +144,18 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
         // library lists in its own order.
         final seed = source.seed;
         if (seed != null) {
-          // The random list is over everything the library holds, so the
-          // media type is this end's to apply: a shuffle of all music
-          // that dealt out an audiobook would be a twelve-hour track.
+          // Scoped in the request, not filtered after it, so a draw of
+          // 100 is 100 tracks. It has to match what the first page was
+          // drawn with or the cursor names another scope.
           return (cursor, limit) => _repository
               .browse(
                 DiscoveryList.random,
+                mediaType: MediaType.music,
                 cursor: cursor,
                 limit: limit,
                 seed: seed,
               )
-              .then(
-                (page) => _pageOf(page, (i) => i.mediaType == MediaType.music),
-              );
+              .then((page) => _pageOf(page, null));
         }
         return (cursor, limit) => _repository
             .listItems(mediaType: MediaType.music, cursor: cursor, limit: limit)
@@ -156,21 +167,37 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
         final dimension = _dimensionOf(source.kind);
         final segment = source.pid;
         if (segment == null) return null;
+        final facet = dimension.wireName;
+        final facetKey = musicFacetKey(dimension, segment);
+        // A bucket counts whatever carried its artist or its year, books
+        // included, and the screens that queue one leave them out for
+        // the same reason a draw does: a twelve-hour file arriving
+        // between two tracks is not what was asked for.
+        bool keep(ItemSummary i) => i.mediaType != MediaType.audiobook;
+        final seed = source.seed;
+        if (seed != null) {
+          // Paging the bucket's own listing shuffled each arriving page
+          // among itself (ADR-0028). Scoped to the bucket, the random
+          // list is one permutation over the whole of it.
+          return (cursor, limit) => _repository
+              .browse(
+                DiscoveryList.random,
+                facet: facet,
+                facetKey: facetKey,
+                cursor: cursor,
+                limit: limit,
+                seed: seed,
+              )
+              .then((page) => _pageOf(page, keep));
+        }
         return (cursor, limit) => _repository
             .listItems(
-              facet: dimension.wireName,
-              facetKey: musicFacetKey(dimension, segment),
+              facet: facet,
+              facetKey: facetKey,
               cursor: cursor,
               limit: limit,
             )
-            // A bucket counts whatever carried its artist or its year,
-            // books included, and the screens that queue one leave them
-            // out for the same reason a draw does: a twelve-hour file
-            // arriving between two tracks is not what was asked for.
-            .then(
-              (page) =>
-                  _pageOf(page, (i) => i.mediaType != MediaType.audiobook),
-            );
+            .then((page) => _pageOf(page, keep));
       case QueueSourceKind.playlist:
         final pid = source.pid;
         if (pid == null) return null;

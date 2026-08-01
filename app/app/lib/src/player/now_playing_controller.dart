@@ -13,6 +13,8 @@ import '../settings/client_prefs.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_state.dart';
 import '../radio/radio_controller.dart';
+import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../sync/sync_providers.dart';
 import 'playback_session.dart';
 import 'session_registry.dart';
@@ -264,6 +266,10 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// [autoplay] false loads the entry and stops there, for a queue put
   /// back at its checkpoint. Resolves once the entry it lands on has
   /// started or failed, so a caller that answers for the load can.
+  /// [offerUndo] false for a queue this device did not choose - a load
+  /// routed from another device, a media-session command - where an
+  /// offer to take it back would undo something its user never did and
+  /// leave the two ends disagreeing about what plays.
   Future<void> playPids(
     List<String> pids, {
     required QueueSource source,
@@ -271,10 +277,14 @@ class NowPlayingController extends Notifier<NowPlaying> {
     bool shuffle = false,
     int? positionMs,
     bool autoplay = true,
+    bool offerUndo = true,
   }) {
     if (pids.isEmpty) return Future<void>.value();
     _pendingPositionMs = positionMs;
     _pendingPaused = !autoplay;
+    // Read before the queue moves, and the queue layer's own guard: it
+    // keeps a displaced queue only when there was one.
+    final displaced = ref.read(queueControllerProvider).isNotEmpty;
     ref
         .read(queueControllerProvider.notifier)
         .playNow(
@@ -287,6 +297,18 @@ class NowPlayingController extends Notifier<NowPlaying> {
           // replacement resumes at.
           replacedPositionMs: _session?.displayPosition.inMilliseconds ?? 0,
         );
+    if (displaced && offerUndo) {
+      // No expiry beyond the snackbar's own: the queue holds only the
+      // most recent replacement, and the shell hides the previous toast.
+      ref
+          .read(shellMessengerProvider.notifier)
+          .show(
+            'Replaced what was playing',
+            actionLabel: 'Undo',
+            onAction: undoReplace,
+            actionSemanticsId: SemanticsIds.queueReplaceUndo,
+          );
+    }
     // The queue notifies its listeners as it is assigned, so the start
     // this landed on is already the one in flight.
     return settled;
@@ -373,10 +395,19 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// Puts a queue found at launch back in play, paused at its
   /// checkpoint. Accepting the offer means "put it back", not "start
   /// playing"; the transport is right there for the rest.
-  void restore(QueueState queue) {
+  /// [offerUndo] keeps what this displaced, for the surfaces that offer
+  /// to put it back. Without it the offer is a button that cannot work.
+  void restore(QueueState queue, {bool offerUndo = false}) {
     _pendingPositionMs = null;
     _pendingPaused = true;
-    ref.read(queueControllerProvider.notifier).restore(queue);
+    ref
+        .read(queueControllerProvider.notifier)
+        .restore(
+          queue,
+          displacedPositionMs: offerUndo
+              ? _session?.displayPosition.inMilliseconds ?? 0
+              : null,
+        );
   }
 
   /// Takes back the replacement a tap made: the queue that was

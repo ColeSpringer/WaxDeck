@@ -468,20 +468,19 @@ func (l *Library) metadataMix(ctx context.Context, uc *UserCtx, genre, artist st
 		genrePool = pool
 	}
 	// Random catalog tracks widen the mix; always fetched so a sparse
-	// genre still fills the request.
+	// genre still fills the request. Scoped in the draw, so 300 rows are
+	// 300 candidates.
 	page, err := l.lib.Browse(ctx, read.ListRandom, read.BrowseOptions{
 		UserPID: model.PID(uc.CatalogPID),
 		Seed:    rand.Int63(),
 		Limit:   300,
+		Query: query.New(query.EntityItems).
+			Where("kind", query.OpIs, string(model.KindTrack)).Build(),
 	})
 	if err != nil {
 		return nil, classify(err)
 	}
-	for _, it := range page.Items {
-		if it.Kind == model.KindTrack {
-			randomPool = append(randomPool, it)
-		}
-	}
+	randomPool = append(randomPool, page.Items...)
 	// Blend proportions: closeness favors the seed artist, wandering
 	// favors the random pool, the genre carries the middle.
 	pArtist := 0.35 * (1 - adv)

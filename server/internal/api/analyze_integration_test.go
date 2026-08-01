@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -55,6 +56,16 @@ func waveform(t *testing.T, h *harness, pid string) Waveform {
 	resp := get(t, h.ts, "/api/v1/items/"+pid+"/waveform", h.token)
 	if resp.StatusCode != 200 {
 		t.Fatalf("waveform status = %d, want 200", resp.StatusCode)
+	}
+	return decode[Waveform](t, resp)
+}
+
+// waveformPart reads one part of a multi-file book's waveform.
+func waveformPart(t *testing.T, h *harness, pid string, part int) Waveform {
+	t.Helper()
+	resp := get(t, h.ts, fmt.Sprintf("/api/v1/items/%s/waveform?partIndex=%d", pid, part), h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("waveform part %d status = %d, want 200", part, resp.StatusCode)
 	}
 	return decode[Waveform](t, resp)
 }
@@ -238,6 +249,151 @@ func TestWaveformEpisodeIsPermanentlyUnavailable(t *testing.T) {
 	analyzeAndWait(t, h)
 	if got := waveform(t, h, ep.Pid); got.State != "unavailable" {
 		t.Fatalf("fetched episode waveform = %q, want unavailable", got.State)
+	}
+}
+
+// Every part has had its own peaks row all along; only the read was
+// pinned to the primary file, which is not part one.
+func TestWaveformPerPart(t *testing.T) {
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook").Items
+	if len(books) != 1 {
+		t.Fatalf("audiobooks = %d, want the one fixture book", len(books))
+	}
+	book := books[0]
+
+	// Analyzable, not analyzed: pending, never unavailable.
+	if got := waveformPart(t, h, book.Pid, 1); got.State != "pending" {
+		t.Fatalf("part 1 before analyze = %q, want pending", got.State)
+	}
+
+	analyzeAndWait(t, h)
+
+	// Distinct tone durations mean distinct essences, so equal hashes
+	// would mean every part answered one file's row.
+	seen := map[string]bool{}
+	for part := range 3 {
+		wf := waveformPart(t, h, book.Pid, part)
+		if wf.State != "ready" {
+			t.Fatalf("part %d = %q, want ready", part, wf.State)
+		}
+		if wf.PartIndex == nil || *wf.PartIndex != part {
+			t.Errorf("part %d echoed partIndex %v", part, wf.PartIndex)
+		}
+		if wf.EssenceHash == nil || *wf.EssenceHash == "" {
+			t.Fatalf("part %d carries no essence hash", part)
+		}
+		if seen[*wf.EssenceHash] {
+			t.Errorf("part %d repeats an earlier part's essence %q", part, *wf.EssenceHash)
+		}
+		seen[*wf.EssenceHash] = true
+		if wf.Peaks == nil || len(*wf.Peaks) == 0 {
+			t.Errorf("part %d is ready with no peaks", part)
+		}
+	}
+
+	// Part zero, not unavailable: the compatible direction for a client
+	// that predates parts.
+	bare := waveform(t, h, book.Pid)
+	if bare.State != "ready" {
+		t.Fatalf("omitted partIndex = %q, want part zero's ready", bare.State)
+	}
+	if bare.PartIndex == nil || *bare.PartIndex != 0 {
+		t.Errorf("omitted partIndex echoed %v, want 0", bare.PartIndex)
+	}
+	zero := waveformPart(t, h, book.Pid, 0)
+	if bare.EssenceHash == nil || zero.EssenceHash == nil || *bare.EssenceHash != *zero.EssenceHash {
+		t.Errorf("omitted index answered %v, partIndex=0 answered %v", bare.EssenceHash, zero.EssenceHash)
+	}
+
+	// The ETag is per part now, since it derives from the part's essence.
+	first := get(t, h.ts, "/api/v1/items/"+book.Pid+"/waveform?partIndex=0", h.token)
+	first.Body.Close()
+	second := get(t, h.ts, "/api/v1/items/"+book.Pid+"/waveform?partIndex=1", h.token)
+	second.Body.Close()
+	if a, b := first.Header.Get("ETag"), second.Header.Get("ETag"); a == "" || a == b {
+		t.Errorf("part ETags = %q and %q, want two distinct validators", a, b)
+	}
+
+	// 404, not 400: neither this endpoint nor the skip map declares one.
+	resp := get(t, h.ts, "/api/v1/items/"+book.Pid+"/waveform?partIndex=9", h.token)
+	resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Errorf("out-of-range partIndex = %d, want 404", resp.StatusCode)
+	}
+
+	// Ignored rather than refused, and echoed back for nobody else.
+	music := h.items(t, "?mediaType=music").Items
+	if len(music) == 0 {
+		t.Fatal("no music scanned")
+	}
+	if got := waveformPart(t, h, music[0].Pid, 3); got.PartIndex != nil {
+		t.Errorf("a track echoed partIndex %d; only multi-file books do", *got.PartIndex)
+	}
+}
+
+// The stamp is the requested part's file now, so a book can read both
+// states across its parts.
+func TestWaveformPartlyAnalyzedBookReadsPending(t *testing.T) {
+	h := newHarness(t)
+
+	// Staged and moved in two steps, so the pass genuinely runs over a
+	// subset and the last part arrives undecoded.
+	staged := t.TempDir()
+	stagedDir, err := fixtures.GenerateBook(staged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(staged, stagedDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bookDir := filepath.Join(h.library, rel)
+	if err := os.MkdirAll(bookDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(stagedDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("staged parts = %d, want the fixture's 3", len(entries))
+	}
+	move := func(name string) {
+		t.Helper()
+		raw, err := os.ReadFile(filepath.Join(stagedDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(bookDir, name), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	last := entries[len(entries)-1].Name()
+	for _, e := range entries[:len(entries)-1] {
+		move(e.Name())
+	}
+	h.rescanAndWait(t)
+	analyzeAndWait(t, h)
+
+	move(last)
+	h.rescanAndWait(t)
+
+	books := h.items(t, "?mediaType=audiobook").Items
+	if len(books) != 1 {
+		t.Fatalf("audiobooks = %d, want 1", len(books))
+	}
+	book := books[0]
+	if got := waveformPart(t, h, book.Pid, 0); got.State != "ready" {
+		t.Errorf("part 0 = %q, want the analyzed part to stay ready", got.State)
+	}
+	// Unavailable here would draw a plain bar forever.
+	if got := waveformPart(t, h, book.Pid, 2); got.State != "pending" {
+		t.Errorf("the late part = %q, want pending rather than unavailable", got.State)
 	}
 }
 

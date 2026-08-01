@@ -453,8 +453,20 @@ class QueueController extends Notifier<QueueState> {
   }
 
   /// Adopts a restored (or otherwise externally built) queue wholesale.
-  void restore(QueueState restored) {
-    state = restored.copyWith(clearUndo: true);
+  ///
+  /// [displacedPositionMs] records what this replaced so it can be taken
+  /// back, for the surfaces that offer an undo. The restored queue's own
+  /// undo is always dropped: it belongs to a session that ended.
+  void restore(QueueState restored, {int? displacedPositionMs}) {
+    final displaced = displacedPositionMs != null && state.isNotEmpty
+        ? QueueUndo(
+            queue: state.copyWith(clearUndo: true),
+            positionMs: displacedPositionMs,
+          )
+        : null;
+    state = displaced == null
+        ? restored.copyWith(clearUndo: true)
+        : restored.copyWith(clearUndo: true).copyWith(undo: displaced);
   }
 
   /// Empties the queue. Repeat and shuffle are the listener's standing

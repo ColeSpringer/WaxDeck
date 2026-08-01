@@ -142,6 +142,17 @@ indexed keyset page by. Filed as an upstream ask with the workaround
 recorded beside it, which is this file's standing contract for a gap
 like that.
 
+*Amended 2026-07-31: half of that is no longer true.* `podcast_pid`
+landed, and the tile's three numbers are two counting queries and a
+one-row read for any caller who may see explicit content. The walk
+survives only for a restricted account, because the gate it applies
+(`ep.Explicit && !uc.Explicit`) has no item query field behind it; that
+is the remaining upstream ask. The cross-show listing is still a slice
+in Go, and the correction is that `podcast_pid` was never going to fix
+it: `QueryPage` owns `sort_key` ordering and ignores a query's own sort,
+so a newest-published cross-show listing has no keyset primitive behind
+it at all. See ADR-0040.
+
 **"Mark older episodes as played" is one request per episode, and the
 dialog says so.** Played is derived server-side from the position
 reached against the item's duration, so there is no flag to set: saying

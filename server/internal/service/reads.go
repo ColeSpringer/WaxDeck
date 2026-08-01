@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,30 +23,50 @@ type ItemFilter struct {
 	FacetKey  string
 }
 
-// Items pages the whole library (optionally one media type, optionally
-// one browse-dimension bucket) in stable (title, pid) order for the
-// acting user. The cursor is WaxBin's opaque keyset token, passed
-// through untouched.
-func (l *Library) Items(ctx context.Context, uc *UserCtx, filter ItemFilter, cursor string, limit int) (Page, error) {
-	b := query.New(query.EntityItems).OrderBy("title", false)
+// applyItemFilter narrows an item query by media type and facet bucket,
+// and answers the canonical scope the pair names.
+func applyItemFilter(b *query.Builder, filter ItemFilter) (*query.Builder, []string, error) {
+	scope := []string{filter.MediaType}
 	if filter.MediaType != "" {
 		kind, ok := kindForMediaType(filter.MediaType)
 		if !ok {
-			return Page{}, errInvalid("unknown mediaType " + filter.MediaType)
+			return nil, nil, errInvalid("unknown mediaType " + filter.MediaType)
 		}
 		b = b.Where("kind", query.OpIs, string(kind))
 	}
-	if filter.Facet != "" {
-		var err error
-		if b, err = applyFacetFilter(b, filter.Facet, filter.FacetKey); err != nil {
-			return Page{}, err
-		}
+	if filter.Facet == "" {
+		return b, append(scope, "", ""), nil
 	}
-	page, err := l.lib.QueryPage(ctx, b.Build(), read.Cursor(cursor), limit, false, model.PID(uc.CatalogPID))
+	// Canonical, not what the caller typed: tag.mood and tag.MOOD are
+	// one dimension and must name one scope.
+	_, canonical, err := facetGroupFor(filter.Facet)
+	if err != nil {
+		return nil, nil, err
+	}
+	if b, err = applyFacetFilter(b, canonical, filter.FacetKey); err != nil {
+		return nil, nil, err
+	}
+	return b, append(scope, canonical, filter.FacetKey), nil
+}
+
+// Items pages the whole library (optionally one media type, optionally
+// one browse-dimension bucket) in stable (title, pid) order for the
+// acting user. The cursor is WaxBin's token inside a scope envelope.
+func (l *Library) Items(ctx context.Context, uc *UserCtx, filter ItemFilter, cursor string, limit int) (Page, error) {
+	b, scope, err := applyItemFilter(query.New(query.EntityItems).OrderBy("title", false), filter)
+	if err != nil {
+		return Page{}, err
+	}
+	key := cursorScope(append([]string{"items"}, scope...)...)
+	token, err := decodeScopedCursor(cursor, key)
+	if err != nil {
+		return Page{}, err
+	}
+	page, err := l.lib.QueryPage(ctx, b.Build(), read.Cursor(token), limit, false, model.PID(uc.CatalogPID))
 	if err != nil {
 		return Page{}, classify(err)
 	}
-	return l.pageDTO(ctx, uc, page), nil
+	return l.pageDTO(ctx, uc, page, key), nil
 }
 
 // browseLists maps API discovery-list names onto WaxBin's. The names
@@ -99,66 +122,94 @@ var collectionLists = map[string]func() query.Node{
 	},
 }
 
-// Browse pages one discovery list; play-derived lists reflect the
-// acting user's own state. A mediaType narrows the list to one medium,
-// for a domain-scoped shelf.
+// Browse pages one discovery list; play-derived lists reflect the acting
+// user's own state. The filter narrows the list to one medium, one
+// browse-dimension bucket, or both.
 //
-// The narrowing is a post-filter on the catalog's own window, so a
-// filtered page comes back short of limit while still carrying a cursor
-// - the same shape a restricted caller's page already has, and the
-// contract documents it. It is not pushed down because BrowseOptions
-// takes no query at all (the standing upstream ask); walking further
-// per request is not an option either, since the cursor a page carries
-// names its own end and there is no way to mint one mid-window, so
-// filling a page would mean consuming rows this answer could not report
-// having consumed.
-func (l *Library) Browse(ctx context.Context, uc *UserCtx, list, mediaType string, seed int64, cursor string, limit int) (Page, error) {
-	var kind model.Kind
-	if mediaType != "" {
-		var ok bool
-		if kind, ok = kindForMediaType(mediaType); !ok {
-			return Page{}, errInvalid("unknown mediaType " + mediaType)
-		}
+// Both halves are pushed into the catalog's query, so a narrowed page
+// comes back full. It is the same filter the bucket's own listing uses,
+// so a count, the list it opens, and a shuffle over it cannot disagree.
+func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter ItemFilter, seed int64, cursor string, limit int) (Page, error) {
+	b, scope, err := applyItemFilter(query.New(query.EntityItems), filter)
+	if err != nil {
+		return Page{}, err
+	}
+	// The seed is part of the scope: a cursor names a position in a
+	// seeded permutation, and another seed is another permutation.
+	key := cursorScope(append([]string{"browse", list, strconv.FormatInt(seed, 10)}, scope...)...)
+	token, err := decodeScopedCursor(cursor, key)
+	if err != nil {
+		return Page{}, err
 	}
 	if where, ok := collectionLists[list]; ok {
-		b := query.New(query.EntityItems).WhereNode(where())
-		if kind != "" {
-			b = b.Where("kind", query.OpIs, string(kind))
-		}
-		page, err := l.lib.QueryPage(ctx, b.Build(), read.Cursor(cursor), limit, false, model.PID(uc.CatalogPID))
+		b = b.WhereNode(where())
+		page, err := l.lib.QueryPage(ctx, b.Build(), read.Cursor(token), limit, false, model.PID(uc.CatalogPID))
 		if err != nil {
 			return Page{}, classify(err)
 		}
-		return l.pageDTO(ctx, uc, page), nil
+		return l.pageDTO(ctx, uc, page, key), nil
 	}
 	dl, ok := browseLists[list]
 	if !ok {
 		return Page{}, errInvalid("unknown list " + list)
 	}
-	page, err := l.lib.Browse(ctx, dl, read.BrowseOptions{
+	opts := read.BrowseOptions{
 		UserPID: model.PID(uc.CatalogPID),
 		Seed:    seed,
-		Cursor:  read.Cursor(cursor),
+		Cursor:  read.Cursor(token),
 		Limit:   limit,
-	})
+	}
+	// Only when something narrows it: a built query always names its
+	// entity, so passing one unconditionally would never be the zero
+	// Query the catalog short-circuits on, and an unfiltered list would
+	// grow a user lookup and start rejecting a stale UserPID.
+	if filter != (ItemFilter{}) {
+		opts.Query = b.Build()
+	}
+	page, err := l.lib.Browse(ctx, dl, opts)
 	if err != nil {
 		return Page{}, classify(err)
 	}
-	out := l.pageDTO(ctx, uc, page)
-	if kind == "" {
-		return out, nil
+	return l.pageDTO(ctx, uc, page, key), nil
+}
+
+// cursorScope names the listing a cursor was issued for. Hashed rather
+// than joined so the token leaks no bucket key.
+func cursorScope(parts ...string) string {
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:8])
+}
+
+// encodeScopedCursor wraps the catalog's keyset token in an envelope
+// carrying the scope it was issued under, so a cursor reused under a
+// changed list, seed, or filter is refused rather than answered wrong.
+// ADR-0040 records why items takes it too. An empty token stays empty.
+func encodeScopedCursor(scope, token string) string {
+	if token == "" {
+		return ""
 	}
-	// Matched on the API media type rather than on the resolved kind:
-	// the summary carries the former, and resolving the kind above was
-	// the validation, not the comparison.
-	kept := make([]ItemSummary, 0, len(out.Items))
-	for _, it := range out.Items {
-		if it.MediaType == mediaType {
-			kept = append(kept, it)
-		}
+	return encodeOpaqueCursor("s1|" + scope + "|" + token)
+}
+
+// decodeScopedCursor unwraps a scoped cursor, refusing one minted for a
+// different scope. An empty cursor is the first page.
+func decodeScopedCursor(cursor, scope string) (string, error) {
+	if cursor == "" {
+		return "", nil
 	}
-	out.Items = kept
-	return out, nil
+	raw, ok := decodeOpaqueCursor(cursor)
+	if !ok {
+		return "", errInvalid("malformed cursor")
+	}
+	// SplitN 3: the catalog's token may hold a separator of its own.
+	parts := strings.SplitN(raw, "|", 3)
+	if len(parts) != 3 || parts[0] != "s1" {
+		return "", errInvalid("malformed cursor")
+	}
+	if parts[1] != scope {
+		return "", errInvalid("cursor was issued for a different list, filter, or seed")
+	}
+	return parts[2], nil
 }
 
 // pageDTO converts a catalog page, dropping items outside the caller's
@@ -167,7 +218,7 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list, mediaType strin
 // a show's episodes from your listings while the catalog keeps
 // everything). Restricted callers may get short pages that still carry
 // a cursor; the contract documents that.
-func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page) Page {
+func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page, scope string) Page {
 	subs := l.newSubscriptionFilter(uc)
 	out := Page{Items: make([]ItemSummary, 0, len(p.Items))}
 	for _, it := range p.Items {
@@ -183,7 +234,7 @@ func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page) Page {
 		out.Items = append(out.Items, summary(it))
 	}
 	if p.HasMore {
-		out.Next = string(p.Next)
+		out.Next = encodeScopedCursor(scope, string(p.Next))
 	}
 	return out
 }

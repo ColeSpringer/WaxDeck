@@ -13,6 +13,7 @@ import (
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/podcast"
+	"github.com/colespringer/waxbin/query"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -528,14 +529,12 @@ func (l *Library) Subscriptions(ctx context.Context, uc *UserCtx, cursor string,
 	return page, next, nil
 }
 
-// countShow fills the three numbers a subscription tile draws, from one
-// walk of the show's episodes.
+// countShow fills the three numbers a subscription tile draws.
 //
-// Together rather than separately because they come from the same rows:
-// showDTO can compute the first two, but only by walking again, and a
-// subscription row that carried a size and no backlog (or the reverse)
-// would be two walks for one tile. A tile that says "4 unplayed" and a
-// tile that says "9 episodes" are the same read.
+// Counting queries for a caller who may see everything; a walk for one
+// who may not, since the explicit gate has no item query field to push
+// down (filed upstream). Explicit is granted by default, so the walk is
+// the rare branch.
 func (l *Library) countShow(
 	ctx context.Context,
 	uc *UserCtx,
@@ -544,6 +543,9 @@ func (l *Library) countShow(
 ) error {
 	if pod == nil {
 		return nil
+	}
+	if uc.Explicit {
+		return l.countShowByQuery(ctx, uc, pod, sub)
 	}
 	eps, states, err := l.showEpisodeStates(ctx, uc, pod)
 	if err != nil {
@@ -561,6 +563,54 @@ func (l *Library) countShow(
 		if ep.PubDateNS > sub.Show.LastPublishedNS {
 			sub.Show.LastPublishedNS = ep.PubDateNS
 		}
+	}
+	return nil
+}
+
+// showEpisodeQuery is the item-query form of "this show's episodes".
+// `kind is episode` is redundant beside podcast_pid but states intent.
+// The counts match the walk because an items query counts an episode
+// nobody has fetched: the file join is a LEFT JOIN with no state
+// filter.
+func showEpisodeQuery(pod *model.Podcast) *query.Builder {
+	return query.New(query.EntityItems).
+		Where("kind", query.OpIs, string(model.KindEpisode)).
+		Where("podcast_pid", query.OpIs, string(pod.PID))
+}
+
+// countShowByQuery fills the same three numbers without a row per
+// episode. Unrestricted callers only; see countShow.
+func (l *Library) countShowByQuery(
+	ctx context.Context,
+	uc *UserCtx,
+	pod *model.Podcast,
+	sub *Subscription,
+) error {
+	// No per-user field in this one, so it needs no user pid.
+	total, err := l.lib.Count(ctx, showEpisodeQuery(pod).Build(), "")
+	if err != nil {
+		return classify(err)
+	}
+	// `played` is per-user, so an empty pid would count somebody
+	// else's backlog.
+	unplayed, err := l.lib.Count(ctx,
+		showEpisodeQuery(pod).Where("played", query.OpIs, 0).Build(),
+		model.PID(uc.CatalogPID))
+	if err != nil {
+		return classify(err)
+	}
+	sub.Show.EpisodeCount = total
+	sub.UnplayedCount = &unplayed
+
+	// Newest publication first, undated last, so the first row is the
+	// max the walk computed. No episodes and all-undated both leave
+	// LastPublishedNS zero, as the walk did.
+	newest, err := l.lib.Podcasts().Episodes(ctx, pod.PID, 1)
+	if err != nil {
+		return classify(err)
+	}
+	if len(newest) > 0 {
+		sub.Show.LastPublishedNS = newest[0].PubDateNS
 	}
 	return nil
 }
@@ -871,18 +921,10 @@ func (l *Library) RemoveEpisodeDownload(ctx context.Context, uc *UserCtx, apiEpi
 	if err != nil {
 		return classify(err)
 	}
-	// ApplyDelete runs under the shared file-mutation job scope, so a
-	// scan, an import, or another delete already holding it answers a
-	// conflict too. That is the same status as the in-use refusal above
-	// and means the opposite thing: this one clears on its own, so it
-	// gets the wording the rest of the server uses for a busy catalog
-	// rather than telling an administrator somebody is listening.
+	// The in-use refusal above needs a listener to stop; this one only
+	// needs another job to finish, so it carries the code that says so.
 	if _, err := l.lib.ApplyDelete(ctx, plan); err != nil {
-		if KindOf(classify(err)) == KindConflict {
-			return &Error{Kind: KindConflict,
-				Msg: "a conflicting catalog job is already running; retry when it finishes", Err: err}
-		}
-		return classify(err)
+		return classifyMutation(err)
 	}
 	return nil
 }
@@ -1053,14 +1095,13 @@ func (l *Library) showDTO(ctx context.Context, pod *model.Podcast, withCounts bo
 		out.RefreshDisabled = st.Disabled
 	}
 	if withCounts {
-		eps, err := l.lib.Podcasts().Episodes(ctx, pod.PID, 0)
-		if err == nil {
-			out.EpisodeCount = len(eps)
-			for _, ep := range eps {
-				if ep.PubDateNS > out.LastPublishedNS {
-					out.LastPublishedNS = ep.PubDateNS
-				}
-			}
+		// No explicit filter here (the show's own size, not a caller's
+		// view), so nothing to gate. Best effort, as the walk was.
+		if n, err := l.lib.Count(ctx, showEpisodeQuery(pod).Build(), ""); err == nil {
+			out.EpisodeCount = n
+		}
+		if newest, err := l.lib.Podcasts().Episodes(ctx, pod.PID, 1); err == nil && len(newest) > 0 {
+			out.LastPublishedNS = newest[0].PubDateNS
 		}
 	}
 	return out, nil

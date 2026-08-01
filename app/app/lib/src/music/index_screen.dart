@@ -60,19 +60,16 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
     }
   }
 
-  /// Scrolls to the first bucket under [letter], paging forward until one
-  /// turns up or the dimension runs out.
+  /// Scrolls to the first bucket under [letter], re-anchoring the window
+  /// on the server's seek when the letter is not loaded.
   ///
-  /// The index is keyset-paginated and the server has no seek-to-letter,
-  /// so this is what a rail can do: ask for more until the letter is on
-  /// the list. Pages are 500 buckets, and the server answers them from
-  /// one cached enumeration, so even a long walk is cheap.
+  /// A loaded letter is a free scroll, which is the common case. An
+  /// unloaded one used to page forward until it turned up: up to twenty
+  /// round trips on a large dimension, one request now.
   Future<void> _jumpTo(String letter) async {
     if (_jumping) return;
     // The letter is not marked current until the list actually moves to
-    // it. Every early return below is a walk that reached nothing - no
-    // buckets yet, a page already in flight, the dimension exhausted -
-    // and a rail showing a letter it never arrived at is the rail lying
+    // it: a rail showing a letter it never arrived at is a rail lying
     // about where the list is.
     var arrived = false;
     setState(() => _jumping = true);
@@ -83,36 +80,63 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
       // Read before the first await: the pitch is a function of the
       // density theme and the text scale, and holding the number rather
       // than the context is what keeps this off a context that may not
-      // outlive the paging. Asked of the row itself rather than guessed
+      // outlive the fetch. Asked of the row itself rather than guessed
       // from the row height, which is only the floor - at 1.5x text a
       // title and a caption clear it, and a guess that is short by four
       // pixels a row is short by a screenful after eighty of them.
       final rowExtent = MediaListRow.heightFor(context);
-      while (mounted) {
-        final buckets = ref.read(musicIndexProvider(key)).value?.buckets;
-        if (buckets == null) return;
-        final index = buckets.indexWhere(
-          (b) =>
-              !b.unknown &&
-              fastScrollLetters.indexOf(fastScrollLetter(b.label)) >= target,
-        );
-        if (index >= 0) {
-          if (_scroll.hasClients) {
-            // Still an estimate rather than an exact offset: a label long
-            // enough to wrap makes its own row taller than the pitch, and
-            // the list is lazily built, so a row that has never been on
-            // screen has no measured extent to ask for. It lands on the
-            // letter or a little above it, which is the direction that
-            // leaves the target in view.
-            _scroll.jumpTo(
-              (index * rowExtent).clamp(0.0, _scroll.position.maxScrollExtent),
-            );
-            arrived = true;
-          }
-          return;
+
+      int indexIn(List<FacetBucket> buckets) => buckets.indexWhere(
+        (b) =>
+            !b.unknown &&
+            fastScrollLetters.indexOf(fastScrollLetter(b.label)) >= target,
+      );
+
+      // Whether the window opens at or before the letter asked for.
+      bool startsAtLetter(MusicIndexState state) =>
+          state.buckets.isNotEmpty &&
+          fastScrollLetters.indexOf(
+                fastScrollLetter(state.buckets.first.label),
+              ) <=
+              target;
+
+      var state = ref.read(musicIndexProvider(key)).value;
+      if (state == null) return;
+      int index;
+      if (letter == fastScrollLetters.first) {
+        // `#` members sort both before A and after Z, so no prefix
+        // names them; the head is where the first of them is.
+        if (state.hasFloor) notifier.reset();
+        index = 0;
+      } else {
+        index = indexIn(state.buckets);
+        // at-or-after means every loaded bucket matches a letter below
+        // a floored window, so landing on the first is only a hit when
+        // nothing sorts before it.
+        if (index == 0 && state.hasFloor && !startsAtLetter(state)) {
+          index = -1;
         }
-        if (!await notifier.loadMore()) return;
+        if (index < 0) {
+          if (!await notifier.anchorAt(letter) || !mounted) return;
+          state = ref.read(musicIndexProvider(key)).value;
+          if (state == null || state.buckets.isEmpty) return;
+          // At-or-after, so the window's head is where the rail
+          // pointed.
+          index = 0;
+        }
       }
+      if (!_scroll.hasClients) return;
+      // The floor's header is a row of its own above the buckets.
+      final rows = index + (state.hasFloor ? 1 : 0);
+      // Still an estimate rather than an exact offset: a label long
+      // enough to wrap makes its own row taller than the pitch, and the
+      // list is lazily built, so a row that has never been on screen has
+      // no measured extent to ask for. It lands on the letter or a little
+      // above it, which is the direction that leaves the target in view.
+      _scroll.jumpTo(
+        (rows * rowExtent).clamp(0.0, _scroll.position.maxScrollExtent),
+      );
+      arrived = true;
     } finally {
       if (mounted) {
         setState(() {
@@ -230,7 +254,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
 
   Widget _list(MusicIndexState state) {
     final dimension = widget.dimension;
-    if (state.buckets.isEmpty) {
+    if (state.buckets.isEmpty && !state.hasFloor) {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: EmptyState(
@@ -242,10 +266,24 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
         ),
       );
     }
+    // A re-anchored window's earlier buckets are unreachable by
+    // scrolling, so the floor needs a way back. An empty window from a
+    // seek past the end needs it most.
+    final header = state.hasFloor ? 1 : 0;
     return SliverList.builder(
-      itemCount: state.buckets.length + (state.loadingMore ? 1 : 0),
+      itemCount: header + state.buckets.length + (state.loadingMore ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index >= state.buckets.length) {
+        if (header == 1 && index == 0) {
+          return _StartOfIndex(
+            dimension: dimension,
+            onTap: () {
+              ref.read(musicIndexProvider(_key).notifier).reset();
+              setState(() => _letter = null);
+            },
+          );
+        }
+        final at = index - header;
+        if (at >= state.buckets.length) {
           return const Padding(
             padding: EdgeInsets.all(WaxSpace.s16),
             child: Center(child: CircularProgressIndicator()),
@@ -253,11 +291,46 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
         }
         return _BucketRow(
           dimension: dimension,
-          bucket: state.buckets[index],
-          index: index,
-          onTap: () => _open(state.buckets[index]),
+          bucket: state.buckets[at],
+          index: at,
+          onTap: () => _open(state.buckets[at]),
         );
       },
+    );
+  }
+}
+
+/// The way back past a re-anchored window's floor.
+class _StartOfIndex extends StatelessWidget {
+  const _StartOfIndex({required this.dimension, required this.onTap});
+
+  final MusicDimension dimension;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Semantics(
+      identifier: SemanticsIds.indexRailStart,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: WaxSizeClass.of(
+            context,
+          ).gutter.copyWith(top: WaxSpace.s12, bottom: WaxSpace.s12),
+          child: Row(
+            children: <Widget>[
+              WaxIcon(WaxIcons.expand, size: 16, color: colors.textTertiary),
+              const SizedBox(width: WaxSpace.s8),
+              Text(
+                'Start of ${dimension.label.toLowerCase()}',
+                style: WaxType.caption.copyWith(color: colors.textTertiary),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -289,16 +289,6 @@ func (l *Library) spokenWordCrossing(ctx context.Context, uc *UserCtx, it *model
 // clock), the clamped recorded time for an offline replay. The catalog
 // enforces recorded-time last-writer-wins itself, so a stale replay is
 // dropped there rather than guarded here.
-//
-// One recorded consequence: a replay the catalog skips still emits the
-// sync event below, where the older WaxDeck-side guard returned early
-// without one. The catalog knows the write was skipped, its
-// play-state writer suppresses its own change-feed delta when nothing
-// changed, but the facade returns only error, so learning the same
-// thing here would cost a state read and a StarredChangedAt comparison
-// on every write. A redundant sync event is cheaper, and the client
-// reconciles from the state it fetches. When the changed-bool upstream
-// ask lands, this note and the redundant event go away together.
 func asOfNS(recordedAt *time.Time) *int64 {
 	if recordedAt == nil {
 		return nil
@@ -312,21 +302,30 @@ func asOfNS(recordedAt *time.Time) *int64 {
 // its recorded time to the catalog, which drops it when the star
 // changed more recently, so a stale replay never resurrects an undone
 // state.
+//
+// The sync event goes out only when the write changed something: the
+// delta builder is a pure projection of stored events, so an event
+// carrying no change carries nothing. A stale replay still learns the
+// truth from the response body below.
 func (l *Library) SetStar(ctx context.Context, uc *UserCtx, apiItemPID string, starred bool, recordedAt *time.Time) (PlayState, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return PlayState{}, err
 	}
-	if err := l.lib.Playback().SetStar(ctx, model.PID(uc.CatalogPID), it.PID, starred, asOfNS(recordedAt)); err != nil {
+	changed, err := l.lib.Playback().SetStar(ctx, model.PID(uc.CatalogPID), it.PID, starred, asOfNS(recordedAt))
+	if err != nil {
 		return PlayState{}, classify(err)
 	}
-	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
+	if changed {
+		l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
+	}
 	return l.playStateFor(ctx, uc, apiItemPID, it.PID)
 }
 
 // SetRating sets (0..100) or clears (nil) the acting user's rating and
 // returns the resulting state. Replayed offline changes carry their
-// recorded time and are ordered by the catalog; see SetStar.
+// recorded time and are ordered by the catalog, and a no-op write emits
+// no sync event; see SetStar.
 func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string, rating *int, recordedAt *time.Time) (PlayState, error) {
 	if rating != nil && (*rating < 0 || *rating > 100) {
 		return PlayState{}, errInvalid("rating must be between 0 and 100")
@@ -335,10 +334,13 @@ func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string,
 	if err != nil {
 		return PlayState{}, err
 	}
-	if err := l.lib.Playback().SetRating(ctx, model.PID(uc.CatalogPID), it.PID, rating, asOfNS(recordedAt)); err != nil {
+	changed, err := l.lib.Playback().SetRating(ctx, model.PID(uc.CatalogPID), it.PID, rating, asOfNS(recordedAt))
+	if err != nil {
 		return PlayState{}, classify(err)
 	}
-	l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
+	if changed {
+		l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
+	}
 	return l.playStateFor(ctx, uc, apiItemPID, it.PID)
 }
 

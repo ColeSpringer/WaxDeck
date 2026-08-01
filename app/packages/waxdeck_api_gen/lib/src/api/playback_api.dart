@@ -567,10 +567,11 @@ class PlaybackApi {
   }
 
   /// Get an item&#39;s waveform overview
-  /// The item&#39;s amplitude envelope, for painting a waveform behind a seek bar. A pure read: the values come from the catalog&#39;s analyze pass and this endpoint computes nothing and queues nothing, so a server whose analyze pass has never run answers &#x60;pending&#x60; everywhere. &#x60;POST /library/analyze&#x60; and the &#x60;analyze&#x60; schedule are what produce them. &#x60;peaks&#x60; is one value per bucket, &#x60;0&#x60; silence and &#x60;255&#x60; full scale, at the fixed &#x60;resolution&#x60; the catalog stores (1000 buckets per track today, about a kilobyte). There is no &#x60;points&#x60; parameter: a resizable seek bar has to downsample to its own pixel width anyway, and a server-side width would add a query dimension to the cache key for work the renderer does for free. The stored values are 16-bit and narrowed to a byte here, so the low bits are dropped rather than rounded; that is invisible at any width a seek bar is drawn at. &#x60;state&#x60; is &#x60;ready&#x60;, &#x60;pending&#x60; (this item is analyzable and has not been analyzed yet; poll again after an analyze pass), or &#x60;unavailable&#x60; (there will never be a waveform for this item). Read &#x60;unavailable&#x60; as final. Four populations answer it: podcast episodes, which are deliberately never analyzed; a track carved out of a shared file by a cue sheet, which has no envelope of its own to report; a multi-file audiobook, whose stored waveform describes only its first part and would be the wrong audio under any other one; and a file the pass analyzed but could not measure, which is not retried until its audio changes. A client should draw its plain seek bar for &#x60;unavailable&#x60; rather than spinning. A &#x60;ready&#x60; answer is content-addressed by the item&#39;s audio essence and cacheable for a day; revalidate with &#x60;If-None-Match&#x60;. &#x60;pending&#x60; and &#x60;unavailable&#x60; are &#x60;no-store&#x60;, since both are expected to change. 
+  /// The item&#39;s amplitude envelope, for painting a waveform behind a seek bar. A pure read: the values come from the catalog&#39;s analyze pass and this endpoint computes nothing and queues nothing, so a server whose analyze pass has never run answers &#x60;pending&#x60; everywhere. &#x60;POST /library/analyze&#x60; and the &#x60;analyze&#x60; schedule are what produce them. &#x60;peaks&#x60; is one value per bucket, &#x60;0&#x60; silence and &#x60;255&#x60; full scale, at the fixed &#x60;resolution&#x60; the catalog stores (1000 buckets per track today, about a kilobyte). There is no &#x60;points&#x60; parameter: a resizable seek bar has to downsample to its own pixel width anyway, and a server-side width would add a query dimension to the cache key for work the renderer does for free. The stored values are 16-bit and narrowed to a byte here, so the low bits are dropped rather than rounded; that is invisible at any width a seek bar is drawn at. Waveforms are per audio file: for a multi-file audiobook, pass &#x60;partIndex&#x60; to get the envelope of one part, in that part&#39;s own timeline, and the answer echoes the &#x60;partIndex&#x60; it describes. An omitted &#x60;partIndex&#x60; is part zero, so a client that does not know about parts gets the first one rather than nothing. &#x60;state&#x60; is &#x60;ready&#x60;, &#x60;pending&#x60; (this item is analyzable and has not been analyzed yet; poll again after an analyze pass), or &#x60;unavailable&#x60; (there will never be a waveform for this item). Read &#x60;unavailable&#x60; as final. Three populations answer it: podcast episodes, which are deliberately never analyzed; a track carved out of a shared file by a cue sheet, which has no envelope of its own to report; and a file the pass analyzed but could not measure, which is not retried until its audio changes. A client should draw its plain seek bar for &#x60;unavailable&#x60; rather than spinning. A book part whose file has simply not been analyzed yet is &#x60;pending&#x60;, not &#x60;unavailable&#x60;, so a partly analyzed book can report the two states across its parts. A &#x60;ready&#x60; answer is content-addressed by the audio essence of the file being described (so a multi-file book&#39;s parts carry different validators) and cacheable for a day; revalidate with &#x60;If-None-Match&#x60;. &#x60;pending&#x60; and &#x60;unavailable&#x60; are &#x60;no-store&#x60;, since both are expected to change. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [partIndex] - Zero-based part of a multi-file audiobook to describe. Ignored for single-file items. Out of range is `not-found`, matching the skip map. 
   /// * [ifNoneMatch] - Previously returned `ETag`; a match answers 304 with no body.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
@@ -583,6 +584,7 @@ class PlaybackApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<Waveform>> getWaveform({ 
     required String pid,
+    int? partIndex,
     String? ifNoneMatch,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -616,9 +618,14 @@ class PlaybackApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (partIndex != null) r'partIndex': encodeQueryParameter(_serializers, partIndex, const FullType(int)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,

@@ -13,6 +13,7 @@ part 'waveform.g.dart';
 ///
 /// Properties:
 /// * [state] - `ready` (peaks present), `pending` (analyzable, not yet analyzed), or `unavailable` (there will never be a waveform for this item). Open set; treat unknown values as `unavailable`. 
+/// * [partIndex] - The described part of a multi-file audiobook. Present only for multi-file books. 
 /// * [peaks] - One amplitude per bucket in playback order, `0` silence and `255` full scale (`ready` only). Downsample to the pixel width being drawn. 
 /// * [resolution] - How many buckets `peaks` carries (`ready` only). Fixed by the catalog at 1000 today; read it rather than assuming, because an analysis version bump may change it. 
 /// * [essenceHash] - Content hash of the analyzed audio essence, matching the download surface's `essenceHash`. A stored waveform whose hash no longer matches the stored audio is stale. 
@@ -21,6 +22,10 @@ abstract class Waveform implements Built<Waveform, WaveformBuilder> {
   /// `ready` (peaks present), `pending` (analyzable, not yet analyzed), or `unavailable` (there will never be a waveform for this item). Open set; treat unknown values as `unavailable`. 
   @BuiltValueField(wireName: r'state')
   String get state;
+
+  /// The described part of a multi-file audiobook. Present only for multi-file books. 
+  @BuiltValueField(wireName: r'partIndex')
+  int? get partIndex;
 
   /// One amplitude per bucket in playback order, `0` silence and `255` full scale (`ready` only). Downsample to the pixel width being drawn. 
   @BuiltValueField(wireName: r'peaks')
@@ -62,6 +67,13 @@ class _$WaveformSerializer implements PrimitiveSerializer<Waveform> {
       object.state,
       specifiedType: const FullType(String),
     );
+    if (object.partIndex != null) {
+      yield r'partIndex';
+      yield serializers.serialize(
+        object.partIndex,
+        specifiedType: const FullType(int),
+      );
+    }
     if (object.peaks != null) {
       yield r'peaks';
       yield serializers.serialize(
@@ -112,6 +124,13 @@ class _$WaveformSerializer implements PrimitiveSerializer<Waveform> {
             specifiedType: const FullType(String),
           ) as String;
           result.state = valueDes;
+          break;
+        case r'partIndex':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.partIndex = valueDes;
           break;
         case r'peaks':
           final valueDes = serializers.deserialize(

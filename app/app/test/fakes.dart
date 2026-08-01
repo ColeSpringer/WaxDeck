@@ -293,6 +293,17 @@ class FakeRepository implements WaxDeckRepository {
   /// tell an A-to-Z index from a biggest-first one.
   final List<FacetSort?> facetSorts = [];
 
+  /// So a rail test can tell a re-anchor from a free scroll.
+  final List<String?> facetStartsAt = [];
+
+  /// Held open, every facet listing waits on it, so a test can have one
+  /// genuinely in flight while it starts another.
+  Completer<void>? facetGate;
+
+  /// Cursors this fake refuses with `invalid-request`, the way a server
+  /// refuses one minted by a build with a different encoding.
+  final Set<String> rejectedCursors = {};
+
   @override
   Future<ItemPage> listItems({
     MediaType? mediaType,
@@ -303,6 +314,12 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     final error = listError;
     if (error != null) throw error;
+    if (cursor != null && rejectedCursors.contains(cursor)) {
+      throw const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'cursor was issued for another scope',
+      );
+    }
     var filtered = mediaType == null
         ? libraryItems
         : libraryItems.where((i) => i.mediaType == mediaType).toList();
@@ -324,11 +341,15 @@ class FakeRepository implements WaxDeckRepository {
     String dimension, {
     FacetSort? sort,
     String? cursor,
+    String? startsAt,
     int? limit,
   }) async {
     final error = listError;
     if (error != null) throw error;
     facetSorts.add(sort);
+    facetStartsAt.add(startsAt);
+    final gate = facetGate;
+    if (gate != null) await gate.future;
     final all = <FacetBucket>[...?facets[dimension]];
     // The server serves the A-to-Z order itself; the fake sorts here so
     // a screen test sees the arrangement its rail is built on.
@@ -338,7 +359,16 @@ class FakeRepository implements WaxDeckRepository {
         return a.label.toLowerCase().compareTo(b.label.toLowerCase());
       });
     }
-    final start = cursor == null ? 0 : int.parse(cursor);
+    var start = cursor == null ? 0 : int.parse(cursor);
+    if (startsAt != null) {
+      // The server's rule: at-or-after, real buckets only.
+      final real = all.where((b) => !b.unknown).toList();
+      final fold = startsAt.trimLeft().toLowerCase();
+      final at = real.indexWhere(
+        (b) => b.label.trimLeft().toLowerCase().compareTo(fold) >= 0,
+      );
+      start = at < 0 ? all.length : all.indexOf(real[at]);
+    }
     final pageSize = limit ?? 100;
     final end = (start + pageSize).clamp(0, all.length);
     return FacetPage(
@@ -366,15 +396,29 @@ class FakeRepository implements WaxDeckRepository {
   /// screen asked for and how it scoped them.
   final List<({DiscoveryList list, MediaType? mediaType})> browseCalls = [];
 
+  /// So a test can tell a bucket-wide shuffle from a page of it.
+  final List<({String facet, String facetKey, int? seed})> scopedBrowses = [];
+
   @override
   Future<ItemPage> browse(
     DiscoveryList list, {
     MediaType? mediaType,
+    String? facet,
+    String? facetKey,
     String? cursor,
     int? limit,
     int? seed,
   }) async {
     browseCalls.add((list: list, mediaType: mediaType));
+    if (facet != null) {
+      scopedBrowses.add((facet: facet, facetKey: facetKey ?? '', seed: seed));
+    }
+    if (cursor != null && rejectedCursors.contains(cursor)) {
+      throw const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'cursor was issued for another scope',
+      );
+    }
     if (list == DiscoveryList.recentlyPlayed &&
         !browseLists.containsKey(list)) {
       final item = recentlyPlayed;
@@ -391,6 +435,8 @@ class FakeRepository implements WaxDeckRepository {
     }
     final page = await listItems(
       mediaType: mediaType,
+      facet: facet,
+      facetKey: facetKey,
       cursor: cursor,
       limit: limit,
     );

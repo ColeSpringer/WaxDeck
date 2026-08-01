@@ -385,6 +385,28 @@ func TestMigrateSubsonicImport(t *testing.T) {
 	if st := f.playState(t, ctx, alpha); st.PlayCount != 3 {
 		t.Fatalf("alpha play count after re-run = %d, want 3", st.PlayCount)
 	}
+
+	// The bulk path the changed flag exists for: every row is
+	// value-identical, so nothing is appended and no device is woken.
+	// History and progress write unconditionally and are left out.
+	tail := eventTail(t, ctx, f.svc, f.uc)
+	quiet := f.runMigration(t, ctx, MigrationRequest{
+		Source: "navidrome", ServerURL: ts.URL,
+		Username: "demo", Password: "demo-pass",
+		Stars: true, Ratings: true,
+	})
+	if quiet.Stars != 1 || quiet.Ratings != 1 {
+		t.Fatalf("quiet re-run counts = %+v, want the same rows replayed", quiet)
+	}
+	var state []wdb.Event
+	for _, e := range eventsAfter(t, ctx, f.svc, f.uc, tail) {
+		if e.Kind == eventPlayState || e.Kind == eventEntityState {
+			state = append(state, e)
+		}
+	}
+	if len(state) != 0 {
+		t.Fatalf("re-importing an already-starred set emitted %+v, want nothing", state)
+	}
 }
 
 // newFakeNavidromeLateMatch emulates a source whose starred groups only

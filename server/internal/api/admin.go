@@ -358,7 +358,9 @@ func (s *Server) DeleteLibraryItems(ctx context.Context, req DeleteLibraryItemsR
 		case service.KindNotFound:
 			return DeleteLibraryItems404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
 		case service.KindReadOnly:
-			return DeleteLibraryItems409JSONResponse{ReadOnlyJSONResponse(errObj("read-only", err.Error()))}, nil
+			return DeleteLibraryItems409JSONResponse(errObj("read-only", err.Error())), nil
+		case service.KindCatalogBusy:
+			return DeleteLibraryItems409JSONResponse(errObj(string(service.KindCatalogBusy), err.Error())), nil
 		}
 		return nil, err
 	}

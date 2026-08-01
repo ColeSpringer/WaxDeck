@@ -395,7 +395,7 @@ func (h *Handler) starredSongs(r *http.Request, uc *service.UserCtx, idx *index)
 	var out []child
 	cursor := ""
 	for {
-		page, err := h.svc.Browse(r.Context(), uc, "starred", "", 0, cursor, 500)
+		page, err := h.svc.Browse(r.Context(), uc, "starred", service.ItemFilter{}, 0, cursor, 500)
 		if err != nil {
 			return nil, err
 		}

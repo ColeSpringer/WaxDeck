@@ -237,7 +237,7 @@ func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string
 		return out, nil
 	}
 	if _, err := l.lib.ApplyDelete(ctx, plan); err != nil {
-		return DeleteItemsResultDTO{}, classify(err)
+		return DeleteItemsResultDTO{}, classifyMutation(err)
 	}
 	out.Applied = true
 	l.Audit(ctx, uc, "items.delete", AuditTarget{Kind: "item"},

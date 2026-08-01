@@ -133,10 +133,13 @@ func (l *Library) SetEntityStar(ctx context.Context, uc *UserCtx, apiEntityPID s
 	if err != nil {
 		return EntityPlayState{}, err
 	}
-	if err := l.lib.SetEntityStar(ctx, model.PID(uc.CatalogPID), kind, pid, starred, asOfNS(recordedAt)); err != nil {
+	changed, err := l.lib.SetEntityStar(ctx, model.PID(uc.CatalogPID), kind, pid, starred, asOfNS(recordedAt))
+	if err != nil {
 		return EntityPlayState{}, classify(err)
 	}
-	l.emitUserEvent(ctx, uc.ID, eventEntityState, apiEntityPID)
+	if changed {
+		l.emitUserEvent(ctx, uc.ID, eventEntityState, apiEntityPID)
+	}
 	return l.entityStateFor(ctx, uc, apiEntityPID, kind, pid)
 }
 
@@ -150,10 +153,13 @@ func (l *Library) SetEntityRating(ctx context.Context, uc *UserCtx, apiEntityPID
 	if err != nil {
 		return EntityPlayState{}, err
 	}
-	if err := l.lib.SetEntityRating(ctx, model.PID(uc.CatalogPID), kind, pid, rating, asOfNS(recordedAt)); err != nil {
+	changed, err := l.lib.SetEntityRating(ctx, model.PID(uc.CatalogPID), kind, pid, rating, asOfNS(recordedAt))
+	if err != nil {
 		return EntityPlayState{}, classify(err)
 	}
-	l.emitUserEvent(ctx, uc.ID, eventEntityState, apiEntityPID)
+	if changed {
+		l.emitUserEvent(ctx, uc.ID, eventEntityState, apiEntityPID)
+	}
 	return l.entityStateFor(ctx, uc, apiEntityPID, kind, pid)
 }
 

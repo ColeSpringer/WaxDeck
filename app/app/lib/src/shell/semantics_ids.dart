@@ -134,6 +134,7 @@ abstract final class SemanticsIds {
   static const String queueClear = 'queue-clear';
   static String queueEntry(Object queueId) => 'queue-entry-$queueId';
   static String queueEntryDrag(Object id) => 'queue-entry-drag-$id';
+  static const String queueReplaceUndo = 'queue-replace-undo';
   static String queueEntryRemove(Object queueId) =>
       'queue-entry-remove-$queueId';
   static const String queueHistory = 'queue-history';
@@ -217,6 +218,7 @@ abstract final class SemanticsIds {
   static String indexItem(Object index) => 'index-item-$index';
   static const String indexRail = 'index-rail';
   static String indexRailLetter(Object letter) => 'index-rail-$letter';
+  static const String indexRailStart = 'index-rail-start';
   static const String indexSort = 'index-sort';
   static const String listingShuffle = 'listing-shuffle';
   static String musicTile(Object name) => 'music-tile-$name';

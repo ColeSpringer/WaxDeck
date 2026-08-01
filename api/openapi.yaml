@@ -89,7 +89,10 @@ info:
       matches the file on disk, a metadata-only retag included since the
       pin is byte identity; re-request the info endpoint that minted it), `catalog-maintenance`
       (the catalog is temporarily handed to a maintenance operation; retry
-      shortly), `sync-reset` (a sync cursor predates the retained change
+      shortly), `catalog-busy` (another job holds the catalog's shared
+      file-mutation scope, so this file-moving request cannot start; unlike
+      a plain `conflict` it clears on its own, so retrying it unattended is
+      worth something), `sync-reset` (a sync cursor predates the retained change
       history; drop the local mirror and re-mirror from a fresh snapshot),
       `feed-unreachable` (an upstream feed could not be fetched or parsed;
       the feed's own server answered an error, timed out, or returned
@@ -2484,9 +2487,12 @@ paths:
         - name: facet
           in: query
           description: >
-            Restrict results to one bucket of a browse dimension. Requires
-            `facetKey`, and takes the same dimension names
-            `/library/facets` enumerates. Composes with `mediaType`.
+            Restrict results to one bucket of a browse dimension, taking
+            the same dimension names `/library/facets` enumerates.
+            Composes with `mediaType`. The pair is keyed on `facet`
+            alone: an absent or empty `facetKey` selects the dimension's
+            unknown bucket, which is a real bucket the enumeration
+            returns, so it is a drill rather than a missing argument.
           schema:
             $ref: "#/components/schemas/BrowseDimension"
         - name: facetKey
@@ -2503,7 +2509,9 @@ paths:
           in: query
           description: >
             Opaque keyset cursor from a previous page's `nextCursor`. Omit for
-            the first page.
+            the first page. A cursor carries the scope it was issued
+            under, so reusing one with a changed `mediaType` or `facet`
+            is `invalid-request` rather than a quietly wrong window.
           schema:
             type: string
         - name: limit
@@ -2550,28 +2558,44 @@ paths:
           description: >
             Restrict the list to one media type, for a domain-scoped shelf
             ("recently added albums" on the music hub). Composes with every
-            list.
-
-            `limit` still bounds how much of the list one request walks, so
-            a filtered page is usually short: asking for 20 music items walks
-            20 rows of a list that also holds books and episodes, and returns
-            the music among them with a `nextCursor` for the rest. That is
-            the same short-page-plus-cursor shape a caller with restricted
-            library visibility already gets, and `nextCursor` is absent only
-            when the list itself is exhausted. A caller drawing a shelf of a
-            dozen cards should ask for a generous limit and take what it
-            draws from the answer, rather than page for an exact count.
+            list, and narrows the list itself rather than the page, so a
+            filtered page comes back full. A caller with restricted library
+            visibility can still get a short page that carries a cursor,
+            which is the contract's standing rule everywhere.
           schema:
             $ref: "#/components/schemas/MediaType"
+        - name: facet
+          in: query
+          description: >
+            Restrict the list to one bucket of a browse dimension, taking
+            the same dimension names `/library/facets` enumerates and the
+            same bucket keys `/library/items` drills. Composes with
+            `mediaType` and with every list, so a shuffle can be scoped to
+            one artist, genre, or year, and it is the same filter the
+            bucket's own listing uses: a bucket's count, the list it opens,
+            and a shuffle over it can never disagree.
+
+            Keyed on `facet` alone, exactly as on `/library/items`: an
+            absent or empty `facetKey` selects the dimension's unknown
+            bucket.
+          schema:
+            $ref: "#/components/schemas/BrowseDimension"
+        - name: facetKey
+          in: query
+          description: >
+            The bucket to scope to, as returned in the enumeration's
+            `key`. Send it empty to select the dimension's unknown bucket;
+            `kind` and custom tag dimensions have no unknown bucket and
+            reject an empty key. Ignored without `facet`.
+          schema:
+            type: string
         - name: seed
           in: query
           description: >
             Shuffle seed for the `random` list. The same seed pages through
             the same shuffled order, so paging stays stable. When omitted the
             server picks a fresh seed and returns it as the page's `seed`;
-            pass that value back with the cursor for later pages. A cursor is
-            only valid together with the same `list` and `seed` it was issued
-            for.
+            pass that value back with the cursor for later pages.
           schema:
             type: integer
             format: int64
@@ -2580,6 +2604,13 @@ paths:
           description: >
             Opaque keyset cursor from a previous page's `nextCursor`. Omit for
             the first page.
+
+            A cursor carries the scope it was issued under - the list, the
+            seed, and the `mediaType`/`facet`/`facetKey` filter - and
+            reusing one under a different scope is `invalid-request`. It
+            names a position in a seeded permutation, so under another
+            seed it would name a position in a different permutation
+            entirely; refusing it is the only honest answer.
           schema:
             type: string
         - name: limit
@@ -2664,6 +2695,26 @@ paths:
             Opaque cursor from a previous page's `nextCursor`. Omit for
             the first page. Valid only with the `sort` it was issued
             under.
+          schema:
+            type: string
+        - name: startsAt
+          in: query
+          description: >
+            Start the page at the first bucket whose display label sorts
+            at or after this prefix, folded the same way `sort=label`
+            folds (case, and leading whitespace ignored). This is what an
+            alphabet rail taps: `startsAt=m` on a library that jumps from
+            L to N answers the first N bucket rather than nothing, since
+            the comparison is at-or-after and not equality.
+
+            Requires `sort=label`; with the default `count` order it is
+            `invalid-request`, because a prefix names no position in a
+            biggest-first list. Sending it together with `cursor` is
+            `invalid-request` too: a cursor already names a position.
+            A prefix past the last bucket is an empty page with no
+            `nextCursor`, not an error. The unknown bucket is not
+            seekable, since it sorts last whatever its sentinel spells;
+            paging to the end still reaches it.
           schema:
             type: string
         - name: limit
@@ -2951,7 +3002,16 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/ReadOnly"
+          description: >
+            The delete was refused. `read-only`: the target library, or
+            the whole server, is in read-only mode. `catalog-busy`:
+            another job holds the catalog's shared file-mutation scope,
+            which clears on its own, so an unattended retry is worth
+            something.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -4753,26 +4813,42 @@ paths:
         low bits are dropped rather than rounded; that is invisible at
         any width a seek bar is drawn at.
 
+        Waveforms are per audio file: for a multi-file audiobook, pass
+        `partIndex` to get the envelope of one part, in that part's own
+        timeline, and the answer echoes the `partIndex` it describes. An
+        omitted `partIndex` is part zero, so a client that does not know
+        about parts gets the first one rather than nothing.
+
         `state` is `ready`, `pending` (this item is analyzable and has
         not been analyzed yet; poll again after an analyze pass), or
         `unavailable` (there will never be a waveform for this item).
-        Read `unavailable` as final. Four populations answer it: podcast
+        Read `unavailable` as final. Three populations answer it: podcast
         episodes, which are deliberately never analyzed; a track carved
         out of a shared file by a cue sheet, which has no envelope of
-        its own to report; a multi-file audiobook, whose stored waveform
-        describes only its first part and would be the wrong audio under
-        any other one; and a file the pass analyzed but could not
+        its own to report; and a file the pass analyzed but could not
         measure, which is not retried until its audio changes. A client
         should draw its plain seek bar for `unavailable` rather than
-        spinning.
+        spinning. A book part whose file has simply not been analyzed
+        yet is `pending`, not `unavailable`, so a partly analyzed book
+        can report the two states across its parts.
 
-        A `ready` answer is content-addressed by the item's audio essence
-        and cacheable for a day; revalidate with `If-None-Match`.
-        `pending` and `unavailable` are `no-store`, since both are
-        expected to change.
+        A `ready` answer is content-addressed by the audio essence of
+        the file being described (so a multi-file book's parts carry
+        different validators) and cacheable for a day; revalidate with
+        `If-None-Match`. `pending` and `unavailable` are `no-store`,
+        since both are expected to change.
       tags: [playback]
       parameters:
         - $ref: "#/components/parameters/Pid"
+        - name: partIndex
+          in: query
+          description: >
+            Zero-based part of a multi-file audiobook to describe.
+            Ignored for single-file items. Out of range is `not-found`,
+            matching the skip map.
+          schema:
+            type: integer
+            minimum: 0
         - name: If-None-Match
           in: header
           description: Previously returned `ETag`; a match answers 304 with no body.
@@ -4784,8 +4860,10 @@ paths:
           headers:
             ETag:
               description: >
-                Validator derived from the item's audio essence. Present
-                on `ready` only; the other two states are not cacheable.
+                Validator derived from the audio essence of the file
+                being described, which for a multi-file book is the
+                requested part. Present on `ready` only; the other two
+                states are not cacheable.
               schema:
                 type: string
             Cache-Control:
@@ -6267,7 +6345,9 @@ paths:
         space). Removing an episode that is not fetched is a no-op
         success that also cancels a queued fetch; an episode someone is
         listening to right now answers `conflict` (retry when playback
-        stops).
+        stops), and one whose delete cannot start because another
+        catalog job holds the file-mutation scope answers `catalog-busy`
+        (retry shortly).
       tags: [podcasts]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -6288,13 +6368,13 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The removal was refused (code `conflict`), for one of two
-            reasons the message distinguishes. Either the episode is
-            being listened to right now and removing the file would kill
-            the stream, which clears when playback stops; or a
+            The removal was refused, for one of two reasons the code
+            distinguishes. `conflict`: the episode is being listened to
+            right now and removing the file would kill the stream, which
+            clears only when playback stops. `catalog-busy`: a
             conflicting catalog job (a scan, an import, another delete)
-            holds the file-mutation lease, which clears on its own and
-            is worth retrying.
+            holds the file-mutation scope, which clears on its own, so an
+            unattended retry is worth something.
           content:
             application/json:
               schema:
@@ -13095,6 +13175,11 @@ components:
             for this item). Open set; treat unknown values as
             `unavailable`.
           example: ready
+        partIndex:
+          type: integer
+          description: >
+            The described part of a multi-file audiobook. Present only
+            for multi-file books.
         peaks:
           type: array
           description: >
