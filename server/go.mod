@@ -7,7 +7,7 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/colespringer/waxdeck/fixtures v0.0.0-00010101000000-000000000000
-	github.com/colespringer/waxtap/v3 v3.0.1
+	github.com/colespringer/waxtap/v3 v3.1.0
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/getkin/kin-openapi v0.145.0
 	github.com/microcosm-cc/bluemonday v1.0.27
@@ -31,7 +31,7 @@ require (
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
-	github.com/colespringer/waxbin v0.0.0-20260801021249-0eac96415b55
+	github.com/colespringer/waxbin v0.0.0-20260802211316-4bad5c8f19fc
 	github.com/colespringer/waxflow v0.0.0-20260730025520-35107bc1aae3
 	github.com/colespringer/waxflow/cli v0.0.0-20260730025520-35107bc1aae3
 	github.com/colespringer/waxlabel v1.2.0

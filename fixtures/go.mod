@@ -3,7 +3,7 @@ module github.com/colespringer/waxdeck/fixtures
 go 1.26
 
 require (
-	github.com/colespringer/waxbin v0.0.0-20260801021249-0eac96415b55
+	github.com/colespringer/waxbin v0.0.0-20260802211316-4bad5c8f19fc
 	github.com/colespringer/waxflow v0.0.0-20260730025520-35107bc1aae3
 )
 
