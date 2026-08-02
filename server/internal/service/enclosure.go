@@ -176,7 +176,13 @@ func (l *Library) EnclosureHTTP() *http.Client {
 		l.enclosureHTTP = &http.Client{
 			Transport: transport,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= 5 {
+				// Go's own default cap, not a tighter one: ad-tech
+				// prefix chains on real enclosures run long (a verified
+				// example walks podtrac, claritas, pdst, mgln, and
+				// pscrb before art19 and its CDN answer - seven hops),
+				// and a cap of five turned every episode of such a show
+				// into a bad gateway. Ten still bounds a loop.
+				if len(via) >= 10 {
 					return errors.New("too many redirects")
 				}
 				return nil

@@ -167,6 +167,54 @@ func (d *DB) FailExhaustedToolTasks(ctx context.Context, nowNS int64, maxAttempt
 	return out, rows.Err()
 }
 
+// DeleteToolTask removes one task, but only in a terminal state: the
+// guard lives in the statement so a worker leasing the row between a
+// caller's read and this delete cannot lose it mid-run. ownerID scopes
+// the delete to that user's rows; empty deletes anyone's
+// (administrators), the same convention ListToolTasks uses. In the
+// statement rather than left to the caller's visibility check, so a
+// future call site that skips the check still cannot delete another
+// account's row. False when nothing went - no such row, not terminal,
+// or not the owner's.
+func (d *DB) DeleteToolTask(ctx context.Context, id, ownerID string) (bool, error) {
+	q := `DELETE FROM tool_tasks WHERE id = ? AND state IN ('done', 'failed')`
+	args := []any{id}
+	if ownerID != "" {
+		q += ` AND user_id = ?`
+		args = append(args, ownerID)
+	}
+	res, err := d.w.ExecContext(ctx, q, args...)
+	if err != nil {
+		return false, fmt.Errorf("db: deleting tool task: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("db: deleting tool task: %w", err)
+	}
+	return n > 0, nil
+}
+
+// DeleteFinishedToolTasks removes every terminal task a user owns and
+// reports how many went; userID empty sweeps everyone's
+// (administrators), the convention ListToolTasks set.
+func (d *DB) DeleteFinishedToolTasks(ctx context.Context, userID string) (int, error) {
+	q := `DELETE FROM tool_tasks WHERE state IN ('done', 'failed')`
+	args := []any{}
+	if userID != "" {
+		q += ` AND user_id = ?`
+		args = append(args, userID)
+	}
+	res, err := d.w.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, fmt.Errorf("db: clearing finished tool tasks: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("db: clearing finished tool tasks: %w", err)
+	}
+	return int(n), nil
+}
+
 // UpdateToolTaskParams rewrites a task's params document (credential
 // scrubbing after a terminal state).
 func (d *DB) UpdateToolTaskParams(ctx context.Context, id, params string) error {

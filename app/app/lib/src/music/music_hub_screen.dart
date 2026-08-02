@@ -2,12 +2,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../auth/auth_controller.dart';
 import '../home/home_shelves.dart';
 import '../home/item_shelf.dart';
+import '../home/mix_shelf.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../sync/sync_providers.dart';
+import '../uploads/add_to_library.dart';
 import 'music_controllers.dart';
 
 /// One tile on the hub: somewhere to go, and how much is behind it.
@@ -83,27 +87,42 @@ class MusicHubScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = WaxSizeClass.of(context);
-    // Compact lays the tiles out two to a row; anything wider fits them
-    // all across one, which is the chip row 6.3 asks for on desktop.
-    final columns = sizeClass.isCompact ? 2 : 3;
 
     return WaxScaffold(
       title: 'Music',
       actions: const <Widget>[SearchAction(), AccountAction()],
       slivers: <Widget>[
-        SliverPadding(
-          padding: sizeClass.gutter + const EdgeInsets.only(top: WaxSpace.s8),
-          sliver: SliverGrid.builder(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              mainAxisSpacing: WaxSpace.s12,
-              crossAxisSpacing: WaxSpace.s12,
-              mainAxisExtent: _IndexTile.extentFor(context),
+        // Compact browses through a tile grid, two to a row. Anything
+        // wider gets the slim chip row 6.3 asks for, so the content
+        // shelves lead the page instead of a wall of navigation.
+        if (sizeClass.isCompact)
+          SliverPadding(
+            padding: sizeClass.gutter + const EdgeInsets.only(top: WaxSpace.s8),
+            sliver: SliverGrid.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: WaxSpace.s12,
+                crossAxisSpacing: WaxSpace.s12,
+                mainAxisExtent: _IndexTile.extentFor(context),
+              ),
+              itemCount: _tiles.length,
+              itemBuilder: (context, index) => _IndexTile(tile: _tiles[index]),
             ),
-            itemCount: _tiles.length,
-            itemBuilder: (context, index) => _IndexTile(tile: _tiles[index]),
+          )
+        else
+          SliverToBoxAdapter(
+            child: Padding(
+              padding:
+                  sizeClass.gutter + const EdgeInsets.only(top: WaxSpace.s8),
+              child: Wrap(
+                spacing: WaxSpace.s8,
+                runSpacing: WaxSpace.s8,
+                children: <Widget>[
+                  for (final tile in _tiles) _IndexChip(tile: tile),
+                ],
+              ),
+            ),
           ),
-        ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s24)),
         ItemShelf(
           shelf: 'music-recent',
@@ -124,8 +143,121 @@ class MusicHubScreen extends ConsumerWidget {
           overline: 'Kept on purpose',
           provider: musicStarredShelfProvider,
         ),
+        const MixShelf(),
+        const _AllEmptyInvitation(),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
+    );
+  }
+}
+
+/// The first-run invitation, drawn only when every shelf has answered
+/// and none of them has anything: a music library that is empty, not one
+/// that is loading or failing, which have their own honest states now.
+class _AllEmptyInvitation extends ConsumerWidget {
+  const _AllEmptyInvitation();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final shelves = <AsyncValue<HomeShelfItems>>[
+      ref.watch(musicRecentlyAddedShelfProvider),
+      ref.watch(musicMostPlayedShelfProvider),
+      ref.watch(musicStarredShelfProvider),
+    ];
+    final mixes = ref.watch(mixCardsProvider);
+    // "Answered" is hasValue, the same test for all four reads: a
+    // refresh is loading WITH a value, so an isLoading test here made
+    // the invitation vanish for every refetch a sync event fans out.
+    // Mixes settle on an error too - they are an extra and their shelf
+    // hides itself then, which must not hold the invitation hostage.
+    final answered =
+        shelves.every((s) => s.hasValue) && (mixes.hasValue || mixes.hasError);
+    final empty =
+        shelves.every((s) => (s.value?.items ?? const []).isEmpty) &&
+        (mixes.value ?? const []).isEmpty;
+    if (!answered || !empty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+    final canUpload =
+        ref.watch(authControllerProvider).value?.user?.uploadEnabled ?? false;
+    final offline = ref.watch(offlineProvider);
+    // The same gate home's add wears: the upload right, and a server to
+    // hand the files to.
+    final offerAdd = canUpload && !offline;
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: EmptyState(
+        title: 'No music yet',
+        message:
+            'Point a library at your music or drop files in. These '
+            'shelves fill themselves as the collection grows and you '
+            'listen.',
+        glyph: WaxIcons.music,
+        actionLabel: offerAdd ? 'Add to library' : null,
+        onAction: offerAdd ? () => showAddToLibrarySheet(context, ref) : null,
+      ),
+    );
+  }
+}
+
+/// One index entry as a slim chip: glyph, label, and the count where a
+/// dimension can answer one. The desktop face of [_IndexTile].
+class _IndexChip extends ConsumerWidget {
+  const _IndexChip({required this.tile});
+
+  final _HubTile tile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = WaxColors.of(context);
+    final dimension = tile.dimension;
+    final count = dimension == null
+        ? null
+        : ref.watch(musicIndexCountProvider(dimension)).value;
+
+    return WaxTappable(
+      semanticsId: SemanticsIds.musicTile(tile.name),
+      label: count == null ? tile.label : '${tile.label}, ${count.label}',
+      onPressed: () => context.go(tile.location),
+      borderRadius: WaxRadius.pill,
+      child: Material(
+        color: colors.surface1,
+        borderRadius: WaxRadius.pill,
+        child: InkWell(
+          onTap: () => context.go(tile.location),
+          borderRadius: WaxRadius.pill,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: WaxSpace.s16,
+              vertical: WaxSpace.s8,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: WaxRadius.pill,
+              border: Border.all(color: colors.hairline),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                WaxIcon(tile.glyph, size: 16, color: colors.accent),
+                const SizedBox(width: WaxSpace.s8),
+                Text(
+                  tile.label,
+                  style: WaxType.label.copyWith(color: colors.textPrimary),
+                ),
+                if (count != null) ...<Widget>[
+                  const SizedBox(width: WaxSpace.s8),
+                  Text(
+                    count.label,
+                    style: WaxType.monoData.copyWith(
+                      color: colors.textTertiary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/colespringer/waxdeck/fixtures"
 
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -550,6 +551,113 @@ func TestCueSplitEndToEnd(t *testing.T) {
 				t.Fatalf("cue sheet survived: %s", e.Name())
 			}
 		}
+	}
+}
+
+func TestToolTaskDeleteAndClear(t *testing.T) {
+	h := newHarnessDirect(t)
+	ctx := context.Background()
+
+	resp := get(t, h.ts, "/api/v1/auth/session", h.token)
+	me := decode[SessionInfo](t, resp)
+	if me.User == nil {
+		t.Fatal("no session user")
+	}
+
+	resp = h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "sam", "password": testPassword,
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create user status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+	sam := loginAs(t, h.ts, "sam", testPassword)
+
+	seed := func(id, owner, state string) {
+		t.Helper()
+		if err := h.store.InsertToolTask(ctx, wdb.ToolTask{
+			ID: id, Type: "acquire", State: state, UserID: owner,
+			Params: "{}", ResultPIDs: "[]", CreatedAtNS: time.Now().UnixNano(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const (
+		adminDone = "tk-01JZX5N8QW3F4V9T2B7KDAD0NE"
+		adminRun  = "tk-01JZX5N8QW3F4V9T2B7KDADRN1"
+		samDone   = "tk-01JZX5N8QW3F4V9T2B7KDSMD0N"
+	)
+	seed(adminDone, me.User.Id, "done")
+	seed(adminRun, me.User.Id, "running")
+	seed(samDone, sam.User.Id, "done")
+
+	// A non-admin cannot delete a row that is not theirs, and learns
+	// nothing from trying: the answer is the read's.
+	resp = reqAs(t, h, "DELETE", "/api/v1/tools/tasks/"+adminDone, sam.Token, nil)
+	if resp.StatusCode != 404 {
+		t.Fatalf("sam deleting admin task status = %d, want 404", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// A task still running refuses: deleting a row out from under a
+	// worker leases nothing back.
+	resp = reqAs(t, h, "DELETE", "/api/v1/tools/tasks/"+adminRun, h.token, nil)
+	if resp.StatusCode != 409 {
+		t.Fatalf("running delete status = %d, want 409", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// The owner deletes a finished row, and it is gone from the read.
+	resp = reqAs(t, h, "DELETE", "/api/v1/tools/tasks/"+adminDone, h.token, nil)
+	if resp.StatusCode != 204 {
+		t.Fatalf("own delete status = %d, want 204", resp.StatusCode)
+	}
+	resp.Body.Close()
+	resp = get(t, h.ts, "/api/v1/tools/tasks/"+adminDone, h.token)
+	if resp.StatusCode != 404 {
+		t.Fatalf("deleted task read status = %d, want 404", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// An administrator may delete any finished row the listing shows.
+	resp = reqAs(t, h, "DELETE", "/api/v1/tools/tasks/"+samDone, h.token, nil)
+	if resp.StatusCode != 204 {
+		t.Fatalf("admin deleting sam's task status = %d, want 204", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// A non-admin's sweep takes their own finished rows and nobody
+	// else's; the admin's failed row survives it.
+	seed("tk-01JZX5N8QW3F4V9T2B7KDADFL1", me.User.Id, "failed")
+	seed("tk-01JZX5N8QW3F4V9T2B7KDSMD02", sam.User.Id, "done")
+	resp = reqAs(t, h, "POST", "/api/v1/tools/tasks/clear-finished", sam.Token, nil)
+	if got := decode[ToolTasksCleared](t, resp); got.Deleted != 1 {
+		t.Fatalf("sam clear deleted = %d, want 1", got.Deleted)
+	}
+	page := decode[ToolTaskPage](t, get(t, h.ts, "/api/v1/tools/tasks", sam.Token))
+	if len(page.Tasks) != 0 {
+		t.Fatalf("sam's log after clear = %+v, want empty", page.Tasks)
+	}
+
+	// An administrator's sweep is as wide as the listing and the
+	// per-row delete: everyone's finished rows go, the running one
+	// stays.
+	seed("tk-01JZX5N8QW3F4V9T2B7KDSMD03", sam.User.Id, "done")
+	resp = reqAs(t, h, "POST", "/api/v1/tools/tasks/clear-finished", h.token, nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("clear status = %d", resp.StatusCode)
+	}
+	cleared := decode[ToolTasksCleared](t, resp)
+	if cleared.Deleted != 2 {
+		t.Fatalf("admin clear deleted = %d, want 2 (own failed + sam's done)", cleared.Deleted)
+	}
+	page = decode[ToolTaskPage](t, get(t, h.ts, "/api/v1/tools/tasks", h.token))
+	ids := map[string]bool{}
+	for _, task := range page.Tasks {
+		ids[task.Id] = true
+	}
+	if len(ids) != 1 || !ids[adminRun] {
+		t.Fatalf("after admin clear, tasks = %v", ids)
 	}
 }
 

@@ -268,6 +268,66 @@ func (l *Library) GetToolTaskFor(ctx context.Context, uc *UserCtx, taskID string
 	return toolTaskDTO(t), nil
 }
 
+// DeleteToolTaskFor removes one finished task under the same
+// owner-or-admin visibility the read has; a task still queued or
+// running answers conflict, because deleting a row out from under a
+// worker leases nothing back.
+func (l *Library) DeleteToolTaskFor(ctx context.Context, uc *UserCtx, taskID string) error {
+	t, err := l.db.ToolTaskByID(ctx, taskID)
+	if errors.Is(err, wdb.ErrNotFound) {
+		return errNotFound("no task with id " + taskID)
+	}
+	if err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	if t.UserID != uc.ID && !uc.Admin {
+		// The read's answer, not "forbidden": that would confirm the
+		// row exists.
+		return errNotFound("no task with id " + taskID)
+	}
+	if t.State != taskStateDone && t.State != taskStateFailed {
+		return &Error{Kind: KindConflict, Msg: "the task has not finished"}
+	}
+	// The statement re-checks ownership: empty scopes an administrator
+	// to any row, the convention the listing uses.
+	owner := uc.ID
+	if uc.Admin {
+		owner = ""
+	}
+	deleted, err := l.db.DeleteToolTask(ctx, taskID, owner)
+	if err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	if !deleted {
+		// The row moved under us between the read and the guarded
+		// delete; terminal states are final, so the only way is gone.
+		return errNotFound("no task with id " + taskID)
+	}
+	// No task event, deliberately: the marker announces a task's state
+	// changing, and a dismissal changes none. Emitted, it undid the
+	// dismissing client's own in-place removal (the fan-out refetches
+	// the list back to page one) and rang the bell for housekeeping.
+	// Another device's stale row answers 404 on its own dismiss, which
+	// the client reads as already gone.
+	return nil
+}
+
+// ClearFinishedToolTasksFor deletes every finished task the caller can
+// see - everyone's for an administrator, the same scope the listing
+// shows and the per-row delete already grants - and answers how many
+// went. No task event, for the reason DeleteToolTaskFor gives.
+func (l *Library) ClearFinishedToolTasksFor(ctx context.Context, uc *UserCtx) (int, error) {
+	owner := uc.ID
+	if uc.Admin {
+		owner = ""
+	}
+	n, err := l.db.DeleteFinishedToolTasks(ctx, owner)
+	if err != nil {
+		return 0, &Error{Kind: KindInternal, Err: err}
+	}
+	return n, nil
+}
+
 // DrainToolTasks retires exhausted tasks and works one leased task;
 // false means the queue is idle so the caller can sleep.
 func (l *Library) DrainToolTasks(ctx context.Context) bool {

@@ -292,6 +292,7 @@ import 'package:waxdeck_api_gen/src/model/timeline_create.dart';
 import 'package:waxdeck_api_gen/src/model/timeline_info.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task.dart';
 import 'package:waxdeck_api_gen/src/model/tool_task_page.dart';
+import 'package:waxdeck_api_gen/src/model/tool_tasks_cleared.dart';
 import 'package:waxdeck_api_gen/src/model/top_entry.dart';
 import 'package:waxdeck_api_gen/src/model/top_list.dart';
 import 'package:waxdeck_api_gen/src/model/transcoding_limits.dart';
@@ -617,6 +618,7 @@ part 'serializers.g.dart';
   TimelineInfo,
   ToolTask,
   ToolTaskPage,
+  ToolTasksCleared,
   TopEntry,
   TopList,
   TranscodingLimits,

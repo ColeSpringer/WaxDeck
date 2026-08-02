@@ -645,14 +645,14 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
             autofocus: true,
           ),
           const SizedBox(height: WaxSpace.s12),
-          SegmentedButton<String>(
-            segments: const <ButtonSegment<String>>[
-              ButtonSegment<String>(value: 'rss', label: Text('RSS')),
-              ButtonSegment<String>(value: 'youtube', label: Text('YouTube')),
+          WaxSegmented(
+            label: 'Source',
+            segments: const <WaxSegment>[
+              WaxSegment(name: 'rss', label: 'RSS'),
+              WaxSegment(name: 'youtube', label: 'YouTube'),
             ],
-            selected: <String>{_sourceType},
-            onSelectionChanged: (selection) =>
-                setState(() => _sourceType = selection.first),
+            selected: _sourceType,
+            onSelect: (name) => setState(() => _sourceType = name),
           ),
         ],
       ),

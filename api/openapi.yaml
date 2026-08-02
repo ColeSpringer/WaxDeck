@@ -8010,6 +8010,28 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthenticated"
 
+  /tools/tasks/clear-finished:
+    post:
+      operationId: clearFinishedToolTasks
+      summary: Clear finished tasks
+      description: >
+        Deletes every finished or failed task the caller can see and
+        answers how many went: an administrator's sweep clears
+        everyone's rows, the same scope the listing shows and the
+        per-row delete grants. Running and queued tasks are untouched.
+        A POST action rather than a filtered DELETE, matching the
+        library's bulk-delete idiom.
+      tags: [tools]
+      responses:
+        "200":
+          description: How many tasks were deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolTasksCleared"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
   /tools/tasks/{taskId}:
     parameters:
       - $ref: "#/components/parameters/TaskId"
@@ -8032,6 +8054,26 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteToolTask
+      summary: Delete a finished tool task
+      description: >
+        Removes one task from the list once it has reached a
+        terminal state (`done` or `failed`); a queued or running
+        task answers `conflict`, because deleting a row out from
+        under a worker leases nothing back. Same visibility as
+        reading the task: callers delete their own rows, and an
+        administrator may delete any row the listing shows them.
+      tags: [tools]
+      responses:
+        "204":
+          description: Task deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /tools/tasks/{taskId}/events:
     get:
@@ -16467,6 +16509,16 @@ components:
             Task-type-specific result detail once the task finishes,
             for example a migration import's match-and-write report.
             Shapes are documented per task type and may grow fields.
+
+    ToolTasksCleared:
+      type: object
+      description: The result of clearing finished tasks.
+      required: [deleted]
+      properties:
+        deleted:
+          type: integer
+          description: How many tasks were deleted.
+          example: 4
 
     ToolTaskPage:
       type: object

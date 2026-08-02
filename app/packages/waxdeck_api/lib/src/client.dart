@@ -1086,6 +1086,14 @@ abstract interface class WaxDeckRepository {
   /// `GET /tools/tasks/{taskId}`: one task's progress and outcome.
   Future<ToolTask> getToolTask(String taskId);
 
+  /// `DELETE /tools/tasks/{taskId}`: removes one finished task; a task
+  /// still queued or running answers `conflict`.
+  Future<void> deleteToolTask(String taskId);
+
+  /// `POST /tools/tasks/clear-finished`: deletes every finished task
+  /// the caller owns and answers how many went.
+  Future<int> clearFinishedToolTasks();
+
   /// `GET /library/enrichment`: provider roster and coverage.
   Future<EnrichmentStatus> getEnrichmentStatus();
 
@@ -3492,6 +3500,17 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<ToolTask> getToolTask(String taskId) => _guard(() async {
     final response = await _gen.getToolsApi().getToolTask(taskId: taskId);
     return toolTaskFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> deleteToolTask(String taskId) => _guard(() async {
+    await _gen.getToolsApi().deleteToolTask(taskId: taskId);
+  });
+
+  @override
+  Future<int> clearFinishedToolTasks() => _guard(() async {
+    final response = await _gen.getToolsApi().clearFinishedToolTasks();
+    return _require(response.data).deleted;
   });
 
   @override

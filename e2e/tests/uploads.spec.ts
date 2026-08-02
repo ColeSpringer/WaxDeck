@@ -65,7 +65,7 @@ test('two picked files group as one album and import through review', async ({
 
   // Open the add sheet and choose the file upload.
   await clickThrough(
-    page.locator(sem(SemanticsIds.addToLibrary)),
+    page.locator(sem(SemanticsIds.homeAdd)),
     page.locator(sem(SemanticsIds.addUploadFile)),
   );
   const chooser = page.waitForEvent('filechooser');
@@ -233,7 +233,7 @@ test('accounts without upload rights see no upload affordances', async ({
 
   // No add button, and no way into uploads: an account with nothing in
   // the curation group is not offered the group at all.
-  await expect(page.locator(sem(SemanticsIds.addToLibrary))).toHaveCount(0);
+  await expect(page.locator(sem(SemanticsIds.homeAdd))).toHaveCount(0);
   await expect(page.locator(sem(SemanticsIds.navGroup('curation')))).toHaveCount(0);
   await expect(page.locator(sem(SemanticsIds.navDestination('uploads')))).toHaveCount(0);
 });

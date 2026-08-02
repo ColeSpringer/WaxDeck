@@ -176,6 +176,7 @@ abstract final class SemanticsIds {
   static String upgradeResolve(Object itemPid) => 'upgrade-resolve-$itemPid';
 
   // home: Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.
+  static const String homeAdd = 'home-add';
   static String homeMix(Object index) => 'home-mix-$index';
   static const String homeScreen = 'home-screen';
   static String notificationRow(Object index) => 'notification-row-$index';
@@ -186,7 +187,6 @@ abstract final class SemanticsIds {
   static String shelfCard(Object shelf, Object pid) => 'shelf-$shelf-$pid';
 
   // library: The complete item listings and the per-item rows the sync specs drive.
-  static const String addToLibrary = 'add-to-library';
   static String item(Object pid) => 'item-$pid';
   static const String itemDelete = 'item-delete';
   static const String itemDeleteConfirm = 'item-delete-confirm';
@@ -523,7 +523,9 @@ abstract final class SemanticsIds {
   static const String yirServer = 'yir-server';
 
   // tools: Long-running tools and their progress rows.
+  static String taskDismiss(Object id) => 'task-dismiss-$id';
   static String taskRow(Object id) => 'task-row-$id';
+  static const String tasksClearFinished = 'tasks-clear-finished';
 
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
   static const String acquireFormat = 'acquire-format';

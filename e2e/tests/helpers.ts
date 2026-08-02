@@ -115,6 +115,20 @@ export async function chooseFromMenu(
       await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
       await item.waitFor({ timeout: 5_000 });
     }
+    // The menu animates into place - and near a screen edge it is
+    // repositioned as it grows - while a forced click dispatches at
+    // whatever rect the semantics overlay held a frame earlier. That
+    // one-frame disagreement is how choosing "Off" from a menu at the
+    // bottom of the screen landed on the row beneath it and silently
+    // stored the wrong value. Two matching reads a beat apart is the
+    // menu at rest; until then the click would be a coin toss.
+    await expect(async () => {
+      const before = await item.boundingBox();
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      const after = await item.boundingBox();
+      expect(before).toBeTruthy();
+      expect(after).toEqual(before);
+    }).toPass({ timeout: 4_000 });
     await item.click({ force: true });
     if (settled) {
       await settled.waitFor({ timeout: 5_000 });

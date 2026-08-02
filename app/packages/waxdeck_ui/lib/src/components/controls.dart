@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -603,12 +604,13 @@ class _PreciseVerticalDragRecognizer extends VerticalDragGestureRecognizer {
 /// must not - so the owning states clear their drag fields in
 /// didUpdateWidget first, and their abandons no-op when there is
 /// nothing left to let go of.
-class _TrackGestures extends StatelessWidget {
+class _TrackGestures extends StatefulWidget {
   const _TrackGestures({
     required this.enabled,
     required this.width,
     required this.inset,
     required this.onPress,
+    required this.onGlide,
     required this.onDrag,
     required this.onCommit,
     required this.onAbandon,
@@ -626,8 +628,20 @@ class _TrackGestures extends StatelessWidget {
   /// a press just past either end still lands and clamps.
   final double inset;
 
-  /// A press that may yet be cancelled: paint, but apply nothing.
-  final ValueChanged<double> onPress;
+  /// A press that may yet be cancelled, with the device it came from:
+  /// the owners decide per pointer kind whether a press only paints or
+  /// already applies (a mouse click is a decision; a touch may become
+  /// a scroll).
+  final void Function(double fraction, PointerDeviceKind? kind) onPress;
+
+  /// Raw movement before any recogniser has claimed the pointer: paint
+  /// only, never apply. Inside a scroll view a touch drag has to travel
+  /// the platform's disambiguation slop before the track wins the
+  /// arena, and a knob that sat still through that stretch read as the
+  /// control lagging the finger; this is what lets it follow from the
+  /// first event. The owners stop honouring it once the gesture is
+  /// abandoned, so a scroll that wins does not drag the knob along.
+  final ValueChanged<double> onGlide;
 
   /// Movement after the arena is won: paint and, where the control is
   /// live, apply.
@@ -638,53 +652,208 @@ class _TrackGestures extends StatelessWidget {
 
   final Widget child;
 
+  @override
+  State<_TrackGestures> createState() => _TrackGesturesState();
+}
+
+class _TrackGesturesState extends State<_TrackGestures> {
+  /// Whether one of this track's own recognisers has claimed the
+  /// pointer, after which the raw glide below stands down and the
+  /// recogniser's stream drives. A field rather than a build-local:
+  /// gliding repaints per event, and closure state minted inside a
+  /// build would reset under the gesture it is tracking.
+  bool _claimed = false;
+
+  /// Whether the current pointer sequence stopped being this track's:
+  /// its vertical excursion says it is a scroll, or a cancel arrived.
+  bool _dead = false;
+
+  /// Whether this sequence has already been answered with a commit or
+  /// an abandon, so the release fallback below does not answer twice.
+  bool _settled = false;
+
+  /// Where the pointer went down, for the excursion test.
+  double? _downDy;
+
+  /// The one pointer this track is following. The raw listener hears
+  /// every pointer, and a second finger landing on the track mid-drag
+  /// must not reset the latches or move the measurements out from
+  /// under the first.
+  int? _pointer;
+
+  /// Bumped per followed press, so a release's deferred fallback can
+  /// tell it still speaks for the sequence it was scheduled by.
+  int _sequence = 0;
+
+  @override
+  void didUpdateWidget(_TrackGestures old) {
+    super.didUpdateWidget(old);
+    // Disabling mid-gesture nulls the listener callbacks, so the up
+    // that would release the followed pointer never arrives; left
+    // held, every press after re-enabling would be refused.
+    if (!widget.enabled) {
+      _sequence++;
+      _pointer = null;
+      _claimed = false;
+      _dead = false;
+      _settled = true;
+    }
+  }
+
   double _fraction(Offset local) {
-    final track = width - 2 * inset;
+    final track = widget.width - 2 * widget.inset;
     if (track <= 0) return 0;
-    return ((local.dx - inset) / track).clamp(0.0, 1.0);
+    return ((local.dx - widget.inset) / track).clamp(0.0, 1.0);
+  }
+
+  void _commit() {
+    _settled = true;
+    _claimed = false;
+    widget.onCommit();
+  }
+
+  void _abandon() {
+    _settled = true;
+    _claimed = false;
+    _dead = true;
+    widget.onAbandon();
+  }
+
+  void _down(PointerDownEvent event) {
+    if (_pointer != null) return;
+    // Primary button only. The recognisers refuse the rest, so nothing
+    // would ever commit or cancel the press this painted: a right-click
+    // would set a level and pin the knob until the next real gesture.
+    if (event.buttons != kPrimaryButton) return;
+    _pointer = event.pointer;
+    _sequence++;
+    _claimed = false;
+    _dead = false;
+    _settled = false;
+    _downDy = event.position.dy;
+    widget.onPress(_fraction(event.localPosition), event.kind);
+  }
+
+  /// Raw movement. Until a recogniser claims the pointer this is what
+  /// keeps the knob under the finger; once the sequence has clearly
+  /// gone vertical it is a scroll by the same rule the arena will
+  /// apply, and the preview is let go rather than dragged along -
+  /// which matters because no recogniser callback reports that loss
+  /// reliably (a fast scroll rejects the tap before it ever sent its
+  /// down, so its cancel never fires).
+  void _move(PointerMoveEvent event) {
+    if (event.pointer != _pointer) return;
+    if (_claimed || _dead) return;
+    final downDy = _downDy;
+    if (downDy != null && (event.position.dy - downDy).abs() > kTouchSlop) {
+      _abandon();
+      return;
+    }
+    widget.onGlide(_fraction(event.localPosition));
+  }
+
+  /// The release. Whether it resolved anything is only knowable after
+  /// the event finishes routing - the arena closes on the up, then a
+  /// winning tap fires its onTapUp or a won drag its onEnd - so the
+  /// question is deferred past both. When it resolved nothing (the tap
+  /// was rejected before its deadline and every drag lost, which no
+  /// recogniser callback reports), the pressed preview would otherwise
+  /// stay latched for good.
+  void _up(PointerUpEvent event) {
+    if (event.pointer != _pointer) return;
+    _pointer = null;
+    final sequence = _sequence;
+    scheduleMicrotask(() {
+      if (!mounted || sequence != _sequence) return;
+      if (_settled || _claimed) return;
+      _abandon();
+    });
+  }
+
+  /// The platform took the pointer back (a palm rejection, a system
+  /// gesture, the browser reclaiming a touch): nothing else reports
+  /// the loss when no recogniser had claimed it yet.
+  void _cancel(PointerCancelEvent event) {
+    if (event.pointer != _pointer) return;
+    _pointer = null;
+    if (_settled) return;
+    _abandon();
+  }
+
+  /// The tap losing to one of this track's own drags is the gesture
+  /// carrying on, not ending; only a loss while nothing here holds the
+  /// pointer is a real abandonment (a touch scroll that started on the
+  /// track and won before the excursion test could see it).
+  void _tapCancel() {
+    if (_claimed || _settled) return;
+    _abandon();
+  }
+
+  void _dragStart(DragStartDetails details) {
+    _claimed = true;
+    widget.onDrag(_fraction(details.localPosition));
+  }
+
+  void _dragCancel() {
+    // Only a drag that had begun has anything to let go of. A
+    // recogniser also fires its cancel when it merely LOSES the arena -
+    // and on a deliberate click (press, pause, release) both drags lose
+    // at the sweep the release runs, before the winning tap's own
+    // callbacks. Un-gated, those cancels wiped the pressed preview and
+    // the tap then committed the value the slider already had: the
+    // click silently did nothing. The losses this gate swallows are
+    // answered by the release fallback and the raw cancel above.
+    if (!_claimed) return;
+    _abandon();
   }
 
   @override
   Widget build(BuildContext context) {
     return RawGestureDetector(
       behavior: HitTestBehavior.opaque,
-      gestures: !enabled
+      gestures: !widget.enabled
           ? const <Type, GestureRecognizerFactory>{}
           : <Type, GestureRecognizerFactory>{
               TapGestureRecognizer:
                   GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
                     TapGestureRecognizer.new,
                     (recognizer) {
-                      recognizer.onTapDown = (d) =>
-                          onPress(_fraction(d.localPosition));
-                      recognizer.onTapUp = (_) => onCommit();
-                      recognizer.onTapCancel = onAbandon;
+                      // The press itself lands through the raw listener
+                      // below, on the down event rather than at the tap
+                      // deadline; the recogniser's half is the release
+                      // and the arena loss.
+                      recognizer.onTapUp = (_) => _commit();
+                      recognizer.onTapCancel = _tapCancel;
                     },
                   ),
               HorizontalDragGestureRecognizer:
                   GestureRecognizerFactoryWithHandlers<
                     HorizontalDragGestureRecognizer
                   >(HorizontalDragGestureRecognizer.new, (recognizer) {
-                    recognizer.onStart = (d) =>
-                        onDrag(_fraction(d.localPosition));
+                    recognizer.onStart = _dragStart;
                     recognizer.onUpdate = (d) =>
-                        onDrag(_fraction(d.localPosition));
-                    recognizer.onEnd = (_) => onCommit();
-                    recognizer.onCancel = onAbandon;
+                        widget.onDrag(_fraction(d.localPosition));
+                    recognizer.onEnd = (_) => _commit();
+                    recognizer.onCancel = _dragCancel;
                   }),
               _PreciseVerticalDragRecognizer:
                   GestureRecognizerFactoryWithHandlers<
                     _PreciseVerticalDragRecognizer
                   >(_PreciseVerticalDragRecognizer.new, (recognizer) {
-                    recognizer.onStart = (d) =>
-                        onDrag(_fraction(d.localPosition));
+                    recognizer.onStart = _dragStart;
                     recognizer.onUpdate = (d) =>
-                        onDrag(_fraction(d.localPosition));
-                    recognizer.onEnd = (_) => onCommit();
-                    recognizer.onCancel = onAbandon;
+                        widget.onDrag(_fraction(d.localPosition));
+                    recognizer.onEnd = (_) => _commit();
+                    recognizer.onCancel = _dragCancel;
                   }),
             },
-      child: child,
+      child: Listener(
+        onPointerDown: !widget.enabled ? null : _down,
+        onPointerMove: !widget.enabled ? null : _move,
+        onPointerUp: !widget.enabled ? null : _up,
+        onPointerCancel: !widget.enabled ? null : _cancel,
+        child: widget.child,
+      ),
     );
   }
 }
@@ -745,11 +914,12 @@ class WaxSlider extends StatefulWidget {
   final double value;
 
   /// Fired live while a drag moves, once per [step] boundary crossed,
-  /// and once more with the exact value on release. Callers therefore
-  /// hear the level as the finger moves it, which is what a level is
-  /// for; a caller with a round trip behind each write paces itself.
-  /// Null disables the control: the track greys and the semantics say
-  /// so.
+  /// and once more with the exact value on release when the gesture has
+  /// not already delivered exactly it - so a mouse click, which applies
+  /// on press, is one event and never two. Callers therefore hear the
+  /// level as the finger moves it, which is what a level is for; a
+  /// caller with a round trip behind each write paces itself. Null
+  /// disables the control: the track greys and the semantics say so.
   final ValueChanged<double>? onChanged;
 
   /// The accessible name of the level itself ("Volume").
@@ -791,11 +961,24 @@ class _WaxSliderState extends State<WaxSlider> {
   /// back. Cleared when the gesture ends.
   double? _dragValue;
 
+  /// Latched when the gesture is abandoned (a scroll won the arena),
+  /// so the raw glide events that keep arriving under the scroll stop
+  /// painting the knob along with it. Reset by the next press.
+  bool _dead = false;
+
   /// The last step boundary reported while dragging, so the live stream
   /// is one event per step crossed rather than one per frame - the
   /// natural throttle - while the painted knob keeps following the raw
   /// fraction. Null outside a gesture.
   int? _reportedStep;
+
+  /// The last value actually handed to the caller this gesture, so the
+  /// release does not repeat it: a mouse press applies exactly where
+  /// the click lands, and un-deduplicated the commit sent the same
+  /// click a second time - two writes for a caller with a round trip
+  /// behind each one. Null outside a gesture and after touch presses,
+  /// which apply nothing until release.
+  double? _sent;
 
   @override
   void didUpdateWidget(WaxSlider old) {
@@ -807,6 +990,7 @@ class _WaxSliderState extends State<WaxSlider> {
     if (widget.onChanged == null) {
       _dragValue = null;
       _reportedStep = null;
+      _sent = null;
     }
   }
 
@@ -829,31 +1013,69 @@ class _WaxSliderState extends State<WaxSlider> {
   int _stepIndex(double value) =>
       widget.step <= 0 ? 0 : (value / widget.step).round();
 
-  /// A press previews only: it can still lose the arena to a scroll,
-  /// and a level applied on press would survive its own cancellation.
-  void _press(double fraction) {
+  /// A press previews, and from a precise pointer it applies too: a
+  /// mouse click is a decision, and a level that only painted until
+  /// release read as a dead control under a held button - the click
+  /// used to land the moment it was pressed, and going quiet on the
+  /// down-stroke was reported as the control getting worse. A touch
+  /// press stays preview-only, because it can still lose the arena to
+  /// the scroll it may be starting, and a level applied then would
+  /// survive its own cancellation.
+  void _press(double fraction, PointerDeviceKind? kind) {
+    _dead = false;
+    _sent = null;
     setState(() {
       _dragValue = fraction;
       _reportedStep ??= _stepIndex(widget.value);
     });
+    if (kind == PointerDeviceKind.mouse) {
+      // The exact fraction rather than the stepped one: a click is one
+      // decision about one place, and the step stays what it is for -
+      // the throttle a drag's stream needs and a keyboard's increment.
+      _sent = fraction;
+      _reportedStep = _stepIndex(fraction);
+      widget.onChanged!(fraction);
+    }
+  }
+
+  /// Raw movement while the arena still arbitrates: the knob follows
+  /// the pointer from the first event instead of sitting through the
+  /// disambiguation slop a scrollable ancestor imposes, which read as
+  /// the drag lagging the finger. Paint only - the level applies once
+  /// a recogniser actually wins, or at release.
+  void _glide(double fraction) {
+    if (_dead || widget.onChanged == null) return;
+    setState(() => _dragValue = fraction);
   }
 
   /// Movement with the arena won: the knob follows the raw fraction and
   /// the caller hears one value per step boundary crossed.
   void _drag(double fraction) {
+    _dead = false;
     setState(() => _dragValue = fraction);
+    _report(fraction);
+  }
+
+  /// One caller-facing event per step boundary crossed.
+  void _report(double fraction) {
     _reportedStep ??= _stepIndex(widget.value);
     final step = _stepIndex(fraction);
     if (step == _reportedStep) return;
     _reportedStep = step;
-    widget.onChanged!((step * widget.step).clamp(0.0, 1.0));
+    final value = (step * widget.step).clamp(0.0, 1.0);
+    _sent = value;
+    widget.onChanged!(value);
   }
 
   void _commit() {
     // The exact fraction, deliberately not the stepped one: the release
     // lands the level where the finger left it, and the step stays what
-    // it is for - the keyboard and screen-reader increment.
-    widget.onChanged!(_value);
+    // it is for - the keyboard and screen-reader increment. Skipped
+    // when the gesture already delivered exactly this value (a mouse
+    // click applies on press), so one click is one event.
+    final value = _value;
+    if (value != _sent) widget.onChanged!(value);
+    _sent = null;
     setState(() {
       _dragValue = null;
       _reportedStep = null;
@@ -866,6 +1088,8 @@ class _WaxSliderState extends State<WaxSlider> {
   /// nothing held: a disable's late cancel arrives mid-build, after
   /// didUpdateWidget already let go, where setState must not run.
   void _abandon() {
+    _dead = true;
+    _sent = null;
     if (_dragValue == null && _reportedStep == null) return;
     setState(() {
       _dragValue = null;
@@ -897,6 +1121,7 @@ class _WaxSliderState extends State<WaxSlider> {
           width: widget.trackWidth + 2 * widget.endSlop,
           inset: widget.endSlop,
           onPress: _press,
+          onGlide: _glide,
           onDrag: _drag,
           onCommit: _commit,
           onAbandon: _abandon,
@@ -1249,6 +1474,10 @@ const double _barPitch = 3;
 class _WaxSeekBarState extends State<WaxSeekBar> {
   double? _dragFraction;
 
+  /// Latched on abandon so the raw glide events a winning scroll keeps
+  /// sending stop moving the scrub preview; reset by the next press.
+  bool _dead = false;
+
   /// The peaks reduced to the number of bars this width draws.
   ///
   /// Held rather than recomputed in `paint`: the playhead moves several
@@ -1351,6 +1580,7 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
             // late cancel arrives mid-build, after didUpdateWidget
             // already let go, where setState must not run.
             void abandon() {
+              _dead = true;
               if (_dragFraction == null) return;
               setState(() => _dragFraction = null);
             }
@@ -1359,8 +1589,20 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
               enabled: enabled,
               width: constraints.maxWidth,
               inset: 0,
-              onPress: preview,
-              onDrag: preview,
+              // A seek is destructive where a level is not, so a press
+              // previews from every device and commits on release.
+              onPress: (fraction, _) {
+                _dead = false;
+                preview(fraction);
+              },
+              onGlide: (fraction) {
+                if (_dead) return;
+                preview(fraction);
+              },
+              onDrag: (fraction) {
+                _dead = false;
+                preview(fraction);
+              },
               onCommit: commit,
               onAbandon: abandon,
               child: SizedBox(

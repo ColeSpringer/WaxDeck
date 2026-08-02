@@ -332,10 +332,18 @@ class ConnectEndpointController {
 
   Future<void> _activeSeek(Duration position) async {
     final session = queue.session;
-    if (session != null) {
-      await session.seek(position);
-    } else {
+    if (session == null) {
       await engine.seek(position);
+      return;
+    }
+    if (!await session.seek(position)) {
+      // The session announced the failure and is being let go; an ok
+      // here would tell the remote its seek worked while this device
+      // stands an error pane where the transport was.
+      throw const WaxDeckApiException(
+        code: 'internal',
+        message: 'the seek could not load that part of the item',
+      );
     }
   }
 

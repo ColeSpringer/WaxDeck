@@ -133,7 +133,9 @@ class SessionHistorySection extends ConsumerWidget {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Playing ${_title(session)}'),
+          // "Restored", because restore's contract is put-it-back,
+          // paused: nothing is playing when this shows.
+          content: Text('Restored ${_title(session)}'),
           action: SnackBarAction(
             label: 'Undo',
             onPressed: playback.undoReplace,

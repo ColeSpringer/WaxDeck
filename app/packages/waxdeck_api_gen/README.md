@@ -512,6 +512,8 @@ Class | Method | HTTP request | Description
 [*SyncApi*](doc/SyncApi.md) | [**syncCatalog**](doc/SyncApi.md#synccatalog) | **GET** /sync/catalog | Mirror the catalog (snapshot or changed-since delta)
 [*SyncApi*](doc/SyncApi.md) | [**syncServer**](doc/SyncApi.md#syncserver) | **GET** /sync/server | Mirror the caller&#39;s server-side state (changed-since delta)
 [*SystemApi*](doc/SystemApi.md) | [**getHealth**](doc/SystemApi.md#gethealth) | **GET** /health | Liveness and version probe
+[*ToolsApi*](doc/ToolsApi.md) | [**clearFinishedToolTasks**](doc/ToolsApi.md#clearfinishedtooltasks) | **POST** /tools/tasks/clear-finished | Clear finished tasks
+[*ToolsApi*](doc/ToolsApi.md) | [**deleteToolTask**](doc/ToolsApi.md#deletetooltask) | **DELETE** /tools/tasks/{taskId} | Delete a finished tool task
 [*ToolsApi*](doc/ToolsApi.md) | [**getToolTask**](doc/ToolsApi.md#gettooltask) | **GET** /tools/tasks/{taskId} | Inspect a tool task
 [*ToolsApi*](doc/ToolsApi.md) | [**listToolTasks**](doc/ToolsApi.md#listtooltasks) | **GET** /tools/tasks | List tool tasks
 [*ToolsApi*](doc/ToolsApi.md) | [**mergeBook**](doc/ToolsApi.md#mergebook) | **POST** /books/{pid}/merge | Merge a multi-file book
@@ -827,6 +829,7 @@ Class | Method | HTTP request | Description
  - [TimelineInfo](doc/TimelineInfo.md)
  - [ToolTask](doc/ToolTask.md)
  - [ToolTaskPage](doc/ToolTaskPage.md)
+ - [ToolTasksCleared](doc/ToolTasksCleared.md)
  - [TopEntry](doc/TopEntry.md)
  - [TopList](doc/TopList.md)
  - [TranscodingLimits](doc/TranscodingLimits.md)

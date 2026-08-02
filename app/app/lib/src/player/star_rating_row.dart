@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
+
 import '../shell/semantics_ids.dart';
 
 /// Star toggle plus the five-star rating row, shared by the item
@@ -10,6 +11,10 @@ import '../shell/semantics_ids.dart';
 /// two surfaces share one set of interaction rules (the clear-on-repeat
 /// gesture, the disabled-while-loading pass, the single accessibility
 /// node per control) instead of two drifting copies.
+///
+/// The toggle is a heart and the rating is stars, on purpose: they are
+/// different verbs ("keep this" against "grade this"), and one mark for
+/// both would read as a six-star row.
 class StarRatingRow extends StatelessWidget {
   const StarRatingRow({
     super.key,
@@ -48,47 +53,33 @@ class StarRatingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = WaxColors.of(context);
     final stars = rating == null ? 0 : (rating! / 20).round().clamp(0, 5);
-    final label = starLabel(starred);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // excludeSemantics collapses the control to one accessibility
-        // node: the wrapper's label plus the button's own (tooltip-fed)
-        // node would otherwise announce twice.
-        Semantics(
-          identifier: SemanticsIds.starButton(idPrefix),
-          label: label,
-          button: true,
-          excludeSemantics: true,
-          onTap: enabled ? () => onStar(!starred) : null,
-          child: IconButton(
-            key: Key(SemanticsIds.starButton(idPrefix)),
-            tooltip: label,
-            color: starred ? colorScheme.primary : null,
-            onPressed: enabled ? () => onStar(!starred) : null,
-            icon: Icon(starred ? Icons.favorite : Icons.favorite_border),
-          ),
+      children: <Widget>[
+        WaxIconButton(
+          key: Key(SemanticsIds.starButton(idPrefix)),
+          glyph: WaxIcons.heart,
+          active: starred,
+          label: starLabel(starred),
+          semanticsId: SemanticsIds.starButton(idPrefix),
+          color: starred ? colors.accent : colors.textSecondary,
+          onPressed: enabled ? () => onStar(!starred) : null,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: WaxSpace.s8),
         for (var n = 1; n <= 5; n++)
-          Semantics(
-            identifier: SemanticsIds.rating(idPrefix, n),
+          WaxIconButton(
+            key: Key(SemanticsIds.rating(idPrefix, n)),
+            glyph: WaxIcons.star,
+            active: n <= stars,
             label: ratingLabel(n),
-            button: true,
-            excludeSemantics: true,
-            onTap: enabled ? () => onRate(n == stars ? null : n * 20) : null,
-            child: IconButton(
-              key: Key(SemanticsIds.rating(idPrefix, n)),
-              visualDensity: VisualDensity.compact,
-              color: n <= stars ? colorScheme.primary : null,
-              onPressed: enabled
-                  ? () => onRate(n == stars ? null : n * 20)
-                  : null,
-              icon: Icon(n <= stars ? Icons.star : Icons.star_border),
-            ),
+            semanticsId: SemanticsIds.rating(idPrefix, n),
+            color: n <= stars ? colors.accent : colors.textSecondary,
+            onPressed: enabled
+                ? () => onRate(n == stars ? null : n * 20)
+                : null,
           ),
       ],
     );

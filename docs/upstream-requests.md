@@ -62,7 +62,11 @@ sidecar injection seam) all landed and are not repeated here.
   declared `releaseGroupPid` is permanently absent. The enrichment spine
   already keys release groups, so this is a projection rather than new
   identity work. The field is optional in the contract, so the gap is a
-  missing link rather than a broken read.
+  missing link rather than a broken read. There is now a consumer
+  standing on the gap: the metadata editor links its artist and album
+  out of exactly these pids, and the release-group door beside them is
+  the deferred half (deferred-work.md), unbuildable until the
+  projection lands.
 
 ## WaxTap
 

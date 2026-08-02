@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -211,6 +212,76 @@ void main() {
     );
 
     expect(engine.position, const Duration(seconds: 90));
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('the device defaults open a choiceless show with effects on', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow(showPid))
+      ..episodesByShow[showPid] = [testEpisode(episodePid)];
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final container = playbackContainer(repo: repo, engine: engine);
+    container.read(trimSilenceDefaultProvider.notifier).set(true);
+    container.read(voiceBoostDefaultProvider.notifier).set(true);
+    final harness = PlayerHarness(container);
+    harness.play([testEpisode(episodePid)]);
+    await tester.pumpAndSettle();
+
+    final session = container.read(nowPlayingProvider).session!;
+    expect(session.trimEnabled.value, isTrue);
+    expect(session.voiceBoost.value, isTrue);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a stored per-show choice beats the device default', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(
+        testShow(showPid),
+        settings: const SubscriptionSettings(
+          trimSilence: false,
+          voiceBoost: false,
+        ),
+      )
+      ..episodesByShow[showPid] = [testEpisode(episodePid)];
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final container = playbackContainer(repo: repo, engine: engine);
+    container.read(trimSilenceDefaultProvider.notifier).set(true);
+    container.read(voiceBoostDefaultProvider.notifier).set(true);
+    final harness = PlayerHarness(container);
+    harness.play([testEpisode(episodePid)]);
+    await tester.pumpAndSettle();
+
+    final session = container.read(nowPlayingProvider).session!;
+    expect(session.trimEnabled.value, isFalse);
+    expect(session.voiceBoost.value, isFalse);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('music never opens with the spoken-word defaults', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-A')]);
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final container = playbackContainer(repo: repo, engine: engine);
+    container.read(trimSilenceDefaultProvider.notifier).set(true);
+    container.read(voiceBoostDefaultProvider.notifier).set(true);
+    final harness = PlayerHarness(container);
+    harness.play([testItem('tr-A')]);
+    await tester.pumpAndSettle();
+
+    final session = container.read(nowPlayingProvider).session!;
+    expect(session.trimEnabled.value, isFalse);
+    expect(session.voiceBoost.value, isFalse);
     await harness.endPlayback(tester);
   });
 }

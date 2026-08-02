@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/home/home_shelves.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/index_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
@@ -723,6 +724,96 @@ void main() {
         reason: '$name has no tile',
       );
     }
+  });
+
+  testWidgets('compact browses through tiles; wide gets the chip row', (
+    tester,
+  ) async {
+    final repository = FakeRepository();
+    await _pump(
+      tester,
+      const MusicHubScreen(),
+      repository,
+      size: const Size(500, 900),
+    );
+    expect(find.byType(SliverGrid), findsOneWidget);
+  });
+
+  testWidgets('the wide hub leads with content, not a wall of tiles', (
+    tester,
+  ) async {
+    final repository = FakeRepository();
+    await _pump(tester, const MusicHubScreen(), repository);
+    // The index entries are a slim chip row, not the tile grid.
+    expect(find.byType(SliverGrid), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.identifier == SemanticsIds.musicTile('artists'),
+      ),
+      findsWidgets,
+    );
+  });
+
+  testWidgets('a loading shelf ghosts instead of vanishing', (tester) async {
+    final repository = FakeRepository(items: [_track('Coastal')])
+      ..browseGate = Completer<void>();
+    await _pump(tester, const MusicHubScreen(), repository);
+
+    // Before the delay: nothing, exactly like a warm cache would show.
+    expect(find.text('Recently added'), findsNothing);
+
+    // Past the delay the shelf's name and its ghost cards hold the
+    // room, instead of the hub degrading to bare navigation.
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Recently added'), findsOneWidget);
+    expect(find.byType(SkeletonShapes), findsWidgets);
+
+    repository.browseGate!.complete();
+    repository.browseGate = null;
+    await tester.pumpAndSettle();
+    expect(find.byType(SkeletonShapes), findsNothing);
+    expect(find.text('Coastal'), findsWidgets);
+  });
+
+  testWidgets('a failed shelf keeps its name and offers a retry', (
+    tester,
+  ) async {
+    final repository = FakeRepository(items: [_track('Coastal')])
+      ..listError = const WaxDeckApiException(
+        code: 'internal',
+        message: 'the server did not answer',
+      );
+    await _pump(tester, const MusicHubScreen(), repository);
+
+    expect(find.text('Recently added'), findsOneWidget);
+    expect(find.text('Try again'), findsNWidgets(3));
+
+    repository.listError = null;
+    await tester.tap(find.text('Try again').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Coastal'), findsWidgets);
+  });
+
+  testWidgets('a hub with nothing gets an invitation, not bare tiles', (
+    tester,
+  ) async {
+    final repository = FakeRepository();
+    final container = await _pump(tester, const MusicHubScreen(), repository);
+    expect(find.text('No music yet'), findsOneWidget);
+
+    // A sync fan-out refetch is loading WITH the old value; the
+    // invitation must not blink out for the round trip and reappear.
+    container.invalidate(mixCardsProvider);
+    await tester.pump();
+    expect(
+      find.text('No music yet'),
+      findsOneWidget,
+      reason: 'a refresh is not an unanswered read',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('No music yet'), findsOneWidget);
   });
 
   test('a bucket handle survives the round trip through a location', () {

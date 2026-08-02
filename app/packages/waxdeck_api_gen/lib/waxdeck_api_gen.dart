@@ -314,6 +314,7 @@ export 'package:waxdeck_api_gen/src/model/timeline_create.dart';
 export 'package:waxdeck_api_gen/src/model/timeline_info.dart';
 export 'package:waxdeck_api_gen/src/model/tool_task.dart';
 export 'package:waxdeck_api_gen/src/model/tool_task_page.dart';
+export 'package:waxdeck_api_gen/src/model/tool_tasks_cleared.dart';
 export 'package:waxdeck_api_gen/src/model/top_entry.dart';
 export 'package:waxdeck_api_gen/src/model/top_list.dart';
 export 'package:waxdeck_api_gen/src/model/transcoding_limits.dart';

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
@@ -12,6 +14,13 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+
+const _uploader = WaxDeckUser(
+  id: 'us-01JZX5N8QW3F4V9T2B7KDUPLOAD',
+  username: 'uploader',
+  roles: ['member'],
+  uploadEnabled: true,
+);
 
 const _sealed = 'tr-01JZX5N8QW3F4V9T2B7KDSEALED';
 const _halfHeard = 'tr-01JZX5N8QW3F4V9T2B7KDHALF01';
@@ -129,6 +138,25 @@ void main() {
     );
   });
 
+  testWidgets('a loading shelf ghosts instead of vanishing', (tester) async {
+    final repo = _repo()..browseGate = Completer<void>();
+    await _pumpHome(tester, repo);
+
+    // Before the delay: nothing, the same as a warm cache.
+    expect(find.text('Continue listening'), findsNothing);
+
+    // Past it, the shelf's name and ghost cards hold the room.
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Continue listening'), findsOneWidget);
+    expect(find.byType(SkeletonShapes), findsWidgets);
+
+    repo.browseGate!.complete();
+    repo.browseGate = null;
+    await tester.pumpAndSettle();
+    expect(find.byType(SkeletonShapes), findsNothing);
+    expect(find.text('Half Heard'), findsWidgets);
+  });
+
   testWidgets('a shelf with nothing on it is not drawn', (tester) async {
     final repo = _repo();
     repo.browseLists[DiscoveryList.rediscover] = const <ItemSummary>[];
@@ -146,6 +174,39 @@ void main() {
 
     expect(find.text('Nothing here yet'), findsOneWidget);
     expect(_byId(SemanticsIds.shelf('recent')), findsNothing);
+  });
+
+  testWidgets('an uploader gets the add top-right, not a floating one', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..sessionState = const SessionState(authenticated: true, user: _uploader);
+    await _pumpHome(tester, repo);
+
+    // The one floating button in the app is gone; the add sits in the
+    // bar the way every hub's own add does, under the same gate the
+    // FAB had.
+    expect(_byId(SemanticsIds.homeAdd), findsOneWidget);
+    expect(find.byType(WaxFab), findsNothing);
+  });
+
+  testWidgets('a listener without the upload right gets no add', (
+    tester,
+  ) async {
+    final repo = _repo();
+    await _pumpHome(tester, repo);
+    expect(_byId(SemanticsIds.homeAdd), findsNothing);
+  });
+
+  testWidgets('the first-run state carries the add for an uploader', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..sessionState = const SessionState(authenticated: true, user: _uploader);
+    await _pumpHome(tester, repo);
+
+    expect(find.text('Nothing here yet'), findsOneWidget);
+    expect(find.text('Add to library'), findsOneWidget);
   });
 
   testWidgets('the shelves ask for the lists 6.1 names, once each', (

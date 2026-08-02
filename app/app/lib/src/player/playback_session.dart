@@ -33,6 +33,8 @@ class PlaybackSession {
     this.initialPositionMs,
     this.skipMapRetryDelay = const Duration(seconds: 30),
     this.defaultSpeed = 1.0,
+    this.defaultTrimSilence = false,
+    this.defaultVoiceBoost = false,
     this.smartRewind = SmartRewind.off,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
@@ -66,6 +68,13 @@ class PlaybackSession {
   /// exactly the semantics wanted, since changing the default must not
   /// re-rate a book somebody is listening to.
   final double defaultSpeed;
+
+  /// What the spoken-word effects do when the show or book has no
+  /// stored choice of its own: this device's Playback defaults, read
+  /// once at build for the same reason [defaultSpeed] is. Never applied
+  /// to music, which has neither effect to default.
+  final bool defaultTrimSilence;
+  final bool defaultVoiceBoost;
 
   /// How far a resume steps back for context, per this device's
   /// Playback setting. Read once at build for the same reason
@@ -184,6 +193,18 @@ class PlaybackSession {
   /// queue above cannot mistake a part boundary for the end of an item.
   Stream<void> get sessionCompleted => _sessionCompleted.stream;
 
+  final StreamController<Object> _sessionFailed =
+      StreamController<Object>.broadcast();
+
+  /// Fires when the session cannot do what its item needs mid-flight: a
+  /// book part that would not load, a cross-part jump the server
+  /// refused. The verbs that get here are unawaited at every call site
+  /// (a chapter row, a bookmark, the roll off a part's end), so a
+  /// rethrow would be an unhandled async error and a dead tap; this is
+  /// where those failures land instead, for the layer above to surface
+  /// the way it surfaces a failed start.
+  Stream<Object> get sessionFailed => _sessionFailed.stream;
+
   /// The book detail behind an audiobook session (chapters, parts), when
   /// it could be fetched.
   BookDetail? get book => _book;
@@ -233,7 +254,6 @@ class PlaybackSession {
     _engineOwners[engine] = this;
     await _loadConfig();
     if (_disposed) return;
-    await engine.setSpeed(_configuredSpeed());
     try {
       var resumeMs = initialPositionMs;
       if (resumeMs == null) {
@@ -350,10 +370,26 @@ class PlaybackSession {
       }
     }
     if (_disposed) return;
+    // After whichever load branch ran, never before: the engine's rate
+    // is player-level state that outlives sources, so a write up where
+    // the config landed sat two round trips ahead of the load and
+    // audibly re-rated the outgoing media - a 1.5x podcast dropping to
+    // 1x while a tapped track resolved, and the reverse. Here the rate
+    // only ever lands on media this session owns, loaded but not yet
+    // audible.
+    await engine.setSpeed(_configuredSpeed());
+    if (_disposed) return;
     _lastPosition = engine.position;
     _loaded = true;
     _watchEngine();
-    if (autoplay) await engine.play();
+    if (autoplay) {
+      await engine.play();
+    } else if (engine.playing) {
+      // A load-paused start can land over live playback (a session
+      // restored while something plays): the source swap alone does not
+      // stop the transport, and put-it-back-paused means exactly that.
+      await engine.pause();
+    }
   }
 
   /// Takes over media the engine is already playing: this item was
@@ -405,12 +441,17 @@ class PlaybackSession {
     } on WaxDeckApiException {
       // Defaults apply; the player still plays.
     }
+    // The device default is the seam behind the stored choice, spoken
+    // word only: music has neither a trim chip nor a boost to open
+    // with, so a default left on must not leak onto it.
+    final fallbackTrim = isSpokenWord && defaultTrimSilence;
+    final fallbackBoost = isSpokenWord && defaultVoiceBoost;
     trimEnabled.value = _isBook
-        ? (_bookSettings?.trimSilence ?? false)
-        : (_showSettings?.trimSilence ?? false);
+        ? (_bookSettings?.trimSilence ?? fallbackTrim)
+        : (_showSettings?.trimSilence ?? fallbackTrim);
     voiceBoost.value = _isBook
-        ? (_bookSettings?.voiceBoost ?? false)
-        : (_showSettings?.voiceBoost ?? false);
+        ? (_bookSettings?.voiceBoost ?? fallbackBoost)
+        : (_showSettings?.voiceBoost ?? fallbackBoost);
   }
 
   /// The item's own remembered rate, and this device's default behind
@@ -472,19 +513,32 @@ class PlaybackSession {
     // Let go while the part was resolving: loading it now would put this
     // book over whatever took the engine.
     if (_disposed) return;
-    _loadedDurationMs = info.durationMs;
-    _partIndex = info.partIndex;
-    _partCount = info.partCount;
-    _partStartMs = info.partStartMs ?? 0;
-    _skipSpans = const [];
-    _lastJumpedSpan = -1;
-    _skipMapRetried = false;
-    final inPartMs = bookMs - _partStartMs;
+    // The timeline state moves only once the part's media is in the
+    // engine. Written before the load, every checkpoint fired inside it
+    // - and the load's own stop publishes a pause, whose checkpoint is
+    // one - added the new part's start to the old part's engine position
+    // and landed part-shifted on the book timeline; and a load that
+    // threw needed everything rolled back. After it, the fields and the
+    // media cannot disagree whichever way the load went. The skip-map
+    // state rides with them: cleared against the old part, a refused
+    // load would leave trimming silently dead for a part still playing.
+    final partStartMs = info.partStartMs ?? 0;
+    final inPartMs = bookMs - partStartMs;
     await engine.load(
       info.url,
       mimeType: info.mimeType,
       initialPosition: inPartMs > 0 ? Duration(milliseconds: inPartMs) : null,
     );
+    // Let go while the part was loading: the play below would start the
+    // engine on whatever a newer session has since loaded into it.
+    if (_disposed) return;
+    _loadedDurationMs = info.durationMs;
+    _partIndex = info.partIndex;
+    _partCount = info.partCount;
+    _partStartMs = partStartMs;
+    _skipSpans = const [];
+    _lastJumpedSpan = -1;
+    _skipMapRetried = false;
     _lastPosition = engine.position;
     if (trimEnabled.value) unawaited(_loadSkipMap());
     if (autoplay) await engine.play();
@@ -506,18 +560,23 @@ class PlaybackSession {
     required bool autoplay,
   }) async {
     final at = local.partAt(bookMs);
+    final inPartMs = bookMs - at.startMs;
+    // State follows the media, the same ordering as the online path and
+    // for the same arithmetic: this is the one branch whose part-shifted
+    // checkpoint no server write would ever correct - a downloaded part
+    // pruned or corrupt would leave the final checkpoint claiming the
+    // next part at the previous part's position, offline, for good.
+    await engine.load(
+      Uri.file(at.part.path).toString(),
+      initialPosition: inPartMs > 0 ? Duration(milliseconds: inPartMs) : null,
+    );
+    if (_disposed) return;
     _loadedDurationMs = at.part.durationMs ?? 0;
     _partIndex = at.index;
     _partCount = local.parts.length;
     _partStartMs = at.startMs;
     _skipSpans = const [];
     _lastJumpedSpan = -1;
-    final inPartMs = bookMs - at.startMs;
-    await engine.load(
-      Uri.file(at.part.path).toString(),
-      initialPosition: inPartMs > 0 ? Duration(milliseconds: inPartMs) : null,
-    );
-    if (_disposed) return;
     _lastPosition = engine.position;
     if (autoplay) await engine.play();
   }
@@ -582,7 +641,15 @@ class PlaybackSession {
   /// Seeks to a display-timeline position: the book timeline for books
   /// (crossing into another part re-resolves play-info), the media
   /// timeline otherwise.
-  Future<void> seek(Duration position) async {
+  ///
+  /// Answers whether the seek landed. A cross-part jump that fails is
+  /// announced on [sessionFailed] rather than thrown - the UI call
+  /// sites are unawaited (a chapter row, a bookmark, a transcript
+  /// cue), so a rethrow would be an unhandled async error and a dead
+  /// tap. The answer is for the caller that speaks for someone else (a
+  /// routed Connect command): a session being torn down must not be
+  /// acked to the remote as a seek that worked.
+  Future<bool> seek(Duration position) async {
     final targetMs = position.inMilliseconds;
     final withinPart =
         _partIndex == null ||
@@ -590,8 +657,17 @@ class PlaybackSession {
             targetMs <= _partStartMs + _loadedDurationMs);
     if (withinPart) {
       await engine.seek(Duration(milliseconds: targetMs - _partStartMs));
-    } else {
+      return true;
+    }
+    try {
       await _loadPartFor(targetMs, autoplay: engine.playing);
+      return true;
+    } on Object catch (error) {
+      // The failure lands on the error surface: the layer above lets
+      // the session go and stands the same pane a failed start gets,
+      // with the checkpoint at the position the jump left.
+      _announceFailed(error);
+      return false;
     }
   }
 
@@ -724,7 +800,6 @@ class PlaybackSession {
     }
     final info = await repository.getPlayInfo(item.pid);
     if (_disposed) return;
-    _loadedDurationMs = info.durationMs;
     // The same guard the first load carries: web answers "no supported
     // source" for a source it is asked to begin at or past the end, and
     // an episode toggled at its own end is exactly where this lands.
@@ -741,6 +816,9 @@ class PlaybackSession {
           : Duration(milliseconds: info.spanEndMs!),
     );
     if (_disposed) return;
+    // After the load, like the part paths: a reopen that threw keeps
+    // the state of the media the engine still describes.
+    _loadedDurationMs = info.durationMs;
     _lastPosition = engine.position;
     if (playing) await engine.play();
   }
@@ -846,6 +924,7 @@ class PlaybackSession {
     unawaited(_playingSub?.cancel());
     unawaited(_completedSub?.cancel());
     unawaited(_sessionCompleted.close());
+    unawaited(_sessionFailed.close());
     // A start that never got as far as loading has nothing to record,
     // and the engine's position belongs to whatever played before it:
     // writing that as this item's resume point would lose the
@@ -958,13 +1037,17 @@ class PlaybackSession {
       // a server that went away mid-book does not end a book somebody
       // downloaded, which is the whole point of downloading one.
       await _loadPartFor(_partStartMs + _loadedDurationMs, autoplay: true);
-    } on WaxDeckApiException {
-      // Nothing local to carry on from: end the session honestly where
-      // it stopped.
-      _finished = true;
-      unawaited(_checkpoint());
-      unawaited(_reportSession(finished: true));
-      _announceCompleted();
+    } on Object catch (error) {
+      // Nothing to carry on from: the server refused the next part with
+      // nothing local behind it, or the part's media would not open.
+      // Broader than the API type on purpose - an engine failure used
+      // to escape this unawaited zone as an unhandled async error, and
+      // the book stopped dead with no error state and the session still
+      // installed. The failure lands on the error surface instead; the
+      // release that answers it flushes the checkpoint at the boundary
+      // this play actually reached and reports the listen unfinished,
+      // which is what it is.
+      _announceFailed(error);
     }
   }
 
@@ -973,6 +1056,12 @@ class PlaybackSession {
   /// advances the queue cannot outrun this item's own accounting.
   void _announceCompleted() {
     if (!_sessionCompleted.isClosed) _sessionCompleted.add(null);
+  }
+
+  /// Tells the layer above this session could not do what its item
+  /// needed and should be let go, with [error] as the reason to show.
+  void _announceFailed(Object error) {
+    if (!_sessionFailed.isClosed) _sessionFailed.add(error);
   }
 
   /// Mints the idempotency ID the first time playback makes progress and

@@ -185,6 +185,30 @@ class _PlaybackBody extends ConsumerWidget {
                 onChanged: ref.read(smartRewindProvider.notifier).set,
               ),
             ),
+            WaxSettingRow(
+              title: 'Trim silence by default',
+              help:
+                  'Shows and books with no stored choice of their own '
+                  'open with silence trimming on',
+              control: WaxSwitch(
+                value: ref.watch(trimSilenceDefaultProvider),
+                label: 'Trim silence by default',
+                semanticsId: SemanticsIds.setting('trim-default'),
+                onChanged: ref.read(trimSilenceDefaultProvider.notifier).set,
+              ),
+            ),
+            WaxSettingRow(
+              title: 'Voice boost by default',
+              help:
+                  'Shows and books with no stored choice of their own '
+                  'open with loudness normalization on',
+              control: WaxSwitch(
+                value: ref.watch(voiceBoostDefaultProvider),
+                label: 'Voice boost by default',
+                semanticsId: SemanticsIds.setting('boost-default'),
+                onChanged: ref.read(voiceBoostDefaultProvider.notifier).set,
+              ),
+            ),
           ],
         ),
         _Group(
@@ -529,7 +553,7 @@ class _AppearanceBody extends ConsumerWidget {
               // rather than the device, which is why it says so.
               help: 'Follows you to your other devices',
               control: WaxChoice<ThemePref>(
-                value: prefs?.theme ?? ThemePref.dark,
+                value: prefs?.theme ?? ThemePref.system,
                 options: ThemePref.values,
                 labelFor: _themeLabel,
                 label: 'Theme',

@@ -524,6 +524,13 @@ void main() {
     final container = _container(FakeRepository(items: <ItemSummary>[]));
     await _pumpHub(tester, container);
     expect(find.text('No stations yet'), findsOneWidget);
+
+    // The invitation carries its action, the same rule every hub's
+    // empty state follows: the button opens the add dialog rather than
+    // describing the plus somewhere else.
+    await tester.tap(find.text('Add a station'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add station'), findsOneWidget);
   });
 
   testWidgets('the add dialog searches the directory and adds a match', (

@@ -305,6 +305,7 @@ Serializers _$serializers =
           ..add(TimelineInfo.serializer)
           ..add(ToolTask.serializer)
           ..add(ToolTaskPage.serializer)
+          ..add(ToolTasksCleared.serializer)
           ..add(TopEntry.serializer)
           ..add(TopList.serializer)
           ..add(TopListKindEnum.serializer)

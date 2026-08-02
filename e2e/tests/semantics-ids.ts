@@ -175,6 +175,7 @@ export const SemanticsIds = {
   upgradeResolve: (itemPid: string | number) => `upgrade-resolve-${itemPid}`,
 
   // home: Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.
+  homeAdd: 'home-add',
   homeMix: (index: string | number) => `home-mix-${index}`,
   homeScreen: 'home-screen',
   notificationRow: (index: string | number) => `notification-row-${index}`,
@@ -185,7 +186,6 @@ export const SemanticsIds = {
   shelfCard: (shelf: string | number, pid: string | number) => `shelf-${shelf}-${pid}`,
 
   // library: The complete item listings and the per-item rows the sync specs drive.
-  addToLibrary: 'add-to-library',
   item: (pid: string | number) => `item-${pid}`,
   itemDelete: 'item-delete',
   itemDeleteConfirm: 'item-delete-confirm',
@@ -512,7 +512,9 @@ export const SemanticsIds = {
   yirServer: 'yir-server',
 
   // tools: Long-running tools and their progress rows.
+  taskDismiss: (id: string | number) => `task-dismiss-${id}`,
   taskRow: (id: string | number) => `task-row-${id}`,
+  tasksClearFinished: 'tasks-clear-finished',
 
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
   acquireFormat: 'acquire-format',

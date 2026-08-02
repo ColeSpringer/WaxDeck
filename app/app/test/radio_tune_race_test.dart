@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/connect/queue_gateway.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -119,6 +120,52 @@ void main() {
     await harness.endPlayback(tester);
   });
 
+  testWidgets('an interrupt the platform refuses puts the station back', (
+    tester,
+  ) async {
+    // An item start interrupts the station, but the media will not
+    // release: the stream is still audible, and a cleared radio state
+    // would leave sound no surface names and no control can silence.
+    // The station goes back up, the hand-over its restore re-fires
+    // supersedes the item's start - no error pane for a station that
+    // simply would not let go - and the transport is a working stop
+    // button again.
+    final repo = FakeRepository(items: [testItem('tr-A')]);
+    final coastal = _station('ra-1', 'Coastal FM');
+    repo.radioStationsByPid[coastal.pid] = coastal;
+    final engine = FakeEngine();
+    final container = playbackContainer(repo: repo, engine: engine);
+    final harness = PlayerHarness(container);
+
+    final radio = container.read(radioPlaybackProvider.notifier);
+    await radio.play(coastal);
+    await tester.pumpAndSettle();
+    expect(engine.playing, isTrue);
+
+    engine.failNextStop = true;
+    harness.play([testItem('tr-A')]);
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(radioPlaybackProvider).station?.pid,
+      coastal.pid,
+      reason: 'the station still audibly playing is still named',
+    );
+    expect(engine.playing, isTrue, reason: 'the stream never stopped');
+    expect(
+      container.read(nowPlayingProvider).error,
+      isNull,
+      reason: 'the superseded start owns no error pane',
+    );
+
+    await radio.stop();
+    await tester.pumpAndSettle();
+    expect(container.read(radioPlaybackProvider).station, isNull);
+    expect(engine.playing, isFalse, reason: 'the retried stop still works');
+
+    await harness.endPlayback(tester);
+  });
+
   testWidgets('a stop lands on a tune that has not named its station yet', (
     tester,
   ) async {
@@ -150,6 +197,94 @@ void main() {
 
     await harness.endPlayback(tester);
   });
+
+  testWidgets('a tune parked in its load never re-arms after an item wins', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: [testItem('tr-A')]);
+    final station = _station('ra-1', 'Coastal FM');
+    repo.radioStationsByPid[station.pid] = station;
+    final engine = FakeEngine();
+    final container = playbackContainer(repo: repo, engine: engine);
+    final harness = PlayerHarness(container);
+
+    // The tune gets as far as its load and parks inside it: the platform
+    // holds the source, only the resolution is pending.
+    final gate = Completer<void>();
+    engine.loadGate = gate;
+    final tune = container.read(radioPlaybackProvider.notifier).play(station);
+    await tester.pump();
+
+    harness.play([testItem('tr-A')]);
+    await tester.pumpAndSettle();
+    expect(engine.loadedUrl, contains('tr-A'));
+    expect(engine.playing, isTrue);
+
+    gate.complete();
+    await tune;
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(radioPlaybackProvider).station,
+      isNull,
+      reason: 'the parked tune lost the engine and must not publish itself',
+    );
+    expect(
+      engine.loadedUrl,
+      contains('tr-A'),
+      reason: 'nor start its stream over the item that took over',
+    );
+    expect(engine.playing, isTrue);
+
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets(
+    'an ICY title change neither bumps the generation nor blames a verb',
+    (tester) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final station = _station('ra-1', 'Coastal FM');
+      repo.radioStationsByPid[station.pid] = station;
+      final engine = FakeEngine();
+      final container = playbackContainer(repo: repo, engine: engine);
+      final harness = PlayerHarness(container);
+
+      // A start that failed leaves its error on the state, and nothing
+      // clears it while radio plays. The Connect gateway decides whether
+      // a routed command owns a failure by generation stability, so a
+      // bump per ICY tick would hand this stale error to whichever
+      // routed verb happened to be in flight when a song changed.
+      repo.playInfoError = const WaxDeckApiException(
+        code: 'transport',
+        message: 'network unreachable',
+      );
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+      expect(container.read(nowPlayingProvider).error, isNotNull);
+      repo.playInfoError = null;
+
+      final radio = container.read(radioPlaybackProvider.notifier);
+      await radio.play(station);
+      await tester.pumpAndSettle();
+
+      final began = container.read(nowPlayingProvider.notifier).startGeneration;
+      repo.radioNowPlaying[station.pid] = 'Second Song';
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
+      expect(container.read(radioPlaybackProvider).nowPlaying, 'Second Song');
+      expect(
+        container.read(nowPlayingProvider.notifier).startGeneration,
+        began,
+      );
+
+      // The routed skip mid-broadcast answers honestly instead of
+      // throwing the stale error: radio has the engine, nothing steps.
+      expect(await container.read(queueGatewayProvider).next(), isFalse);
+
+      await radio.stop();
+      await harness.endPlayback(tester);
+    },
+  );
 
   testWidgets('a tune leaves the item paused, however many are in flight', (
     tester,

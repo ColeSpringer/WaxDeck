@@ -7,16 +7,12 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
-import '../discovery/discovery_actions.dart';
 import '../downloads/downloads_controller.dart';
 import '../media_view.dart';
 import '../notifications/notifications_bell.dart';
-import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../podcasts/episode_actions.dart';
 import '../podcasts/podcast_shelves.dart';
-import '../providers.dart';
-import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../sync/sync_providers.dart';
 import '../shell/account_chrome.dart';
@@ -26,6 +22,7 @@ import '../uploads/add_to_library.dart';
 import '../uploads/audio_drop_area.dart';
 import 'home_shelves.dart';
 import 'item_shelf.dart';
+import 'mix_shelf.dart';
 
 /// The landing surface: what you were listening to, what is new, and what
 /// is yours and still sealed.
@@ -56,25 +53,27 @@ class HomeScreen extends ConsumerWidget {
       child: WaxScaffold(
         title: 'Home',
         semanticsId: SemanticsIds.homeScreen,
-        actions: const <Widget>[
-          SearchAction(),
-          NotificationsBell(),
-          AccountAction(),
+        actions: <Widget>[
+          const SearchAction(),
+          const NotificationsBell(),
+          // Adding audio is a primary action and home is where it
+          // belongs: every other surface is about one medium, and what
+          // a listener drops in may be any of them. Top-right, because
+          // that is where every hub keeps its own add - home had the
+          // one floating button in the app, which read as a different
+          // app's convention. Hidden without the upload right, which
+          // every path behind it needs, and offline, where there is no
+          // server to hand it to.
+          if (canUpload && !offline)
+            WaxIconButton(
+              glyph: WaxIcons.add,
+              label: 'Add to library',
+              semanticsId: SemanticsIds.homeAdd,
+              onPressed: () => showAddToLibrarySheet(context, ref),
+            ),
+          const AccountAction(),
         ],
         onRefresh: () => refreshHome(ref),
-        // Adding audio is a primary action and home is where it belongs:
-        // every other surface is about one medium, and what a listener
-        // drops in may be any of them. Hidden without the upload right,
-        // which every path behind it needs, and offline, where there is
-        // no server to hand it to.
-        floating: !canUpload || offline
-            ? null
-            : WaxFab(
-                glyph: WaxIcons.add,
-                label: 'Add to library',
-                semanticsId: SemanticsIds.addToLibrary,
-                onPressed: () => showAddToLibrarySheet(context, ref),
-              ),
         slivers: <Widget>[
           if (offline) ...<Widget>[
             const SliverToBoxAdapter(
@@ -105,35 +104,44 @@ class _OnlineHome extends ConsumerWidget {
   const _OnlineHome();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      switch (ref.watch(libraryHasAnythingProvider)) {
-        // A server with nothing in it gets the first-run state rather
-        // than eight empty shelves.
-        AsyncData(value: false) => const SliverFillRemaining(
-          hasScrollBody: false,
-          child: EmptyState(
-            title: 'Nothing here yet',
-            message:
-                'Point a library at your music, follow a show, or drop '
-                'files in. Everything you add turns up on these shelves.',
-            glyph: WaxIcons.home,
-          ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The same gate as the app bar's add: this widget only mounts
+    // online, so the offline half is already decided.
+    final canUpload =
+        ref.watch(authControllerProvider).value?.user?.uploadEnabled ?? false;
+    return switch (ref.watch(libraryHasAnythingProvider)) {
+      // A server with nothing in it gets the first-run state rather
+      // than eight empty shelves.
+      AsyncData(value: false) => SliverFillRemaining(
+        hasScrollBody: false,
+        child: EmptyState(
+          title: 'Nothing here yet',
+          message:
+              'Point a library at your music, follow a show, or drop '
+              'files in. Everything you add turns up on these shelves.',
+          glyph: WaxIcons.home,
+          actionLabel: canUpload ? 'Add to library' : null,
+          onAction: canUpload
+              ? () => showAddToLibrarySheet(context, ref)
+              : null,
         ),
-        AsyncData() => const _Shelves(),
-        AsyncError(:final error) => SliverFillRemaining(
-          hasScrollBody: false,
-          child: ErrorState(
-            title: 'Could not reach the library',
-            message: error is WaxDeckApiException
-                ? error.message
-                : 'The server did not answer.',
-            onRetry: () => ref.invalidate(libraryHasAnythingProvider),
-          ),
+      ),
+      AsyncData() => const _Shelves(),
+      AsyncError(:final error) => SliverFillRemaining(
+        hasScrollBody: false,
+        child: ErrorState(
+          title: 'Could not reach the library',
+          message: error is WaxDeckApiException
+              ? error.message
+              : 'The server did not answer.',
+          onRetry: () => ref.invalidate(libraryHasAnythingProvider),
         ),
-        _ => const SliverToBoxAdapter(
-          child: SkeletonShapes(shape: SkeletonShape.shelf),
-        ),
-      };
+      ),
+      _ => const SliverToBoxAdapter(
+        child: SkeletonShapes(shape: SkeletonShape.shelf),
+      ),
+    };
+  }
 }
 
 /// The shelves, in the order 6.1 lists them.
@@ -164,7 +172,7 @@ class _Shelves extends StatelessWidget {
         overline: 'In your library, still sealed',
         provider: neverPlayedShelfProvider,
       ),
-      const _MixShelf(),
+      const MixShelf(),
       ItemShelf(
         shelf: 'rediscover',
         title: 'Rediscover',
@@ -324,117 +332,5 @@ class _NewEpisodesShelf extends ConsumerWidget {
         ),
       ),
     );
-  }
-}
-
-/// Mixes built from what the caller listens to.
-///
-/// The cards carry seeds, not tracks: a mix is computed fresh per call
-/// and never persisted, so drawing this shelf would otherwise run the
-/// neighbour graph a dozen times on every visit to home. The tap is what
-/// mints one.
-class _MixShelf extends ConsumerWidget {
-  const _MixShelf();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cards = ref.watch(mixCardsProvider).value ?? const <MixCard>[];
-    if (cards.isEmpty) {
-      return const SliverToBoxAdapter(child: SizedBox.shrink());
-    }
-    final store = ref.watch(artworkStoreProvider);
-    final tiles = <MediaTileData>[
-      for (var i = 0; i < cards.length; i++)
-        MediaTileData(
-          title: cards[i].title,
-          subtitle: 'Instant mix',
-          artwork: waxArtwork(store, cards[i].artUrl),
-          domain: WaxDomain.music,
-          semanticsId: SemanticsIds.homeMix(i),
-        ),
-    ];
-    return SliverToBoxAdapter(
-      child: Semantics(
-        // A region rather than a node that swallows its subtree; see
-        // `ItemShelf` for why.
-        container: true,
-        explicitChildNodes: true,
-        identifier: SemanticsIds.shelf('mixes'),
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: WaxSpace.s24),
-          child: ShelfRow(
-            title: 'Made for you',
-            overline: 'Mixes from what you play',
-            items: tiles,
-            onTapItem: (tile) {
-              final at = tiles.indexOf(tile);
-              if (at < 0) return;
-              unawaited(playMixCard(context, ref, cards[at]));
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Mints a mix from a card's seed and plays it.
-///
-/// The same landing the instant-mix sheet uses: the track list is pushed
-/// so there is somewhere to come back to, and the player over it. The
-/// mix's own `basis` rides the list, which is what tells the truth about
-/// whether this was sonic or metadata - no copy here may imply otherwise.
-Future<void> playMixCard(
-  BuildContext context,
-  WidgetRef ref,
-  MixCard card,
-) async {
-  final router = GoRouter.of(context);
-  final messenger = ScaffoldMessenger.of(context);
-  final playback = ref.read(nowPlayingProvider.notifier);
-  try {
-    final mix = await ref
-        .read(repositoryProvider)
-        .createInstantMix(
-          seedPid: card.seedPid,
-          genre: card.genre,
-          adventurousness: ref.read(mixAdventurousnessProvider),
-          size: instantMixSize,
-        );
-    if (mix.items.isEmpty) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('No mix available for ${card.title}')),
-        );
-      return;
-    }
-    // A mix takes a moment to build, and the tap that asked for it is a
-    // play command: it is honoured whether or not the card is still on
-    // screen, and the deck bar is where it shows up. What is conditional
-    // is the navigation - the router outlives this widget, so pushing
-    // unguarded would slam a track list and a player over whichever
-    // destination the visitor walked to meanwhile.
-    playback.play(
-      mix.items,
-      source: QueueSource(kind: QueueSourceKind.mix, label: card.title),
-    );
-    if (!context.mounted) return;
-    unawaited(
-      router.push<void>(
-        WaxRoute.tracks,
-        extra: TrackListArgs(
-          title: card.title,
-          basis: mix.basis,
-          items: mix.items,
-          idPrefix: 'mix',
-        ),
-      ),
-    );
-    unawaited(router.push<void>(WaxRoute.nowPlaying));
-  } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(e.message)));
   }
 }

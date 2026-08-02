@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxTextField;
+import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxChoice, WaxTextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_screen.dart';
 import 'package:waxdeck/src/settings/settings_section_screen.dart';
@@ -355,6 +356,31 @@ void main() {
   });
 
   group('the appearance section', () {
+    test('an unset theme follows the system', () async {
+      final repo = _signedInRepo();
+      final container = ProviderContainer(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+      // Before the document loads, and after it loads with nothing
+      // stored, the platform decides. Only a stored choice departs.
+      expect(container.read(themeModeProvider), ThemeMode.system);
+      await container.read(prefsControllerProvider.future);
+      expect(container.read(themeModeProvider), ThemeMode.system);
+    });
+
+    testWidgets('an unset theme shows System in the picker', (tester) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo();
+      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      await tester.pumpAndSettle();
+
+      final choice = tester.widget<WaxChoice<ThemePref>>(
+        find.byWidgetPredicate((w) => w is WaxChoice<ThemePref>),
+      );
+      expect(choice.value, ThemePref.system);
+    });
+
     testWidgets('the theme picker stores the preference', (tester) async {
       _tallWindow(tester);
       final repo = _signedInRepo();

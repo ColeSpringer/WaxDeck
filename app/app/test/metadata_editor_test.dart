@@ -5,10 +5,16 @@ import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
   child: const MaterialApp(home: MetadataScreen(pid: 'tr-1')),
+);
+
+Widget _routed(FakeRepository repo) => ProviderScope(
+  overrides: [repositoryProvider.overrideWithValue(repo)],
+  child: routedHost(const MetadataScreen(pid: 'tr-1')),
 );
 
 FakeRepository _repo() {
@@ -45,6 +51,32 @@ void main() {
     await tester.pumpWidget(_host(own));
     await tester.pumpAndSettle();
     expect(find.text('Has its own cover'), findsOneWidget);
+  });
+
+  testWidgets('entity links open the artist and album screens', (tester) async {
+    final repo = _repo();
+    repo.metadataEntityPids['tr-1'] = (
+      artistPid: 'ar-01JZX5N8QW3F4V9T2B7KDBREE1',
+      albumPid: 'al-01JZX5N8QW3F4V9T2B7KDBLUES',
+    );
+    await tester.pumpWidget(_routed(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open artist'), findsOneWidget);
+    expect(find.text('Open album'), findsOneWidget);
+
+    // Pushed like a search hit's entity door, so the editor stays
+    // underneath to come back to.
+    await tester.tap(find.text('Open artist'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MetadataScreen), findsNothing);
+  });
+
+  testWidgets('no entity doors without pids to open', (tester) async {
+    await tester.pumpWidget(_routed(_repo()));
+    await tester.pumpAndSettle();
+    expect(find.text('Open artist'), findsNothing);
+    expect(find.text('Open album'), findsNothing);
   });
 
   testWidgets('builds the field form from the kind vocabulary', (tester) async {

@@ -11,8 +11,8 @@ class WaxDeckApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Dark-first per the UX blueprint; the synced theme preference can
-    // lift it, and OLED is the dark build in true black rather than a
+    // The system decides until the synced theme preference says
+    // otherwise; OLED is the dark build in true black rather than a
     // third theme. Art-driven accent stays scoped to player subtrees.
     final spec = ref.watch(waxThemeSpecProvider);
     return MaterialApp.router(

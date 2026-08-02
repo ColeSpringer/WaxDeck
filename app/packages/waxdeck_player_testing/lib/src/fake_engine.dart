@@ -54,6 +54,13 @@ class FakeEngine implements AudioEnginePort {
   /// fires.
   bool failNextSetVolume = false;
 
+  /// Holds the next [load] open until the test completes it, after its
+  /// state has applied: a real platform swaps the source at dispatch and
+  /// only its resolution takes time, so a caller parked in a load has
+  /// already replaced what the engine holds. One-shot - consumed as it
+  /// fires - so the load that takes over afterwards runs free.
+  Completer<void>? loadGate;
+
   /// Fails the next [stop] the way a platform that will not release the
   /// media fails: it throws and nothing about the engine moves. Cleared
   /// as it fires.
@@ -172,6 +179,14 @@ class FakeEngine implements AudioEnginePort {
       failNextLoad = false;
       throw const MediaWillNotOpen();
     }
+    // The real facade stops the transport before replacing sources (the
+    // web platform's per-playlist player cache makes the stop
+    // mandatory), so a session watching the engine hears playing go
+    // false mid-load with the outgoing media's position still standing.
+    // Announced before the first suspension so the event lands exactly
+    // in that window, which is where a checkpoint fired off the pause
+    // has to read the old timeline and not a half-updated one.
+    _setPlaying(false);
     // A fresh load starts a fresh window, preload included.
     await clearPreload();
     loadedUrl = url;
@@ -183,6 +198,9 @@ class FakeEngine implements AudioEnginePort {
     if (!_durations.isClosed) _durations.add(_duration);
     _setPosition(initialPosition ?? Duration.zero);
     _setState(EngineProcessingState.ready);
+    final gate = loadGate;
+    loadGate = null;
+    if (gate != null) await gate.future;
   }
 
   @override

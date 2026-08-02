@@ -129,6 +129,22 @@ void main() {
     );
   });
 
+  testWidgets('the empty state invites the first playlist', (tester) async {
+    final repo = FakeRepository();
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No playlists yet'), findsOneWidget);
+    // The invitation carries its action: the button opens the create
+    // dialog rather than pointing at the plus somewhere else.
+    await tester.tap(find.text('New playlist'));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistNameField),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('yours and the server\'s are separate sections', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     await repo.createPlaylist(name: 'Mine', kind: 'static');

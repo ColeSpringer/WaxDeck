@@ -264,6 +264,40 @@ void main() {
     expect(oks, everyElement(isTrue));
   });
 
+  test('a routed seek that cannot load its part answers ok:false', () async {
+    // The handler acks a command when its verb returns. A cross-part
+    // seek whose load fails announces on sessionFailed rather than
+    // throwing (its UI call sites are unawaited), and returning
+    // normally here told the remote its seek worked while this device
+    // tore the session down and stood an error pane.
+    final h = _build();
+    const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBK0009';
+    h.repo.libraryItems.add(
+      testItem(bookPid, mediaType: MediaType.audiobook, durationMs: 120000),
+    );
+    h.repo.books[bookPid] = testBook(bookPid, durationMs: 120000, partCount: 2);
+    await _cmd(
+      h,
+      'load',
+      args: {
+        'itemPids': [bookPid],
+        'index': 0,
+        'play': true,
+      },
+    );
+
+    h.engine.failNextLoad = true;
+    await _cmd(h, 'seek', id: 'e2', args: {'positionMs': 90000});
+
+    final result = _ofType(h.sent, 'cmd-result').last;
+    expect(result['id'], 'e2');
+    expect(
+      result['ok'],
+      isFalse,
+      reason: 'a seek that tore the session down must not ack as landed',
+    );
+  });
+
   test('routed skips step the same queue the screen has', () async {
     final h = _build();
     h.container.playback.play([testItem(pidA), testItem(pidB)], source: _album);

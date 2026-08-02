@@ -243,6 +243,18 @@ const settingsRegistry = <SettingEntry>[
     keywords: <String>['smart rewind', 'back', 'context', 'podcast', 'book'],
   ),
   SettingEntry(
+    id: 'trim-default',
+    title: 'Trim silence by default',
+    section: SettingsSection.playback,
+    keywords: <String>['silence', 'skip', 'spoken word', 'podcast', 'book'],
+  ),
+  SettingEntry(
+    id: 'boost-default',
+    title: 'Voice boost by default',
+    section: SettingsSection.playback,
+    keywords: <String>['loudness', 'normalize', 'volume', 'speech', 'quiet'],
+  ),
+  SettingEntry(
     id: 'crossfade',
     title: 'Casting crossfade',
     section: SettingsSection.playback,

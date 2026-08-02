@@ -229,6 +229,112 @@ void main() {
       expect(h.engine.position, const Duration(seconds: 60));
       expect(h.engine.playing, isFalse);
     });
+
+    test('restoring a session while playing replaces the audio', () async {
+      final h = _harness();
+      h.repo.playPositions[_b] = 60000;
+      h.container.playback.play([testItem(_a)], source: _album);
+      await pumpEventQueue();
+      expect(h.engine.loadedUrl, contains(_a));
+      expect(h.engine.playing, isTrue);
+
+      // A restored session mints entry ids from zero, and so did the
+      // live queue's first playNow: the current ids collide, and the
+      // entry-change guard alone saw nothing to do - track A kept
+      // playing under B's face forever, with the snackbar naming B.
+      h.container.playback.restore(
+        QueueState.fromStored(
+          StoredQueue(
+            entries: const [
+              StoredQueueEntry(queueId: 'q0', pid: _b, sourceRank: 0),
+            ],
+            currentIndex: 0,
+            shuffled: false,
+            repeat: 'off',
+            sourceKind: 'album',
+            sourceLabel: 'Blue Train',
+            nextQueueId: 1,
+            updatedAt: DateTime.utc(2026, 7, 25),
+          ),
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(h.engine.loadedUrl, contains(_b));
+      expect(h.engine.position, const Duration(seconds: 60));
+      expect(
+        h.engine.playing,
+        isFalse,
+        reason: 'restore means put it back, paused',
+      );
+    });
+
+    test('restoring the identical session reloads it', () async {
+      final h = _harness();
+      h.repo.playPositions[_a] = 60000;
+      h.container.playback.play([testItem(_a)], source: _album);
+      await pumpEventQueue();
+      expect(h.engine.playing, isTrue);
+      expect(h.repo.playInfoCalls.where((c) => c.pid == _a), hasLength(1));
+
+      h.container.playback.restore(
+        QueueState.fromStored(
+          StoredQueue(
+            entries: const [
+              StoredQueueEntry(queueId: 'q0', pid: _a, sourceRank: 0),
+            ],
+            currentIndex: 0,
+            shuffled: false,
+            repeat: 'off',
+            sourceKind: 'album',
+            sourceLabel: 'Kind of Blue',
+            nextQueueId: 1,
+            updatedAt: DateTime.utc(2026, 7, 25),
+          ),
+        ),
+      );
+      await pumpEventQueue();
+
+      // A real reload at the checkpoint, not the old load left standing.
+      expect(h.repo.playInfoCalls.where((c) => c.pid == _a), hasLength(2));
+      expect(h.engine.playing, isFalse);
+    });
+
+    test('the pending pause never leaks into a later advance', () async {
+      final h = _harness();
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+
+      // A colliding restore: the forced start consumes the paused flag.
+      h.container.playback.restore(
+        QueueState.fromStored(
+          StoredQueue(
+            entries: const [
+              StoredQueueEntry(queueId: 'q0', pid: _a, sourceRank: 0),
+              StoredQueueEntry(queueId: 'q1', pid: _b, sourceRank: 1),
+            ],
+            currentIndex: 0,
+            shuffled: false,
+            repeat: 'off',
+            sourceKind: 'album',
+            sourceLabel: 'Kind of Blue',
+            nextQueueId: 2,
+            updatedAt: DateTime.utc(2026, 7, 25),
+          ),
+        ),
+      );
+      await pumpEventQueue();
+      expect(h.engine.playing, isFalse);
+
+      // Pressing play and running A out must start B playing, not
+      // stand it silently paused on a flag nothing consumed.
+      await h.engine.play();
+      await pumpEventQueue();
+      await _runOut(h.engine);
+
+      expect(h.container.queueState.currentPid, _b);
+      expect(h.engine.playing, isTrue);
+    });
   });
 
   group('the end of an item', () {
@@ -580,6 +686,240 @@ void main() {
     expect(h.container.queueState.currentPid, _a);
     expect(h.engine.loadedUrl, contains('/media/radio/'));
   });
+
+  group('engine rate across switches', () {
+    test('a station tuned after a 1.5x show broadcasts at 1x', () async {
+      final h = _harness(items: [testEpisode(_episode)]);
+      h.repo
+        ..addSubscription(
+          testShow(_showPid),
+          settings: const SubscriptionSettings(speed: 1.5),
+        )
+        ..episodesByShow[_showPid] = [testEpisode(_episode)];
+      h.container.playback.play([testEpisode(_episode)], source: _album);
+      await pumpEventQueue();
+      expect(h.engine.speed, 1.5);
+
+      await h.container
+          .read(radioPlaybackProvider.notifier)
+          .play(
+            RadioStation(
+              pid: 'st-1',
+              name: 'Prancing Pony FM',
+              streamUrl: 'https://pony.example/stream',
+              createdAt: DateTime.utc(2026, 7, 25),
+            ),
+          );
+      await pumpEventQueue();
+
+      expect(h.engine.speed, 1.0);
+      expect(h.engine.playing, isTrue);
+    });
+
+    test('a cross-media tap never re-rates the outgoing item', () async {
+      final h = _harness(items: [testItem(_a), testEpisode(_episode)]);
+      h.repo
+        ..addSubscription(
+          testShow(_showPid),
+          settings: const SubscriptionSettings(speed: 1.5),
+        )
+        ..episodesByShow[_showPid] = [testEpisode(_episode)];
+      h.container.playback.play([testEpisode(_episode)], source: _album);
+      await pumpEventQueue();
+      expect(h.engine.speed, 1.5);
+
+      // Hold the track's stream resolution open: the show is audible
+      // through this whole window and must keep its own rate rather
+      // than drop to the track's before the track has any media.
+      final gate = Completer<void>();
+      h.repo.playInfoGate = gate;
+      h.container.playback.play([testItem(_a)], source: _album);
+      await pumpEventQueue();
+      expect(
+        h.engine.speed,
+        1.5,
+        reason: 'the outgoing show keeps its rate while the track resolves',
+      );
+
+      h.repo.playInfoGate = null;
+      gate.complete();
+      await pumpEventQueue();
+
+      expect(h.engine.loadedUrl, contains(_a));
+      expect(h.engine.speed, 1.0);
+    });
+
+    test('a 1.5x show still starts at 1.5x', () async {
+      final h = _harness(items: [testItem(_a), testEpisode(_episode)]);
+      h.repo
+        ..addSubscription(
+          testShow(_showPid),
+          settings: const SubscriptionSettings(speed: 1.5),
+        )
+        ..episodesByShow[_showPid] = [testEpisode(_episode)];
+      // From a 1x track into the show: the relocated rate write still
+      // lands before the show becomes audible.
+      h.container.playback.play([testItem(_a)], source: _album);
+      await pumpEventQueue();
+      expect(h.engine.speed, 1.0);
+
+      h.container.playback.play([testEpisode(_episode)], source: _album);
+      await pumpEventQueue();
+
+      expect(h.engine.speed, 1.5);
+      expect(h.engine.playing, isTrue);
+    });
+  });
+
+  test('an item start silences the station before it resolves', () async {
+    final h = _harness();
+    await h.container
+        .read(radioPlaybackProvider.notifier)
+        .play(
+          RadioStation(
+            pid: 'st-1',
+            name: 'Prancing Pony FM',
+            streamUrl: 'https://pony.example/stream',
+            createdAt: DateTime.utc(2026, 7, 25),
+          ),
+        );
+    await pumpEventQueue();
+    expect(h.engine.playing, isTrue);
+
+    // Hold the item's stream resolution open: an item start runs several
+    // round trips before its load replaces the source, and this is the
+    // window the station used to keep playing through, audibly, under an
+    // item face that said the podcast was on.
+    final gate = Completer<void>();
+    h.repo.playInfoGate = gate;
+    h.container.playback.play([testItem(_a)], source: _album);
+    await pumpEventQueue();
+
+    expect(
+      h.engine.playing,
+      isFalse,
+      reason: 'the station goes quiet as the start begins, not when it ends',
+    );
+    expect(h.container.read(radioPlaybackProvider).station, isNull);
+
+    h.repo.playInfoGate = null;
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(h.engine.loadedUrl, contains(_a));
+    expect(h.engine.playing, isTrue);
+  });
+
+  test('an empty-queue start racing a tune loses to the station', () async {
+    final h = _harness();
+    // A pid-only start with its resolution held open: the window before
+    // any session exists, which the hand-over's session guard used to
+    // skip entirely - the parked start woke unsuperseded and loaded its
+    // item over the station that had just won the engine.
+    final gate = Completer<void>();
+    h.repo.getItemGate = gate;
+    final started = h.container.playback.playPids([
+      _a,
+    ], source: QueueSource.none);
+    await pumpEventQueue();
+
+    await h.container
+        .read(radioPlaybackProvider.notifier)
+        .play(
+          RadioStation(
+            pid: 'st-1',
+            name: 'Prancing Pony FM',
+            streamUrl: 'https://pony.example/stream',
+            createdAt: DateTime.utc(2026, 7, 25),
+          ),
+        );
+    await pumpEventQueue();
+    expect(h.engine.playing, isTrue);
+
+    h.repo.getItemGate = null;
+    gate.complete();
+    await started;
+    await pumpEventQueue();
+
+    expect(
+      h.engine.loadedUrl,
+      contains('/media/radio/'),
+      reason: 'the parked start must not load its item over the station',
+    );
+    expect(h.engine.playing, isTrue);
+    expect(h.container.read(nowPlayingProvider).session, isNull);
+    expect(h.container.read(currentSessionRegistryProvider).current, isNull);
+    expect(h.container.read(radioPlaybackProvider).station, isNotNull);
+  });
+
+  test(
+    'a tune landing in the boundary window never adopts the crossing',
+    () async {
+      final h = _harness();
+      h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+      await pumpEventQueue();
+      await _skipTo(h.engine, 190000);
+      expect(h.engine.preloadedUrl, contains(_b));
+
+      // Cross the boundary and land a tune before the boundary event is
+      // dispatched: the crossing's adopt has no media load of its own, so
+      // a session built here would run its checkpoint timer against the
+      // station's stream and write the crossed-into item's pid at the
+      // station's position.
+      h.engine.advance(const Duration(milliseconds: _trackMs));
+      final tune = h.container
+          .read(radioPlaybackProvider.notifier)
+          .play(
+            RadioStation(
+              pid: 'st-1',
+              name: 'Prancing Pony FM',
+              streamUrl: 'https://pony.example/stream',
+              createdAt: DateTime.utc(2026, 7, 25),
+            ),
+          );
+      await pumpEventQueue();
+      await tune;
+      await pumpEventQueue();
+
+      expect(h.engine.loadedUrl, contains('/media/radio/'));
+      expect(h.engine.playing, isTrue);
+      expect(h.container.read(nowPlayingProvider).session, isNull);
+      expect(h.container.read(currentSessionRegistryProvider).current, isNull);
+      expect(h.repo.putPlayStateCalls.where((c) => c.pid == _b), isEmpty);
+    },
+  );
+
+  test(
+    'a start that dies before its session leaves the radio silent',
+    () async {
+      final h = _harness();
+      await h.container
+          .read(radioPlaybackProvider.notifier)
+          .play(
+            RadioStation(
+              pid: 'st-1',
+              name: 'Prancing Pony FM',
+              streamUrl: 'https://pony.example/stream',
+              createdAt: DateTime.utc(2026, 7, 25),
+            ),
+          );
+      await pumpEventQueue();
+      expect(h.engine.playing, isTrue);
+
+      // A pid the server does not know (a routed queue, a restored one):
+      // the resolve throws before any session exists, so no session
+      // teardown will ever run. The engine has to be silent already, or
+      // the station plays forever under the error pane.
+      await h.container.playback.playPids([
+        'tr-01JZX5N8QW3F4V9T2B7KDGONE01',
+      ], source: QueueSource.none);
+      await pumpEventQueue();
+
+      expect(h.engine.playing, isFalse);
+      expect(h.container.read(nowPlayingProvider).error, isNotNull);
+      expect(h.container.read(radioPlaybackProvider).station, isNull);
+    },
+  );
 
   test('previous at the front leaves a paused queue paused', () async {
     final h = _harness();

@@ -57,17 +57,18 @@ class RadioScreen extends ConsumerWidget {
         if (playback.station != null)
           const SliverToBoxAdapter(child: _StationVolume()),
         switch (stations) {
-          AsyncData(:final value) when value.isEmpty =>
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: EmptyState(
-                title: 'No stations yet',
-                message:
-                    'Search the directory to add your first, or paste a stream '
-                    'URL if you already have one.',
-                glyph: WaxIcons.radio,
-              ),
+          AsyncData(:final value) when value.isEmpty => SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              title: 'No stations yet',
+              message:
+                  'Search the directory to add your first, or paste a stream '
+                  'URL if you already have one.',
+              glyph: WaxIcons.radio,
+              actionLabel: 'Add a station',
+              onAction: () => unawaited(showAddStationDialog(context)),
             ),
+          ),
           AsyncData(:final value) => _StationGrid(
             stations: value,
             playback: playback,
@@ -154,13 +155,16 @@ class _StationVolume extends ConsumerWidget {
     }
     final volume = ref.read(outputVolumeProvider.notifier);
     return Padding(
-      // The scaffold gutter, so the row sits on the same left edge as
-      // the grid and the title instead of against the window.
       padding: WaxSizeClass.of(
         context,
       ).gutter.add(const EdgeInsets.only(bottom: WaxSpace.s16)),
       child: Align(
-        alignment: Alignment.centerLeft,
+        // Centred, because the row belongs to the readout cluster above
+        // it - station name, tune control, level - and that cluster is a
+        // centred stack. Left on the gutter it floated between the
+        // cluster and the grid, attached to neither, which is what "the
+        // slider is under the radio text" was pointing at.
+        alignment: Alignment.center,
         child: WaxSlider(
           value: ref.watch(outputVolumeProvider),
           onChanged: (level) => unawaited(volume.set(level)),

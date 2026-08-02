@@ -183,6 +183,37 @@ final podcastSpeedProvider = NotifierProvider<PodcastSpeed, double>(
 );
 final bookSpeedProvider = NotifierProvider<BookSpeed, double>(BookSpeed.new);
 
+/// Whether spoken word trims silence when the show or book has no
+/// stored choice of its own. Per device like the speed default beside
+/// it: it is about the ears in front of this machine. Off by default,
+/// so nothing changes for a listener who never asked.
+class TrimSilenceDefault extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.trimSilenceDefault;
+
+  @override
+  bool get defaultValue => false;
+}
+
+final trimSilenceDefaultProvider = NotifierProvider<TrimSilenceDefault, bool>(
+  TrimSilenceDefault.new,
+);
+
+/// Whether spoken word opens with loudness normalization when the show
+/// or book has no stored choice. The same per-device scope and the same
+/// quiet default as the trim beside it.
+class VoiceBoostDefault extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.voiceBoostDefault;
+
+  @override
+  bool get defaultValue => false;
+}
+
+final voiceBoostDefaultProvider = NotifierProvider<VoiceBoostDefault, bool>(
+  VoiceBoostDefault.new,
+);
+
 /// Whether each spoken-word effect has explained itself once (5.3).
 ///
 /// Not settings, and deliberately absent from the settings registry:

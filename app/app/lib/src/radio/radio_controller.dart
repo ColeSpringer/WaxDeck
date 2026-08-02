@@ -236,7 +236,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     // is handed out in completion order rather than in tap order, so the
     // tap that came first can wake last, outrank the station the listener
     // actually asked for, and win. The same window hid the tune from
-    // [stop] and [markInterrupted], which used to look for a station this
+    // [stop] and [interrupt], which used to look for a station this
     // had not published yet.
     final tuning = ++_tuning;
     _stopTitlePoll();
@@ -269,6 +269,12 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
           .getRadioPlayInfo(station.pid);
       if (tuning != _tuning) return;
       await engine.load(info.url);
+      if (tuning != _tuning) return;
+      // Engine speed is player-level state and outlives sources, and
+      // radio bypasses the session layer that manages it: without this a
+      // station tuned after a 1.5x podcast broadcasts at 1.5x. A live
+      // stream has no rate of its own, so the dial always means 1x.
+      await engine.setSpeed(1.0);
       if (tuning != _tuning) return;
       await engine.play();
       if (tuning != _tuning) return;
@@ -349,8 +355,9 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     await ref.read(audioEngineProvider).play();
   }
 
-  /// Clears radio state without touching the engine; the player screen
-  /// calls this as it hands the engine to a new item session.
+  /// Clears radio state as an item start takes the engine, and stops the
+  /// engine when a station's sound was the engine's; the playback
+  /// controller awaits this before it resolves the item.
   ///
   /// The generation goes up for the same reason [stop] raises it, and just
   /// as unconditionally: the item session owns the engine from here, and a
@@ -359,10 +366,40 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   /// exactly the tune that had not published one yet, which is the window
   /// this is called in - the controller reaches here while loading an
   /// item, which is what a tune's own first await is waiting on.
-  void markInterrupted() {
+  ///
+  /// The stop is conditional on a published station - established or
+  /// still tuning, either way the engine's sound is radio's, and an item
+  /// start runs several round trips before its own load replaces the
+  /// source, so a stream left running is audible under the item face for
+  /// that whole window. No station published means the engine holds the
+  /// outgoing item, and stopping that would break the seamless replace an
+  /// item-to-item start does.
+  ///
+  /// A stop the platform refuses puts the station back before the
+  /// rethrow: the stream is still audible, and a cleared state would
+  /// leave it with no surface that names it and no control that can
+  /// silence it. The restore re-fires the hand-over listener above
+  /// playback, which supersedes the interrupted start - so the item
+  /// never shows an error for a station that simply would not let go -
+  /// and the rethrow is what stops that start from loading over the
+  /// stream. Restored as established rather than mid-tune: an
+  /// interrupted tune's awaits are dead (the generation moved), so a
+  /// "starting" state would spin forever, while an established one is a
+  /// working stop button.
+  Future<void> interrupt() async {
     _tuning++;
     _stopTitlePoll();
-    if (state.station != null) state = const RadioPlayback();
+    final held = state;
+    final station = held.station;
+    if (station == null) return;
+    state = const RadioPlayback();
+    try {
+      await ref.read(audioEngineProvider).stop();
+    } on Object {
+      state = RadioPlayback(station: station, nowPlaying: held.nowPlaying);
+      _startTitlePoll(station.pid);
+      rethrow;
+    }
   }
 
   /// The in-stream title lives in play-info and only exists while the

@@ -270,6 +270,12 @@ abstract final class WaxIcons {
     IconData(0xE46A, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
+  /// Phosphor `heart`.
+  static const heart = WaxGlyph(
+    IconData(0xE2A8, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE2A8, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
   /// Phosphor `list-bullets`.
   static const queue = WaxGlyph(
     IconData(0xE2F2, fontFamily: _regularFamily, fontPackage: _fontPackage),
@@ -476,6 +482,7 @@ abstract final class WaxIcons {
     'albums': albums,
     'stats': stats,
     'star': star,
+    'heart': heart,
     'queue': queue,
     'addToQueue': addToQueue,
     'lyrics': lyrics,

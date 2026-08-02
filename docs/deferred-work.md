@@ -64,11 +64,11 @@ here waits on upstream.
   produces (ADR-0040). It is bounded and one-off per queue, but a
   cheaper answer would be a version byte in the envelope that tells a
   stale cursor from a mismatched scope, so only the second walks.
-- `[in-repo]` **The metadata editor does not link its entities.** The
-  read carries `artistPid` and `albumPid` now, and nothing on the screen
-  uses them: the artist and album stay plain text where they could open
-  their own screens. `releaseGroupPid` is still absent, so a release-group
-  link waits on the upstream ask.
+- `[upstream]` **The metadata editor has no release-group door.** The
+  artist and album lines link out to their screens now; `releaseGroupPid`
+  is still absent from the read, so that third door waits on the
+  "release-group handle on the item view" ask under WaxBin in
+  upstream-requests.md.
 - `[in-repo]` **The book player draws no waveform.** The server half
   landed: `GET /items/{pid}/waveform` takes a `partIndex` and answers
   the requested part's own envelope, so a multi-file audiobook is
@@ -81,34 +81,13 @@ here waits on upstream.
   catalog exposes `PeaksForItem(itemPID) []model.ItemPeaks`, every
   part's envelope in one read, which is the shape a book-timeline
   waveform is built from.
-- `[in-repo]` **The star and rating row is still Material.** Everything
-  else the player draws came onto the design system with the rebuild onto
-  `PlayerScaffold` (ADR-0039); `StarRatingRow` did not, and it is shared
-  with the artist, album, and book headers, so it is one conversion for
-  four surfaces rather than a leftover of one. What blocks it is the
-  glyph set, not the widget: the row tells a starred item from a rated
-  one by drawing a heart for the first and stars for the second, and
-  `WaxIcons` carries only `star`, so converting today would give the
-  toggle and the five rating stars the same mark. It wants a heart added
-  to the vendored subset, which is a `make icons` run rather than a code
-  change, and then the row and its two callers convert together.
 - `[in-repo]` **Playback defaults 6.13 asks for that Settings does not
   offer.** The section ships skip intervals, per-domain speed, casting
-  crossfade and leveling, the wifi-only preload brake (ADR-0037), and
-  rewind-on-resume (ADR-0041). Three more are specified and unbuilt, in
-  two groups.
-
-  **The web autoplay-overlay preference** needs a mechanism rather than a
-  control: the autoplay gate reports a refusal without offering a
-  standing preference about it.
-
-  **Trim-silence and voice-boost defaults** need only a control. The seam
-  is the one the speed defaults already use - `PlaybackSession` resolves
-  the item's own stored value and falls through to a per-device default -
-  and `trimEnabled` reads `settings?.trimSilence ?? false` a few lines
-  away. Left out because a default that silently turns silence trimming
-  on for every show is a decision worth looking at on its own, where a
-  playback speed is not.
+  crossfade and leveling, the wifi-only preload brake (ADR-0037),
+  rewind-on-resume (ADR-0041), and the trim-silence and voice-boost
+  device defaults. One remains: **the web autoplay-overlay preference**,
+  which needs a mechanism rather than a control - the autoplay gate
+  reports a refusal without offering a standing preference about it.
 - `[in-repo]` **A place cannot be marked offline.** Audiobook bookmarks
   are a live read against the server (ADR-0041): the sheet fetches on
   open and marking one needs a round trip. Everything else a listener
@@ -740,6 +719,14 @@ here waits on upstream.
 
 ## Admin and ops
 
+- `[in-repo]` **No server-side retention sweep for old finished tool
+  tasks.** Rows now clear by hand - a per-row delete and a
+  clear-finished sweep, both caller-scoped - but an account that never
+  visits the tasks screen still accumulates finished rows forever. A
+  cron-side sweep of terminal rows past some age is hygiene the manual
+  clear is not; it wants a retention knob and a place in the
+  maintenance loop rather than growing the bug-batch that added the
+  manual clear.
 - `[in-repo]` **A degraded runtime library reports streaming trouble only
   on the audit entry.** Creating a library at runtime reconciles the
   streaming engine, and when that cannot happen (an engine too old to

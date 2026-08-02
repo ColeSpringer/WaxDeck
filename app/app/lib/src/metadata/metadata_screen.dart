@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../music/music_controllers.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'metadata_controller.dart';
 
@@ -222,6 +225,38 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
                       .read(metadataControllerProvider(widget.pid).notifier)
                       .setLock(field.name, locked: !state.isLocked(field.name)),
                 ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            // The read carries the entity pids; the lines they belong
+            // to are edit fields, so the doors sit beside the form
+            // rather than turning an input into a link. No release-group
+            // door yet: the read carries no releaseGroupPid (upstream
+            // ask).
+            if (state.metadata.artistPid != null ||
+                state.metadata.albumPid != null) ...[
+              Wrap(
+                spacing: 8,
+                children: [
+                  if (state.metadata.artistPid case final artistPid?)
+                    ActionChip(
+                      key: const Key('metadata-open-artist'),
+                      avatar: const Icon(Icons.person_outlined, size: 18),
+                      label: const Text('Open artist'),
+                      onPressed: () => context.push(
+                        WaxRoute.musicBucket(MusicDimension.artists, artistPid),
+                      ),
+                    ),
+                  if (state.metadata.albumPid case final albumPid?)
+                    ActionChip(
+                      key: const Key('metadata-open-album'),
+                      avatar: const Icon(Icons.album_outlined, size: 18),
+                      label: const Text('Open album'),
+                      onPressed: () => context.push(
+                        WaxRoute.musicBucket(MusicDimension.albums, albumPid),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
             ],

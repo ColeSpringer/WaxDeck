@@ -14,20 +14,26 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'home_shelves.dart';
 
+/// How long a shelf loads before its skeleton appears.
+///
+/// The delay is the difference between honesty and jank: a warm cache
+/// answers in a frame or two, and a skeleton that flashes for 80 ms
+/// reads as the layout stuttering rather than as loading. One knob, so
+/// home and the music hub ghost at the same moment.
+const Duration kShelfSkeletonDelay = Duration(milliseconds: 200);
+
 /// One shelf over a discovery list.
 ///
-/// Empty, still loading, and failed are all the same on screen, and each
-/// for its own reason. A shelf that hides while it loads and appears
-/// when it lands is the layout jumping under a thumb, and a skeleton per
-/// shelf would draw eight ghosts on a library that has two - the
-/// screen's own skeleton covers the first frame. A shelf whose read
-/// *failed* hides because the screen already has one error surface, over
-/// the probe that decides whether home has anything at all: a server
-/// that is not answering fails that too and the screen says so once,
-/// rather than eight times. What is left after that is one list failing
-/// while the rest answer, which on an older server is a list it cannot
-/// serve - and hiding it is the right answer to that, not a swallowed
-/// error.
+/// A shelf that is *empty* hides (ADR-0038): nothing enumerates "never
+/// played" but the shelf itself, and an empty row with a heading is a
+/// reproach. Loading and failed used to hide the same way, and a
+/// library without stars or plays degraded the hub to bare navigation
+/// with nothing saying why - so they stopped masquerading as empty:
+/// loading shows the shelf's ghost once [kShelfSkeletonDelay] passes,
+/// and a failed read keeps the shelf's name on screen with a quiet
+/// retry, which is the honest answer for one list failing while the
+/// rest of the screen works. A server that is down entirely never gets
+/// this far - the screen-level probe fails first and says so once.
 class ItemShelf extends ConsumerWidget {
   const ItemShelf({
     super.key,
@@ -58,7 +64,33 @@ class ItemShelf extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(provider).value;
+    final async = ref.watch(provider);
+    if (!async.hasValue) {
+      if (async.hasError) {
+        return SliverToBoxAdapter(
+          child: Semantics(
+            container: true,
+            explicitChildNodes: true,
+            identifier: SemanticsIds.shelf(shelf),
+            child: Padding(
+              padding:
+                  WaxSizeClass.of(context).gutter +
+                  const EdgeInsets.only(bottom: WaxSpace.s24),
+              child: SectionHeader(
+                title: title,
+                overline: overline,
+                actionLabel: 'Try again',
+                onAction: () => ref.invalidate(provider),
+              ),
+            ),
+          ),
+        );
+      }
+      return SliverToBoxAdapter(
+        child: DelayedShelfSkeleton(title: title, overline: overline),
+      );
+    }
+    final state = async.value;
     final items = state?.items ?? const <ItemSummary>[];
     if (items.isEmpty) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
@@ -133,6 +165,64 @@ class ItemShelf extends ConsumerWidget {
     final remaining = progress[item.pid].remainingOf(item.durationMs);
     if (remaining == null) return null;
     return '${short ? formatSpan(remaining) : spellDuration(remaining)} left';
+  }
+}
+
+/// A shelf's ghost - its heading and a row of blank cards - shown only
+/// once [kShelfSkeletonDelay] has passed, so a warm cache never flashes
+/// it. Until then it takes no height, exactly like the hidden shelf it
+/// stands in for.
+class DelayedShelfSkeleton extends StatefulWidget {
+  const DelayedShelfSkeleton({
+    super.key,
+    required this.title,
+    required this.overline,
+  });
+
+  final String title;
+  final String overline;
+
+  @override
+  State<DelayedShelfSkeleton> createState() => _DelayedShelfSkeletonState();
+}
+
+class _DelayedShelfSkeletonState extends State<DelayedShelfSkeleton> {
+  Timer? _timer;
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(kShelfSkeletonDelay, () {
+      if (mounted) setState(() => _visible = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_visible) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: WaxSpace.s24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: WaxSizeClass.of(context).gutter,
+            child: SectionHeader(
+              title: widget.title,
+              overline: widget.overline,
+            ),
+          ),
+          const SkeletonShapes(shape: SkeletonShape.shelf),
+        ],
+      ),
+    );
   }
 }
 

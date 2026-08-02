@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxIcons;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -23,17 +24,17 @@ void main() {
     );
 
     expect(find.byKey(const Key('star-button')), findsOneWidget);
-    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.byIcon(WaxIcons.heart.regular), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('star-button')));
     await tester.pumpAndSettle();
     expect(repo.starredByPid[pid], isTrue);
-    expect(find.byIcon(Icons.favorite), findsOneWidget);
+    expect(find.byIcon(WaxIcons.heart.fill), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('star-button')));
     await tester.pumpAndSettle();
     expect(repo.starredByPid[pid], isFalse);
-    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.byIcon(WaxIcons.heart.regular), findsOneWidget);
     await harness.endPlayback(tester);
   });
 
@@ -55,18 +56,18 @@ void main() {
     await tester.tap(find.byKey(const Key('rating-3')));
     await tester.pumpAndSettle();
     expect(repo.ratingByPid[pid], 60);
-    expect(find.byIcon(Icons.star), findsNWidgets(3));
+    expect(find.byIcon(WaxIcons.star.fill), findsNWidgets(3));
 
     await tester.tap(find.byKey(const Key('rating-5')));
     await tester.pumpAndSettle();
     expect(repo.ratingByPid[pid], 100);
-    expect(find.byIcon(Icons.star), findsNWidgets(5));
+    expect(find.byIcon(WaxIcons.star.fill), findsNWidgets(5));
 
     // Tapping the current rating again clears it.
     await tester.tap(find.byKey(const Key('rating-5')));
     await tester.pumpAndSettle();
     expect(repo.ratingByPid[pid], isNull);
-    expect(find.byIcon(Icons.star_border), findsNWidgets(5));
+    expect(find.byIcon(WaxIcons.star.regular), findsNWidgets(5));
     await harness.endPlayback(tester);
   });
 
@@ -85,8 +86,8 @@ void main() {
       item: testItem(pid),
     );
 
-    expect(find.byIcon(Icons.favorite), findsOneWidget);
-    expect(find.byIcon(Icons.star), findsNWidgets(2));
+    expect(find.byIcon(WaxIcons.heart.fill), findsOneWidget);
+    expect(find.byIcon(WaxIcons.star.fill), findsNWidgets(2));
     await harness.endPlayback(tester);
   });
 
@@ -102,7 +103,7 @@ void main() {
       engine: engine,
       item: testItem(pid),
     );
-    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.byIcon(WaxIcons.heart.regular), findsOneWidget);
 
     // Arm the failure after load, so only the mutation trips it.
     repo.playStateError = const WaxDeckApiException(
@@ -114,12 +115,12 @@ void main() {
     await tester.tap(find.byKey(const Key('star-button')));
     // The optimistic flip lands before the request settles.
     await tester.pump();
-    expect(find.byIcon(Icons.favorite), findsOneWidget);
+    expect(find.byIcon(WaxIcons.heart.fill), findsOneWidget);
 
     // The failure rolls it back and surfaces a snack bar; the fake was
     // never mutated.
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    expect(find.byIcon(WaxIcons.heart.regular), findsOneWidget);
     expect(repo.starredByPid[pid], isNull);
     expect(find.text('Could not save that change'), findsOneWidget);
     await harness.endPlayback(tester);

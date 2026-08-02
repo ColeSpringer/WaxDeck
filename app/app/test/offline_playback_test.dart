@@ -317,9 +317,11 @@ void main() {
     });
 
     test('a crossing with nothing downloaded reports the failure', () async {
-      // The fallback is not a swallow: with no local parts the exception
-      // reaches the caller, which is what lets `start`'s own offline
-      // branch decide what to do about those.
+      // The fallback is not a swallow: with no local parts the failure
+      // lands on the session's error surface for the layer above to
+      // show. Not rethrown from `seek`, whose call sites are unawaited
+      // (a chapter row, a bookmark, a transcript cue) - an escape there
+      // is an unhandled async error and a dead tap.
       final repo = FakeRepository()
         ..books[bookPid] = testBook(bookPid, durationMs: 180000, partCount: 3);
       final engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
@@ -333,10 +335,16 @@ void main() {
       await session.start();
 
       repo.playInfoError = unreachable;
-      await expectLater(
-        session.seek(const Duration(seconds: 150)),
-        throwsA(unreachable),
-      );
+      final failures = <Object>[];
+      final sub = session.sessionFailed.listen(failures.add);
+      await session.seek(const Duration(seconds: 150));
+      await pumpEventQueue();
+
+      expect(failures, [unreachable]);
+      // The loaded part is untouched by the refused resolve, timeline
+      // state included: a checkpoint now still reads on part 0.
+      expect(engine.loadedUrl, contains('part=0'));
+      await sub.cancel();
       await session.dispose();
     });
 

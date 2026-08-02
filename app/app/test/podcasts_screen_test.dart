@@ -188,6 +188,26 @@ void main() {
     expect(find.text('Subscribed Show 1'), findsOneWidget);
   });
 
+  testWidgets('the source selector carries YouTube through', (tester) async {
+    final repo = FakeRepository();
+    await _pump(tester, repo);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastAdd));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('podcast-url-field')),
+      'https://tube.example/@pony',
+    );
+    await tester.tap(find.text('YouTube'));
+    await tester.pump();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSubscribeConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.subscribeCalls.single.sourceType, 'youtube');
+  });
+
   testWidgets('a failed subscribe surfaces the server message', (tester) async {
     final repo = FakeRepository()
       ..subscribeError = const WaxDeckApiException(

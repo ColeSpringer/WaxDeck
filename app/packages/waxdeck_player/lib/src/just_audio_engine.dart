@@ -77,6 +77,21 @@ class JustAudioEngine implements AudioEnginePort {
     _preloadedLength = null;
     _heldDuration = _windowLength(clipStart, clipEnd);
     try {
+      // A hard stop before every replacement, and not an optimisation:
+      // just_audio funnels setAudioSources through one internal playlist
+      // whose id never changes, and its web platform caches source
+      // players by that id - so a second load on a live player finds
+      // the stale cached player, keeps the old element's src, applies
+      // the new initial position as a bare seek, and reports success.
+      // The audible result was the old item playing on under the new
+      // item's face while the new session checkpointed against it.
+      // Stopping first deactivates the platform player, so the load
+      // that follows builds a fresh one with an empty cache. Nothing
+      // gapless is lost: crossings ride the preload window and never
+      // pass through here.
+      if (_player.processingState != ProcessingState.idle) {
+        await _player.stop();
+      }
       await _player.setAudioSources(
         [source],
         initialIndex: 0,

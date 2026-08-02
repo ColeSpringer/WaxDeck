@@ -89,6 +89,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
 
   StreamSubscription<void>? _boundarySub;
   StreamSubscription<void>? _completedSub;
+  StreamSubscription<Object>? _failedSub;
   StreamSubscription<Duration>? _positionFeed;
 
   /// Item summaries the callers already had in hand, so a queue built
@@ -143,8 +144,16 @@ class NowPlayingController extends Notifier<NowPlaying> {
     ref.listen(queueControllerProvider, _onQueueChanged);
     // Radio drives the engine itself, so the item playing has to let go
     // of it rather than keep counting the station's stream as its own.
+    // Gated on the station transition, not on every publish: the ICY
+    // poll mints a fresh state per song change carrying the same
+    // station, and each of those would otherwise reach the hand-over
+    // and bump the start generation - which the Connect gateway reads
+    // to decide whether a routed command owns a failure, so a title
+    // change mid-verb would blame a stale error on an innocent command.
     ref.listen(radioPlaybackProvider, (previous, next) {
-      if (next.station != null) _handOverToRadio();
+      if (next.station != null && previous?.station != next.station) {
+        _handOverToRadio();
+      }
     });
     final standing = ref.read(queueControllerProvider).currentEntry;
     if (standing != null) {
@@ -400,6 +409,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
   void restore(QueueState queue, {bool offerUndo = false}) {
     _pendingPositionMs = null;
     _pendingPaused = true;
+    final began = _startToken;
     ref
         .read(queueControllerProvider.notifier)
         .restore(
@@ -408,6 +418,20 @@ class NowPlayingController extends Notifier<NowPlaying> {
               ? _session?.displayPosition.inMilliseconds ?? 0
               : null,
         );
+    // The queue notified its listeners as it was assigned, so when the
+    // restored current entry's id differs from the playing one's, the
+    // entry change above already started it. When it does not - restored
+    // sessions mint entry ids from zero and so does a live queue's first
+    // playNow, so a collision is ordinary - nothing started: the engine
+    // would keep playing the old audio under the restored queue's UI
+    // forever, and the pending-paused flag would sit armed until some
+    // later advance consumed it and stood silent. The start is forced,
+    // not playback: it loads the restored source over the old one and
+    // honors the paused contract at the checkpoint.
+    if (_startToken != began) return;
+    final entry = ref.read(queueControllerProvider).currentEntry;
+    if (entry == null) return;
+    _inFlight = _start(entry);
   }
 
   /// Takes back the replacement a tap made: the queue that was
@@ -476,17 +500,26 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _entryPositionMs = positionMs;
     _pendingPositionMs = null;
     _pendingPaused = false;
-    // Live radio bypasses sessions; loading an item takes the engine
-    // back, so the radio surface must stop claiming it.
-    ref.read(radioPlaybackProvider.notifier).markInterrupted();
     state = NowPlaying(entry: entry, item: _known[entry.pid]);
     try {
+      // Live radio bypasses sessions; loading an item takes the engine
+      // back, so the radio surface must stop claiming it - and stop its
+      // sound. Awaited, and inside the try, because the interrupt is the
+      // start's first act on the engine: a station audibly playing
+      // through the round trips below is the seam showing, and a start
+      // that dies before its session exists has no other teardown that
+      // would ever silence it. The ordering is total from here: engine
+      // idle, then resolve, then session start, then load.
+      await ref.read(radioPlaybackProvider.notifier).interrupt();
+      if (_superseded(token)) return;
+      // A load starts a fresh window, so whatever was prepared behind
+      // the outgoing item is gone at the engine and gone here. Above the
+      // resolve, so a resolve that throws cannot leave a stale record
+      // suppressing the next legitimate arm.
+      _preload = null;
       final item = await _resolve(entry.pid);
       if (_superseded(token)) return;
       final session = _build(item, initialPositionMs: positionMs);
-      // A load starts a fresh window, so whatever was prepared behind
-      // the outgoing item is gone at the engine and gone here.
-      _preload = null;
       // The engine's owner changes as start() begins, so the outgoing
       // session flushes its final checkpoint and listen report without
       // stopping media it no longer owns.
@@ -519,6 +552,13 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// Takes over a stream the engine is already playing, after it crossed
   /// out of the previous item and into this one.
   Future<void> _adopt(QueueEntry entry, PlayInfo info) async {
+    // The same bail every other start-class entry point has: radio took
+    // the engine between the crossing and the queue catching up, so the
+    // stream is the station's and there is nothing of this item's to
+    // adopt. A session built here would run its checkpoint timer
+    // against the radio stream and write this item's pid at the
+    // station's position.
+    if (_radioOwnsEngine) return;
     final token = ++_startToken;
     _starting = token;
     _sessionEntryId = entry.queueId;
@@ -571,12 +611,18 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// the stream dropped. The queue keeps its entry, so what was playing
   /// is still named; nothing restarts it, because that would load over
   /// the radio the listener just chose.
+  ///
+  /// The token bump is unconditional, session or none: a start still
+  /// resolving has no session installed yet, and guarding the bump on
+  /// one let exactly that start wake up unsuperseded and load its item
+  /// over the station that had just won the engine. Only the farewell
+  /// is session-shaped, so only it stays behind the guard.
   void _handOverToRadio() {
-    final session = _session;
-    if (session == null) return;
     _startToken++;
     _adopting = null;
     unawaited(_dropPreload());
+    final session = _session;
+    if (session == null) return;
     _release(session, _Farewell.handOver);
     _setSession(null);
     state = NowPlaying(entry: state.entry, item: state.item);
@@ -609,6 +655,8 @@ class NowPlayingController extends Notifier<NowPlaying> {
         defaultSpeed: item.mediaType == MediaType.audiobook
             ? ref.read(bookSpeedProvider)
             : ref.read(podcastSpeedProvider),
+        defaultTrimSilence: ref.read(trimSilenceDefaultProvider),
+        defaultVoiceBoost: ref.read(voiceBoostDefaultProvider),
         smartRewind: ref.read(smartRewindProvider),
       );
 
@@ -621,6 +669,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _registry.register(session);
     _setSession(session);
     _completedSub = session.sessionCompleted.listen((_) => _onCompleted());
+    _failedSub = session.sessionFailed.listen(_onSessionFailed);
     // End-of-chapter sleep mode watches the display timeline; the
     // preload rides the same ticks, since when to prepare the next item
     // is a question about how much of this one is left.
@@ -644,8 +693,10 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// between these two calls that is nothing.
   void _release(PlaybackSession? session, _Farewell farewell) {
     unawaited(_completedSub?.cancel());
+    unawaited(_failedSub?.cancel());
     unawaited(_positionFeed?.cancel());
     _completedSub = null;
+    _failedSub = null;
     _positionFeed = null;
     if (session == null) return;
     _registry.unregister(session);
@@ -663,6 +714,21 @@ class NowPlayingController extends Notifier<NowPlaying> {
   void _setSession(PlaybackSession? session) {
     _session = session;
     _connect.onPlaybackChanged();
+  }
+
+  /// The live session could not do what its item needed mid-flight (a
+  /// book part that would not load, a cross-part jump the server
+  /// refused): let it go the way a failed start is let go, so the same
+  /// error pane and retry stand where the transport was. The release
+  /// flushes the checkpoint at the position the failure left, which is
+  /// where the retry resumes.
+  void _onSessionFailed(Object error) {
+    final session = _session;
+    if (session == null) return;
+    debugPrint('playback session failed: $error');
+    _release(session, _Farewell.stop);
+    _setSession(null);
+    state = NowPlaying(entry: state.entry, item: state.item, error: error);
   }
 
   /// The item ended with nothing behind it in the engine: step the

@@ -802,6 +802,10 @@
       "doc": "Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.",
       "ids": [
         {
+          "name": "homeAdd",
+          "id": "home-add"
+        },
+        {
           "name": "homeMix",
           "id": "home-mix-{index}",
           "params": [
@@ -855,10 +859,6 @@
       "name": "library",
       "doc": "The complete item listings and the per-item rows the sync specs drive.",
       "ids": [
-        {
-          "name": "addToLibrary",
-          "id": "add-to-library"
-        },
         {
           "name": "item",
           "id": "item-{pid}",
@@ -2415,11 +2415,22 @@
       "doc": "Long-running tools and their progress rows.",
       "ids": [
         {
+          "name": "taskDismiss",
+          "id": "task-dismiss-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
           "name": "taskRow",
           "id": "task-row-{id}",
           "params": [
             "id"
           ]
+        },
+        {
+          "name": "tasksClearFinished",
+          "id": "tasks-clear-finished"
         }
       ]
     },

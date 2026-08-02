@@ -33,6 +33,10 @@ type feedServer struct {
 	// writes counts feed rewrites, so each one can carry a strictly
 	// newer modification time; see writeFeed.
 	writes int
+	// enclosurePrefix goes between the host and the file in every
+	// enclosure URL. "/hop/7" routes the audio through seven redirects
+	// first, the shape ad-tech prefix chains put on real enclosures.
+	enclosurePrefix string
 }
 
 func newFeedServer(t *testing.T, episodes int) *feedServer {
@@ -56,6 +60,26 @@ func newFeedServer(t *testing.T, episodes int) *feedServer {
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir(fs.dir)))
+	// /hop/<n>/<file>: n redirect hops before the file answers, the way
+	// podtrac-style measurement chains front real enclosures.
+	mux.HandleFunc("/hop/", func(w http.ResponseWriter, r *http.Request) {
+		rest := strings.TrimPrefix(r.URL.Path, "/hop/")
+		slash := strings.IndexByte(rest, '/')
+		if slash < 0 {
+			http.NotFound(w, r)
+			return
+		}
+		n, err := strconv.Atoi(rest[:slash])
+		if err != nil || n < 1 {
+			http.NotFound(w, r)
+			return
+		}
+		target := "/" + rest[slash+1:]
+		if n > 1 {
+			target = fmt.Sprintf("/hop/%d%s", n-1, target)
+		}
+		http.Redirect(w, r, target, http.StatusFound)
+	})
 	fs.ts = httptest.NewServer(mux)
 	t.Cleanup(fs.ts.Close)
 	fs.writeFeed(t, episodes)
@@ -90,9 +114,10 @@ func (fs *feedServer) writeFeed(t *testing.T, n int) {
 			<itunes:duration>%d</itunes:duration>
 			<description><![CDATA[<p>Notes for <b>episode %d</b></p><script>alert(1)</script>]]></description>
 			%s
-			<enclosure url="%s/%s" type="audio/mpeg" length="%d"/>
+			<enclosure url="%s%s/%s" type="audio/mpeg" length="%d"/>
 		</item>`, i+1, i+1, base.AddDate(0, 0, i).Format(time.RFC1123Z),
-			int(fs.specs[i].Duration.Seconds()), i+1, extra, fs.ts.URL, fs.files[i], info.Size())
+			int(fs.specs[i].Duration.Seconds()), i+1, extra,
+			fs.ts.URL, fs.enclosurePrefix, fs.files[i], info.Size())
 	}
 	doc := `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0">
@@ -1297,6 +1322,56 @@ func TestEnclosurePassthrough(t *testing.T) {
 	denied.Body.Close()
 	if denied.StatusCode != 401 {
 		t.Errorf("a token for another pid = %d, want 401", denied.StatusCode)
+	}
+}
+
+// TestEnclosurePassthroughFollowsTrackerChains holds the relay to what
+// real enclosures look like: measurement prefixes stack several
+// redirects in front of the audio (a verified show walks seven hops -
+// podtrac, claritas, pdst, mgln, pscrb, then art19 and its CDN), and a
+// cap tighter than that turned every one of its episodes into a bad
+// gateway. The cap still exists; past ten hops is refused as the loop
+// guard it is.
+func TestEnclosurePassthroughFollowsTrackerChains(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 1)
+	feed.enclosurePrefix = "/hop/7"
+	feed.writeFeed(t, 1)
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	sub := decode[Subscription](t, resp)
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
+	ep := decode[EpisodePage](t, resp).Items[0]
+	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", h.token)
+	info := decode[PlayInfo](t, resp)
+
+	whole := get(t, h.ts, info.Url, "")
+	body, err := io.ReadAll(whole.Body)
+	whole.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if whole.StatusCode != 200 {
+		t.Fatalf("chained passthrough status = %d, want 200", whole.StatusCode)
+	}
+	if len(body) == 0 {
+		t.Fatal("chained passthrough served no bytes")
+	}
+
+	runaway := newFeedServer(t, 1)
+	runaway.enclosurePrefix = "/hop/12"
+	runaway.writeFeed(t, 1)
+	resp = h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": runaway.feedURL()})
+	sub2 := decode[Subscription](t, resp)
+	resp = get(t, h.ts, "/api/v1/podcasts/"+sub2.Show.Pid+"/episodes", h.token)
+	ep2 := decode[EpisodePage](t, resp).Items[0]
+	resp = get(t, h.ts, "/api/v1/items/"+ep2.Pid+"/play-info", h.token)
+	info2 := decode[PlayInfo](t, resp)
+
+	blocked := get(t, h.ts, info2.Url, "")
+	blocked.Body.Close()
+	if blocked.StatusCode != http.StatusBadGateway {
+		t.Fatalf("runaway chain status = %d, want 502", blocked.StatusCode)
 	}
 }
 

@@ -49,16 +49,17 @@ class PlaylistsScreen extends ConsumerWidget {
       ],
       slivers: <Widget>[
         switch (state) {
-          AsyncData() when all.isEmpty => const SliverFillRemaining(
+          AsyncData() when all.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: 'No playlists yet',
               message:
-                  'Make one from the plus above, or add a track to a new '
-                  'list from anywhere it is playing. A smart playlist '
-                  'writes itself from rules and keeps up as the library '
-                  'grows.',
+                  'Make one, or add a track to a new list from anywhere '
+                  'it is playing. A smart playlist writes itself from '
+                  'rules and keeps up as the library grows.',
               glyph: WaxIcons.playlists,
+              actionLabel: 'New playlist',
+              onAction: () => unawaited(showCreatePlaylistDialog(context)),
             ),
           ),
           AsyncData() => _Sections(mine: mine, shared: shared, split: split),

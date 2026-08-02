@@ -77,6 +77,12 @@ abstract final class ClientSettingKeys {
   static const trimSilenceExplained = 'waxdeck.playback.trimExplained';
   static const voiceBoostExplained = 'waxdeck.playback.boostExplained';
 
+  /// What the spoken-word effects do when a show or book has no stored
+  /// choice of its own. Per device like the speed default beside them:
+  /// they are about the ears and the speaker in front of this machine.
+  static const trimSilenceDefault = 'waxdeck.playback.trimSilenceDefault';
+  static const voiceBoostDefault = 'waxdeck.playback.voiceBoostDefault';
+
   /// How far a spoken-word resume steps back for context after a long
   /// enough pause. Per device because it is about how this listener
   /// listens on this machine: a phone picked up on a commute and a

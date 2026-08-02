@@ -85,6 +85,64 @@ void main() {
     });
   });
 
+  group('WaxSegmented', () {
+    testWidgets('unequal labels still get equal segments', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          Center(
+            child: WaxSegmented(
+              label: 'Source',
+              segments: const [
+                WaxSegment(name: 'rss', label: 'RSS'),
+                WaxSegment(name: 'youtube', label: 'YouTube'),
+              ],
+              selected: 'rss',
+              onSelect: (_) {},
+            ),
+          ),
+          height: 120,
+        ),
+      );
+
+      // The component's promise is a partition, not a pair of pills
+      // each sized to its own word: every segment is as wide as the
+      // widest label needs.
+      final rss = tester.getRect(
+        find.ancestor(of: find.text('RSS'), matching: find.byType(WaxTappable)),
+      );
+      final youtube = tester.getRect(
+        find.ancestor(
+          of: find.text('YouTube'),
+          matching: find.byType(WaxTappable),
+        ),
+      );
+      expect(rss.width, youtube.width);
+    });
+
+    testWidgets('reports the tapped segment by name', (tester) async {
+      final picked = <String>[];
+      await tester.pumpWidget(
+        _host(
+          Center(
+            child: WaxSegmented(
+              label: 'Source',
+              segments: const [
+                WaxSegment(name: 'rss', label: 'RSS'),
+                WaxSegment(name: 'youtube', label: 'YouTube'),
+              ],
+              selected: 'rss',
+              onSelect: picked.add,
+            ),
+          ),
+          height: 120,
+        ),
+      );
+
+      await tester.tap(find.text('YouTube'));
+      expect(picked, ['youtube']);
+    });
+  });
+
   group('FilterChipRow', () {
     testWidgets('reports the chip name, not its label', (tester) async {
       final picked = <String>[];

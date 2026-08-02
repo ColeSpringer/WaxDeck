@@ -117,15 +117,17 @@ final prefsControllerProvider = AsyncNotifierProvider<PrefsController, Prefs>(
   PrefsController.new,
 );
 
-/// Material theme mode derived from the synced preference. Dark-first per
-/// the UX blueprint while nothing is stored or loaded yet.
+/// Material theme mode derived from the synced preference. The unset
+/// state follows the platform: someone who never chose a theme has told
+/// the OS what they like, not this app, and dark-on-a-light-desktop was
+/// read as a bug. A stored choice is untouched.
 final themeModeProvider = Provider<ThemeMode>((ref) {
   final prefs = ref.watch(prefsControllerProvider).value;
   return switch (prefs?.theme) {
     ThemePref.system => ThemeMode.system,
     ThemePref.light => ThemeMode.light,
     ThemePref.dark || ThemePref.oled => ThemeMode.dark,
-    null => ThemeMode.dark,
+    null => ThemeMode.system,
   };
 });
 

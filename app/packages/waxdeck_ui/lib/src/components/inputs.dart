@@ -391,16 +391,26 @@ class WaxSegmented extends StatelessWidget {
           borderRadius: WaxRadius.pill,
           border: Border.all(color: colors.hairline),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            for (final segment in segments)
-              _Segment(
-                segment: segment,
-                selected: segment.name == selected,
-                onTap: () => onSelect(segment.name),
-              ),
-          ],
+        // Equal widths are the component's promise, so they are made
+        // here rather than hoped for: the intrinsic pass sizes the row
+        // so every flexed segment gets the widest label's width. A
+        // min-width floor alone let any label past the floor render
+        // wider than its siblings, which is the lopsided pair the add
+        // dialogs shipped with.
+        child: IntrinsicWidth(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              for (final segment in segments)
+                Expanded(
+                  child: _Segment(
+                    segment: segment,
+                    selected: segment.name == selected,
+                    onTap: () => onSelect(segment.name),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

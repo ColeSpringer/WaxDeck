@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
@@ -358,6 +359,50 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(engine.position, const Duration(milliseconds: 1800000));
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a chapter jump the server refuses surfaces the failure', (
+      tester,
+    ) async {
+      final repo = FakeRepository()
+        ..books[_bookPid] = testBook(
+          _bookPid,
+          durationMs: 3600000,
+          partCount: 2,
+          chapters: const [
+            ChapterMark(index: 0, title: 'An Unexpected Party', startMs: 0),
+            ChapterMark(index: 1, title: 'Roast Mutton', startMs: 1860000),
+          ],
+        );
+      final engine = FakeEngine(mediaDuration: const Duration(minutes: 30));
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: _book(),
+      );
+      expect(engine.loadedUrl, contains('part=0'));
+
+      // The server goes away, then the listener taps a chapter in the
+      // other part. The jump used to rethrow into an unawaited call
+      // site and die unseen: a dead tap, with the book playing on as if
+      // nothing had been asked.
+      repo.playInfoError = const WaxDeckApiException(
+        code: 'transport',
+        message: 'network unreachable',
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playerChapter(1)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('player-error')), findsOneWidget);
+      expect(harness.container.read(nowPlayingProvider).session, isNull);
+      expect(engine.playing, isFalse);
+      // The final checkpoint reads on the loaded part's timeline, not
+      // shifted onto the part that refused to resolve.
+      expect(repo.putPlayStateCalls.last.positionMs, lessThan(1800000));
       await harness.endPlayback(tester);
     });
 

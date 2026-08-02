@@ -39,7 +39,10 @@ void main() {
       final gesture = await tester.startGesture(centre);
       await gesture.moveBy(const Offset(30, 0));
       await tester.pump();
-      await gesture.moveBy(const Offset(30, 0));
+      // Deliberately off any step boundary, so the release has an exact
+      // value the live stream has not already delivered: a release that
+      // lands exactly on the last stepped report stays silent.
+      await gesture.moveBy(const Offset(33, 0));
       await tester.pump();
 
       expect(
@@ -63,8 +66,8 @@ void main() {
         greaterThan(before),
         reason: 'release commits the exact final value',
       );
-      // 60 px right of centre on a 200 px track is 0.8 of the way.
-      expect(reported.last, moreOrLessEquals(0.8, epsilon: 0.01));
+      // 63 px right of centre on a 200 px track is 0.815 of the way.
+      expect(reported.last, moreOrLessEquals(0.815, epsilon: 0.001));
     });
 
     testWidgets('a held press hands over to the drag without a stale level', (
@@ -104,6 +107,159 @@ void main() {
       await gesture.up();
       await tester.pump();
       expect(reported.last, moreOrLessEquals(0.8, epsilon: 0.01));
+    });
+
+    testWidgets('the knob follows the finger before the arena settles', (
+      tester,
+    ) async {
+      // Inside a scroll view a touch drag must travel the platform's
+      // disambiguation slop before the track wins the pointer, and the
+      // knob used to sit still through that stretch: the drag read as
+      // lagging the finger. It paints from the first event now, while
+      // the level still applies only once the drag actually wins.
+      final reported = <double>[];
+      await _pump(
+        tester,
+        ListView(
+          children: [
+            Center(
+              child: WaxSlider(
+                value: 0.5,
+                trackWidth: 200,
+                label: 'Volume',
+                onChanged: reported.add,
+              ),
+            ),
+          ],
+        ),
+      );
+
+      final rect = tester.getRect(find.byType(WaxSlider));
+      final gesture = await tester.startGesture(
+        Offset(rect.left + WaxSlider.defaultEndSlop + 100, rect.center.dy),
+      );
+      await gesture.moveBy(const Offset(8, 0));
+      await tester.pump();
+
+      expect(reported, isEmpty, reason: 'nothing applies before a win');
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Volume')).value,
+        '54%',
+        reason: 'the knob already follows the finger',
+      );
+
+      await gesture.moveBy(const Offset(40, 0));
+      await tester.pump();
+      expect(reported, isNotEmpty, reason: 'the drag won and reports live');
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('a scroll that wins lets go of the knob', (tester) async {
+      final reported = <double>[];
+      await _pump(
+        tester,
+        ListView(
+          children: [
+            Center(
+              child: WaxSlider(
+                value: 0.5,
+                trackWidth: 200,
+                label: 'Volume',
+                onChanged: reported.add,
+              ),
+            ),
+            const SizedBox(height: 800),
+          ],
+        ),
+      );
+
+      final rect = tester.getRect(find.byType(WaxSlider));
+      final gesture = await tester.startGesture(
+        Offset(rect.left + WaxSlider.defaultEndSlop + 100, rect.center.dy),
+      );
+      // Vertical past the slop: the list claims the pointer. The raw
+      // glide events keep arriving underneath, and must stop painting.
+      await gesture.moveBy(const Offset(0, 30));
+      await tester.pump();
+      await gesture.moveBy(const Offset(60, 0));
+      await tester.pump();
+
+      expect(reported, isEmpty, reason: 'a touch scroll must not set a level');
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Volume')).value,
+        '50%',
+        reason: 'the knob reverts when the scroll wins and stays put',
+      );
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('a deliberate press-and-release click lands', (tester) async {
+      // Press, pause past the tap deadline, release without moving: the
+      // losing drag recognisers fire their cancels at the sweep the
+      // release runs, before the winning tap's own callbacks, and
+      // un-gated those cancels wiped the pressed preview - the tap then
+      // committed the value the slider already had, a dead tap on the
+      // most careful click there is.
+      final reported = <double>[];
+      await _pump(
+        tester,
+        WaxSlider(
+          value: 0.2,
+          trackWidth: 200,
+          label: 'Volume',
+          onChanged: reported.add,
+        ),
+      );
+
+      final rect = tester.getRect(find.byType(WaxSlider));
+      final gesture = await tester.startGesture(
+        Offset(rect.left + WaxSlider.defaultEndSlop + 150, rect.center.dy),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      await gesture.up();
+      await tester.pump();
+
+      expect(reported, isNotEmpty, reason: 'the held click must land');
+      expect(reported.last, moreOrLessEquals(0.75, epsilon: 0.01));
+    });
+
+    testWidgets('a mouse press applies the level before release', (
+      tester,
+    ) async {
+      // A click used to land the moment it was pressed, and a press
+      // that only painted until release read as a dead control under a
+      // held button. Touch keeps the preview-only press (the held-press
+      // case above); a mouse click is a decision.
+      final reported = <double>[];
+      await _pump(
+        tester,
+        WaxSlider(
+          value: 0.2,
+          trackWidth: 200,
+          label: 'Volume',
+          onChanged: reported.add,
+        ),
+      );
+
+      final rect = tester.getRect(find.byType(WaxSlider));
+      final gesture = await tester.startGesture(
+        Offset(rect.left + WaxSlider.defaultEndSlop + 150, rect.center.dy),
+        kind: PointerDeviceKind.mouse,
+      );
+      // Past the tap deadline, still held: the level has already moved.
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(
+        reported,
+        isNotEmpty,
+        reason: 'a mouse click is a decision, not a preview',
+      );
+      expect(reported.last, moreOrLessEquals(0.75, epsilon: 0.03));
+
+      await gesture.up();
+      await tester.pump();
+      expect(reported.last, moreOrLessEquals(0.75, epsilon: 0.01));
     });
 
     testWidgets('a mouse click with a pixel of drift still sets the level', (
@@ -155,6 +311,122 @@ void main() {
         surfaceDragged,
         isFalse,
         reason: 'the click belongs to the track, not the surface behind it',
+      );
+    });
+
+    testWidgets('one mouse click is one event', (tester) async {
+      // The press applies the exact value and the release must not
+      // repeat it: two events per click is two unordered network writes
+      // for a caller like the remote volume.
+      final reported = <double>[];
+      await _pump(
+        tester,
+        WaxSlider(
+          value: 0.2,
+          trackWidth: 200,
+          label: 'Volume',
+          onChanged: reported.add,
+        ),
+      );
+
+      final rect = tester.getRect(find.byType(WaxSlider));
+      final gesture = await tester.startGesture(
+        Offset(rect.left + WaxSlider.defaultEndSlop + 150, rect.center.dy),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+
+      expect(reported, hasLength(1), reason: 'one decision, one event');
+      expect(reported.single, moreOrLessEquals(0.75, epsilon: 0.01));
+    });
+
+    testWidgets('a secondary click neither sets nor pins the level', (
+      tester,
+    ) async {
+      // The raw listener hears every button and the recognisers refuse
+      // all but the primary one, so nothing would ever commit or cancel
+      // what a right-click pressed: it used to jump the level and leave
+      // the knob pinned at the click. It must be no gesture at all -
+      // and must not eat the primary click that follows.
+      final reported = <double>[];
+      await _pump(
+        tester,
+        WaxSlider(
+          value: 0.2,
+          trackWidth: 200,
+          label: 'Volume',
+          onChanged: reported.add,
+        ),
+      );
+
+      final rect = tester.getRect(find.byType(WaxSlider));
+      final at = Offset(
+        rect.left + WaxSlider.defaultEndSlop + 150,
+        rect.center.dy,
+      );
+      final secondary = await tester.startGesture(
+        at,
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await tester.pump();
+      await secondary.up();
+      await tester.pump();
+
+      expect(reported, isEmpty, reason: 'a right-click is not a level');
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Volume')).value,
+        '20%',
+        reason: 'nothing previews under a refused button',
+      );
+
+      final primary = await tester.startGesture(
+        at,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await primary.up();
+      await tester.pump();
+      expect(reported, isNotEmpty, reason: 'the next real click still lands');
+      expect(reported.last, moreOrLessEquals(0.75, epsilon: 0.01));
+    });
+
+    testWidgets('a platform cancel lets go of the preview', (tester) async {
+      // A palm rejection or a system gesture ends the sequence with a
+      // cancel no recogniser reports while nothing had claimed the
+      // pointer; unanswered, the pressed preview stayed latched at the
+      // press for good.
+      final reported = <double>[];
+      await _pump(
+        tester,
+        WaxSlider(
+          value: 0.2,
+          trackWidth: 200,
+          label: 'Volume',
+          onChanged: reported.add,
+        ),
+      );
+
+      final rect = tester.getRect(find.byType(WaxSlider));
+      final gesture = await tester.startGesture(
+        Offset(rect.left + WaxSlider.defaultEndSlop + 150, rect.center.dy),
+      );
+      await tester.pump();
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Volume')).value,
+        '75%',
+        reason: 'the press previews',
+      );
+
+      await gesture.cancel();
+      await tester.pump();
+      expect(reported, isEmpty, reason: 'a cancelled press applies nothing');
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Volume')).value,
+        '20%',
+        reason: 'the preview reverts when the platform takes the pointer',
       );
     });
 
@@ -212,6 +484,26 @@ void main() {
         tester.getSemantics(find.bySemanticsLabel('Volume')).value,
         '20%',
         reason: 'the knob reads the value again, not the dead preview',
+      );
+
+      // The disable also swallowed the release (the listener callbacks
+      // were nulled), so the track must let go of the followed pointer
+      // itself or every press after re-enabling is refused.
+      final reported = <double>[];
+      await pumpSlider(reported.add);
+      await tester.tapAt(
+        Offset(rect.left + WaxSlider.defaultEndSlop + 150, rect.center.dy),
+      );
+      await tester.pump();
+      expect(
+        reported,
+        isNotEmpty,
+        reason: 're-enabled, the next press must land',
+      );
+      expect(
+        reported.last,
+        moreOrLessEquals(0.75, epsilon: 0.01),
+        reason: 'landed where it was pressed, not a commit of the old value',
       );
     });
 

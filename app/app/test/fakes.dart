@@ -413,6 +413,10 @@ class FakeRepository implements WaxDeckRepository {
   /// So a test can tell a bucket-wide shuffle from a page of it.
   final List<({String facet, String facetKey, int? seed})> scopedBrowses = [];
 
+  /// When set, every [browse] waits on it before answering, so a shelf
+  /// can be held loading while a test looks at what it draws meanwhile.
+  Completer<void>? browseGate;
+
   @override
   Future<ItemPage> browse(
     DiscoveryList list, {
@@ -424,6 +428,7 @@ class FakeRepository implements WaxDeckRepository {
     int? seed,
   }) async {
     browseCalls.add((list: list, mediaType: mediaType));
+    await browseGate?.future;
     if (facet != null) {
       scopedBrowses.add((facet: facet, facetKey: facetKey ?? '', seed: seed));
     }
@@ -480,8 +485,14 @@ class FakeRepository implements WaxDeckRepository {
   @override
   String artUrlFor(String pid) => '/api/v1/items/$pid/art';
 
+  /// When set, [getItem] waits on it before answering, so a test can
+  /// hold an entry's resolution open - the window before any session
+  /// exists - and act while it is in flight.
+  Completer<void>? getItemGate;
+
   @override
   Future<ItemDetail> getItem(String pid) async {
+    await getItemGate?.future;
     final item = libraryItems.firstWhere((i) => i.pid == pid);
     return ItemDetail(
       pid: item.pid,
@@ -2621,11 +2632,16 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<MetadataFields> getMetadataFields() async => metadataFields;
 
+  /// Entity pids the metadata read carries, per item pid.
+  final Map<String, ({String? artistPid, String? albumPid})>
+  metadataEntityPids = {};
+
   @override
   Future<ItemMetadata> getItemMetadata(String pid) async {
     final error = metadataError;
     if (error != null) throw error;
     final item = libraryItems.where((i) => i.pid == pid).firstOrNull;
+    final entities = metadataEntityPids[pid];
     return ItemMetadata(
       pid: pid,
       mediaType: item?.mediaType ?? MediaType.music,
@@ -2641,6 +2657,8 @@ class FakeRepository implements WaxDeckRepository {
       unofficial: unofficialPids.contains(pid),
       hasArtwork: artworkPids.contains(pid) || ownArtworkPids.contains(pid),
       hasOwnArtwork: ownArtworkPids.contains(pid),
+      artistPid: entities?.artistPid,
+      albumPid: entities?.albumPid,
     );
   }
 
@@ -3157,6 +3175,44 @@ class FakeRepository implements WaxDeckRepository {
       );
     }
     return task;
+  }
+
+  /// Every id [deleteToolTask] was asked to remove, refusals included.
+  final List<String> deleteToolTaskCalls = [];
+
+  /// How many times the bulk clear ran.
+  int clearFinishedToolTaskCalls = 0;
+
+  @override
+  Future<void> deleteToolTask(String taskId) async {
+    deleteToolTaskCalls.add(taskId);
+    final task = toolTasksById[taskId];
+    if (task == null) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such task',
+        statusCode: 404,
+      );
+    }
+    if (task.state != 'done' && task.state != 'failed') {
+      throw const WaxDeckApiException(
+        code: 'conflict',
+        message: 'the task has not finished',
+        statusCode: 409,
+      );
+    }
+    toolTasksById.remove(taskId);
+  }
+
+  @override
+  Future<int> clearFinishedToolTasks() async {
+    clearFinishedToolTaskCalls++;
+    final finished = [
+      for (final task in toolTasksById.values)
+        if (task.state == 'done' || task.state == 'failed') task.id,
+    ];
+    finished.forEach(toolTasksById.remove);
+    return finished.length;
   }
 
   /// Enrichment status served by [getEnrichmentStatus].

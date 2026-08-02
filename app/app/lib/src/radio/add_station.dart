@@ -249,14 +249,14 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
               // Only where there is a choice: editing a station that
               // already exists has nothing to look up.
               if (!_editing)
-                SegmentedButton<bool>(
-                  segments: const <ButtonSegment<bool>>[
-                    ButtonSegment<bool>(value: false, label: Text('Search')),
-                    ButtonSegment<bool>(value: true, label: Text('By URL')),
+                WaxSegmented(
+                  label: 'How to add',
+                  segments: const <WaxSegment>[
+                    WaxSegment(name: 'search', label: 'Search'),
+                    WaxSegment(name: 'url', label: 'By URL'),
                   ],
-                  selected: <bool>{_manual},
-                  onSelectionChanged: (selection) =>
-                      setState(() => _manual = selection.first),
+                  selected: _manual ? 'url' : 'search',
+                  onSelect: (name) => setState(() => _manual = name == 'url'),
                 ),
               const SizedBox(height: WaxSpace.s12),
               if (!_manual) ..._directory(colors) else ..._form(colors),

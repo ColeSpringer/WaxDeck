@@ -167,3 +167,32 @@ func (s *Server) GetToolTask(ctx context.Context, req GetToolTaskRequestObject) 
 	}
 	return GetToolTask200JSONResponse(toolTaskJSON(task)), nil
 }
+
+func (s *Server) DeleteToolTask(ctx context.Context, req DeleteToolTaskRequestObject) (DeleteToolTaskResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.DeleteToolTaskFor(ctx, uc, string(req.TaskId)); err != nil {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
+			return DeleteToolTask404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such task"))}, nil
+		case service.KindConflict:
+			return DeleteToolTask409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return DeleteToolTask204Response{}, nil
+}
+
+func (s *Server) ClearFinishedToolTasks(ctx context.Context, req ClearFinishedToolTasksRequestObject) (ClearFinishedToolTasksResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	deleted, err := s.svc.ClearFinishedToolTasksFor(ctx, uc)
+	if err != nil {
+		return nil, err
+	}
+	return ClearFinishedToolTasks200JSONResponse(ToolTasksCleared{Deleted: deleted}), nil
+}
