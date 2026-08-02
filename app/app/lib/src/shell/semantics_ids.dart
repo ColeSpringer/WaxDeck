@@ -113,6 +113,7 @@ abstract final class SemanticsIds {
   static const String bannerUpdatedReload = 'banner-updated-reload';
   static const String deckBar = 'deck-bar';
   static const String deckCast = 'deck-cast';
+  static const String deckLyrics = 'deck-lyrics';
   static const String deckMore = 'deck-more';
   static const String deckMute = 'deck-mute';
   static const String deckNext = 'deck-next';
@@ -134,12 +135,12 @@ abstract final class SemanticsIds {
   static const String queueClear = 'queue-clear';
   static String queueEntry(Object queueId) => 'queue-entry-$queueId';
   static String queueEntryDrag(Object id) => 'queue-entry-drag-$id';
-  static const String queueReplaceUndo = 'queue-replace-undo';
   static String queueEntryRemove(Object queueId) =>
       'queue-entry-remove-$queueId';
   static const String queueHistory = 'queue-history';
   static String queueHistoryEntry(Object id) => 'queue-history-$id';
   static const String queueRepeat = 'queue-repeat';
+  static const String queueReplaceUndo = 'queue-replace-undo';
   static String queueRestoreSession(Object id) => 'queue-restore-session-$id';
   static const String queueScreen = 'queue-screen';
   static const String queueShuffle = 'queue-shuffle';
@@ -231,10 +232,19 @@ abstract final class SemanticsIds {
   static const String organizeProfile = 'organize-profile';
   static const String organizeReport = 'organize-report';
 
-  // player: Playback surfaces: transport, stars and ratings, speed, chapters, bookmarks, sleep timer, notes and transcript.
+  // player: Playback surfaces: transport, stars and ratings, speed, chapters, bookmarks, sleep timer, notes and transcript, lyrics, the visualizer, and car mode.
   static const String addToPlaylist = 'add-to-playlist';
+  static const String carExit = 'car-exit';
+  static const String carNext = 'car-next';
+  static const String carPrevious = 'car-previous';
+  static const String carSurface = 'car-surface';
+  static const String carToggle = 'car-toggle';
   static const String downloadButton = 'download-button';
   static const String instantMix = 'instant-mix';
+  static const String lyricsAdd = 'lyrics-add';
+  static const String lyricsFollow = 'lyrics-follow';
+  static String lyricsLine(Object index) => 'lyrics-line-$index';
+  static const String lyricsSurface = 'lyrics-surface';
   static const String playerBack = 'player-back';
   static String playerBookmark(Object index) => 'player-bookmark-$index';
   static const String playerBookmarkAdd = 'player-bookmark-add';
@@ -243,6 +253,7 @@ abstract final class SemanticsIds {
   static const String playerBookmarkNote = 'player-bookmark-note';
   static const String playerBookmarkSheet = 'player-bookmark-sheet';
   static const String playerBookmarks = 'player-bookmarks';
+  static const String playerCarMode = 'player-car-mode';
   static String playerChapter(Object index) => 'player-chapter-$index';
   static const String playerChapters = 'player-chapters';
   static const String playerDevices = 'player-devices';
@@ -250,6 +261,7 @@ abstract final class SemanticsIds {
   static const String playerFindInLibrary = 'player-find-in-library';
   static const String playerFunding = 'player-funding';
   static const String playerGoToShow = 'player-go-to-show';
+  static const String playerLyrics = 'player-lyrics';
   static const String playerMarkPlayed = 'player-mark-played';
   static const String playerMore = 'player-more';
   static const String playerMute = 'player-mute';
@@ -275,6 +287,7 @@ abstract final class SemanticsIds {
   static const String playerToggle = 'player-toggle';
   static const String playerTrim = 'player-trim';
   static const String playerUpNext = 'player-up-next';
+  static const String playerVisualizer = 'player-visualizer';
   static const String playerVoiceBoost = 'player-voice-boost';
   static const String playerVolume = 'player-volume';
   static String rating(Object scope, Object value) => '${scope}rating-$value';
@@ -288,6 +301,14 @@ abstract final class SemanticsIds {
   static const String sleepTimerExtend = 'sleep-timer-extend';
   static const String sleepTimerOpen = 'sleep-timer-open';
   static String starButton(Object scope) => '${scope}star-button';
+  static const String transcriptFollow = 'transcript-follow';
+  static const String visualizerClose = 'visualizer-close';
+  static String visualizerMode(Object name) => 'visualizer-mode-$name';
+  static const String visualizerNext = 'visualizer-next';
+  static const String visualizerPrevious = 'visualizer-previous';
+  static const String visualizerSeek = 'visualizer-seek';
+  static const String visualizerSurface = 'visualizer-surface';
+  static const String visualizerToggle = 'visualizer-toggle';
 
   // playlists: Playlists, their entries, and the smart-rule editor.
   static const String addToPlaylistNew = 'add-to-playlist-new';

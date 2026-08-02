@@ -107,6 +107,18 @@ abstract final class ClientSettingKeys {
   /// on, and never the other way, because the platform's answer is an
   /// accessibility need rather than a preference to overrule.
   static const reduceMotion = 'waxdeck.a11y.reduceMotion';
+
+  /// Whether a desktop left alone with music playing opens the
+  /// visualizer on its own. Per device because it is about the screen in
+  /// front of the listener: the machine on a shelf across the room is
+  /// the one this is for, and the laptop on their knees is not.
+  static const visualizerWhenIdle = 'waxdeck.player.visualizerWhenIdle';
+
+  /// Whether car mode gets a control of its own on the player rather
+  /// than living in the overflow. Per device for the same reason: the
+  /// phone that rides on a dashboard mount wants it and the desktop
+  /// never does.
+  static const carModeButton = 'waxdeck.player.carModeButton';
 }
 
 /// Per-device settings in the local mirror database (native builds).

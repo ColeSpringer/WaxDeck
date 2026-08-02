@@ -135,6 +135,17 @@ class FakeRepository implements WaxDeckRepository {
   /// Thrown by [getWaveform] when set.
   WaxDeckApiException? waveformError;
 
+  /// Lyrics by pid. An unseeded pid answers null, which is what a
+  /// server says about a track nobody has words for.
+  final Map<String, Lyrics> lyrics = {};
+
+  /// Pids [getItemLyrics] was asked about, so a test can pin that a
+  /// face with no lyrics affordance does not ask.
+  final List<String> lyricsCalls = [];
+
+  /// Thrown by [getItemLyrics] when set.
+  WaxDeckApiException? lyricsError;
+
   final List<({String username, String password, String? deviceName})>
   loginCalls = [];
   final List<({String username, String password, String? displayName})>
@@ -1251,6 +1262,14 @@ class FakeRepository implements WaxDeckRepository {
     final error = waveformError;
     if (error != null) throw error;
     return waveforms[pid] ?? const Waveform(state: 'pending');
+  }
+
+  @override
+  Future<Lyrics?> getItemLyrics(String pid) async {
+    lyricsCalls.add(pid);
+    final error = lyricsError;
+    if (error != null) throw error;
+    return lyrics[pid];
   }
 
   @override

@@ -721,6 +721,25 @@ Waveform waveformFromGen(gen.Waveform waveform) {
   );
 }
 
+Lyrics lyricsFromGen(gen.Lyrics lyrics) {
+  return Lyrics(
+    pid: lyrics.pid,
+    source: lyrics.source_,
+    // Sorted here rather than trusted: the contract says ordered by
+    // `timeMs` and the karaoke view walks the list assuming it, so an
+    // out-of-order sidecar would light the wrong line rather than
+    // simply reading oddly.
+    synced:
+        (lyrics.synced?.map(
+                  (line) => SyncedLine(timeMs: line.timeMs, text: line.text),
+                ) ??
+                const <SyncedLine>[])
+            .toList()
+          ..sort((a, b) => a.timeMs.compareTo(b.timeMs)),
+    unsynced: lyrics.unsynced,
+  );
+}
+
 RuleNode ruleNodeFromGen(gen.RuleNode node) {
   final inner = node.node;
   return RuleNode(

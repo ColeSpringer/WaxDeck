@@ -507,6 +507,10 @@
           "id": "deck-cast"
         },
         {
+          "name": "deckLyrics",
+          "id": "deck-lyrics"
+        },
+        {
           "name": "deckMore",
           "id": "deck-more"
         },
@@ -597,10 +601,6 @@
           ]
         },
         {
-          "name": "queueReplaceUndo",
-          "id": "queue-replace-undo"
-        },
-        {
           "name": "queueEntryRemove",
           "id": "queue-entry-remove-{queueId}",
           "params": [
@@ -621,6 +621,10 @@
         {
           "name": "queueRepeat",
           "id": "queue-repeat"
+        },
+        {
+          "name": "queueReplaceUndo",
+          "id": "queue-replace-undo"
         },
         {
           "name": "queueRestoreSession",
@@ -1053,11 +1057,31 @@
     },
     {
       "name": "player",
-      "doc": "Playback surfaces: transport, stars and ratings, speed, chapters, bookmarks, sleep timer, notes and transcript.",
+      "doc": "Playback surfaces: transport, stars and ratings, speed, chapters, bookmarks, sleep timer, notes and transcript, lyrics, the visualizer, and car mode.",
       "ids": [
         {
           "name": "addToPlaylist",
           "id": "add-to-playlist"
+        },
+        {
+          "name": "carExit",
+          "id": "car-exit"
+        },
+        {
+          "name": "carNext",
+          "id": "car-next"
+        },
+        {
+          "name": "carPrevious",
+          "id": "car-previous"
+        },
+        {
+          "name": "carSurface",
+          "id": "car-surface"
+        },
+        {
+          "name": "carToggle",
+          "id": "car-toggle"
         },
         {
           "name": "downloadButton",
@@ -1066,6 +1090,25 @@
         {
           "name": "instantMix",
           "id": "instant-mix"
+        },
+        {
+          "name": "lyricsAdd",
+          "id": "lyrics-add"
+        },
+        {
+          "name": "lyricsFollow",
+          "id": "lyrics-follow"
+        },
+        {
+          "name": "lyricsLine",
+          "id": "lyrics-line-{index}",
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "lyricsSurface",
+          "id": "lyrics-surface"
         },
         {
           "name": "playerBack",
@@ -1102,6 +1145,10 @@
           "id": "player-bookmarks"
         },
         {
+          "name": "playerCarMode",
+          "id": "player-car-mode"
+        },
+        {
           "name": "playerChapter",
           "id": "player-chapter-{index}",
           "params": [
@@ -1131,6 +1178,10 @@
         {
           "name": "playerGoToShow",
           "id": "player-go-to-show"
+        },
+        {
+          "name": "playerLyrics",
+          "id": "player-lyrics"
         },
         {
           "name": "playerMarkPlayed",
@@ -1242,6 +1293,10 @@
           "id": "player-up-next"
         },
         {
+          "name": "playerVisualizer",
+          "id": "player-visualizer"
+        },
+        {
           "name": "playerVoiceBoost",
           "id": "player-voice-boost"
         },
@@ -1302,6 +1357,41 @@
           "params": [
             "scope"
           ]
+        },
+        {
+          "name": "transcriptFollow",
+          "id": "transcript-follow"
+        },
+        {
+          "name": "visualizerClose",
+          "id": "visualizer-close"
+        },
+        {
+          "name": "visualizerMode",
+          "id": "visualizer-mode-{name}",
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "visualizerNext",
+          "id": "visualizer-next"
+        },
+        {
+          "name": "visualizerPrevious",
+          "id": "visualizer-previous"
+        },
+        {
+          "name": "visualizerSeek",
+          "id": "visualizer-seek"
+        },
+        {
+          "name": "visualizerSurface",
+          "id": "visualizer-surface"
+        },
+        {
+          "name": "visualizerToggle",
+          "id": "visualizer-toggle"
         }
       ]
     },

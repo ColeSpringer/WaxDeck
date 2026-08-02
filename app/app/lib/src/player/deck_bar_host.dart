@@ -21,6 +21,7 @@ import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'autoplay_gate.dart';
+import 'lyrics.dart';
 import 'now_playing_controller.dart';
 import 'output_volume.dart';
 import 'play_state_controller.dart';
@@ -50,6 +51,7 @@ const _ids = DeckBarIds(
   star: SemanticsIds.deckStar,
   seek: SemanticsIds.deckSeek,
   queue: SemanticsIds.deckQueue,
+  lyrics: SemanticsIds.deckLyrics,
   cast: SemanticsIds.deckCast,
   volume: SemanticsIds.deckVolume,
   mute: SemanticsIds.deckMute,
@@ -245,6 +247,13 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
               ? null
               : () => unawaited(_showActions(context, ref, item, session)),
           onQueue: () => openQueue(context, ref),
+          // Music only, and only where the bar has a right cluster to
+          // put it in: a track has words and a station, an episode, and
+          // a chapter do not, and 5.2's lyrics toggle is one of the
+          // controls the compact bar drops.
+          onLyrics: wide && session != null && item != null && !spokenWord
+              ? () => openLyrics(context, ref)
+              : null,
           onVolume: localVolume
               ? (level) => unawaited(
                   ref.read(outputVolumeProvider.notifier).set(level),

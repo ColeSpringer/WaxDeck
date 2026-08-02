@@ -185,7 +185,7 @@ class _PersonalRecap extends ConsumerWidget {
                       StatTile(
                         keyName: 'yir-saved',
                         value: formatListenTime(value.timeSavedMs),
-                        label: 'saved by silence trimming',
+                        label: 'time saved',
                       ),
                     ],
                   ),

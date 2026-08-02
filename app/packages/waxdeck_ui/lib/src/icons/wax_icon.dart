@@ -451,6 +451,12 @@ abstract final class WaxIcons {
     IconData(0xE2A6, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
+  /// Phosphor `car`.
+  static const car = WaxGlyph(
+    IconData(0xE112, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE112, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
   /// Every glyph the app can render, for the catalog and for the
   /// subset drift test.
   static const Map<String, WaxGlyph> all = <String, WaxGlyph>{
@@ -512,5 +518,6 @@ abstract final class WaxIcons {
     'recent': recent,
     'waveform': waveform,
     'headphones': headphones,
+    'car': car,
   };
 }

@@ -74,23 +74,60 @@ void main() {
 
   group('search', () {
     test('a title match outranks a keyword match', () {
-      final hits = searchSettings('speed', isAdmin: true, isNative: true);
+      final hits = searchSettings(
+        'speed',
+        isAdmin: true,
+        isNative: true,
+        isDesktop: true,
+      );
       expect(hits.first.title, contains('speed'));
     });
 
     test('an empty query answers nothing rather than everything', () {
-      expect(searchSettings('  ', isAdmin: true, isNative: true), isEmpty);
+      expect(
+        searchSettings('  ', isAdmin: true, isNative: true, isDesktop: true),
+        isEmpty,
+      );
     });
 
     test('a member is offered nothing they cannot open', () {
-      final hits = searchSettings('server', isAdmin: false, isNative: true);
+      final hits = searchSettings(
+        'server',
+        isAdmin: false,
+        isNative: true,
+        isDesktop: true,
+      );
       expect(hits.every((e) => !e.adminOnly && !e.section.adminOnly), isTrue);
     });
 
     test('the web build is offered nothing it does not have', () {
-      final hits = searchSettings('wifi', isAdmin: true, isNative: false);
+      final hits = searchSettings(
+        'wifi',
+        isAdmin: true,
+        isNative: false,
+        isDesktop: true,
+      );
       expect(hits, isEmpty);
-      expect(searchSettings('wifi', isAdmin: true, isNative: true), isNotEmpty);
+      expect(
+        searchSettings('wifi', isAdmin: true, isNative: true, isDesktop: true),
+        isNotEmpty,
+      );
+    });
+
+    test('a phone is offered nothing only a desktop can do', () {
+      expect(
+        searchSettings('idle', isAdmin: true, isNative: true, isDesktop: false),
+        isEmpty,
+      );
+      expect(
+        searchSettings(
+          'idle',
+          isAdmin: true,
+          isNative: true,
+          isDesktop: true,
+        ).map((e) => e.id),
+        contains('visualizer-idle'),
+      );
     });
 
     test('the match is case-insensitive in both directions', () {
@@ -99,6 +136,7 @@ void main() {
           'CROSSFADE',
           isAdmin: true,
           isNative: true,
+          isDesktop: true,
         ).map((e) => e.id),
         contains('crossfade'),
       );
@@ -129,6 +167,12 @@ void main() {
             credentialStoreProvider.overrideWithValue(
               InMemoryCredentialStore(),
             ),
+            // The harness pins the target platform to Android, so a
+            // desktop-only row would be absent and this check would
+            // read that as a registered setting nothing draws. Standing
+            // on a desktop is what makes the assertion cover every
+            // entry rather than most of them.
+            desktopProvider.overrideWithValue(true),
           ],
           child: routedHost(SettingsSectionScreen(section: section)),
         ),

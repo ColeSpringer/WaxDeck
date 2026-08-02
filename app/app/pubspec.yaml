@@ -47,6 +47,10 @@ dependencies:
   # contract and a minor bump has moved redirect semantics before.
   go_router: 17.3.0
   url_launcher: 6.3.2
+  # Keeps the screen awake in car mode and the visualizer, behind
+  # WakePort. A car screen that sleeps mid-drive is a dead feature, and
+  # nothing portable answers this without a plugin.
+  wakelock_plus: 1.7.0
   web: 1.1.1
   waxdeck_api:
     path: ../packages/waxdeck_api

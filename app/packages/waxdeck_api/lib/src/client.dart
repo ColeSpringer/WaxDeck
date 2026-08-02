@@ -404,6 +404,15 @@ abstract interface class WaxDeckRepository {
   /// analyze pass stored; nothing is computed or queued by asking.
   Future<Waveform> getWaveform(String pid);
 
+  /// `GET /items/{pid}/lyrics`: the item's words, or null when it has
+  /// none.
+  ///
+  /// Null rather than a thrown 404, because having no lyrics is what
+  /// most tracks in most libraries answer: it is the ordinary state of
+  /// the field, not a failure to report. A caller that cannot reach the
+  /// server still gets an exception.
+  Future<Lyrics?> getItemLyrics(String pid);
+
   /// `GET /podcasts/opml`: the caller's subscriptions as an OPML 2.0
   /// document.
   Future<String> exportOpml();
@@ -2132,6 +2141,18 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<Waveform> getWaveform(String pid) => _guard(() async {
     final response = await _gen.getPlaybackApi().getWaveform(pid: pid);
     return waveformFromGen(_require(response.data));
+  });
+
+  @override
+  Future<Lyrics?> getItemLyrics(String pid) => _guard(() async {
+    try {
+      final response = await _gen.getLibraryApi().getItemLyrics(pid: pid);
+      return lyricsFromGen(_require(response.data));
+    } on DioException catch (e) {
+      // An item with no words is a state, not an error, for callers.
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
   });
 
   @override

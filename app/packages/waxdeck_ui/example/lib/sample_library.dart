@@ -244,6 +244,34 @@ abstract final class SampleLibrary {
     live: true,
   );
 
+  /// Timed lines for the lyrics view, spaced far enough apart that the
+  /// highlight is somewhere to look at rather than a flicker.
+  static List<LyricLine> lyrics() => const <LyricLine>[
+    LyricLine(at: Duration(seconds: 8), text: 'The tide comes in'),
+    LyricLine(
+      at: Duration(seconds: 21),
+      text: 'and the harbour lights go out, one at a time',
+    ),
+    LyricLine(at: Duration(minutes: 1), text: 'Nobody counts them but me'),
+    LyricLine(
+      at: Duration(minutes: 1, seconds: 42),
+      text: 'and I have lost my place again',
+    ),
+    LyricLine(at: Duration(minutes: 2, seconds: 30), text: 'So the tide'),
+    LyricLine(
+      at: Duration(minutes: 3, seconds: 4),
+      text: 'comes in, and I am still counting',
+    ),
+  ];
+
+  /// The other shape the same view draws: words a tag carried with no
+  /// timings on them.
+  static const String unsyncedLyrics =
+      'The tide comes in\n'
+      'and the harbour lights go out, one at a time\n\n'
+      'Nobody counts them but me\n'
+      'and I have lost my place again';
+
   /// Peaks for the waveform seek bar. Real peaks come from the server;
   /// these are shaped like a track rather than like noise so the
   /// composite reads honestly.

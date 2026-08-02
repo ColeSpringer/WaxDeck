@@ -10,6 +10,7 @@ import '../artwork/artwork_providers.dart';
 import '../connect/cast_preflight.dart';
 import '../connect/device_picker.dart';
 import '../player/smart_rewind.dart';
+import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'about_screen.dart';
@@ -209,6 +210,41 @@ class _PlaybackBody extends ConsumerWidget {
                 onChanged: ref.read(voiceBoostDefaultProvider.notifier).set,
               ),
             ),
+          ],
+        ),
+        _Group(
+          title: 'The player',
+          children: <Widget>[
+            WaxSettingRow(
+              title: 'Car mode button',
+              help:
+                  'Puts car mode on the player itself instead of inside '
+                  'its menu',
+              control: WaxSwitch(
+                value: ref.watch(carModeButtonProvider),
+                label: 'Car mode button',
+                semanticsId: SemanticsIds.setting('car-button'),
+                onChanged: ref.read(carModeButtonProvider.notifier).set,
+              ),
+            ),
+            // Desktop alone: this is about a machine left playing in a
+            // room, and neither a phone that locks its own screen nor a
+            // browser tab is that. A switch with nothing behind it is
+            // the promise a settings screen must not make, so it is
+            // absent rather than disabled.
+            if (ref.watch(desktopProvider))
+              WaxSettingRow(
+                title: 'Open the visualizer when idle',
+                help:
+                    'Fills the screen with the track once music has been '
+                    'playing untouched for a few minutes',
+                control: WaxSwitch(
+                  value: ref.watch(visualizerWhenIdleProvider),
+                  label: 'Open the visualizer when idle',
+                  semanticsId: SemanticsIds.setting('visualizer-idle'),
+                  onChanged: ref.read(visualizerWhenIdleProvider.notifier).set,
+                ),
+              ),
           ],
         ),
         _Group(

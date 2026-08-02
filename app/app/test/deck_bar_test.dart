@@ -175,6 +175,50 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    testWidgets('opens the words beside the page, for a track that has any', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: FakeEngine(),
+        routed: true,
+      );
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.deckLyrics));
+      await tester.pumpAndSettle();
+      expect(harness.container.read(sidePanelProvider), WaxPanel.lyrics);
+
+      // A book's words are not a thing to follow, so the bar offers no
+      // control for them.
+      harness.play([
+        testItem('bk-1', mediaType: MediaType.audiobook, title: 'A Book'),
+      ]);
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsIdentifier(SemanticsIds.deckLyrics), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('and drops the control on a bar with no cluster', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: FakeEngine(),
+        size: const Size(420, 900),
+      );
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsIdentifier(SemanticsIds.deckLyrics), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('ticks its progress without rebuilding the bar', (
       tester,
     ) async {

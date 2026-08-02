@@ -22,7 +22,9 @@ import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/music/music_hub_screen.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
+import 'package:waxdeck/src/player/car_mode_screen.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
+import 'package:waxdeck/src/player/visualizer_screen.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
@@ -108,9 +110,11 @@ final _locations = <String, Type>{
   WaxRoute.book('bk-1'): BookScreen,
   WaxRoute.radio: RadioScreen,
   WaxRoute.downloads: DownloadsScreen,
-  // A view of whatever is playing, so it carries no payload and a
+  // Views of whatever is playing, so none carries a payload and a
   // reload lands back on it.
   WaxRoute.nowPlaying: PlayerScreen,
+  WaxRoute.visualizer: VisualizerScreen,
+  WaxRoute.carMode: CarModeScreen,
   WaxRoute.stats: StatsScreen,
   WaxRoute.listenLog: ListenLogScreen,
   WaxRoute.yearInReview: YearInReviewScreen,

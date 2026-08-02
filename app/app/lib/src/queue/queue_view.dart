@@ -27,15 +27,22 @@ String? queueProvenance(QueueSource source) {
   };
 }
 
-/// Opens the queue wherever this width keeps it.
+/// Opens the queue wherever this caller keeps it.
 ///
-/// The panel where there is room for one, the queue's own screen where
-/// there is not. The same queue either way, and one place that decides
-/// so: the deck bar, the player's action row, and the up-next peek all
-/// ask for it, and three copies of the condition is three places to fix
-/// when the answer changes.
-void openQueue(BuildContext context, WidgetRef ref) {
-  if (WaxSizeClass.of(context).hasSidebar) {
+/// The panel where there is room for one and something to put it beside,
+/// the queue's own screen otherwise. The same queue either way, and one
+/// place that decides so: the deck bar, the player's action row, and the
+/// up-next peek all ask for it, and three copies of the condition is
+/// three places to fix when the answer changes.
+///
+/// [overShell] is the second half of that condition, and the player is
+/// why it exists: `/now-playing` is a route pushed over the shell, so it
+/// covers the panel slot. Opening the panel from there lit the control
+/// and changed nothing anybody could see, on every window wide enough to
+/// have a panel. The deck bar is shell chrome rather than a page over
+/// it, so it keeps the panel.
+void openQueue(BuildContext context, WidgetRef ref, {bool overShell = false}) {
+  if (!overShell && WaxSizeClass.of(context).hasSidebar) {
     ref.read(sidePanelProvider.notifier).toggle(WaxPanel.queue);
     return;
   }

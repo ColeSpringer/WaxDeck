@@ -1,16 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../player/lyrics.dart';
 import '../queue/queue_panel.dart';
 
 /// What the shell's right panel is showing.
 ///
 /// One panel at a time, named rather than stacked: the panel is a place
 /// to keep one thing open beside the page, and two of them would be a
-/// second navigation to reason about. Lyrics and the remote session join
-/// this list when those surfaces exist.
+/// second navigation to reason about. The remote session joins this list
+/// when that surface exists.
 enum WaxPanel {
-  queue('Queue');
+  queue('Queue'),
+  lyrics('Lyrics');
 
   const WaxPanel(this.title);
 
@@ -49,5 +51,6 @@ Widget? shellSidePanel(WidgetRef ref) {
   return switch (open) {
     null => null,
     WaxPanel.queue => const QueuePanel(),
+    WaxPanel.lyrics => const LyricsPanel(),
   };
 }

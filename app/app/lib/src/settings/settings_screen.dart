@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'settings_registry.dart';
@@ -35,7 +36,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final sizeClass = WaxSizeClass.of(context);
     final isAdmin = ref.watch(isAdminProvider);
     final query = _query.text;
-    final results = searchSettings(query, isAdmin: isAdmin, isNative: !kIsWeb);
+    final results = searchSettings(
+      query,
+      isAdmin: isAdmin,
+      isNative: !kIsWeb,
+      isDesktop: ref.watch(desktopProvider),
+    );
     final sections = <SettingsSection>[
       for (final section in SettingsSection.values)
         if (!section.adminOnly || isAdmin) section,

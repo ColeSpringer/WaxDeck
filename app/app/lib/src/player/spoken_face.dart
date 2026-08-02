@@ -377,11 +377,12 @@ void explainOnce(
     ..showSnackBar(SnackBar(content: Text(message)));
 }
 
-/// Silence-trimming toggle with the time-saved badge.
+/// Silence-trimming toggle with its own saved badge.
 ///
-/// The label says "silence trimming" and not "time saved" on purpose:
-/// the client counts trim jumps only, and the seek-aware accounting that
-/// would make the larger claim true is P20's.
+/// Trim jumps only, which is narrower than what the stats now report and
+/// is deliberate: this is the trim control, and the number beside it is
+/// the reason to leave the trim control on. Crediting it with what the
+/// speed chip saved would be the wrong number under the wrong toggle.
 class TrimChip extends ConsumerWidget {
   const TrimChip({required this.session, super.key});
 
@@ -813,95 +814,35 @@ class _TranscriptRegion extends ConsumerStatefulWidget {
 }
 
 class _TranscriptRegionState extends ConsumerState<_TranscriptRegion> {
-  static const _rowExtent = 56.0;
+  late final Future<List<LyricLine>> _loading = ref
+      .read(repositoryProvider)
+      .getEpisodeTranscript(widget.session.item.pid)
+      .then(_asLines);
 
-  final _scroll = ScrollController();
-  late final Future<Transcript> _loading;
-  var _following = true;
-
-  /// The cues, once they arrive, so the position listener can say which
-  /// one is current without waiting for a build.
-  List<TranscriptCue> _cues = const <TranscriptCue>[];
-
-  /// Which cue is being spoken, or -1 before the first one.
-  var _current = -1;
-
-  @override
-  void initState() {
-    super.initState();
-    _loading = ref
-        .read(repositoryProvider)
-        .getEpisodeTranscript(widget.session.item.pid)
-        .then((transcript) {
-          if (!mounted) return transcript;
-          _cues = transcript.cues;
-          // Placed once here as well as on every tick: a transcript
-          // opened while playback is paused gets no ticks at all, and
-          // without this it would draw from the top with nothing
-          // highlighted until somebody pressed play.
-          _onPosition();
-          return transcript;
-        });
-    widget.position.addListener(_onPosition);
-  }
-
-  @override
-  void dispose() {
-    widget.position.removeListener(_onPosition);
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  /// On cue boundaries, not on ticks: the position moves several times
-  /// a second and the highlight moves every few seconds at most, and
-  /// rebuilding the list for the first is work nobody sees.
-  void _onPosition() {
-    if (!mounted) return;
-    final at = widget.position.value.inMilliseconds;
-    var next = -1;
-    for (var i = 0; i < _cues.length; i++) {
-      if (_cues[i].startMs <= at) next = i;
-    }
-    if (next == _current) return;
-    setState(() => _current = next);
-    if (_following && next >= 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _following) _followCue(next);
-      });
-    }
-  }
-
-  /// A manual scroll turns following off; the pill turns it back on.
+  /// The cues as the lyrics view draws them.
   ///
-  /// Told apart by who moved it: a programmatic jump is this widget's
-  /// own and arrives with no user scroll behind it, so only a drag or a
-  /// wheel gesture counts.
-  bool _onScrollNotification(Notification note) {
-    if (note is UserScrollNotification && _following) {
-      setState(() => _following = false);
-    }
-    return false;
-  }
-
-  void _followCue(int index) {
-    if (!_scroll.hasClients) return;
-    final target = (index * _rowExtent - _rowExtent).clamp(
-      0.0,
-      _scroll.position.maxScrollExtent,
-    );
-    unawaited(
-      _scroll.animateTo(
-        target,
-        duration: WaxMotion.of(context).standard,
-        curve: WaxMotion.emphasized,
+  /// A transcript and a lyric sheet are the same surface: timed lines
+  /// that follow a playhead, tap to seek, following handed over on a
+  /// scroll and offered back by a button. This region was a hand-written
+  /// copy of that, and the two had already drifted - the lyrics view
+  /// scrolls to the line when the button is pressed and this one only
+  /// flipped the flag. One component draws both now, and the speaker is
+  /// folded into the line, which is how it read before.
+  ///
+  /// Mapped once into a future rather than per build, because the view
+  /// resets a reader's scroll when it is handed a different list.
+  static List<LyricLine> _asLines(Transcript transcript) => <LyricLine>[
+    for (final cue in transcript.cues)
+      LyricLine(
+        at: Duration(milliseconds: cue.startMs),
+        text: cue.speaker == null ? cue.text : '${cue.speaker}: ${cue.text}',
       ),
-    );
-  }
+  ];
 
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    return FutureBuilder<Transcript>(
+    return FutureBuilder<List<LyricLine>>(
       future: _loading,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
@@ -916,71 +857,16 @@ class _TranscriptRegionState extends ConsumerState<_TranscriptRegion> {
             ),
           );
         }
-        final transcript = snapshot.data;
-        if (transcript == null) {
+        final lines = snapshot.data;
+        if (lines == null) {
           return const Center(child: CircularProgressIndicator());
         }
-        final cues = transcript.cues;
-        final current = _current;
-        return Stack(
-          children: <Widget>[
-            NotificationListener<Notification>(
-              onNotification: _onScrollNotification,
-              child: ListView.builder(
-                controller: _scroll,
-                itemExtent: _rowExtent,
-                padding: const EdgeInsets.only(bottom: WaxSpace.s8),
-                itemCount: cues.length,
-                itemBuilder: (context, index) {
-                  final cue = cues[index];
-                  final spoken = cue.speaker == null
-                      ? cue.text
-                      : '${cue.speaker}: ${cue.text}';
-                  return WaxTappable(
-                    semanticsId: SemanticsIds.transcriptCue(index),
-                    label: spoken,
-                    selected: index == current,
-                    onPressed: () => unawaited(
-                      widget.session.seek(Duration(milliseconds: cue.startMs)),
-                    ),
-                    child: InkWell(
-                      onTap: () => unawaited(
-                        widget.session.seek(
-                          Duration(milliseconds: cue.startMs),
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: WaxSpace.s16,
-                          vertical: WaxSpace.s8,
-                        ),
-                        child: Text(
-                          spoken,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: WaxType.body.copyWith(
-                            color: index == current
-                                ? colors.textPrimary
-                                : colors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            if (!_following)
-              Positioned(
-                right: WaxSpace.s12,
-                bottom: WaxSpace.s12,
-                child: WaxButton(
-                  label: 'Follow along',
-                  kind: WaxButtonKind.tonal,
-                  onPressed: () => setState(() => _following = true),
-                ),
-              ),
-          ],
+        return LyricsView(
+          position: widget.position,
+          lines: lines,
+          onSeek: (at) => unawaited(widget.session.seek(at)),
+          lineSemanticsId: SemanticsIds.transcriptCue,
+          followSemanticsId: SemanticsIds.transcriptFollow,
         );
       },
     );

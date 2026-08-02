@@ -118,9 +118,23 @@ class PlaybackSession {
   DateTime? _startedAt;
   int _msPlayed = 0;
 
-  // The hours-saved counter's value when the open listen session began,
-  // so each session reports only its own trimmed milliseconds.
+  // The trimmed-milliseconds counter's value when the open listen
+  // session began, so each session reports only its own.
   int _skippedAtSessionStart = 0;
+
+  /// The other half of the time-saved sum: milliseconds of content this
+  /// session heard but did not sit through, because it was playing
+  /// faster than the recording.
+  ///
+  /// Accumulated per counted position delta at the rate that delta was
+  /// heard at, so a rate changed mid-episode is priced from where it
+  /// changed, and a rate below 1x adds nothing rather than owing time
+  /// back.
+  int _speedSavedMs = 0;
+
+  /// The counter when the open listen session began, the same baseline
+  /// [_skippedAtSessionStart] is.
+  int _speedSavedAtSessionStart = 0;
   bool _finished = false;
   ListenSession? _pendingRetry;
   bool _disposed = false;
@@ -181,8 +195,27 @@ class PlaybackSession {
   /// stream rather than changing anything locally.
   final ValueNotifier<bool> voiceBoost = ValueNotifier(false);
 
-  /// Milliseconds of silence skipped so far, for the hours-saved badge.
+  /// Milliseconds of silence skipped so far, for the trim chip's badge.
+  ///
+  /// Trimming only, which is what the control it feeds is about. The
+  /// listen report adds what playing faster saved on top; a chip that
+  /// counted both would credit the trim toggle with the speed chip's
+  /// work.
   final ValueNotifier<int> hoursSavedMs = ValueNotifier(0);
+
+  /// Prices [heard] milliseconds of content against the rate they were
+  /// heard at.
+  ///
+  /// Content heard at 2x took half as long to sit through as the
+  /// recording lasts, so half of it is time the listener got back. Rates
+  /// at or below 1x save nothing: a listener slowing a lecture down is
+  /// spending time, not saving it, and the counter this feeds only
+  /// counts one direction.
+  void _countSpeedSaving(int heard) {
+    final rate = engine.speed;
+    if (rate <= 1) return;
+    _speedSavedMs += (heard * (1 - 1 / rate)).round();
+  }
 
   final StreamController<void> _sessionCompleted =
       StreamController<void>.broadcast();
@@ -650,6 +683,13 @@ class PlaybackSession {
   /// routed Connect command): a session being torn down must not be
   /// acked to the remote as a seek that worked.
   Future<bool> seek(Duration position) async {
+    // A session that has let go must not move an engine a newer one is
+    // driving. The same rule the shutdown follows for `stop`, and it
+    // belongs here too: a surface built with this session can outlive
+    // it - a sheet holding the track it was opened over, a routed
+    // command in flight - and the answer for those is that the seek did
+    // not land, not that somebody else's item jumped.
+    if (_disposed) return false;
     final targetMs = position.inMilliseconds;
     final withinPart =
         _partIndex == null ||
@@ -949,6 +989,7 @@ class PlaybackSession {
     if (delta > Duration.zero && delta <= maxCountedStep) {
       _ensureSession();
       _msPlayed += delta.inMilliseconds;
+      _countSpeedSaving(delta.inMilliseconds);
     }
     _maybeTrimJump(position);
     _maybeOutroStop(position);
@@ -1072,6 +1113,7 @@ class PlaybackSession {
     _startedAt = DateTime.now().toUtc();
     _msPlayed = 0;
     _skippedAtSessionStart = hoursSavedMs.value;
+    _speedSavedAtSessionStart = _speedSavedMs;
   }
 
   /// Checkpoints [at] (engine timeline; defaults to the live position),
@@ -1092,6 +1134,30 @@ class PlaybackSession {
     }
   }
 
+  /// Milliseconds of content this listen session did not sit through,
+  /// for the server's time-saved counter.
+  ///
+  /// The two things the field is defined as, added: what trimming jumped
+  /// over, and what playing faster than the recording gave back. Both
+  /// are accumulated where they happen - the jump that skipped a span
+  /// adds its own length, and every counted delta is priced at the rate
+  /// it was heard at - so this is a sum rather than a measurement.
+  ///
+  /// It is deliberately *not* content minus wall clock, which is the
+  /// obvious formulation and is wrong twice over. A trim jump and a hand
+  /// on the seek bar look identical as a position delta, so content read
+  /// off raw movement counts a scrub through an hour as an hour saved.
+  /// And wall clock counts every second that passed, including the ones
+  /// that saved nobody anything: a rebuffer, a phone that slept, a
+  /// browser tab throttled in the background. Subtracting those would
+  /// let a stalled stream eat a real saving and report zero beside a
+  /// trim chip saying thirty seconds.
+  int _timeSavedMs() {
+    final trimmed = hoursSavedMs.value - _skippedAtSessionStart;
+    final faster = _speedSavedMs - _speedSavedAtSessionStart;
+    return (trimmed > 0 ? trimmed : 0) + (faster > 0 ? faster : 0);
+  }
+
   /// Reports the open session once. On network failure the session is kept
   /// and retried on dispose; the server deduplicates on the session ID, so
   /// the retry can never double-count.
@@ -1101,9 +1167,7 @@ class PlaybackSession {
     _sessionId = null;
     _startedAt = null;
     if (sessionId == null || startedAt == null || _msPlayed <= 0) return;
-    // Silence trimmed during this session, for the server's time-saved
-    // counter; absent when nothing was trimmed.
-    final skipped = hoursSavedMs.value - _skippedAtSessionStart;
+    final skipped = _timeSavedMs();
     final session = ListenSession(
       sessionId: sessionId,
       pid: item.pid,

@@ -20,6 +20,7 @@ class EmptyState extends StatelessWidget {
     this.actionLabel,
     this.onAction,
     this.semanticsId,
+    this.actionSemanticsId,
     super.key,
   });
 
@@ -29,6 +30,11 @@ class EmptyState extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
   final String? semanticsId;
+
+  /// The handle on the invitation's own button, where a test or a spec
+  /// has to press it. Separate from [semanticsId], which names the state
+  /// rather than the way out of it.
+  final String? actionSemanticsId;
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +67,11 @@ class EmptyState extends StatelessWidget {
                 ),
                 if (actionLabel != null) ...<Widget>[
                   const SizedBox(height: WaxSpace.s20),
-                  WaxButton(label: actionLabel!, onPressed: onAction),
+                  WaxButton(
+                    label: actionLabel!,
+                    semanticsId: actionSemanticsId,
+                    onPressed: onAction,
+                  ),
                 ],
               ],
             ),

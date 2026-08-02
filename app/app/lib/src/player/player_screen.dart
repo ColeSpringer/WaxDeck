@@ -22,12 +22,14 @@ import '../queue/queue_item.dart';
 import '../queue/queue_state.dart';
 import '../queue/queue_view.dart';
 import '../radio/radio_controller.dart';
+import '../settings/client_prefs.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'deck_bar_host.dart';
 import 'download_action.dart';
 import 'item_star_rating_row.dart';
+import 'lyrics.dart';
 import 'now_playing_controller.dart';
 import 'output_volume.dart';
 import 'playback_session.dart';
@@ -44,6 +46,8 @@ enum _PlayerMenuAction {
   goToShow,
   markPlayed,
   funding,
+  visualizer,
+  carMode,
 }
 
 /// The e2e handles the player's own controls carry. One place, because
@@ -342,6 +346,9 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     // build of that leaf and not of this widget, and a `watch` from
     // there would be registering a dependency out of phase.
     final canDelete = canDeleteItems(ref);
+    // Same reason, and it decides two things at once: whether the action
+    // row carries car mode, and whether the overflow still offers it.
+    final carMode = ref.watch(carModeButtonProvider);
     final playback = ref.read(nowPlayingProvider.notifier);
     final queue = ref.read(queueControllerProvider.notifier);
 
@@ -359,7 +366,11 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           ),
           ids: _ids,
           onCollapse: () => leavePlayer(context),
-          trailingHeaderActions: _headerActions(context, canDelete: canDelete),
+          trailingHeaderActions: _headerActions(
+            context,
+            canDelete: canDelete,
+            carMode: carMode,
+          ),
           // The show an episode is from, above its title and tappable
           // (5.3). Books and tracks name their maker under the title
           // instead, which is what the subtitle already is.
@@ -406,7 +417,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             skipForwardSeconds: skips.forward.inSeconds,
           ),
           volume: const _VolumeRow(),
-          actionRow: _actionRow(context),
+          actionRow: _actionRow(context, carMode: carMode),
           bottomRegion: _music
               ? const _UpNextPeek()
               : SpokenBottomRegion(session: _session, position: _position),
@@ -423,7 +434,11 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   /// Cast and the one overflow. Everything else that acts on the item
   /// lives inside that menu: 5.3 gives the header two controls, and a
   /// player whose chrome is a row of glyphs is a toolbar with artwork.
-  List<Widget> _headerActions(BuildContext context, {required bool canDelete}) {
+  List<Widget> _headerActions(
+    BuildContext context, {
+    required bool canDelete,
+    required bool carMode,
+  }) {
     // Captured while the surface is still standing: a delete finishes
     // when the server answers, and what it leaves behind is a player
     // whose item no longer exists. `maybeOf` because this runs during
@@ -490,6 +505,31 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             glyph: WaxIcons.share,
             semanticsId: SemanticsIds.shareLink,
           ),
+          // Music only: what it draws is the peak envelope, and the
+          // three populations that never have one are the three other
+          // faces. A row that opened an empty state would be a menu
+          // entry that exists to disappoint.
+          if (_music)
+            const WaxMenuItem(
+              value: _PlayerMenuAction.visualizer,
+              // The record, not the waveform: the waveform glyph is the
+              // discovery control two rows up, and one page should not
+              // wear it twice.
+              glyph: WaxIcons.albums,
+              label: 'Visualizer',
+              semanticsId: SemanticsIds.playerVisualizer,
+            ),
+          // Gone from the menu once the row above carries it: the verb
+          // is the same one and so is its handle, and the same
+          // identifier twice in one tree is what a menu row and a
+          // button both claiming it would be.
+          if (!carMode)
+            const WaxMenuItem(
+              value: _PlayerMenuAction.carMode,
+              glyph: WaxIcons.car,
+              label: 'Car mode',
+              semanticsId: SemanticsIds.playerCarMode,
+            ),
           if (canDelete)
             const WaxMenuItem(
               value: _PlayerMenuAction.delete,
@@ -524,6 +564,15 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           _PlayerMenuAction.goToShow => Future<void>.sync(
             () => context.push(WaxRoute.show(_episode!.showPid)),
           ),
+          // Pushed over the player rather than replacing it: both are
+          // views of the same playback, and leaving either lands back on
+          // the face somebody opened it from.
+          _PlayerMenuAction.visualizer => Future<void>.sync(
+            () => context.push(WaxRoute.visualizer),
+          ),
+          _PlayerMenuAction.carMode => Future<void>.sync(
+            () => context.push(WaxRoute.carMode),
+          ),
           _PlayerMenuAction.funding =>
             ref.read(urlOpenerProvider).open(_funding!.url),
         }),
@@ -548,7 +597,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   /// this"; spoken word gets rate, the two effects, and a book's
   /// bookmarks. The chapter list is no longer a button here: it is the
   /// bottom region, where 5.3 puts it.
-  Widget _actionRow(BuildContext context) {
+  Widget _actionRow(BuildContext context, {required bool carMode}) {
     // A wrap rather than a row: the spoken-word faces carry four
     // labelled chips, which do not fit a phone in one line, and a Row
     // answers that by overflowing. The hero above gives up the height a
@@ -560,11 +609,23 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
       runSpacing: WaxSpace.s8,
       children: <Widget>[
         if (_music) ...<Widget>[
+          // First in the row, where 5.3 puts it: the words are what a
+          // listener reaches the music face for while a track plays,
+          // and the queue is what they reach it for between tracks.
+          WaxIconButton(
+            glyph: WaxIcons.lyrics,
+            label: 'Lyrics',
+            semanticsId: SemanticsIds.playerLyrics,
+            // Always the overlay, whatever the width: this screen is a
+            // route pushed over the shell, so the panel it would
+            // otherwise open opens behind it.
+            onPressed: () => openLyrics(context, ref, overShell: true),
+          ),
           WaxIconButton(
             glyph: WaxIcons.queue,
             label: 'Queue',
             semanticsId: SemanticsIds.playerQueue,
-            onPressed: () => openQueue(context, ref),
+            onPressed: () => openQueue(context, ref, overShell: true),
           ),
           WaxMenuButton<String>(
             glyph: WaxIcons.waveform,
@@ -593,6 +654,16 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
         // falling asleep to a record is what the control is for, and it
         // is about the device rather than the medium.
         SleepTimerButton(session: _session),
+        // Only where somebody asked for it (5.6). The verb is in the
+        // overflow for everybody; this is the row for the listener who
+        // takes the same phone to the same car every morning.
+        if (carMode)
+          WaxIconButton(
+            glyph: WaxIcons.car,
+            label: 'Car mode',
+            semanticsId: SemanticsIds.playerCarMode,
+            onPressed: () => context.push(WaxRoute.carMode),
+          ),
       ],
     );
   }
@@ -679,7 +750,7 @@ class _UpNextPeek extends ConsumerWidget {
       semanticsId: SemanticsIds.playerUpNext,
       label: item == null ? 'Up next$left' : 'Up next, ${item.title}$left',
       borderRadius: WaxRadius.sheetTop,
-      onPressed: () => openQueue(context, ref),
+      onPressed: () => openQueue(context, ref, overShell: true),
       // Ink outside, InkWell in: the scaffold's only Material is
       // transparent, so a splash under an opaquely decorated Container
       // paints beneath it and never appears. Ink puts the decoration
@@ -691,7 +762,7 @@ class _UpNextPeek extends ConsumerWidget {
           border: Border(top: BorderSide(color: colors.hairline)),
         ),
         child: InkWell(
-          onTap: () => openQueue(context, ref),
+          onTap: () => openQueue(context, ref, overShell: true),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
               WaxSpace.s16,

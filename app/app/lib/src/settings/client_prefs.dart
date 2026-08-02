@@ -300,6 +300,43 @@ final downloadsOnWifiOnlyProvider = NotifierProvider<DownloadsOnWifiOnly, bool>(
   DownloadsOnWifiOnly.new,
 );
 
+/// Whether a desktop left alone with music playing opens the visualizer
+/// by itself.
+///
+/// Off by default, and this one is not a close call: a screen that
+/// changes on its own is a surprise, and the listeners who want their
+/// machine to become a record player when they walk away are the ones
+/// who will go and find the switch.
+class VisualizerWhenIdle extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.visualizerWhenIdle;
+
+  @override
+  bool get defaultValue => false;
+}
+
+final visualizerWhenIdleProvider = NotifierProvider<VisualizerWhenIdle, bool>(
+  VisualizerWhenIdle.new,
+);
+
+/// Whether car mode gets its own control on the player.
+///
+/// Off by default: the overflow reaches it, and a driver who uses it
+/// every day is exactly the person who will turn this on once. A row of
+/// glyphs everybody carries for the few who need one is how a player
+/// becomes a toolbar.
+class CarModeButton extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.carModeButton;
+
+  @override
+  bool get defaultValue => false;
+}
+
+final carModeButtonProvider = NotifierProvider<CarModeButton, bool>(
+  CarModeButton.new,
+);
+
 // --- library and metadata ----------------------------------------------------
 
 /// Whether codec, bitrate, and provenance chips are drawn.

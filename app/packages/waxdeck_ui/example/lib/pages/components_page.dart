@@ -23,6 +23,24 @@ class _ComponentsPageState extends State<ComponentsPage> {
   bool _sidebarCollapsed = false;
   String _filter = 'all';
   String _letter = 'A';
+  WaxVisualizerMode _visualizer = WaxVisualizerMode.waveform;
+
+  /// The same position the seek bars above draw, as the listenable the
+  /// lyrics and the visualizer follow. They take one because a playhead
+  /// moves several times a second and neither rebuilds for it; here the
+  /// catalogue's own scrubbing is what moves it.
+  late final ValueNotifier<Duration> _live = ValueNotifier(_position);
+
+  @override
+  void dispose() {
+    _live.dispose();
+    super.dispose();
+  }
+
+  void _seek(Duration to) {
+    setState(() => _position = to);
+    _live.value = to;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,14 +160,86 @@ class _ComponentsPageState extends State<ComponentsPage> {
           position: _position,
           duration: const Duration(minutes: 4, seconds: 5),
           buffered: const Duration(minutes: 3, seconds: 30),
-          onSeek: (value) => setState(() => _position = value),
+          onSeek: _seek,
         ),
         const SizedBox(height: WaxSpace.s12),
         WaxSeekBar(
           position: _position,
           duration: const Duration(minutes: 4, seconds: 5),
           peaks: SampleLibrary.peaks(),
-          onSeek: (value) => setState(() => _position = value),
+          onSeek: _seek,
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
+        // The three player extras, driven by the seek bars above: scrub
+        // one and the sung line, the playhead, and the ring all follow.
+        const SectionHeader(overline: 'Player', title: 'Lyrics'),
+        SizedBox(
+          height: 200,
+          child: LyricsView(
+            position: _live,
+            lines: SampleLibrary.lyrics(),
+            onSeek: _seek,
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        SizedBox(
+          height: 140,
+          child: LyricsView(
+            position: _live,
+            text: SampleLibrary.unsyncedLyrics,
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
+        const SectionHeader(overline: 'Player', title: 'Visualizer'),
+        WaxSegmented(
+          label: 'Visualizer mode',
+          selected: _visualizer.name,
+          segments: <WaxSegment>[
+            for (final mode in WaxVisualizerMode.values)
+              WaxSegment(name: mode.name, label: mode.label),
+          ],
+          onSelect: (name) => setState(
+            () => _visualizer = WaxVisualizerMode.values.byName(name),
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        SizedBox(
+          height: 260,
+          child: VisualizerStage(
+            position: _live,
+            duration: const Duration(minutes: 4, seconds: 5),
+            peaks: SampleLibrary.peaks(),
+            mode: _visualizer,
+            playing: true,
+            artwork: art.of('Salt Harbour'),
+            monogram: 'Salt Harbour',
+            onSeek: _seek,
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
+        const SectionHeader(overline: 'Player', title: 'Car mode'),
+        // Boxed rather than full-screen: it imposes the OLED theme on
+        // whatever it is drawn inside, and the point of showing it here
+        // is that it looks the same in all three.
+        SizedBox(
+          height: 420,
+          child: CarModeScaffold(
+            now: NowPlayingData(
+              title: 'Salt Harbour',
+              subtitle: 'Nightjar',
+              artwork: art.of('Salt Harbour'),
+              position: _position,
+              duration: const Duration(minutes: 4, seconds: 5),
+              playing: true,
+            ),
+            onPlayPause: () {},
+            onNext: () {},
+            onPrevious: () {},
+            onExit: () {},
+          ),
         ),
         const SizedBox(height: WaxSpace.s24),
 

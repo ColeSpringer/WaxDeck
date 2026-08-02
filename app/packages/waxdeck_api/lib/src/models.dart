@@ -1386,6 +1386,45 @@ class Waveform {
   bool get pending => state == 'pending';
 }
 
+/// One item's words, synced or not.
+///
+/// [synced] and [unsynced] are alternatives rather than both halves of
+/// one answer: the contract promises at least one of them is non-empty,
+/// and a source that carries timings gives the lines while a plain tag
+/// gives the block.
+class Lyrics {
+  const Lyrics({
+    required this.pid,
+    required this.source,
+    this.synced = const [],
+    this.unsynced,
+  });
+
+  final String pid;
+
+  /// Where the words came from (`lrc` sidecar, `embedded` tag). An open
+  /// vocabulary.
+  final String source;
+
+  /// Time-synced lines, ordered by [SyncedLine.timeMs]. Empty when the
+  /// source carried no timings.
+  final List<SyncedLine> synced;
+
+  /// The plain block, when there are no synced lines.
+  final String? unsynced;
+
+  /// Whether these words can follow playback.
+  bool get isSynced => synced.isNotEmpty;
+}
+
+/// One time-synced lyric line.
+class SyncedLine {
+  const SyncedLine({required this.timeMs, required this.text});
+
+  final int timeMs;
+  final String text;
+}
+
 /// One node of a smart rule's condition tree. [type] selects the shape:
 /// `all` and `any` carry [nodes], `not` carries [node], `condition`
 /// compares [field] with [op] against [value] (or [values] for

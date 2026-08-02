@@ -105,13 +105,13 @@ class _ListeningSection extends ConsumerWidget {
                 value: '${value.sessions}',
                 label: 'sessions',
               ),
-              // The label says silence trimming and not "saved", because
-              // speed savings are not counted yet and a general claim
-              // would be the wrong number under an honest word.
+              // The general claim, now that it is true: the client
+              // counts what playing faster saved as well as what
+              // trimming skipped, so the honest word is the plain one.
               StatTile(
                 keyName: 'stats-saved',
                 value: formatListenTime(value.timeSavedMs),
-                label: 'saved by silence trimming',
+                label: 'time saved',
               ),
             ],
           ),
@@ -211,8 +211,8 @@ class StatTile extends StatelessWidget {
     // Merged, so the tile announces "2h 6m listened" as one thing. Left
     // unmerged, three tiles side by side merge by geometry instead -
     // every value on one line and every caption on the next, which reads
-    // as "2h 6m 10 1m listened sessions saved by silence trimming" and
-    // is three numbers nobody can attach to anything.
+    // as "2h 6m 10 1m listened sessions time saved" and is three
+    // numbers nobody can attach to anything.
     return MergeSemantics(
       child: Column(
         key: Key(keyName),

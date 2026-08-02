@@ -53,6 +53,24 @@ final connectivityProvider = Provider<ConnectivityPort>(
   (ref) => createConnectivityPort(),
 );
 
+/// Whether this is a machine somebody walks away from.
+///
+/// A desktop build and nothing else: not web, whose tab is not a room's
+/// stereo and whose window the app does not own, and not a phone, which
+/// locks its own screen. A provider rather than a bare check because it
+/// is a fact about the platform that surfaces branch on, and a test has
+/// to be able to say which platform it is standing on - the harness pins
+/// the target platform to Android, and resetting that global is checked
+/// for. Same shape and same reason as `localVolumeAvailableProvider`,
+/// which asks a different question about the same set.
+final desktopProvider = Provider<bool>(
+  (ref) =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.windows),
+);
+
 /// Incoming deep links, wrapped so widget code never touches app_links.
 final deepLinkProvider = Provider<DeepLinkPort>((ref) => AppLinksDeepLinks());
 

@@ -708,14 +708,6 @@ here waits on upstream.
   answers data; rendering shareable image cards from it (and clip
   cards for episode shares) is client work on top of the existing
   responses.
-- `[in-repo]` **Speed-up time saved is not reported by the first-party
-  client.** The wire field (`ListenSession.skippedMs`) covers both
-  silence trimming and playback speed above 1x, but the player only
-  accounts trim jumps; counting speed savings needs seek-aware
-  wall-clock-versus-content tracking in the playback session (a trim
-  jump and a user seek look identical as position moves, so naive
-  content-minus-wall math double counts). The stats labels say
-  "silence trimming" until this lands.
 
 ## Admin and ops
 

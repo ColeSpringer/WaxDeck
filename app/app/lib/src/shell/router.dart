@@ -32,8 +32,12 @@ import '../music/music_hub_screen.dart';
 import '../notifications/notifications_binder.dart';
 import '../organize/organize_screen.dart';
 import '../player/autoplay_gate.dart';
+import '../player/car_mode_screen.dart';
+import '../player/idle_visualizer.dart';
 import '../player/now_playing_controller.dart';
 import '../player/player_screen.dart';
+import '../player/visualizer_screen.dart';
+import '../providers.dart';
 import '../playlists/playlist_screen.dart';
 import '../playlists/playlists_screen.dart';
 import '../playlists/rule_editor_screen.dart';
@@ -620,6 +624,14 @@ List<RouteBase> shellRoutes() => <RouteBase>[
     builder: (context, state) => const QueueScreen(),
   ),
   GoRoute(
+    path: WaxRoute.visualizer,
+    builder: (context, state) => const VisualizerScreen(),
+  ),
+  GoRoute(
+    path: WaxRoute.carMode,
+    builder: (context, state) => const CarModeScreen(),
+  ),
+  GoRoute(
     path: WaxRoute.tracks,
     redirect: _requires<TrackListArgs>(WaxRoute.home),
     builder: _trackList,
@@ -668,7 +680,19 @@ class _SignedInScope extends ConsumerWidget {
     // bar it feeds is mounted only once there is something to show.
     ref.watch(nowPlayingProvider.notifier);
     ref.watch(autoplayBlockedProvider.notifier);
-    return ShareIntakeGate(child: child);
+    // Around everything signed in, including the pushed overlays: being
+    // left alone on the queue screen is being left alone.
+    //
+    // Desktop only, and mounted rather than merely guarded inside: on a
+    // phone or a browser tab the watcher can never fire, and leaving it
+    // there is a five-minute timer, a pointer listener over every screen
+    // and a global keyboard handler, all to read three providers and
+    // return. The platform does not change under a running app; the
+    // setting does, and that one is checked when the timer fires.
+    final watched = ref.watch(desktopProvider)
+        ? IdleVisualizer(child: ShareIntakeGate(child: child))
+        : ShareIntakeGate(child: child);
+    return watched;
   }
 }
 

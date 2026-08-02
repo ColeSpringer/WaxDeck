@@ -86,7 +86,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('saved by silence trimming'), findsOneWidget);
+    expect(find.text('time saved'), findsOneWidget);
     expect(find.byKey(const Key('stats-chart')), findsOneWidget);
     expect(find.byKey(const Key('stats-heatmap')), findsOneWidget);
     expect(

@@ -127,6 +127,14 @@ abstract final class WaxRoute {
   /// put it in, and back closes it onto what was underneath.
   static const queue = '/queue';
 
+  /// The track drawn large, and the player at arm's length. Views of
+  /// what is playing like [nowPlaying], and declared for the same
+  /// reason: each is a whole surface with a way out, reachable from a
+  /// menu today and from the command palette next, and neither is a
+  /// place a stranger's link can put somebody.
+  static const visualizer = '/visualizer';
+  static const carMode = '/car';
+
   /// Controlling a Connect session on another endpoint.
   static const remote = '/remote';
 

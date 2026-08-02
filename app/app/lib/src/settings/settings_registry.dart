@@ -117,6 +117,7 @@ class SettingEntry {
     this.handle,
     this.adminOnly = false,
     this.nativeOnly = false,
+    this.desktopOnly = false,
   });
 
   /// A stable handle, also this setting's e2e identifier suffix. Renaming
@@ -155,6 +156,12 @@ class SettingEntry {
   /// Absent on web, where there is no download manager and no metered
   /// connection worth asking about.
   final bool nativeOnly;
+
+  /// Absent anywhere that is not a desktop: a machine somebody walks
+  /// away from with the music still playing. A phone locks its screen
+  /// and a browser tab is not a room's stereo, so the one setting this
+  /// covers would be a switch with nothing behind it on both.
+  final bool desktopOnly;
 }
 
 /// Every leaf setting this build ships.
@@ -272,6 +279,19 @@ const settingsRegistry = <SettingEntry>[
     section: SettingsSection.playback,
     keywords: <String>['gapless', 'preload', 'data', 'metered', 'mobile'],
     nativeOnly: true,
+  ),
+  SettingEntry(
+    id: 'car-button',
+    title: 'Car mode button',
+    section: SettingsSection.playback,
+    keywords: <String>['driving', 'large', 'dashboard', 'player'],
+  ),
+  SettingEntry(
+    id: 'visualizer-idle',
+    title: 'Open the visualizer when idle',
+    section: SettingsSection.playback,
+    keywords: <String>['screensaver', 'waveform', 'platter', 'away'],
+    desktopOnly: true,
   ),
 
   // Library and metadata
@@ -392,12 +412,13 @@ const settingsRegistry = <SettingEntry>[
 /// tie-break nobody could predict, and this list is short enough that
 /// the honest ordering is the useful one.
 ///
-/// [isAdmin] and [isNative] drop what this caller cannot reach, rather
-/// than offering a row that opens a section without it.
+/// [isAdmin], [isNative], and [isDesktop] drop what this caller cannot
+/// reach, rather than offering a row that opens a section without it.
 List<SettingEntry> searchSettings(
   String query, {
   required bool isAdmin,
   required bool isNative,
+  required bool isDesktop,
 }) {
   final needle = query.trim().toLowerCase();
   if (needle.isEmpty) return const <SettingEntry>[];
@@ -408,6 +429,7 @@ List<SettingEntry> searchSettings(
     if (entry.adminOnly && !isAdmin) continue;
     if (entry.section.adminOnly && !isAdmin) continue;
     if (entry.nativeOnly && !isNative) continue;
+    if (entry.desktopOnly && !isDesktop) continue;
     final title = entry.title.toLowerCase();
     if (title.startsWith(needle)) {
       starts.add(entry);
