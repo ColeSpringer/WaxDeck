@@ -2216,6 +2216,13 @@
           ]
         },
         {
+          "name": "deviceRename",
+          "id": "device-rename-{id}",
+          "params": [
+            "id"
+          ]
+        },
+        {
           "name": "deviceRevoke",
           "id": "device-revoke-{id}",
           "params": [

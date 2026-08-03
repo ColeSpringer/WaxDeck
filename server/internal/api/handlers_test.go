@@ -364,6 +364,188 @@ func TestSessionRevocationKillsDevice(t *testing.T) {
 	resp.Body.Close()
 }
 
+// A device's label is whatever its login supplied, which for a web login
+// is nothing at all, so renaming is how a row in the device list gets a
+// name a person recognizes. Everything here is about one caller's own
+// sessions: another account's is indistinguishable from a missing one.
+func TestRenameSession(t *testing.T) {
+	ts := newAuthTestServer(t)
+	admin := bootstrap(t, ts)
+
+	phone := postJSON(t, ts.URL+"/api/v1/auth/login", "",
+		`{"username":"admin","password":"`+testPassword+`","deviceName":"Test Phone"}`)
+	phoneID := decodeSessionID(t, ts, admin.Token, "Test Phone")
+	phone.Body.Close()
+
+	rename := func(token, id, body string) *http.Response {
+		t.Helper()
+		req, _ := http.NewRequest("PATCH", ts.URL+"/api/v1/auth/sessions/"+id,
+			strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	// Renamed from the other session, and the echoed row is the renamed
+	// one rather than what was sent.
+	resp := rename(admin.Token, phoneID, `{"deviceName":"  Kitchen Radio  "}`)
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("rename status = %d, want 200", resp.StatusCode)
+	}
+	got := decode[DeviceSession](t, resp)
+	// Trimmed on the way in, so neither the store nor the list ever holds
+	// the padding.
+	if got.DeviceName == nil || *got.DeviceName != "Kitchen Radio" {
+		t.Fatalf("renamed session = %v, want the trimmed name", got.DeviceName)
+	}
+	if got.Current {
+		t.Error("the renamed session is not the one serving this request")
+	}
+	list := decode[SessionList](t, get(t, ts, "/api/v1/auth/sessions", admin.Token))
+	found := false
+	for _, s := range list.Sessions {
+		if s.DeviceName != nil && *s.DeviceName == "Kitchen Radio" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the device list still shows the old name")
+	}
+
+	// Empty after trimming is refused: there is no way to spell "clear
+	// the label", and a blank row reads as a bug.
+	for _, body := range []string{
+		`{"deviceName":""}`,
+		`{"deviceName":"   "}`,
+		`{"deviceName":"` + strings.Repeat("a", 129) + `"}`,
+	} {
+		resp = rename(admin.Token, phoneID, body)
+		if resp.StatusCode != 400 {
+			resp.Body.Close()
+			t.Errorf("rename %s status = %d, want 400", body, resp.StatusCode)
+		} else {
+			resp.Body.Close()
+		}
+	}
+	// The cap is measured on the value as sent, so padding counts toward
+	// it: a validating client rejects this before the request, and the
+	// handler must not disagree by trimming first.
+	resp = rename(admin.Token, phoneID, `{"deviceName":" `+strings.Repeat("a", 128)+` "}`)
+	if resp.StatusCode != 400 {
+		resp.Body.Close()
+		t.Errorf("a padded over-cap name status = %d, want 400", resp.StatusCode)
+	} else {
+		resp.Body.Close()
+	}
+	// Exactly at the cap, counted in characters: an emoji is one.
+	resp = rename(admin.Token, phoneID, `{"deviceName":"`+strings.Repeat("a", 127)+`📻"}`)
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Errorf("a 128-character name status = %d, want 200", resp.StatusCode)
+	} else {
+		resp.Body.Close()
+	}
+
+	// Another account's session is a 404, the same as one that does not
+	// exist, so this cannot be used to probe for ids.
+	other := postJSON(t, ts.URL+"/api/v1/users", admin.Token,
+		`{"username":"sam","password":"`+testPassword+`"}`)
+	if other.StatusCode != 201 {
+		other.Body.Close()
+		t.Fatalf("create second user status = %d", other.StatusCode)
+	}
+	other.Body.Close()
+	sam := loginAs(t, ts, "sam", testPassword)
+	resp = rename(sam.Token, phoneID, `{"deviceName":"Not Mine"}`)
+	if resp.StatusCode != 404 {
+		resp.Body.Close()
+		t.Fatalf("renaming a foreign session = %d, want 404", resp.StatusCode)
+	}
+	resp.Body.Close()
+	resp = rename(admin.Token, "se-01JZX5N8QW3F4V9T2B7KD3M9R6", `{"deviceName":"Ghost"}`)
+	if resp.StatusCode != 404 {
+		resp.Body.Close()
+		t.Fatalf("renaming a missing session = %d, want 404", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+// A login is never refused over its label: an over-long name is stored
+// cut to the cap, and a whitespace-only one leaves a web session.
+func TestLoginDeviceNameIsTrimmedAndCapped(t *testing.T) {
+	ts := newAuthTestServer(t)
+	admin := bootstrap(t, ts)
+
+	long := postJSON(t, ts.URL+"/api/v1/auth/login", "",
+		`{"username":"admin","password":"`+testPassword+`","deviceName":"`+
+			strings.Repeat("b", 400)+`"}`)
+	if long.StatusCode != 200 {
+		long.Body.Close()
+		t.Fatalf("login with a long device name = %d, want 200", long.StatusCode)
+	}
+	long.Body.Close()
+
+	blank := postJSON(t, ts.URL+"/api/v1/auth/login", "",
+		`{"username":"admin","password":"`+testPassword+`","deviceName":"   "}`)
+	if blank.StatusCode != 200 {
+		blank.Body.Close()
+		t.Fatalf("login with a blank device name = %d, want 200", blank.StatusCode)
+	}
+	blank.Body.Close()
+
+	list := decode[SessionList](t, get(t, ts, "/api/v1/auth/sessions", admin.Token))
+	capped, unnamedDevice, unnamedWeb := 0, 0, 0
+	for _, s := range list.Sessions {
+		if s.DeviceName != nil && strings.HasPrefix(*s.DeviceName, "b") {
+			capped++
+			if n := len([]rune(*s.DeviceName)); n != 128 {
+				t.Errorf("stored device name is %d characters, want it cut to 128", n)
+			}
+		}
+		if s.DeviceName != nil {
+			continue
+		}
+		if s.Kind == "device" {
+			unnamedDevice++
+		} else {
+			unnamedWeb++
+		}
+	}
+	if capped != 1 {
+		t.Errorf("found %d capped device names, want 1", capped)
+	}
+	// The whitespace-only login. It sent a label, so it is a device and
+	// keeps the device session's expiry; only the label was nothing, and
+	// storing that blank is what the trim is for. Deciding the kind on
+	// the trimmed value instead would silently cut its token's life from
+	// 90 days to 14.
+	if unnamedDevice != 1 {
+		t.Errorf("found %d unnamed device sessions, want the padded login's 1", unnamedDevice)
+	}
+	// The bootstrap login, which sent no deviceName at all.
+	if unnamedWeb != 1 {
+		t.Errorf("found %d unnamed web sessions, want the bootstrap's 1", unnamedWeb)
+	}
+}
+
+// decodeSessionID finds one session's id by its device name.
+func decodeSessionID(t *testing.T, ts *httptest.Server, token, deviceName string) string {
+	t.Helper()
+	list := decode[SessionList](t, get(t, ts, "/api/v1/auth/sessions", token))
+	for _, s := range list.Sessions {
+		if s.DeviceName != nil && *s.DeviceName == deviceName {
+			return s.Id
+		}
+	}
+	t.Fatalf("no session named %q", deviceName)
+	return ""
+}
+
 func TestTokenRefreshRotates(t *testing.T) {
 	ts := newAuthTestServer(t)
 	bootstrap(t, ts)

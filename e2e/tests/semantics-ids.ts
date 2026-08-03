@@ -473,6 +473,7 @@ export const SemanticsIds = {
   aboutOpen: 'about-open',
   appPasswordAdd: 'app-password-add',
   appPasswordRevoke: (id: string | number) => `app-password-revoke-${id}`,
+  deviceRename: (id: string | number) => `device-rename-${id}`,
   deviceRevoke: (id: string | number) => `device-revoke-${id}`,
   deviceRow: (id: string | number) => `device-row-${id}`,
   lastfmCredentialsClear: 'lastfm-credentials-clear',

@@ -66,7 +66,9 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
     final first = items.firstOrNull;
     final derived = switch (dimension) {
       MusicDimension.artists => first?.artist,
-      MusicDimension.albums => first?.album,
+      // A release group is named for the record, and every edition of it
+      // carries that name, so the first row has it.
+      MusicDimension.albums || MusicDimension.releaseGroups => first?.album,
       _ => null,
     };
     return derived ??
@@ -86,6 +88,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       kind: switch (dimension) {
         MusicDimension.artists => QueueSourceKind.artist,
         MusicDimension.albums => QueueSourceKind.album,
+        MusicDimension.releaseGroups => QueueSourceKind.releaseGroup,
         MusicDimension.genres => QueueSourceKind.genre,
         MusicDimension.years => QueueSourceKind.year,
       },

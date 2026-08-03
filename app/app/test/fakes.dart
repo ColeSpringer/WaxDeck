@@ -153,6 +153,10 @@ class FakeRepository implements WaxDeckRepository {
   final List<({String code, String? verifier, String? deviceName})>
   oidcExchangeCalls = [];
   final List<String> revokedSessionIds = [];
+  final List<({String id, String deviceName})> renamedSessions = [];
+
+  /// When set, renameSession fails with it instead of storing.
+  WaxDeckApiException? renameError;
   final List<({String pid, int positionMs})> putPlayStateCalls = [];
   final List<ListenSession> reportedSessions = [];
   final List<({String url, String? sourceType})> subscribeCalls = [];
@@ -280,6 +284,43 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<List<DeviceSession>> listSessions() async => List.of(deviceSessions);
+
+  @override
+  Future<DeviceSession> renameSession(
+    String sessionId,
+    String deviceName,
+  ) async {
+    final failure = renameError;
+    if (failure != null) throw failure;
+    // The server trims; the fake stores what a trimming server would.
+    final name = deviceName.trim();
+    if (name.isEmpty) {
+      throw const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'deviceName must be 1 to 128 characters after trimming',
+      );
+    }
+    renamedSessions.add((id: sessionId, deviceName: name));
+    final at = deviceSessions.indexWhere((s) => s.id == sessionId);
+    if (at < 0) {
+      throw const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no session with that id',
+      );
+    }
+    final was = deviceSessions[at];
+    final now = DeviceSession(
+      id: was.id,
+      kind: was.kind,
+      createdAt: was.createdAt,
+      current: was.current,
+      deviceName: name,
+      client: was.client,
+      lastSeenAt: was.lastSeenAt,
+    );
+    deviceSessions[at] = now;
+    return now;
+  }
 
   @override
   Future<void> revokeSession(String sessionId) async {
@@ -2652,7 +2693,10 @@ class FakeRepository implements WaxDeckRepository {
   Future<MetadataFields> getMetadataFields() async => metadataFields;
 
   /// Entity pids the metadata read carries, per item pid.
-  final Map<String, ({String? artistPid, String? albumPid})>
+  final Map<
+    String,
+    ({String? artistPid, String? albumPid, String? releaseGroupPid})
+  >
   metadataEntityPids = {};
 
   @override
@@ -2678,6 +2722,7 @@ class FakeRepository implements WaxDeckRepository {
       hasOwnArtwork: ownArtworkPids.contains(pid),
       artistPid: entities?.artistPid,
       albumPid: entities?.albumPid,
+      releaseGroupPid: entities?.releaseGroupPid,
     );
   }
 

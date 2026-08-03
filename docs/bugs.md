@@ -2,6 +2,8 @@
 
 List of current bugs or correctness issues.
 
+- [8-2-2026] `TestCueSplitEndToEnd` is flaky under full-suite load: seen once as `pieces kept the virtual pids` at tools_integration_test.go around 536, then passing in isolation and across four consecutive full runs of `internal/api`, so it is rare rather than fixed. The task itself had already been asserted `done` with two `resultPids` two lines earlier, and the failing read is the `/library/items` listing right after, which still answered the pre-split virtual carvings. So the gap is between the split committing and the listing reflecting it, not the split failing. Two candidates, neither confirmed: the drain helper returns when `DrainToolTasks` reports no more work, which may be ahead of the catalog change the replacement lands through; or the listing read is served from a generation the split has not yet bumped. Worth reproducing under `-count` with `-race` before picking one - a fix aimed at the wrong half would just move the window.
+
 - [8-1-2026] Casting a fresh session from the device picker while local audio plays stops nothing locally: the picker creates the remote session without ending local playback, and the deck bar's precedence keeps the local face over the remote one (device_picker.dart around 313-356, precedence in deck_bar_host.dart around 80-91). Needs ADR-0008's transfer semantics before deciding what "start there" should do to the local engine.
 
 - [8-1-2026] Casting while radio plays transfers a dead item session: mirrorSessionId never clears when radio takes the engine, so the picker (reachable via the settings screen during radio) offers a transfer of a session whose queue the engine no longer plays (connect_controller.dart around 91-99). Same ADR-0008 dependency.

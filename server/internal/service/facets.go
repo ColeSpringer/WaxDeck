@@ -50,12 +50,13 @@ import (
 // enumerated here: tag keys are open-ended, so it is validated by the
 // catalog's own tag-key rules instead.
 var browseDimensions = map[string]read.GroupBy{
-	"genre":        read.GroupGenre,
-	"artist":       read.GroupArtist,
-	"album-artist": read.GroupAlbumArtist,
-	"album":        read.GroupAlbum,
-	"year":         read.GroupYear,
-	"kind":         read.GroupKind,
+	"genre":         read.GroupGenre,
+	"artist":        read.GroupArtist,
+	"album-artist":  read.GroupAlbumArtist,
+	"album":         read.GroupAlbum,
+	"release-group": read.GroupReleaseGroup,
+	"year":          read.GroupYear,
+	"kind":          read.GroupKind,
 }
 
 // facetFilterField is the query field a dimension's bucket key filters
@@ -63,12 +64,13 @@ var browseDimensions = map[string]read.GroupBy{
 // bucket's count and the list it opens can never disagree about what
 // belongs in it.
 var facetFilterField = map[string]string{
-	"genre":        "genre_pid",
-	"artist":       "artist_pid",
-	"album-artist": "album_artist_pid",
-	"album":        "album_pid",
-	"year":         "year",
-	"kind":         "kind",
+	"genre":         "genre_pid",
+	"artist":        "artist_pid",
+	"album-artist":  "album_artist_pid",
+	"album":         "album_pid",
+	"release-group": "release_group_pid",
+	"year":          "year",
+	"kind":          "kind",
 }
 
 // facetTagPrefix marks a custom-tag browse dimension.
@@ -115,7 +117,8 @@ func ParseFacetSort(s string) (FacetSort, error) {
 // unknown bucket). The drill filter mirrors it so the item set matches
 // the bucket count.
 var facetNoEpisodes = map[string]bool{
-	"genre": true, "artist": true, "album-artist": true, "album": true, "year": true,
+	"genre": true, "artist": true, "album-artist": true, "album": true,
+	"release-group": true, "year": true,
 }
 
 // facetHasUnknownBucket names the dimensions that enumerate a bucket for
@@ -126,7 +129,8 @@ var facetNoEpisodes = map[string]bool{
 // match facetNoEpisodes today; they answer different questions, so they
 // stay separate lists.
 var facetHasUnknownBucket = map[string]bool{
-	"genre": true, "artist": true, "album-artist": true, "album": true, "year": true,
+	"genre": true, "artist": true, "album-artist": true, "album": true,
+	"release-group": true, "year": true,
 }
 
 // FacetBucket is one bucket of a browse dimension.
@@ -599,15 +603,17 @@ func facetGroupFor(dimension string) (read.GroupBy, string, error) {
 }
 
 // facetEntityPrefix is the API pid prefix for a dimension's entity
-// buckets. Only the artist-shaped and album-shaped dimensions have one;
-// a genre entity has no first-party pid surface, and year, kind, and tag
-// buckets are not entities at all.
+// buckets. Only the artist-shaped, album-shaped, and release-group
+// dimensions have one; a genre entity has no first-party pid surface,
+// and year, kind, and tag buckets are not entities at all.
 func facetEntityPrefix(dimension string) string {
 	switch dimension {
 	case "artist", "album-artist":
 		return PrefixArtist
 	case "album":
 		return PrefixAlbum
+	case "release-group":
+		return PrefixReleaseGroup
 	default:
 		return ""
 	}

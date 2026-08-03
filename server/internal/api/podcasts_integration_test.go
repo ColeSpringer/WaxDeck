@@ -1809,9 +1809,10 @@ func TestSubscribedEpisodesAndUnplayedCount(t *testing.T) {
 		t.Fatalf("unplayedCount = %d before any listening, want 3", got)
 	}
 
-	// The tile's other two numbers ride the same walk, so a subscription
-	// row can order by recency and say how big a show is. Both were
-	// absent before, which made the hub's default sort a no-op.
+	// The tile's other two numbers come from the same view of the show,
+	// so a subscription row can order by recency and say how big a show
+	// is. Both were absent before, which made the hub's default sort a
+	// no-op.
 	resp = get(t, h.ts, "/api/v1/podcasts", h.token)
 	row := decode[SubscriptionPage](t, resp).Items[0]
 	if row.Show.EpisodeCount == nil || *row.Show.EpisodeCount != 3 {
@@ -1921,6 +1922,238 @@ func TestSubscribedEpisodesAndUnplayedCount(t *testing.T) {
 	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=latest", h.token)
 	if got := decode[EpisodePage](t, resp).Items; len(got) != 0 {
 		t.Errorf("an unfollowed show still lists %d episodes", len(got))
+	}
+}
+
+// The cross-show listing is a keyset browse of the catalog, so what it
+// must prove is what a Go sort over every followed show used to make
+// trivially true: rows from different shows interleave by publication
+// date and page across a show boundary without a duplicate or a gap.
+func TestSubscribedEpisodesInterleaveAcrossShows(t *testing.T) {
+	h := newPodcastHarness(t)
+	// Two feeds a day out of step with each other, so the merged order
+	// alternates between them and every page of two straddles a show
+	// boundary.
+	dayOne := time.Date(2026, 6, 1, 8, 0, 0, 0, time.UTC)
+	odd := newCountsFeedAs(t, countsChannel{firstPublished: dayOne},
+		[]countsEpisode{{title: "A1"}, {title: "A2"}, {title: "A3"}})
+	even := newCountsFeedAs(t, countsChannel{firstPublished: dayOne.Add(12 * time.Hour)},
+		[]countsEpisode{{title: "B1"}, {title: "B2"}, {title: "B3"}})
+	for _, f := range []*countsFeed{odd, even} {
+		resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": f.feedURL()})
+		wantStatus(t, resp, 201, "subscribe")
+	}
+
+	resp := get(t, h.ts, "/api/v1/podcasts/episodes?filter=latest", h.token)
+	all := decode[EpisodePage](t, resp).Items
+	if len(all) != 6 {
+		t.Fatalf("latest = %d rows, want all 6", len(all))
+	}
+	for i := 1; i < len(all); i++ {
+		if all[i-1].ShowPid == all[i].ShowPid {
+			t.Fatalf("rows %d and %d are from the same show; the two feeds should alternate", i-1, i)
+		}
+		if all[i-1].PublishedAt.Before(all[i].PublishedAt) {
+			t.Fatalf("latest is not newest first at row %d", i)
+		}
+	}
+
+	// Page it two at a time and rebuild the same list.
+	var paged []EpisodeSummary
+	cursor := ""
+	for range 5 {
+		path := "/api/v1/podcasts/episodes?filter=latest&limit=2"
+		if cursor != "" {
+			path += "&cursor=" + cursor
+		}
+		resp = get(t, h.ts, path, h.token)
+		page := decode[EpisodePage](t, resp)
+		paged = append(paged, page.Items...)
+		if page.NextCursor == nil {
+			break
+		}
+		cursor = *page.NextCursor
+	}
+	if len(paged) != len(all) {
+		t.Fatalf("paged %d rows, want the same %d", len(paged), len(all))
+	}
+	seen := map[string]bool{}
+	for i, ep := range paged {
+		if seen[ep.Pid] {
+			t.Errorf("row %d (%s) is a duplicate across pages", i, ep.Pid)
+		}
+		seen[ep.Pid] = true
+		if ep.Pid != all[i].Pid {
+			t.Errorf("paged row %d = %s, want %s (paging reordered the listing)", i, ep.Pid, all[i].Pid)
+		}
+	}
+}
+
+// The keyset the listing rides on is the publication date, so an episode
+// without one cannot appear in it. Its own show still lists it: the
+// exclusion is the cross-show order's, not a disappearance.
+func TestSubscribedEpisodesExcludeUndated(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newCountsFeed(t, []countsEpisode{
+		{title: "Dated"},
+		{title: "Undated", undated: true},
+	})
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+
+	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+	own := decode[EpisodePage](t, resp).Items
+	if len(own) != 2 {
+		t.Fatalf("the show's own listing = %d rows, want both", len(own))
+	}
+	var undated string
+	for _, ep := range own {
+		if ep.Title == "Undated" {
+			undated = ep.Pid
+		}
+	}
+	if undated == "" {
+		t.Fatal("no undated episode in the show's listing")
+	}
+
+	for _, filter := range []string{"latest", "unplayed"} {
+		resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter="+filter, h.token)
+		rows := decode[EpisodePage](t, resp).Items
+		if len(rows) != 1 {
+			t.Errorf("%s = %d rows, want only the dated one", filter, len(rows))
+		}
+		for _, ep := range rows {
+			if ep.Pid == undated {
+				t.Errorf("%s carries the undated episode", filter)
+			}
+		}
+	}
+
+	// The tile still counts it: the backlog is what is waiting, whatever
+	// the feed declared about dates.
+	if got := unplayedFor(t, h, show); got != 2 {
+		t.Errorf("unplayedCount = %d, want both episodes", got)
+	}
+}
+
+// The gate rides in the query now, so it holds on the cross-show listing
+// exactly as it holds on a show's own.
+func TestSubscribedEpisodesHideExplicitFromRestricted(t *testing.T) {
+	h := newPodcastHarness(t)
+	flagged := newCountsFeed(t, []countsEpisode{
+		{title: "Clean"},
+		{title: "Explicit", explicit: true},
+	})
+	explicitShow := newCountsFeedAs(t, countsChannel{explicit: true}, []countsEpisode{
+		{title: "Unflagged Of A Flagged Show"},
+	})
+
+	id, listener := listenerAccount(t, h, "cross-shielded", true)
+	for _, f := range []*countsFeed{flagged, explicitShow} {
+		resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": f.feedURL()})
+		wantStatus(t, resp, 201, "admin subscribe")
+		resp = reqAs(t, h, "POST", "/api/v1/podcasts", listener, map[string]any{"url": f.feedURL()})
+		wantStatus(t, resp, 201, "listener subscribe while allowed")
+	}
+	resp := h.patchJSON(t, "/api/v1/users/"+id, map[string]any{
+		"permissions": map[string]any{
+			"download": true, "delete": false, "explicitContent": false,
+			"sharedOutputs": true, "managePodcasts": true,
+		},
+	})
+	wantStatus(t, resp, 200, "revoke explicit content")
+
+	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=latest", h.token)
+	if got := decode[EpisodePage](t, resp).Items; len(got) != 3 {
+		t.Fatalf("open latest = %d rows, want all 3", len(got))
+	}
+	resp = reqAs(t, h, "GET", "/api/v1/podcasts/episodes?filter=latest", listener, nil)
+	rows := decode[EpisodePage](t, resp).Items
+	if len(rows) != 1 {
+		t.Fatalf("restricted latest = %d rows, want only the clean one", len(rows))
+	}
+	if rows[0].Title != "Clean" {
+		t.Errorf("restricted latest kept %q, want Clean", rows[0].Title)
+	}
+}
+
+// The in-progress strip ranks on when an episode was last played, and
+// falls back to when its play state last changed for a checkpoint that
+// never stamped one.
+func TestSubscribedEpisodesInProgressRecency(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newCountsFeed(t, []countsEpisode{
+		{title: "First"}, {title: "Second"}, {title: "Third"},
+	})
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+	eps := decode[EpisodePage](t, resp).Items
+	if len(eps) != 3 {
+		t.Fatalf("episodes = %d, want 3", len(eps))
+	}
+
+	// Start the oldest first and the newest last, so publication order and
+	// recency order disagree and only the second can be right.
+	for _, ep := range []EpisodeSummary{eps[2], eps[1], eps[0]} {
+		putPlayState(t, h, ep.Pid, 1_000)
+	}
+	// Finishing one drops it: in-progress is started and unfinished.
+	putPlayState(t, h, eps[1].Pid, eps[1].DurationMs)
+
+	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=in-progress", h.token)
+	rows := decode[EpisodePage](t, resp).Items
+	if len(rows) != 2 {
+		t.Fatalf("in-progress = %d rows, want the two still started", len(rows))
+	}
+	if rows[0].Pid != eps[0].Pid || rows[1].Pid != eps[2].Pid {
+		t.Errorf("in-progress order = %s, %s; want most recently played first (%s, %s)",
+			rows[0].Pid, rows[1].Pid, eps[0].Pid, eps[2].Pid)
+	}
+
+	// It pages under its own cursor, and the second page resumes rather
+	// than restarting.
+	resp = get(t, h.ts, "/api/v1/podcasts/episodes?filter=in-progress&limit=1", h.token)
+	first := decode[EpisodePage](t, resp)
+	if len(first.Items) != 1 || first.NextCursor == nil {
+		t.Fatalf("capped in-progress page = %d rows, cursor %v", len(first.Items), first.NextCursor)
+	}
+	resp = get(t, h.ts,
+		"/api/v1/podcasts/episodes?filter=in-progress&cursor="+*first.NextCursor, h.token)
+	rest := decode[EpisodePage](t, resp).Items
+	if len(rest) != 1 || rest[0].Pid == first.Items[0].Pid {
+		t.Errorf("resumed in-progress page = %+v, want the other row", rest)
+	}
+
+	// Walked one row at a time, the pages rebuild the unpaged listing
+	// exactly. The resume is a search for the first row strictly after
+	// the cursor's own, and getting that boundary wrong reads as a row
+	// served twice and a cursor that never advances rather than as an
+	// error, so it is pinned rather than reasoned about.
+	var paged []EpisodeSummary
+	cursor := ""
+	for range len(rows) + 1 {
+		path := "/api/v1/podcasts/episodes?filter=in-progress&limit=1"
+		if cursor != "" {
+			path += "&cursor=" + cursor
+		}
+		page := decode[EpisodePage](t, get(t, h.ts, path, h.token))
+		paged = append(paged, page.Items...)
+		if page.NextCursor == nil {
+			break
+		}
+		if *page.NextCursor == cursor {
+			t.Fatalf("the in-progress cursor did not advance past %q", cursor)
+		}
+		cursor = *page.NextCursor
+	}
+	if len(paged) != len(rows) {
+		t.Fatalf("paging one at a time drew %d rows, want the same %d", len(paged), len(rows))
+	}
+	for i, ep := range paged {
+		if ep.Pid != rows[i].Pid {
+			t.Errorf("paged row %d = %s, want %s", i, ep.Pid, rows[i].Pid)
+		}
 	}
 }
 

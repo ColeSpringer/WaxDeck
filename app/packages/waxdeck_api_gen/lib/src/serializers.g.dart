@@ -274,6 +274,7 @@ Serializers _$serializers =
           ..add(ServerYearInReview.serializer)
           ..add(SessionInfo.serializer)
           ..add(SessionList.serializer)
+          ..add(SessionRename.serializer)
           ..add(Share.serializer)
           ..add(ShareCreate.serializer)
           ..add(SharePage.serializer)

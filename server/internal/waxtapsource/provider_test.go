@@ -39,6 +39,9 @@ type fakeTap struct {
 	downloadErr error
 	downloads   int
 	warnings    []waxtap.Warning // emitted as events, and echoed on a successful Result
+	// lastReq is the request the provider built, for the tests that are
+	// about the spec rather than about the bytes.
+	lastReq waxtap.Request
 }
 
 var _ tap = (*fakeTap)(nil)
@@ -71,6 +74,7 @@ func (f *fakeTap) Info(_ context.Context, url string, _ waxtap.InfoDepth, _ ...w
 
 func (f *fakeTap) Download(_ context.Context, req waxtap.Request) (*waxtap.Result, error) {
 	f.downloads++
+	f.lastReq = req
 	// Warnings reach the event stream as the conditions occur, ahead of any
 	// failure. The real client also copies them onto a successful Result (below),
 	// and only onto a successful one -- that asymmetry is the thing under test.
@@ -134,12 +138,23 @@ func channelFake(n int) *fakeTap {
 
 func testProvider(t *testing.T, f *fakeTap, logs *bytes.Buffer) *Provider {
 	t.Helper()
+	return testProviderWith(t, f, logs, nil)
+}
+
+// testProviderWith is testProvider with a hand on the configuration, for
+// the tests that are about what a config switch puts in the spec.
+func testProviderWith(t *testing.T, f *fakeTap, logs *bytes.Buffer, mutate func(*Config)) *Provider {
+	t.Helper()
 	f.workDir = t.TempDir()
 	var log *slog.Logger
 	if logs != nil {
 		log = slog.New(slog.NewTextHandler(logs, nil))
 	}
-	return newProvider(f, Config{WorkDir: f.workDir}, log, nil)
+	cfg := Config{WorkDir: f.workDir}
+	if mutate != nil {
+		mutate(&cfg)
+	}
+	return newProvider(f, cfg, log, nil)
 }
 
 func TestEnumerateFirstSync(t *testing.T) {
@@ -421,6 +436,39 @@ func TestFetchDeliversOpusInRecognizedContainer(t *testing.T) {
 	}
 	if res.ContentType != "audio/opus" {
 		t.Errorf("ContentType = %q, want audio/opus (never audio/webm)", res.ContentType)
+	}
+}
+
+// The cover-art mode rides the thumbnail switch and cannot be set
+// without it: a mode with no embed to shape is ErrIncompatibleSpec,
+// which would fail every acquisition rather than shape none of them.
+func TestFetchCoverArtFollowsEmbedThumbnail(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		embed bool
+		want  waxtap.CoverArtMode
+	}{
+		{name: "embedding", embed: true, want: waxtap.CoverArtSquare},
+		{name: "not embedding", embed: false, want: waxtap.CoverArtFrame},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := channelFake(1)
+			f.infos[vid(1)].Formats = audioFormats()
+			f.payload = []byte("deterministic bytes")
+			p := testProviderWith(t, f, nil, func(c *Config) { c.EmbedThumbnail = tc.embed })
+
+			var sink bytes.Buffer
+			if _, err := p.Fetch(context.Background(),
+				source.FetchRequest{URL: "https://www.youtube.com/watch?v=" + vid(1)}, &sink); err != nil {
+				t.Fatalf("Fetch: %v", err)
+			}
+			if got := f.lastReq.EmbedThumbnail; got != tc.embed {
+				t.Fatalf("EmbedThumbnail = %v, want %v", got, tc.embed)
+			}
+			if got := f.lastReq.CoverArt; got != tc.want {
+				t.Errorf("CoverArt = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

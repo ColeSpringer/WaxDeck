@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -153,6 +154,9 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter I
 	if !ok {
 		return Page{}, errInvalid("unknown list " + list)
 	}
+	if err := browseScopeKindError(dl, list, filter, scope[1], scope[2]); err != nil {
+		return Page{}, err
+	}
 	opts := read.BrowseOptions{
 		UserPID: model.PID(uc.CatalogPID),
 		Seed:    seed,
@@ -173,12 +177,64 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter I
 	return l.pageDTO(ctx, uc, page, key), nil
 }
 
+// browseScopeKindError refuses a browse whose filter names a kind the
+// list cannot hold.
+//
+// A few discovery lists are scoped to the kinds they can order by:
+// `newest` orders by release year, which an episode has not got.
+// Upstream answers an out-of-scope kind with an empty page, and an empty
+// page is an honest-looking lie on a surface whose whole job is saying
+// what the library holds. The guard reads the scope off the list rather
+// than naming any list, so one scoped later inherits it.
+func browseScopeKindError(dl read.DiscoveryList, list string, filter ItemFilter, canonicalFacet, facetKey string) error {
+	kinds := dl.Kinds()
+	if len(kinds) == 0 {
+		return nil
+	}
+	refuse := func(named string) error {
+		return errInvalid("the " + list + " list never contains " + named + " items")
+	}
+	if filter.MediaType != "" {
+		// Already validated by applyItemFilter, so an unknown one cannot
+		// reach here.
+		if kind, ok := kindForMediaType(filter.MediaType); ok && !slices.Contains(kinds, kind) {
+			return refuse(filter.MediaType)
+		}
+	}
+	if canonicalFacet == "kind" && facetKey != "" && !slices.Contains(kinds, model.Kind(facetKey)) {
+		return refuse(facetKey)
+	}
+	return nil
+}
+
 // cursorScope names the listing a cursor was issued for. Hashed rather
 // than joined so the token leaks no bucket key.
 func cursorScope(parts ...string) string {
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(sum[:8])
 }
+
+// cursorVersion stamps every scoped cursor this build mints.
+//
+// oldCursorVersions lists the versions a previous build minted whose
+// scope hash this build no longer computes the same way. It is empty
+// because nothing has changed yet, and it exists now because the moment
+// it is needed is the moment it is too late: a stored queue carries its
+// source cursor, and a change to what a scope hashes over turns every
+// one of them into a scope mismatch at once. A mismatch is a 400, the
+// pager treats a 400 as no cursor, and no cursor means a placement walk
+// of up to forty pages per queue - all of them, on the first play after
+// an upgrade.
+//
+// With the version byte, a token from a retired version is recognizable
+// as stale rather than as wrong-scope, so it can be handed to the
+// catalog to accept or refuse on its own terms instead of costing a
+// walk. Retiring a version is one line here, in the change that alters
+// the scope, and the next page a client asks for re-mints at the current
+// version, so stored queues upgrade themselves.
+const cursorVersion = "s1"
+
+var oldCursorVersions = map[string]bool{}
 
 // encodeScopedCursor wraps the catalog's keyset token in an envelope
 // carrying the scope it was issued under, so a cursor reused under a
@@ -188,7 +244,7 @@ func encodeScopedCursor(scope, token string) string {
 	if token == "" {
 		return ""
 	}
-	return encodeOpaqueCursor("s1|" + scope + "|" + token)
+	return encodeOpaqueCursor(cursorVersion + "|" + scope + "|" + token)
 }
 
 // decodeScopedCursor unwraps a scoped cursor, refusing one minted for a
@@ -203,8 +259,19 @@ func decodeScopedCursor(cursor, scope string) (string, error) {
 	}
 	// SplitN 3: the catalog's token may hold a separator of its own.
 	parts := strings.SplitN(raw, "|", 3)
-	if len(parts) != 3 || parts[0] != "s1" {
+	if len(parts) != 3 {
 		return "", errInvalid("malformed cursor")
+	}
+	if parts[0] != cursorVersion {
+		if !oldCursorVersions[parts[0]] {
+			return "", errInvalid("malformed cursor")
+		}
+		// A scope hash from a retired version means nothing to this
+		// build, so there is no comparison to make: hand the token
+		// through and let the catalog judge it. The worst case is what a
+		// client already gets from a stale cursor today, and the ordinary
+		// case is a page rather than a walk.
+		return parts[2], nil
 	}
 	if parts[1] != scope {
 		return "", errInvalid("cursor was issued for a different list, filter, or seed")

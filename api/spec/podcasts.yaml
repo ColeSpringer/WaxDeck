@@ -263,6 +263,12 @@ paths:
         caller last played the episode, most recent first, which is the
         order a "pick up where you left off" strip wants.
 
+        Episodes without a publication date are excluded from `latest`
+        and `unplayed`, because publication date is what orders them and
+        a feed that declares none leaves nothing to page on. Such an
+        episode still appears on its own show's listing, and still counts
+        toward that show's `unplayedCount`.
+
         A cursor is only valid for the filter it was issued under, since
         the two orders interleave differently. Sending a mismatched pair
         is `invalid-request` rather than a silently wrong page.
@@ -399,6 +405,13 @@ paths:
         (`descriptionHtml` is feed-controlled HTML reduced server-side
         to a safe allowlist; clients may render it directly) and chapter
         marks when the episode has them.
+
+        An account without the explicit-content right gets 404 for an
+        episode marked explicit and for any episode of a show marked
+        explicit at the channel level, whether or not the episode itself
+        carries the flag. That is the same rule the item read, the
+        stream, and the subscription counts apply, so no surface can
+        offer what another refuses.
       tags: [podcasts]
       parameters:
         - $ref: "#/components/parameters/Pid"

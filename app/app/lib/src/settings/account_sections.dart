@@ -216,6 +216,12 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
 class _DeviceSessions extends ConsumerWidget {
   const _DeviceSessions();
 
+  Future<void> _rename(BuildContext context, DeviceSession session) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) => _DeviceRenameDialog(session: session),
+      );
+
   Future<void> _revoke(
     BuildContext context,
     WidgetRef ref,
@@ -296,11 +302,24 @@ class _DeviceSessions extends ConsumerWidget {
                       ? WaxIcons.devices
                       : WaxIcons.headphones,
                   semanticsId: SemanticsIds.deviceRow(session.id),
-                  trailing: WaxIconButton(
-                    glyph: WaxIcons.offline,
-                    label: 'Sign out device',
-                    semanticsId: SemanticsIds.deviceRevoke(session.id),
-                    onPressed: () => _revoke(context, ref, session),
+                  // One trailing slot, two affordances, so they share a
+                  // Row sized to itself rather than to the option row.
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      WaxIconButton(
+                        glyph: WaxIcons.edit,
+                        label: 'Rename device',
+                        semanticsId: SemanticsIds.deviceRename(session.id),
+                        onPressed: () => _rename(context, session),
+                      ),
+                      WaxIconButton(
+                        glyph: WaxIcons.offline,
+                        label: 'Sign out device',
+                        semanticsId: SemanticsIds.deviceRevoke(session.id),
+                        onPressed: () => _revoke(context, ref, session),
+                      ),
+                    ],
                   ),
                 ),
             ],
@@ -311,6 +330,94 @@ class _DeviceSessions extends ConsumerWidget {
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
         },
+      ],
+    );
+  }
+}
+
+/// Device rename: a plain text field whose value the server trims and
+/// validates, so a refusal comes back into the dialog rather than into a
+/// snackbar somewhere behind it.
+///
+/// Save is disabled while the trimmed value is empty, which is the same
+/// rule the server enforces: refusing locally is a better answer than a
+/// round trip that can only end in 400.
+class _DeviceRenameDialog extends ConsumerStatefulWidget {
+  const _DeviceRenameDialog({required this.session});
+
+  final DeviceSession session;
+
+  @override
+  ConsumerState<_DeviceRenameDialog> createState() =>
+      _DeviceRenameDialogState();
+}
+
+class _DeviceRenameDialogState extends ConsumerState<_DeviceRenameDialog> {
+  late final _controller = TextEditingController(
+    text: widget.session.deviceName ?? '',
+  );
+  String? _error;
+  var _busy = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _controller.text.trim();
+    if (_busy || name.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final navigator = Navigator.of(context);
+    try {
+      await ref
+          .read(sessionsControllerProvider.notifier)
+          .rename(widget.session.id, name);
+      navigator.pop();
+    } on WaxDeckApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = _controller.text.trim().isEmpty;
+    return AlertDialog(
+      title: const Text('Rename device'),
+      content: WaxTextField(
+        label: 'Device name',
+        hint: 'Kitchen radio',
+        controller: _controller,
+        autofocus: true,
+        errorText: _error,
+        // Clears the refusal as well as re-running the save gate: the
+        // message is about the name that was submitted, and leaving it
+        // under a name that has since changed would show "invalid" beside
+        // an enabled Save.
+        // Clears the refusal as well as re-running the save gate: the
+        // message is about the name that was submitted, and leaving it
+        // under a name that has since changed would show "invalid" beside
+        // an enabled Save.
+        onChanged: (_) => setState(() => _error = null),
+        onSubmitted: (_) => _save(),
+      ),
+      actions: <Widget>[
+        WaxButton(
+          label: 'Cancel',
+          kind: WaxButtonKind.text,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        WaxButton(
+          key: const Key('device-rename-confirm'),
+          label: 'Save',
+          onPressed: _busy || empty ? null : _save,
+        ),
       ],
     );
   }

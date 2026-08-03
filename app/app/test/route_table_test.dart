@@ -85,7 +85,12 @@ final _locations = <String, Type>{
     ): switch (dimension) {
       MusicDimension.artists => ArtistScreen,
       MusicDimension.albums => AlbumScreen,
-      MusicDimension.genres || MusicDimension.years => MusicListingScreen,
+      // A release group is an entity and travels as its pid, but has no
+      // screen of its own, so it opens the listing like the two that are
+      // not entities.
+      MusicDimension.releaseGroups ||
+      MusicDimension.genres ||
+      MusicDimension.years => MusicListingScreen,
     },
     // A bucket with no entity behind it travels as its bare key, even on
     // a dimension whose buckets usually are entities, and an entity

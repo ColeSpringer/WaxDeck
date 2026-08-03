@@ -224,3 +224,17 @@ func (d *DB) UpdateToolTaskParams(ctx context.Context, id, params string) error 
 	}
 	return nil
 }
+
+// PruneFinishedToolTasks removes terminal tool tasks that finished
+// before olderThanNS and reports how many went. A finished task is a
+// receipt: worth keeping long enough for someone to read it, and not
+// worth keeping forever.
+func (d *DB) PruneFinishedToolTasks(ctx context.Context, olderThanNS int64) (int64, error) {
+	res, err := d.w.ExecContext(ctx, `
+		DELETE FROM tool_tasks
+		WHERE state IN ('done', 'failed') AND finished_at_ns < ?`, olderThanNS)
+	if err != nil {
+		return 0, fmt.Errorf("db: pruning finished tool tasks: %w", err)
+	}
+	return res.RowsAffected()
+}

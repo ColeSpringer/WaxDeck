@@ -15,6 +15,7 @@ const (
 	PrefixTrack        = "tr"
 	PrefixAlbum        = "al"
 	PrefixArtist       = "ar"
+	PrefixReleaseGroup = "rg"
 	PrefixPodcast      = "pc"
 	PrefixEpisode      = "ep"
 	PrefixBook         = "bk"

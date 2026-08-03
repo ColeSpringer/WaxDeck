@@ -270,6 +270,12 @@ Widget _bucketScreen(MusicDimension dimension, GoRouterState state) {
         return ArtistScreen(pid: segment, label: label);
       case MusicDimension.albums:
         return AlbumScreen(pid: segment, label: label);
+      // A release group is an entity and travels as its pid, but there is
+      // no release-group screen: the work's own page would be an album
+      // page with the editions folded together, which is its own design.
+      // So it opens the listing, like the dimensions that are not
+      // entities at all.
+      case MusicDimension.releaseGroups:
       case MusicDimension.genres:
       case MusicDimension.years:
         break;

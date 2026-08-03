@@ -284,6 +284,7 @@ export 'package:waxdeck_api_gen/src/model/server_sync_page.dart';
 export 'package:waxdeck_api_gen/src/model/server_year_in_review.dart';
 export 'package:waxdeck_api_gen/src/model/session_info.dart';
 export 'package:waxdeck_api_gen/src/model/session_list.dart';
+export 'package:waxdeck_api_gen/src/model/session_rename.dart';
 export 'package:waxdeck_api_gen/src/model/share.dart';
 export 'package:waxdeck_api_gen/src/model/share_create.dart';
 export 'package:waxdeck_api_gen/src/model/share_page.dart';

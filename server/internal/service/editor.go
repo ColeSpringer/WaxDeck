@@ -142,9 +142,13 @@ type ItemMetadataDTO struct {
 	HasOwnArtwork   bool
 	WriteBackIssues []WriteBackIssueDTO
 	// The entity handles behind the display text, as ItemSummary carries
-	// them. Empty when absent; AlbumPID is track-only.
-	ArtistPID string
-	AlbumPID  string
+	// them. Empty when absent; AlbumPID and ReleaseGroupPID are
+	// track-only, and the release group is additionally empty for a track
+	// whose album has none, which is its own state rather than a missing
+	// album.
+	ArtistPID       string
+	AlbumPID        string
+	ReleaseGroupPID string
 }
 
 // MetadataEditParams carries the shared edit switches.
@@ -836,9 +840,11 @@ func mergeEntityForType(entityType string) (model.MergeEntity, bool) {
 }
 
 // editorEntityPID parses an entity's API pid. Albums and artists carry
-// established prefixes; release groups and genres have no API prefix
-// convention yet, so any well-formed prefix is accepted for them and
-// the bare PID passes through.
+// established prefixes and are checked against them. Release groups
+// mint `rg-` on reads now, but this stays permissive for them and for
+// genres: both have accepted any well-formed prefix since before the
+// read existed, and tightening it would refuse pids clients already
+// hold.
 func editorEntityPID(entityType, apiEntityPID string) (model.PID, error) {
 	prefix, pid, ok := parseAPIPID(apiEntityPID)
 	if !ok {
@@ -1171,6 +1177,57 @@ func (l *Library) SetReleaseStatus(ctx context.Context, uc *UserCtx, apiPID stri
 
 // --- full metadata read -----------------------------------------------------------
 
+// writeBackIssueCodes maps the catalog's write-back diagnostics onto the
+// contract's codes. The catalog names them in snake_case and the API in
+// kebab, so the two vocabularies are joined here once rather than
+// stringified at the edge.
+var writeBackIssueCodes = map[model.DiagnosticCode]string{
+	model.DiagTagWriteUnsynced: "tag-write-unsynced",
+	model.DiagTagWriteLost:     "tag-write-lost",
+}
+
+// writeBackIssues reads the write-back drift recorded against one item's
+// files.
+//
+// The filter is by code and not by origin: `tag_write_lost` is recorded
+// by the edit, organize, and replaygain writers alike, and all three are
+// the same fact to an editor asking whether this file's tags match the
+// catalog. Everything else the audit records (missing art, corrupt
+// audio) belongs to the diagnostics dashboard, not here.
+//
+// It goes to the facade directly rather than through service
+// FileDiagnostics, which is administrators-only because its rows carry
+// raw file paths. This read is open to anyone who can see the item, so
+// it has to withhold what makes that one administrators-only: the
+// catalog stamps Detail with the tag writer's own error, and a failed
+// write reads "writing tags to /srv/music/...: permission denied". Code,
+// tag key, and file pid say what went wrong without saying where the
+// library lives; Detail rides along for administrators, who can already
+// read it whole from the diagnostics dashboard.
+func (l *Library) writeBackIssues(ctx context.Context, uc *UserCtx, itemPID model.PID) ([]WriteBackIssueDTO, error) {
+	rows, err := l.lib.FileDiagnostics(ctx, model.DiagnosticFilter{ItemPID: itemPID})
+	if err != nil {
+		return nil, classify(err)
+	}
+	out := make([]WriteBackIssueDTO, 0, len(rows))
+	for _, d := range rows {
+		code, ok := writeBackIssueCodes[d.Code]
+		if !ok {
+			continue
+		}
+		issue := WriteBackIssueDTO{
+			FilePID: string(d.FilePID),
+			Code:    code,
+			TagKey:  d.TagKey,
+		}
+		if uc.Admin {
+			issue.Detail = d.Detail
+		}
+		out = append(out, issue)
+	}
+	return out, nil
+}
+
 // ItemMetadataFor assembles everything the editor shows for one item.
 // Readable by any user who can see the item.
 func (l *Library) ItemMetadataFor(ctx context.Context, uc *UserCtx, apiPID string) (ItemMetadataDTO, error) {
@@ -1182,24 +1239,24 @@ func (l *Library) ItemMetadataFor(ctx context.Context, uc *UserCtx, apiPID strin
 	if err != nil {
 		return ItemMetadataDTO{}, classify(err)
 	}
-	out := ItemMetadataDTO{
-		PID:          itemAPIPID(it),
-		MediaType:    mediaTypeForKind(it.Kind),
-		Fields:       editorScalarFields(it, prov),
-		LockedFields: []string{},
-		Provenance:   []FieldProvenanceDTO{},
-		Credits:      []CreditDTO{},
-		CustomTags:   []CustomTagDTO{},
-		VirtualTrack: it.Virtual,
-		ArtistPID:    entityAPIPID(PrefixArtist, it.ArtistPID),
-		AlbumPID:     entityAPIPID(PrefixAlbum, it.AlbumPID),
-		// Empty: FileDiagnostics has no file or item handle to filter
-		// by, so a per-item read would scan a library per editor open.
-		// Filed in docs/upstream-requests.md.
-		WriteBackIssues: []WriteBackIssueDTO{},
+	issues, err := l.writeBackIssues(ctx, uc, it.PID)
+	if err != nil {
+		return ItemMetadataDTO{}, err
 	}
-	// releaseGroupPid stays absent for the same kind of reason: the item
-	// view projects no release-group handle. Also filed.
+	out := ItemMetadataDTO{
+		PID:             itemAPIPID(it),
+		MediaType:       mediaTypeForKind(it.Kind),
+		Fields:          editorScalarFields(it, prov),
+		LockedFields:    []string{},
+		Provenance:      []FieldProvenanceDTO{},
+		Credits:         []CreditDTO{},
+		CustomTags:      []CustomTagDTO{},
+		VirtualTrack:    it.Virtual,
+		ArtistPID:       entityAPIPID(PrefixArtist, it.ArtistPID),
+		AlbumPID:        entityAPIPID(PrefixAlbum, it.AlbumPID),
+		ReleaseGroupPID: entityAPIPID(PrefixReleaseGroup, it.ReleaseGroupPID),
+		WriteBackIssues: issues,
+	}
 	for _, r := range prov {
 		dto := FieldProvenanceDTO{
 			Field: r.Field, Source: string(r.Source), Provider: r.Provider, Locked: r.Locked,

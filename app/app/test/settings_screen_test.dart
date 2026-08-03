@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxChoice, WaxTextField;
+import 'package:waxdeck_ui/waxdeck_ui.dart'
+    show WaxButton, WaxChoice, WaxTextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
@@ -218,6 +219,88 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.deviceRow('se-1')),
         findsOneWidget,
       );
+    });
+
+    testWidgets('renaming a device sends the trimmed name', (tester) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo(
+        sessions: [
+          testSession('se-1', current: true, deviceName: 'This one'),
+          testSession('se-2', deviceName: 'Pixel 9'),
+        ],
+      );
+      await tester.pumpWidget(_section(repo, SettingsSection.account));
+      await tester.pumpAndSettle();
+
+      await _show(
+        tester,
+        find.bySemanticsIdentifier(SemanticsIds.deviceRename('se-2')),
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.deviceRename('se-2')),
+      );
+      await tester.pumpAndSettle();
+
+      // The dialog opens on the name the row already carries, so a
+      // rename is an edit rather than a retype.
+      expect(find.widgetWithText(TextField, 'Pixel 9'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), '  Kitchen radio  ');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('device-rename-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(repo.renamedSessions, [(id: 'se-2', deviceName: 'Kitchen radio')]);
+      // Redrawn from the reloaded list, not from what was typed.
+      expect(find.textContaining('Kitchen radio'), findsOneWidget);
+      expect(find.textContaining('Pixel 9'), findsNothing);
+    });
+
+    testWidgets('an empty name cannot be saved', (tester) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo(
+        sessions: [testSession('se-2', deviceName: 'Pixel 9')],
+      );
+      await tester.pumpWidget(_section(repo, SettingsSection.account));
+      await tester.pumpAndSettle();
+
+      await _show(
+        tester,
+        find.bySemanticsIdentifier(SemanticsIds.deviceRename('se-2')),
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.deviceRename('se-2')),
+      );
+      await tester.pumpAndSettle();
+
+      // The server refuses a blank name, so the button refuses it here
+      // rather than spending a round trip on a certain 400.
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.pumpAndSettle();
+      final save = tester.widget<WaxButton>(
+        find.byKey(const Key('device-rename-confirm')),
+      );
+      expect(save.onPressed, isNull);
+
+      // A refusal is about the name that was submitted, so editing the
+      // field clears it: the dialog must never show "invalid" beside an
+      // enabled Save.
+      repo.renameError = const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'deviceName must be 1 to 128 characters after trimming',
+      );
+      await tester.enterText(find.byType(TextField), 'Nope');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('device-rename-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 to 128 characters'), findsOneWidget);
+
+      repo.renameError = null;
+      await tester.enterText(find.byType(TextField), 'Kitchen radio');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 to 128 characters'), findsNothing);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(repo.renamedSessions, isEmpty);
     });
 
     testWidgets('cancelling the confirm dialog revokes nothing', (

@@ -131,15 +131,18 @@ func (l *Library) allowedByContent(ctx context.Context, uc *UserCtx, it *model.I
 		if uc.Explicit {
 			return true
 		}
-		ep, err := l.lib.Podcasts().Episode(ctx, it.PID)
-		if err != nil || ep.Episode == nil {
-			return false // fail closed for restricted callers
-		}
-		if ep.Episode.Explicit {
+		// The view carries the episode's own flag, so a flagged one is
+		// refused without reading anything. A clean one still costs the
+		// chain: the view projects no podcast handle, and the show's flag
+		// hides its unflagged episodes too.
+		if it.Explicit {
 			return false
 		}
-		show, err := l.lib.Podcasts().Get(ctx, ep.Episode.PodcastPID)
-		return err == nil && !show.Explicit
+		ep, err := l.lib.Podcasts().Episode(ctx, it.PID)
+		if err != nil || ep == nil {
+			return false // fail closed for restricted callers
+		}
+		return l.episodeAllowed(ctx, uc, ep.Episode)
 	}
 	if len(uc.TagAllow) == 0 && len(uc.TagDeny) == 0 {
 		return true
@@ -149,6 +152,35 @@ func (l *Library) allowedByContent(ctx context.Context, uc *UserCtx, it *model.I
 		return false // fail closed for restricted callers
 	}
 	return matchesTagRules(tags, uc.TagAllow, uc.TagDeny)
+}
+
+// episodeAllowed is the whole of "may this caller open this episode":
+// its own advisory flag, then its show's.
+//
+// Both, because a feed may mark itself explicit at the channel level and
+// leave every episode unmarked, so the episode flag alone would let the
+// unmarked ones through. It lives here, taking the episode row rather
+// than an item view, so every surface holding one applies the same rule
+// as allowedByContent and the counts: the alternative is what this
+// replaced, where a detail read answered an episode the stream refused.
+//
+// Fails closed on a missing episode row and on an unreadable show, as
+// the rest of this file does. The nil guard is first and not beside the
+// caller that happened to need it: a detail read hands its row straight
+// in, and a permission rule that panics on the input one caller already
+// treats as a refusal is not a shared rule.
+func (l *Library) episodeAllowed(ctx context.Context, uc *UserCtx, ep *model.Episode) bool {
+	if ep == nil {
+		return false
+	}
+	if uc.Explicit {
+		return true
+	}
+	if ep.Explicit {
+		return false
+	}
+	show, err := l.lib.Podcasts().Get(ctx, ep.PodcastPID)
+	return err == nil && !show.Explicit
 }
 
 // contentAllowsPID is allowedByContent for callers holding only a PID

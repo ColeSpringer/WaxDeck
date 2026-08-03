@@ -230,11 +230,12 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
             ],
             // The read carries the entity pids; the lines they belong
             // to are edit fields, so the doors sit beside the form
-            // rather than turning an input into a link. No release-group
-            // door yet: the read carries no releaseGroupPid (upstream
-            // ask).
+            // rather than turning an input into a link. The release
+            // group is the third of them, and opens the bucket of every
+            // edition of the record rather than a screen of its own.
             if (state.metadata.artistPid != null ||
-                state.metadata.albumPid != null) ...[
+                state.metadata.albumPid != null ||
+                state.metadata.releaseGroupPid != null) ...[
               Wrap(
                 spacing: 8,
                 children: [
@@ -254,6 +255,21 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
                       label: const Text('Open album'),
                       onPressed: () => context.push(
                         WaxRoute.musicBucket(MusicDimension.albums, albumPid),
+                      ),
+                    ),
+                  if (state.metadata.releaseGroupPid case final rgPid?)
+                    ActionChip(
+                      key: const Key('metadata-open-release-group'),
+                      avatar: const Icon(
+                        Icons.library_music_outlined,
+                        size: 18,
+                      ),
+                      label: const Text('Open release group'),
+                      onPressed: () => context.push(
+                        WaxRoute.musicBucket(
+                          MusicDimension.releaseGroups,
+                          rgPid,
+                        ),
                       ),
                     ),
                 ],

@@ -162,11 +162,12 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
             .then((page) => _pageOf(page, null));
       case QueueSourceKind.artist:
       case QueueSourceKind.album:
+      case QueueSourceKind.releaseGroup:
       case QueueSourceKind.genre:
       case QueueSourceKind.year:
         final dimension = _dimensionOf(source.kind);
         final segment = source.pid;
-        if (segment == null) return null;
+        if (dimension == null || segment == null) return null;
         final facet = dimension.wireName;
         final facetKey = musicFacetKey(dimension, segment);
         // A bucket counts whatever carried its artist or its year, books
@@ -223,13 +224,28 @@ class RepositoryQueueSourcePager implements QueueSourcePager {
     }
   }
 
-  MusicDimension _dimensionOf(QueueSourceKind kind) => switch (kind) {
+  /// The music dimension a source is a bucket of, or null for the
+  /// sources that are not buckets.
+  ///
+  /// Exhaustive rather than wildcarded, because every other link in this
+  /// chain is a compile error when a kind or a dimension is added and a
+  /// wildcard here would instead page the new kind against some other
+  /// dimension, quietly.
+  MusicDimension? _dimensionOf(QueueSourceKind kind) => switch (kind) {
     QueueSourceKind.artist => MusicDimension.artists,
     QueueSourceKind.album => MusicDimension.albums,
+    QueueSourceKind.releaseGroup => MusicDimension.releaseGroups,
     QueueSourceKind.genre => MusicDimension.genres,
     QueueSourceKind.year => MusicDimension.years,
-    // Unreachable: the caller matched on the four dimension kinds.
-    _ => MusicDimension.artists,
+    QueueSourceKind.playlist ||
+    QueueSourceKind.mix ||
+    QueueSourceKind.shelf ||
+    QueueSourceKind.search ||
+    QueueSourceKind.library ||
+    QueueSourceKind.show ||
+    QueueSourceKind.book ||
+    QueueSourceKind.single ||
+    QueueSourceKind.unknown => null,
   };
 
   /// One listing page as pids, keeping the items [keep] admits.

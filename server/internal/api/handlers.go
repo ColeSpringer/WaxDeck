@@ -179,11 +179,17 @@ func (s *Server) Login(ctx context.Context, req LoginRequestObject) (LoginRespon
 	s.limiter.Success(ipKey)
 	s.limiter.Success(acctKey)
 
+	// The kind keys on whether the client sent a label at all, not on
+	// whether one survives the trim: a native client that pads or blanks
+	// its name is still a device, and letting the trim decide would
+	// quietly move it onto the web session's much shorter expiry.
+	// Trimmed and capped rather than refused for storage, because a
+	// sign-in must never fail over a label.
 	kind := "web"
-	deviceName := deref(req.Body.DeviceName)
-	if deviceName != "" {
+	if deref(req.Body.DeviceName) != "" {
 		kind = "device"
 	}
+	deviceName := truncatedDeviceName(deref(req.Body.DeviceName))
 	created, err := s.sessions.Create(ctx, user.ID, kind, deviceName, clientFromContext(ctx))
 	if err != nil {
 		return nil, err

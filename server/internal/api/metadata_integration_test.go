@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colespringer/waxdeck/fixtures"
 )
@@ -188,6 +190,8 @@ func TestMetadataEditorLifecycle(t *testing.T) {
 	if md.VirtualTrack || md.Unofficial || md.HasArtwork {
 		t.Fatalf("flags = %+v", md)
 	}
+	// Present and empty, never null: a client reads "no issues", not
+	// "the server did not look".
 	if md.WriteBackIssues == nil || len(md.WriteBackIssues) != 0 {
 		t.Fatalf("writeBackIssues = %+v", md.WriteBackIssues)
 	}
@@ -206,9 +210,17 @@ func TestMetadataEditorLifecycle(t *testing.T) {
 	if got := page.Items[0]; got.ArtistPid == nil || *got.ArtistPid != *md.ArtistPid {
 		t.Errorf("listing artistPid = %v, editor %v", got.ArtistPid, md.ArtistPid)
 	}
-	// No release-group handle on the item view, so it stays absent.
-	if md.ReleaseGroupPid != nil {
-		t.Errorf("metadata releaseGroupPid = %v, want absent", *md.ReleaseGroupPid)
+	// The third handle, minted with its own prefix. A scanned track gets
+	// a release group off its album chain, so the fixtures carry one.
+	if md.ReleaseGroupPid == nil || !strings.HasPrefix(*md.ReleaseGroupPid, "rg-") {
+		t.Errorf("metadata releaseGroupPid = %v, want the item's release group", md.ReleaseGroupPid)
+	} else if resp := h.patchJSON(t, "/api/v1/entities/release-group/"+*md.ReleaseGroupPid,
+		map[string]any{"edits": map[string]string{"sort": "Fixture Album, The"}}); resp.StatusCode != 200 {
+		// The pid the read mints is a pid the write takes back.
+		resp.Body.Close()
+		t.Errorf("editing the release group the read named = %d, want 200", resp.StatusCode)
+	} else {
+		resp.Body.Close()
 	}
 
 	// A scalar edit persists and locks by default.
@@ -575,6 +587,184 @@ func TestMetadataEditorLifecycle(t *testing.T) {
 			t.Fatalf("non-admin %s %s = %d, want 403", f.method, f.path, resp.StatusCode)
 		}
 		resp.Body.Close()
+	}
+}
+
+// The handle is legitimately absent, and absent means "this track's
+// album has no release group" rather than "the server did not look".
+func TestMetadataReleaseGroupAbsentForAnAlbumlessTrack(t *testing.T) {
+	h := newHarness(t)
+	// No ALBUM and no MusicBrainz ids: the release-group key is derived
+	// from an mbid when there is one, whatever the album title says, so
+	// a loose track with an mbid would still get a group and this case
+	// would prove nothing.
+	if _, err := fixtures.Generate(h.library, fixtures.Spec{
+		Name: "loose", Codec: fixtures.CodecMP3, Duration: 2 * time.Second,
+		Tags: map[string]string{"TITLE": "Loose Cut", "ARTIST": "Nobody In Particular"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+
+	var loose string
+	for _, it := range h.items(t, "").Items {
+		if it.Title == "Loose Cut" {
+			loose = it.Pid
+		}
+	}
+	if loose == "" {
+		t.Fatal("the albumless fixture did not scan")
+	}
+	md := h.itemMeta(t, loose)
+	if md.AlbumPid != nil {
+		t.Errorf("albumless track carries albumPid %v", *md.AlbumPid)
+	}
+	if md.ReleaseGroupPid != nil {
+		t.Errorf("albumless track carries releaseGroupPid %v, want absent", *md.ReleaseGroupPid)
+	}
+}
+
+// writeBackIssues is the editor's answer to "do this item's tags match
+// the catalog", and its whole lifecycle is the drift appearing when a
+// write-back cannot land and clearing when one does.
+func TestMetadataWriteBackIssues(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file permissions, so the unwritable-file setup cannot fail")
+	}
+	h := newHarness(t)
+
+	// Resolved by the fixture's own name rather than by extension: the
+	// demo library happens to hold one mp3 today, and a second preset
+	// would otherwise silently lock an unrelated file and fail this test
+	// somewhere far from the cause.
+	var mp3 string
+	if err := filepath.WalkDir(h.library, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if strings.HasPrefix(filepath.Base(path), "bravo") &&
+			strings.EqualFold(filepath.Ext(path), ".mp3") {
+			if mp3 != "" {
+				return fmt.Errorf("two candidate files: %s and %s", mp3, path)
+			}
+			mp3 = path
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if mp3 == "" {
+		t.Fatal("no bravo mp3 in the demo library")
+	}
+	var item string
+	for _, it := range h.items(t, "").Items {
+		if it.Title == "Bravo Song" {
+			item = it.Pid
+		}
+	}
+	if item == "" {
+		t.Fatal("no Bravo Song item")
+	}
+
+	// Both the file and its directory: the tag writer replaces the file
+	// atomically, so a writable directory would let it succeed anyway.
+	dir := filepath.Dir(mp3)
+	if err := os.Chmod(mp3, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(dir, 0o755)
+		_ = os.Chmod(mp3, 0o644)
+	})
+
+	resp := h.patchJSON(t, "/api/v1/items/"+item+"/metadata", map[string]any{
+		"fields":    map[string]string{"title": "Bravo Unsynced"},
+		"writeBack": true,
+	})
+	// The catalog edit commits whatever the file does; the failure rides
+	// in the outcome, not in the status.
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("edit status = %d, want 200", resp.StatusCode)
+	}
+	res := decode[MetadataEditResult](t, resp)
+	if res.WriteBackFailures == nil || len(*res.WriteBackFailures) == 0 {
+		t.Fatalf("edit reported no write-back failure: %+v", res)
+	}
+
+	md := h.itemMeta(t, item)
+	if len(md.WriteBackIssues) != 1 {
+		t.Fatalf("writeBackIssues = %+v, want one", md.WriteBackIssues)
+	}
+	issue := md.WriteBackIssues[0]
+	// The catalog names the code in snake_case; the contract is kebab.
+	if issue.Code != "tag-write-unsynced" {
+		t.Errorf("issue code = %q, want tag-write-unsynced", issue.Code)
+	}
+	if issue.FilePid == "" {
+		t.Error("issue carries no filePid")
+	}
+	if strings.Contains(issue.FilePid, "/") {
+		t.Errorf("issue filePid = %q, want a pid rather than a path", issue.FilePid)
+	}
+	// The admin read carries the writer's own error, which names the
+	// path; that is the whole reason the next assertion exists.
+	if issue.Detail == nil || !strings.Contains(*issue.Detail, h.library) {
+		t.Errorf("admin detail = %v, want the writer's error", issue.Detail)
+	}
+
+	// The same read by somebody who is not an administrator says what
+	// went wrong without saying where the library lives. This endpoint is
+	// open to anyone who can see the item, unlike the diagnostics
+	// listing, so the path must not ride along.
+	resp = h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "wb-reader", "password": testPassword,
+	})
+	wantStatus(t, resp, 201, "create non-admin reader")
+	reader := loginAs(t, h.ts, "wb-reader", testPassword).Token
+	resp = get(t, h.ts, "/api/v1/items/"+item+"/metadata", reader)
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("non-admin metadata read = %d, want 200", resp.StatusCode)
+	}
+	plain := decode[ItemMetadata](t, resp)
+	if len(plain.WriteBackIssues) != 1 {
+		t.Fatalf("non-admin writeBackIssues = %+v, want one", plain.WriteBackIssues)
+	}
+	seen := plain.WriteBackIssues[0]
+	if seen.Code != "tag-write-unsynced" || seen.FilePid != issue.FilePid {
+		t.Errorf("non-admin issue = %+v, want the same code and file", seen)
+	}
+	if seen.Detail != nil {
+		t.Errorf("non-admin detail = %q, want it withheld", *seen.Detail)
+	}
+
+	// A clean write-back clears it: the field is drift, not history.
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(mp3, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resp = h.patchJSON(t, "/api/v1/items/"+item+"/metadata", map[string]any{
+		// force, because the first edit locked the field on its way past.
+		"fields":    map[string]string{"title": "Bravo Synced"},
+		"writeBack": true,
+		"force":     true,
+	})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("second edit status = %d, want 200", resp.StatusCode)
+	}
+	res = decode[MetadataEditResult](t, resp)
+	if res.WriteBackFailures != nil && len(*res.WriteBackFailures) != 0 {
+		t.Fatalf("second edit still failed write-back: %+v", *res.WriteBackFailures)
+	}
+	if got := h.itemMeta(t, item).WriteBackIssues; len(got) != 0 {
+		t.Errorf("writeBackIssues after a clean sync = %+v, want empty", got)
 	}
 }
 

@@ -130,6 +130,25 @@ orders by publication date. The correction is filed upstream as a
 publication-ordered listing primitive rather than as the pid field an
 earlier entry wrongly claimed would fix it.
 
+*Amended 2026-08-02:* the primitive landed as the `recent-episodes`
+list, and `latest`/`unplayed` are now exactly the shape this section
+describes - a discovery list narrowed by a `BrowseOptions.Query`,
+carrying the catalog's own keyset cursor. Two things did not follow it.
+The list excludes undated episodes, because publication date is the
+keyset column and coalescing a substitute would break paging rather than
+complete it. And `in-progress` is not a browse at all: a checkpoint
+never stamps `last_played_at`, so `recently-played` excludes precisely
+the checkpoint-only rows that *are* the in-progress population. Its
+membership is a `QueryPage` over `position_ms gt 0 AND finished is 0`
+and its ranking stays in Go. The residual upstream ask is narrower than
+the original: a last-touched membership and ordering primitive for
+started-and-unfinished.
+
+The show set reaches the query as a disjunction of `podcast_pid is X`
+because item queries have no set-membership operator, which is filed
+upstream beside it. That is fine at the design center of tens of
+subscriptions and holds into the low hundreds.
+
 ## Consequences
 
 `/library/facets` and its cache are load-bearing rather than
@@ -142,3 +161,18 @@ are persisted rather than ephemeral. The client's rolling-queue pager
 treats a rejected cursor as no cursor and falls through to placement,
 which is why that fallback landed as this change's first commit rather
 than alongside it.
+
+*Amended 2026-08-02:* the envelope carries a version byte
+(`cursorVersion`, with `oldCursorVersions` naming the retired ones), so
+that fallback is no longer the only answer. The point is what happens
+the day the scope hash changes: without it, every stored queue's cursor
+becomes a scope mismatch at once, and the pager's placement walk - up to
+forty pages per queue - runs for all of them on the first play after the
+upgrade. With it, a token from a retired version is recognizable as
+stale rather than wrong, so it is handed to the catalog to accept or
+refuse instead of costing a walk, while a mismatch at the *current*
+version keeps its refusal. The next page re-mints at the current
+version, so stored queues upgrade themselves. Retiring a version is one
+line, in the same change that alters the scope; the set is empty today
+because nothing has been retired yet, and it exists now because the
+moment it is needed is the moment it is too late to add.

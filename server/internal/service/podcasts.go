@@ -14,6 +14,7 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/podcast"
 	"github.com/colespringer/waxbin/query"
+	"github.com/colespringer/waxbin/read"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -462,9 +463,9 @@ func (l *Library) afterSubscriptionChange(ctx context.Context, uc *UserCtx, show
 // SQL without denormalizing titles into waxdeck.db (the two databases
 // are never joined by design). One user's subscription count is
 // bounded at a few hundred rows of point lookups.
-// [withCounts] asks for the unplayed backlog on each row, which costs a
-// walk of the show's episodes and a batched play-state read per
-// subscription. The surfaces that draw a tile want it; the Subsonic
+// [withCounts] asks for the unplayed backlog on each row, which costs
+// three catalog queries per subscription. The surfaces that draw a tile
+// want it; the Subsonic
 // adapter, which pages every subscription and then lists their episodes
 // anyway, does not, and asking for it there would double the work for a
 // number nothing in that protocol carries.
@@ -482,7 +483,7 @@ func (l *Library) Subscriptions(ctx context.Context, uc *UserCtx, cursor string,
 			// dangling reference; tolerate and skip.
 			continue
 		}
-		s, err := l.subscriptionRow(ctx, pod, row)
+		s, err := l.subscriptionRow(ctx, uc, pod, row)
 		if err != nil {
 			return nil, "", err
 		}
@@ -511,9 +512,9 @@ func (l *Library) Subscriptions(ctx context.Context, uc *UserCtx, cursor string,
 	}
 	end := min(start+limit, len(subs))
 	page := subs[start:end]
-	// After the slice, never before it: the walk is per show, and doing
-	// it for every subscription to answer a page of twenty would be
-	// paying for the whole list on every page of it.
+	// After the slice, never before it: the counts are per show, and
+	// doing them for every subscription to answer a page of twenty would
+	// be paying for the whole list on every page of it.
 	if withCounts {
 		for i := range page {
 			if err := l.countShow(ctx, uc, shows[page[i].Show.PID], &page[i]); err != nil {
@@ -529,12 +530,8 @@ func (l *Library) Subscriptions(ctx context.Context, uc *UserCtx, cursor string,
 	return page, next, nil
 }
 
-// countShow fills the three numbers a subscription tile draws.
-//
-// Counting queries for a caller who may see everything; a walk for one
-// who may not, since the explicit gate has no item query field to push
-// down (filed upstream). Explicit is granted by default, so the walk is
-// the rare branch.
+// countShow fills the three numbers a subscription tile draws, all
+// three from the caller's own view of the show.
 func (l *Library) countShow(
 	ctx context.Context,
 	uc *UserCtx,
@@ -544,57 +541,16 @@ func (l *Library) countShow(
 	if pod == nil {
 		return nil
 	}
-	if uc.Explicit {
-		return l.countShowByQuery(ctx, uc, pod, sub)
-	}
-	eps, states, err := l.showEpisodeStates(ctx, uc, pod)
-	if err != nil {
-		return err
-	}
-	unplayed := 0
-	for _, ep := range eps {
-		if st := states[ep.PID]; st == nil || !st.Played {
-			unplayed++
-		}
-	}
-	sub.UnplayedCount = &unplayed
-	sub.Show.EpisodeCount = len(eps)
-	for _, ep := range eps {
-		if ep.PubDateNS > sub.Show.LastPublishedNS {
-			sub.Show.LastPublishedNS = ep.PubDateNS
-		}
-	}
-	return nil
-}
-
-// showEpisodeQuery is the item-query form of "this show's episodes".
-// `kind is episode` is redundant beside podcast_pid but states intent.
-// The counts match the walk because an items query counts an episode
-// nobody has fetched: the file join is a LEFT JOIN with no state
-// filter.
-func showEpisodeQuery(pod *model.Podcast) *query.Builder {
-	return query.New(query.EntityItems).
-		Where("kind", query.OpIs, string(model.KindEpisode)).
-		Where("podcast_pid", query.OpIs, string(pod.PID))
-}
-
-// countShowByQuery fills the same three numbers without a row per
-// episode. Unrestricted callers only; see countShow.
-func (l *Library) countShowByQuery(
-	ctx context.Context,
-	uc *UserCtx,
-	pod *model.Podcast,
-	sub *Subscription,
-) error {
-	// No per-user field in this one, so it needs no user pid.
-	total, err := l.lib.Count(ctx, showEpisodeQuery(pod).Build(), "")
+	// A total, not a per-user number: the query references no per-user
+	// field. The pid is passed anyway because an empty one is not "no
+	// user" in WaxBin, it resolves to the default user, and a query that
+	// grows a per-user field later would silently read the wrong one.
+	total, err := l.lib.Count(ctx, showEpisodeQueryFor(uc, pod).Build(), model.PID(uc.CatalogPID))
 	if err != nil {
 		return classify(err)
 	}
-	// `played` is per-user, so an empty pid would count somebody
-	// else's backlog.
 	unplayed, err := l.lib.Count(ctx,
-		showEpisodeQuery(pod).Where("played", query.OpIs, 0).Build(),
+		showEpisodeQueryFor(uc, pod).Where("played", query.OpIs, 0).Build(),
 		model.PID(uc.CatalogPID))
 	if err != nil {
 		return classify(err)
@@ -602,17 +558,56 @@ func (l *Library) countShowByQuery(
 	sub.Show.EpisodeCount = total
 	sub.UnplayedCount = &unplayed
 
-	// Newest publication first, undated last, so the first row is the
-	// max the walk computed. No episodes and all-undated both leave
-	// LastPublishedNS zero, as the walk did.
-	newest, err := l.lib.Podcasts().Episodes(ctx, pod.PID, 1)
+	newest, err := l.newestVisibleEpisodeNS(ctx, uc, pod)
 	if err != nil {
-		return classify(err)
+		return err
 	}
-	if len(newest) > 0 {
-		sub.Show.LastPublishedNS = newest[0].PubDateNS
-	}
+	sub.Show.LastPublishedNS = newest
 	return nil
+}
+
+// showEpisodeQuery is the item-query form of "this show's episodes".
+// `kind is episode` is redundant beside podcast_pid but states intent.
+// The counts are honest because an items query counts an episode nobody
+// has fetched: the file join is a LEFT JOIN with no state filter.
+func showEpisodeQuery(pod *model.Podcast) *query.Builder {
+	return query.New(query.EntityItems).
+		Where("kind", query.OpIs, string(model.KindEpisode)).
+		Where("podcast_pid", query.OpIs, string(pod.PID))
+}
+
+// showEpisodeQueryFor narrows showEpisodeQuery to what one caller may
+// see. Both advisory flags, matching allowedByContent and
+// PodcastDetailFor's 404: a feed can mark itself explicit at the channel
+// level and leave every episode unmarked, so a restricted subscriber to
+// an explicit show sees nothing of it rather than its unmarked episodes.
+func showEpisodeQueryFor(uc *UserCtx, pod *model.Podcast) *query.Builder {
+	q := showEpisodeQuery(pod)
+	if !uc.Explicit {
+		q = q.Where("explicit", query.OpIs, 0).
+			Where("podcast_explicit", query.OpIs, 0)
+	}
+	return q
+}
+
+// newestVisibleEpisodeNS is the publication time of the newest episode
+// of one show the caller may see, or zero when there is none.
+//
+// The list excludes undated episodes, which is the answer we want: an
+// undated episode never won a max over publication times either.
+func (l *Library) newestVisibleEpisodeNS(ctx context.Context, uc *UserCtx, pod *model.Podcast) (int64, error) {
+	page, err := l.lib.Browse(ctx, read.ListRecentEpisodes, read.BrowseOptions{
+		UserPID: model.PID(uc.CatalogPID),
+		Limit:   1,
+		Query:   showEpisodeQueryFor(uc, pod).Build(),
+	})
+	if err != nil {
+		return 0, classify(err)
+	}
+	if page == nil || len(page.Items) == 0 {
+		return 0, nil
+	}
+	return page.Items[0].PubDateNS, nil
 }
 
 // PodcastDetailFor returns any cataloged show with the caller's
@@ -628,7 +623,7 @@ func (l *Library) PodcastDetailFor(ctx context.Context, uc *UserCtx, apiShowPID 
 	if pod.Explicit && !uc.Explicit {
 		return PodcastDetail{}, errNotFound("no show with pid " + apiShowPID)
 	}
-	show, err := l.showDTO(ctx, pod, true)
+	show, err := l.showDTO(ctx, uc, pod, true)
 	if err != nil {
 		return PodcastDetail{}, err
 	}
@@ -761,7 +756,10 @@ func (l *Library) EpisodeDetailFor(ctx context.Context, uc *UserCtx, apiEpisodeP
 	if !l.podcastsVisible(ctx, uc) {
 		return EpisodeDetail{}, errNotFound("no episode with pid " + apiEpisodePID)
 	}
-	if det.Episode.Explicit && !uc.Explicit {
+	// The show's flag as well as the episode's: reaching an episode by
+	// its own pid is the one path that does not pass its show, so this
+	// is where the two would otherwise disagree.
+	if !l.episodeAllowed(ctx, uc, det.Episode) {
 		return EpisodeDetail{}, errNotFound("no episode with pid " + apiEpisodePID)
 	}
 	out := EpisodeDetail{
@@ -1034,11 +1032,11 @@ func (l *Library) subscriptionFor(ctx context.Context, uc *UserCtx, pod *model.P
 	if err != nil {
 		return Subscription{}, &Error{Kind: KindInternal, Err: err}
 	}
-	return l.subscriptionRow(ctx, pod, row)
+	return l.subscriptionRow(ctx, uc, pod, row)
 }
 
-func (l *Library) subscriptionRow(ctx context.Context, pod *model.Podcast, row wdb.Subscription) (Subscription, error) {
-	show, err := l.showDTO(ctx, pod, false)
+func (l *Library) subscriptionRow(ctx context.Context, uc *UserCtx, pod *model.Podcast, row wdb.Subscription) (Subscription, error) {
+	show, err := l.showDTO(ctx, uc, pod, false)
 	if err != nil {
 		return Subscription{}, err
 	}
@@ -1068,9 +1066,9 @@ func settingsDTO(row wdb.Subscription) SubscriptionSettings {
 }
 
 // showDTO builds the API show view. withCounts adds the episode count
-// and newest publication time (a full episode listing; detail surfaces
-// only).
-func (l *Library) showDTO(ctx context.Context, pod *model.Podcast, withCounts bool) (PodcastShow, error) {
+// and newest publication time (detail surfaces only), counted through
+// uc's view of the show; uc is consulted for nothing else.
+func (l *Library) showDTO(ctx context.Context, uc *UserCtx, pod *model.Podcast, withCounts bool) (PodcastShow, error) {
 	out := PodcastShow{
 		PID:             apiPID(PrefixPodcast, pod.PID),
 		Title:           pod.Title,
@@ -1095,13 +1093,14 @@ func (l *Library) showDTO(ctx context.Context, pod *model.Podcast, withCounts bo
 		out.RefreshDisabled = st.Disabled
 	}
 	if withCounts {
-		// No explicit filter here (the show's own size, not a caller's
-		// view), so nothing to gate. Best effort, as the walk was.
-		if n, err := l.lib.Count(ctx, showEpisodeQuery(pod).Build(), ""); err == nil {
+		// The caller's view, not the show's raw size, so the detail
+		// header agrees with the episode listing drawn beneath it, which
+		// drops explicit rows for a restricted caller. Best effort.
+		if n, err := l.lib.Count(ctx, showEpisodeQueryFor(uc, pod).Build(), model.PID(uc.CatalogPID)); err == nil {
 			out.EpisodeCount = n
 		}
-		if newest, err := l.lib.Podcasts().Episodes(ctx, pod.PID, 1); err == nil && len(newest) > 0 {
-			out.LastPublishedNS = newest[0].PubDateNS
+		if newest, err := l.newestVisibleEpisodeNS(ctx, uc, pod); err == nil {
+			out.LastPublishedNS = newest
 		}
 	}
 	return out, nil
@@ -1128,49 +1127,6 @@ func (l *Library) markShowPrivate(ctx context.Context, showPID string) {
 	}
 }
 
-// showEpisodeStates reads one show's visible episodes together with the
-// caller's play state for each, in one batched state pass.
-//
-// The two surfaces that need it (the unplayed count on a subscription
-// and the cross-show episode listing) both want "this show's episodes,
-// and what has this listener done with them", and a second copy of that
-// walk is how the count and the list come to disagree about which
-// episodes are hidden from the caller.
-func (l *Library) showEpisodeStates(
-	ctx context.Context,
-	uc *UserCtx,
-	pod *model.Podcast,
-) ([]*model.Episode, map[model.PID]*model.PlayState, error) {
-	eps, err := l.lib.Podcasts().Episodes(ctx, pod.PID, 0)
-	if err != nil {
-		return nil, nil, classify(err)
-	}
-	visible := make([]*model.Episode, 0, len(eps))
-	pids := make([]model.PID, 0, len(eps))
-	for _, ep := range eps {
-		if ep.Explicit && !uc.Explicit {
-			continue
-		}
-		visible = append(visible, ep)
-		pids = append(pids, ep.PID)
-	}
-	if len(visible) == 0 {
-		return visible, map[model.PID]*model.PlayState{}, nil
-	}
-	batch, err := l.lib.PlayStatesForItems(ctx, pids)
-	if err != nil {
-		return nil, nil, classify(err)
-	}
-	userPID := model.PID(uc.CatalogPID)
-	states := make(map[model.PID]*model.PlayState, len(visible))
-	for _, ep := range visible {
-		if st := userPlayState(batch[ep.PID], userPID); st != nil {
-			states[ep.PID] = st
-		}
-	}
-	return visible, states, nil
-}
-
 // SubscribedEpisodeFilter names which episodes a cross-show listing
 // keeps.
 type SubscribedEpisodeFilter string
@@ -1194,13 +1150,40 @@ func (f SubscribedEpisodeFilter) Valid() bool {
 	}
 }
 
+// subscribedEpisodeScope is the item query for "episodes of the shows
+// this caller follows, that this caller may see".
+//
+// The show set arrives as a disjunction because item queries have no
+// set-membership operator (filed upstream). One OR arm per subscription
+// is fine at the design center of tens of shows and holds up into the
+// low hundreds; a library-scale importer with thousands of feeds would
+// need the operator. showPIDs is sorted so one caller's scope compiles
+// to a stable string, which keeps a cursor issued under it meaningful.
+func subscribedEpisodeScope(uc *UserCtx, showPIDs []string) *query.Builder {
+	arms := make([]query.Node, 0, len(showPIDs))
+	for _, pid := range showPIDs {
+		arms = append(arms, query.Cond{Field: "podcast_pid", Op: query.OpIs, Value: pid})
+	}
+	q := query.New(query.EntityItems).
+		Where("kind", query.OpIs, string(model.KindEpisode)).
+		WhereNode(query.Or{Nodes: arms})
+	if !uc.Explicit {
+		q = q.Where("explicit", query.OpIs, 0).
+			Where("podcast_explicit", query.OpIs, 0)
+	}
+	return q
+}
+
 // SubscribedEpisodes pages episodes across every show the caller
 // follows.
 //
 // Ordering follows the filter, because the two questions want different
 // orders: what is new is newest-published first, and what to pick up
-// again is most-recently-played first. The cursor carries the same pair
-// either way (a sort key and a pid), so paging is keyset in both.
+// again is most-recently-played first. The first is a keyset browse of
+// the catalog; the second cannot be, because a checkpoint never stamps
+// last_played_at, so no discovery list can define either its membership
+// or its order (filed upstream). Its ranking stays in Go over the
+// started-and-unfinished rows.
 func (l *Library) SubscribedEpisodes(
 	ctx context.Context,
 	uc *UserCtx,
@@ -1214,69 +1197,139 @@ func (l *Library) SubscribedEpisodes(
 	if !l.podcastsVisible(ctx, uc) {
 		return []EpisodeSummary{}, "", nil
 	}
+	// Before the reads, so a cursor from another filter is refused at the
+	// same cost whatever the caller follows.
+	payload := ""
+	if cursor != "" {
+		issued, rest, ok := decodeFilteredCursor(cursor)
+		if !ok {
+			return nil, "", errInvalid("malformed cursor")
+		}
+		if issued != filter {
+			return nil, "", errInvalid(
+				"cursor was issued for filter " + string(issued) +
+					" and cannot be used with " + string(filter))
+		}
+		payload = rest
+	}
 	rows, err := l.db.SubscriptionsByUser(ctx, uc.ID)
 	if err != nil {
 		return nil, "", &Error{Kind: KindInternal, Err: err}
 	}
+	if len(rows) == 0 {
+		// An empty disjunction matches nothing, but saying so here keeps
+		// a follower of no shows from compiling a query at all.
+		return []EpisodeSummary{}, "", nil
+	}
+	showPIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		showPIDs = append(showPIDs, row.ShowPID)
+	}
+	sort.Strings(showPIDs)
+	scope := subscribedEpisodeScope(uc, showPIDs)
 
-	// The episode, not its DTO: building a summary costs a fetch-queue
-	// read per undownloaded episode, and passthrough makes undownloaded
-	// the ordinary state, so building fifteen thousand of them to return
-	// twelve would be fifteen thousand queries for a shelf. The rows are
-	// built after the page is cut.
+	if filter == EpisodesInProgress {
+		return l.inProgressEpisodes(ctx, uc, scope, payload, limit)
+	}
+	if filter == EpisodesUnplayed {
+		scope = scope.Where("played", query.OpIs, 0)
+	}
+	page, err := l.lib.Browse(ctx, read.ListRecentEpisodes, read.BrowseOptions{
+		UserPID: model.PID(uc.CatalogPID),
+		Cursor:  read.Cursor(payload),
+		Limit:   limit,
+		Query:   scope.Build(),
+	})
+	if err != nil {
+		return nil, "", classify(err)
+	}
+	out, err := l.episodeRows(ctx, page.Items)
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if page.HasMore {
+		next = encodeFilteredCursor(filter, string(page.Next))
+	}
+	return out, next, nil
+}
+
+// inProgressEpisodes answers the "where was I" strip: every followed
+// episode someone started and did not finish, most recently played
+// first.
+//
+// The membership is one query, but the ranking is not, so the whole
+// population is collected before the page is cut. That is deliberate and
+// not a cap waiting to be added: the query returns rows in sort_key
+// order, so any cap would drop an arbitrary subset before the recency
+// ranking ran - wrong results rather than degraded ones. The population
+// is human-bounded (a row exists only for an episode somebody started),
+// and it is strictly smaller than what the walk this replaced held,
+// which was every episode of every followed show.
+//
+// The membership comes from flushed play_state rows rather than the
+// playback service's view. The two agree because WaxDeck's only progress
+// write is Checkpoint, which is write-through; a tick-buffered writer
+// would need this revisited.
+func (l *Library) inProgressEpisodes(
+	ctx context.Context,
+	uc *UserCtx,
+	scope *query.Builder,
+	payload string,
+	limit int,
+) ([]EpisodeSummary, string, error) {
+	q := scope.
+		Where("position_ms", query.OpGt, 0).
+		Where("finished", query.OpIs, 0).
+		Build()
+	userPID := model.PID(uc.CatalogPID)
+
+	var items []*model.ItemView
+	var cur read.Cursor
+	for {
+		page, err := l.lib.QueryPage(ctx, q, cur, inProgressScanPage, false, userPID)
+		if err != nil {
+			return nil, "", classify(err)
+		}
+		items = append(items, page.Items...)
+		if !page.HasMore {
+			break
+		}
+		cur = page.Next
+	}
+	if len(items) == 0 {
+		return []EpisodeSummary{}, "", nil
+	}
+
+	pids := make([]model.PID, 0, len(items))
+	for _, it := range items {
+		pids = append(pids, it.PID)
+	}
+	batch, err := l.lib.PlayStatesForItems(ctx, pids)
+	if err != nil {
+		return nil, "", classify(err)
+	}
+
 	type ranked struct {
-		episode *model.Episode
-		pid     string
-		// key orders the listing: publication time, or last-played time
-		// for the in-progress strip.
+		item *model.ItemView
+		pid  string
+		// key is when it was last played, not when its play state last
+		// changed: starring a half-heard episode from two years ago must
+		// not push it to the top of "where was I".
 		key int64
 	}
-	out := make([]ranked, 0, 64)
-	for _, sub := range rows {
-		pod, err := l.lib.Podcasts().Get(ctx, model.PID(sub.ShowPID))
-		if err != nil {
-			// A show removed out from under a subscription row is a
-			// dangling reference; tolerate and skip, as the listing does.
+	out := make([]ranked, 0, len(items))
+	for _, it := range items {
+		st := userPlayState(batch[it.PID], userPID)
+		if st == nil {
 			continue
 		}
-		if pod.Explicit && !uc.Explicit {
-			continue
+		key := st.LastPlayedAt
+		if key == 0 {
+			key = st.UpdatedAt
 		}
-		eps, states, err := l.showEpisodeStates(ctx, uc, pod)
-		if err != nil {
-			return nil, "", err
-		}
-		for _, ep := range eps {
-			st := states[ep.PID]
-			switch filter {
-			case EpisodesUnplayed:
-				if st != nil && st.Played {
-					continue
-				}
-			case EpisodesInProgress:
-				if st == nil || st.Finished || st.PositionMS <= 0 {
-					continue
-				}
-			case EpisodesLatest:
-			}
-			key := episodePublishedNS(ep)
-			if filter == EpisodesInProgress {
-				// When it was last played, not when its play state last
-				// changed: starring a half-heard episode from two years
-				// ago must not push it to the top of "where was I".
-				key = st.LastPlayedAt
-				if key == 0 {
-					key = st.UpdatedAt
-				}
-			}
-			out = append(out, ranked{
-				episode: ep,
-				pid:     apiPID(PrefixEpisode, ep.PID),
-				key:     key,
-			})
-		}
+		out = append(out, ranked{item: it, pid: apiPID(PrefixEpisode, it.PID), key: key})
 	}
-
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].key != out[j].key {
 			return out[i].key > out[j].key
@@ -1285,20 +1338,10 @@ func (l *Library) SubscribedEpisodes(
 	})
 
 	start := 0
-	if cursor != "" {
-		// The filter rides in the cursor because the orders interleave
-		// differently: a key issued against publication time means
-		// something else entirely read as a last-played time, and the
-		// keyset search would land somewhere plausible and wrong. The
-		// contract promises a refusal here rather than a quiet misread.
-		issued, key, pid, ok := decodeFilteredCursor(cursor)
+	if payload != "" {
+		key, pid, ok := decodeInProgressPayload(payload)
 		if !ok {
 			return nil, "", errInvalid("malformed cursor")
-		}
-		if issued != filter {
-			return nil, "", errInvalid(
-				"cursor was issued for filter " + string(issued) +
-					" and cannot be used with " + string(filter))
 		}
 		start = sort.Search(len(out), func(i int) bool {
 			if out[i].key != key {
@@ -1308,16 +1351,61 @@ func (l *Library) SubscribedEpisodes(
 		})
 	}
 	end := min(start+limit, len(out))
-	page := make([]EpisodeSummary, 0, end-start)
+	views := make([]*model.ItemView, 0, end-start)
 	for _, r := range out[start:end] {
-		page = append(page, l.episodeSummary(ctx, r.episode))
+		views = append(views, r.item)
+	}
+	page, err := l.episodeRows(ctx, views)
+	if err != nil {
+		return nil, "", err
 	}
 	next := ""
-	if end < len(out) && len(page) > 0 {
+	// Keyed on the ranking, not on the rows that survived hydration: a
+	// window whose every episode vanished is still a window, and
+	// withholding the cursor there would strand the client on an empty
+	// page with more behind it.
+	if end < len(out) {
 		last := out[end-1]
-		next = encodeFilteredCursor(filter, last.key, last.pid)
+		next = encodeFilteredCursor(EpisodesInProgress,
+			strconv.FormatInt(last.key, 10)+"|"+last.pid)
 	}
 	return page, next, nil
+}
+
+// inProgressScanPage is how many membership rows one QueryPage call
+// pulls while collecting the started-and-unfinished population.
+const inProgressScanPage = 500
+
+// episodeRows turns a cut page of item views into episode summaries.
+//
+// One episode read per row, after the cut, never before it: an item view
+// cannot fill an EpisodeSummary (show title, enclosure, transcript), and
+// building a summary costs a fetch-queue read besides, so paying for it
+// per returned row is the whole point of cutting first.
+//
+// Only a vanished episode is skipped. Anything else fails the read,
+// because the two look identical to a client and are not: a row removed
+// between the query and the hydration is a short page and correct, while
+// a transient store failure silently dropping rows is a page that looks
+// complete and is not.
+func (l *Library) episodeRows(ctx context.Context, items []*model.ItemView) ([]EpisodeSummary, error) {
+	out := make([]EpisodeSummary, 0, len(items))
+	for _, it := range items {
+		det, err := l.lib.Podcasts().Episode(ctx, it.PID)
+		if err != nil {
+			if KindOf(classify(err)) == KindNotFound {
+				// Removed out from under the page: tolerate and skip, as
+				// the per-show listing does with a dangling subscription.
+				continue
+			}
+			return nil, classify(err)
+		}
+		if det == nil || det.Episode == nil {
+			continue
+		}
+		out = append(out, l.episodeSummary(ctx, det.Episode))
+	}
+	return out, nil
 }
 
 // episodePublishedNS is the ordering time for one episode: its
@@ -1334,32 +1422,47 @@ func episodePublishedNS(ep *model.Episode) int64 {
 
 // encodeFilteredCursor stamps a cross-show listing cursor with the
 // filter it was issued under, so resuming under a different one is a
-// refusal rather than a wrong page.
-func encodeFilteredCursor(filter SubscribedEpisodeFilter, key int64, pid string) string {
-	return encodeOpaqueCursor(fmt.Sprintf("s1|%s|%d|%s", filter, key, pid))
+// refusal rather than a wrong page: the filters interleave differently,
+// and a keyset search under the wrong one lands somewhere plausible and
+// wrong.
+//
+// The payload is opaque and filter-specific: the catalog's own keyset
+// cursor for latest and unplayed, `key|pid` for the Go-ranked
+// in-progress strip. The tag is this family's alone; reads.go's scoped
+// envelope owns s1.
+func encodeFilteredCursor(filter SubscribedEpisodeFilter, payload string) string {
+	return encodeOpaqueCursor(fmt.Sprintf("pe1|%s|%s", filter, payload))
 }
 
-func decodeFilteredCursor(s string) (
-	filter SubscribedEpisodeFilter, key int64, pid string, ok bool,
-) {
+func decodeFilteredCursor(s string) (filter SubscribedEpisodeFilter, payload string, ok bool) {
 	raw, ok := decodeOpaqueCursor(s)
 	if !ok {
-		return "", 0, "", false
+		return "", "", false
 	}
-	parts := strings.SplitN(raw, "|", 4)
-	if len(parts) != 4 || parts[0] != "s1" {
-		return "", 0, "", false
+	parts := strings.SplitN(raw, "|", 3)
+	if len(parts) != 3 || parts[0] != "pe1" {
+		return "", "", false
+	}
+	return SubscribedEpisodeFilter(parts[1]), parts[2], true
+}
+
+// decodeInProgressPayload splits the in-progress payload back into the
+// recency key and the api pid it was cut at.
+func decodeInProgressPayload(payload string) (key int64, pid string, ok bool) {
+	before, after, found := strings.Cut(payload, "|")
+	if !found {
+		return 0, "", false
 	}
 	// ParseInt rather than Sscanf, and the reason is strictness rather
 	// than speed: `Sscanf` with %d stops at the first non-digit and
 	// reports success, so "123abc" decodes as 123. A cursor arrives in
 	// the query string, so it is input, and input that is nearly a
 	// number is not one.
-	key, err := strconv.ParseInt(parts[2], 10, 64)
+	key, err := strconv.ParseInt(before, 10, 64)
 	if err != nil {
-		return "", 0, "", false
+		return 0, "", false
 	}
-	return SubscribedEpisodeFilter(parts[1]), key, parts[3], true
+	return key, after, true
 }
 
 // episodeSummary builds the episode list row from the catalog episode.

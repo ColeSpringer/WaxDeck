@@ -13,12 +13,12 @@ part 'facet_page.g.dart';
 /// One keyset-paginated page of a browse dimension's buckets.
 ///
 /// Properties:
-/// * [dimension] - A browse dimension: one of `genre`, `artist`, `album-artist`, `album`, `year`, `kind`, or a custom tag dimension spelled `tag.<KEY>` (for example `tag.MOOD`). The fixed set is stable; which tag dimensions exist depends on the library's tags. Tag keys are case-insensitive and canonicalize to upper case, so `tag.mood` and `tag.MOOD` are one dimension; responses echo the canonical spelling. 
+/// * [dimension] - A browse dimension: one of `genre`, `artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a custom tag dimension spelled `tag.<KEY>` (for example `tag.MOOD`). `release-group` buckets tracks by their album's release group, which is the work rather than the edition, so the several pressings of one record answer as one bucket. The fixed set is stable; which tag dimensions exist depends on the library's tags. Tag keys are case-insensitive and canonicalize to upper case, so `tag.mood` and `tag.MOOD` are one dimension; responses echo the canonical spelling. 
 /// * [buckets] 
 /// * [nextCursor] - Opaque cursor for the next page. Absent on the last page.
 @BuiltValue()
 abstract class FacetPage implements Built<FacetPage, FacetPageBuilder> {
-  /// A browse dimension: one of `genre`, `artist`, `album-artist`, `album`, `year`, `kind`, or a custom tag dimension spelled `tag.<KEY>` (for example `tag.MOOD`). The fixed set is stable; which tag dimensions exist depends on the library's tags. Tag keys are case-insensitive and canonicalize to upper case, so `tag.mood` and `tag.MOOD` are one dimension; responses echo the canonical spelling. 
+  /// A browse dimension: one of `genre`, `artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a custom tag dimension spelled `tag.<KEY>` (for example `tag.MOOD`). `release-group` buckets tracks by their album's release group, which is the work rather than the edition, so the several pressings of one record answer as one bucket. The fixed set is stable; which tag dimensions exist depends on the library's tags. Tag keys are case-insensitive and canonicalize to upper case, so `tag.mood` and `tag.MOOD` are one dimension; responses echo the canonical spelling. 
   @BuiltValueField(wireName: r'dimension')
   String get dimension;
 

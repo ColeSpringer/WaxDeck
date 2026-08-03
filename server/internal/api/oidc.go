@@ -152,7 +152,8 @@ func (s *Server) ExchangeOidcCode(ctx context.Context, req ExchangeOidcCodeReque
 		return nil, err
 	}
 	kind := "device"
-	created, err := s.sessions.Create(ctx, acct.User.ID, kind, deref(req.Body.DeviceName), clientFromContext(ctx))
+	created, err := s.sessions.Create(ctx, acct.User.ID, kind,
+		truncatedDeviceName(deref(req.Body.DeviceName)), clientFromContext(ctx))
 	if err != nil {
 		return nil, err
 	}

@@ -534,7 +534,7 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 		if len(entries) == limit {
 			return entries, last, nil
 		}
-		show, err := l.showDTO(ctx, pod, false)
+		show, err := l.showDTO(ctx, uc, pod, false)
 		if err != nil {
 			return nil, "", err
 		}
@@ -665,7 +665,7 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			if !subs.allowsShow(ctx, l, string(pod.PID)) {
 				continue
 			}
-			show, err := l.showDTO(ctx, pod, false)
+			show, err := l.showDTO(ctx, uc, pod, false)
 			if err != nil {
 				return CatalogDelta{}, err
 			}

@@ -92,7 +92,7 @@ func run() error {
 		sealURL      = flag.String("seal-url", envOr("WAXDECK_SEAL_URL", ""), "WaxSeal attestation sidecar base URL (optional; full-quality YouTube path)")
 		sealKey      = flag.String("seal-api-key", envOr("WAXDECK_SEAL_API_KEY", ""), "API key for the WaxSeal sidecar")
 		sponsorBlock = flag.String("youtube-sponsorblock", envOr("WAXDECK_YOUTUBE_SPONSORBLOCK", ""), "SponsorBlock categories to cut from acquired audio, comma separated (empty disables)")
-		ytThumbnail  = flag.Bool("youtube-thumbnail", envOr("WAXDECK_YOUTUBE_THUMBNAIL", "true") == "true", "embed the source thumbnail as cover art on acquired audio, until enrichment finds official artwork. On by default; set WAXDECK_YOUTUBE_THUMBNAIL=false to disable")
+		ytThumbnail  = flag.Bool("youtube-thumbnail", envOr("WAXDECK_YOUTUBE_THUMBNAIL", "true") == "true", "embed the source thumbnail as cover art on acquired audio, cropped to its square where the source is letterboxed release art, until enrichment finds official artwork. On by default; set WAXDECK_YOUTUBE_THUMBNAIL=false to disable")
 
 		advertiseBase = flag.String("advertise-base", envOr("WAXDECK_ADVERTISE_BASE", ""), "plain-HTTP LAN base URL cast devices fetch media from (empty auto-detects the LAN address)")
 		castDiscovery = flag.Bool("cast-discovery", envOr("WAXDECK_CAST_DISCOVERY", "true") == "true", "discover Chromecast and DLNA devices on the LAN (mDNS and SSDP)")

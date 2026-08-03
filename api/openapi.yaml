@@ -1634,6 +1634,48 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
 
   /auth/sessions/{sessionId}:
+    patch:
+      operationId: renameSession
+      summary: Rename one of the caller's sessions
+      description: >
+        Relabels one of the calling user's sessions in the device list.
+        The label is whatever the login supplied, which for a web login
+        is usually nothing at all, so this is how a device gets a name a
+        person recognizes.
+
+        The name is trimmed of surrounding whitespace and must not be
+        empty afterwards: there is no way to spell "clear this label"
+        here, and a blank row in a device list is worse than the
+        client's own fallback. The length limit applies to the value as
+        sent, before that trim, so a client can decide acceptance
+        without guessing; it is counted in characters rather than bytes,
+        because device names are where emoji turn up.
+
+        Only the caller's own sessions are reachable. Another user's
+        session answers 404, the same as one that does not exist, so
+        this endpoint cannot be used to probe for session ids.
+      tags: [auth]
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRename"
+      responses:
+        "200":
+          description: The renamed session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceSession"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
     delete:
       operationId: revokeSession
       summary: Revoke one of the caller's sessions
@@ -2636,6 +2678,14 @@ paths:
         recently added, most played, recently played, random, starred,
         alphabetical, never played, and rediscover. Play-derived lists
         reflect the calling user's own listening state.
+
+        Most lists span every media type. `newest` does not: it orders by
+        release year, which a podcast episode has not got, so it covers
+        music and audiobooks only. Pairing it with `mediaType=podcast`,
+        or drilling its `kind` dimension to `episode`, is
+        `invalid-request` rather than an empty page that would read as
+        "your library holds none". Episodes ordered by publication date
+        live on `/podcasts/episodes`.
       tags: [library]
       parameters:
         - name: list
@@ -2746,10 +2796,13 @@ paths:
         mismatched pair is `invalid-request` rather than a silently
         wrong page.
 
-        The `genre`, `artist`, `album-artist`, `album`, and `year`
-        dimensions each carry a bucket for the items the dimension is
-        absent from (`[No Genre]`, `[Unknown Artist]`, `[Non-Album]`,
-        `[Unknown Year]`), with an empty `key` and `unknown` true.
+        The `genre`, `artist`, `album-artist`, `album`, `release-group`,
+        and `year` dimensions each carry a bucket for the items the
+        dimension is absent from (`[No Genre]`, `[Unknown Artist]`,
+        `[Non-Album]`, `[No Release Group]`, `[Unknown Year]`), with an
+        empty `key` and `unknown` true. `[No Release Group]` is not
+        `[Non-Album]`: a track on an album whose release group is
+        unresolved is in the first and not the second.
         `kind` has none, because an item's kind is never absent, and a
         custom tag dimension has none, because only items carrying the
         key contribute at all; on those two, drilling an empty
@@ -6175,6 +6228,12 @@ paths:
         caller last played the episode, most recent first, which is the
         order a "pick up where you left off" strip wants.
 
+        Episodes without a publication date are excluded from `latest`
+        and `unplayed`, because publication date is what orders them and
+        a feed that declares none leaves nothing to page on. Such an
+        episode still appears on its own show's listing, and still counts
+        toward that show's `unplayedCount`.
+
         A cursor is only valid for the filter it was issued under, since
         the two orders interleave differently. Sending a mismatched pair
         is `invalid-request` rather than a silently wrong page.
@@ -6311,6 +6370,13 @@ paths:
         (`descriptionHtml` is feed-controlled HTML reduced server-side
         to a safe allowlist; clients may render it directly) and chapter
         marks when the episode has them.
+
+        An account without the explicit-content right gets 404 for an
+        episode marked explicit and for any episode of a show marked
+        explicit at the channel level, whether or not the episode itself
+        carries the flag. That is the same rule the item read, the
+        stream, and the subscription counts apply, so no surface can
+        offer what another refuses.
       tags: [podcasts]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -10260,6 +10326,21 @@ components:
           type: boolean
           description: True for the session serving this request.
 
+    SessionRename:
+      type: object
+      description: A new label for one session in the device list.
+      required: [deviceName]
+      properties:
+        deviceName:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: >
+            Human-readable label for this session (for example `Pixel 9`
+            or `Study desktop`), matching what a login may supply.
+            Trimmed of surrounding whitespace; empty after trimming is
+            `invalid-request`.
+
     SessionList:
       type: object
       description: The caller's live sessions, newest first.
@@ -11542,8 +11623,11 @@ components:
       type: string
       description: >
         A browse dimension: one of `genre`, `artist`, `album-artist`,
-        `album`, `year`, `kind`, or a custom tag dimension spelled
-        `tag.<KEY>` (for example `tag.MOOD`). The fixed set is stable;
+        `album`, `release-group`, `year`, `kind`, or a custom tag
+        dimension spelled `tag.<KEY>` (for example `tag.MOOD`).
+        `release-group` buckets tracks by their album's release group,
+        which is the work rather than the edition, so the several
+        pressings of one record answer as one bucket. The fixed set is stable;
         which tag dimensions exist depends on the library's tags. Tag
         keys are case-insensitive and canonicalize to upper case, so
         `tag.mood` and `tag.MOOD` are one dimension; responses echo the
@@ -11587,8 +11671,9 @@ components:
           type: string
           description: >
             The catalog entity behind the bucket, for the dimensions that
-            have one (`artist`, `album-artist`, `album`). Absent for the
-            unknown bucket and for dimensions that are not entities.
+            have one (`artist`, `album-artist`, `album`,
+            `release-group`). Absent for the unknown bucket and for
+            dimensions that are not entities.
 
             It is this bucket's `key` carried with the entity's API type
             prefix, so a client holding one has the other: a screen
@@ -12094,7 +12179,13 @@ components:
           description: The affected tag key, when known.
         detail:
           type: string
-          description: Human-readable detail.
+          description: >
+            Human-readable detail, administrators only. It is the tag
+            writer's own error, which names the file's absolute path, so
+            it is withheld from everyone else exactly as the diagnostics
+            listing is; `code`, `tagKey`, and `filePid` say what went
+            wrong without saying where the library lives. Absent rather
+            than redacted for a non-administrator.
 
     MetadataEdit:
       type: object

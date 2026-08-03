@@ -53,21 +53,49 @@ void main() {
     expect(find.text('Has its own cover'), findsOneWidget);
   });
 
-  testWidgets('entity links open the artist and album screens', (tester) async {
+  testWidgets('entity links open the three entities behind an item', (
+    tester,
+  ) async {
     final repo = _repo();
     repo.metadataEntityPids['tr-1'] = (
       artistPid: 'ar-01JZX5N8QW3F4V9T2B7KDBREE1',
       albumPid: 'al-01JZX5N8QW3F4V9T2B7KDBLUES',
+      releaseGroupPid: 'rg-01JZX5N8QW3F4V9T2B7KDBWORK',
     );
     await tester.pumpWidget(_routed(repo));
     await tester.pumpAndSettle();
 
     expect(find.text('Open artist'), findsOneWidget);
     expect(find.text('Open album'), findsOneWidget);
+    expect(find.text('Open release group'), findsOneWidget);
 
     // Pushed like a search hit's entity door, so the editor stays
     // underneath to come back to.
     await tester.tap(find.text('Open artist'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MetadataScreen), findsNothing);
+  });
+
+  testWidgets('the release-group door opens its bucket listing', (
+    tester,
+  ) async {
+    final repo = _repo();
+    repo.metadataEntityPids['tr-1'] = (
+      artistPid: null,
+      albumPid: null,
+      releaseGroupPid: 'rg-01JZX5N8QW3F4V9T2B7KDBWORK',
+    );
+    await tester.pumpWidget(_routed(repo));
+    await tester.pumpAndSettle();
+
+    // Alone: the outer gate opens on any one of the three.
+    expect(find.text('Open artist'), findsNothing);
+    expect(
+      find.byKey(const Key('metadata-open-release-group')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('metadata-open-release-group')));
     await tester.pumpAndSettle();
     expect(find.byType(MetadataScreen), findsNothing);
   });
@@ -77,6 +105,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Open artist'), findsNothing);
     expect(find.text('Open album'), findsNothing);
+    expect(find.text('Open release group'), findsNothing);
   });
 
   testWidgets('builds the field form from the kind vocabulary', (tester) async {

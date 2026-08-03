@@ -58,7 +58,9 @@ func TestFacetDimensionsDrillToTheirCount(t *testing.T) {
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
 
-	for _, dimension := range []string{"genre", "artist", "album-artist", "album", "year", "kind"} {
+	for _, dimension := range []string{
+		"genre", "artist", "album-artist", "album", "release-group", "year", "kind",
+	} {
 		t.Run(dimension, func(t *testing.T) {
 			buckets := facetsOf(t, f, dimension)
 			if len(buckets) == 0 {
@@ -106,22 +108,29 @@ func TestFacetUnknownBucketIsDrillable(t *testing.T) {
 	}
 }
 
-// TestFacetEntityPidsOnEntityDimensions: an artist or album bucket
-// carries the catalog entity behind it, so a browse tab can navigate to
-// a real entity page; year and kind buckets carry none, and a minted
-// "ar-" with no ULID after it would parse back as malformed.
+// TestFacetEntityPidsOnEntityDimensions: an artist, album, or
+// release-group bucket carries the catalog entity behind it, so a browse
+// tab can navigate to a real entity page; year and kind buckets carry
+// none, and a minted "ar-" with no ULID after it would parse back as
+// malformed.
 func TestFacetEntityPidsOnEntityDimensions(t *testing.T) {
 	f := newGenreFixture(t)
 
-	for _, b := range facetsOf(t, f, "artist") {
-		if b.Unknown {
-			continue
-		}
-		if !strings.HasPrefix(b.EntityPID, PrefixArtist+"-") {
-			t.Fatalf("artist bucket %q carries entityPid %q", b.Label, b.EntityPID)
-		}
-		if _, _, ok := parseAPIPID(b.EntityPID); !ok {
-			t.Fatalf("artist bucket %q carries an unparseable pid %q", b.Label, b.EntityPID)
+	for _, tc := range []struct{ dimension, prefix string }{
+		{"artist", PrefixArtist},
+		{"album", PrefixAlbum},
+		{"release-group", PrefixReleaseGroup},
+	} {
+		for _, b := range facetsOf(t, f, tc.dimension) {
+			if b.Unknown {
+				continue
+			}
+			if !strings.HasPrefix(b.EntityPID, tc.prefix+"-") {
+				t.Fatalf("%s bucket %q carries entityPid %q", tc.dimension, b.Label, b.EntityPID)
+			}
+			if _, _, ok := parseAPIPID(b.EntityPID); !ok {
+				t.Fatalf("%s bucket %q carries an unparseable pid %q", tc.dimension, b.Label, b.EntityPID)
+			}
 		}
 	}
 	for _, dimension := range []string{"year", "kind"} {

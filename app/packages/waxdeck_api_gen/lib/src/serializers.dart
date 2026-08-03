@@ -262,6 +262,7 @@ import 'package:waxdeck_api_gen/src/model/server_sync_page.dart';
 import 'package:waxdeck_api_gen/src/model/server_year_in_review.dart';
 import 'package:waxdeck_api_gen/src/model/session_info.dart';
 import 'package:waxdeck_api_gen/src/model/session_list.dart';
+import 'package:waxdeck_api_gen/src/model/session_rename.dart';
 import 'package:waxdeck_api_gen/src/model/share.dart';
 import 'package:waxdeck_api_gen/src/model/share_create.dart';
 import 'package:waxdeck_api_gen/src/model/share_page.dart';
@@ -588,6 +589,7 @@ part 'serializers.g.dart';
   ServerYearInReview,
   SessionInfo,
   SessionList,
+  SessionRename,
   Share,
   ShareCreate,
   SharePage,

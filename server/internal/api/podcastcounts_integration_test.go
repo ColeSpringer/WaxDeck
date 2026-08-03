@@ -13,16 +13,18 @@ import (
 	"time"
 )
 
-// The subscription tile's three numbers come from counting queries for
-// a caller who may see everything and from a walk for one who may not.
-// These are the parity assertion between the two.
+// The subscription tile's three numbers are counting queries narrowed
+// to what the caller may see. These pin what "may see" means: two
+// accounts reading one show agree wherever nothing is flagged and
+// diverge exactly where something is.
 //
-// The population is the part worth proving: the two agree only because
-// an items query counts an episode nobody has fetched, so the fixtures
-// leave every episode undownloaded and assert it.
+// The population is the part worth proving: the counts include an
+// episode nobody has fetched, so the fixtures leave every episode
+// undownloaded and assert it.
 
-// countsFeed serves a feed whose items can be flagged explicit or left
-// undated, which the shared feedServer's cannot.
+// countsFeed serves a feed whose channel or items can be flagged
+// explicit and whose items can be left undated, which the shared
+// feedServer's cannot.
 type countsFeed struct {
 	ts  *httptest.Server
 	dir string
@@ -40,7 +42,22 @@ type countsEpisode struct {
 	undated bool
 }
 
+// countsChannel carries the channel-level flags a countsFeed declares.
+type countsChannel struct {
+	// explicit marks the show itself explicit, independent of its items.
+	explicit bool
+	// firstPublished dates the first item, each later one a day after.
+	// The zero value uses the shared default, which makes two feeds tie
+	// item for item.
+	firstPublished time.Time
+}
+
 func newCountsFeed(t *testing.T, eps []countsEpisode) *countsFeed {
+	t.Helper()
+	return newCountsFeedAs(t, countsChannel{}, eps)
+}
+
+func newCountsFeedAs(t *testing.T, ch countsChannel, eps []countsEpisode) *countsFeed {
 	t.Helper()
 	cf := &countsFeed{dir: t.TempDir()}
 	mux := http.NewServeMux()
@@ -50,7 +67,10 @@ func newCountsFeed(t *testing.T, eps []countsEpisode) *countsFeed {
 
 	guid := strconv.FormatInt(countsFeeds.Add(1), 10)
 	var items strings.Builder
-	base := time.Date(2026, 6, 1, 8, 0, 0, 0, time.UTC)
+	base := ch.firstPublished
+	if base.IsZero() {
+		base = time.Date(2026, 6, 1, 8, 0, 0, 0, time.UTC)
+	}
 	for i, ep := range eps {
 		date := ""
 		if !ep.undated {
@@ -70,6 +90,10 @@ func newCountsFeed(t *testing.T, eps []countsEpisode) *countsFeed {
 			<enclosure url="%s/never-fetched-%d.mp3" type="audio/mpeg" length="1000"/>
 		</item>`, ep.title, i, date, explicit, cf.ts.URL, i)
 	}
+	channelExplicit := ""
+	if ch.explicit {
+		channelExplicit = "<itunes:explicit>true</itunes:explicit>"
+	}
 	doc := `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0">
 <channel>
@@ -77,6 +101,7 @@ func newCountsFeed(t *testing.T, eps []countsEpisode) *countsFeed {
 <itunes:author>Counting Author</itunes:author>
 <description>A show that exists to be counted.</description>
 <podcast:guid>counting-cast-` + guid + `</podcast:guid>
+` + channelExplicit + `
 ` + items.String() + `
 </channel>
 </rss>`
@@ -92,15 +117,27 @@ func (cf *countsFeed) feedURL() string { return cf.ts.URL + "/feed.xml" }
 // not see explicit ones, and returns its token.
 func restrictedListener(t *testing.T, h *harness, username string) string {
 	t.Helper()
+	_, token := listenerAccount(t, h, username, false)
+	return token
+}
+
+// listenerAccount creates a podcast-following account with explicit
+// content granted or withheld, and returns its id and token. The id is
+// what a later PATCH needs to change its mind.
+func listenerAccount(t *testing.T, h *harness, username string, explicit bool) (string, string) {
+	t.Helper()
 	resp := h.postJSON(t, "/api/v1/users", map[string]any{
 		"username": username, "password": testPassword,
 		"permissions": map[string]any{
-			"download": true, "delete": false, "explicitContent": false,
+			"download": true, "delete": false, "explicitContent": explicit,
 			"sharedOutputs": true, "managePodcasts": true,
 		},
 	})
-	wantStatus(t, resp, 201, "create restricted listener")
-	return loginAs(t, h.ts, username, testPassword).Token
+	if resp.StatusCode != 201 {
+		resp.Body.Close()
+		t.Fatalf("create listener status = %d, want 201", resp.StatusCode)
+	}
+	return decode[UserAccount](t, resp).Id, loginAs(t, h.ts, username, testPassword).Token
 }
 
 // subscriptionRow reads one caller's subscription row for a show.
@@ -116,9 +153,10 @@ func subscriptionRow(t *testing.T, h *harness, token, show string) Subscription 
 	return Subscription{}
 }
 
-// The parity case: one show, no explicit episodes, read by a caller who
-// counts and one who walks.
-func TestShowCountsMatchTheWalk(t *testing.T) {
+// The parity case: one show, nothing flagged, read by an account that
+// may see explicit content and one that may not. Nothing is flagged, so
+// the two must agree on all three numbers.
+func TestShowCountsAgreeWhenNothingIsFlagged(t *testing.T) {
 	h := newPodcastHarness(t)
 	eps := make([]countsEpisode, 0, 12)
 	for i := range 12 {
@@ -132,7 +170,7 @@ func TestShowCountsMatchTheWalk(t *testing.T) {
 	resp = reqAs(t, h, "POST", "/api/v1/podcasts", listener, map[string]any{"url": feed.feedURL()})
 	resp.Body.Close()
 
-	// If a query counted only present items, the two would differ by 12.
+	// If a query counted only present items, both would read 0.
 	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
 	for _, ep := range decode[EpisodePage](t, resp).Items {
 		if ep.Downloaded {
@@ -140,28 +178,28 @@ func TestShowCountsMatchTheWalk(t *testing.T) {
 		}
 	}
 
-	counted := subscriptionRow(t, h, h.token, show)
-	walked := subscriptionRow(t, h, listener, show)
-	if counted.Show.EpisodeCount == nil || walked.Show.EpisodeCount == nil {
-		t.Fatalf("episodeCount = %v (counted) / %v (walked), want both", counted.Show.EpisodeCount, walked.Show.EpisodeCount)
+	open := subscriptionRow(t, h, h.token, show)
+	restricted := subscriptionRow(t, h, listener, show)
+	if open.Show.EpisodeCount == nil || restricted.Show.EpisodeCount == nil {
+		t.Fatalf("episodeCount = %v (open) / %v (restricted), want both", open.Show.EpisodeCount, restricted.Show.EpisodeCount)
 	}
-	if *counted.Show.EpisodeCount != 12 || *walked.Show.EpisodeCount != *counted.Show.EpisodeCount {
-		t.Errorf("episodeCount = %d counted, %d walked, want 12 both",
-			*counted.Show.EpisodeCount, *walked.Show.EpisodeCount)
+	if *open.Show.EpisodeCount != 12 || *restricted.Show.EpisodeCount != *open.Show.EpisodeCount {
+		t.Errorf("episodeCount = %d open, %d restricted, want 12 both",
+			*open.Show.EpisodeCount, *restricted.Show.EpisodeCount)
 	}
-	if counted.UnplayedCount == nil || walked.UnplayedCount == nil {
-		t.Fatalf("unplayedCount = %v / %v, want both", counted.UnplayedCount, walked.UnplayedCount)
+	if open.UnplayedCount == nil || restricted.UnplayedCount == nil {
+		t.Fatalf("unplayedCount = %v / %v, want both", open.UnplayedCount, restricted.UnplayedCount)
 	}
-	if *counted.UnplayedCount != 12 || *walked.UnplayedCount != *counted.UnplayedCount {
-		t.Errorf("unplayedCount = %d counted, %d walked, want 12 both",
-			*counted.UnplayedCount, *walked.UnplayedCount)
+	if *open.UnplayedCount != 12 || *restricted.UnplayedCount != *open.UnplayedCount {
+		t.Errorf("unplayedCount = %d open, %d restricted, want 12 both",
+			*open.UnplayedCount, *restricted.UnplayedCount)
 	}
-	if counted.Show.LastPublishedAt == nil || walked.Show.LastPublishedAt == nil {
-		t.Fatalf("lastPublishedAt = %v / %v, want both", counted.Show.LastPublishedAt, walked.Show.LastPublishedAt)
+	if open.Show.LastPublishedAt == nil || restricted.Show.LastPublishedAt == nil {
+		t.Fatalf("lastPublishedAt = %v / %v, want both", open.Show.LastPublishedAt, restricted.Show.LastPublishedAt)
 	}
-	if !counted.Show.LastPublishedAt.Equal(*walked.Show.LastPublishedAt) {
-		t.Errorf("lastPublishedAt = %v counted, %v walked",
-			*counted.Show.LastPublishedAt, *walked.Show.LastPublishedAt)
+	if !open.Show.LastPublishedAt.Equal(*restricted.Show.LastPublishedAt) {
+		t.Errorf("lastPublishedAt = %v open, %v restricted",
+			*open.Show.LastPublishedAt, *restricted.Show.LastPublishedAt)
 	}
 
 	// `played` is per-user: a count with the wrong pid answers somebody
@@ -172,21 +210,24 @@ func TestShowCountsMatchTheWalk(t *testing.T) {
 	putPlayState(t, h, all[1].Pid, all[1].DurationMs)
 
 	if got := subscriptionRow(t, h, h.token, show).UnplayedCount; got == nil || *got != 10 {
-		t.Errorf("counted unplayedCount = %v after two plays, want 10", got)
+		t.Errorf("open unplayedCount = %v after two plays, want 10", got)
 	}
 	if got := subscriptionRow(t, h, listener, show).UnplayedCount; got == nil || *got != 12 {
-		t.Errorf("walked unplayedCount = %v; the other account's plays are not this one's", got)
+		t.Errorf("restricted unplayedCount = %v; the other account's plays are not this one's", got)
 	}
 }
 
-// Why the walk survives: no `explicit` query field to push the gate
-// down with.
+// The gate pushed down into the query: a restricted caller's three
+// numbers describe the episodes that caller can actually open, and the
+// show detail header agrees with the listing drawn beneath it.
 func TestRestrictedShowCountsHideExplicitEpisodes(t *testing.T) {
 	h := newPodcastHarness(t)
 	feed := newCountsFeed(t, []countsEpisode{
 		{title: "Clean One"},
 		{title: "Explicit One", explicit: true},
 		{title: "Clean Two"},
+		// Newest overall, and unreadable: the restricted caller's
+		// lastPublishedAt must fall back to Clean Two.
 		{title: "Explicit Two", explicit: true},
 	})
 
@@ -197,18 +238,128 @@ func TestRestrictedShowCountsHideExplicitEpisodes(t *testing.T) {
 	resp.Body.Close()
 
 	if got := subscriptionRow(t, h, h.token, show).Show.EpisodeCount; got == nil || *got != 4 {
-		t.Errorf("counted episodeCount = %v, want all 4", got)
+		t.Errorf("open episodeCount = %v, want all 4", got)
 	}
-	walked := subscriptionRow(t, h, listener, show)
-	if got := walked.Show.EpisodeCount; got == nil || *got != 2 {
-		t.Errorf("walked episodeCount = %v, want the 2 clean episodes", got)
+	restricted := subscriptionRow(t, h, listener, show)
+	if got := restricted.Show.EpisodeCount; got == nil || *got != 2 {
+		t.Errorf("restricted episodeCount = %v, want the 2 clean episodes", got)
 	}
-	if got := walked.UnplayedCount; got == nil || *got != 2 {
-		t.Errorf("walked unplayedCount = %v, want 2", got)
+	if got := restricted.UnplayedCount; got == nil || *got != 2 {
+		t.Errorf("restricted unplayedCount = %v, want 2", got)
+	}
+
+	// The flagged episodes are shut on the view's own flag, without a
+	// read behind it.
+	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+	for _, ep := range decode[EpisodePage](t, resp).Items {
+		if ep.Explicit == nil || !*ep.Explicit {
+			continue
+		}
+		resp = reqAs(t, h, "GET", "/api/v1/items/"+ep.Pid, listener, nil)
+		wantStatus(t, resp, 404, "restricted item read of a flagged episode")
+	}
+
+	// The detail header counts the same way the detail's own episode
+	// list filters, so the two never contradict each other.
+	resp = reqAs(t, h, "GET", "/api/v1/podcasts/"+show, listener, nil)
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("restricted show detail status = %d, want 200", resp.StatusCode)
+	}
+	detail := decode[PodcastDetail](t, resp)
+	if got := detail.Show.EpisodeCount; got == nil || *got != 2 {
+		t.Errorf("restricted detail episodeCount = %v, want the 2 clean episodes", got)
+	}
+	resp = reqAs(t, h, "GET", "/api/v1/podcasts/"+show+"/episodes", listener, nil)
+	listed := decode[EpisodePage](t, resp).Items
+	if len(listed) != 2 {
+		t.Fatalf("restricted episode listing = %d rows, want 2", len(listed))
+	}
+	if detail.Show.LastPublishedAt == nil {
+		t.Fatal("restricted detail lastPublishedAt absent, want the newest clean episode")
+	}
+	// Clean Two is the newest the restricted caller can see; the two
+	// explicit ones straddle it in the feed.
+	var newestClean time.Time
+	for _, ep := range listed {
+		if ep.PublishedAt.After(newestClean) {
+			newestClean = ep.PublishedAt
+		}
+	}
+	if !detail.Show.LastPublishedAt.Equal(newestClean) {
+		t.Errorf("restricted lastPublishedAt = %v, want the newest clean episode %v",
+			*detail.Show.LastPublishedAt, newestClean)
+	}
+	if restricted.Show.LastPublishedAt == nil || !restricted.Show.LastPublishedAt.Equal(newestClean) {
+		t.Errorf("restricted tile lastPublishedAt = %v, want %v", restricted.Show.LastPublishedAt, newestClean)
 	}
 }
 
-// The two cases the walk answered by falling out of its loop.
+// A show flagged explicit at the channel level hides all of it, even
+// the episodes that carry no flag of their own: the counts agree with
+// the 404 the same caller gets on the show and on any of its episodes.
+func TestRestrictedShowCountsZeroExplicitShow(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newCountsFeedAs(t, countsChannel{explicit: true}, []countsEpisode{
+		{title: "Unflagged One"},
+		{title: "Unflagged Two"},
+		{title: "Flagged", explicit: true},
+	})
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+
+	// Subscribing to an explicit show is refused outright, so the only
+	// way to hold this row is to have subscribed while allowed and lose
+	// the grant afterwards.
+	id, listener := listenerAccount(t, h, "revoked", true)
+	resp = reqAs(t, h, "POST", "/api/v1/podcasts", listener, map[string]any{"url": feed.feedURL()})
+	wantStatus(t, resp, 201, "subscribe while allowed")
+	resp = h.patchJSON(t, "/api/v1/users/"+id, map[string]any{
+		"permissions": map[string]any{
+			"download": true, "delete": false, "explicitContent": false,
+			"sharedOutputs": true, "managePodcasts": true,
+		},
+	})
+	wantStatus(t, resp, 200, "revoke explicit content")
+
+	row := subscriptionRow(t, h, listener, show)
+	// A zero count is absent on the wire; the show DTO's own rule.
+	if row.Show.EpisodeCount != nil {
+		t.Errorf("restricted episodeCount = %d, want absent", *row.Show.EpisodeCount)
+	}
+	if got := row.UnplayedCount; got == nil || *got != 0 {
+		t.Errorf("restricted unplayedCount = %v, want a computed 0", got)
+	}
+	if row.Show.LastPublishedAt != nil {
+		t.Errorf("restricted lastPublishedAt = %v, want absent", *row.Show.LastPublishedAt)
+	}
+	if got := subscriptionRow(t, h, h.token, show).Show.EpisodeCount; got == nil || *got != 3 {
+		t.Errorf("open episodeCount = %v, want all 3", got)
+	}
+
+	// The numbers and the doors agree: nothing of this show opens. The
+	// unflagged episodes are the interesting ones, since only the show's
+	// own flag shuts them.
+	resp = reqAs(t, h, "GET", "/api/v1/podcasts/"+show, listener, nil)
+	wantStatus(t, resp, 404, "restricted show detail on an explicit show")
+	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+	all := decode[EpisodePage](t, resp).Items
+	if len(all) != 3 {
+		t.Fatalf("open episode listing = %d rows, want 3", len(all))
+	}
+	for _, ep := range all {
+		// Both doors onto the same episode, because the episode endpoint
+		// is the one path that reaches an episode without passing its
+		// show, and it used to answer what the item read refused.
+		resp = reqAs(t, h, "GET", "/api/v1/items/"+ep.Pid, listener, nil)
+		wantStatus(t, resp, 404, "restricted item read of an explicit show's episode")
+		resp = reqAs(t, h, "GET", "/api/v1/episodes/"+ep.Pid, listener, nil)
+		wantStatus(t, resp, 404, "restricted episode read of an explicit show's episode")
+	}
+}
+
+// The two cases the counts answer by matching nothing.
 func TestShowCountsZeroCases(t *testing.T) {
 	h := newPodcastHarness(t)
 
@@ -227,8 +378,8 @@ func TestShowCountsZeroCases(t *testing.T) {
 		t.Errorf("empty show lastPublishedAt = %v, want absent", *row.Show.LastPublishedAt)
 	}
 
-	// Undated sorts last, so the newest row's time is zero, as the
-	// walk's max was.
+	// The recent-episodes list excludes undated rows outright, so an
+	// all-undated show has no newest publication at all.
 	undated := newCountsFeed(t, []countsEpisode{
 		{title: "No Date One", undated: true},
 		{title: "No Date Two", undated: true},

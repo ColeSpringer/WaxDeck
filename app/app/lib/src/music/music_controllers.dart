@@ -29,6 +29,14 @@ enum MusicDimension {
     glyph: WaxIcons.albums,
     entityPrefix: 'al-',
   ),
+  releaseGroups(
+    segment: 'release-groups',
+    wireName: 'release-group',
+    label: 'Release groups',
+    singular: 'release group',
+    glyph: WaxIcons.albums,
+    entityPrefix: 'rg-',
+  ),
   genres(
     segment: 'genres',
     wireName: 'genre',
@@ -314,9 +322,10 @@ final musicIndexProvider =
 /// about the list in front of you.
 ///
 /// A-to-Z leads where an alphabet is how anyone looks for a thing:
-/// artists, albums. Genres and years lead biggest-first, because an
-/// alphabet of years is the years again, and the genre with two tracks in
-/// it is not where a visitor starts. Either way the toggle is there.
+/// artists, albums, release groups. Genres and years lead biggest-first,
+/// because an alphabet of years is the years again, and the genre with
+/// two tracks in it is not where a visitor starts. Either way the toggle
+/// is there.
 class MusicIndexSort extends Notifier<FacetSort> {
   MusicIndexSort(this.dimension);
 
@@ -324,7 +333,9 @@ class MusicIndexSort extends Notifier<FacetSort> {
 
   @override
   FacetSort build() => switch (dimension) {
-    MusicDimension.artists || MusicDimension.albums => FacetSort.label,
+    MusicDimension.artists ||
+    MusicDimension.albums ||
+    MusicDimension.releaseGroups => FacetSort.label,
     MusicDimension.genres || MusicDimension.years => FacetSort.count,
   };
 

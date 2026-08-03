@@ -76,6 +76,14 @@ paths:
         recently added, most played, recently played, random, starred,
         alphabetical, never played, and rediscover. Play-derived lists
         reflect the calling user's own listening state.
+
+        Most lists span every media type. `newest` does not: it orders by
+        release year, which a podcast episode has not got, so it covers
+        music and audiobooks only. Pairing it with `mediaType=podcast`,
+        or drilling its `kind` dimension to `episode`, is
+        `invalid-request` rather than an empty page that would read as
+        "your library holds none". Episodes ordered by publication date
+        live on `/podcasts/episodes`.
       tags: [library]
       parameters:
         - name: list
@@ -186,10 +194,13 @@ paths:
         mismatched pair is `invalid-request` rather than a silently
         wrong page.
 
-        The `genre`, `artist`, `album-artist`, `album`, and `year`
-        dimensions each carry a bucket for the items the dimension is
-        absent from (`[No Genre]`, `[Unknown Artist]`, `[Non-Album]`,
-        `[Unknown Year]`), with an empty `key` and `unknown` true.
+        The `genre`, `artist`, `album-artist`, `album`, `release-group`,
+        and `year` dimensions each carry a bucket for the items the
+        dimension is absent from (`[No Genre]`, `[Unknown Artist]`,
+        `[Non-Album]`, `[No Release Group]`, `[Unknown Year]`), with an
+        empty `key` and `unknown` true. `[No Release Group]` is not
+        `[Non-Album]`: a track on an album whose release group is
+        unresolved is in the first and not the second.
         `kind` has none, because an item's kind is never absent, and a
         custom tag dimension has none, because only items carrying the
         key contribute at all; on those two, drilling an empty
@@ -582,8 +593,11 @@ components:
       type: string
       description: >
         A browse dimension: one of `genre`, `artist`, `album-artist`,
-        `album`, `year`, `kind`, or a custom tag dimension spelled
-        `tag.<KEY>` (for example `tag.MOOD`). The fixed set is stable;
+        `album`, `release-group`, `year`, `kind`, or a custom tag
+        dimension spelled `tag.<KEY>` (for example `tag.MOOD`).
+        `release-group` buckets tracks by their album's release group,
+        which is the work rather than the edition, so the several
+        pressings of one record answer as one bucket. The fixed set is stable;
         which tag dimensions exist depends on the library's tags. Tag
         keys are case-insensitive and canonicalize to upper case, so
         `tag.mood` and `tag.MOOD` are one dimension; responses echo the
@@ -627,8 +641,9 @@ components:
           type: string
           description: >
             The catalog entity behind the bucket, for the dimensions that
-            have one (`artist`, `album-artist`, `album`). Absent for the
-            unknown bucket and for dimensions that are not entities.
+            have one (`artist`, `album-artist`, `album`,
+            `release-group`). Absent for the unknown bucket and for
+            dimensions that are not entities.
 
             It is this bucket's `key` carried with the entity's API type
             prefix, so a client holding one has the other: a screen

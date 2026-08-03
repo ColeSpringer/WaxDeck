@@ -59,6 +59,11 @@ abstract interface class WaxDeckRepository {
   /// user, newest first. Doubles as the device list.
   Future<List<DeviceSession>> listSessions();
 
+  /// `PATCH /auth/sessions/{id}`: relabels one of the caller's sessions
+  /// in the device list. The name is trimmed server-side and must not be
+  /// empty afterwards.
+  Future<DeviceSession> renameSession(String sessionId, String deviceName);
+
   /// `DELETE /auth/sessions/{id}`: revokes one of the caller's sessions.
   /// Revoking the session serving the request acts as a logout.
   Future<void> revokeSession(String sessionId);
@@ -1518,6 +1523,18 @@ class WaxDeckClient implements WaxDeckRepository {
     final body = _require((await _gen.getAuthApi().listSessions()).data);
     return body.sessions.map(deviceSessionFromGen).toList();
   });
+
+  @override
+  Future<DeviceSession> renameSession(String sessionId, String deviceName) =>
+      _guard(() async {
+        final body = _require(
+          (await _gen.getAuthApi().renameSession(
+            sessionId: sessionId,
+            sessionRename: gen.SessionRename((b) => b..deviceName = deviceName),
+          )).data,
+        );
+        return deviceSessionFromGen(body);
+      });
 
   @override
   Future<void> revokeSession(String sessionId) => _guard(() async {

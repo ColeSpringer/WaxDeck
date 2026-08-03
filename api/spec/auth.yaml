@@ -220,6 +220,48 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
 
   /auth/sessions/{sessionId}:
+    patch:
+      operationId: renameSession
+      summary: Rename one of the caller's sessions
+      description: >
+        Relabels one of the calling user's sessions in the device list.
+        The label is whatever the login supplied, which for a web login
+        is usually nothing at all, so this is how a device gets a name a
+        person recognizes.
+
+        The name is trimmed of surrounding whitespace and must not be
+        empty afterwards: there is no way to spell "clear this label"
+        here, and a blank row in a device list is worse than the
+        client's own fallback. The length limit applies to the value as
+        sent, before that trim, so a client can decide acceptance
+        without guessing; it is counted in characters rather than bytes,
+        because device names are where emoji turn up.
+
+        Only the caller's own sessions are reachable. Another user's
+        session answers 404, the same as one that does not exist, so
+        this endpoint cannot be used to probe for session ids.
+      tags: [auth]
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRename"
+      responses:
+        "200":
+          description: The renamed session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceSession"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
     delete:
       operationId: revokeSession
       summary: Revoke one of the caller's sessions
@@ -600,6 +642,21 @@ components:
         current:
           type: boolean
           description: True for the session serving this request.
+
+    SessionRename:
+      type: object
+      description: A new label for one session in the device list.
+      required: [deviceName]
+      properties:
+        deviceName:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: >
+            Human-readable label for this session (for example `Pixel 9`
+            or `Study desktop`), matching what a login may supply.
+            Trimmed of surrounding whitespace; empty after trimming is
+            `invalid-request`.
 
     SessionList:
       type: object

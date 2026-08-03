@@ -348,6 +348,7 @@ Class | Method | HTTP request | Description
 [*AuthApi*](doc/AuthApi.md) | [**logout**](doc/AuthApi.md#logout) | **POST** /auth/logout | End the current session
 [*AuthApi*](doc/AuthApi.md) | [**oidcCallback**](doc/AuthApi.md#oidccallback) | **GET** /auth/oidc/callback | OIDC provider callback
 [*AuthApi*](doc/AuthApi.md) | [**refreshToken**](doc/AuthApi.md#refreshtoken) | **POST** /auth/refresh | Rotate the caller&#39;s bearer token
+[*AuthApi*](doc/AuthApi.md) | [**renameSession**](doc/AuthApi.md#renamesession) | **PATCH** /auth/sessions/{sessionId} | Rename one of the caller&#39;s sessions
 [*AuthApi*](doc/AuthApi.md) | [**revokeSession**](doc/AuthApi.md#revokesession) | **DELETE** /auth/sessions/{sessionId} | Revoke one of the caller&#39;s sessions
 [*AuthApi*](doc/AuthApi.md) | [**signup**](doc/AuthApi.md#signup) | **POST** /auth/signup | Request an account
 [*AuthApi*](doc/AuthApi.md) | [**startOidc**](doc/AuthApi.md#startoidc) | **GET** /auth/oidc/start | Start an OIDC login
@@ -799,6 +800,7 @@ Class | Method | HTTP request | Description
  - [ServerYearInReview](doc/ServerYearInReview.md)
  - [SessionInfo](doc/SessionInfo.md)
  - [SessionList](doc/SessionList.md)
+ - [SessionRename](doc/SessionRename.md)
  - [Share](doc/Share.md)
  - [ShareCreate](doc/ShareCreate.md)
  - [SharePage](doc/SharePage.md)

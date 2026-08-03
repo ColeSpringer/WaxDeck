@@ -911,8 +911,8 @@ func (l *Library) MergeDuplicates(ctx context.Context, uc *UserCtx, entityType, 
 }
 
 // bareEntityPID accepts both the bare catalog pids the duplicates
-// listing returns (albums, release groups, and genres have no API
-// prefix scheme) and a prefixed API pid, yielding the bare pid.
+// listing returns (it reports genres and albums bare) and a prefixed
+// API pid, yielding the bare pid.
 func bareEntityPID(s string) (model.PID, bool) {
 	if _, pid, ok := parseAPIPID(s); ok {
 		return pid, true

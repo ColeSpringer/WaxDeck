@@ -163,7 +163,8 @@ func (l *Library) MarkScheduleRun(ctx context.Context, kind string, runErr error
 }
 
 // RunPrune is the scheduled prune pass: event log, mutation stamps,
-// audit log, and ended playback sessions. Horizons are deliberately
+// audit log, ended playback sessions, finished tool tasks, and analysis
+// rows that will never come good. Horizons are deliberately
 // server-owned constants; sync consumers whose cursor falls below the
 // surviving event floor get a clean resync by design.
 func (l *Library) RunPrune(ctx context.Context) error {
@@ -172,6 +173,17 @@ func (l *Library) RunPrune(ctx context.Context) error {
 		keepAudit       = 50_000
 		stampRetention  = 365 * 24 * time.Hour
 		keepSessionsPer = 5
+		// A finished task is a receipt somebody may want to read; a month
+		// outlives any question about last night's split.
+		keepToolTasks = 30 * 24 * time.Hour
+		// A week since the row last tried, because it is a give-up rather
+		// than a receipt and deleting it re-opens the work. Long enough
+		// that a file broken for good costs about five attempts a week
+		// rather than thrashing, short enough that an outage heals within
+		// days of ending. The contrast is DropExhaustedMatches, which
+		// drops immediately: there the review entry records the give-up,
+		// so nothing is lost by clearing the queue row at once.
+		keepExhaustedAnalysis = 7 * 24 * time.Hour
 	)
 	var firstErr error
 	record := func(what string, err error) {
@@ -198,5 +210,16 @@ func (l *Library) RunPrune(ctx context.Context) error {
 		l.log.Info("pruned audit log", "rows", an)
 	}
 	record("playback sessions", l.db.PrunePlaybackSessions(ctx, keepSessionsPer))
+	tn, err := l.db.PruneFinishedToolTasks(ctx, time.Now().Add(-keepToolTasks).UnixNano())
+	record("tool tasks", err)
+	if tn > 0 {
+		l.log.Info("pruned finished tool tasks", "rows", tn)
+	}
+	qn, err := l.db.PruneExhaustedAnalysis(ctx,
+		time.Now().Add(-keepExhaustedAnalysis).UnixNano(), analysisMaxAttempts)
+	record("exhausted analysis", err)
+	if qn > 0 {
+		l.log.Info("pruned exhausted analysis", "rows", qn)
+	}
 	return firstErr
 }

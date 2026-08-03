@@ -14,82 +14,52 @@ sidecar injection seam) all landed and are not repeated here.
 
 ## WaxBin
 
-- **An `explicit` item query field.** `podcast_pid` landed and the
-  subscription tile's three numbers are two counting queries and a
-  one-row read now, but only for a caller who may see explicit content.
-  The walk it replaced dropped episodes the caller cannot see
-  (`ep.Explicit && !uc.Explicit`), and no item query field expresses
-  that flag, so `countShow` still walks for a restricted account
-  (`server/internal/service/podcasts.go`). The flag is on the episode
-  row already; a presence-style `explicit` field (`is 0` / `is 1`, like
-  `has_art`) would retire the second path. This is the rare branch -
-  `permissionsOf` grants Explicit by default and every admin holds it -
-  so the workaround is shipped, correct, and cheap meanwhile.
+- **A last-touched primitive for started-and-unfinished items.** The
+  publication-ordered ask this entry used to carry landed as the
+  `recent-episodes` list, and `latest`/`unplayed` on
+  `GET /podcasts/episodes` are keyset browses of the catalog now. The
+  `in-progress` filter did not follow, and the reason is a design
+  decision rather than a missing field: `last_played_at` is stamped by
+  `MarkPlayed` and never by `Checkpoint`, so `recently-played` excludes
+  exactly the checkpoint-only rows that are the in-progress population.
+  `position_ms` landed and gives the membership
+  (`position_ms gt 0 AND finished is 0`), so what is left is ordering:
+  a discovery list over items a user last touched, or a per-user
+  last-touched sort field, would let the strip page as a keyset browse
+  instead of collecting its population and ranking it in Go
+  (`inProgressEpisodes`, `server/internal/service/podcasts.go`). The
+  population is human-bounded - a row exists only for an episode
+  somebody started - so the shipped ranking is correct and affordable.
 
-- **A publication-ordered cross-show listing primitive.**
-  `GET /podcasts/episodes`, episodes across everything the caller
-  follows, assembles every subscribed show's episodes in Go, sorts them,
-  and pages the slice, per request (`SubscribedEpisodes`,
-  `server/internal/service/podcasts.go`). An earlier version of this
-  entry claimed `podcast_pid` would make it "one keyset query over an
-  indexed join". It does not, and the correction is the ask: `QueryPage`
-  owns `sort_key` ordering and ignores a query's own sort, and no
-  discovery list orders by publication date, so a cross-show listing in
-  newest-published order has no keyset primitive behind it at all.
-  Either a publication-ordered discovery list or sort-aware keyset
-  paging would give it one. The `in-progress` filter needs a second
-  thing besides: it selects on `PositionMS > 0` and there is no position
-  field. A listener follows tens of shows, so the slice is correct and
-  affordable today, and it is the wrong layer for a power user's OPML
-  import.
+- **A podcast handle on the item view.** `model.ItemView` projects
+  `Explicit` now, which is the episode's own advisory flag, and WaxDeck
+  reads it: `allowedByContent` refuses a flagged episode without a read.
+  A *clean* episode still costs two, because deciding it needs the
+  show's flag and the view carries no `PodcastPID` to reach the show
+  with - so the check reads the episode to learn its show, then reads
+  the show. `subscriptionFilter.allowsEpisode` pays the first of those
+  two for the same reason: it reads a whole episode to learn one pid it
+  then looks up in the subscribed set
+  (`server/internal/service/perms.go`, `podcasts.go`).
+  `ArtistPID`, `AlbumPID`, and `ReleaseGroupPID` are all
+  projected already, so a `PodcastPID` beside them is the same kind of
+  handle and would halve the chain. The workaround is shipped and
+  correct, and restricted callers are the rare branch, so this is a cost
+  rather than a gap.
 
-- **A file handle on `DiagnosticFilter`.** `FileDiagnostics` landed and
-  is the query surface the earlier "per-file diagnostics" ask wanted;
-  `model.FileDiagnostic` maps onto WaxDeck's `WriteBackIssueDTO` field
-  for field. What it cannot answer is "this item's issues": the filter
-  is origin, code, severity, and library pid, so a per-item read means
-  pulling a whole library's diagnostics and scanning them on every
-  editor open. A `FilePID` dimension (WaxDeck resolves an item's files
-  through `ItemFiles`) would close it. Until then
-  `GET /items/{pid}/metadata` answers an empty `writeBackIssues`, which
-  the contract already allows.
-
-- **A release-group handle on the item view.** `model.ItemView` projects
-  `ArtistPID`, `AlbumArtistPID`, and `AlbumPID`, and WaxDeck reads all
-  three - the item listing and the metadata editor both carry the artist
-  and album pids now. There is no release-group equivalent, and no
-  facade read that resolves one from an item, so `ItemMetadata`'s
-  declared `releaseGroupPid` is permanently absent. The enrichment spine
-  already keys release groups, so this is a projection rather than new
-  identity work. The field is optional in the contract, so the gap is a
-  missing link rather than a broken read. There is now a consumer
-  standing on the gap: the metadata editor links its artist and album
-  out of exactly these pids, and the release-group door beside them is
-  the deferred half (deferred-work.md), unbuildable until the
-  projection lands.
-
-## WaxTap
-
-- **Square cover art from the embed pass.** The thumbnail embed takes
-  `videoDetails`' largest thumbnail and embeds the bytes verbatim
-  (`youtube/playerresponse.go` sorts largest-first, `embed.go`'s
-  `thumbnailImage` fetches `Thumbnails[0]`), and for music that image
-  is never square: player-response thumbnails are frame-shaped, the
-  square art composited onto a 16:9 canvas and letterboxed again into
-  the 4:3 variants, so the bars are burned into the pixels. A verified
-  example: an Art Track acquisition delivered a 640x480 JPEG front
-  cover - the square release art centered, black bars above and below,
-  background-color pillars beside. Wanted, either or both: crop the
-  fetched frame to its centered square when uniform-color borders
-  surround one (the standard remedy), or source genuinely square art
-  where a surface offers it (square music thumbnails live in other
-  innertube surfaces, not in `videoDetails`). WaxDeck's side is a
-  pass-through by design - `waxtapsource` only toggles
-  `EmbedThumbnail`, the scan stores the embedded picture as delivered,
-  and the art pipeline resizes without cropping - so the shipped
-  mitigation is enrichment: a matched release's official art replaces
-  the front cover, leaving the bars on unmatched and kept-as-is
-  content only.
+- **A set-membership operator on item queries.** There is no `OpIn`: the
+  operator vocabulary is is/isNot, the string and ordered comparisons,
+  `OpInRange` (a two-ended range, not a set), the presence pair, and the
+  relative-time pair. So "episodes of any show this caller follows"
+  compiles as a `query.Or` of one `podcast_pid is X` arm per
+  subscription (`subscribedEpisodeScope`,
+  `server/internal/service/podcasts.go`). That is the shipped workaround
+  and it is fine at the design center of tens of shows; the practical
+  ceiling is somewhere in the low hundreds of subscriptions, past which
+  the OR width is a real cost. An `OpIn` taking `Cond.Values` would
+  collapse the whole disjunction into one indexed predicate, and it
+  would serve every other "any of these entities" scope besides this
+  one.
 
 ## Recorded upstream non-goals
 

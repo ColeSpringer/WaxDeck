@@ -27,6 +27,11 @@ enum QueueRepeat {
 /// screen's header, and the restore offer.
 enum QueueSourceKind {
   album('album'),
+
+  /// A release group: the work rather than the edition, so the queue is
+  /// every pressing's tracks. Not [album], which is one edition and is
+  /// what a queue captioned with an album title should mean.
+  releaseGroup('releaseGroup'),
   artist('artist'),
   playlist('playlist'),
   genre('genre'),

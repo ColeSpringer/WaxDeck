@@ -115,9 +115,10 @@ func (d *DB) EnqueueAnalysis(ctx context.Context, essenceHash, itemPID string, n
 
 // LeaseAnalysis claims the oldest lease-free analysis row for leaseNS
 // nanoseconds; ErrNotFound when the queue is idle. Rows past maxAttempts
-// are skipped and nothing sweeps them, and EnqueueAnalysis ignores a key
-// it already holds, so an exhausted row bars that audio for good:
-// callers drop work that cannot come good rather than spend its attempts.
+// are skipped, and EnqueueAnalysis ignores a key it already holds, so an
+// exhausted row bars that audio until the nightly sweep clears it
+// (PruneExhaustedAnalysis): callers drop work that cannot come good
+// rather than spend its attempts on every pass.
 func (d *DB) LeaseAnalysis(ctx context.Context, nowNS, leaseNS int64, maxAttempts int) (QueueRow, error) {
 	return d.leaseQueue(ctx, "analysis_queue", "essence_hash", nowNS, leaseNS, maxAttempts)
 }
@@ -143,6 +144,35 @@ func (d *DB) FailAnalysis(ctx context.Context, essenceHash, msg string, retryAtN
 		return fmt.Errorf("db: failing analysis: %w", err)
 	}
 	return nil
+}
+
+// PruneExhaustedAnalysis removes analysis rows that spent maxAttempts
+// and last tried before gaveUpBeforeNS, reporting how many went.
+//
+// AND rather than OR, deliberately: a freshly exhausted row still holds
+// a backoff lease somebody may yet want honored, and deleting it would
+// re-open EnqueueAnalysis immediately. With the age term, a permanently
+// broken file costs one round of attempts per horizon instead of
+// thrashing, and audio that failed to a transient cause gets another
+// chance once the horizon passes, since the skip-map poll re-enqueues
+// what it still wants.
+//
+// The age is read off lease_until_ns and not enqueued_at_ns, because
+// only one of them moves. EnqueueAnalysis is ON CONFLICT DO NOTHING, so
+// enqueued_at_ns records when the essence was *first* seen and never
+// changes; a file scanned six months ago that exhausts its last attempt
+// tonight would already be older than any horizon, get swept the same
+// night, and be re-enqueued at once - the thrash the age term exists to
+// prevent. LeaseAnalysis and FailAnalysis both stamp lease_until_ns, so
+// it is the column that actually says when this row last tried.
+func (d *DB) PruneExhaustedAnalysis(ctx context.Context, gaveUpBeforeNS int64, maxAttempts int) (int64, error) {
+	res, err := d.w.ExecContext(ctx, `
+		DELETE FROM analysis_queue WHERE attempts >= ? AND lease_until_ns < ?`,
+		maxAttempts, gaveUpBeforeNS)
+	if err != nil {
+		return 0, fmt.Errorf("db: pruning exhausted analysis: %w", err)
+	}
+	return res.RowsAffected()
 }
 
 // EnqueueFetch queues a server-side enclosure download for one episode;

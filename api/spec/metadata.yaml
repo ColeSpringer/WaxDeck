@@ -1072,7 +1072,13 @@ components:
           description: The affected tag key, when known.
         detail:
           type: string
-          description: Human-readable detail.
+          description: >
+            Human-readable detail, administrators only. It is the tag
+            writer's own error, which names the file's absolute path, so
+            it is withheld from everyone else exactly as the diagnostics
+            listing is; `code`, `tagKey`, and `filePid` say what went
+            wrong without saying where the library lives. Absent rather
+            than redacted for a non-administrator.
 
     MetadataEdit:
       type: object

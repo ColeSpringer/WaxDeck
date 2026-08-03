@@ -97,6 +97,7 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 	}
 	setOpt(&out.ArtistPid, d.ArtistPID)
 	setOpt(&out.AlbumPid, d.AlbumPID)
+	setOpt(&out.ReleaseGroupPid, d.ReleaseGroupPID)
 	for _, p := range d.Provenance {
 		fp := FieldProvenance{Field: p.Field, Source: p.Source, Locked: p.Locked}
 		if p.Provider != "" {

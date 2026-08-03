@@ -14,7 +14,7 @@ part 'write_back_issue.g.dart';
 /// * [filePid] - The backing file.
 /// * [code] - The diagnostic: `tag-write-unsynced` (a write-back was refused or failed; the file's tags lag the catalog) or `tag-write-lost` (the write ran but the format could not store the value). A string, not a closed enum. 
 /// * [tagKey] - The affected tag key, when known.
-/// * [detail] - Human-readable detail.
+/// * [detail] - Human-readable detail, administrators only. It is the tag writer's own error, which names the file's absolute path, so it is withheld from everyone else exactly as the diagnostics listing is; `code`, `tagKey`, and `filePid` say what went wrong without saying where the library lives. Absent rather than redacted for a non-administrator. 
 @BuiltValue()
 abstract class WriteBackIssue implements Built<WriteBackIssue, WriteBackIssueBuilder> {
   /// The backing file.
@@ -29,7 +29,7 @@ abstract class WriteBackIssue implements Built<WriteBackIssue, WriteBackIssueBui
   @BuiltValueField(wireName: r'tagKey')
   String? get tagKey;
 
-  /// Human-readable detail.
+  /// Human-readable detail, administrators only. It is the tag writer's own error, which names the file's absolute path, so it is withheld from everyone else exactly as the diagnostics listing is; `code`, `tagKey`, and `filePid` say what went wrong without saying where the library lives. Absent rather than redacted for a non-administrator. 
   @BuiltValueField(wireName: r'detail')
   String? get detail;
 

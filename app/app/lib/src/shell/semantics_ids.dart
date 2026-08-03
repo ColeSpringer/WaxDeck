@@ -481,6 +481,7 @@ abstract final class SemanticsIds {
   static const String aboutOpen = 'about-open';
   static const String appPasswordAdd = 'app-password-add';
   static String appPasswordRevoke(Object id) => 'app-password-revoke-$id';
+  static String deviceRename(Object id) => 'device-rename-$id';
   static String deviceRevoke(Object id) => 'device-revoke-$id';
   static String deviceRow(Object id) => 'device-row-$id';
   static const String lastfmCredentialsClear = 'lastfm-credentials-clear';

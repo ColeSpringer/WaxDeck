@@ -153,6 +153,27 @@ it: `QueryPage` owns `sort_key` ordering and ignores a query's own sort,
 so a newest-published cross-show listing has no keyset primitive behind
 it at all. See ADR-0040.
 
+*Amended 2026-08-02: the walk is gone entirely.* The `explicit` and
+`podcast_explicit` item fields landed, so the gate pushes down and the
+tile's three numbers are the same two counts and one browse for every
+caller. Restricted callers gate on **both** flags, which changed one
+answer deliberately: a restricted subscriber to a channel-level explicit
+show now reads zero rather than that show's unflagged episodes, which is
+what `allowedByContent` and the show detail's 404 already told them. The
+show detail header counts the same way, so it can no longer contradict
+the episode listing drawn beneath it.
+
+`recent-episodes` landed too, so the cross-show listing is a keyset
+browse of the catalog and no longer assembles every followed show in Go.
+Two consequences ride with it. Episodes with no publication date drop
+out of `latest` and `unplayed` - the list is ordered by a date they do
+not have - while still appearing on their own show's listing and still
+counting toward `unplayedCount`; the spec says so. And `in-progress`
+stays ranked in Go, because a checkpoint never stamps `last_played_at`,
+so no discovery list can define either its membership or its order. It
+reads its membership from `position_ms gt 0 AND finished is 0` and ranks
+the result, which is a strictly smaller population than the walk held.
+
 **"Mark older episodes as played" is one request per episode, and the
 dialog says so.** Played is derived server-side from the position
 reached against the item's duration, so there is no flag to set: saying

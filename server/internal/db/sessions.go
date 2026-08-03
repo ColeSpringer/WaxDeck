@@ -127,6 +127,17 @@ func (d *DB) TouchSession(ctx context.Context, id string, expiresAt time.Time) e
 	return err
 }
 
+// RenameSession relabels one session in the device list; ErrNotFound
+// when no session has that id.
+func (d *DB) RenameSession(ctx context.Context, id, deviceName string) error {
+	res, err := d.w.ExecContext(ctx,
+		`UPDATE sessions SET device_name = ? WHERE id = ?`, deviceName, id)
+	if err != nil {
+		return err
+	}
+	return requireRow(res)
+}
+
 // DeleteSession revokes one session. Revocation is deletion: the next
 // lookup misses and the device is signed out.
 func (d *DB) DeleteSession(ctx context.Context, id string) error {

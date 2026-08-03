@@ -175,6 +175,12 @@ func (s *Sessions) Revoke(ctx context.Context, sessionID string) error {
 	return s.store.DeleteSession(ctx, sessionID)
 }
 
+// Rename relabels one session in the device list. The caller validates
+// the name; this is the store passthrough.
+func (s *Sessions) Rename(ctx context.Context, sessionID, deviceName string) error {
+	return s.store.RenameSession(ctx, sessionID, deviceName)
+}
+
 // ListForUser returns the account's live sessions, newest first.
 // Expired rows awaiting the janitor are filtered out.
 func (s *Sessions) ListForUser(ctx context.Context, userID string) ([]*db.Session, error) {

@@ -56,19 +56,6 @@ here waits on upstream.
   took), and a pin affordance on every entity surface in the app, which
   is where the work actually is. The shelf itself is one more `ItemShelf`
   over a provider that resolves pids to items.
-- `[in-repo]` **The first refill after a cursor-encoding change walks
-  the source from its head.** A rejected cursor falls through to
-  placement, which reads up to 40 pages of 500 looking for the queue's
-  frontier before it seals. That cap was sized for the rare restore, not
-  for every stored queue at once, which is what a scope-encoding change
-  produces (ADR-0040). It is bounded and one-off per queue, but a
-  cheaper answer would be a version byte in the envelope that tells a
-  stale cursor from a mismatched scope, so only the second walks.
-- `[upstream]` **The metadata editor has no release-group door.** The
-  artist and album lines link out to their screens now; `releaseGroupPid`
-  is still absent from the read, so that third door waits on the
-  "release-group handle on the item view" ask under WaxBin in
-  upstream-requests.md.
 - `[in-repo]` **The book player draws no waveform.** The server half
   landed: `GET /items/{pid}/waveform` takes a `partIndex` and answers
   the requested part's own envelope, so a multi-file audiobook is
@@ -120,11 +107,10 @@ here waits on upstream.
   further off: `Prefs.locale` is stored and the app has no localization
   behind it, so a picker there would change nothing.
 
-  Two more are per-section rather than per-setting. **Auto-remove
+  One more is per-section rather than per-setting. **Auto-remove
   finished episodes**: the manual action exists on the downloads screen,
   and making it automatic wants a sweep with its own timing rules rather
-  than a switch. **Renaming this device's session**: `DeviceSession`
-  carries the label and no endpoint writes it.
+  than a switch.
 - `[in-repo]` **The web build's per-device settings binding is not covered
   by an automated test.** `BrowserClientSettingsStore` - the probe, the
   fallback to memory, the write-through shadow, the key semantics - is
@@ -271,17 +257,6 @@ here waits on upstream.
   request, so this is resource use rather than an open proxy. Fix both
   together when it is worth a bound, since they have the same shape: a
   per-user cap plus an idle-read deadline, not an overall one.
-- `[in-repo]` **An analysis entry that exhausts its attempts is
-  permanent.** The queue is keyed by essence hash, `EnqueueAnalysis`
-  ignores a key it already holds, and only success deletes a row, so five
-  failed attempts bar that audio for the life of the database. Work that
-  cannot come good is now dropped (`errAnalysisMoot`), but a durable
-  outage still burns the budget: a sidecar down for an hour leaves every
-  file queued during it unanalyzable, and the on-access path cannot heal
-  it because its enqueue is the same no-op. Wants a sweep of exhausted
-  rows on a horizon (the prune job) or a reset on a genuinely fresh
-  enqueue; not retry-forever, since a client polling a pending skip map
-  re-enqueues on every request.
 - `[in-repo]` **A skip map stays pending for audio deleted behind the
   server's back.** The item is still `present` in the catalog, so
   `SkipMapFor` enqueues and answers pending, while the worker drops the

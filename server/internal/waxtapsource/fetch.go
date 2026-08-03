@@ -66,17 +66,26 @@ func (p *Provider) fetch(ctx context.Context, req source.FetchRequest, w io.Writ
 	if len(p.categories) > 0 {
 		cut = &waxtap.CutSpec{SponsorBlock: p.categories}
 	}
-	res, err := p.tap.Download(ctx, waxtap.Request{
-		URL: req.URL,
-		ProcessSpec: waxtap.ProcessSpec{
-			Output:         waxtap.ToFile(path),
-			Transcode:      &tspec,
-			Cut:            cut,
-			EmbedThumbnail: p.cfg.EmbedThumbnail,
-			EmbedMetadata:  p.cfg.EmbedMetadata,
-			Events:         p.warningEvents(ctx, req.URL),
-		},
-	})
+	spec := waxtap.ProcessSpec{
+		Output:         waxtap.ToFile(path),
+		Transcode:      &tspec,
+		Cut:            cut,
+		EmbedThumbnail: p.cfg.EmbedThumbnail,
+		EmbedMetadata:  p.cfg.EmbedMetadata,
+		Events:         p.warningEvents(ctx, req.URL),
+	}
+	if p.cfg.EmbedThumbnail {
+		// Conditional and not unconditional: a cover-art mode without an
+		// embed to shape is ErrIncompatibleSpec, which would fail every
+		// acquisition rather than shape none of them.
+		//
+		// No knob beside it, because there is no case for the frame: a
+		// player-response thumbnail is 16:9 or 4:3 with the square release
+		// art letterboxed inside it, and waxtap falls back to embedding
+		// the unshaped image when the crop cannot be found.
+		spec.CoverArt = waxtap.CoverArtSquare
+	}
+	res, err := p.tap.Download(ctx, waxtap.Request{URL: req.URL, ProcessSpec: spec})
 	if err != nil {
 		return nil, err
 	}

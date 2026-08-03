@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
+	"unicode/utf8"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -84,6 +86,79 @@ func (s *Server) ListSessions(ctx context.Context, _ ListSessionsRequestObject) 
 		out.Sessions = append(out.Sessions, deviceSessionJSON(row, row.ID == p.Session.ID))
 	}
 	return ListSessions200JSONResponse(out), nil
+}
+
+// maxDeviceNameRunes is the device-name cap the spec declares, counted
+// in characters. Runes and not bytes: the spec's maxLength counts
+// characters, and device names are where emoji turn up.
+const maxDeviceNameRunes = 128
+
+// deviceNameFor trims a supplied device label and reports whether it is
+// storable. Empty after trimming is not, since there is no way to spell
+// "clear this label" and a blank row in a device list reads as a bug.
+//
+// The generated server does not enforce minLength or maxLength, so this
+// is where the declared constraints become real - and the length one is
+// measured on the value as sent, before the trim, because that is what
+// the schema declares it on. Measuring the trimmed value instead would
+// accept a 130-character name with two trailing spaces that a validating
+// proxy or a generated client had already rejected, so the two would
+// disagree about what is acceptable.
+func deviceNameFor(raw string) (string, bool) {
+	if utf8.RuneCountInString(raw) > maxDeviceNameRunes {
+		return "", false
+	}
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return "", false
+	}
+	return name, true
+}
+
+// truncatedDeviceName is deviceNameFor for a login, which must never be
+// refused over a label: an over-long or blank name is stored trimmed and
+// cut to the cap rather than turned into a failed sign-in. Renaming is
+// an explicit act and refuses instead, which is the whole difference.
+func truncatedDeviceName(raw string) string {
+	name := strings.TrimSpace(raw)
+	if utf8.RuneCountInString(name) > maxDeviceNameRunes {
+		name = string([]rune(name)[:maxDeviceNameRunes])
+	}
+	return name
+}
+
+func (s *Server) RenameSession(ctx context.Context, req RenameSessionRequestObject) (RenameSessionResponseObject, error) {
+	p, ok := principalFromContext(ctx)
+	if !ok {
+		return RenameSession401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
+	}
+	if req.Body == nil {
+		return RenameSession400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	name, ok := deviceNameFor(req.Body.DeviceName)
+	if !ok {
+		return RenameSession400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request",
+			"deviceName must be 1 to 128 characters after trimming"))}, nil
+	}
+	target, err := s.sessions.Get(ctx, req.SessionId)
+	if err != nil {
+		if errors.Is(err, wdb.ErrNotFound) {
+			return RenameSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no session with id "+req.SessionId))}, nil
+		}
+		return nil, err
+	}
+	// A foreign session is indistinguishable from a missing one.
+	if target.UserID != p.User.ID {
+		return RenameSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no session with id "+req.SessionId))}, nil
+	}
+	if err := s.sessions.Rename(ctx, target.ID, name); err != nil {
+		if errors.Is(err, wdb.ErrNotFound) {
+			return RenameSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no session with id "+req.SessionId))}, nil
+		}
+		return nil, err
+	}
+	target.DeviceName = name
+	return RenameSession200JSONResponse(deviceSessionJSON(target, target.ID == p.Session.ID)), nil
 }
 
 func (s *Server) RevokeSession(ctx context.Context, req RevokeSessionRequestObject) (RevokeSessionResponseObject, error) {

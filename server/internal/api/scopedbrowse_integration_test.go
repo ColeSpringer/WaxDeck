@@ -146,3 +146,40 @@ func TestItemsCursorCarriesItsScope(t *testing.T) {
 		t.Errorf("a cursor reused under a facet = %d, want 400", got)
 	}
 }
+
+// A list scoped to some kinds cannot answer for the others, and upstream
+// answers the pairing with an empty page. On a surface whose job is
+// saying what the library holds, an empty page reads as "you have none";
+// the refusal says which question was wrong.
+func TestBrowseKindScopedListRefusesForeignScope(t *testing.T) {
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+
+	if got := browseStatus(t, h, "?list=newest&mediaType=podcast"); got != 400 {
+		t.Errorf("newest+podcast = %d, want 400", got)
+	}
+	if got := browseStatus(t, h, "?list=newest&facet=kind&facetKey=episode"); got != 400 {
+		t.Errorf("newest drilled to the episode kind = %d, want 400", got)
+	}
+
+	// The kinds newest does order by are unaffected, filter or none.
+	for _, q := range []string{
+		"?list=newest",
+		"?list=newest&mediaType=music",
+		"?list=newest&mediaType=audiobook",
+		"?list=newest&facet=kind&facetKey=track",
+	} {
+		if got := browseStatus(t, h, q); got != 200 {
+			t.Errorf("browse%s = %d, want 200", q, got)
+		}
+	}
+
+	// Only the scoped list refuses: an unscoped one still answers an
+	// honest empty page for a medium the library has none of.
+	if got := browseStatus(t, h, "?list=alphabetical&mediaType=podcast"); got != 200 {
+		t.Errorf("alphabetical+podcast = %d, want 200", got)
+	}
+}
