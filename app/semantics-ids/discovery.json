@@ -1,0 +1,8 @@
+{
+  "doc": "Instant mixes, similar tracks, and the track lists they open.",
+  "ids": {
+    "instantMixRun": "instant-mix-run",
+    "mixAdventurousness": "mix-adventurousness",
+    "scopedItem": "{scope}-item-{index}"
+  }
+}

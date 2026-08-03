@@ -1,0 +1,24 @@
+{
+  "doc": "The radio hub: the favorites dial, the station grid, and the add-station flow.",
+  "ids": {
+    "radio": "radio-{pid}",
+    "radioAdd": "radio-add",
+    "radioAddConfirm": "radio-add-confirm",
+    "radioAddDirectory": "radio-add-directory-{index}",
+    "radioDelete": "radio-delete-{pid}",
+    "radioDial": "radio-dial",
+    "radioEdit": "radio-edit-{pid}",
+    "radioFavorite": "radio-favorite-{pid}",
+    "radioHub": "radio-hub",
+    "radioMenu": "radio-menu-{pid}",
+    "radioMute": "radio-mute",
+    "radioNameField": "radio-name-field",
+    "radioNowPlaying": "radio-now-playing",
+    "radioSearchAdd": "radio-search-add-{index}",
+    "radioSearchField": "radio-search-field",
+    "radioSearchRun": "radio-search-run",
+    "radioTune": "radio-tune",
+    "radioUrlField": "radio-url-field",
+    "radioVolume": "radio-volume"
+  }
+}

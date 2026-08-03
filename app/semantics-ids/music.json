@@ -1,0 +1,18 @@
+{
+  "doc": "The music hub, its indexes, and the buckets they drill.",
+  "ids": {
+    "entityAlbum": "entity-album-{pid}",
+    "entityAllTracks": "entity-all-tracks",
+    "entityPlay": "entity-play",
+    "entityShuffle": "entity-shuffle",
+    "indexBucket": "index-bucket-{index}",
+    "indexCount": "index-count",
+    "indexItem": "index-item-{index}",
+    "indexRail": "index-rail",
+    "indexRailLetter": "index-rail-{letter}",
+    "indexRailStart": "index-rail-start",
+    "indexSort": "index-sort",
+    "listingShuffle": "listing-shuffle",
+    "musicTile": "music-tile-{name}"
+  }
+}

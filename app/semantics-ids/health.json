@@ -1,0 +1,16 @@
+{
+  "doc": "Library health: rules, issues, and their fixes.",
+  "ids": {
+    "adminDiagnostics": "admin-diagnostics",
+    "duplicateGroup": "duplicate-group-{pid}",
+    "duplicateMerge": "duplicate-merge-{pid}",
+    "health": "health-rule-{rule}",
+    "healthFix": "health-fix-{rule}",
+    "healthIssue": "health-issue-{pid}",
+    "healthScore": "health-score",
+    "healthSweep": "health-sweep",
+    "healthWarmingUp": "health-warming-up",
+    "upgradeGroup": "upgrade-group-{itemPid}",
+    "upgradeResolve": "upgrade-resolve-{itemPid}"
+  }
+}

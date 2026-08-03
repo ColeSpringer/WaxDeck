@@ -1,0 +1,16 @@
+{
+  "doc": "The downloads manager: what this device holds and the transfers in flight.",
+  "ids": {
+    "downloadCancel": "download-cancel-{pid}",
+    "downloadPause": "download-pause-{pid}",
+    "downloadRemove": "download-remove-{pid}",
+    "downloadResume": "download-resume-{pid}",
+    "downloadRow": "download-row-{pid}",
+    "downloadsClearAll": "downloads-clear-all",
+    "downloadsOverflow": "downloads-overflow",
+    "downloadsRefresh": "downloads-refresh",
+    "downloadsRemoveFinished": "downloads-remove-finished",
+    "downloadsScreen": "downloads-screen",
+    "downloadsStorage": "downloads-storage"
+  }
+}

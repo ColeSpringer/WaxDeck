@@ -1,0 +1,8 @@
+{
+  "doc": "Long-running tools and their progress rows.",
+  "ids": {
+    "taskDismiss": "task-dismiss-{id}",
+    "taskRow": "task-row-{id}",
+    "tasksClearFinished": "tasks-clear-finished"
+  }
+}

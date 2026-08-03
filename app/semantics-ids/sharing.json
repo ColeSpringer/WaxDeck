@@ -1,0 +1,13 @@
+{
+  "doc": "Shares and share links.",
+  "ids": {
+    "shareAllowDownload": "share-allow-download",
+    "shareCopy": "share-copy-{pid}",
+    "shareCreate": "share-create",
+    "shareExpiry": "share-expiry",
+    "shareRevoke": "share-revoke-{pid}",
+    "shareRow": "share-row-{pid}",
+    "shareStartAt": "share-start-at",
+    "sharesEmpty": "shares-empty"
+  }
+}

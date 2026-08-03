@@ -1,0 +1,24 @@
+{
+  "doc": "Uploads: batches, rows, duplicates, and the add-to-library flow.",
+  "ids": {
+    "acquireFormat": "acquire-format",
+    "acquireSubmit": "acquire-submit",
+    "addFromUrl": "add-from-url",
+    "addUploadFile": "add-upload-file",
+    "addUploadFolder": "add-upload-folder",
+    "uploadBatch": "upload-batch-{batchId}",
+    "uploadDelete": "upload-delete-{id}",
+    "uploadDropTarget": "upload-drop-target",
+    "uploadDuplicate": "upload-duplicate-{id}",
+    "uploadFromUrl": "upload-from-url",
+    "uploadGrouping": "upload-grouping",
+    "uploadGroupingOption": "upload-grouping-{wireName}",
+    "uploadMediaConfirm": "upload-media-confirm",
+    "uploadMediaType": "upload-media-type",
+    "uploadPick": "upload-pick",
+    "uploadQuota": "upload-quota",
+    "uploadRetry": "upload-retry-{id}",
+    "uploadReview": "upload-review-{id}",
+    "uploadRow": "upload-row-{id}"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "doc": "Connect: the device picker, the disconnect triad, cast preflight, remote sessions, and cast controls.",
+  "ids": {
+    "endpoint": "endpoint-{id}",
+    "picker": "device-picker",
+    "pickerCheck": "device-picker-check",
+    "pickerOverflow": "device-picker-overflow",
+    "pickerThisDevice": "device-picker-this-device",
+    "preflight": "cast-preflight",
+    "preflightBase": "cast-preflight-base-{index}",
+    "preflightRetry": "cast-preflight-retry",
+    "remoteLeave": "remote-leave",
+    "remoteNext": "remote-next",
+    "remotePlayHere": "remote-play-here",
+    "remotePrevious": "remote-previous",
+    "remoteSeek": "remote-seek",
+    "remoteStopThere": "remote-stop-there",
+    "remoteToggle": "remote-toggle",
+    "remoteVolume": "remote-volume",
+    "session": "session-{id}"
+  }
+}

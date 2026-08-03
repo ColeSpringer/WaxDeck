@@ -1,0 +1,14 @@
+{
+  "doc": "The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.",
+  "ids": {
+    "navAccount": "nav-account",
+    "navAccountAction": "nav-account-{name}",
+    "navDestination": "nav-{name}",
+    "navDisclose": "nav-disclose-{name}",
+    "navGroup": "nav-group-{name}",
+    "navOverflow": "nav-overflow",
+    "navRegion": "nav-region",
+    "navSidebarCollapse": "nav-sidebar-collapse",
+    "skipToContent": "skip-to-content"
+  }
+}

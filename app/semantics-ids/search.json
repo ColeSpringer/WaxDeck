@@ -1,0 +1,15 @@
+{
+  "doc": "The search screen, its filters, and the chrome that opens it.",
+  "ids": {
+    "searchAction": "search-action",
+    "searchClear": "search-clear",
+    "searchField": "search-field",
+    "searchFilter": "search-filter-{name}",
+    "searchHit": "search-hit-{kind}-{index}",
+    "searchLauncher": "search-launcher",
+    "searchRecent": "search-recent-{index}",
+    "searchRecentRemove": "search-recent-remove-{index}",
+    "searchShowAll": "search-show-all-{kind}",
+    "searchTruncated": "search-truncated"
+  }
+}

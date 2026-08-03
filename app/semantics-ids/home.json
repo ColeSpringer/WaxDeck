@@ -1,0 +1,14 @@
+{
+  "doc": "Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.",
+  "ids": {
+    "homeAdd": "home-add",
+    "homeMix": "home-mix-{index}",
+    "homeScreen": "home-screen",
+    "notificationRow": "notification-row-{index}",
+    "notificationsBell": "notifications-bell",
+    "notificationsClear": "notifications-clear",
+    "shelf": "shelf-{shelf}",
+    "shelfAll": "shelf-{shelf}-all",
+    "shelfCard": "shelf-{shelf}-{pid}"
+  }
+}

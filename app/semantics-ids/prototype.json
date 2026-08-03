@@ -1,0 +1,13 @@
+{
+  "doc": "The editing prototype kept behind its own route for the e2e keyboard contract.",
+  "ids": {
+    "protoCellArtist": "proto-cell-{index}-artist",
+    "protoCellCurrent": "proto-cell-{index}-current",
+    "protoEdit": "proto-edit-{index}",
+    "protoKebab": "proto-kebab-{index}",
+    "protoMenuApply": "proto-menu-apply",
+    "protoMenuCopy": "proto-menu-copy",
+    "protoRow": "proto-row-{index}",
+    "protoTable": "proto-table"
+  }
+}

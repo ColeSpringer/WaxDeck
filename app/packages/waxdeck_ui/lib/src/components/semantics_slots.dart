@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 ///
 /// The design system emits no identifier strings of its own. Identifiers
 /// are a contract between the app and the browser-driven suite, generated
-/// into both from `app/semantics-ids.json`, and a package that cannot see
+/// into both from `app/semantics-ids/`, and a package that cannot see
 /// that registry has no business inventing them: two definitions of one
 /// contract string is exactly the drift the registry exists to prevent.
 ///

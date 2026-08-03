@@ -1,0 +1,16 @@
+{
+  "doc": "Listening stats and year in review.",
+  "ids": {
+    "listenLogClientFilter": "listen-log-client-filter",
+    "openListenLog": "open-listen-log",
+    "openYearInReview": "open-year-in-review",
+    "statsBucket": "stats-bucket",
+    "statsRange": "stats-range-{range}",
+    "top": "top-kind-{kind}",
+    "topEntry": "top-entry-{index}",
+    "yirNextYear": "yir-next-year",
+    "yirPersonal": "yir-personal",
+    "yirPrevYear": "yir-prev-year",
+    "yirServer": "yir-server"
+  }
+}

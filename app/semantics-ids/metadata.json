@@ -1,0 +1,19 @@
+{
+  "doc": "The metadata editor: fields, locks, candidates, and artwork.",
+  "ids": {
+    "creditsRole": "credits-role",
+    "creditsSave": "credits-save",
+    "fieldLock": "field-lock-{name}",
+    "lyricsClear": "lyrics-clear",
+    "lyricsSave": "lyrics-save",
+    "metadataEnrich": "metadata-enrich",
+    "metadataForce": "metadata-force",
+    "metadataLock": "metadata-lock",
+    "metadataRematch": "metadata-rematch",
+    "metadataSave": "metadata-save",
+    "metadataWriteback": "metadata-writeback",
+    "tagAdd": "tag-add",
+    "tagRemove": "tag-remove-{key}",
+    "unofficialSwitch": "unofficial-switch"
+  }
+}

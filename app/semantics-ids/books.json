@@ -1,0 +1,23 @@
+{
+  "doc": "Audiobooks: the hub, the book screen, its chapters, and its per-book settings.",
+  "ids": {
+    "book": "book-{pid}",
+    "bookAuthorFilter": "book-author-{key}",
+    "bookContinue": "book-continue-{pid}",
+    "bookDownload": "book-download",
+    "bookEdition": "book-edition",
+    "bookFinishedFilter": "book-finished-{name}",
+    "bookMarkFinished": "book-mark-finished",
+    "bookOverflow": "book-overflow",
+    "bookPartsNote": "book-parts-note",
+    "bookResume": "book-resume",
+    "bookSettingsOpen": "book-settings-open",
+    "bookSettingsSave": "book-settings-save",
+    "bookSettingsSpeed": "book-settings-speed",
+    "bookSort": "book-sort-{name}",
+    "bookStartOver": "book-start-over",
+    "booksHub": "books-hub",
+    "booksHubOverflow": "books-hub-overflow",
+    "chapter": "chapter-{index}"
+  }
+}

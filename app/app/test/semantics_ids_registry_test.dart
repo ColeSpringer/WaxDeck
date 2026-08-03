@@ -34,24 +34,24 @@ void main() {
         offenders,
         isEmpty,
         reason:
-            'Add the identifier to app/semantics-ids.json, run '
+            'Add the identifier to its group in app/semantics-ids/, run '
             '`make generate`, and use SemanticsIds instead:\n'
             '${offenders.join('\n')}',
       );
     });
 
     test('every generated identifier is unique', () {
-      final source =
-          jsonDecode(File('../semantics-ids.json').readAsStringSync())
-              as Map<String, dynamic>;
+      final files = Directory('../semantics-ids')
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.json'))
+          .toList();
+      expect(files, isNotEmpty, reason: 'no group files in app/semantics-ids');
       final ids = <String>[];
-      for (final group
-          in (source['groups']! as List<dynamic>)
-              .cast<Map<String, dynamic>>()) {
-        for (final entry
-            in (group['ids']! as List<dynamic>).cast<Map<String, dynamic>>()) {
-          ids.add(entry['id']! as String);
-        }
+      for (final file in files) {
+        final source =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+        ids.addAll((source['ids']! as Map<String, dynamic>).values.cast());
       }
       expect(ids.toSet().length, ids.length, reason: 'duplicate identifiers');
     });

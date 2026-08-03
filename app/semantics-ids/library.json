@@ -1,0 +1,9 @@
+{
+  "doc": "The complete item listings and the per-item rows the sync specs drive.",
+  "ids": {
+    "item": "item-{pid}",
+    "itemDelete": "item-delete",
+    "itemDeleteConfirm": "item-delete-confirm",
+    "offlineBanner": "offline-banner"
+  }
+}

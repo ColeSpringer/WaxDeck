@@ -1,0 +1,11 @@
+{
+  "doc": "Organize: previews, duplicates, and upgrade groups.",
+  "ids": {
+    "organizeApply": "organize-apply",
+    "organizeConfirm": "organize-confirm",
+    "organizePlan": "organize-plan",
+    "organizePreview": "organize-preview",
+    "organizeProfile": "organize-profile",
+    "organizeReport": "organize-report"
+  }
+}
