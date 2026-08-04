@@ -88,6 +88,14 @@ export const SemanticsIds = {
   booksHubOverflow: 'books-hub-overflow',
   chapter: (index: string | number) => `chapter-${index}`,
 
+  // commands: The command palette, the keyboard reference sheet, and the rows in each.
+  commandPalette: 'command-palette',
+  commandPaletteEntry: (id: string | number) => `command-palette-entry-${id}`,
+  commandPaletteField: 'command-palette-field',
+  shortcutSheet: 'shortcut-sheet',
+  shortcutSheetClose: 'shortcut-sheet-close',
+  shortcutSheetRow: (id: string | number) => `shortcut-sheet-row-${id}`,
+
   // connect: Connect: the device picker, the disconnect triad, cast preflight, remote sessions, and cast controls.
   endpoint: (id: string | number) => `endpoint-${id}`,
   picker: 'device-picker',

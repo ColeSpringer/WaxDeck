@@ -686,6 +686,13 @@ here waits on upstream.
 
 ## Admin and ops
 
+- `[roadmap]` **The command palette cannot start a scan.** The palette's
+  action registry ships with every verb the client already has, and
+  starting a library scan is not one of them: nothing in the app calls
+  that endpoint yet, so the command would have to build the verb as well
+  as the row. The admin console slice is where the verb belongs, and
+  registering a `WaxCommand` for it there is a few lines once it exists
+  (docs/adr/0044).
 - `[in-repo]` **No server-side retention sweep for old finished tool
   tasks.** Rows now clear by hand - a per-row delete and a
   clear-finished sweep, both caller-scoped - but an account that never

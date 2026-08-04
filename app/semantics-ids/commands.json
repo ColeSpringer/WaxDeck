@@ -1,0 +1,11 @@
+{
+  "doc": "The command palette, the keyboard reference sheet, and the rows in each.",
+  "ids": {
+    "commandPalette": "command-palette",
+    "commandPaletteEntry": "command-palette-entry-{id}",
+    "commandPaletteField": "command-palette-field",
+    "shortcutSheet": "shortcut-sheet",
+    "shortcutSheetClose": "shortcut-sheet-close",
+    "shortcutSheetRow": "shortcut-sheet-row-{id}"
+  }
+}

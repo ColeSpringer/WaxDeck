@@ -391,18 +391,15 @@ Future<void> _tune(
   RadioStation station,
   RadioPlayback playback,
 ) async {
+  // Which of the two, so the failure is named after it: a stop that threw
+  // used to report that the station could not be tuned, while it carried
+  // on playing.
+  if (station.pid != playback.station?.pid) {
+    return tuneStation(context, ref, station);
+  }
   final messenger = ScaffoldMessenger.of(context);
-  final controller = ref.read(radioPlaybackProvider.notifier);
-  // Which of the two ran, so the failure is named after it: a stop that
-  // threw used to report that the station could not be tuned, while it
-  // carried on playing.
-  final tuning = station.pid != playback.station?.pid;
   try {
-    if (tuning) {
-      await controller.play(station);
-    } else {
-      await controller.stop();
-    }
+    await ref.read(radioPlaybackProvider.notifier).stop();
   } on Exception catch (e) {
     messenger
       ..hideCurrentSnackBar()
@@ -411,9 +408,32 @@ Future<void> _tune(
           content: Text(
             e is WaxDeckApiException
                 ? e.message
-                : tuning
-                ? 'Could not tune ${station.name}'
                 : 'Could not stop ${station.name}',
+          ),
+        ),
+      );
+  }
+}
+
+/// Puts [station] on the air, saying so where it cannot. The palette
+/// tunes through this too, so a dead stream fails the same way there.
+Future<void> tuneStation(
+  BuildContext context,
+  WidgetRef ref,
+  RadioStation station,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await ref.read(radioPlaybackProvider.notifier).play(station);
+  } on Exception catch (e) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            e is WaxDeckApiException
+                ? e.message
+                : 'Could not tune ${station.name}',
           ),
         ),
       );

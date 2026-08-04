@@ -65,6 +65,7 @@ import '../tools/tasks_screen.dart';
 import '../uploads/share_intake_gate.dart';
 import '../uploads/uploads_screen.dart';
 import 'adaptive_shell.dart';
+import 'commands.dart';
 import 'routes.dart';
 
 /// The app's router, built once per provider container.
@@ -698,7 +699,10 @@ class _SignedInScope extends ConsumerWidget {
     final watched = ref.watch(desktopProvider)
         ? IdleVisualizer(child: ShareIntakeGate(child: child))
         : ShareIntakeGate(child: child);
-    return watched;
+    // Here rather than in the shell: the overlays are pushed onto this
+    // navigator, so a map inside the shell would be their sibling and
+    // dead on the player, the queue, and car mode.
+    return CommandShortcuts(child: watched);
   }
 }
 

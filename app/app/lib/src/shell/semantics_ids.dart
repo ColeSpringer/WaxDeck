@@ -88,6 +88,14 @@ abstract final class SemanticsIds {
   static const String booksHubOverflow = 'books-hub-overflow';
   static String chapter(Object index) => 'chapter-$index';
 
+  // commands: The command palette, the keyboard reference sheet, and the rows in each.
+  static const String commandPalette = 'command-palette';
+  static String commandPaletteEntry(Object id) => 'command-palette-entry-$id';
+  static const String commandPaletteField = 'command-palette-field';
+  static const String shortcutSheet = 'shortcut-sheet';
+  static const String shortcutSheetClose = 'shortcut-sheet-close';
+  static String shortcutSheetRow(Object id) => 'shortcut-sheet-row-$id';
+
   // connect: Connect: the device picker, the disconnect triad, cast preflight, remote sessions, and cast controls.
   static String endpoint(Object id) => 'endpoint-$id';
   static const String picker = 'device-picker';

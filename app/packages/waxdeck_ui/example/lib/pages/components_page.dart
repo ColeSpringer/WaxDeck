@@ -472,11 +472,95 @@ class _ComponentsPageState extends State<ComponentsPage> {
             ],
           ),
         ),
+        const SizedBox(height: WaxSpace.s24),
+
+        const SectionHeader(overline: 'Shell', title: 'Command palette'),
+        // Drawn in place rather than over the page: the catalogue is for
+        // judging the surface, and a palette that had to be summoned with
+        // a chord would be a component nobody here could see in three
+        // themes at once. The app opens it in a dialog.
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: WaxCommandPalette(
+            groups: _catalogPalette,
+            maxHeight: 320,
+            onQueryChanged: (_) {},
+            onRun: (_) {},
+            onClose: () {},
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s16),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: WaxShortcutSheet(
+            groups: _catalogShortcuts,
+            maxHeight: 300,
+            onClose: () {},
+          ),
+        ),
         const SizedBox(height: WaxSpace.s32),
       ],
     );
   }
 }
+
+/// A palette mid-query: an action with its key, a place, and a library
+/// hit, which is the mixture the app's own groups produce.
+const _catalogPalette = <WaxPaletteGroup>[
+  WaxPaletteGroup(
+    title: 'Actions',
+    entries: <WaxPaletteEntry>[
+      WaxPaletteEntry(
+        id: 'shuffle',
+        label: 'Shuffle the queue',
+        detail: 'Playback',
+        glyph: WaxIcons.shuffle,
+      ),
+      WaxPaletteEntry(
+        id: 'queue',
+        label: 'Show the queue',
+        detail: 'Views',
+        glyph: WaxIcons.queue,
+        shortcut: 'Q',
+      ),
+    ],
+  ),
+  WaxPaletteGroup(
+    title: 'Go to',
+    entries: <WaxPaletteEntry>[
+      WaxPaletteEntry(
+        id: 'go-radio',
+        label: 'Radio',
+        detail: 'Go to',
+        glyph: WaxIcons.radio,
+      ),
+      WaxPaletteEntry(
+        id: 'hit-1',
+        label: 'Sonata for Cello and Piano in D Minor',
+        detail: 'Nightjar Quartet',
+        glyph: WaxIcons.albums,
+      ),
+    ],
+  ),
+];
+
+const _catalogShortcuts = <WaxShortcutGroup>[
+  WaxShortcutGroup(
+    title: 'Playback',
+    rows: <WaxShortcutRow>[
+      WaxShortcutRow(label: 'Play or pause', keys: 'Space'),
+      WaxShortcutRow(label: 'Next track', keys: 'Ctrl →'),
+      WaxShortcutRow(label: 'Skip ahead 10 seconds', keys: 'Shift →'),
+    ],
+  ),
+  WaxShortcutGroup(
+    title: 'Everywhere',
+    rows: <WaxShortcutRow>[
+      WaxShortcutRow(label: 'Open the command palette', keys: 'Ctrl K'),
+      WaxShortcutRow(label: 'Keyboard shortcuts', keys: 'Shift ?'),
+    ],
+  ),
+];
 
 const _catalogDestinations = <WaxDestination>[
   WaxDestination(name: 'Home', label: 'Home', glyph: WaxIcons.home),

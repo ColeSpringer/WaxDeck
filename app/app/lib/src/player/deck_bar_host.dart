@@ -18,6 +18,7 @@ import '../queue/queue_state.dart';
 import '../radio/radio_controller.dart';
 import '../settings/client_prefs.dart';
 import '../sharing/share_dialog.dart';
+import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'autoplay_gate.dart';
@@ -209,18 +210,15 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
         positionTicker: _position,
         autoplayBlocked: blocked,
         actions: DeckBarActions(
-          // With no session there is nothing to toggle, and two ways to
-          // get there keep the entry on the bar: a start that failed,
-          // and an item that let the engine go to live radio. The bar's
-          // own play button is what takes it back in both.
-          onPlayPause: session != null ? session.toggle : playback.resume,
+          // The command, not a copy: the key and the button are one verb.
+          onPlayPause: () => togglePlayback(ref),
           onNext: () => unawaited(playback.next()),
           onPrevious: () => unawaited(playback.previous()),
           onSkipBack: spokenWord && session != null
-              ? () => unawaited(_seekBy(session, -skips.back))
+              ? () => seekBy(ref, -skips.back)
               : null,
           onSkipForward: spokenWord && session != null
-              ? () => unawaited(_seekBy(session, skips.forward))
+              ? () => seekBy(ref, skips.forward)
               : null,
           // The same two durations the seeks use, so the controls
           // announce the distance they actually travel.
@@ -277,11 +275,6 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
         ),
       ),
     );
-  }
-
-  Future<void> _seekBy(PlaybackSession session, Duration delta) {
-    final target = session.displayPosition + delta;
-    return session.seek(target < Duration.zero ? Duration.zero : target);
   }
 }
 
@@ -345,9 +338,8 @@ class _RadioDeckBar extends ConsumerWidget {
           // Which of stop and start it is belongs to the controller,
           // which is the one thing that can see why a station is
           // silent - a refused start, or a stream that ended on its
-          // own.
-          onPlayPause: () =>
-              unawaited(ref.read(radioPlaybackProvider.notifier).toggle()),
+          // own. Through the same command the play key runs.
+          onPlayPause: () => togglePlayback(ref),
           onVolume: localVolume
               ? (level) => unawaited(
                   ref.read(outputVolumeProvider.notifier).set(level),

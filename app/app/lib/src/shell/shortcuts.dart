@@ -1,41 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-/// Reusable keyboard-shortcut layer for keyboard-first screens.
+/// Keyboard bindings for a subtree, guarded so a key reaches whatever has
+/// focus first: text fields keep their letters and arrows, and a focused
+/// control keeps its space (WCAG 2.1.1).
 ///
-/// Wraps a subtree in [CallbackShortcuts] plus an autofocused [Focus]
-/// node, so bindings are live the moment the screen appears without the
-/// user clicking anything first. Screens pass plain
-/// `Map<ShortcutActivator, VoidCallback>` bindings and reuse this
-/// wrapper unchanged; the review queue is the first adopter.
-///
-/// Bindings are suppressed while a text-editing field has primary
-/// focus: before invoking a callback the wrapper checks whether the
-/// primary focus node's context widget is an [EditableText] and skips
-/// the callback when it is. Key events from a focused text field still
-/// bubble up through ancestor shortcut handlers, so without this guard
-/// typing a bound letter into any form or search field would trigger
-/// navigation or a decision mid-word.
+/// [typingBindings] are the exception, for chords no field can receive as
+/// text. A declined key is reported ignored, so it goes on to the
+/// ancestors that own it.
 class AppShortcuts extends StatelessWidget {
   const AppShortcuts({
     super.key,
     required this.bindings,
     required this.child,
+    this.typingBindings = const <ShortcutActivator, VoidCallback>{},
     this.autofocus = true,
   });
 
-  /// Shortcut activators to callbacks; only evaluated while no text
-  /// field holds primary focus.
   final Map<ShortcutActivator, VoidCallback> bindings;
-
+  final Map<ShortcutActivator, VoidCallback> typingBindings;
   final Widget child;
 
-  /// Whether the wrapped [Focus] node grabs focus on mount.
+  /// Whether to grab focus on mount, for a screen whose keys must be live
+  /// before anything is clicked.
   final bool autofocus;
 
-  /// True while the focused widget is a text editor; bound keys must
-  /// then act as typed text, never as commands. The primary focus node
-  /// can be hosted either by the [EditableText] itself or by a [Focus]
-  /// widget inside its build, so the ancestor lookup covers both.
+  /// The editor can host the primary focus itself or through a [Focus] in
+  /// its build, so the lookup covers both.
   static bool _editingText() {
     final context = FocusManager.instance.primaryFocus?.context;
     if (context == null) return false;
@@ -43,17 +34,44 @@ class AppShortcuts extends StatelessWidget {
     return context.findAncestorStateOfType<EditableTextState>() != null;
   }
 
+  static bool _focusActivates() {
+    final context = FocusManager.instance.primaryFocus?.context;
+    if (context == null) return false;
+    return Actions.maybeFind<ActivateIntent>(context) != null;
+  }
+
+  static bool _isBareSpace(ShortcutActivator activator) =>
+      activator is SingleActivator &&
+      activator.trigger == LogicalKeyboardKey.space &&
+      !activator.control &&
+      !activator.meta &&
+      !activator.alt &&
+      !activator.shift;
+
+  KeyEventResult _dispatch(KeyEvent event) {
+    var result = KeyEventResult.ignored;
+    for (final entry in typingBindings.entries) {
+      if (!entry.key.accepts(event, HardwareKeyboard.instance)) continue;
+      entry.value();
+      result = KeyEventResult.handled;
+    }
+    if (_editingText()) return result;
+    for (final entry in bindings.entries) {
+      if (!entry.key.accepts(event, HardwareKeyboard.instance)) continue;
+      if (_isBareSpace(entry.key) && _focusActivates()) continue;
+      entry.value();
+      result = KeyEventResult.handled;
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return CallbackShortcuts(
-      bindings: {
-        for (final entry in bindings.entries)
-          entry.key: () {
-            if (_editingText()) return;
-            entry.value();
-          },
-      },
-      child: Focus(autofocus: autofocus, child: child),
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) => _dispatch(event),
+      child: autofocus ? Focus(autofocus: true, child: child) : child,
     );
   }
 }

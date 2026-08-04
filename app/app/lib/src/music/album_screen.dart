@@ -10,6 +10,7 @@ import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../settings/client_prefs.dart';
+import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'entity_facts.dart';
@@ -42,6 +43,52 @@ class AlbumScreen extends ConsumerWidget {
     final tracks = albumOrder(state.value?.items ?? const <ItemSummary>[]);
     final facts = AlbumFacts.of(tracks, fallbackTitle: label);
 
+    return CommandScope(
+      // The header's two buttons, named after this album. The runs read
+      // the listing rather than closing over it: a scope keeps the
+      // closure it first registered while the offer is unchanged.
+      commands: <WaxCommand>[
+        if (tracks.isNotEmpty) ...<WaxCommand>[
+          WaxCommand(
+            id: 'album-play',
+            label: 'Play ${facts.title}',
+            section: WaxCommandSection.playback,
+            glyph: WaxIcons.play,
+            run: (context, ref) => _playLive(context, ref),
+          ),
+          WaxCommand(
+            id: 'album-shuffle',
+            label: 'Shuffle ${facts.title}',
+            section: WaxCommandSection.playback,
+            glyph: WaxIcons.shuffle,
+            run: (context, ref) => _playLive(context, ref, shuffle: true),
+          ),
+        ],
+      ],
+      child: _screen(context, ref, state, tracks, facts),
+    );
+  }
+
+  void _playLive(BuildContext context, WidgetRef ref, {bool shuffle = false}) {
+    final items = ref.read(musicItemsProvider(_listing)).value?.items;
+    final tracks = albumOrder(items ?? const <ItemSummary>[]);
+    playAlbum(
+      context,
+      ref,
+      pid: pid,
+      facts: AlbumFacts.of(tracks, fallbackTitle: label),
+      tracks: tracks,
+      shuffle: shuffle,
+    );
+  }
+
+  Widget _screen(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<MusicItemsState> state,
+    List<ItemSummary> tracks,
+    AlbumFacts facts,
+  ) {
     return WaxScaffold(
       title: facts.title,
       largeTitle: false,
@@ -92,6 +139,31 @@ class AlbumScreen extends ConsumerWidget {
   }
 }
 
+/// Plays this album and opens the player on it. The header's buttons and
+/// the palette's rows both run this.
+void playAlbum(
+  BuildContext context,
+  WidgetRef ref, {
+  required String pid,
+  required AlbumFacts facts,
+  required List<ItemSummary> tracks,
+  bool shuffle = false,
+}) {
+  if (tracks.isEmpty) return;
+  ref
+      .read(nowPlayingProvider.notifier)
+      .play(
+        tracks,
+        shuffle: shuffle,
+        source: QueueSource(
+          kind: QueueSourceKind.album,
+          label: facts.title,
+          pid: pid,
+        ),
+      );
+  context.push(WaxRoute.nowPlaying);
+}
+
 class _Header extends ConsumerWidget {
   const _Header({required this.pid, required this.facts, required this.tracks});
 
@@ -101,20 +173,14 @@ class _Header extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final playback = ref.read(nowPlayingProvider.notifier);
-    void play({bool shuffle = false}) {
-      if (tracks.isEmpty) return;
-      playback.play(
-        tracks,
-        shuffle: shuffle,
-        source: QueueSource(
-          kind: QueueSourceKind.album,
-          label: facts.title,
-          pid: pid,
-        ),
-      );
-      context.push(WaxRoute.nowPlaying);
-    }
+    void play({bool shuffle = false}) => playAlbum(
+      context,
+      ref,
+      pid: pid,
+      facts: facts,
+      tracks: tracks,
+      shuffle: shuffle,
+    );
 
     return EntityHeader(
       title: facts.title,
