@@ -537,6 +537,14 @@ class _IntegrationsBody extends ConsumerWidget {
             ),
           ],
         ),
+        // Desktop alone: presence is published through the Discord app's
+        // own socket on this machine, so a phone or a browser tab has
+        // nothing to publish it to. Absent rather than disabled, the way
+        // the idle visualizer is.
+        if (ref.watch(desktopProvider)) ...<Widget>[
+          const SizedBox(height: WaxSpace.s24),
+          const DiscordPresenceSection(),
+        ],
         const SizedBox(height: WaxSpace.s24),
         Semantics(
           identifier: SemanticsIds.setting('notifications'),

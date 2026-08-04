@@ -552,9 +552,19 @@ void main() {
 }
 
 /// A media session that records the one extra control the app raises.
+/// What it publishes is the feed's business, and has its own test.
 class _FakeMediaSession implements MediaSessionPort {
   MediaSessionExtra? extra;
 
   @override
   void showExtra(MediaSessionExtra? value) => extra = value;
+
+  @override
+  void publish(MediaSessionItem? item) {}
+
+  @override
+  void publishQueue(List<MediaSessionItem> items, {int index = 0}) {}
+
+  @override
+  void publishQueueIndex(int index) {}
 }

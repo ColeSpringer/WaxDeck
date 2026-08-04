@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../connect/device_picker.dart';
 import '../connect/remote_session.dart';
+import '../desktop/mini_window.dart';
 import '../artwork/artwork_providers.dart';
 import '../media_view.dart';
 import '../playlists/add_to_playlist_sheet.dart';
@@ -568,6 +569,25 @@ Future<void> _showActions(
               router.push<void>(WaxRoute.nowPlaying);
             },
           ),
+          // Desktop, and only where the window layer answered: the
+          // sheet's other rows are true everywhere, and a row that
+          // opened nothing on a phone would be the one exception.
+          if (ref.read(miniWindowProvider).available)
+            Semantics(
+              // A registered id that never reaches the tree is a spec
+              // that matches nothing (rule 8).
+              identifier: SemanticsIds.deckMiniWindow,
+              button: true,
+              child: ListTile(
+                key: const ValueKey(SemanticsIds.deckMiniWindow),
+                leading: const WaxIcon(WaxIcons.collapse),
+                title: const Text('Mini player window'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(ref.read(miniWindowProvider.notifier).enter());
+                },
+              ),
+            ),
         ],
       ),
     ),

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'auth/auth_controller.dart';
+import 'desktop/mini_window.dart';
 import 'settings/client_prefs.dart';
 import 'settings/prefs_controller.dart';
 import 'shell/router.dart';
@@ -28,8 +29,12 @@ class WaxDeckApp extends ConsumerWidget {
       // router does not get to run until they answer. Withholding the
       // child leaves the Router unmounted rather than routing on a
       // guess and correcting a frame later.
-      builder: (context, child) =>
-          _ReducedMotion(child: _BootGate(child: child!)),
+      //
+      // The mini window wraps all of it, above the router: what it hides
+      // is the whole app, and it keeps that app mounted while it does.
+      builder: (context, child) => MiniWindowGate(
+        child: _ReducedMotion(child: _BootGate(child: child!)),
+      ),
     );
   }
 }

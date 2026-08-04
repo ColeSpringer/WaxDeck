@@ -20,6 +20,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -98,6 +99,32 @@ func listModules(goos string, mods map[string]string) error {
 	return nil
 }
 
+// toolchainFile reads one of the Go toolchain's own legal files.
+//
+// Not simply GOROOT/name, because packagers move them. Homebrew installs
+// GOROOT at <prefix>/libexec and lifts LICENSE to <prefix>, leaving
+// PATENTS behind - so the fallback is per file rather than a choice of
+// directory, and a stock tarball, which has both in GOROOT, takes the
+// first branch for both. Still an error when neither has it: these are
+// terms the binary ships under, and a notices file that silently lost
+// one is worse than a generator that stops.
+func toolchainFile(gorootDir, name string) ([]byte, error) {
+	tried := []string{
+		filepath.Join(gorootDir, name),
+		filepath.Join(filepath.Dir(gorootDir), name),
+	}
+	for _, path := range tried {
+		body, err := os.ReadFile(path)
+		if err == nil {
+			return body, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+	}
+	return nil, fmt.Errorf("%s not found in %s", name, strings.Join(tried, " or "))
+}
+
 func run(out string) error {
 	// The docker image is linux; the other two are what operators build
 	// from source and what the flag is expected to answer for there.
@@ -123,14 +150,14 @@ func run(out string) error {
 		return fmt.Errorf("go env GOROOT: %w", err)
 	}
 	gorootDir := strings.TrimSpace(string(goroot))
-	goLicense, err := os.ReadFile(filepath.Join(gorootDir, "LICENSE"))
+	goLicense, err := toolchainFile(gorootDir, "LICENSE")
 	if err != nil {
 		return fmt.Errorf("reading the Go toolchain license: %w", err)
 	}
 	block("Go standard library and runtime", goLicense)
 	// The toolchain's patent grant is part of its terms; required, not
 	// best-effort, so its absence cannot silently drift the output.
-	goPatents, err := os.ReadFile(filepath.Join(gorootDir, "PATENTS"))
+	goPatents, err := toolchainFile(gorootDir, "PATENTS")
 	if err != nil {
 		return fmt.Errorf("reading the Go toolchain patent grant: %w", err)
 	}

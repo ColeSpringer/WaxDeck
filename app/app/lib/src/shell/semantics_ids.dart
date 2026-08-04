@@ -153,6 +153,14 @@ abstract final class SemanticsIds {
   static const String queueScreen = 'queue-screen';
   static const String queueShuffle = 'queue-shuffle';
 
+  // desktop: The desktop shell surfaces: the mini player window and the deck bar's way into it. The tray has no semantics tree of its own.
+  static const String deckMiniWindow = 'deck-mini-window';
+  static const String miniWindow = 'mini-window';
+  static const String miniWindowNext = 'mini-window-next';
+  static const String miniWindowPlay = 'mini-window-play';
+  static const String miniWindowPrevious = 'mini-window-previous';
+  static const String miniWindowRestore = 'mini-window-restore';
+
   // discovery: Instant mixes, similar tracks, and the track lists they open.
   static const String instantMixRun = 'instant-mix-run';
   static const String mixAdventurousness = 'mix-adventurousness';

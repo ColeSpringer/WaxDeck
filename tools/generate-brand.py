@@ -205,12 +205,22 @@ def draw_mark(
     dial=DIAL,
     padding: float = 0.0,
     monochrome: bool = False,
+    flat=None,
+    deflection: float = 0.6,
 ) -> Canvas:
     """The dial mark: an arc with the needle parked where a meter rests.
 
     `padding` insets the drawing for adaptive icons and maskable web
     icons, whose outer ring is cropped by the launcher.
+
+    `flat` draws every stroke in one colour, for the tray glyphs, whose
+    platforms want a single-ink shape they tint themselves. `deflection`
+    moves the needle along the arc, which is how the tray says whether
+    the music is playing: a badge in the corner would be mush at 22 px,
+    and a meter that reads is the whole point of the mark.
     """
+    if flat is not None:
+        ink = dial = flat
     canvas = Canvas(size, background)
     inset = size * padding
     box0, box1 = inset, size - inset
@@ -237,7 +247,7 @@ def draw_mark(
         alpha=1.0 if not monochrome else 0.45,
     )
 
-    angle = start + sweep * 0.6
+    angle = start + sweep * deflection
     tip_x = cx + math.cos(angle) * radius * 1.02
     tip_y = cy + math.sin(angle) * radius * 1.02
     needle = ink if not monochrome else (255, 255, 255)
@@ -428,6 +438,44 @@ def android(res: Path) -> None:
     )
 
 
+def tray(out: Path) -> None:
+    """The desktop tray glyphs: the mark with no tile, in one ink.
+
+    Three platform conventions and two play states. macOS wants a
+    template image - black with alpha, which the system inverts for a
+    dark menu bar - and Windows wants the pair drawn for it, because a
+    taskbar's own theme is what decides which reads. Linux takes the
+    mark's own amber, where a StatusNotifier host draws it at all.
+
+    The needle says the state: parked while paused, swung up while
+    playing.
+    """
+    states = (("playing", 0.9), ("paused", 0.32))
+    for state, deflection in states:
+        write_icon(
+            out / f"{state}-template.png",
+            44,
+            tile=False,
+            flat=(0, 0, 0),
+            deflection=deflection,
+        )
+        write_icon(
+            out / f"{state}-light.png",
+            32,
+            tile=False,
+            flat=CANVAS_DARK,
+            deflection=deflection,
+        )
+        write_icon(
+            out / f"{state}-dark.png",
+            32,
+            tile=False,
+            flat=TEXT_DARK,
+            deflection=deflection,
+        )
+        write_icon(out / f"{state}.png", 48, tile=False, deflection=deflection)
+
+
 def macos(appicon: Path) -> None:
     entries = []
     for size, scales in ((16, (1, 2)), (32, (1, 2)), (128, (1, 2)), (256, (1, 2)), (512, (1, 2))):
@@ -470,6 +518,9 @@ def main() -> int:
     write_grain(UI_BRAND / "grain.png")
     write_wordmark_svg(UI_BRAND / "wordmark.svg")
     write_icon(UI_BRAND / "mark-512.png", 512)
+
+    print("brand: tray")
+    tray(APP / "assets/tray")
 
     print("brand: web")
     web(APP / "web")

@@ -5,14 +5,23 @@ import 'package:alchemist/alchemist.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+// Reached by path rather than by package, because it lives in the parent
+// package's `test/` and test code is deliberately not on its release
+// surface. The fonts a few lines down are read the same way and for the
+// same reason.
+// ignore: avoid_relative_lib_imports
+import '../../test/support/tolerant_goldens.dart';
+
 /// Golden harness for the composites.
 ///
 /// Same contract as the design system's own harness: CI goldens (blocked
-/// text) run everywhere, and the readable Linux goldens are what prove
-/// the type is the type. Fonts come from the parent package, where they
-/// are bundled.
+/// text, compared with a tolerance for host rasterisation) run
+/// everywhere, and the readable Linux goldens are what prove the type is
+/// the type. The comparator is the parent package's, for the same reason
+/// the fonts are: one answer, in the package that owns the question.
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   TestWidgetsFlutterBinding.ensureInitialized();
+  useTolerantGoldenComparator();
   const families = <String, String>{
     'Archivo': '../fonts/Archivo-Variable.ttf',
     'Inter': '../fonts/Inter-Variable.ttf',

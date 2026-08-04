@@ -47,6 +47,13 @@ dependencies:
   # contract and a minor bump has moved redirect semantics before.
   go_router: 17.3.0
   url_launcher: 6.3.2
+  # The desktop mini player, behind MiniWindowPort. Frameless,
+  # always-on-top, and positioned - three things a compositor is allowed
+  # to refuse, which is why the port probes before it asks.
+  window_manager: 0.5.2
+  # The desktop tray, behind TrayPort. Degrades to nothing where the
+  # session has no StatusNotifier host to talk to.
+  tray_manager: 0.5.3
   # Keeps the screen awake in car mode and the visualizer, behind
   # WakePort. A car screen that sleeps mid-drive is a dead feature, and
   # nothing portable answers this without a plugin.
@@ -73,6 +80,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    # The tray glyphs, drawn by tools/generate-brand.py: the mark with no
+    # tile, one file per platform convention and play state. tray_manager
+    # resolves them as bundle paths, so they have to be declared here
+    # rather than in the design system.
+    - assets/tray/
 
 # Unsigned MSIX for the CI packaging matrix (signing comes later).
 msix_config:

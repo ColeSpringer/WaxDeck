@@ -64,6 +64,33 @@ abstract class IntSetting extends Notifier<int> with StoredSetting<int> {
   void set(int value) => put(value.clamp(minValue, maxValue));
 }
 
+/// A free-text preference.
+///
+/// Nothing stored here is a secret: this is for the handful of settings
+/// whose value is an identifier somebody pastes in. A credential would
+/// belong in the credential store, behind the platform's own keyring.
+abstract class StringSetting extends Notifier<String>
+    with StoredSetting<String> {
+  /// The longest value worth believing. A stored string past it reads as
+  /// nothing stored, which is what keeps a corrupted row from becoming a
+  /// text field nobody can clear.
+  int get maxLength => 128;
+
+  @override
+  String? decode(String raw) => raw.length > maxLength ? null : raw;
+
+  @override
+  String encode(String value) => value;
+
+  @override
+  String build() => hydrate();
+
+  void set(String value) {
+    final trimmed = value.trim();
+    put(trimmed.length > maxLength ? trimmed.substring(0, maxLength) : trimmed);
+  }
+}
+
 /// A preference chosen from a fixed list.
 abstract class EnumSetting<T extends Enum> extends Notifier<T>
     with StoredSetting<T> {
@@ -422,6 +449,49 @@ final gridSizeProvider = NotifierProvider<GridSize, WaxGridSize>(GridSize.new);
 final gridScaleProvider = Provider<double>(
   (ref) => ref.watch(gridSizeProvider).scale,
 );
+
+// --- integrations ------------------------------------------------------------
+
+/// Whether this desktop publishes "Listening to WaxDeck" to a Discord
+/// client running beside it.
+///
+/// Off by default, and per device rather than per account, because that
+/// is what it is: presence is set through the Discord client's own local
+/// socket, so the two programs have to be on the same machine. A phone
+/// signed in to the same account is not publishing anything.
+class DiscordPresenceEnabled extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.discordPresence;
+
+  @override
+  bool get defaultValue => false;
+}
+
+final discordPresenceEnabledProvider =
+    NotifierProvider<DiscordPresenceEnabled, bool>(DiscordPresenceEnabled.new);
+
+/// Which registered Discord application the presence is published as.
+///
+/// An override, and empty is the ordinary case: WaxDeck has one of its
+/// own (`kWaxDeckDiscordApplicationId`), and this is here for somebody
+/// who would rather publish under an application they registered - a
+/// different name after "Listening to", or their own cover art. A public
+/// snowflake from the developer portal, not a credential.
+class DiscordApplicationId extends StringSetting {
+  @override
+  String get settingKey => ClientSettingKeys.discordApplicationId;
+
+  @override
+  String get defaultValue => '';
+
+  /// A snowflake is at most twenty digits; the slack is for a paste with
+  /// something on the end of it, which [set] trims.
+  @override
+  int get maxLength => 32;
+}
+
+final discordApplicationIdProvider =
+    NotifierProvider<DiscordApplicationId, String>(DiscordApplicationId.new);
 
 // --- accessibility -----------------------------------------------------------
 

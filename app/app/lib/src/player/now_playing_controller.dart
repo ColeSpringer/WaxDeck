@@ -323,6 +323,28 @@ class NowPlayingController extends Notifier<NowPlaying> {
     return settled;
   }
 
+  /// Plays or pauses whatever this device is playing: a station stops
+  /// and starts, a live session toggles, and an entry left standing by a
+  /// failed start is taken back by starting it again.
+  ///
+  /// Here rather than beside the command that runs it, because the
+  /// surfaces that need it are no longer all in the widget tree: the
+  /// keyboard and the deck bar hold a `WidgetRef`, the tray menu holds a
+  /// container's `Ref`, and neither is the other. The verb belongs to
+  /// whatever owns playback, which is this.
+  void togglePlayback() {
+    if (_radioOwnsEngine) {
+      unawaited(ref.read(radioPlaybackProvider.notifier).toggle());
+      return;
+    }
+    final session = state.session;
+    if (session != null) {
+      unawaited(session.toggle());
+      return;
+    }
+    resume();
+  }
+
   /// Steps to the next entry at someone's request. False when the queue
   /// has nowhere to go, so the caller can say so rather than pretend.
   ///

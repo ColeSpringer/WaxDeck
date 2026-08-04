@@ -10,10 +10,11 @@ import 'media_session_port.dart';
 class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   WaxDeckAudioHandler({
     required this.engine,
-    required this.browse,
     required this.onPlayFromMediaId,
+    this.browse,
     this.onSkipNext,
     this.onSkipPrevious,
+    this.onSkipToQueueItem,
   }) {
     engine.playingStream.listen(_publishState);
     engine.processingStateStream.listen((_) => _publishState(engine.playing));
@@ -26,7 +27,11 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   }
 
   final AudioEnginePort engine;
-  final BrowseSourcePort browse;
+
+  /// The browse tree, where the platform has one to serve and this build
+  /// has a mirror to serve it from. Null on web, whose media session is
+  /// the browser's own transport and has no drawer to appear in.
+  final BrowseSourcePort? browse;
 
   /// Starts playback of a browse-tree leaf (the media id is the item
   /// pid). The app decides how: online play-info or the downloaded
@@ -39,8 +44,45 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   final Future<void> Function()? onSkipNext;
   final Future<void> Function()? onSkipPrevious;
 
+  /// A row of the published queue, chosen on a head unit's up-next list.
+  /// By index rather than by media id: the same item queued twice is
+  /// ordinary, and an id would step to the wrong one of the pair.
+  final Future<void> Function(int index)? onSkipToQueueItem;
+
   /// The one extra control the app has raised, when it has.
   MediaSessionExtra? _extra;
+
+  /// Whether what is playing is a live stream, which decides what the
+  /// transport may honestly offer.
+  bool _live = false;
+
+  /// Which row of the published queue is playing, so a head unit can
+  /// highlight it.
+  int? _queueIndex;
+
+  @override
+  void publish(MediaSessionItem? item) {
+    _live = item?.live ?? false;
+    mediaItem.add(item == null ? null : _asMediaItem(item));
+    // The controls follow what is playing - a station has nothing to
+    // seek and nothing to step to - so the state is republished with it.
+    _publishState(engine.playing);
+  }
+
+  @override
+  void publishQueue(List<MediaSessionItem> items, {int index = 0}) {
+    queue.add(<MediaItem>[for (final item in items) _asMediaItem(item)]);
+    _queueIndex = items.isEmpty ? null : index;
+    _publishState(engine.playing);
+  }
+
+  @override
+  void publishQueueIndex(int index) {
+    if (queue.value.isEmpty) return;
+    // The state carries the index; the list itself did not change.
+    _queueIndex = index;
+    _publishState(engine.playing);
+  }
 
   @override
   void showExtra(MediaSessionExtra? extra) {
@@ -51,6 +93,17 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
     // would be waiting for the pause it exists to prevent.
     _publishState(engine.playing);
   }
+
+  MediaItem _asMediaItem(MediaSessionItem item) => MediaItem(
+    id: item.id,
+    title: item.title,
+    artist: item.artist,
+    album: item.album,
+    duration: item.duration,
+    artUri: item.artUri,
+    isLive: item.live,
+    playable: true,
+  );
 
   @override
   Future<void> customAction(String name, [Map<String, dynamic>? extras]) async {
@@ -64,14 +117,19 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
 
   void _publishState(bool playing) {
     final extra = _extra;
+    // A station has no position to move and no queue to step through, so
+    // it offers exactly one verb. Drawing the rest would be four controls
+    // on a lock screen that do nothing when they are pressed - and on a
+    // steering wheel, four buttons that appear to have broken.
+    final stepping = !_live;
     playbackState.add(
       PlaybackState(
         controls: [
-          if (onSkipPrevious != null) MediaControl.skipToPrevious,
-          MediaControl.rewind,
+          if (stepping && onSkipPrevious != null) MediaControl.skipToPrevious,
+          if (stepping) MediaControl.rewind,
           if (playing) MediaControl.pause else MediaControl.play,
-          MediaControl.fastForward,
-          if (onSkipNext != null) MediaControl.skipToNext,
+          if (stepping) MediaControl.fastForward,
+          if (stepping && onSkipNext != null) MediaControl.skipToNext,
           MediaControl.stop,
           if (extra != null)
             MediaControl.custom(
@@ -94,6 +152,19 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
         playing: playing,
         updatePosition: engine.position,
         speed: engine.speed,
+        queueIndex: _queueIndex,
+        // What the desktop surfaces read to decide whether their seek bar
+        // and their skip buttons are live at all. MPRIS spells it
+        // CanSeek and CanGoNext; the notification spells it by which
+        // controls it drew.
+        systemActions: <MediaAction>{
+          if (stepping) MediaAction.seek,
+          if (stepping) MediaAction.seekForward,
+          if (stepping) MediaAction.seekBackward,
+          if (stepping && onSkipToQueueItem != null)
+            MediaAction.skipToQueueItem,
+          MediaAction.setSpeed,
+        },
       ),
     );
   }
@@ -134,6 +205,11 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   }
 
   @override
+  Future<void> skipToQueueItem(int index) async {
+    await onSkipToQueueItem?.call(index);
+  }
+
+  @override
   Future<void> setSpeed(double speed) => engine.setSpeed(speed);
 
   @override
@@ -146,7 +222,9 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
     String parentMediaId, [
     Map<String, dynamic>? options,
   ]) async {
-    final entries = await browse.children(parentMediaId);
+    final source = browse;
+    if (source == null) return const <MediaItem>[];
+    final entries = await source.children(parentMediaId);
     return [
       for (final e in entries)
         MediaItem(
@@ -160,14 +238,18 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
 }
 
 /// Initializes the OS media session around the engine. Called once at
-/// startup on platforms with a media session (Android today); the
-/// browse tree makes the app appear in Android Auto's media drawer.
+/// startup on every platform that has one: the notification and Android
+/// Auto's drawer on Android, MediaSession in the browser, MPRIS on
+/// Linux, the transport controls on Windows, and the now-playing panel
+/// on macOS. The browse tree is what makes the app appear in a head
+/// unit's media drawer, where the platform renders one.
 Future<WaxDeckAudioHandler> initWaxDeckAudioService({
   required AudioEnginePort engine,
-  required BrowseSourcePort browse,
   required Future<void> Function(String pid) onPlayFromMediaId,
+  BrowseSourcePort? browse,
   Future<void> Function()? onSkipNext,
   Future<void> Function()? onSkipPrevious,
+  Future<void> Function(int index)? onSkipToQueueItem,
 }) {
   return AudioService.init(
     builder: () => WaxDeckAudioHandler(
@@ -176,6 +258,7 @@ Future<WaxDeckAudioHandler> initWaxDeckAudioService({
       onPlayFromMediaId: onPlayFromMediaId,
       onSkipNext: onSkipNext,
       onSkipPrevious: onSkipPrevious,
+      onSkipToQueueItem: onSkipToQueueItem,
     ),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.colespringer.waxdeck.playback',

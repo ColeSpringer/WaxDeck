@@ -359,6 +359,13 @@ const settingsRegistry = <SettingEntry>[
     keywords: <String>['last.fm', 'listenbrainz', 'station', 'stream'],
   ),
   SettingEntry(
+    id: 'discord-presence',
+    title: 'Show what I am listening to on Discord',
+    section: SettingsSection.integrations,
+    keywords: <String>['discord', 'rich presence', 'status', 'listening to'],
+    desktopOnly: true,
+  ),
+  SettingEntry(
     id: 'notifications',
     title: 'Notification targets',
     section: SettingsSection.integrations,

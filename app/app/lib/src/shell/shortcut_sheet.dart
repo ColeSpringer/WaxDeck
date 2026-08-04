@@ -32,6 +32,12 @@ class _ShortcutSheetDialog extends ConsumerWidget {
 
 /// Built from what is actually bound. Only commands with a keystroke
 /// appear; sections keep their declared order.
+///
+/// Every command in the registry, whatever its `enabled` says right now.
+/// A sheet teaches what a key does, and "nothing is playing yet" is not
+/// a reason to stop teaching the space bar. What a build genuinely does
+/// not have is kept out of the registry itself (`WaxCommand.offered`),
+/// so it never reaches this.
 List<WaxShortcutGroup> shortcutGroups(List<WaxCommand> commands) {
   return <WaxShortcutGroup>[
     for (final section in WaxCommandSection.values)

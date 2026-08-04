@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxSettingRow, WaxSwitch;
 
 import '../auth/auth_controller.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import 'client_prefs.dart';
 import 'integrations_controller.dart';
 
 /// Scrobbling connections: Last.fm through the browser authorization
@@ -412,6 +414,116 @@ class _LastfmCredentialsDialogState
             child: const Text('Save'),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// Discord rich presence: whether this desktop tells a Discord client
+/// running beside it what is playing.
+///
+/// A switch and, folded under it, an override nobody has to touch:
+/// presence is published as a Discord *application*, WaxDeck has one
+/// registered, and the field is for somebody who would rather use their
+/// own. It is second and optional because that is what it is.
+class DiscordPresenceSection extends ConsumerStatefulWidget {
+  const DiscordPresenceSection({super.key});
+
+  @override
+  ConsumerState<DiscordPresenceSection> createState() =>
+      _DiscordPresenceSectionState();
+}
+
+class _DiscordPresenceSectionState
+    extends ConsumerState<DiscordPresenceSection> {
+  /// Seeded here rather than in a `late final` initializer: a section
+  /// built and torn down without ever being laid out would run that
+  /// initializer from `dispose`, where reading `ref` is unsafe.
+  late final TextEditingController _id;
+
+  @override
+  void initState() {
+    super.initState();
+    _id = TextEditingController(text: ref.read(discordApplicationIdProvider));
+  }
+
+  /// Stores what was typed, once. Per keystroke, each write would
+  /// reconnect the binder against a prefix of the real id - nineteen
+  /// dials, nineteen socket sweeps, and a race over which one survives.
+  void _commit() {
+    final typed = _id.text.trim();
+    if (typed == ref.read(discordApplicationIdProvider)) return;
+    ref.read(discordApplicationIdProvider.notifier).set(typed);
+  }
+
+  @override
+  void dispose() {
+    _id.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final on = ref.watch(discordPresenceEnabledProvider);
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text('Discord', style: textTheme.titleMedium),
+        const SizedBox(height: 8),
+        WaxSettingRow(
+          title: 'Show what I am listening to',
+          help:
+              'Sets your Discord status while WaxDeck plays, through the '
+              'Discord app on this machine',
+          control: WaxSwitch(
+            value: on,
+            label: 'Show what I am listening to on Discord',
+            semanticsId: SemanticsIds.setting('discord-presence'),
+            onChanged: ref.read(discordPresenceEnabledProvider.notifier).set,
+          ),
+        ),
+        if (on)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                // No Semantics identifier wrapper: on the web it would
+                // mint a second, disabled text-field node beside the
+                // real input. The switch above carries the handle.
+                Focus(
+                  // The ordinary use is paste, then click away.
+                  onFocusChange: (has) {
+                    if (!has) _commit();
+                  },
+                  child: TextField(
+                    key: const Key('discord-application-id-field'),
+                    controller: _id,
+                    decoration: const InputDecoration(
+                      labelText: 'Publish as another application (optional)',
+                      helperText:
+                          'Empty publishes as WaxDeck. An application ID from '
+                          'discord.com/developers changes the name Discord '
+                          'shows and where its cover art comes from',
+                    ),
+                    keyboardType: TextInputType.number,
+                    onSubmitted: (_) => _commit(),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'The cover is one image for every track, uploaded to '
+                    'that application rather than taken from your library: '
+                    'Discord fetches art through its own servers, which '
+                    'cannot reach a private one.',
+                    style: textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }

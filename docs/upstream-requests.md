@@ -47,6 +47,24 @@ sidecar injection seam) all landed and are not repeated here.
   correct, and restricted callers are the rare branch, so this is a cost
   rather than a gap.
 
+- **A release MBID on the item view.** `model.ItemView` carries no
+  MusicBrainz identifier of any kind, which is the same wall the
+  `missing-mbid` health check ran into and recorded rather than crossed
+  (`server/internal/service/health.go`): "the recording MBID is not
+  reachable from here at sweep cost". Two WaxDeck surfaces want one and
+  neither can have it. The health sweep would report the gap it is
+  named for. And Discord rich presence (ADR-0045) would draw the real
+  album cover: Discord fetches art through its own media proxy, so the
+  URL has to be publicly resolvable, and a Cover Art Archive URL built
+  from a matched release id is the one source that is public without the
+  instance being. The identifiers exist - matching writes them, the
+  review surfaces speak them (`appliedMbid`, `releaseGroupMbid`), and
+  the metadata editor edits them - so this is a projection rather than
+  new storage. A release MBID on the item view, or on the album view the
+  item resolves through, closes both. The workaround is shipped for
+  both: the health check omits the rule, and presence shows the
+  application's own static asset.
+
 - **A set-membership operator on item queries.** There is no `OpIn`: the
   operator vocabulary is is/isNot, the string and ordered comparisons,
   `OpInRange` (a two-ended range, not a set), the presence pair, and the

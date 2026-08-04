@@ -152,6 +152,14 @@ export const SemanticsIds = {
   queueScreen: 'queue-screen',
   queueShuffle: 'queue-shuffle',
 
+  // desktop: The desktop shell surfaces: the mini player window and the deck bar's way into it. The tray has no semantics tree of its own.
+  deckMiniWindow: 'deck-mini-window',
+  miniWindow: 'mini-window',
+  miniWindowNext: 'mini-window-next',
+  miniWindowPlay: 'mini-window-play',
+  miniWindowPrevious: 'mini-window-previous',
+  miniWindowRestore: 'mini-window-restore',
+
   // discovery: Instant mixes, similar tracks, and the track lists they open.
   instantMixRun: 'instant-mix-run',
   mixAdventurousness: 'mix-adventurousness',

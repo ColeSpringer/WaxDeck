@@ -77,6 +77,12 @@ abstract class QueueGateway {
   /// at the front. False when nothing is queued.
   Future<bool> previous();
 
+  /// Jumps to a row of the queue by its index, for an up-next list
+  /// tapped on a head unit. By index because that is what the media
+  /// session round-trips: the same item queued twice is ordinary, and a
+  /// pid would step to the wrong one of the pair.
+  Future<void> jumpTo(int index);
+
   /// Ends playback and the queue with it: a controller's `stop` ends
   /// the session, and the local queue is what that session is.
   void stop();
@@ -186,6 +192,17 @@ class LocalQueueGateway implements QueueGateway {
     final moved = await _playback.previous();
     _throwOnFailedStart(began);
     return moved;
+  }
+
+  @override
+  Future<void> jumpTo(int index) async {
+    final began = _playback.startGeneration;
+    _queue.jumpTo(index);
+    // The queue notified its listeners as it moved, so the start this
+    // landed on is already in flight; waiting on it is what lets a
+    // failure be answered for rather than swallowed.
+    await _playback.settled;
+    _throwOnFailedStart(began);
   }
 
   @override

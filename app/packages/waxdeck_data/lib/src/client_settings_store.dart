@@ -119,6 +119,16 @@ abstract final class ClientSettingKeys {
   /// phone that rides on a dashboard mount wants it and the desktop
   /// never does.
   static const carModeButton = 'waxdeck.player.carModeButton';
+
+  /// Whether this desktop publishes "Listening to WaxDeck" to Discord,
+  /// and which registered application it publishes as.
+  ///
+  /// Per device by nature rather than by policy: presence is set through
+  /// the Discord client's own local socket, so it is a fact about the
+  /// machine both programs are running on. The id is a public snowflake
+  /// from the Discord developer portal, not a credential.
+  static const discordPresence = 'waxdeck.integrations.discordPresence';
+  static const discordApplicationId = 'waxdeck.integrations.discordAppId';
 }
 
 /// Per-device settings in the local mirror database (native builds).

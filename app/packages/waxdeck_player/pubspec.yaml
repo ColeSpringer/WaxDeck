@@ -16,6 +16,14 @@ dependencies:
   flutter:
     sdk: flutter
   audio_service: 0.18.19
+  # The federated halves of audio_service that give the desktops their OS
+  # media surfaces: MPRIS on Linux, System Media Transport Controls on
+  # Windows. Never imported - both register themselves as implementations
+  # of audio_service_platform_interface - so the handler above is the
+  # whole seam, on every platform. Android, iOS, macOS and web ship
+  # inside audio_service itself.
+  audio_service_mpris: 0.2.1
+  audio_service_win: 0.0.3
   audio_session: 0.2.4
   just_audio: 0.10.6
   just_audio_media_kit: 2.1.0

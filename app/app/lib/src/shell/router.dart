@@ -10,6 +10,9 @@ import '../admin/trash_screen.dart';
 import '../admin/user_edit_screen.dart';
 import '../admin/users_screen.dart';
 import '../auth/auth_controller.dart';
+import '../auto/media_session_feed.dart';
+import '../desktop/discord_binder.dart';
+import '../desktop/tray_binder.dart';
 import '../auth/login_screen.dart';
 import '../auth/setup_screen.dart';
 import '../auth/signup_screen.dart';
@@ -673,6 +676,23 @@ class _SignedInScope extends ConsumerWidget {
     ref.watch(syncBinderProvider);
     ref.watch(queuePersistenceProvider);
     ref.watch(queueRefillProvider);
+    // What the lock screen, the head unit, MPRIS, the Windows transport
+    // controls and macOS's now-playing panel all say. Here rather than
+    // beside the deck bar: those surfaces are what somebody looks at
+    // with the app minimized, which is exactly when no bar is built.
+    // Not where registration failed: the feed would build a queue per
+    // track change for a holder nothing can read.
+    if (ref.watch(mediaSessionProvider).live) {
+      ref.watch(mediaSessionFeedProvider);
+    }
+    // The desktop tray and the Discord status, for the same reason.
+    // Mounted rather than merely guarded inside: off the desktops
+    // neither has anything to talk to, and leaving them there is a set
+    // of listeners that exist to read three providers and return.
+    if (ref.watch(desktopProvider)) {
+      ref.watch(trayBinderProvider);
+      ref.watch(discordPresenceProvider);
+    }
     // The bell promises what this client saw while it was running, so it
     // collects for as long as the session does. Watched from the bell
     // instead it would collect only once home had been built, which a

@@ -8,6 +8,7 @@ import 'package:waxdeck_api/waxdeck_api.dart' show MediaType;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../connect/device_picker.dart';
+import '../desktop/mini_window.dart';
 import '../player/lyrics.dart';
 import '../player/now_playing_controller.dart';
 import '../player/output_volume.dart';
@@ -51,6 +52,7 @@ class WaxCommand {
     this.glyph,
     this.activators = const <ShortcutActivator>[],
     this.enabled,
+    this.offered,
     this.whileTyping = false,
     this.inPalette = true,
   });
@@ -74,9 +76,22 @@ class WaxCommand {
   final List<ShortcutActivator> activators;
 
   /// Whether it can do anything right now; null means always. Read by
-  /// the palette and the sheet, never by the binding map - bindings
-  /// built from live state would rebuild on every position tick.
+  /// the palette, never by the binding map - bindings built from live
+  /// state would rebuild on every position tick.
   final bool Function(WidgetRef ref)? enabled;
+
+  /// Whether this build has the command at all; null means every build
+  /// does. Read once by the registry, which withholds a command that
+  /// answers false: it is not bound, not in the palette, and not taught
+  /// by the sheet.
+  ///
+  /// Distinct from [enabled] because the two answer different questions,
+  /// and the sheet is where the difference shows. "Nothing is playing
+  /// yet" is not a reason to stop teaching the space bar, so the sheet
+  /// prints a command whose [enabled] is false. "This browser tab has no
+  /// window to shrink" is a reason never to print Ctrl+Shift+M, and no
+  /// amount of playing anything will change it.
+  final bool Function(Ref ref)? offered;
 
   /// Whether the binding fires inside a text field. Only the palette's,
   /// which has to open from wherever the caret is.
@@ -296,6 +311,10 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
     enabled: _somethingToPlay,
     run: (context, ref) => context.push(WaxRoute.carMode),
   ),
+  // Desktop only, and gated on what the compositor said rather than on
+  // the platform: a Wayland session gets a plain small window, and a
+  // window layer that would not answer at all gets no offer.
+  miniWindowCommand,
 
   WaxCommand(
     id: 'create-playlist',
@@ -361,22 +380,12 @@ bool _seekable(WidgetRef ref) => ref.read(nowPlayingProvider).session != null;
 
 bool _hasLocalVolume(WidgetRef ref) => ref.read(localVolumeAvailableProvider);
 
-/// Plays or pauses whatever this device is playing: a station stops and
-/// starts, a live session toggles, and an entry left standing by a
-/// failed start is taken back by starting it again. The deck bar's play
-/// button runs this too.
-void togglePlayback(WidgetRef ref) {
-  if (ref.read(radioPlaybackProvider).station != null) {
-    unawaited(ref.read(radioPlaybackProvider.notifier).toggle());
-    return;
-  }
-  final session = ref.read(nowPlayingProvider).session;
-  if (session != null) {
-    unawaited(session.toggle());
-    return;
-  }
-  ref.read(nowPlayingProvider.notifier).resume();
-}
+/// Plays or pauses whatever this device is playing. The deck bar's play
+/// button and the mini player's run this too; the verb itself lives on
+/// the controller that owns playback, because the tray menu needs it
+/// from outside the widget tree.
+void togglePlayback(WidgetRef ref) =>
+    ref.read(nowPlayingProvider.notifier).togglePlayback();
 
 /// Nudges the playhead, never before the start.
 void seekBy(WidgetRef ref, Duration delta) {
@@ -400,16 +409,31 @@ class CommandRegistry extends Notifier<List<WaxCommand>> {
 
   /// A scope withdraws post-frame, and a closing app runs those after
   /// the container is gone.
+  ///
+  /// Cleared in [build], because Riverpod runs disposal callbacks before
+  /// a recompute too: latched, the mini window's probe would freeze this
+  /// registry seconds after launch.
   bool _closed = false;
+
+  /// The standing commands this build has, settled in [build] because
+  /// that is the only place a predicate may watch what it depends on -
+  /// and the mini window's answer arrives after a platform probe, so a
+  /// set decided once at startup would be decided too early.
+  List<WaxCommand> _standing = const <WaxCommand>[];
 
   @override
   List<WaxCommand> build() {
+    _closed = false;
     ref.onDispose(() => _closed = true);
+    _standing = <WaxCommand>[
+      for (final command in waxStandingCommands)
+        if (command.offered?.call(ref) ?? true) command,
+    ];
     return _all();
   }
 
   List<WaxCommand> _all() => <WaxCommand>[
-    ...waxStandingCommands,
+    ..._standing,
     for (final commands in _scoped.values) ...commands,
   ];
 

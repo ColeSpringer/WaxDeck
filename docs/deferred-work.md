@@ -164,35 +164,47 @@ here waits on upstream.
   freshness - so a miss on the grid is a signal about the virtualized
   list rather than about artwork, and `-covers=false` is the run that
   tells the two apart.
-- `[in-repo]` **Discord rich presence from the desktop builds.** The
-  Spotify-style "Listening to" status (track, artist, album art, a
-  progress bar) while WaxDeck plays. Distinct from the Discord
-  notification provider, which is a server-side webhook: presence is
-  set through the Discord desktop client's local IPC endpoint (a Unix
-  socket on Linux and macOS, a named pipe on Windows) with a
-  registered application id, no bot and no OAuth, and activity type 2
-  renders as "Listening to WaxDeck" with timestamps driving the
-  progress bar. That endpoint only exists where the Discord desktop
-  client runs, so this is a desktop-build feature, but the connect
-  surface already mirrors sessions on other devices, so the desktop
-  app can publish presence for playback happening anywhere (a phone
-  included) while it is open. Shape: a presence port behind the
-  plugin-wrapping rule, fed by player and connect state, implemented
-  either as a pinned community plugin or a small pure-Dart IPC client
-  (a handshake and SET_ACTIVITY as JSON frames; the Windows named
-  pipe is the fiddly half). Update on track and pause changes, not
-  position ticks; Discord displays at most roughly one activity
-  update per 15 seconds. Album art must be publicly fetchable by
-  Discord's media proxy, so a LAN-only instance's art URLs will not
-  render: Cover Art Archive URLs from matched MusicBrainz release ids
-  are the workable default (a small read-surface addition if the
-  playing track does not expose its id yet), a public instance can use
-  the tokenized `/media/art` the cast displays now use, and a static
-  WaxDeck asset is the fallback. Navidrome ships this
-  server-side instead, over a gateway connection authenticated with
-  stored per-user Discord user tokens, which works from any client
-  but is self-botting against Discord's terms of service; recorded
-  so it is not re-derived as an option. Needs no sibling-repo work.
+
+- `[in-repo]` **Discord presence has no image at all until the mark is
+  final.** The status, the track, the artist, the album and the progress
+  bar all render; the square beside them is blank, because Discord draws
+  it from an art asset uploaded to the application and none has been
+  uploaded. That is waiting on the logo rather than on any code: the
+  client already sends the key (`kDiscordCoverAsset`, the string
+  `waxdeck`, in `app/app/lib/src/desktop/discord_presence.dart`), and
+  Discord renders an activity with no large image when the key resolves
+  to nothing, which is why presence ships looking deliberate rather than
+  broken. **To close it:** upload a square PNG under exactly that key in
+  the developer portal's art assets for application
+  `1534302390650405078`, and nothing needs rebuilding - the key is
+  resolved by Discord at display time, so an existing install picks the
+  image up. 512 px is the size the other surfaces settled on. If the
+  final mark wants a different key, change the constant with it. Worth
+  doing in the same pass as any other brand asset that lands with the
+  logo, since `tools/generate-brand.py` will be re-run anyway.
+
+- `[in-repo]` **Discord presence shows the application's own cover, not
+  the album's.** Presence shipped in P22 (ADR-0045) with the status,
+  the track, the artist, the album, and the timestamps that drive the
+  progress bar; the image beside them is the asset uploaded against the
+  Discord application (see the entry above - not yet uploaded), the same
+  for every track whenever it is. The two richer sources
+  named when this was first recorded are both out of reach today, and
+  for different reasons. **Cover Art Archive** needs a MusicBrainz
+  release id on the item read surface, which is an upstream ask (see
+  `docs/upstream-requests.md`): `model.ItemView` carries no MBID, which
+  is the same wall the `missing-mbid` health check ran into
+  (`server/internal/service/health.go`). **The tokenized `/media/art`**
+  a cast receiver uses would work on an instance the internet can reach,
+  but the token is minted per play-info and the presence binder does not
+  hold one: `PlaybackSession` fetches its `PlayInfo`, uses the stream
+  URL, and lets it go, and asking for another would open a second
+  server-side stream session. Either fix is a change to a layer that
+  exists for something else, for a 512-pixel square in a chat client.
+  Also unbuilt: presence for playback happening on *another* device this
+  desktop is mirroring through Connect. The binder reads local playback
+  only, which is the honest half - "listening to" is a claim about this
+  machine's ears - and a remote session is what the deck bar names.
 
 ## Connect and casting
 
@@ -231,10 +243,6 @@ here waits on upstream.
   candidate base; true device-side verification (loading a probe URL
   on the device and watching status) would catch DNS and cert
   failures the server cannot see.
-- `[in-repo]` **The head unit gets skip controls but no queue
-  display.** Next and previous step the active queue from Auto and
-  the notification; publishing the queue itself as media items (so
-  the head unit renders an up-next list) is the remaining half.
 - `[hardware]` **The real-device cast checklist has not run.** The
   protocol suites drive wire-honest fakes (a TLS CASTV2 receiver, a
   SOAP renderer), but a real Chromecast, a speaker group, and a real
