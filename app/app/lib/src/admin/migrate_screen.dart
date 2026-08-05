@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../tools/tasks_screen.dart';
 
 /// The importable sources. Podcast feeds move by OPML, which has no
@@ -65,7 +66,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
   Future<void> _submit() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final router = GoRouter.of(context);
     try {
       await ref
@@ -85,22 +86,14 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
             dryRun: _dryRun,
           );
       ref.invalidate(toolTasksProvider);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: const Text('Import started'),
-            duration: const Duration(seconds: 6),
-            action: SnackBarAction(
-              label: 'Tasks',
-              onPressed: () => router.push<void>(WaxRoute.tasks),
-            ),
-          ),
-        );
+      messenger.show(
+        'Import started',
+        actionLabel: 'Tasks',
+        actionSemanticsId: SemanticsIds.adminAction('migrate-tasks'),
+        onAction: () => router.push<void>(WaxRoute.tasks),
+      );
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

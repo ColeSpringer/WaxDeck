@@ -600,8 +600,12 @@ components:
               type: integer
               format: int64
               description: >
-                Total bytes of uploads the account may hold at once;
-                absent means no per-user cap.
+                Bytes the account may hold in upload staging at once,
+                awaiting review; absent means no per-user cap. A
+                pending-upload limit rather than a storage-contribution
+                cap: importing a session releases what it held, and
+                nothing here bounds what the account adds to the
+                library over time.
             createdAt:
               type: string
               format: date-time
@@ -696,7 +700,9 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Per-user upload cap in bytes; absent means none.
+          description: >
+            Bytes the account may hold in upload staging at once; absent
+            means none. An import releases what it held.
         permissions:
           $ref: "#/components/schemas/Permissions"
 
@@ -730,7 +736,8 @@ components:
           format: int64
           minimum: 0
           description: >
-            New per-user upload cap in bytes; 0 removes the cap.
+            New ceiling on bytes held in upload staging at once; 0
+            removes it.
         permissions:
           $ref: "#/components/schemas/Permissions"
 
@@ -1041,7 +1048,9 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Per-user upload cap in bytes.
+          description: >
+            Bytes an account made from this invite may hold in upload
+            staging at once.
 
     Invite:
       type: object

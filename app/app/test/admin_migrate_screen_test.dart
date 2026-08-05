@@ -3,18 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/migrate_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
 
 /// A viewport tall enough for the whole form, so no test scrolls.
-Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
+Future<void> _pump(
+  WidgetTester tester,
+  FakeRepository repo, [
+  ProviderContainer? container,
+]) async {
   tester.view.physicalSize = const Size(1200, 3000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+  final scope =
+      container ??
+      ProviderContainer(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+      );
+  addTearDown(scope.dispose);
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [repositoryProvider.overrideWithValue(repo)],
+    UncontrolledProviderScope(
+      container: scope,
       child: routedHost(const MigrateScreen()),
     ),
   );
@@ -26,7 +37,10 @@ void main() {
     tester,
   ) async {
     final repo = FakeRepository();
-    await _pump(tester, repo);
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    await _pump(tester, repo, container);
 
     await tester.enterText(
       find.byKey(const Key('migrate-server-url')),
@@ -51,8 +65,15 @@ void main() {
     expect(call.password, 'butterbur');
     expect(call.token, isNull);
     expect(call.dryRun, isTrue);
-    expect(find.text('Import started'), findsOneWidget);
-    expect(find.text('Tasks'), findsOneWidget);
+    // The message rides the shell's own channel now, like every other
+    // admin screen's, so it is asserted where it is raised rather than
+    // in a snackbar this screen would have to host itself.
+    final raised = container.read(shellMessengerProvider);
+    expect(raised?.text, 'Import started');
+    // And it carries the way to watch the import, which is the whole
+    // point of saying it started.
+    expect(raised?.actionLabel, 'Tasks');
+    expect(raised?.onAction, isNotNull);
   });
 
   testWidgets('audiobookshelf swaps credentials for a token field', (

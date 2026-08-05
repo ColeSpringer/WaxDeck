@@ -43,8 +43,8 @@ paths:
       description: >
         Creates a resumable upload session for one audio file. The
         caller must hold upload rights; the declared size counts
-        against the caller's quota up front so a full quota fails
-        fast, and the file name's extension is checked against the
+        against the caller's pending-upload limit up front so a full
+        one fails fast, and the file name's extension is checked against the
         server's accepted formats. The required media type label
         routes the file to the matching library kind; `libraryPid`
         pins a specific library (required when several libraries of
@@ -354,9 +354,11 @@ components:
   responses:
     QuotaExceeded:
       description: >
-        The upload would exceed the caller's storage quota (code
-        `quota-exceeded`). The message names the quota and current
-        use.
+        The upload would exceed the caller's pending-upload limit (code
+        `quota-exceeded`). The message names the limit and current use.
+        The limit caps what may sit in staging awaiting a decision, so
+        importing or discarding what is already there frees room for
+        this.
       content:
         application/json:
           schema:
@@ -585,14 +587,17 @@ components:
           type: integer
           format: int64
           description: >
-            Declared bytes of the caller's live sessions (everything
-            not discarded); what quota checks charge.
+            Declared bytes of the caller's sessions still sitting in
+            staging: everything neither discarded nor imported. What
+            quota checks charge, so importing a session releases the
+            headroom it held.
         quotaBytes:
           type: integer
           format: int64
           description: >
-            The account's cap on `bytesInUse`; absent means no
-            per-user cap.
+            The account's ceiling on `bytesInUse`; absent means no
+            per-user cap. A limit on pending uploads, not on what the
+            account has contributed to the library.
 
     UploadPage:
       type: object

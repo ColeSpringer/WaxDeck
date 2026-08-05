@@ -342,9 +342,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(_selected(tester), WaxNavTarget.books.name);
 
+    // A console section lights the console's own row: the chrome has one
+    // entry for the whole of it, and the section list inside it says
+    // which one is open.
     container.read(routerProvider).go(WaxRoute.trash);
     await tester.pumpAndSettle();
-    expect(_selected(tester), WaxNavTarget.trash.name);
+    expect(_selected(tester), WaxNavTarget.admin.name);
 
     // The show-less episode location, which a search hit opens because a
     // hit carries no show, cannot sit under `/podcasts`, so nothing but
@@ -505,11 +508,12 @@ void main() {
     container.read(routerProvider).go(WaxRoute.trash);
     await tester.pumpAndSettle();
 
-    // Arriving by URL must never hide where you are.
+    // Arriving by URL must never hide where you are: the group opens on
+    // the console entry that claims the location.
     expect(
       find.descendant(
         of: find.byType(WaxSidebar),
-        matching: find.text('Trash'),
+        matching: find.text('Admin console'),
       ),
       findsOneWidget,
     );

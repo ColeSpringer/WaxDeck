@@ -21,7 +21,7 @@ part 'user_create.g.dart';
 /// * [roles] - Assigned roles; defaults to `[user]`.
 /// * [libraryAccess] 
 /// * [uploadEnabled] - Grant upload rights; defaults to false.
-/// * [uploadQuotaBytes] - Per-user upload cap in bytes; absent means none.
+/// * [uploadQuotaBytes] - Bytes the account may hold in upload staging at once; absent means none. An import releases what it held. 
 /// * [permissions] 
 @BuiltValue()
 abstract class UserCreate implements Built<UserCreate, UserCreateBuilder> {
@@ -48,7 +48,7 @@ abstract class UserCreate implements Built<UserCreate, UserCreateBuilder> {
   @BuiltValueField(wireName: r'uploadEnabled')
   bool? get uploadEnabled;
 
-  /// Per-user upload cap in bytes; absent means none.
+  /// Bytes the account may hold in upload staging at once; absent means none. An import releases what it held. 
   @BuiltValueField(wireName: r'uploadQuotaBytes')
   int? get uploadQuotaBytes;
 

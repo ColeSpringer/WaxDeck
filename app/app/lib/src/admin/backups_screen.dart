@@ -1,28 +1,32 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../uploads/audio_drop_area.dart';
 import '../uploads/file_picker_port.dart';
+import 'admin_console.dart';
 import 'admin_providers.dart';
 import '../format_bytes.dart';
 
-/// Backup archives with create, import, download, delete, and staged
-/// restore, plus the maintenance schedules and backup retention knobs.
-/// One screen because they are one story: when and what the server
-/// keeps.
+/// Backup archives with create, import, download, delete, staged
+/// restore, and how many the server keeps.
+///
+/// The maintenance timetable moved to its own console section: only one
+/// of those schedules is a backup, and a library scan buried at the
+/// bottom of this page was a scan nobody found.
 class BackupsScreen extends ConsumerWidget {
   const BackupsScreen({super.key});
 
   Future<void> _createBackup(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(repositoryProvider).createBackup();
       ref.invalidate(backupsProvider);
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
@@ -46,7 +50,7 @@ class BackupsScreen extends ConsumerWidget {
     WidgetRef ref,
     PickedAudioFile file,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final openRead = file.openRead;
     if (openRead == null) return;
     try {
@@ -54,25 +58,19 @@ class BackupsScreen extends ConsumerWidget {
           .read(repositoryProvider)
           .importBackup(sizeBytes: file.size, openRead: () => openRead());
       ref.invalidate(backupsProvider);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('${file.name} imported; stage its restore')),
-        );
+      messenger.show('${file.name} imported; stage its restore');
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
   Future<void> _cancelRestore(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(repositoryProvider).cancelStagedRestore();
       ref.invalidate(stagedRestoreProvider);
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
@@ -82,99 +80,94 @@ class BackupsScreen extends ConsumerWidget {
     final staged = ref.watch(stagedRestoreProvider).value;
     final anyRunning = backups.value?.any((b) => b.state == 'running') ?? false;
     final picker = ref.watch(filePickerProvider);
-    return Semantics(
-      identifier: SemanticsIds.adminBackups,
-      container: true,
-      child: Scaffold(
-        appBar: AppBar(title: const Text('Backups')),
-        body: AudioDropArea(
-          extensions: const {'zip'},
-          hint: 'Drop a backup archive to import',
-          onDropped: (files) async {
-            for (final file in files) {
-              if (!context.mounted) return;
-              await _importArchive(context, ref, file);
-            }
-          },
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (staged != null)
-                _RestoreBanner(
-                  plan: staged,
-                  onCancel: () => _cancelRestore(context, ref),
-                ),
-              Row(
-                children: [
-                  Semantics(
-                    identifier: SemanticsIds.backupCreate,
-                    child: FilledButton.icon(
-                      key: const Key(SemanticsIds.backupCreate),
-                      onPressed: anyRunning
-                          ? null
-                          : () => _createBackup(context, ref),
-                      icon: const Icon(Icons.archive_outlined),
-                      label: Text(anyRunning ? 'Backing up...' : 'Back up now'),
-                    ),
+    return WaxScaffold(
+      title: 'Backups',
+      largeTitle: false,
+      semanticsId: SemanticsIds.adminBackups,
+      onBack: adminBack(context),
+      // A sliver rather than a body: the drop target has to cover the
+      // page to be a target at all, and the scaffold's body is an
+      // adapter with no height of its own.
+      slivers: <Widget>[
+        SliverFillRemaining(
+          child: AudioDropArea(
+            extensions: const {'zip'},
+            hint: 'Drop a backup archive to import',
+            onDropped: (files) async {
+              for (final file in files) {
+                if (!context.mounted) return;
+                await _importArchive(context, ref, file);
+              }
+            },
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (staged != null)
+                  _RestoreBanner(
+                    plan: staged,
+                    onCancel: () => _cancelRestore(context, ref),
                   ),
-                  const SizedBox(width: 8),
-                  if (picker != null)
+                Row(
+                  children: [
                     Semantics(
-                      identifier: SemanticsIds.backupImport,
-                      child: OutlinedButton.icon(
-                        key: const Key(SemanticsIds.backupImport),
-                        onPressed: () => _pickAndImport(context, ref),
-                        icon: const Icon(Icons.unarchive_outlined),
-                        label: const Text('Import archive'),
+                      identifier: SemanticsIds.backupCreate,
+                      child: FilledButton.icon(
+                        key: const Key(SemanticsIds.backupCreate),
+                        onPressed: anyRunning
+                            ? null
+                            : () => _createBackup(context, ref),
+                        icon: const Icon(Icons.archive_outlined),
+                        label: Text(
+                          anyRunning ? 'Backing up...' : 'Back up now',
+                        ),
                       ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              switch (backups) {
-                AsyncData(:final value) when value.isEmpty => const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('No backups yet'),
-                ),
-                AsyncData(:final value) => Column(
-                  children: [
-                    for (final backup in value) _BackupRow(backup: backup),
-                  ],
-                ),
-                AsyncError(:final error) => Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    error is WaxDeckApiException
-                        ? error.message
-                        : 'Could not load backups',
-                  ),
-                ),
-                _ => const Center(child: CircularProgressIndicator()),
-              },
-              const SizedBox(height: 16),
-              Text('Schedules', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              switch (ref.watch(schedulesProvider)) {
-                AsyncData(:final value) => Column(
-                  children: [
-                    for (final schedule in value)
-                      _ScheduleRow(
-                        key: ValueKey('schedule-${schedule.kind}'),
-                        schedule: schedule,
+                    const SizedBox(width: 8),
+                    if (picker != null)
+                      Semantics(
+                        identifier: SemanticsIds.backupImport,
+                        child: OutlinedButton.icon(
+                          key: const Key(SemanticsIds.backupImport),
+                          onPressed: () => _pickAndImport(context, ref),
+                          icon: const Icon(Icons.unarchive_outlined),
+                          label: const Text('Import archive'),
+                        ),
                       ),
                   ],
                 ),
-                AsyncError() => const Text('Could not load schedules'),
-                _ => const Center(child: CircularProgressIndicator()),
-              },
-              const SizedBox(height: 16),
-              Text('Retention', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              const _RetentionFields(),
-            ],
+                const SizedBox(height: 8),
+                switch (backups) {
+                  AsyncData(:final value) when value.isEmpty => const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('No backups yet'),
+                  ),
+                  AsyncData(:final value) => Column(
+                    children: [
+                      for (final backup in value) _BackupRow(backup: backup),
+                    ],
+                  ),
+                  AsyncError(:final error) => Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      error is WaxDeckApiException
+                          ? error.message
+                          : 'Could not load backups',
+                    ),
+                  ),
+                  _ => const Center(child: CircularProgressIndicator()),
+                },
+                const SizedBox(height: 16),
+                Text(
+                  'Retention',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                const _RetentionFields(),
+              ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -235,7 +228,7 @@ class _BackupRow extends ConsumerWidget {
   }
 
   Future<void> _stageRestore(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -267,12 +260,12 @@ class _BackupRow extends ConsumerWidget {
         builder: (_) => _RestorePlanDialog(plan: plan),
       );
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -296,7 +289,7 @@ class _BackupRow extends ConsumerWidget {
       await ref.read(repositoryProvider).deleteBackup(backup.id);
       ref.invalidate(backupsProvider);
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
@@ -429,159 +422,6 @@ class _RestorePlanDialog extends StatelessWidget {
   }
 }
 
-class _ScheduleRow extends ConsumerStatefulWidget {
-  const _ScheduleRow({super.key, required this.schedule});
-
-  final Schedule schedule;
-
-  @override
-  ConsumerState<_ScheduleRow> createState() => _ScheduleRowState();
-}
-
-class _ScheduleRowState extends ConsumerState<_ScheduleRow> {
-  late final TextEditingController _cron = TextEditingController(
-    text: widget.schedule.cron,
-  );
-  late bool _enabled = widget.schedule.enabled;
-  var _busy = false;
-
-  static String _label(String kind) => switch (kind) {
-    'scan' => 'Library scan',
-    'backup' => 'Backup',
-    'prune' => 'Prune',
-    'analyze' => 'Analyze audio',
-    _ => kind,
-  };
-
-  /// What a kind costs, for the kinds where that is not obvious. Only
-  /// analyze has one: it is the sole pass that decodes audio, and an
-  /// administrator who reads it as another scan will switch it on for a
-  /// large library and wonder why the machine is busy all night.
-  static String? _blurb(String kind) => switch (kind) {
-    'analyze' =>
-      'Measures loudness, fingerprints, and waveforms. Decodes every '
-          'audio file, so a large library takes hours. Resumable: files '
-          'already analyzed are skipped.',
-    _ => null,
-  };
-
-  @override
-  void dispose() {
-    _cron.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref
-          .read(schedulesProvider.notifier)
-          .save(
-            widget.schedule.kind,
-            cron: _cron.text.trim(),
-            enabled: _enabled,
-          );
-      messenger.showSnackBar(
-        SnackBar(content: Text('${_label(widget.schedule.kind)} saved')),
-      );
-    } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    final schedule = widget.schedule;
-    final kind = schedule.kind;
-    final blurb = _blurb(kind);
-    final status = StringBuffer();
-    if (schedule.lastRunAt != null) {
-      status.write('Last run ${schedule.lastStatus ?? 'unknown'}');
-    }
-    if (schedule.nextRunAt != null) {
-      if (status.isNotEmpty) status.write(', ');
-      status.write('next ${schedule.nextRunAt!.toLocal()}');
-    }
-    return Semantics(
-      identifier: SemanticsIds.scheduleRow(kind),
-      container: true,
-      child: Card(
-        key: ValueKey(SemanticsIds.scheduleRow(kind)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(_label(kind), style: textTheme.titleSmall),
-                  ),
-                  Semantics(
-                    identifier: SemanticsIds.scheduleEnabled(kind),
-                    child: Switch(
-                      key: Key(SemanticsIds.scheduleEnabled(kind)),
-                      value: _enabled,
-                      onChanged: (value) => setState(() => _enabled = value),
-                    ),
-                  ),
-                ],
-              ),
-              if (blurb != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(blurb, style: textTheme.bodySmall),
-                ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Semantics(
-                      identifier: SemanticsIds.scheduleCron(kind),
-                      child: TextField(
-                        key: Key(SemanticsIds.scheduleCron(kind)),
-                        controller: _cron,
-                        decoration: const InputDecoration(
-                          labelText: 'Cron',
-                          helperText: 'minute hour day month weekday',
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Semantics(
-                    identifier: SemanticsIds.scheduleSave(kind),
-                    child: FilledButton.tonal(
-                      key: Key(SemanticsIds.scheduleSave(kind)),
-                      onPressed: _busy ? null : _save,
-                      child: const Text('Save'),
-                    ),
-                  ),
-                ],
-              ),
-              if (status.isNotEmpty)
-                Text(status.toString(), style: textTheme.bodySmall),
-              if (schedule.lastError != null)
-                Text(
-                  schedule.lastError!,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.error,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Backup retention (count and megabytes) bound to the admin settings.
 class _RetentionFields extends ConsumerStatefulWidget {
   const _RetentionFields();
@@ -613,7 +453,7 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
   Future<void> _save(AdminSettings settings) async {
     if (_busy) return;
     setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref
           .read(adminSettingsProvider.notifier)
@@ -629,9 +469,9 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
                   1024,
             ),
           );
-      messenger.showSnackBar(const SnackBar(content: Text('Retention saved')));
+      messenger.show('Retention saved');
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

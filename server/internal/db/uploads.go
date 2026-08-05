@@ -203,13 +203,55 @@ func (d *DB) UploadOwnsItem(ctx context.Context, userID, itemPID string) (bool, 
 	return true, nil
 }
 
-// UploadBytesInUse sums the declared sizes of a user's live sessions
-// (everything not discarded), which is what quota checks charge.
+// UploadedItemPIDs reports which of the given catalog items an upload
+// session produced. The discovery sweeper asks: a file that arrived
+// through the upload pipeline was already reviewed on its way in, and
+// the scan that indexes it afterwards must not open a second entry for
+// the same audio.
+func (d *DB) UploadedItemPIDs(ctx context.Context, itemPIDs []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(itemPIDs))
+	if len(itemPIDs) == 0 {
+		return out, nil
+	}
+	args := make([]any, 0, len(itemPIDs))
+	placeholders := make([]byte, 0, len(itemPIDs)*2)
+	for i, pid := range itemPIDs {
+		if i > 0 {
+			placeholders = append(placeholders, ',')
+		}
+		placeholders = append(placeholders, '?')
+		args = append(args, pid)
+	}
+	rows, err := d.r.QueryContext(ctx,
+		`SELECT DISTINCT item_pid FROM uploads WHERE item_pid IN (`+string(placeholders)+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing uploaded items: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var pid string
+		if err := rows.Scan(&pid); err != nil {
+			return nil, fmt.Errorf("db: listing uploaded items: %w", err)
+		}
+		out[pid] = true
+	}
+	return out, rows.Err()
+}
+
+// UploadBytesInUse sums the declared sizes of a user's sessions still
+// sitting in staging, which is what quota checks charge.
+//
+// Neither discarded nor imported counts. The quota is a ceiling on
+// in-flight footprint - what may wait in staging for a decision - not a
+// cap on what an account has contributed, so a session that reached the
+// library releases the room it held. Charging imported sessions instead
+// made a filled quota permanent: nothing releases them, and deleting the
+// item they became does not touch this table.
 func (d *DB) UploadBytesInUse(ctx context.Context, userID string) (int64, error) {
 	var n sql.NullInt64
 	err := d.r.QueryRowContext(ctx, `
 		SELECT SUM(size_bytes) FROM uploads
-		WHERE user_id = ? AND state != 'discarded'`, userID).Scan(&n)
+		WHERE user_id = ? AND state NOT IN ('discarded', 'imported')`, userID).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("db: summing upload use: %w", err)
 	}

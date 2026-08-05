@@ -217,32 +217,8 @@ final reviewEntryProvider = AsyncNotifierProvider.autoDispose
       ReviewEntryController.new,
     );
 
-/// The catalog libraries, for the matching-mode control. Admin-only on
-/// the server; a non-admin caller never opens the control that reads it.
-final librariesProvider = FutureProvider<List<LibraryInfo>>(
-  (ref) => ref.watch(repositoryProvider).listLibraries(),
-);
-
-/// One library's matching mode, keyed by pid.
-final libraryMatchingProvider =
-    AsyncNotifierProvider.family<LibraryMatchingController, String, String>(
-      LibraryMatchingController.new,
-    );
-
-/// Reads and sets a library's automatic matching behavior.
-class LibraryMatchingController extends AsyncNotifier<String> {
-  LibraryMatchingController(this.libraryPid);
-
-  final String libraryPid;
-
-  @override
-  Future<String> build() =>
-      ref.watch(repositoryProvider).getLibraryMatching(libraryPid);
-
-  Future<void> setMode(String mode) async {
-    final stored = await ref
-        .read(repositoryProvider)
-        .setLibraryMatching(libraryPid, mode);
-    state = AsyncData(stored);
-  }
-}
+// The catalog libraries and their matching modes moved to
+// `admin/admin_providers.dart` when the console gained a libraries
+// screen: the review screen's matching menu is one reader of that state
+// and the libraries table is the other, and two declarations of it would
+// be two caches disagreeing about what a library is set to.

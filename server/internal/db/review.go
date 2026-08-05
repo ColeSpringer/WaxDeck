@@ -183,6 +183,49 @@ func (d *DB) ReviewStatsNow(ctx context.Context) (ReviewStats, error) {
 	return s, nil
 }
 
+// PendingReviewUnit names one entry still awaiting a decision, by the
+// three columns that define the album unit it covers.
+type PendingReviewUnit struct {
+	LibraryPID string
+	Title      string
+	Artist     string
+}
+
+// PendingReviewUnits lists the units still awaiting a decision.
+//
+// The discovery sweeper's idempotence guard. An album unit is defined by
+// its library, its album title, and its album artist, so an entry
+// already waiting on those three is an entry for the same unit - which
+// is what a re-read of the change log, or an album whose files straddle
+// two passes, would otherwise open a second time.
+//
+// The values come back exactly as stored, and the caller folds case
+// itself. SQLite's lower() is ASCII-only (it leaves "ÉTÉ" as "ÉtÉ")
+// while Go's strings.ToLower is not, so folding here and comparing
+// there would make every accented album miss its own entry and open a
+// fresh one on every tick, forever. Columns only: the payload holds the
+// exact file list, and parsing every pending entry's JSON on every tick
+// to learn what three indexed columns answer is not worth the
+// exactness.
+func (d *DB) PendingReviewUnits(ctx context.Context) ([]PendingReviewUnit, error) {
+	rows, err := d.r.QueryContext(ctx, `
+		SELECT library_pid, title, artist FROM review_entries
+		WHERE status = 'pending'`)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing pending review units: %w", err)
+	}
+	defer rows.Close()
+	var out []PendingReviewUnit
+	for rows.Next() {
+		var unit PendingReviewUnit
+		if err := rows.Scan(&unit.LibraryPID, &unit.Title, &unit.Artist); err != nil {
+			return nil, fmt.Errorf("db: listing pending review units: %w", err)
+		}
+		out = append(out, unit)
+	}
+	return out, rows.Err()
+}
+
 // EnqueueMatch queues an entry for the identify worker. Re-queueing an
 // already queued entry is a no-op.
 func (d *DB) EnqueueMatch(ctx context.Context, entryID string) error {

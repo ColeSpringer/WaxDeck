@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/users_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
@@ -47,15 +48,17 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    final adminRow = find.byKey(const ValueKey('user-row-us-1'));
+    final adminRow = find.bySemanticsIdentifier('user-row-us-1');
     expect(adminRow, findsOneWidget);
     expect(
       find.descendant(of: adminRow, matching: find.text('admin')),
       findsOneWidget,
     );
-    final disabledRow = find.byKey(const ValueKey('user-row-us-2'));
+    // The state is a column of its own now rather than a chip beside
+    // the name: a table row says active, pending, or disabled once.
+    final disabledRow = find.bySemanticsIdentifier('user-row-us-2');
     expect(
-      find.descendant(of: disabledRow, matching: find.text('disabled')),
+      find.descendant(of: disabledRow, matching: find.text('Disabled')),
       findsOneWidget,
     );
   });
@@ -84,11 +87,20 @@ void main() {
     await tester.pumpAndSettle();
 
     // Grant the admin role and uploads in the prefilled editor.
-    await tester.tap(find.byKey(const Key('user-admin-role')));
-    await tester.tap(find.byKey(const Key('user-upload-enabled')));
+    await tester.tap(
+      find.bySemanticsIdentifier('user-admin-role'),
+      warnIfMissed: false,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier('user-upload-enabled'),
+      warnIfMissed: false,
+    );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('user-save')));
-    await tester.tap(find.byKey(const Key('user-save')));
+    await tester.ensureVisible(find.bySemanticsIdentifier('user-save'));
+    await tester.tap(
+      find.bySemanticsIdentifier('user-save'),
+      warnIfMissed: false,
+    );
     await tester.pumpAndSettle();
 
     final call = repo.approveSignupCalls.single;
@@ -171,6 +183,49 @@ void main() {
     expect(
       find.descendant(of: row, matching: find.text('revoked')),
       findsOneWidget,
+    );
+  });
+  // Kids mode is admin-configured in v1 by decision: there is no
+  // kid-facing UI, so the preset is the whole of it. One press, and
+  // everything it set stays editable.
+  testWidgets('the child preset locks the account down in one press', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repo = FakeRepository();
+    repo.usersById['us-3'] = _account('us-3', username: 'merry');
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier('user-row-us-3'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.userChildPreset),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.bySemanticsIdentifier('user-save'));
+    await tester.tap(
+      find.bySemanticsIdentifier('user-save'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    final stored = repo.usersById['us-3']!;
+    expect(stored.roles, ['user']);
+    expect(stored.uploadEnabled, isFalse);
+    expect(stored.permissions.download, isFalse);
+    expect(stored.permissions.delete, isFalse);
+    expect(stored.permissions.explicitContent, isFalse);
+    // A deny rule for what files actually carry: there is no canonical
+    // explicit flag in music metadata, so the advisory tag is what the
+    // rules act on.
+    expect(
+      stored.permissions.tagDeny.map((r) => '${r.key}=${r.value}'),
+      contains('ITUNESADVISORY=1'),
     );
   });
 }

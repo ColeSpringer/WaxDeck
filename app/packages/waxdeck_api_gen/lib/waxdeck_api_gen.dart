@@ -147,6 +147,7 @@ export 'package:waxdeck_api_gen/src/model/lastfm_connect_start.dart';
 export 'package:waxdeck_api_gen/src/model/libraries.dart';
 export 'package:waxdeck_api_gen/src/model/library_access.dart';
 export 'package:waxdeck_api_gen/src/model/library_create.dart';
+export 'package:waxdeck_api_gen/src/model/library_created.dart';
 export 'package:waxdeck_api_gen/src/model/library_matching.dart';
 export 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 export 'package:waxdeck_api_gen/src/model/linked_identity.dart';

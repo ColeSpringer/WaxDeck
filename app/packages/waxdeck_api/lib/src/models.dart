@@ -2818,7 +2818,14 @@ class DiagnosticCount {
 /// One entity in a duplicate group.
 /// One catalog library (a scanned root).
 class LibraryInfo {
-  const LibraryInfo({required this.pid, required this.name, this.media});
+  const LibraryInfo({
+    required this.pid,
+    required this.name,
+    this.media,
+    this.path,
+    this.itemCount,
+    this.streamingWarning,
+  });
 
   final String pid;
   final String name;
@@ -2826,6 +2833,60 @@ class LibraryInfo {
   /// The content class the library holds (`music`, `audiobook`,
   /// `mixed`), when declared.
   final String? media;
+
+  /// The root directory on the server, for the screen that manages it.
+  /// Absent where the catalog holds a path it cannot render as text.
+  final String? path;
+
+  /// What the catalog holds under the root. Absent where nothing counted
+  /// it, which is every answer but the listing's.
+  final int? itemCount;
+
+  /// Set on a freshly created library whose root the streaming sidecar
+  /// did not take: the library works for browsing, downloading, and
+  /// direct playback, and streaming waits for a sidecar restart.
+  final String? streamingWarning;
+}
+
+/// One genre in the canonical vocabulary: its display spelling, the
+/// top-level genre it groups under, and the spellings that fold onto it.
+class GenreNode {
+  const GenreNode({
+    required this.name,
+    this.parent,
+    this.aliases = const <String>[],
+  });
+
+  final String name;
+
+  /// The parent genre's canonical name, or null for a top-level genre.
+  /// The tree is two levels deep, so a parent never has one of its own.
+  final String? parent;
+
+  final List<String> aliases;
+
+  GenreNode copyWith({
+    String? name,
+    String? parent,
+    bool clearParent = false,
+    List<String>? aliases,
+  }) => GenreNode(
+    name: name ?? this.name,
+    parent: clearParent ? null : (parent ?? this.parent),
+    aliases: aliases ?? this.aliases,
+  );
+}
+
+/// The vocabulary in force, and whether it is the shipped default or one
+/// stored on this instance.
+class GenreTree {
+  const GenreTree({required this.source, required this.genres});
+
+  /// `default` or `custom`.
+  final String source;
+  final List<GenreNode> genres;
+
+  bool get isDefault => source == 'default';
 }
 
 class DuplicateEntity {

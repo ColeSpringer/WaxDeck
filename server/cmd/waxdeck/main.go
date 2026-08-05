@@ -838,6 +838,54 @@ func run() error {
 		}
 	})
 
+	// Files a scan discovers reach the matching pipeline the same way:
+	// by tailing the catalog's change log rather than by an ingest hook,
+	// because a scan indexes files without WaxDeck being in the loop.
+	// The pass defers while a catalog job runs, which is what lets an
+	// album arrive whole rather than one entry per file indexed so far,
+	// so the ticker is slower than the sweeps that are pure computation.
+	group.Go(ctx, "discovery-match", func(ctx context.Context) error {
+		first := time.NewTimer(90 * time.Second)
+		defer first.Stop()
+		tick := time.NewTicker(3 * time.Minute)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-first.C:
+			case <-tick.C:
+			}
+			// Paced, not drained. A first scan of a large library holds
+			// thousands of album units and each pass re-reads the
+			// pending set, so looping back to back would spend the
+			// import as one long burst against a table the burst is
+			// growing - and the identify worker behind it is the thing
+			// that actually has to keep up. A short breath between
+			// passes turns that into a steady trickle; the ticker is
+			// the backstop either way.
+			for {
+				rep, err := svc.SweepDiscoveries(ctx)
+				if err != nil {
+					log.Warn("scan discovery sweep", "err", err)
+					break
+				}
+				if rep.Opened > 0 {
+					log.Info("scan discovery sweep",
+						"considered", rep.Considered, "opened", rep.Opened)
+				}
+				if !rep.More || ctx.Err() != nil {
+					break
+				}
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(2 * time.Second):
+				}
+			}
+		}
+	})
+
 	var oidc *auth.OIDC
 	if *oidcIssuer != "" {
 		if *publicBase == "" {

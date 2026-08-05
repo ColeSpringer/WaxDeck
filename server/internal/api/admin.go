@@ -471,11 +471,37 @@ func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObje
 		}
 		return nil, err
 	}
+	// The generators flatten the allOf, so this is Library's fields plus
+	// the warning rather than an embedded value.
+	base := libraryDTO(lib)
+	out := LibraryCreated{
+		Pid:       base.Pid,
+		Name:      base.Name,
+		Media:     base.Media,
+		Path:      base.Path,
+		ItemCount: base.ItemCount,
+	}
+	if lib.StreamingWarning != "" {
+		out.StreamingWarning = ptr(lib.StreamingWarning)
+	}
+	return CreateLibrary201JSONResponse(out), nil
+}
+
+// libraryDTO renders a catalog library for the admin surface. The count
+// is omitted rather than sent as zero where nothing counted it (a
+// create), so a client can tell "nothing here yet" from "not asked".
+func libraryDTO(lib service.LibraryInfo) Library {
 	out := Library{Pid: lib.PID, Name: lib.Name}
 	if lib.Media != "" {
 		out.Media = ptr(lib.Media)
 	}
-	return CreateLibrary201JSONResponse(out), nil
+	if lib.Path != "" {
+		out.Path = ptr(lib.Path)
+	}
+	if lib.ItemCount > 0 {
+		out.ItemCount = ptr(lib.ItemCount)
+	}
+	return out
 }
 
 // --- migration ---------------------------------------------------------------------

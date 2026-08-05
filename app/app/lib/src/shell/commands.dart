@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart' show MediaType;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../admin/dashboard_screen.dart';
 import '../connect/device_picker.dart';
 import '../desktop/mini_window.dart';
 import '../player/lyrics.dart';
@@ -14,6 +15,7 @@ import '../player/now_playing_controller.dart';
 import '../player/output_volume.dart';
 import '../playlists/playlist_create.dart';
 import '../queue/queue_controller.dart';
+import '../settings/settings_registry.dart';
 import '../queue/queue_view.dart';
 import '../radio/radio_controller.dart';
 import 'command_palette.dart';
@@ -343,6 +345,24 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
     ],
     // The search screen autofocuses its own field.
     run: (context, ref) => context.go(WaxRoute.search),
+  ),
+  // Administrators only, and withheld rather than disabled for everyone
+  // else: an account that cannot start a scan should not be taught a
+  // command for it. `offered` is what does that - it is read once by the
+  // registry, so the command is absent from the palette and from the
+  // shortcut sheet alike.
+  WaxCommand(
+    id: 'scan-library',
+    label: 'Scan library',
+    section: WaxCommandSection.app,
+    glyph: WaxIcons.refresh,
+    // Watched, not read: build() is the one place a predicate may, and a
+    // read registers no dependency - a registry first built while the
+    // session was still loading would hide the command for the
+    // container's life. isAdminProvider rather than a fourth spelling
+    // of roles.contains.
+    offered: (ref) => ref.watch(isAdminProvider),
+    run: (context, ref) => unawaited(startLibraryScan(ref)),
   ),
   WaxCommand(
     id: 'shortcuts',

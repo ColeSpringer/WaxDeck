@@ -55,7 +55,8 @@ func (l *Library) SetFlowRoots(s FlowRootSync) { l.flowRoots = s }
 // root, and kicks a background scan. Browsing and downloading the new
 // root's files work once the scan indexes them; streaming works as soon as
 // the sidecar reconciles, and degrades to needing a sidecar restart when
-// it cannot. Administrators only.
+// it cannot - which the returned StreamingWarning reports. Administrators
+// only.
 func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInput) (LibraryInfo, error) {
 	if !uc.Admin {
 		return LibraryInfo{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
@@ -116,7 +117,17 @@ func (l *Library) AddLibrary(ctx context.Context, uc *UserCtx, in AddLibraryInpu
 		detail["streamingWarning"] = streamWarning
 	}
 	l.Audit(ctx, uc, "library.create", AuditTarget{Kind: "library", PID: apiLibPID}, detail)
-	return LibraryInfo{PID: apiLibPID, Name: name, Media: string(lib.MediaType())}, nil
+	return LibraryInfo{
+		PID:   apiLibPID,
+		Name:  name,
+		Media: string(lib.MediaType()),
+		Path:  path,
+		// The 201 carries it as well as the audit entry now: the
+		// administrator who made the change is looking at the response,
+		// and asking them to go and read the log for the half that
+		// degraded is how a silent partial success happens.
+		StreamingWarning: streamWarning,
+	}, nil
 }
 
 // syncFlowRoot brings the streaming sidecar to the new root. It

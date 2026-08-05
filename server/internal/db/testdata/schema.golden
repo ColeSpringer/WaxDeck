@@ -524,6 +524,7 @@ table uploads
   index uploads_batch|unique=0|partial=1|(batch_id)
   index uploads_entry|unique=0|partial=1|(review_entry_id)
   index uploads_item|unique=0|partial=0|(item_pid,user_id)
+  index uploads_staged|unique=0|partial=1|(user_id,size_bytes)
   index uploads_user|unique=0|partial=0|(user_id,created_at_ns DESC,id)
 table users
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0

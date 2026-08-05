@@ -85,7 +85,7 @@ class AccountSectionBody extends ConsumerWidget {
         ),
         const SizedBox(height: WaxSpace.s24),
         SectionHeader(title: 'About'),
-        const AboutRow(semanticsId: 'about'),
+        const AboutRow(semanticsId: SemanticsIds.aboutRow),
         const SizedBox(height: WaxSpace.s24),
         WaxButton(
           label: 'Sign out',

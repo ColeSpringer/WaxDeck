@@ -1158,8 +1158,44 @@ gen.ReviewBulkDecisionActionEnum reviewBulkActionToGen(String action) =>
 
 /// Bridges the matching mode to its wire name; the generated Dart name
 /// for `false` is `false_`.
-LibraryInfo libraryInfoFromGen(gen.ModelLibrary l) =>
-    LibraryInfo(pid: l.pid, name: l.name, media: l.media);
+LibraryInfo libraryInfoFromGen(gen.ModelLibrary l) => LibraryInfo(
+  pid: l.pid,
+  name: l.name,
+  media: l.media,
+  path: l.path,
+  itemCount: l.itemCount,
+);
+
+/// The create response is the same library plus what creating it left
+/// degraded, so it maps through the listing's own conversion.
+LibraryInfo libraryCreatedFromGen(gen.LibraryCreated l) => LibraryInfo(
+  pid: l.pid,
+  name: l.name,
+  media: l.media,
+  path: l.path,
+  itemCount: l.itemCount,
+  streamingWarning: l.streamingWarning,
+);
+
+GenreNode genreNodeFromGen(gen.GenreNode n) => GenreNode(
+  name: n.name,
+  parent: (n.parent ?? '').isEmpty ? null : n.parent,
+  aliases: n.aliases?.toList(growable: false) ?? const <String>[],
+);
+
+gen.GenreNode genreNodeToGen(GenreNode n) => gen.GenreNode(
+  (b) => b
+    ..name = n.name
+    ..parent = n.parent
+    ..aliases = n.aliases.isEmpty
+        ? null
+        : (ListBuilder<String>()..addAll(n.aliases)),
+);
+
+GenreTree genreTreeFromGen(gen.GenreTree t) => GenreTree(
+  source: t.source_.name,
+  genres: t.genres.map(genreNodeFromGen).toList(growable: false),
+);
 
 String libraryMatchingModeFromGen(gen.LibraryMatching m) => m.mode.name;
 

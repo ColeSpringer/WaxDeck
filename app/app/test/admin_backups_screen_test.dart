@@ -32,8 +32,8 @@ class _ZipPicker implements FilePickerPort {
   }) async => archive;
 }
 
-/// A viewport tall enough to hold archives, schedules, and retention,
-/// so no test scrolls through lazily built rows.
+/// A viewport tall enough to hold the archives and the retention
+/// fields, so no test scrolls through lazily built rows.
 Future<void> _pump(
   WidgetTester tester,
   FakeRepository repo, {
@@ -65,7 +65,7 @@ Backup _backup(String id, {String state = 'done'}) => Backup(
 );
 
 void main() {
-  testWidgets('lists archives and the three schedules', (tester) async {
+  testWidgets('lists archives', (tester) async {
     final repo = FakeRepository();
     repo.backupsById['ba-1'] = _backup('ba-1');
     await _pump(tester, repo);
@@ -76,18 +76,6 @@ void main() {
       find.descendant(
         of: row,
         matching: find.textContaining('3.0 MB, done, manual'),
-      ),
-      findsOneWidget,
-    );
-    for (final kind in const ['scan', 'backup', 'prune', 'analyze']) {
-      expect(find.byKey(ValueKey('schedule-row-$kind')), findsOneWidget);
-    }
-    // Only analyze carries a cost line; it is the one kind whose price
-    // an administrator cannot guess from its name.
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('schedule-row-analyze')),
-        matching: find.textContaining('Decodes every audio file'),
       ),
       findsOneWidget,
     );
@@ -141,41 +129,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.cancelStagedRestoreCalls, 1);
     expect(find.byKey(const Key('restore-banner')), findsNothing);
-  });
-
-  testWidgets('an invalid cron surfaces the server message', (tester) async {
-    final repo = FakeRepository();
-    await _pump(tester, repo);
-
-    await tester.enterText(
-      find.byKey(const Key('schedule-cron-scan')),
-      'whenever feels right',
-    );
-    await tester.tap(find.byKey(const Key('schedule-save-scan')));
-    await tester.pumpAndSettle();
-
-    expect(repo.putScheduleCalls.single.kind, 'scan');
-    expect(find.text('invalid cron expression'), findsOneWidget);
-    // The stored schedule is untouched.
-    expect(repo.schedules['scan']!.cron, '0 3 * * *');
-  });
-
-  testWidgets('a valid schedule save stores cron and enablement', (
-    tester,
-  ) async {
-    final repo = FakeRepository();
-    await _pump(tester, repo);
-
-    await tester.tap(find.byKey(const Key('schedule-enabled-backup')));
-    await tester.enterText(
-      find.byKey(const Key('schedule-cron-backup')),
-      '30 4 * * 1',
-    );
-    await tester.tap(find.byKey(const Key('schedule-save-backup')));
-    await tester.pumpAndSettle();
-
-    expect(repo.schedules['backup']!.cron, '30 4 * * 1');
-    expect(repo.schedules['backup']!.enabled, isTrue);
   });
 
   testWidgets('importing an archive streams it and refreshes the list', (

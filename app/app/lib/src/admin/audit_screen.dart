@@ -1,11 +1,12 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import 'admin_console.dart';
 
 /// The action-prefix filter above the audit list.
 class AuditFilterController extends Notifier<String> {
@@ -103,7 +104,8 @@ final auditProvider = AsyncNotifierProvider<AuditController, AuditState>(
   AuditController.new,
 );
 
-/// The audit log: who did what, newest first, with expandable detail.
+/// The audit log: who did what, newest first, with the stored detail
+/// behind each row.
 class AuditScreen extends ConsumerStatefulWidget {
   const AuditScreen({super.key});
 
@@ -116,6 +118,10 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
     text: ref.read(auditFilterProvider),
   );
 
+  /// Which row has its detail open. One at a time: the detail is a JSON
+  /// block, and several expanded at once turns the log into a wall.
+  String? _expanded;
+
   @override
   void dispose() {
     _filter.dispose();
@@ -124,94 +130,108 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sizeClass = WaxSizeClass.of(context);
     final audit = ref.watch(auditProvider);
-    final filter = ref.watch(auditFilterProvider);
-    return Semantics(
-      identifier: SemanticsIds.adminAudit,
-      container: true,
-      child: Scaffold(
-        appBar: AppBar(title: const Text('Audit log')),
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Semantics(
-                identifier: SemanticsIds.auditFilter,
-                child: TextField(
-                  key: const Key(SemanticsIds.auditFilter),
-                  controller: _filter,
-                  decoration: InputDecoration(
-                    labelText: 'Filter by action',
-                    hintText: 'user. or backup.create',
-                    prefixIcon: const Icon(Icons.filter_alt_outlined),
-                    suffixIcon: filter.isEmpty
-                        ? null
-                        : IconButton(
-                            key: const Key('audit-filter-clear'),
-                            tooltip: 'Clear filter',
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _filter.clear();
-                              ref.read(auditFilterProvider.notifier).set('');
-                            },
-                          ),
-                  ),
-                  onSubmitted: (value) =>
-                      ref.read(auditFilterProvider.notifier).set(value.trim()),
-                ),
+    return WaxScaffold(
+      title: 'Audit log',
+      largeTitle: false,
+      semanticsId: SemanticsIds.adminAudit,
+      onBack: adminBack(context),
+      slivers: <Widget>[
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: sizeClass.gutter.add(
+              const EdgeInsets.only(bottom: WaxSpace.s12),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: SearchField(
+                label: 'Filter by action',
+                hint: 'user. or backup.create',
+                controller: _filter,
+                semanticsId: SemanticsIds.auditFilter,
+                clearSemanticsId: SemanticsIds.auditFilterClear,
+                // Submitting applies it: each keystroke would be a
+                // request, and an action prefix is typed whole. The
+                // change handler is what redraws the clear control as
+                // the field fills, and clearing the field applies the
+                // empty filter without a second press.
+                onChanged: (value) {
+                  if (value.isEmpty) {
+                    ref.read(auditFilterProvider.notifier).set('');
+                  }
+                  setState(() {});
+                },
+                onSubmitted: (value) =>
+                    ref.read(auditFilterProvider.notifier).set(value.trim()),
               ),
             ),
-            Expanded(
-              child: switch (audit) {
-                AsyncData(:final value) => _list(value),
-                AsyncError(:final error) => _errorView(error),
-                _ => const Center(child: CircularProgressIndicator()),
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _errorView(Object error) {
-    final message = error is WaxDeckApiException
-        ? error.message
-        : 'Could not load the audit log';
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () => ref.invalidate(auditProvider),
-            child: const Text('Retry'),
           ),
-        ],
-      ),
+        ),
+        switch (audit) {
+          AsyncData(:final value) when value.events.isEmpty =>
+            const SliverToBoxAdapter(
+              child: EmptyState(
+                glyph: WaxIcons.info,
+                title: 'Nothing logged yet',
+                message:
+                    'Administrative actions are recorded here as they happen.',
+              ),
+            ),
+          AsyncData(:final value) => _list(sizeClass, value),
+          AsyncError(:final error) => SliverToBoxAdapter(
+            child: ErrorState(
+              title: 'Could not load the audit log',
+              message: error is WaxDeckApiException
+                  ? error.message
+                  : 'Something went wrong reading it.',
+              onRetry: () => ref.invalidate(auditProvider),
+            ),
+          ),
+          _ => const SliverToBoxAdapter(
+            child: SkeletonShapes(shape: SkeletonShape.list),
+          ),
+        },
+      ],
     );
   }
 
-  Widget _list(AuditState state) {
-    if (state.events.isEmpty) {
-      return const Center(child: Text('Nothing logged yet'));
-    }
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        final metrics = notification.metrics;
-        if (metrics.pixels >= metrics.maxScrollExtent - 400) {
-          ref.read(auditProvider.notifier).loadMore();
-        }
-        return false;
-      },
-      child: ListView.builder(
+  Widget _list(WaxSizeClass sizeClass, AuditState state) {
+    return SliverPadding(
+      padding: sizeClass.gutter.add(
+        const EdgeInsets.only(bottom: WaxSpace.s32),
+      ),
+      sliver: SliverList.builder(
         itemCount: state.events.length + (state.loadingMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= state.events.length) {
-            return const Center(child: CircularProgressIndicator());
+            return const Padding(
+              padding: EdgeInsets.all(WaxSpace.s16),
+              child: Center(child: CircularProgressIndicator()),
+            );
           }
-          return _AuditRow(event: state.events[index]);
+          // Paging asks from the tail rather than from a scroll
+          // listener: the list is a sliver inside the page's own scroll
+          // view now, so building the last row is what says "near the
+          // end". The controller's own guards make a repeat a no-op.
+          if (index == state.events.length - 1) {
+            // Guarded: the callback runs after the frame, and navigating
+            // away as the last row builds disposes this State first -
+            // touching ref then throws. The NotificationListener this
+            // replaced could not outlive the widget and needed no guard.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              ref.read(auditProvider.notifier).loadMore();
+            });
+          }
+          final event = state.events[index];
+          return _AuditRow(
+            event: event,
+            expanded: _expanded == event.id,
+            onToggle: () => setState(
+              () => _expanded = _expanded == event.id ? null : event.id,
+            ),
+          );
         },
       ),
     );
@@ -219,9 +239,15 @@ class _AuditScreenState extends ConsumerState<AuditScreen> {
 }
 
 class _AuditRow extends StatelessWidget {
-  const _AuditRow({required this.event});
+  const _AuditRow({
+    required this.event,
+    required this.expanded,
+    required this.onToggle,
+  });
 
   final AuditEvent event;
+  final bool expanded;
+  final VoidCallback onToggle;
 
   /// Rough relative age, enough to scan the log by eye.
   static String relativeTime(DateTime at, {DateTime? now}) {
@@ -235,37 +261,86 @@ class _AuditRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
+    final colors = WaxColors.of(context);
     final subtitle = StringBuffer(event.actorName ?? 'system');
-    if (event.targetName != null) {
-      subtitle.write(', ${event.targetName}');
-    }
+    if (event.targetName != null) subtitle.write(', ${event.targetName}');
     subtitle.write(', ${relativeTime(event.createdAt)}');
-    return Semantics(
-      identifier: SemanticsIds.auditRow(event.id),
-      child: ExpansionTile(
-        key: ValueKey(SemanticsIds.auditRow(event.id)),
-        title: Text(event.action, style: textTheme.titleSmall),
-        subtitle: Text(subtitle.toString()),
-        children: [
-          if (event.detail.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('No further detail'),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  const JsonEncoder.withIndent('  ').convert(event.detail),
-                  style: textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        WaxTappable(
+          label: '${event.action}, $subtitle',
+          semanticsId: SemanticsIds.auditRow(event.id),
+          selected: expanded,
+          borderRadius: WaxRadius.chip,
+          onPressed: onToggle,
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: WaxRadius.chip,
+            child: InkWell(
+              onTap: onToggle,
+              borderRadius: WaxRadius.chip,
+              child: Padding(
+                padding: const EdgeInsets.all(WaxSpace.s8),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            event.action,
+                            style: WaxType.monoData.copyWith(
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            subtitle.toString(),
+                            style: WaxType.caption.copyWith(
+                              color: colors.textTertiary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    WaxIcon(
+                      expanded ? WaxIcons.collapse : WaxIcons.expand,
+                      size: 16,
+                      color: colors.textTertiary,
+                    ),
+                  ],
                 ),
               ),
             ),
-        ],
-      ),
+          ),
+        ),
+        if (expanded)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(
+              left: WaxSpace.s8,
+              bottom: WaxSpace.s8,
+            ),
+            padding: const EdgeInsets.all(WaxSpace.s12),
+            decoration: BoxDecoration(
+              color: colors.surface1,
+              borderRadius: WaxRadius.chip,
+            ),
+            // Detail is one JSON block and stays tabular: it scrolls
+            // sideways in its own box rather than wrapping into
+            // something nobody can read.
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Text(
+                event.detail.isEmpty
+                    ? 'No further detail'
+                    : const JsonEncoder.withIndent('  ').convert(event.detail),
+                style: WaxType.monoData.copyWith(color: colors.textSecondary),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

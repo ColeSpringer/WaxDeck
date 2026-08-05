@@ -137,31 +137,14 @@ enum WaxNavTarget {
     WaxNavSection.curation,
     needsUpload: true,
   ),
+  // The review queue keeps a shell entry of its own as well as a place
+  // in the console: it is the surface an administrator opens daily, and
+  // burying the keyboard-first screen one level deeper to tidy the group
+  // would cost more than the tidiness is worth.
   review(
     'Review queue',
     WaxIcons.check,
     WaxRoute.review,
-    WaxNavSection.curation,
-    adminOnly: true,
-  ),
-  health(
-    'Health',
-    WaxIcons.warning,
-    WaxRoute.health,
-    WaxNavSection.curation,
-    adminOnly: true,
-  ),
-  diagnostics(
-    'Diagnostics',
-    WaxIcons.info,
-    WaxRoute.diagnostics,
-    WaxNavSection.curation,
-    adminOnly: true,
-  ),
-  organize(
-    'Organize',
-    WaxIcons.sort,
-    WaxRoute.organize,
     WaxNavSection.curation,
     adminOnly: true,
   ),
@@ -176,38 +159,14 @@ enum WaxNavTarget {
     WaxNavSection.curation,
     needsUpload: true,
   ),
-  users(
-    'Users',
-    WaxIcons.artists,
-    WaxRoute.users,
-    WaxNavSection.curation,
-    adminOnly: true,
-  ),
-  audit(
-    'Audit log',
-    WaxIcons.recent,
-    WaxRoute.audit,
-    WaxNavSection.curation,
-    adminOnly: true,
-  ),
-  backups(
-    'Backups',
-    WaxIcons.bookmark,
-    WaxRoute.backups,
-    WaxNavSection.curation,
-    adminOnly: true,
-  ),
-  trash(
-    'Trash',
-    WaxIcons.delete,
-    WaxRoute.trash,
-    WaxNavSection.curation,
-    adminOnly: true,
-  ),
-  migrate(
-    'Import from another server',
-    WaxIcons.downloads,
-    WaxRoute.migrate,
+  // One entry for the console, which is where the other nine
+  // administrative surfaces live now. They were nine sidebar rows in a
+  // Curation group that told nobody how they related; the console's own
+  // section list groups them and says what each is for.
+  admin(
+    'Admin console',
+    WaxIcons.admin,
+    WaxRoute.admin,
     WaxNavSection.curation,
     adminOnly: true,
   );

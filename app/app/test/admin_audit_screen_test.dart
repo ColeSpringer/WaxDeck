@@ -37,7 +37,7 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    final row = find.byKey(const ValueKey('audit-row-au-1'));
+    final row = find.bySemanticsIdentifier('audit-row-au-1');
     expect(row, findsOneWidget);
     expect(
       find.descendant(of: row, matching: find.text('gandalf, pippin, 2h ago')),
@@ -67,17 +67,17 @@ void main() {
     ];
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('audit-row-au-2')), findsOneWidget);
+    expect(find.bySemanticsIdentifier('audit-row-au-2'), findsOneWidget);
 
-    await tester.enterText(find.byKey(const Key('audit-filter')), 'user.');
+    await tester.enterText(find.bySemanticsIdentifier('audit-filter'), 'user.');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('audit-row-au-1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('audit-row-au-2')), findsNothing);
+    expect(find.bySemanticsIdentifier('audit-row-au-1'), findsOneWidget);
+    expect(find.bySemanticsIdentifier('audit-row-au-2'), findsNothing);
 
-    await tester.tap(find.byKey(const Key('audit-filter-clear')));
+    await tester.tap(find.bySemanticsIdentifier('audit-filter-clear'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('audit-row-au-2')), findsOneWidget);
+    expect(find.bySemanticsIdentifier('audit-row-au-2'), findsOneWidget);
   });
 }

@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/query"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -27,7 +28,8 @@ type UserCtx struct {
 	// AllLibraries is false.
 	Libraries map[string]bool
 	// UploadEnabled grants the upload surface (administrators always
-	// have it); UploadQuotaBytes caps live uploads, 0 meaning no cap.
+	// have it); UploadQuotaBytes caps what may sit in upload staging at
+	// once, 0 meaning no cap.
 	UploadEnabled    bool
 	UploadQuotaBytes int64
 	// Granular permission toggles; administrators hold all of them.
@@ -253,11 +255,37 @@ type LibraryInfo struct {
 	PID   string
 	Name  string
 	Media string
+	// Path is the root directory, for the screen that manages it. Empty
+	// where the catalog holds a path it cannot render as text.
+	Path string
+	// ItemCount is what the catalog holds under the root, counted at read
+	// time. Only Libraries fills it; a create has nothing there yet.
+	ItemCount int64
+	// StreamingWarning is set by AddLibrary when the root exists but the
+	// streaming sidecar did not take it.
+	StreamingWarning string
 }
 
 // Libraries lists the catalog's libraries with their configured root
-// names (falling back to the root directory's base name).
+// names (falling back to the root directory's base name) and their
+// paths. Cheap: no counting.
+//
+// The Subsonic surface calls this on every getMusicFolders, which
+// clients issue on connect, so nothing here may touch the catalog's
+// item tables. LibrariesWithCounts is the variant that does, and only
+// the administrative listing asks for it.
 func (l *Library) Libraries(ctx context.Context) ([]LibraryInfo, error) {
+	return l.libraries(ctx, false)
+}
+
+// LibrariesWithCounts is Libraries plus how much each root holds. One
+// path-prefix count per library - see libraryItemCount for why that is
+// what it costs.
+func (l *Library) LibrariesWithCounts(ctx context.Context) ([]LibraryInfo, error) {
+	return l.libraries(ctx, true)
+}
+
+func (l *Library) libraries(ctx context.Context, counts bool) ([]LibraryInfo, error) {
 	libs, err := l.lib.Libraries(ctx)
 	if err != nil {
 		return nil, classify(err)
@@ -273,11 +301,43 @@ func (l *Library) Libraries(ctx context.Context) ([]LibraryInfo, error) {
 		if name == "" {
 			name = filepath.Base(lib.DisplayRoot)
 		}
-		out = append(out, LibraryInfo{
+		info := LibraryInfo{
 			PID:   apiPID(PrefixLibrary, lib.PID),
 			Name:  name,
 			Media: string(lib.MediaType()),
-		})
+			Path:  lib.DisplayRoot,
+		}
+		if counts {
+			info.ItemCount = l.libraryItemCount(ctx, lib.DisplayRoot)
+		}
+		out = append(out, info)
 	}
 	return out, nil
+}
+
+// libraryItemCount counts the playable items under a root by path
+// prefix, which is the same attribution every other library-scoped
+// answer uses: the catalog's query language has no library dimension,
+// and a file's path is what says which root it came from.
+//
+// It is not cheap. `startsWith` compiles to `LIKE ? ESCAPE '\'`, and
+// SQLite turns its LIKE optimization off whenever an ESCAPE clause is
+// present, so this scans rather than seeks. That is why counting is
+// opt-in on the listing rather than part of it, and why the upstream
+// ask for a library dimension exists. A count that cannot be taken
+// reports zero rather than failing the listing - the number is a
+// caption on an administrative table, and losing the table over it
+// would be the worse answer.
+func (l *Library) libraryItemCount(ctx context.Context, root string) int64 {
+	if root == "" {
+		return 0
+	}
+	prefix := strings.TrimSuffix(root, string(filepath.Separator)) + string(filepath.Separator)
+	q := query.New(query.EntityItems).Where("path", query.OpStartsWith, prefix).Build()
+	n, err := l.lib.Count(ctx, q, "")
+	if err != nil {
+		l.log.Warn("counting a library's items", "root", root, "err", err)
+		return 0
+	}
+	return int64(n)
 }

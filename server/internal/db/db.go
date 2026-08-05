@@ -526,6 +526,16 @@ const baselineSchema = `
 	CREATE INDEX uploads_item ON uploads (item_pid, user_id);
 	CREATE INDEX uploads_batch ON uploads (batch_id) WHERE batch_id != '';
 	CREATE INDEX uploads_entry ON uploads (review_entry_id) WHERE review_entry_id != '';
+	-- The pending-upload sum, over exactly the rows it charges. Partial
+	-- rather than (user_id, state): the predicate is a negated set, so a
+	-- state column could not be seeked on anyway, and the population
+	-- this indexes is bounded by retention while the table it lives in
+	-- is not. An account that imports steadily accumulates imported rows
+	-- for good - they stopped being charged, which is the point - and
+	-- summing over uploads_user would make every new session's quota
+	-- check walk all of them.
+	CREATE INDEX uploads_staged ON uploads (user_id, size_bytes)
+		WHERE state NOT IN ('discarded', 'imported');
 
 	-- Upload batches group several sessions into review units by a
 	-- declared grouping intent (one album, separate tracks, or

@@ -72,7 +72,8 @@ type UploadDTO struct {
 }
 
 // UploadQuotaDTO is the caller's allowance snapshot: declared bytes of
-// live sessions against the account cap (0 meaning no cap).
+// sessions still in staging against the account's pending-upload limit
+// (0 meaning no limit).
 type UploadQuotaDTO struct {
 	BytesInUse int64
 	QuotaBytes int64
@@ -150,7 +151,7 @@ func (l *Library) validateUploadTargetLibrary(ctx context.Context, uc *UserCtx, 
 }
 
 // CreateUpload opens a resumable session, charging the declared size
-// against the caller's quota up front.
+// against the caller's pending-upload limit up front.
 func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateParams) (UploadDTO, error) {
 	if err := l.requireUploader(uc); err != nil {
 		return UploadDTO{}, err
@@ -185,7 +186,7 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 		}
 		if used+p.SizeBytes > uc.UploadQuotaBytes {
 			return UploadDTO{}, &Error{Kind: KindQuota, Msg: fmt.Sprintf(
-				"quota is %d bytes, %d in use; this upload needs %d more",
+				"uploads waiting for review may total %d bytes, %d in use; this one needs %d more. Importing or discarding what is staged frees the room",
 				uc.UploadQuotaBytes, used, p.SizeBytes)}
 		}
 	}

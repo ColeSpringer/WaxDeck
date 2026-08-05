@@ -20,7 +20,7 @@ part 'user_update.g.dart';
 /// * [disabled] - Disable or re-enable the account. Disabling revokes its live sessions. 
 /// * [libraryAccess] 
 /// * [uploadEnabled] - Grant or revoke upload rights.
-/// * [uploadQuotaBytes] - New per-user upload cap in bytes; 0 removes the cap. 
+/// * [uploadQuotaBytes] - New ceiling on bytes held in upload staging at once; 0 removes it. 
 /// * [permissions] 
 @BuiltValue()
 abstract class UserUpdate implements Built<UserUpdate, UserUpdateBuilder> {
@@ -43,7 +43,7 @@ abstract class UserUpdate implements Built<UserUpdate, UserUpdateBuilder> {
   @BuiltValueField(wireName: r'uploadEnabled')
   bool? get uploadEnabled;
 
-  /// New per-user upload cap in bytes; 0 removes the cap. 
+  /// New ceiling on bytes held in upload staging at once; 0 removes it. 
   @BuiltValueField(wireName: r'uploadQuotaBytes')
   int? get uploadQuotaBytes;
 

@@ -561,22 +561,23 @@ func prefsJSON(p service.Prefs) Prefs {
 
 // --- libraries ---------------------------------------------------------------------
 
-func (s *Server) ListLibraries(ctx context.Context, _ ListLibrariesRequestObject) (ListLibrariesResponseObject, error) {
+func (s *Server) ListLibraries(ctx context.Context, req ListLibrariesRequestObject) (ListLibrariesResponseObject, error) {
 	p, ok := principalFromContext(ctx)
 	if !ok || !p.IsAdmin() {
 		return ListLibraries403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
+	// Counting is a scan per library, so it happens only where it was
+	// asked for. Everything else here is a name and a pid.
 	libs, err := s.svc.Libraries(ctx)
+	if derefBool(req.Params.Counts) {
+		libs, err = s.svc.LibrariesWithCounts(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
 	out := Libraries{Libraries: make([]Library, 0, len(libs))}
 	for _, lib := range libs {
-		item := Library{Pid: lib.PID, Name: lib.Name}
-		if lib.Media != "" {
-			item.Media = ptr(lib.Media)
-		}
-		out.Libraries = append(out.Libraries, item)
+		out.Libraries = append(out.Libraries, libraryDTO(lib))
 	}
 	return ListLibraries200JSONResponse(out), nil
 }

@@ -2365,8 +2365,14 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<List<LibraryInfo>> listLibraries() async =>
-      List.unmodifiable(libraries);
+  Future<List<LibraryInfo>> listLibraries({bool counts = false}) async {
+    listLibrariesCalls.add(counts);
+    return List.unmodifiable(libraries);
+  }
+
+  /// Whether each library listing asked for the per-root counts, so a
+  /// test can pin that the cheap callers stay cheap.
+  final List<bool> listLibrariesCalls = <bool>[];
 
   @override
   Future<LibraryInfo> createLibrary({
@@ -2379,9 +2385,58 @@ class FakeRepository implements WaxDeckRepository {
       pid: 'lb-${libraries.length + 1}',
       name: name,
       media: media ?? 'mixed',
+      path: path,
     );
     libraries.add(info);
-    return info;
+    return LibraryInfo(
+      pid: info.pid,
+      name: info.name,
+      media: info.media,
+      path: info.path,
+      streamingWarning: createLibraryWarning,
+    );
+  }
+
+  /// What the next [createLibrary] reports about streaming, so a test
+  /// can drive the degraded answer.
+  String? createLibraryWarning;
+
+  /// Scans this fake has been asked to start.
+  int rescans = 0;
+
+  @override
+  Future<Job> rescanLibrary() async {
+    rescans++;
+    return Job(pid: 'jb-scan-$rescans', kind: 'scan', state: 'running');
+  }
+
+  /// The stored vocabulary; empty means the shipped default is in force.
+  List<GenreNode> genreTree = <GenreNode>[];
+
+  /// Normalizations started, and whether each was a dry run.
+  final List<bool> genreNormalizations = <bool>[];
+
+  @override
+  Future<GenreTree> getGenreTree() async => GenreTree(
+    source: genreTree.isEmpty ? 'default' : 'custom',
+    genres: List.unmodifiable(genreTree),
+  );
+
+  @override
+  Future<GenreTree> putGenreTree(List<GenreNode> genres) async {
+    genreTree = List.of(genres);
+    return getGenreTree();
+  }
+
+  @override
+  Future<ToolTask> normalizeGenres({bool dryRun = false}) async {
+    genreNormalizations.add(dryRun);
+    return ToolTask(
+      id: 'tt-genre-${genreNormalizations.length}',
+      type: 'genre-normalize',
+      state: 'running',
+      createdAt: DateTime.utc(2026),
+    );
   }
 
   @override

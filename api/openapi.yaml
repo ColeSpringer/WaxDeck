@@ -385,7 +385,23 @@ paths:
         The catalog's libraries, for granting per-library visibility.
         Administrators only. Unpaginated: libraries are a handful of roots,
         not a collection that grows with content.
+
+        `itemCount` is opt-in through `counts`, because it is the one
+        field here that costs anything: the catalog has no library
+        dimension, so counting a root means matching every item's path
+        against it. Callers that want the names and pids - a permission
+        editor, a matching-mode menu - should leave it off.
       tags: [admin]
+      parameters:
+        - name: counts
+          in: query
+          description: >
+            Count the items under each root. Off by default; the count
+            is a scan per library, so it is asked for by the one screen
+            that shows it.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: All libraries.
@@ -410,7 +426,9 @@ paths:
         the scan indexes them. Streaming through the WaxFlow sidecar also
         needs the sidecar to mount the same-named root, so a runtime-added
         root streams once the sidecar learns it, while downloads and direct
-        playback do not wait on that. `name` is the display name and the
+        playback do not wait on that; when the sidecar cannot be brought to
+        the new root the 201 carries `streamingWarning` saying so, rather
+        than reporting a plain success. `name` is the display name and the
         WaxFlow root name the same directory is served under. Administrators
         only.
       tags: [admin]
@@ -422,11 +440,13 @@ paths:
               $ref: "#/components/schemas/LibraryCreate"
       responses:
         "201":
-          description: The created library.
+          description: >
+            The created library. `streamingWarning` is present when the
+            root exists but the streaming sidecar did not take it.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Library"
+                $ref: "#/components/schemas/LibraryCreated"
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "401":
@@ -8215,8 +8235,8 @@ paths:
       description: >
         Creates a resumable upload session for one audio file. The
         caller must hold upload rights; the declared size counts
-        against the caller's quota up front so a full quota fails
-        fast, and the file name's extension is checked against the
+        against the caller's pending-upload limit up front so a full
+        one fails fast, and the file name's extension is checked against the
         server's accepted formats. The required media type label
         routes the file to the matching library kind; `libraryPid`
         pins a specific library (required when several libraries of
@@ -9369,9 +9389,11 @@ components:
 
     QuotaExceeded:
       description: >
-        The upload would exceed the caller's storage quota (code
-        `quota-exceeded`). The message names the quota and current
-        use.
+        The upload would exceed the caller's pending-upload limit (code
+        `quota-exceeded`). The message names the limit and current use.
+        The limit caps what may sit in staging awaiting a decision, so
+        importing or discarding what is already there frees room for
+        this.
       content:
         application/json:
           schema:
@@ -9524,6 +9546,42 @@ components:
             Content class the library holds. Currently `music`,
             `audiobook`, `podcast`, or `mixed`; new values may appear.
           example: music
+        path:
+          type: string
+          description: >
+            Absolute filesystem path of the root, for the administrative
+            surface that manages it. Absent where the catalog cannot
+            render the stored path as text (roots on non-UTF8
+            filesystems are stored as raw bytes).
+          example: /srv/media/music
+        itemCount:
+          type: integer
+          format: int64
+          description: >
+            Playable items the catalog holds under this root. Present
+            only where the caller asked for counts, and counted at read
+            time, so it lags a running scan.
+
+    LibraryCreated:
+      allOf:
+        - $ref: "#/components/schemas/Library"
+        - type: object
+          description: What creating the library did beyond creating it.
+          properties:
+            streamingWarning:
+              type: string
+              description: >
+                Present when the library exists but streaming from it does
+                not work yet, saying what an administrator still has to do.
+                Creating a root reconciles the WaxFlow sidecar so it serves
+                the same directory; where that cannot happen (a sidecar too
+                old to reload, a path it cannot open) browsing, downloading,
+                and direct playback still work and streaming waits for a
+                sidecar restart. Absent means streaming works now.
+              example: >-
+                streaming from this library is not available yet: the
+                sidecar could not open /srv/media/audiobooks
+      description: A newly created library, with any degradation it left behind.
 
     Libraries:
       type: object
@@ -16886,14 +16944,17 @@ components:
           type: integer
           format: int64
           description: >
-            Declared bytes of the caller's live sessions (everything
-            not discarded); what quota checks charge.
+            Declared bytes of the caller's sessions still sitting in
+            staging: everything neither discarded nor imported. What
+            quota checks charge, so importing a session releases the
+            headroom it held.
         quotaBytes:
           type: integer
           format: int64
           description: >
-            The account's cap on `bytesInUse`; absent means no
-            per-user cap.
+            The account's ceiling on `bytesInUse`; absent means no
+            per-user cap. A limit on pending uploads, not on what the
+            account has contributed to the library.
 
     UploadPage:
       type: object
@@ -17013,8 +17074,12 @@ components:
               type: integer
               format: int64
               description: >
-                Total bytes of uploads the account may hold at once;
-                absent means no per-user cap.
+                Bytes the account may hold in upload staging at once,
+                awaiting review; absent means no per-user cap. A
+                pending-upload limit rather than a storage-contribution
+                cap: importing a session releases what it held, and
+                nothing here bounds what the account adds to the
+                library over time.
             createdAt:
               type: string
               format: date-time
@@ -17109,7 +17174,9 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Per-user upload cap in bytes; absent means none.
+          description: >
+            Bytes the account may hold in upload staging at once; absent
+            means none. An import releases what it held.
         permissions:
           $ref: "#/components/schemas/Permissions"
 
@@ -17143,7 +17210,8 @@ components:
           format: int64
           minimum: 0
           description: >
-            New per-user upload cap in bytes; 0 removes the cap.
+            New ceiling on bytes held in upload staging at once; 0
+            removes it.
         permissions:
           $ref: "#/components/schemas/Permissions"
 
@@ -17454,7 +17522,9 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Per-user upload cap in bytes.
+          description: >
+            Bytes an account made from this invite may hold in upload
+            staging at once.
 
     Invite:
       type: object

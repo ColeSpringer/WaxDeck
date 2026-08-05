@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../admin/admin_providers.dart';
 import '../auth/auth_controller.dart';
 import '../media_icons.dart';
 import '../shell/routes.dart';
@@ -390,7 +391,7 @@ class _MatchingModeMenu extends ConsumerWidget {
                   try {
                     await ref
                         .read(libraryMatchingProvider(library.pid).notifier)
-                        .setMode(mode);
+                        .set(mode);
                   } on WaxDeckApiException catch (e) {
                     messenger
                       ..hideCurrentSnackBar()

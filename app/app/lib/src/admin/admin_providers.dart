@@ -81,6 +81,70 @@ final backupsProvider = FutureProvider<List<Backup>>(
   (ref) => ref.watch(repositoryProvider).listBackups(),
 );
 
+/// Recent catalog jobs, newest first. The dashboard counts what is
+/// running; the tasks screen is where one is watched.
+final adminJobsProvider = FutureProvider<List<Job>>(
+  (ref) => ref.watch(repositoryProvider).listJobs(),
+);
+
+/// The catalog's libraries: names, paths, and the per-library switches.
+///
+/// No counts. This feeds the permission editor's grant list and the
+/// review screen's matching menu as well as the libraries table, and a
+/// count is a scan per library - see [libraryCountsProvider], which the
+/// one screen that draws the number watches instead.
+final librariesProvider = FutureProvider<List<LibraryInfo>>(
+  (ref) => ref.watch(repositoryProvider).listLibraries(),
+);
+
+/// The same libraries, with what each holds. Separate because the count
+/// costs a scan per root: the table that shows it asks, and nothing else
+/// pays.
+final libraryCountsProvider = FutureProvider<List<LibraryInfo>>(
+  (ref) => ref.watch(repositoryProvider).listLibraries(counts: true),
+);
+
+/// One library's matching mode, keyed by pid.
+class LibraryMatchingController extends AsyncNotifier<String> {
+  LibraryMatchingController(this.libraryPid);
+
+  final String libraryPid;
+
+  @override
+  Future<String> build() =>
+      ref.watch(repositoryProvider).getLibraryMatching(libraryPid);
+
+  Future<void> set(String mode) async {
+    final stored = await ref
+        .read(repositoryProvider)
+        .setLibraryMatching(libraryPid, mode);
+    state = AsyncData(stored);
+  }
+}
+
+final libraryMatchingProvider =
+    AsyncNotifierProvider.family<LibraryMatchingController, String, String>(
+      LibraryMatchingController.new,
+    );
+
+/// The canonical genre vocabulary, with the edits the editor applies.
+class GenreTreeController extends AsyncNotifier<GenreTree> {
+  @override
+  Future<GenreTree> build() => ref.watch(repositoryProvider).getGenreTree();
+
+  /// Stores a replacement vocabulary. An empty list clears the override
+  /// and returns the instance to the shipped default, which is the
+  /// contract's own "revert" and why this takes no separate verb.
+  Future<void> save(List<GenreNode> genres) async {
+    final stored = await ref.read(repositoryProvider).putGenreTree(genres);
+    state = AsyncData(stored);
+  }
+}
+
+final genreTreeProvider = AsyncNotifierProvider<GenreTreeController, GenreTree>(
+  GenreTreeController.new,
+);
+
 /// The staged restore, or null when none is staged.
 final stagedRestoreProvider = FutureProvider<RestorePlan?>(
   (ref) => ref.watch(repositoryProvider).getStagedRestore(),

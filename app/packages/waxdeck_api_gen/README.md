@@ -663,6 +663,7 @@ Class | Method | HTTP request | Description
  - [Libraries](doc/Libraries.md)
  - [LibraryAccess](doc/LibraryAccess.md)
  - [LibraryCreate](doc/LibraryCreate.md)
+ - [LibraryCreated](doc/LibraryCreated.md)
  - [LibraryMatching](doc/LibraryMatching.md)
  - [LibraryReadOnly](doc/LibraryReadOnly.md)
  - [LinkedIdentity](doc/LinkedIdentity.md)

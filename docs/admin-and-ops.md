@@ -7,10 +7,22 @@ invites, the audit log, backups and restore, scheduled jobs, the
 trash, upload oversight, read-only mode, transcoding limits,
 Prometheus metrics, and moving in from another server.
 
+Everything here lives in the **admin console** at `/admin`, reached from
+the sidebar's Curation group or from Settings > Server. The console has a
+dashboard (health, the review queue's depth, jobs in flight, the last
+backup, and the two long operations you start by hand) and a section per
+area, each with a location of its own so "it is under Backups" is a link
+rather than a set of directions. On a phone the console is a list of
+those sections.
+
 ## Accounts, roles, and permissions
 
-Accounts are managed under the library's curation menu (Users) or over
-the API. Every account has a role (`admin` or `user`), library
+Accounts are managed in the admin console (Users) or over the API. The
+editor also carries a **Child account preset**: one press sets no
+explicit content, no deleting, downloading, or uploading, and a deny
+rule for advisory-tagged tracks, and everything it set stays editable.
+Kids mode is administrator-configured - there is no separate kid-facing
+app. Every account has a role (`admin` or `user`), library
 visibility (every library, or an explicit set), and a set of
 permission toggles:
 
@@ -18,9 +30,12 @@ permission toggles:
   any client, and URL acquisitions, both staged for a review
   decision instead of landing directly. The grant carries
   item-scoped metadata editing over what the account's uploads
-  bring in, and an optional per-account byte quota caps the total
-  uploads the account may hold at once (acquired bytes count
-  against it too).
+  bring in, and an optional **pending upload limit** caps how much
+  the account may hold in staging at once (acquired bytes count
+  against it too). It is a limit on the queue, not on what the
+  account has contributed: importing a staged upload into the
+  library frees the room it held, and nothing here bounds how much
+  somebody adds to the library over time.
 - **Download** - fetch original files for offline use.
 - **Delete** - delete visible library items to the trash. Permanent
   deletion is always admin-only.
@@ -137,7 +152,8 @@ administrators see every account's, with who owns each. Any
 unfinished or undecided session can be deleted there, freeing
 its staged bytes and closing its pending review entry; a file that
 already entered the library is deleted in the library instead, like
-any other item. Staging never needs manual sweeping: stalled
+any other item, and it stopped counting against the pending upload
+limit the moment it was imported. Staging never needs manual sweeping: stalled
 transfers and staged files nobody decides on are reclaimed a week
 after the session opened, their pending review entries closed with
 them. Granting upload rights and setting quotas is covered above;
@@ -147,7 +163,7 @@ the upload flow itself, grouping, and the review pipeline are in the
 ## Read-only mode
 
 For media mounted read-only on principle: per library, or server-wide
-(Settings > Server). A read-only library refuses uploads, organizing,
+(the console's Server settings). A read-only library refuses uploads, organizing,
 file write-back, deletion, and the file tools with the `read-only`
 error code, while playback, browsing, and per-user state (stars,
 progress, playlists) keep working. Podcast libraries need a writable
@@ -155,8 +171,10 @@ root for episode fetching; the flag refuses fetches too.
 
 ## Adding a library at runtime
 
-Settings > Libraries creates a library root without restarting the
-server: the path is validated (absolute, not overlapping an existing
+The console's Libraries section lists every root with its path, what it
+holds, how many items the catalog has under it, its read-only flag, and
+its matching mode (automatic, ask me, or leave alone). Adding one there
+creates a library root without restarting the server: the path is validated (absolute, not overlapping an existing
 root, the inbox, or the podcast download dir), cataloged, and scanned in
 the background. Browsing and downloading its files work as soon as the
 scan indexes them. The library name doubles as the streaming engine's
@@ -184,8 +202,9 @@ the engine mounts; the reload reconciles names and paths, it cannot
 mount a filesystem. The engine opens each root while reconciling, so a
 path it cannot see fails the reload with a plain error rather than half
 working. Either way the library is created and keeps browsing and
-downloading; the reason streaming has to wait for an engine restart is
-recorded on the `library.create` audit entry.
+downloading; the reason streaming has to wait for an engine restart
+comes back on the create response, stays on the Libraries screen until
+the next one, and is recorded on the `library.create` audit entry.
 
 ## Transcoding limits
 

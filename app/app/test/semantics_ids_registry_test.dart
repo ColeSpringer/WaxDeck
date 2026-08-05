@@ -19,9 +19,18 @@ void main() {
         .where((f) => !f.path.endsWith('shell/semantics_ids.dart'))
         .toList();
 
+    // Both spellings. `identifier:` is what a raw Semantics widget
+    // takes; `semanticsId:` is what every design-system component takes,
+    // and it is the one the console screens reached for - so a guard
+    // that watched only the first stayed green through a whole phase of
+    // hand-typed handles. `clearSemanticsId`, `backSemanticsId` and the
+    // rest of the family end in the same word and are caught by the
+    // same pattern.
     test('no screen writes an identifier string by hand', () {
       final offenders = <String>[];
-      final literal = RegExp(r"""identifier:\s*(?:const\s+)?['"]""");
+      final literal = RegExp(
+        r"""(?:[Ii]dentifier|[sS]emanticsId):\s*(?:const\s+)?['"]""",
+      );
       for (final file in sources) {
         final lines = file.readAsLinesSync();
         for (var i = 0; i < lines.length; i++) {

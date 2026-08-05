@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../admin/server_settings_section.dart';
 import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../connect/cast_preflight.dart';
@@ -706,18 +705,22 @@ class _ServerBody extends ConsumerWidget {
         _Group(
           title: 'This server',
           children: <Widget>[
-            const AboutRow(semanticsId: 'server-summary'),
+            const AboutRow(semanticsId: SemanticsIds.serverSummary),
+            // A door rather than a control panel. The switches that
+            // used to sit here are decisions about the server, and they
+            // belong beside the other ones: "read-only mode" was a
+            // sibling of "reduce motion" while they lived in a list of
+            // personal preferences.
             WaxOptionRow(
               title: 'Open the admin console',
               subtitle: 'Libraries, users, scans, backups, and the audit log',
               glyph: WaxIcons.admin,
               trailing: const WaxIcon(WaxIcons.forward, size: 16),
+              semanticsId: SemanticsIds.setting('admin-console'),
               onTap: () => context.go(WaxRoute.admin),
             ),
           ],
         ),
-        const SizedBox(height: WaxSpace.s24),
-        const ServerSettingsSection(),
         const SizedBox(height: WaxSpace.s24),
         const SimilarityStatusSection(),
       ],

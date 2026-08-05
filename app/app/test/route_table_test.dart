@@ -2,6 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/admin/audit_screen.dart';
+import 'package:waxdeck/src/admin/dashboard_screen.dart';
+import 'package:waxdeck/src/admin/genres_screen.dart';
+import 'package:waxdeck/src/admin/libraries_screen.dart';
+import 'package:waxdeck/src/admin/schedules_screen.dart';
+import 'package:waxdeck/src/admin/server_settings_screen.dart';
 import 'package:waxdeck/src/admin/backups_screen.dart';
 import 'package:waxdeck/src/admin/migrate_screen.dart';
 import 'package:waxdeck/src/admin/trash_screen.dart';
@@ -134,6 +139,12 @@ final _locations = <String, Type>{
   WaxRoute.uploads: UploadsScreen,
   WaxRoute.tasks: TasksScreen,
   WaxRoute.metadata('tr-1'): MetadataScreen,
+  // The admin console. Every section is a location a stranger can open,
+  // which is what makes "it is under Backups" a link rather than a set
+  // of directions; the console frame wraps them all.
+  WaxRoute.admin: AdminDashboardScreen,
+  WaxRoute.libraries: LibrariesScreen,
+  WaxRoute.genres: GenreTreeScreen,
   WaxRoute.review: ReviewScreen,
   WaxRoute.reviewEntry('re-1'): ReviewEntryScreen,
   WaxRoute.health: HealthScreen,
@@ -141,6 +152,8 @@ final _locations = <String, Type>{
   WaxRoute.diagnostics: DiagnosticsScreen,
   WaxRoute.organize: OrganizeScreen,
   WaxRoute.users: UsersScreen,
+  WaxRoute.adminSettings: ServerSettingsScreen,
+  WaxRoute.schedules: SchedulesScreen,
   WaxRoute.audit: AuditScreen,
   WaxRoute.backups: BackupsScreen,
   WaxRoute.trash: TrashScreen,

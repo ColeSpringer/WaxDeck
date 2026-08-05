@@ -22,9 +22,9 @@ import 'package:waxdeck_api_gen/src/model/job.dart';
 import 'package:waxdeck_api_gen/src/model/job_list.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
 import 'package:waxdeck_api_gen/src/model/library_create.dart';
+import 'package:waxdeck_api_gen/src/model/library_created.dart';
 import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/migration_create.dart';
-import 'package:waxdeck_api_gen/src/model/model_library.dart';
 import 'package:waxdeck_api_gen/src/model/restore_plan.dart';
 import 'package:waxdeck_api_gen/src/model/schedule.dart';
 import 'package:waxdeck_api_gen/src/model/schedule_kind.dart';
@@ -377,7 +377,7 @@ class AdminApi {
   }
 
   /// Create a library at runtime
-  /// Registers a new library root without a server restart. The path is validated (absolute, and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that. &#x60;name&#x60; is the display name and the WaxFlow root name the same directory is served under. Administrators only. 
+  /// Registers a new library root without a server restart. The path is validated (absolute, and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries &#x60;streamingWarning&#x60; saying so, rather than reporting a plain success. &#x60;name&#x60; is the display name and the WaxFlow root name the same directory is served under. Administrators only. 
   ///
   /// Parameters:
   /// * [libraryCreate] 
@@ -388,9 +388,9 @@ class AdminApi {
   /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
   /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
   ///
-  /// Returns a [Future] containing a [Response] with a [ModelLibrary] as data
+  /// Returns a [Future] containing a [Response] with a [LibraryCreated] as data
   /// Throws [DioException] if API call or serialization fails
-  Future<Response<ModelLibrary>> createLibrary({ 
+  Future<Response<LibraryCreated>> createLibrary({ 
     required LibraryCreate libraryCreate,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
@@ -451,14 +451,14 @@ class AdminApi {
       onReceiveProgress: onReceiveProgress,
     );
 
-    ModelLibrary? _responseData;
+    LibraryCreated? _responseData;
 
     try {
       final rawResponse = _response.data;
       _responseData = rawResponse == null ? null : _serializers.deserialize(
         rawResponse,
-        specifiedType: const FullType(ModelLibrary),
-      ) as ModelLibrary;
+        specifiedType: const FullType(LibraryCreated),
+      ) as LibraryCreated;
 
     } catch (error, stackTrace) {
       throw DioException(
@@ -470,7 +470,7 @@ class AdminApi {
       );
     }
 
-    return Response<ModelLibrary>(
+    return Response<LibraryCreated>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -1876,9 +1876,10 @@ class AdminApi {
   }
 
   /// List libraries
-  /// The catalog&#39;s libraries, for granting per-library visibility. Administrators only. Unpaginated: libraries are a handful of roots, not a collection that grows with content. 
+  /// The catalog&#39;s libraries, for granting per-library visibility. Administrators only. Unpaginated: libraries are a handful of roots, not a collection that grows with content. &#x60;itemCount&#x60; is opt-in through &#x60;counts&#x60;, because it is the one field here that costs anything: the catalog has no library dimension, so counting a root means matching every item&#39;s path against it. Callers that want the names and pids - a permission editor, a matching-mode menu - should leave it off. 
   ///
   /// Parameters:
+  /// * [counts] - Count the items under each root. Off by default; the count is a scan per library, so it is asked for by the one screen that shows it. 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1889,6 +1890,7 @@ class AdminApi {
   /// Returns a [Future] containing a [Response] with a [Libraries] as data
   /// Throws [DioException] if API call or serialization fails
   Future<Response<Libraries>> listLibraries({ 
+    bool? counts = false,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -1920,9 +1922,14 @@ class AdminApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (counts != null) r'counts': encodeQueryParameter(_serializers, counts, const FullType(bool)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,

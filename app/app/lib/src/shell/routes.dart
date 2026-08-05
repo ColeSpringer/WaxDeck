@@ -178,11 +178,18 @@ abstract final class WaxRoute {
   /// no session of its own, and the e2e suite opens it cold.
   static const editingPrototype = '/prototype/editing';
 
-  /// Curation and administration. No role redirect lives on these paths:
-  /// the menus that lead here already hide what an account cannot use,
-  /// and the server refuses the calls regardless. A role-aware console
-  /// shell is the admin phase's job.
+  /// Curation and administration: the admin console, and one location
+  /// per section. No role redirect lives on these paths: the chrome that
+  /// leads here already hides what an account cannot use, and the server
+  /// refuses the calls regardless.
+  ///
+  /// Every one of these is a place a stranger can open, which is what
+  /// makes "it is under Backups" a link rather than a set of directions;
+  /// the console frame wraps them all, so a section opened cold arrives
+  /// with its own navigation around it.
   static const admin = '/admin';
+  static const libraries = '$admin/libraries';
+  static const genres = '$admin/genres';
   static const review = '$admin/review';
   static String reviewEntry(String entryId) => '$review/$entryId';
   static const health = '$admin/health';
@@ -192,6 +199,12 @@ abstract final class WaxRoute {
   static const users = '$admin/users';
   static const userEdit = '$users/edit';
   static const audit = '$admin/audit';
+
+  /// The server's own switches. Distinct from [settings], which is the
+  /// listener's: one is what this instance does, the other is what this
+  /// account prefers, and only administrators see the first.
+  static const adminSettings = '$admin/settings';
+  static const schedules = '$admin/schedules';
   static const backups = '$admin/backups';
   static const trash = '$admin/trash';
   static const migrate = '$admin/migrate';

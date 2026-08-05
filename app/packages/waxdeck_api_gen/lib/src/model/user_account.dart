@@ -25,7 +25,7 @@ part 'user_account.g.dart';
 /// * [pending] - True for a self-serve registration still awaiting an administrator's decision. Pending accounts cannot log in; approve or reject them through the signup request endpoints. 
 /// * [libraryAccess] 
 /// * [permissions] 
-/// * [uploadQuotaBytes] - Total bytes of uploads the account may hold at once; absent means no per-user cap. 
+/// * [uploadQuotaBytes] - Bytes the account may hold in upload staging at once, awaiting review; absent means no per-user cap. A pending-upload limit rather than a storage-contribution cap: importing a session releases what it held, and nothing here bounds what the account adds to the library over time. 
 /// * [createdAt] - When the account was created.
 /// * [hasPassword] - Whether local password login is enabled for the account (false for accounts provisioned by OIDC that never set one). 
 /// * [identities] - Linked single sign-on identities.
@@ -57,7 +57,7 @@ abstract class UserAccount implements User, Built<UserAccount, UserAccountBuilde
   @BuiltValueField(wireName: r'hasPassword')
   bool? get hasPassword;
 
-  /// Total bytes of uploads the account may hold at once; absent means no per-user cap. 
+  /// Bytes the account may hold in upload staging at once, awaiting review; absent means no per-user cap. A pending-upload limit rather than a storage-contribution cap: importing a session releases what it held, and nothing here bounds what the account adds to the library over time. 
   @BuiltValueField(wireName: r'uploadQuotaBytes')
   int? get uploadQuotaBytes;
 

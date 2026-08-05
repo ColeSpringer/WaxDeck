@@ -15,6 +15,17 @@ text search, every candidate is scored by weighted field distances
 over an optimal track assignment, and the unit is decided as a whole.
 A unit never half applies.
 
+Files reach the pipeline four ways: an upload, a URL acquisition, a
+rematch pressed on an item, and a scan. That last one is what covers
+files dropped into a library root by hand: a background pass follows the
+catalog's change log and opens an album-unit entry for what a scan
+added, waiting for the scan to settle first so an album arrives whole
+rather than one entry per file indexed so far. It watches from the
+moment the feature lands rather than sweeping up what was already there,
+so an upgrade does not drop an existing library into the queue; a
+library set to **leave alone** in the console (matching mode `off`) is
+never touched at all.
+
 Confident matches apply themselves and appear in the queue as
 auto-applied, with a revert button; everything else waits for review
 with ranked candidates, a match percentage, a per-field distance
@@ -51,7 +62,7 @@ entirely.
 ## Uploads
 
 Users with upload rights (an admin grant, with an optional per-user
-byte quota) can push audio from any client: uploads are chunked and
+pending upload limit) can push audio from any client: uploads are chunked and
 resumable, carry a required media type label (music, podcast episode,
 audiobook), and stage outside the library until a review decision
 imports them. Items a user's own uploads bring into the library stay
@@ -61,7 +72,9 @@ identify pipeline runs on every completed upload, so a well-tagged
 file usually arrives with its candidates already scored. Duplicate
 warnings (exact bytes, or the same recording in a different encoding)
 inform the decision instead of blocking it. The uploads screen shows
-the account's quota usage at the top of the session list.
+what the account currently has waiting at the top of the session list.
+The limit caps what may sit in staging awaiting a decision, so
+importing an upload frees the room it held.
 
 Files reach the flow three ways: a file picker on every platform, a
 folder picker on desktop (Linux, macOS, Windows - Android folder
@@ -160,9 +173,15 @@ runs a full-catalog pass for a library older than the change log
 retains, or to apply a vocabulary edit at once; `dryRun` reports what
 would change first.
 
-WaxDeck ships a broad default tree. `GET /admin/genre-tree` reads
-whatever is in force and `PUT` replaces it wholesale (an empty list
-goes back to the shipped default). A tree that could not resolve one
+WaxDeck ships a broad default tree. The admin console's Genre tree
+section edits it: the vocabulary on one side, one genre's name, parent,
+and aliases on the other, with the whole tree saved in one write
+(every save rewinds the sweeper, so a rename and a re-parent should be
+one change rather than two full re-checks). Reverting to the shipped
+default and starting a normalization pass, dry-run first, are both
+there. Over the API, `GET /admin/genre-tree` reads whatever is in force
+and `PUT` replaces it wholesale (an empty list goes back to the shipped
+default). A tree that could not resolve one
 way is refused rather than stored, so an alias claimed by two genres
 or a genre nested three levels deep is a clear error, not a silent
 coin flip. The `genre-whitelist` health rule lists what is still

@@ -320,8 +320,12 @@ test('an exported archive imports back through the backups screen', async ({
   await typeInto(page, username, ADMIN_USER);
   await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await clickThrough(page.locator(sem(SemanticsIds.navGroup('curation'))), page.locator(sem(SemanticsIds.navDestination('backups'))));
-  await clickThrough(page.locator(sem(SemanticsIds.navDestination('backups'))), page.locator(sem(SemanticsIds.backupImport)));
+  // Through the admin console: the sidebar's Curation group holds one
+  // entry for the whole of it now, and the console's own section list
+  // is what reaches Backups.
+  await clickThrough(page.locator(sem(SemanticsIds.navGroup('curation'))), page.locator(sem(SemanticsIds.navDestination('admin'))));
+  await clickThrough(page.locator(sem(SemanticsIds.navDestination('admin'))), page.locator(sem(SemanticsIds.adminSection('backups'))));
+  await clickThrough(page.locator(sem(SemanticsIds.adminSection('backups'))), page.locator(sem(SemanticsIds.backupImport)));
 
   const chooser = page.waitForEvent('filechooser');
   await page.locator(sem(SemanticsIds.backupImport)).click({ force: true });
@@ -369,7 +373,17 @@ test('a library created at runtime reaches the streaming sidecar', async ({ requ
     data: { name: 'runtime', path: extra, media: 'music' },
   });
   expect(created.status(), await created.text()).toBe(201);
-  const libraryPid = (await created.json()).pid as string;
+  const createdBody = await created.json();
+  const libraryPid = createdBody.pid as string;
+
+  // The 201 says so as well as the audit entry: the administrator who
+  // made the change is looking at the response, and reporting a plain
+  // success while streaming is broken is a silent partial failure.
+  expect(
+    createdBody.streamingWarning,
+    'the create reports streaming as working',
+  ).toBeUndefined();
+  expect(createdBody.path, 'the create names the root it registered').toBe(extra);
 
   // The sidecar's own reconcile is the verification: a refusal (a path
   // it cannot open, a reload it does not serve) is recorded here.

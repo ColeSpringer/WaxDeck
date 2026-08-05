@@ -7,28 +7,68 @@
 
 /// Stable identifiers for the controls the e2e suite drives.
 abstract final class SemanticsIds {
-  // admin: The admin console: users, settings, schedules, backups, trash, audit, migration.
+  // admin: The admin console: its shell and dashboard, libraries, genres, users, settings, schedules, backups, trash, audit, migration.
+  static String adminAction(Object name) => 'admin-action-$name';
   static const String adminAudit = 'admin-audit';
   static const String adminBackups = 'admin-backups';
+  static const String adminConsole = 'admin-console';
+  static const String adminDashboard = 'admin-dashboard';
+  static const String adminGenres = 'admin-genres';
+  static const String adminLibraries = 'admin-libraries';
   static const String adminMigrate = 'admin-migrate';
+  static const String adminSchedules = 'admin-schedules';
+  static String adminSection(Object name) => 'admin-section-$name';
   static const String adminSettingsSection = 'admin-settings-section';
+  static String adminTile(Object name) => 'admin-tile-$name';
   static const String adminTrash = 'admin-trash';
   static const String adminUsers = 'admin-users';
   static const String auditFilter = 'audit-filter';
+  static const String auditFilterClear = 'audit-filter-clear';
   static String auditRow(Object id) => 'audit-row-$id';
   static const String backupCreate = 'backup-create';
   static const String backupImport = 'backup-import';
   static String backupRow(Object id) => 'backup-row-$id';
+  static const String confirmAccept = 'confirm-accept';
+  static const String confirmCancel = 'confirm-cancel';
+  static const String confirmField = 'confirm-field';
+  static const String genreAdd = 'genre-add';
+  static const String genreAliases = 'genre-aliases';
+  static const String genreDelete = 'genre-delete';
+  static const String genreName = 'genre-name';
+  static String genreNode(Object name) => 'genre-node-$name';
+  static const String genreNormalize = 'genre-normalize';
+  static const String genreNormalizeDryRun = 'genre-normalize-dry-run';
+  static const String genreParent = 'genre-parent';
+  static const String genreRevert = 'genre-revert';
+  static const String genreSave = 'genre-save';
   static const String inviteCreate = 'invite-create';
   static String inviteRevoke(Object id) => 'invite-revoke-$id';
   static String inviteRow(Object id) => 'invite-row-$id';
   static const String inviteToken = 'invite-token';
+  static const String libraryAdd = 'library-add';
+  static String libraryDetail(Object id) => 'library-detail-$id';
+  static const String libraryManaged = 'library-managed';
+  static String libraryMatching(Object id) => 'library-matching-$id';
+  static const String libraryMedia = 'library-media';
+  static const String libraryName = 'library-name';
+  static const String libraryPath = 'library-path';
+  static String libraryReadOnly(Object id) => 'library-read-only-$id';
+  static String libraryRescan(Object id) => 'library-rescan-$id';
+  static String libraryRow(Object id) => 'library-row-$id';
+  static const String librarySubmit = 'library-submit';
+  static const String libraryWarning = 'library-warning';
   static const String migratePassword = 'migrate-password';
   static const String migrateServerUrl = 'migrate-server-url';
   static const String migrateSource = 'migrate-source';
   static const String migrateSubmit = 'migrate-submit';
   static const String migrateToken = 'migrate-token';
   static const String migrateUsername = 'migrate-username';
+  static const String permDelete = 'perm-delete';
+  static const String permDownload = 'perm-download';
+  static const String permExplicit = 'perm-explicit';
+  static const String permManagePodcasts = 'perm-manage-podcasts';
+  static const String permMaxKbps = 'perm-max-kbps';
+  static const String permSharedOutputs = 'perm-shared-outputs';
   static String requestApprove(Object id) => 'request-approve-$id';
   static String requestReject(Object id) => 'request-reject-$id';
   static String requestRow(Object id) => 'request-row-$id';
@@ -42,11 +82,36 @@ abstract final class SemanticsIds {
   static const String settingSignupEnabled = 'setting-signup-enabled';
   static const String settingSonicAnalysis = 'setting-sonic-analysis';
   static const String signupRequests = 'signup-requests';
+  static String tagRule(Object list, Object index) => '$list-rule-$index';
+  static String tagRuleAdd(Object list) => '$list-add';
+  static String tagRuleKey(Object list) => '$list-key';
+  static String tagRuleValue(Object list) => '$list-value';
+  static const String transcodingDefaultKbps = 'transcoding-default-kbps';
+  static const String transcodingMaxConcurrent = 'transcoding-max-concurrent';
+  static const String transcodingMaxPerUser = 'transcoding-max-per-user';
+  static const String transcodingSave = 'transcoding-save';
+  static String trashDetail(Object id) => 'trash-detail-$id';
   static const String trashEmpty = 'trash-empty';
+  static const String trashIncludeRestored = 'trash-include-restored';
   static String trashPurge(Object id) => 'trash-purge-$id';
+  static const String trashPurgeConfirm = 'trash-purge-confirm';
   static String trashRestore(Object id) => 'trash-restore-$id';
+  static const String trashRetentionDays = 'trash-retention-days';
+  static const String trashRetentionSave = 'trash-retention-save';
   static String trashRow(Object id) => 'trash-row-$id';
+  static const String userAccessAll = 'user-access-all';
+  static const String userAdminRole = 'user-admin-role';
+  static const String userChildPreset = 'user-child-preset';
+  static const String userDelete = 'user-delete';
+  static String userDetail(Object id) => 'user-detail-$id';
+  static const String userDisabled = 'user-disabled';
+  static String userLibrary(Object id) => 'user-library-$id';
+  static const String userQuota = 'user-quota';
+  static const String userRevokeSessions = 'user-revoke-sessions';
   static String userRow(Object id) => 'user-row-$id';
+  static const String userSave = 'user-save';
+  static const String userSetPassword = 'user-set-password';
+  static const String userUploadEnabled = 'user-upload-enabled';
 
   // auth: Sign-in, first-run setup, and signup. The names here are frozen vocabulary for the accessibility audit.
   static const String loginError = 'login-error';
@@ -495,6 +560,7 @@ abstract final class SemanticsIds {
   // settings: Settings: the searchable sections, every leaf control, account, devices, app passwords, notifications, scrobblers.
   static const String aboutLicenses = 'about-licenses';
   static const String aboutOpen = 'about-open';
+  static const String aboutRow = 'about';
   static const String appPasswordAdd = 'app-password-add';
   static String appPasswordRevoke(Object id) => 'app-password-revoke-$id';
   static String deviceRename(Object id) => 'device-rename-$id';
@@ -516,6 +582,7 @@ abstract final class SemanticsIds {
   static String scrobblerDisconnect(Object service) =>
       'scrobbler-disconnect-$service';
   static const String scrobblerSetupLastfm = 'scrobbler-setup-lastfm';
+  static const String serverSummary = 'server-summary';
   static String setting(Object id) => 'setting-$id';
   static String settingsResult(Object id) => 'settings-result-$id';
   static const String settingsScreen = 'settings-screen';

@@ -79,6 +79,25 @@ sidecar injection seam) all landed and are not repeated here.
   would serve every other "any of these entities" scope besides this
   one.
 
+- **A library dimension on item queries.** The query language has no way
+  to say "in this library": the field table exposes `path` (a text
+  match on `f.display_path`) and nothing keyed on `library_id`, though
+  every file row carries one. So WaxDeck attributes items to libraries
+  by path prefix everywhere it needs to - `libraryForPath` walks the
+  root table for reads, and the admin console's libraries screen counts
+  what each root holds with `path startsWith <root>/` through
+  `Library.Count` (`libraryItemCount`,
+  `server/internal/service/visibility.go`). That is the shipped
+  workaround and it is correct: a file's path is genuinely what says
+  which root it came from, and the console is administrator-only over a
+  handful of roots. It is also a `LIKE`-shaped scan per library per read
+  where an indexed integer comparison would do, and the same prefix
+  trick is what per-library visibility scoping would want if it ever
+  moved from the root table into the query. A `library` field in the
+  store's field table - `is`/`isNot` against a library PID - would make
+  both a lookup, and it needs no new storage: the column is already
+  there and already joined.
+
 ## Recorded upstream non-goals
 
 Deliberate upstream decisions WaxDeck designs around; listed so they

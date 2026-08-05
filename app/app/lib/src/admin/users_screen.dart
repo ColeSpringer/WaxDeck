@@ -1,12 +1,13 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../providers.dart';
-import '../review/review_controller.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
+import 'admin_console.dart';
 import 'admin_providers.dart';
 
 /// Accumulated pages of accounts.
@@ -89,26 +90,46 @@ class UsersScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Semantics(
-      identifier: SemanticsIds.adminUsers,
-      container: true,
-      child: DefaultTabController(
-        length: 3,
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Users'),
-            bottom: const TabBar(
-              tabs: [
-                Tab(key: Key('users-tab'), text: 'Users'),
-                Tab(key: Key('requests-tab'), text: 'Requests'),
-                Tab(key: Key('invites-tab'), text: 'Invites'),
-              ],
+    return DefaultTabController(
+      length: 3,
+      child: WaxScaffold(
+        title: 'Users',
+        largeTitle: false,
+        semanticsId: SemanticsIds.adminUsers,
+        onBack: adminBack(context),
+        // Slivers rather than a body: a TabBarView needs bounded height
+        // and each tab pages a list of its own, so the remaining space
+        // is exactly what it should get.
+        slivers: const <Widget>[
+          SliverToBoxAdapter(child: _Tabs()),
+          SliverFillRemaining(
+            child: TabBarView(
+              children: <Widget>[_UsersTab(), _RequestsTab(), _InvitesTab()],
             ),
           ),
-          body: const TabBarView(
-            children: [_UsersTab(), _RequestsTab(), _InvitesTab()],
-          ),
-        ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Tabs extends StatelessWidget {
+  const _Tabs();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Material(
+      color: colors.canvas,
+      child: TabBar(
+        labelColor: colors.accent,
+        unselectedLabelColor: colors.textSecondary,
+        indicatorColor: colors.accent,
+        tabs: const <Widget>[
+          Tab(key: Key('users-tab'), text: 'Users'),
+          Tab(key: Key('requests-tab'), text: 'Requests'),
+          Tab(key: Key('invites-tab'), text: 'Invites'),
+        ],
       ),
     );
   }
@@ -132,6 +153,7 @@ class _UsersTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final users = ref.watch(adminUsersProvider);
+    final colors = WaxColors.of(context);
     return switch (users) {
       AsyncData(:final value) => NotificationListener<ScrollNotification>(
         onNotification: (notification) {
@@ -141,72 +163,103 @@ class _UsersTab extends ConsumerWidget {
           }
           return false;
         },
-        child: ListView.builder(
-          itemCount: value.users.length + (value.loadingMore ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index >= value.users.length) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final user = value.users[index];
-            return _UserRow(user: user, onTap: () => _open(context, ref, user));
-          },
+        child: ListView(
+          padding: const EdgeInsets.all(WaxSpace.s16),
+          children: <Widget>[
+            WaxTable<UserAccount>(
+              rows: value.users,
+              rowId: (user) => user.id,
+              rowSemanticsId: SemanticsIds.userRow,
+              rowDetailSemanticsId: SemanticsIds.userDetail,
+              onRowTap: (user) => _open(context, ref, user),
+              empty: const EmptyState(
+                glyph: WaxIcons.artists,
+                title: 'No accounts',
+                message: 'Invite somebody, or open signup in server settings.',
+              ),
+              columns: <WaxColumn<UserAccount>>[
+                WaxColumn<UserAccount>(
+                  label: 'Account',
+                  priority: WaxColumnPriority.primary,
+                  text: (user) => user.username,
+                  cell: (context, user) => Text(
+                    user.displayName == null || user.displayName!.isEmpty
+                        ? user.username
+                        : '${user.displayName} (${user.username})',
+                    style: WaxType.titleItem.copyWith(
+                      color: colors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                WaxColumn<UserAccount>(
+                  label: 'Roles',
+                  width: 140,
+                  text: (user) => user.roles.join(', '),
+                  cell: (context, user) => Text(
+                    user.roles.isEmpty ? 'user' : user.roles.join(', '),
+                    style: WaxType.bodySmall.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                WaxColumn<UserAccount>(
+                  label: 'State',
+                  width: 116,
+                  text: _state,
+                  cell: (context, user) => Text(
+                    _state(user),
+                    style: WaxType.bodySmall.copyWith(
+                      color: user.disabled
+                          ? colors.error
+                          : colors.textSecondary,
+                    ),
+                  ),
+                ),
+                WaxColumn<UserAccount>(
+                  label: 'Uploads',
+                  width: 128,
+                  priority: WaxColumnPriority.detail,
+                  text: _uploads,
+                  cell: (context, user) => Text(
+                    _uploads(user),
+                    style: WaxType.monoData.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (value.loadingMore)
+              const Padding(
+                padding: EdgeInsets.all(WaxSpace.s16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+          ],
         ),
       ),
       AsyncError(:final error) => _ErrorRetry(
         error: error,
         onRetry: () => ref.invalidate(adminUsersProvider),
       ),
-      _ => const Center(child: CircularProgressIndicator()),
+      _ => const SkeletonShapes(shape: SkeletonShape.list),
     };
   }
-}
 
-class _UserRow extends StatelessWidget {
-  const _UserRow({required this.user, required this.onTap});
+  static String _state(UserAccount user) {
+    if (user.disabled) return 'Disabled';
+    if (user.pending) return 'Pending';
+    return 'Active';
+  }
 
-  final UserAccount user;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget badge(String label, {bool error = false}) {
-      final colorScheme = Theme.of(context).colorScheme;
-      return Chip(
-        label: Text(label),
-        visualDensity: VisualDensity.compact,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        backgroundColor: error ? colorScheme.errorContainer : null,
-        labelStyle: error
-            ? TextStyle(color: colorScheme.onErrorContainer)
-            : null,
-      );
-    }
-
-    return Semantics(
-      identifier: SemanticsIds.userRow(user.id),
-      button: true,
-      child: ListTile(
-        key: ValueKey(SemanticsIds.userRow(user.id)),
-        leading: const Icon(Icons.account_circle_outlined),
-        title: Row(
-          children: [
-            Flexible(
-              child: Text(user.username, overflow: TextOverflow.ellipsis),
-            ),
-            const SizedBox(width: 8),
-            for (final role in user.roles) ...[
-              badge(role),
-              const SizedBox(width: 4),
-            ],
-            if (user.disabled) badge('disabled', error: true),
-            if (user.pending) badge('pending'),
-          ],
-        ),
-        subtitle: user.displayName == null ? null : Text(user.displayName!),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      ),
-    );
+  /// The account's pending-upload allowance, as the console reads it:
+  /// what may wait in staging, not what has been contributed.
+  static String _uploads(UserAccount user) {
+    if (!user.uploadEnabled) return 'none';
+    final quota = user.uploadQuotaBytes;
+    if (quota == null || quota == 0) return 'unlimited';
+    return '${quota ~/ (1024 * 1024)} MB';
   }
 }
 
@@ -233,7 +286,7 @@ class _RequestsTab extends ConsumerWidget {
     WidgetRef ref,
     UserAccount user,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -257,7 +310,7 @@ class _RequestsTab extends ConsumerWidget {
       await ref.read(repositoryProvider).rejectSignupRequest(user.id);
       ref.invalidate(signupRequestsProvider);
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
@@ -332,7 +385,7 @@ class _InvitesTab extends ConsumerWidget {
   const _InvitesTab();
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final request = await showDialog<_InviteRequest>(
       context: context,
       builder: (_) => const _CreateInviteDialog(),
@@ -380,7 +433,7 @@ class _InvitesTab extends ConsumerWidget {
         ),
       );
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
@@ -389,7 +442,7 @@ class _InvitesTab extends ConsumerWidget {
     WidgetRef ref,
     Invite invite,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -413,7 +466,7 @@ class _InvitesTab extends ConsumerWidget {
       await ref.read(repositoryProvider).revokeInvite(invite.id);
       ref.invalidate(invitesProvider);
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 

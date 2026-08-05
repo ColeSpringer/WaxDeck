@@ -295,10 +295,21 @@ class WaxChoice<T> extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Text(
-                    labelFor(value),
-                    style: WaxType.body.copyWith(
-                      color: enabled ? colors.textPrimary : colors.textDisabled,
+                  // Flexible so a narrow column (a table cell, a
+                  // cramped settings row) makes the value ellipsize
+                  // rather than overflowing its box. The chevron beside
+                  // it is what says the control is a control, so it
+                  // keeps its width and the text yields.
+                  Flexible(
+                    child: Text(
+                      labelFor(value),
+                      style: WaxType.body.copyWith(
+                        color: enabled
+                            ? colors.textPrimary
+                            : colors.textDisabled,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
                     ),
                   ),
                   const SizedBox(width: WaxSpace.s4),

@@ -19,7 +19,7 @@ part 'signup_approval.g.dart';
 /// * [libraryAccess] 
 /// * [permissions] 
 /// * [uploadEnabled] - Grant upload rights.
-/// * [uploadQuotaBytes] - Per-user upload cap in bytes.
+/// * [uploadQuotaBytes] - Bytes an account made from this invite may hold in upload staging at once. 
 @BuiltValue()
 abstract class SignupApproval implements Built<SignupApproval, SignupApprovalBuilder> {
   /// Assigned roles.
@@ -36,7 +36,7 @@ abstract class SignupApproval implements Built<SignupApproval, SignupApprovalBui
   @BuiltValueField(wireName: r'uploadEnabled')
   bool? get uploadEnabled;
 
-  /// Per-user upload cap in bytes.
+  /// Bytes an account made from this invite may hold in upload staging at once. 
   @BuiltValueField(wireName: r'uploadQuotaBytes')
   int? get uploadQuotaBytes;
 

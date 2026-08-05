@@ -167,7 +167,7 @@ func (l *Library) runAcquire(ctx context.Context, t *wdb.ToolTask, p toolTaskPar
 		if user.UploadQuotaBytes > 0 {
 			used, err := l.db.UploadBytesInUse(ctx, t.UserID)
 			if err == nil && used >= user.UploadQuotaBytes {
-				fetchErr = fmt.Errorf("%w: the upload quota is full (%d bytes)", errToolPermanent, user.UploadQuotaBytes)
+				fetchErr = fmt.Errorf("%w: the pending-upload limit is full (%d bytes waiting for review)", errToolPermanent, user.UploadQuotaBytes)
 				break
 			}
 		}

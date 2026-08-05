@@ -210,7 +210,15 @@ func (l *Library) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payloa
 		return "", &Error{Kind: KindInternal, Err: err}
 	}
 	l.matchWakeup()
-	l.notifyReview(ctx, e.ID, e.UploadedBy)
+	// The marker is an invalidation hint - it is what makes the review
+	// screen refetch - so it is not suppressed, it is batched. A scan
+	// that discovers a library opens thousands of entries, and one
+	// event per entry per administrator is a flood that arrives faster
+	// than the pacer behind it can spend. The sweeper raises one marker
+	// per pass instead, once it knows how many it opened.
+	if e.Origin != reviewOriginScan {
+		l.notifyReview(ctx, e.ID, e.UploadedBy)
+	}
 	return e.ID, nil
 }
 

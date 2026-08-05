@@ -3,9 +3,15 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../admin/admin_console.dart';
 import '../admin/audit_screen.dart';
 import '../admin/backups_screen.dart';
+import '../admin/dashboard_screen.dart';
+import '../admin/genres_screen.dart';
+import '../admin/libraries_screen.dart';
 import '../admin/migrate_screen.dart';
+import '../admin/schedules_screen.dart';
+import '../admin/server_settings_screen.dart';
 import '../admin/trash_screen.dart';
 import '../admin/user_edit_screen.dart';
 import '../admin/users_screen.dart';
@@ -559,63 +565,96 @@ List<RouteBase> shellRoutes() => <RouteBase>[
             builder: (context, state) =>
                 MetadataScreen(pid: state.pathParameters['pid']!),
           ),
-          GoRoute(
-            path: WaxRoute.review,
-            builder: (context, state) => const ReviewScreen(),
+          // The admin console. One nested shell around every `/admin`
+          // location, so the section list keeps its place across a move
+          // between sections and each screen only has to be a page.
+          // Nested rather than a branch of its own: the console is not a
+          // domain, and everything that is not a domain shares the last
+          // branch so a visit here never rewrites the stack a tab
+          // restores.
+          ShellRoute(
+            builder: (context, state, child) =>
+                AdminConsole(location: state.uri.path, child: child),
             routes: <RouteBase>[
               GoRoute(
-                path: ':entryId',
-                builder: (context, state) => ReviewEntryScreen(
-                  entryId: state.pathParameters['entryId']!,
-                ),
+                path: WaxRoute.admin,
+                builder: (context, state) => const AdminDashboardScreen(),
               ),
-            ],
-          ),
-          GoRoute(
-            path: WaxRoute.health,
-            builder: (context, state) => const HealthScreen(),
-            routes: <RouteBase>[
               GoRoute(
-                path: ':rule',
-                builder: (context, state) =>
-                    HealthIssuesScreen(rule: state.pathParameters['rule']!),
+                path: WaxRoute.libraries,
+                builder: (context, state) => const LibrariesScreen(),
               ),
-            ],
-          ),
-          GoRoute(
-            path: WaxRoute.diagnostics,
-            builder: (context, state) => const DiagnosticsScreen(),
-          ),
-          GoRoute(
-            path: WaxRoute.organize,
-            builder: (context, state) => const OrganizeScreen(),
-          ),
-          GoRoute(
-            path: WaxRoute.users,
-            builder: (context, state) => const UsersScreen(),
-            routes: <RouteBase>[
               GoRoute(
-                path: 'edit',
-                redirect: _requires<UserEditArgs>(WaxRoute.users),
-                builder: _userEdit,
+                path: WaxRoute.genres,
+                builder: (context, state) => const GenreTreeScreen(),
+              ),
+              GoRoute(
+                path: WaxRoute.review,
+                builder: (context, state) => const ReviewScreen(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: ':entryId',
+                    builder: (context, state) => ReviewEntryScreen(
+                      entryId: state.pathParameters['entryId']!,
+                    ),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: WaxRoute.health,
+                builder: (context, state) => const HealthScreen(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: ':rule',
+                    builder: (context, state) =>
+                        HealthIssuesScreen(rule: state.pathParameters['rule']!),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: WaxRoute.diagnostics,
+                builder: (context, state) => const DiagnosticsScreen(),
+              ),
+              GoRoute(
+                path: WaxRoute.organize,
+                builder: (context, state) => const OrganizeScreen(),
+              ),
+              GoRoute(
+                path: WaxRoute.users,
+                builder: (context, state) => const UsersScreen(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: 'edit',
+                    redirect: _requires<UserEditArgs>(WaxRoute.users),
+                    builder: _userEdit,
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: WaxRoute.adminSettings,
+                builder: (context, state) => const ServerSettingsScreen(),
+              ),
+              GoRoute(
+                path: WaxRoute.schedules,
+                builder: (context, state) => const SchedulesScreen(),
+              ),
+              GoRoute(
+                path: WaxRoute.audit,
+                builder: (context, state) => const AuditScreen(),
+              ),
+              GoRoute(
+                path: WaxRoute.backups,
+                builder: (context, state) => const BackupsScreen(),
+              ),
+              GoRoute(
+                path: WaxRoute.trash,
+                builder: (context, state) => const TrashScreen(),
+              ),
+              GoRoute(
+                path: WaxRoute.migrate,
+                builder: (context, state) => const MigrateScreen(),
               ),
             ],
-          ),
-          GoRoute(
-            path: WaxRoute.audit,
-            builder: (context, state) => const AuditScreen(),
-          ),
-          GoRoute(
-            path: WaxRoute.backups,
-            builder: (context, state) => const BackupsScreen(),
-          ),
-          GoRoute(
-            path: WaxRoute.trash,
-            builder: (context, state) => const TrashScreen(),
-          ),
-          GoRoute(
-            path: WaxRoute.migrate,
-            builder: (context, state) => const MigrateScreen(),
           ),
         ],
       ),

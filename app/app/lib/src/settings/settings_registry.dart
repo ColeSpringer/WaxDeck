@@ -406,7 +406,29 @@ const settingsRegistry = <SettingEntry>[
     id: 'server-summary',
     title: 'This server',
     section: SettingsSection.server,
-    keywords: <String>['version', 'uptime', 'admin', 'console'],
+    keywords: <String>['version', 'uptime', 'build'],
+    adminOnly: true,
+  ),
+  // The switches themselves live in the console now, but searching
+  // settings for "read-only" or "signup" has to land somewhere, and the
+  // row that opens the console is the honest destination: the query is
+  // about the server, and this is the way to the server's own screens.
+  SettingEntry(
+    id: 'admin-console',
+    title: 'Admin console',
+    section: SettingsSection.server,
+    keywords: <String>[
+      'read-only',
+      'signup',
+      'libraries',
+      'users',
+      'backups',
+      'schedules',
+      'trash',
+      'audit',
+      'transcoding',
+      'genres',
+    ],
     adminOnly: true,
   ),
 ];

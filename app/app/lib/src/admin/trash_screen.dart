@@ -1,36 +1,37 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../shell/semantics_ids.dart';
-import 'admin_providers.dart';
 import '../format_bytes.dart';
+import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
+import 'admin_console.dart';
+import 'admin_providers.dart';
 
 /// The server-side trash: what deletions parked, restorable per entry,
-/// purgeable as a whole.
+/// purgeable one at a time or all at once.
 class TrashScreen extends ConsumerWidget {
   const TrashScreen({super.key});
 
-  Future<void> _restore(
-    BuildContext context,
-    WidgetRef ref,
-    TrashEntry entry,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
+  Future<void> _restore(WidgetRef ref, TrashEntry entry) async {
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(trashProvider.notifier).restore(entry.id);
-      messenger.showSnackBar(SnackBar(content: Text('Restored ${entry.name}')));
-    } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show('Restored ${entry.name}');
+    } on WaxDeckApiException catch (error) {
+      messenger.show(error.message);
     }
   }
 
+  /// One file, behind a plain confirmation: it is one file, its name is
+  /// on screen, and the typed word is for the action that takes every
+  /// one of them at once.
   Future<void> _purge(
     BuildContext context,
     WidgetRef ref,
     TrashEntry entry,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -38,15 +39,17 @@ class TrashScreen extends ConsumerWidget {
         content: Text(
           '${entry.name} is deleted for good. This cannot be undone.',
         ),
-        actions: [
-          TextButton(
+        actions: <Widget>[
+          WaxButton(
+            label: 'Cancel',
+            kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
-            key: const Key('trash-purge-confirm'),
+          WaxButton(
+            label: 'Purge',
+            kind: WaxButtonKind.destructive,
+            semanticsId: SemanticsIds.trashPurgeConfirm,
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Purge'),
           ),
         ],
       ),
@@ -54,120 +57,177 @@ class TrashScreen extends ConsumerWidget {
     if (confirmed != true) return;
     try {
       final reclaimed = await ref.read(trashProvider.notifier).purge(entry.id);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Purged ${entry.name}, reclaimed ${formatBytes(reclaimed)}',
-          ),
-        ),
+      messenger.show(
+        'Purged ${entry.name}, reclaimed ${formatBytes(reclaimed)}',
       );
-    } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } on WaxDeckApiException catch (error) {
+      messenger.show(error.message);
     }
   }
 
+  /// Emptying takes the typed word: it deletes files the server was
+  /// holding precisely because somebody might want them back, and it is
+  /// one press away from the row that restores one.
   Future<void> _empty(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Empty trash?'),
-        content: const Text(
-          'Every trashed file is deleted for good. This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            key: const Key('trash-empty-confirm'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Empty trash'),
-          ),
-        ],
-      ),
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    final confirmed = await showTypedConfirm(
+      context,
+      title: 'Empty the trash?',
+      message:
+          'Every trashed file is deleted for good, including the ones '
+          'still restorable. This cannot be undone.',
+      confirmWord: 'EMPTY',
+      confirmLabel: 'Empty trash',
+      fieldSemanticsId: SemanticsIds.confirmField,
+      confirmSemanticsId: SemanticsIds.confirmAccept,
+      cancelSemanticsId: SemanticsIds.confirmCancel,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     try {
       final result = await ref.read(trashProvider.notifier).empty();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Purged ${result.purged} files, reclaimed '
-            '${formatBytes(result.reclaimedBytes)}',
-          ),
-        ),
+      messenger.show(
+        'Purged ${result.purged} files, reclaimed '
+        '${formatBytes(result.reclaimedBytes)}',
       );
-    } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } on WaxDeckApiException catch (error) {
+      messenger.show(error.message);
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final sizeClass = WaxSizeClass.of(context);
+    final colors = WaxColors.of(context);
     final trash = ref.watch(trashProvider);
     final includeRestored = ref.watch(trashIncludeRestoredProvider);
-    return Semantics(
-      identifier: SemanticsIds.adminTrash,
-      container: true,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Trash'),
-          actions: [
-            Semantics(
-              identifier: SemanticsIds.trashEmpty,
-              child: TextButton.icon(
-                key: const Key(SemanticsIds.trashEmpty),
-                onPressed: () => _empty(context, ref),
-                icon: const Icon(Icons.delete_forever_outlined),
-                label: const Text('Empty trash'),
+    return WaxScaffold(
+      title: 'Trash',
+      largeTitle: false,
+      semanticsId: SemanticsIds.adminTrash,
+      onBack: adminBack(context),
+      actions: <Widget>[
+        WaxButton(
+          label: 'Empty trash',
+          kind: WaxButtonKind.destructive,
+          semanticsId: SemanticsIds.trashEmpty,
+          onPressed: () => _empty(context, ref),
+        ),
+      ],
+      body: Padding(
+        padding: sizeClass.gutter.add(
+          const EdgeInsets.only(bottom: WaxSpace.s32),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            WaxSettingRow(
+              title: 'Show restored entries',
+              help: 'Entries already put back, for the record',
+              control: WaxSwitch(
+                label: 'Show restored entries',
+                value: includeRestored,
+                semanticsId: SemanticsIds.trashIncludeRestored,
+                onChanged: (value) => ref
+                    .read(trashIncludeRestoredProvider.notifier)
+                    .toggle(value),
               ),
             ),
-          ],
-        ),
-        body: Column(
-          children: [
-            SwitchListTile(
-              key: const Key('trash-include-restored'),
-              title: const Text('Show restored entries'),
-              value: includeRestored,
-              onChanged: (value) =>
-                  ref.read(trashIncludeRestoredProvider.notifier).toggle(value),
-            ),
-            Expanded(
-              child: switch (trash) {
-                AsyncData(:final value) when value.entries.isEmpty =>
-                  const Center(child: Text('The trash is empty')),
-                AsyncData(:final value) => ListView(
-                  children: [
-                    for (final entry in value.entries)
-                      _TrashRow(
+            const SizedBox(height: WaxSpace.s16),
+            switch (trash) {
+              AsyncData(:final value) => WaxTable<TrashEntry>(
+                rows: value.entries,
+                rowId: (entry) => entry.id,
+                rowSemanticsId: SemanticsIds.trashRow,
+                rowDetailSemanticsId: SemanticsIds.trashDetail,
+                empty: const EmptyState(
+                  glyph: WaxIcons.delete,
+                  title: 'The trash is empty',
+                  message: 'Deleted files wait here before they are purged.',
+                ),
+                columns: <WaxColumn<TrashEntry>>[
+                  WaxColumn<TrashEntry>(
+                    label: 'File',
+                    priority: WaxColumnPriority.primary,
+                    text: (entry) => entry.name,
+                    cell: (context, entry) => Text(
+                      entry.name,
+                      style: WaxType.titleItem.copyWith(
+                        color: entry.restoredAt == null
+                            ? colors.textPrimary
+                            : colors.textTertiary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  WaxColumn<TrashEntry>(
+                    label: 'Reason',
+                    width: 140,
+                    text: (entry) => entry.reason,
+                    cell: (context, entry) => Text(
+                      entry.restoredAt == null ? entry.reason : 'restored',
+                      style: WaxType.bodySmall.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  WaxColumn<TrashEntry>(
+                    label: 'Size',
+                    width: 92,
+                    numeric: true,
+                    text: (entry) => formatBytes(entry.sizeBytes),
+                    cell: (context, entry) => Text(
+                      formatBytes(entry.sizeBytes),
+                      style: WaxType.monoData.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  WaxColumn<TrashEntry>(
+                    label: 'Trashed',
+                    width: 108,
+                    text: (entry) => _date(entry.trashedAt),
+                    cell: (context, entry) => Text(
+                      _date(entry.trashedAt),
+                      style: WaxType.monoData.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+                trailing: (context, entry) => entry.restoredAt != null
+                    ? const SizedBox.shrink()
+                    : _RowActions(
                         entry: entry,
-                        onRestore: () => _restore(context, ref, entry),
+                        onRestore: () => _restore(ref, entry),
                         onPurge: () => _purge(context, ref, entry),
                       ),
-                  ],
-                ),
-                AsyncError(:final error) => Center(
-                  child: Text(
-                    error is WaxDeckApiException
-                        ? error.message
-                        : 'Could not load the trash',
-                  ),
-                ),
-                _ => const Center(child: CircularProgressIndicator()),
-              },
-            ),
+              ),
+              AsyncError(:final error) => ErrorState(
+                title: 'Could not load the trash',
+                message: error is WaxDeckApiException
+                    ? error.message
+                    : 'Something went wrong reading it.',
+                onRetry: () => ref.invalidate(trashProvider),
+              ),
+              _ => const SkeletonShapes(shape: SkeletonShape.list),
+            },
           ],
         ),
       ),
     );
   }
+
+  static String _date(DateTime at) {
+    final local = at.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day';
+  }
 }
 
-class _TrashRow extends StatelessWidget {
-  const _TrashRow({
+class _RowActions extends StatelessWidget {
+  const _RowActions({
     required this.entry,
     required this.onRestore,
     required this.onPurge,
@@ -177,62 +237,24 @@ class _TrashRow extends StatelessWidget {
   final VoidCallback onRestore;
   final VoidCallback onPurge;
 
-  static String _date(DateTime at) {
-    final local = at.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final restored = entry.restoredAt != null;
-    return Semantics(
-      identifier: SemanticsIds.trashRow(entry.id),
-      child: ListTile(
-        key: ValueKey(SemanticsIds.trashRow(entry.id)),
-        leading: const Icon(Icons.delete_outline),
-        title: Row(
-          children: [
-            Flexible(child: Text(entry.name, overflow: TextOverflow.ellipsis)),
-            if (restored) ...[
-              const SizedBox(width: 8),
-              const Chip(
-                label: Text('restored'),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ],
-          ],
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        WaxIconButton(
+          glyph: WaxIcons.refresh,
+          label: 'Restore ${entry.name}',
+          semanticsId: SemanticsIds.trashRestore(entry.id),
+          onPressed: onRestore,
         ),
-        subtitle: Text(
-          '${formatBytes(entry.sizeBytes)}, ${entry.reason}, '
-          '${_date(entry.trashedAt)}',
+        WaxIconButton(
+          glyph: WaxIcons.delete,
+          label: 'Purge ${entry.name}',
+          semanticsId: SemanticsIds.trashPurge(entry.id),
+          onPressed: onPurge,
         ),
-        trailing: restored
-            ? null
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Semantics(
-                    identifier: SemanticsIds.trashPurge(entry.id),
-                    child: TextButton(
-                      key: Key(SemanticsIds.trashPurge(entry.id)),
-                      onPressed: onPurge,
-                      child: const Text('Purge'),
-                    ),
-                  ),
-                  Semantics(
-                    identifier: SemanticsIds.trashRestore(entry.id),
-                    child: TextButton(
-                      key: Key(SemanticsIds.trashRestore(entry.id)),
-                      onPressed: onRestore,
-                      child: const Text('Restore'),
-                    ),
-                  ),
-                ],
-              ),
-      ),
+      ],
     );
   }
 }

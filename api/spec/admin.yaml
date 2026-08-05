@@ -8,7 +8,23 @@ paths:
         The catalog's libraries, for granting per-library visibility.
         Administrators only. Unpaginated: libraries are a handful of roots,
         not a collection that grows with content.
+
+        `itemCount` is opt-in through `counts`, because it is the one
+        field here that costs anything: the catalog has no library
+        dimension, so counting a root means matching every item's path
+        against it. Callers that want the names and pids - a permission
+        editor, a matching-mode menu - should leave it off.
       tags: [admin]
+      parameters:
+        - name: counts
+          in: query
+          description: >
+            Count the items under each root. Off by default; the count
+            is a scan per library, so it is asked for by the one screen
+            that shows it.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: All libraries.
@@ -33,7 +49,9 @@ paths:
         the scan indexes them. Streaming through the WaxFlow sidecar also
         needs the sidecar to mount the same-named root, so a runtime-added
         root streams once the sidecar learns it, while downloads and direct
-        playback do not wait on that. `name` is the display name and the
+        playback do not wait on that; when the sidecar cannot be brought to
+        the new root the 201 carries `streamingWarning` saying so, rather
+        than reporting a plain success. `name` is the display name and the
         WaxFlow root name the same directory is served under. Administrators
         only.
       tags: [admin]
@@ -45,11 +63,13 @@ paths:
               $ref: "#/components/schemas/LibraryCreate"
       responses:
         "201":
-          description: The created library.
+          description: >
+            The created library. `streamingWarning` is present when the
+            root exists but the streaming sidecar did not take it.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Library"
+                $ref: "#/components/schemas/LibraryCreated"
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "401":
@@ -1086,6 +1106,42 @@ components:
             Content class the library holds. Currently `music`,
             `audiobook`, `podcast`, or `mixed`; new values may appear.
           example: music
+        path:
+          type: string
+          description: >
+            Absolute filesystem path of the root, for the administrative
+            surface that manages it. Absent where the catalog cannot
+            render the stored path as text (roots on non-UTF8
+            filesystems are stored as raw bytes).
+          example: /srv/media/music
+        itemCount:
+          type: integer
+          format: int64
+          description: >
+            Playable items the catalog holds under this root. Present
+            only where the caller asked for counts, and counted at read
+            time, so it lags a running scan.
+
+    LibraryCreated:
+      allOf:
+        - $ref: "#/components/schemas/Library"
+        - type: object
+          description: What creating the library did beyond creating it.
+          properties:
+            streamingWarning:
+              type: string
+              description: >
+                Present when the library exists but streaming from it does
+                not work yet, saying what an administrator still has to do.
+                Creating a root reconciles the WaxFlow sidecar so it serves
+                the same directory; where that cannot happen (a sidecar too
+                old to reload, a path it cannot open) browsing, downloading,
+                and direct playback still work and streaming waits for a
+                sidecar restart. Absent means streaming works now.
+              example: >-
+                streaming from this library is not available yet: the
+                sidecar could not open /srv/media/audiobooks
+      description: A newly created library, with any degradation it left behind.
 
     Libraries:
       type: object

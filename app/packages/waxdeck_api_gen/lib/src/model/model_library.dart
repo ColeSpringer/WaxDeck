@@ -14,8 +14,10 @@ part 'model_library.g.dart';
 /// * [pid] - Library PID.
 /// * [name] - Display name (the configured root name).
 /// * [media] - Content class the library holds. Currently `music`, `audiobook`, `podcast`, or `mixed`; new values may appear. 
-@BuiltValue()
-abstract class ModelLibrary implements Built<ModelLibrary, ModelLibraryBuilder> {
+/// * [path] - Absolute filesystem path of the root, for the administrative surface that manages it. Absent where the catalog cannot render the stored path as text (roots on non-UTF8 filesystems are stored as raw bytes). 
+/// * [itemCount] - Playable items the catalog holds under this root. Present only where the caller asked for counts, and counted at read time, so it lags a running scan. 
+@BuiltValue(instantiable: false)
+abstract class ModelLibrary  {
   /// Library PID.
   @BuiltValueField(wireName: r'pid')
   String get pid;
@@ -28,12 +30,13 @@ abstract class ModelLibrary implements Built<ModelLibrary, ModelLibraryBuilder> 
   @BuiltValueField(wireName: r'media')
   String? get media;
 
-  ModelLibrary._();
+  /// Absolute filesystem path of the root, for the administrative surface that manages it. Absent where the catalog cannot render the stored path as text (roots on non-UTF8 filesystems are stored as raw bytes). 
+  @BuiltValueField(wireName: r'path')
+  String? get path;
 
-  factory ModelLibrary([void updates(ModelLibraryBuilder b)]) = _$ModelLibrary;
-
-  @BuiltValueHook(initializeBuilder: true)
-  static void _defaults(ModelLibraryBuilder b) => b;
+  /// Playable items the catalog holds under this root. Present only where the caller asked for counts, and counted at read time, so it lags a running scan. 
+  @BuiltValueField(wireName: r'itemCount')
+  int? get itemCount;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<ModelLibrary> get serializer => _$ModelLibrarySerializer();
@@ -41,7 +44,7 @@ abstract class ModelLibrary implements Built<ModelLibrary, ModelLibraryBuilder> 
 
 class _$ModelLibrarySerializer implements PrimitiveSerializer<ModelLibrary> {
   @override
-  final Iterable<Type> types = const [ModelLibrary, _$ModelLibrary];
+  final Iterable<Type> types = const [ModelLibrary];
 
   @override
   final String wireName = r'ModelLibrary';
@@ -68,6 +71,20 @@ class _$ModelLibrarySerializer implements PrimitiveSerializer<ModelLibrary> {
         specifiedType: const FullType(String),
       );
     }
+    if (object.path != null) {
+      yield r'path';
+      yield serializers.serialize(
+        object.path,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.itemCount != null) {
+      yield r'itemCount';
+      yield serializers.serialize(
+        object.itemCount,
+        specifiedType: const FullType(int),
+      );
+    }
   }
 
   @override
@@ -77,6 +94,46 @@ class _$ModelLibrarySerializer implements PrimitiveSerializer<ModelLibrary> {
     FullType specifiedType = FullType.unspecified,
   }) {
     return _serializeProperties(serializers, object, specifiedType: specifiedType).toList();
+  }
+
+  @override
+  ModelLibrary deserialize(
+    Serializers serializers,
+    Object serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
+    return serializers.deserialize(serialized, specifiedType: FullType($ModelLibrary)) as $ModelLibrary;
+  }
+}
+
+/// a concrete implementation of [ModelLibrary], since [ModelLibrary] is not instantiable
+@BuiltValue(instantiable: true)
+abstract class $ModelLibrary implements ModelLibrary, Built<$ModelLibrary, $ModelLibraryBuilder> {
+  $ModelLibrary._();
+
+  factory $ModelLibrary([void Function($ModelLibraryBuilder)? updates]) = _$$ModelLibrary;
+
+  @BuiltValueHook(initializeBuilder: true)
+  static void _defaults($ModelLibraryBuilder b) => b;
+
+  @BuiltValueSerializer(custom: true)
+  static Serializer<$ModelLibrary> get serializer => _$$ModelLibrarySerializer();
+}
+
+class _$$ModelLibrarySerializer implements PrimitiveSerializer<$ModelLibrary> {
+  @override
+  final Iterable<Type> types = const [$ModelLibrary, _$$ModelLibrary];
+
+  @override
+  final String wireName = r'$ModelLibrary';
+
+  @override
+  Object serialize(
+    Serializers serializers,
+    $ModelLibrary object, {
+    FullType specifiedType = FullType.unspecified,
+  }) {
+    return serializers.serialize(object, specifiedType: FullType(ModelLibrary))!;
   }
 
   void _deserializeProperties(
@@ -112,6 +169,20 @@ class _$ModelLibrarySerializer implements PrimitiveSerializer<ModelLibrary> {
           ) as String;
           result.media = valueDes;
           break;
+        case r'path':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.path = valueDes;
+          break;
+        case r'itemCount':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.itemCount = valueDes;
+          break;
         default:
           unhandled.add(key);
           unhandled.add(value);
@@ -121,12 +192,12 @@ class _$ModelLibrarySerializer implements PrimitiveSerializer<ModelLibrary> {
   }
 
   @override
-  ModelLibrary deserialize(
+  $ModelLibrary deserialize(
     Serializers serializers,
     Object serialized, {
     FullType specifiedType = FullType.unspecified,
   }) {
-    final result = ModelLibraryBuilder();
+    final result = $ModelLibraryBuilder();
     final serializedList = (serialized as Iterable<Object?>).toList();
     final unhandled = <Object?>[];
     _deserializeProperties(

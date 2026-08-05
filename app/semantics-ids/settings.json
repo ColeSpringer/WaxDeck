@@ -3,6 +3,7 @@
   "ids": {
     "aboutLicenses": "about-licenses",
     "aboutOpen": "about-open",
+    "aboutRow": "about",
     "appPasswordAdd": "app-password-add",
     "appPasswordRevoke": "app-password-revoke-{id}",
     "deviceRename": "device-rename-{id}",
@@ -21,6 +22,7 @@
     "scrobblerConnect": "scrobbler-connect-{service}",
     "scrobblerDisconnect": "scrobbler-disconnect-{service}",
     "scrobblerSetupLastfm": "scrobbler-setup-lastfm",
+    "serverSummary": "server-summary",
     "setting": "setting-{id}",
     "settingsResult": "settings-result-{id}",
     "settingsScreen": "settings-screen",

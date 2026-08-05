@@ -757,17 +757,39 @@ abstract interface class WaxDeckRepository {
   /// `GET /review/stats`: queue counters by lifecycle state.
   Future<ReviewStats> getReviewStats();
 
-  /// `GET /libraries`: every catalog library.
-  Future<List<LibraryInfo>> listLibraries();
+  /// `GET /libraries`: every catalog library. [counts] asks for each
+  /// root's item count, which is a scan per library, so only the screen
+  /// that shows the number passes it.
+  Future<List<LibraryInfo>> listLibraries({bool counts = false});
 
   /// `POST /libraries`: registers a new library root at runtime,
-  /// returning the created library. Administrators only.
+  /// returning the created library. Its `streamingWarning` is set when
+  /// the root exists but the streaming sidecar did not take it.
+  /// Administrators only.
   Future<LibraryInfo> createLibrary({
     required String name,
     required String path,
     String? media,
     bool? managed,
   });
+
+  /// `POST /library/rescan`: starts a scan of every library root,
+  /// returning the job tracking it. Administrators only.
+  Future<Job> rescanLibrary();
+
+  /// `GET /admin/genre-tree`: the canonical genre vocabulary in force
+  /// (administrators).
+  Future<GenreTree> getGenreTree();
+
+  /// `PUT /admin/genre-tree`: replaces the vocabulary, returning what is
+  /// now in force. An empty list clears the override and returns the
+  /// instance to the shipped default (administrators).
+  Future<GenreTree> putGenreTree(List<GenreNode> genres);
+
+  /// `POST /admin/genre-normalize`: starts a full-catalog normalization
+  /// as a background task; [dryRun] reports the same numbers without
+  /// writing (administrators).
+  Future<ToolTask> normalizeGenres({bool dryRun = false});
 
   /// `GET /libraries/{pid}/matching`: the library's matching mode
   /// (`auto`, `review`, or `off`).
@@ -2849,12 +2871,13 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<List<LibraryInfo>> listLibraries() => _guard(() async {
-    final response = await _gen.getAdminApi().listLibraries();
-    return _require(
-      response.data,
-    ).libraries.map(libraryInfoFromGen).toList(growable: false);
-  });
+  Future<List<LibraryInfo>> listLibraries({bool counts = false}) =>
+      _guard(() async {
+        final response = await _gen.getAdminApi().listLibraries(counts: counts);
+        return _require(
+          response.data,
+        ).libraries.map(libraryInfoFromGen).toList(growable: false);
+      });
 
   @override
   Future<LibraryInfo> createLibrary({
@@ -2872,7 +2895,40 @@ class WaxDeckClient implements WaxDeckRepository {
           ..managed = managed ?? false,
       ),
     );
-    return libraryInfoFromGen(_require(response.data));
+    return libraryCreatedFromGen(_require(response.data));
+  });
+
+  @override
+  Future<Job> rescanLibrary() => _guard(() async {
+    final response = await _gen.getAdminApi().rescanLibrary();
+    return jobFromGen(_require(response.data));
+  });
+
+  @override
+  Future<GenreTree> getGenreTree() => _guard(() async {
+    final response = await _gen.getAdminApi().getGenreTree();
+    return genreTreeFromGen(_require(response.data));
+  });
+
+  @override
+  Future<GenreTree> putGenreTree(List<GenreNode> genres) => _guard(() async {
+    final response = await _gen.getAdminApi().putGenreTree(
+      genreTreeUpdate: gen.GenreTreeUpdate(
+        (b) =>
+            b..genres = ListBuilder<gen.GenreNode>(genres.map(genreNodeToGen)),
+      ),
+    );
+    return genreTreeFromGen(_require(response.data));
+  });
+
+  @override
+  Future<ToolTask> normalizeGenres({bool dryRun = false}) => _guard(() async {
+    final response = await _gen.getAdminApi().createGenreNormalization(
+      genreNormalizeRequest: gen.GenreNormalizeRequest(
+        (b) => b..dryRun = dryRun,
+      ),
+    );
+    return toolTaskFromGen(_require(response.data));
   });
 
   @override

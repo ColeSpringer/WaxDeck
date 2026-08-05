@@ -380,13 +380,6 @@ here waits on upstream.
 
 ## Curation and metadata
 
-- `[in-repo]` **Scan discoveries do not enqueue matching on their own.** The
-  identify pipeline runs for uploads and for explicit rematch
-  requests; a library scan that discovers new loose files does not
-  yet open review entries for them. The wiring point is the catalog
-  change feed consumer (debounce a scan's item additions into album
-  units once the scan settles); until it lands, "identify my new
-  files" is a rematch away.
 - `[in-repo]` **Book and remaining metadata providers.** Hardcover
   (the ASIN to ISBN bridge), Google Books and Open Library fallbacks,
   and Discogs are not yet implemented as enrichment providers; Deezer,
@@ -417,39 +410,6 @@ here waits on upstream.
   `FilePickerPort` deliberately does not speak; the "Upload a folder"
   tile hides there (`canPickFolders`). Multi-select plus auto
   grouping covers the album case on Android meanwhile.
-- `[in-repo]` **Upload quota counts imported sessions, so a filled quota
-  never frees.** `UploadBytesInUse` sums every non-discarded session's
-  declared size, imported ones included, and `DeleteUpload` refuses
-  imported rows, so bytes that reached the library stay charged for
-  good. Deleting the item does not help: `POST /library/items/delete`
-  is shipped and permission-gated, but it never touches the uploads
-  table, though `uploads.item_pid` is the link it would need. A user who
-  fills a small quota stays locked out after following the refusal's own
-  advice ("delete the item there").
-
-  Decided: the quota means in-flight footprint, not total contribution.
-  It caps what may sit in staging awaiting review, so an import releases
-  the headroom it held. The fix is the accounting predicate (skip
-  imported alongside discarded) plus honest naming, since "upload quota"
-  reads as a storage-contribution cap to most people: the admin field
-  becomes a pending-upload limit, and its helper text says that
-  importing frees the space. The rejected reading, total contribution,
-  wanted release-on-delete accounting that had to stay correct across
-  trash, restore, purge, merge, dedup, and the health fixes, and it had
-  no answer for a restore that would re-charge a user already at their
-  cap.
-
-  Lands with the admin users screen, which is what first makes a quota
-  settable: every account runs uncapped today, so neither reading is
-  observable and the label is where the decision becomes visible.
-  Recorded because the setting is easily read as something it is not.
-  This is a byte ceiling checked when a session opens, and enforced
-  through the transfer (over-length bytes are truncated), not a rate
-  limit or a time window; the only rate limiter in the server counts
-  failed logins. It does not bound what a user adds to the library over
-  time, and no free-space guard exists anywhere, so protecting the disk
-  from a trusted but enthusiastic uploader is a separate unbuilt
-  mechanism.
 - `[in-repo]` **Acquired-track metadata is cleaned for matching, not for
   display.** For a loose track the matching engine reads an "Artist -
   Track" title and a channel-style artist tag into a clean recording
@@ -694,13 +654,6 @@ here waits on upstream.
 
 ## Admin and ops
 
-- `[roadmap]` **The command palette cannot start a scan.** The palette's
-  action registry ships with every verb the client already has, and
-  starting a library scan is not one of them: nothing in the app calls
-  that endpoint yet, so the command would have to build the verb as well
-  as the row. The admin console slice is where the verb belongs, and
-  registering a `WaxCommand` for it there is a few lines once it exists
-  (docs/adr/0044).
 - `[in-repo]` **No server-side retention sweep for old finished tool
   tasks.** Rows now clear by hand - a per-row delete and a
   clear-finished sweep, both caller-scoped - but an account that never
@@ -709,16 +662,32 @@ here waits on upstream.
   clear is not; it wants a retention knob and a place in the
   maintenance loop rather than growing the bug-batch that added the
   manual clear.
-- `[in-repo]` **A degraded runtime library reports streaming trouble only
-  on the audit entry.** Creating a library at runtime reconciles the
-  streaming engine, and when that cannot happen (an engine too old to
-  reload, or a path it cannot open) the reason is recorded on the
-  `library.create` audit entry and logged, while the 201 itself is a
-  plain success. Putting it in the response wants a `streamingWarning`
-  on the create body; deferred because nothing consumes library creation
-  yet -- there is no libraries screen in the app, so the field would be
-  wire with no reader. Add it with that screen, which is where an
-  administrator would actually see it.
+- `[in-repo]` **Three admin console sections are declared and unbuilt.**
+  The console holds fourteen sections; the layout blueprint's 6.15 names
+  three more that have no server-scope surface at all yet. Notification
+  targets exist per account and not per server (the same target editor
+  plus the server event catalog would do it); share links are listed for
+  their owner and the `all=true` oversight listing has no screen; and
+  the transcoding limits are set without the current-session context
+  that would say what they are actually bounding. Each is a section
+  registration and one screen against endpoints that already answer.
+- `[upstream]` **The libraries screen counts items by path prefix.** The
+  catalog's query language has no library dimension, so a per-library
+  count is `path startsWith root`, which is the same attribution every
+  other library-scoped answer uses and is one `LIKE`-shaped query per
+  library per read of the screen. It is honest and it is not free. The
+  ask is filed as "a library dimension on item queries" in
+  upstream-requests.md; the prefix count is the shipped workaround and
+  stays correct whether or not it lands.
+- `[in-repo]` **The first-run guided flow is the console, not a wizard.**
+  6.14 describes a three-step card flow after the create-admin form (add
+  a library, start a scan, "while it warms up"). What shipped is the
+  console's own libraries screen, its Scan library action, and a
+  warming-up card on the dashboard, which is where a new administrator
+  lands and which now says something true - scan discoveries identify
+  themselves. A wizard that walks somebody through those three screens
+  in order is still worth building; it is a presentation of surfaces
+  that all exist rather than new capability.
 - `[in-repo]` **Importers beyond Navidrome/Subsonic and
   Audiobookshelf.** The migration framework (portable-ref matching,
   backdated idempotent listen ingest, dry runs, task reports) is

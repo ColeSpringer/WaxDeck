@@ -11,15 +11,15 @@ part 'upload_quota.g.dart';
 /// The caller's upload allowance: always their own, even for administrators listing everyone's sessions. Treat absence on a page as unknown, not unlimited. 
 ///
 /// Properties:
-/// * [bytesInUse] - Declared bytes of the caller's live sessions (everything not discarded); what quota checks charge. 
-/// * [quotaBytes] - The account's cap on `bytesInUse`; absent means no per-user cap. 
+/// * [bytesInUse] - Declared bytes of the caller's sessions still sitting in staging: everything neither discarded nor imported. What quota checks charge, so importing a session releases the headroom it held. 
+/// * [quotaBytes] - The account's ceiling on `bytesInUse`; absent means no per-user cap. A limit on pending uploads, not on what the account has contributed to the library. 
 @BuiltValue()
 abstract class UploadQuota implements Built<UploadQuota, UploadQuotaBuilder> {
-  /// Declared bytes of the caller's live sessions (everything not discarded); what quota checks charge. 
+  /// Declared bytes of the caller's sessions still sitting in staging: everything neither discarded nor imported. What quota checks charge, so importing a session releases the headroom it held. 
   @BuiltValueField(wireName: r'bytesInUse')
   int get bytesInUse;
 
-  /// The account's cap on `bytesInUse`; absent means no per-user cap. 
+  /// The account's ceiling on `bytesInUse`; absent means no per-user cap. A limit on pending uploads, not on what the account has contributed to the library. 
   @BuiltValueField(wireName: r'quotaBytes')
   int? get quotaBytes;
 

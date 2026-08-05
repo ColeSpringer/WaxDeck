@@ -125,6 +125,7 @@ import 'package:waxdeck_api_gen/src/model/lastfm_connect_start.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
 import 'package:waxdeck_api_gen/src/model/library_access.dart';
 import 'package:waxdeck_api_gen/src/model/library_create.dart';
+import 'package:waxdeck_api_gen/src/model/library_created.dart';
 import 'package:waxdeck_api_gen/src/model/library_matching.dart';
 import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/linked_identity.dart';
@@ -452,6 +453,7 @@ part 'serializers.g.dart';
   Libraries,
   LibraryAccess,
   LibraryCreate,
+  LibraryCreated,
   LibraryMatching,
   LibraryReadOnly,
   LinkedIdentity,
@@ -483,7 +485,7 @@ part 'serializers.g.dart';
   MigrationCreate,
   MigrationOptions,
   MixBasis,
-  ModelLibrary,
+  ModelLibrary,$ModelLibrary,
   MonthListening,
   NotificationEvent,
   NotificationEventList,
@@ -670,6 +672,7 @@ Serializers serializers = (_$serializers.toBuilder()
       ..add(EpisodeSummary.serializer)
       ..add(Invite.serializer)
       ..add(ItemSummary.serializer)
+      ..add(ModelLibrary.serializer)
       ..add(ReviewEntry.serializer)
       ..add(User.serializer)
       ..add(const OneOfSerializer())
