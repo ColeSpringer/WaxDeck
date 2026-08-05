@@ -397,12 +397,6 @@ here waits on upstream.
   background, disc art) needs the candidate/provider model extended to
   carry per-role art first. The slots are readable and hand-settable
   meanwhile (docs/adr/0014).
-- `[in-repo]` **No multi-slot artwork editor in the app.** The client
-  can read `art-roles` and write any slot, and the metadata editor shows
-  the own-versus-inherited cover indicator, but a surface to view every
-  slot and upload or clear each one is unbuilt. It is a net-new UI (no
-  artwork upload existed before), tracked rather than rushed into the
-  art-role slice (docs/adr/0014).
 - `[in-repo]` **Android folder picking is excluded from the upload
   surface.** File picking works on every platform (the endorsed
   `file_selector_android` implementation covers in-app file picks),
@@ -647,10 +641,24 @@ here waits on upstream.
   and the sync channel is down stays a monogram until the channel
   reconnects and invalidates. That is the same window every other cached
   view has, and it closes the same way.
-- `[in-repo]` **Share-card image export.** The year-in-review surface
-  answers data; rendering shareable image cards from it (and clip
-  cards for episode shares) is client work on top of the existing
-  responses.
+- `[in-repo]` **Share cards carry no artwork.** The year-in-review
+  cards render and export (docs/adr/0047), and everything on them is
+  text and tokens: a top-artists card is a list of names rather than a
+  mosaic of covers. The card is deliberately one frame with no network
+  in it, so drawing covers wants the store's `bytesFor` threaded into
+  the render as a pre-fetch step before the boundary is captured, plus
+  a decision about what a card does when a cover is missing. Clip cards
+  for episode shares are the same shape and are not built either.
+- `[hardware]` **The Android share path for a card is unverified.**
+  Exporting a card on Android writes it into a FileProvider-scoped
+  cache directory and opens `ACTION_SEND` over the `waxdeck/share`
+  channel (docs/adr/0047). There is no device here and no Android build
+  in CI, so the Kotlin handler, the manifest `<provider>`, and the
+  `res/xml/file_paths.xml` scope have never run. What to check: the
+  chooser opens, the receiving app can read the image (a wrong
+  authority or an unscoped path fails here), the temp-then-rename
+  leaves no `.tmp` behind, and a second export of the same card
+  replaces rather than duplicates.
 
 ## Admin and ops
 

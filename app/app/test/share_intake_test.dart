@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/share_intake.dart';
 import 'package:waxdeck/src/uploads/share_intake_gate.dart';
 
@@ -48,14 +49,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(port.consumeCalls, 1);
-    expect(find.byKey(const Key('acquire-dialog')), findsOneWidget);
+    final url = find.bySemanticsIdentifier(SemanticsIds.acquireUrl);
+    expect(url, findsOneWidget);
     final field = tester.widget<TextField>(
-      find.byKey(const Key('acquire-url')),
+      find.descendant(of: url, matching: find.byType(TextField)),
     );
     expect(field.controller?.text, 'https://tube.example/watch?v=pony');
 
     // Submitting rides the normal acquisition path.
-    await tester.tap(find.byKey(const Key('acquire-submit')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
     await tester.pumpAndSettle();
     expect(
       repo.acquisitionCalls.single.url,

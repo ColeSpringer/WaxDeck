@@ -37,7 +37,6 @@ import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
-import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
 import 'package:waxdeck/src/settings/about_screen.dart';
@@ -145,8 +144,10 @@ final _locations = <String, Type>{
   WaxRoute.admin: AdminDashboardScreen,
   WaxRoute.libraries: LibrariesScreen,
   WaxRoute.genres: GenreTreeScreen,
-  WaxRoute.review: ReviewScreen,
-  WaxRoute.reviewEntry('re-1'): ReviewEntryScreen,
+  WaxRoute.review: ReviewSurface,
+  // The same surface: the entry is a pane beside the queue where there
+  // is room for one and the page itself where there is not.
+  WaxRoute.reviewEntry('re-1'): ReviewSurface,
   WaxRoute.health: HealthScreen,
   WaxRoute.healthRule('missing-artwork'): HealthIssuesScreen,
   WaxRoute.diagnostics: DiagnosticsScreen,
@@ -201,7 +202,6 @@ final _stackedInShell = <String>{
   // lands on the row that opened it - which is what let the Account
   // section stop pushing.
   WaxRoute.shares,
-  WaxRoute.reviewEntry('re-1'),
   WaxRoute.healthRule('missing-artwork'),
 };
 

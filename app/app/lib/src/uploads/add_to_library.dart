@@ -1,20 +1,19 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../tools/tasks_screen.dart';
 import 'file_picker_port.dart';
 import 'uploads_controller.dart';
 
-/// The one place new audio enters the library: acquire it from a URL (a
-/// video, playlist, or channel) or upload a file. Both land in the
-/// review queue. This is shared by the prominent add button on the
-/// library and the manage-uploads screen, so there is one flow to
-/// maintain.
+/// The one place new audio enters the library: a URL to acquire or a
+/// file to upload, both landing in the review queue. Shared by the add
+/// button and the uploads screen so there is one flow.
 
 /// Opens the add sheet, defaulting the media type to [initial] (the
 /// section the caller is in). Podcasts are added by subscribing, not
@@ -28,48 +27,52 @@ Future<void> showAddToLibrarySheet(
   final defaultType = (initial == null || initial == MediaType.podcast)
       ? MediaType.music
       : initial;
+  final colors = WaxColors.of(context);
   final choice = await showModalBottomSheet<String>(
     context: context,
+    backgroundColor: colors.surface2,
+    showDragHandle: true,
     builder: (sheetContext) => SafeArea(
-      child: Column(
-        key: const Key('add-sheet'),
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Semantics(
-            identifier: SemanticsIds.addFromUrl,
-            button: true,
-            child: ListTile(
-              key: const Key(SemanticsIds.addFromUrl),
-              leading: const Icon(Icons.add_link),
-              title: const Text('Add from URL'),
-              subtitle: const Text('A video, playlist, or channel'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          WaxSpace.s16,
+          0,
+          WaxSpace.s16,
+          WaxSpace.s24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const SectionHeader(
+              title: 'Add to the library',
+              overline: 'Both routes land in the review queue',
+            ),
+            WaxOptionRow(
+              title: 'Add from URL',
+              subtitle: 'A video, a playlist, or a channel',
+              glyph: WaxIcons.downloads,
+              semanticsId: SemanticsIds.addFromUrl,
               onTap: () => Navigator.of(sheetContext).pop('url'),
             ),
-          ),
-          if (picker != null)
-            Semantics(
-              identifier: SemanticsIds.addUploadFile,
-              button: true,
-              child: ListTile(
-                key: const Key(SemanticsIds.addUploadFile),
-                leading: const Icon(Icons.upload_file),
-                title: const Text('Upload files'),
+            if (picker != null)
+              WaxOptionRow(
+                title: 'Upload files',
+                subtitle: 'One track, or a set you pick yourself',
+                glyph: WaxIcons.add,
+                semanticsId: SemanticsIds.addUploadFile,
                 onTap: () => Navigator.of(sheetContext).pop('file'),
               ),
-            ),
-          if (picker != null && picker.canPickFolders)
-            Semantics(
-              identifier: SemanticsIds.addUploadFolder,
-              button: true,
-              child: ListTile(
-                key: const Key(SemanticsIds.addUploadFolder),
-                leading: const Icon(Icons.drive_folder_upload),
-                title: const Text('Upload a folder'),
-                subtitle: const Text('An album or a collection'),
+            if (picker != null && picker.canPickFolders)
+              WaxOptionRow(
+                title: 'Upload a folder',
+                subtitle: 'An album or a collection, hierarchy and all',
+                glyph: WaxIcons.albums,
+                semanticsId: SemanticsIds.addUploadFolder,
                 onTap: () => Navigator.of(sheetContext).pop('folder'),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -97,7 +100,7 @@ Future<void> acquireFromUrl(
   MediaType initial = MediaType.music,
   String? initialUrl,
 }) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final router = GoRouter.of(context);
   final request =
       await showDialog<({String url, MediaType mediaType, String format})>(
@@ -113,30 +116,19 @@ Future<void> acquireFromUrl(
           mediaType: request.mediaType,
           format: request.format,
         );
-    ref.invalidate(uploadsProvider);
-    ref.invalidate(toolTasksProvider);
-    // The download runs in the background and its files land in the
-    // review queue, not straight in the library, so the message says
-    // where to look and offers a jump to the task list to watch
-    // progress (or see why it failed).
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Downloading. It will appear in the review queue when ready.',
-          ),
-          duration: const Duration(seconds: 6),
-          action: SnackBarAction(
-            label: 'Tasks',
-            onPressed: () => router.push<void>(WaxRoute.tasks),
-          ),
-        ),
-      );
+    ref
+      ..invalidate(uploadsProvider)
+      ..invalidate(toolTasksProvider);
+    // It runs in the background and lands in review rather than the
+    // library, so the message says where to look.
+    messenger.show(
+      'Downloading. It will appear in the review queue when ready.',
+      actionLabel: 'Tasks',
+      actionSemanticsId: SemanticsIds.acquireTasks,
+      onAction: () => router.push<void>(WaxRoute.tasks),
+    );
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(e.message)));
+    messenger.show(e.message);
   }
 }
 
@@ -166,19 +158,16 @@ Future<void> pickFolderAndUpload(
   await uploadPickedFiles(context, ref, files, initial: initial);
 }
 
-/// The one upload flow behind every entry point (picker, folder,
-/// drag-and-drop): asks the media type - and, for several files, the
-/// grouping intent - opens the batch, uploads every file, and
-/// finalizes. Per-file failures surface and the loop continues; the
-/// finalize runs regardless so the files that did arrive reach
-/// review.
+/// The one upload flow behind picker, folder, and drop. A per-file
+/// failure surfaces and the loop continues, and the finalize runs
+/// regardless so what did arrive reaches review.
 Future<void> uploadPickedFiles(
   BuildContext context,
   WidgetRef ref,
   List<PickedAudioFile> files, {
   MediaType? initial,
 }) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final choice =
       await showDialog<({MediaType mediaType, UploadGrouping grouping})>(
         context: context,
@@ -198,9 +187,7 @@ Future<void> uploadPickedFiles(
       );
       batchId = batch.id;
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
       return;
     }
   }
@@ -214,18 +201,14 @@ Future<void> uploadPickedFiles(
             batchId: batchId,
           );
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('${file.name}: ${e.message}')));
+      messenger.show('${file.name}: ${e.message}');
     }
   }
   if (batchId != null) {
     try {
       await repository.completeUploadBatch(batchId);
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
     // Finalization filled the members' review entries; refresh the
     // rows.
@@ -271,69 +254,65 @@ class _AcquireDialogState extends State<AcquireDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
     final url = _urlController.text.trim();
     return AlertDialog(
-      key: const Key('acquire-dialog'),
+      backgroundColor: colors.surface2,
       title: const Text('Add from URL'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            key: const Key('acquire-url'),
-            controller: _urlController,
-            autofocus: true,
-            keyboardType: TextInputType.url,
-            decoration: const InputDecoration(
-              labelText: 'Source URL',
-              helperText: 'A single video, or a playlist or channel',
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            WaxTextField(
+              label: 'Source URL',
+              hint: 'A single video, or a playlist or channel',
+              controller: _urlController,
+              autofocus: true,
+              semanticsId: SemanticsIds.acquireUrl,
             ),
-          ),
-          const SizedBox(height: 8),
-          MediaTypeSelector(
-            value: _mediaType,
-            onChanged: (value) => setState(() => _mediaType = value),
-          ),
-          // Format is a download choice, so it is hidden for podcasts, which
-          // subscribe to a feed rather than transcode a file.
-          if (_mediaType != MediaType.podcast) ...[
-            const SizedBox(height: 8),
-            AcquireFormatSelector(
-              value: _format,
-              onChanged: (value) => setState(() => _format = value),
+            const SizedBox(height: WaxSpace.s12),
+            MediaTypeSelector(
+              value: _mediaType,
+              onChanged: (value) => setState(() => _mediaType = value),
             ),
+            // Format is a download choice, so it is hidden for podcasts,
+            // which subscribe to a feed rather than transcode a file.
+            if (_mediaType != MediaType.podcast) ...<Widget>[
+              const SizedBox(height: WaxSpace.s12),
+              AcquireFormatSelector(
+                value: _format,
+                onChanged: (value) => setState(() => _format = value),
+              ),
+            ],
           ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
-        Semantics(
-          identifier: SemanticsIds.acquireSubmit,
-          label: 'Queue download',
-          button: true,
-          child: FilledButton(
-            key: const Key(SemanticsIds.acquireSubmit),
-            onPressed: url.isEmpty
-                ? null
-                : () => Navigator.of(context).pop((
-                    url: url,
-                    mediaType: _mediaType,
-                    format: _mediaType == MediaType.podcast ? 'best' : _format,
-                  )),
-            child: const Text('Download'),
-          ),
+      ),
+      actions: <Widget>[
+        WaxButton(
+          label: 'Cancel',
+          kind: WaxButtonKind.text,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        WaxButton(
+          label: 'Download',
+          semanticsId: SemanticsIds.acquireSubmit,
+          onPressed: url.isEmpty
+              ? null
+              : () => Navigator.of(context).pop((
+                  url: url,
+                  mediaType: _mediaType,
+                  format: _mediaType == MediaType.podcast ? 'best' : _format,
+                )),
         ),
       ],
     );
   }
 }
 
-/// The media-type prompt before an upload; with several files it also
-/// asks the grouping intent, so an album folder never floods the
-/// review queue with per-file entries by accident - and a mixed grab
-/// of singles never merges into one album.
+/// The media-type prompt, plus the grouping intent for several files:
+/// an album must not arrive as one entry per track, and a grab of
+/// singles must not merge into one album.
 class MediaTypeDialog extends StatefulWidget {
   const MediaTypeDialog({
     super.key,
@@ -357,8 +336,10 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
     final several = widget.fileCount > 1;
     return AlertDialog(
+      backgroundColor: colors.surface2,
       title: Text(
         several
             ? 'What are these ${widget.fileCount} files?'
@@ -370,13 +351,14 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
             MediaTypeSelector(
               value: _mediaType,
               onChanged: (value) => setState(() => _mediaType = value),
             ),
-            if (several) ...[
-              const SizedBox(height: 12),
+            if (several) ...<Widget>[
+              const SizedBox(height: WaxSpace.s16),
               UploadGroupingSelector(
                 value: _grouping,
                 onChanged: (value) => setState(() => _grouping = value),
@@ -385,22 +367,18 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
           ],
         ),
       ),
-      actions: [
-        TextButton(
+      actions: <Widget>[
+        WaxButton(
+          label: 'Cancel',
+          kind: WaxButtonKind.text,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
-        Semantics(
-          identifier: SemanticsIds.uploadMediaConfirm,
-          label: 'Start upload',
-          button: true,
-          child: FilledButton(
-            key: const Key(SemanticsIds.uploadMediaConfirm),
-            onPressed: () => Navigator.of(
-              context,
-            ).pop((mediaType: _mediaType, grouping: _grouping)),
-            child: const Text('Upload'),
-          ),
+        WaxButton(
+          label: 'Upload',
+          semanticsId: SemanticsIds.uploadMediaConfirm,
+          onPressed: () => Navigator.of(
+            context,
+          ).pop((mediaType: _mediaType, grouping: _grouping)),
         ),
       ],
     );
@@ -430,37 +408,27 @@ class UploadGroupingSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
     return Semantics(
       identifier: SemanticsIds.uploadGrouping,
+      container: true,
       child: Column(
-        key: const Key(SemanticsIds.uploadGrouping),
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children: <Widget>[
           Text(
             'How should these files be grouped?',
-            style: Theme.of(context).textTheme.bodySmall,
+            style: WaxType.overline.copyWith(color: colors.textSecondary),
           ),
+          const SizedBox(height: WaxSpace.s4),
           for (final (grouping, label, help) in _options)
-            Semantics(
-              identifier: SemanticsIds.uploadGroupingOption(grouping.wireName),
-              button: true,
-              child: ListTile(
-                key: Key(SemanticsIds.uploadGroupingOption(grouping.wireName)),
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                leading: Icon(
-                  value == grouping
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
-                  color: value == grouping
-                      ? Theme.of(context).colorScheme.primary
-                      : null,
-                ),
-                title: Text(label),
-                subtitle: Text(help),
-                onTap: () => onChanged(grouping),
-              ),
+            WaxOptionRow(
+              title: label,
+              subtitle: help,
+              glyph: value == grouping ? WaxIcons.check : null,
+              selected: value == grouping,
+              semanticsId: SemanticsIds.uploadGroupingOption(grouping.wireName),
+              onTap: () => onChanged(grouping),
             ),
         ],
       ),
@@ -480,26 +448,21 @@ class MediaTypeSelector extends StatelessWidget {
   final MediaType value;
   final ValueChanged<MediaType> onChanged;
 
+  static String label(MediaType type) => switch (type) {
+    MediaType.music => 'Music',
+    MediaType.podcast => 'Podcast',
+    MediaType.audiobook => 'Audiobook',
+  };
+
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      identifier: SemanticsIds.uploadMediaType,
-      child: DropdownButton<MediaType>(
-        key: const Key(SemanticsIds.uploadMediaType),
-        value: value,
-        isExpanded: true,
-        onChanged: (selected) {
-          if (selected != null) onChanged(selected);
-        },
-        items: const [
-          DropdownMenuItem(value: MediaType.music, child: Text('Music')),
-          DropdownMenuItem(value: MediaType.podcast, child: Text('Podcast')),
-          DropdownMenuItem(
-            value: MediaType.audiobook,
-            child: Text('Audiobook'),
-          ),
-        ],
-      ),
+    return WaxChoice<MediaType>(
+      label: 'What this is',
+      value: value,
+      semanticsId: SemanticsIds.uploadMediaType,
+      options: MediaType.values,
+      labelFor: label,
+      onChanged: onChanged,
     );
   }
 }
@@ -517,28 +480,23 @@ class AcquireFormatSelector extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;
 
+  static const _labels = {
+    'best': 'Best quality (recommended)',
+    'opus': 'Opus',
+    'm4a': 'M4A (AAC)',
+    'mp3': 'MP3',
+    'flac': 'FLAC',
+  };
+
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      identifier: SemanticsIds.acquireFormat,
-      child: DropdownButton<String>(
-        key: const Key(SemanticsIds.acquireFormat),
-        value: value,
-        isExpanded: true,
-        onChanged: (selected) {
-          if (selected != null) onChanged(selected);
-        },
-        items: const [
-          DropdownMenuItem(
-            value: 'best',
-            child: Text('Best quality (recommended)'),
-          ),
-          DropdownMenuItem(value: 'opus', child: Text('Opus')),
-          DropdownMenuItem(value: 'm4a', child: Text('M4A (AAC)')),
-          DropdownMenuItem(value: 'mp3', child: Text('MP3')),
-          DropdownMenuItem(value: 'flac', child: Text('FLAC')),
-        ],
-      ),
+    return WaxChoice<String>(
+      label: 'Download format',
+      value: value,
+      semanticsId: SemanticsIds.acquireFormat,
+      options: _labels.keys.toList(),
+      labelFor: (format) => _labels[format] ?? format,
+      onChanged: onChanged,
     );
   }
 }

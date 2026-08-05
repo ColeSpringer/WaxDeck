@@ -4,6 +4,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart'
     show
         FilterChipRow,
+        WaxButton,
+        WaxButtonKind,
         WaxColors,
         WaxFilterChip,
         WaxIconButton,
@@ -15,6 +17,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart'
 
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import 'share_cards.dart';
 import 'stats_charts.dart';
 import 'stats_controller.dart';
 import 'stats_screen.dart';
@@ -219,6 +222,7 @@ class _PersonalRecap extends ConsumerWidget {
                     kind: 'shows',
                     entries: value.topShows,
                   ),
+                  _ShareCardsDoor(data: ShareCardData.personal(value)),
                 ],
               ),
       AsyncError(:final error) => _RecapError(
@@ -287,6 +291,7 @@ class _ServerRecap extends ConsumerWidget {
                     kind: 'genres',
                     entries: value.topGenres,
                   ),
+                  _ShareCardsDoor(data: ShareCardData.server(value)),
                 ],
               ),
       AsyncError(:final error) => _RecapError(
@@ -329,6 +334,28 @@ class _TopFive extends StatelessWidget {
         for (var i = 0; i < top.length; i++)
           TopEntryRow(index: i, entry: top[i], kind: kind),
       ],
+    );
+  }
+}
+
+/// The way onto a shareable card. At the end of the scroll, not in the
+/// bar: it is what the story has been building to.
+class _ShareCardsDoor extends StatelessWidget {
+  const _ShareCardsDoor({required this.data});
+
+  final ShareCardData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: WaxSpace.s32),
+      child: WaxButton(
+        label: 'Make a share card',
+        kind: WaxButtonKind.tonal,
+        icon: WaxIcons.share,
+        semanticsId: SemanticsIds.shareCardOpen,
+        onPressed: () => showShareCardSheet(context, data),
+      ),
     );
   }
 }

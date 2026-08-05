@@ -1,12 +1,14 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../admin/admin_console.dart';
 import '../auth/auth_controller.dart';
-import '../media_icons.dart';
+import '../media_view.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'health_controller.dart';
 
 /// The library health dashboard: the score headline, the per-rule
@@ -15,31 +17,23 @@ import 'health_controller.dart';
 class HealthScreen extends ConsumerWidget {
   const HealthScreen({super.key});
 
-  Future<void> _fix(BuildContext context, WidgetRef ref, String rule) async {
-    final messenger = ScaffoldMessenger.of(context);
+  Future<void> _fix(WidgetRef ref, String rule) async {
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final queued = await ref.read(healthProvider.notifier).fix(rule);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Queued $queued items')));
+      messenger.show('Queued $queued items');
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
-  Future<void> _sweep(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+  Future<void> _sweep(WidgetRef ref) async {
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(healthProvider.notifier).sweep();
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Sweep queued')));
+      messenger.show('Sweep queued');
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
@@ -48,41 +42,26 @@ class HealthScreen extends ConsumerWidget {
     WidgetRef ref,
     DuplicateGroup group,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
     final losers = group.losers.map((l) => '"${l.name}"').join(', ');
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Merge duplicates?'),
-        content: Text(
-          '$losers will merge into "${group.survivor.name}". '
-          'Their items move under the survivor.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            key: const Key('duplicate-merge-confirm'),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Merge'),
-          ),
-        ],
-      ),
+    final confirmed = await showTypedConfirm(
+      context,
+      title: 'Merge duplicates?',
+      message:
+          '$losers will merge into "${group.survivor.name}". Their items '
+          'move under the survivor, and the merge cannot be undone.',
+      confirmWord: 'merge',
+      confirmLabel: 'Merge',
+      fieldSemanticsId: SemanticsIds.confirmField,
+      confirmSemanticsId: SemanticsIds.confirmAccept,
+      cancelSemanticsId: SemanticsIds.confirmCancel,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final outcome = await ref.read(duplicatesProvider.notifier).merge(group);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('Merged ${outcome.merged} entries')),
-        );
+      messenger.show('Merged ${outcome.merged} entries');
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
@@ -91,43 +70,31 @@ class HealthScreen extends ConsumerWidget {
     WidgetRef ref,
     UpgradeGroup group,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Keep the best version?'),
-        content: const Text(
-          'The other versions move to the server trash and can be '
-          'restored until the trash window closes.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            key: const Key('upgrade-resolve-confirm'),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Resolve'),
-          ),
-        ],
-      ),
+    final confirmed = await showTypedConfirm(
+      context,
+      title: 'Keep the best version?',
+      message:
+          'The other versions move to the server trash and can be restored '
+          'until the trash window closes.',
+      confirmWord: 'resolve',
+      confirmLabel: 'Resolve',
+      fieldSemanticsId: SemanticsIds.confirmField,
+      confirmSemanticsId: SemanticsIds.confirmAccept,
+      cancelSemanticsId: SemanticsIds.confirmCancel,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final trashed = await ref.read(upgradesProvider.notifier).resolve(group);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Trashed $trashed files')));
+      messenger.show('Trashed $trashed files');
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final sizeClass = WaxSizeClass.of(context);
     final health = ref.watch(healthProvider);
     final isAdmin =
         ref
@@ -137,174 +104,232 @@ class HealthScreen extends ConsumerWidget {
             ?.roles
             .contains('admin') ??
         false;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Library health'),
-        actions: [
-          if (isAdmin)
-            Semantics(
-              identifier: SemanticsIds.healthSweep,
-              label: 'Sweep now',
-              button: true,
-              child: IconButton(
-                key: const Key(SemanticsIds.healthSweep),
-                tooltip: 'Sweep now',
-                icon: const Icon(Icons.autorenew),
-                onPressed: () => _sweep(context, ref),
-              ),
-            ),
-        ],
-      ),
-      body: switch (health) {
-        AsyncData(:final value) => _body(context, ref, value),
-        AsyncError(:final error) => _errorView(context, ref, error),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
-    );
-  }
-
-  Widget _errorView(BuildContext context, WidgetRef ref, Object error) {
-    final message = error is WaxDeckApiException
-        ? error.message
-        : 'Could not load library health';
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () => ref.invalidate(healthProvider),
-            child: const Text('Retry'),
+    return WaxScaffold(
+      title: 'Library health',
+      largeTitle: false,
+      semanticsId: SemanticsIds.adminHealth,
+      onBack: adminBack(context),
+      actions: <Widget>[
+        if (isAdmin)
+          WaxIconButton(
+            glyph: WaxIcons.refresh,
+            label: 'Sweep now',
+            semanticsId: SemanticsIds.healthSweep,
+            onPressed: () => _sweep(ref),
           ),
-        ],
+      ],
+      body: Padding(
+        padding: sizeClass.gutter.add(
+          const EdgeInsets.only(bottom: WaxSpace.s32),
+        ),
+        child: switch (health) {
+          AsyncData(:final value) => _body(context, ref, value),
+          AsyncError(:final error) => ErrorState(
+            title: 'Could not load library health',
+            message: error is WaxDeckApiException
+                ? error.message
+                : 'Something went wrong reading it.',
+            onRetry: () => ref.invalidate(healthProvider),
+          ),
+          _ => const SkeletonShapes(shape: SkeletonShape.list),
+        },
       ),
     );
   }
 
   Widget _body(BuildContext context, WidgetRef ref, HealthSummary summary) {
-    final textTheme = Theme.of(context).textTheme;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _scoreCard(context, summary),
-          const SizedBox(height: 16),
-          Text('Rules', style: textTheme.titleMedium),
-          for (final rule in summary.rules)
-            _RuleRow(
-              rule: rule,
-              onFix: () => _fix(context, ref, rule.rule),
-              onOpen: () => context.go(WaxRoute.healthRule(rule.rule)),
-            ),
-          const SizedBox(height: 16),
-          _DuplicatesSection(onMerge: (group) => _merge(context, ref, group)),
-          const SizedBox(height: 16),
-          _UpgradesSection(onResolve: (group) => _resolve(context, ref, group)),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _ScoreHeadline(summary: summary),
+        const SizedBox(height: WaxSpace.s32),
+        const SectionHeader(
+          title: 'Rules',
+          overline: 'What the sweeper checks',
+        ),
+        _RuleTable(
+          rules: summary.rules,
+          onFix: (rule) => _fix(ref, rule),
+          onOpen: (rule) => context.go(WaxRoute.healthRule(rule)),
+        ),
+        const SizedBox(height: WaxSpace.s32),
+        _DuplicatesSection(onMerge: (group) => _merge(context, ref, group)),
+        const SizedBox(height: WaxSpace.s32),
+        _UpgradesSection(onResolve: (group) => _resolve(context, ref, group)),
+      ],
     );
   }
+}
 
-  Widget _scoreCard(BuildContext context, HealthSummary summary) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
+/// The score, or the arc filling toward it. An unevaluated library has
+/// no score rather than a zero, so warming up replaces the number.
+class _ScoreHeadline extends StatelessWidget {
+  const _ScoreHeadline({required this.summary});
+
+  final HealthSummary summary;
+
+  /// Green above 90, amber in the middle, red below 60: the number is a
+  /// verdict, and one drawn in the text colour reads as a statistic.
+  static Color _tone(WaxColors colors, double score) {
+    if (score >= 90) return colors.success;
+    if (score >= 60) return colors.accent;
+    return colors.error;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
     if (summary.warmingUp) {
       final progress = summary.totalItems == 0
-          ? null
+          ? 0.0
           : summary.evaluatedItems / summary.totalItems;
-      return Card(
-        key: const Key(SemanticsIds.healthWarmingUp),
-        child: Semantics(
-          identifier: SemanticsIds.healthWarmingUp,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Still warming up', style: textTheme.titleMedium),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(value: progress),
-                const SizedBox(height: 4),
-                Text(
-                  'Evaluated ${summary.evaluatedItems} of '
-                  '${summary.totalItems} items',
-                  style: textTheme.bodySmall,
+      return Semantics(
+        identifier: SemanticsIds.healthWarmingUp,
+        container: true,
+        child: _Card(
+          child: Row(
+            children: <Widget>[
+              ProgressRing(
+                progress: progress,
+                size: 72,
+                thickness: 5,
+                child: Center(
+                  child: Text(
+                    '${(progress * 100).round()}%',
+                    style: WaxType.monoData.copyWith(color: colors.textPrimary),
+                  ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: WaxSpace.s20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Still warming up',
+                      style: WaxType.headline.copyWith(
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: WaxSpace.s4),
+                    Text(
+                      'Evaluated ${summary.evaluatedItems} of '
+                      '${summary.totalItems} items',
+                      style: WaxType.body.copyWith(color: colors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       );
     }
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Semantics(
-              identifier: SemanticsIds.healthScore,
-              label: 'Health score ${summary.score.round()}',
-              child: Text(
-                '${summary.score.round()}',
-                key: const Key(SemanticsIds.healthScore),
-                style: textTheme.displayLarge?.copyWith(
-                  color: colorScheme.primary,
-                ),
+    final score = summary.score.round();
+    return _Card(
+      child: Row(
+        children: <Widget>[
+          Semantics(
+            identifier: SemanticsIds.healthScore,
+            label: 'Health score $score',
+            excludeSemantics: true,
+            child: Text(
+              '$score',
+              style: WaxType.display.copyWith(
+                color: _tone(colors, summary.score),
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                'Library health across ${summary.evaluatedItems} '
-                'evaluated items',
-                style: textTheme.bodyMedium,
-              ),
+          ),
+          const SizedBox(width: WaxSpace.s20),
+          Expanded(
+            child: Text(
+              'Library health across ${summary.evaluatedItems} evaluated '
+              'items',
+              style: WaxType.body.copyWith(color: colors.textSecondary),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _RuleRow extends StatelessWidget {
-  const _RuleRow({
-    required this.rule,
+class _Card extends StatelessWidget {
+  const _Card({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Container(
+      padding: const EdgeInsets.all(WaxSpace.s20),
+      decoration: BoxDecoration(
+        color: colors.surface1,
+        borderRadius: WaxRadius.card,
+        border: Border.all(color: colors.hairline),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _RuleTable extends StatelessWidget {
+  const _RuleTable({
+    required this.rules,
     required this.onFix,
     required this.onOpen,
   });
 
-  final HealthRuleCount rule;
-  final VoidCallback onFix;
-  final VoidCallback onOpen;
+  final List<HealthRuleCount> rules;
+  final void Function(String rule) onFix;
+  final void Function(String rule) onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      identifier: SemanticsIds.health(rule.rule),
-      label: rule.label ?? rule.rule,
-      button: true,
-      child: ListTile(
-        key: ValueKey(SemanticsIds.health(rule.rule)),
-        contentPadding: EdgeInsets.zero,
-        title: Text(rule.label ?? rule.rule),
-        subtitle: Text('${rule.failing} failing'),
-        onTap: onOpen,
-        trailing: rule.fixable && rule.failing > 0
-            ? Semantics(
-                identifier: SemanticsIds.healthFix(rule.rule),
-                label: 'Fix ${rule.label ?? rule.rule}',
-                button: true,
-                child: FilledButton.tonal(
-                  key: ValueKey(SemanticsIds.healthFix(rule.rule)),
-                  onPressed: onFix,
-                  child: const Text('Fix'),
-                ),
-              )
-            : null,
+    final colors = WaxColors.of(context);
+    return WaxTable<HealthRuleCount>(
+      rows: rules,
+      rowId: (rule) => rule.rule,
+      rowSemanticsId: SemanticsIds.health,
+      onRowTap: (rule) => onOpen(rule.rule),
+      empty: const EmptyState(
+        glyph: WaxIcons.success,
+        title: 'Nothing to check yet',
+        message: 'Rules appear once the sweeper has evaluated the library.',
       ),
+      columns: <WaxColumn<HealthRuleCount>>[
+        WaxColumn<HealthRuleCount>(
+          label: 'Rule',
+          priority: WaxColumnPriority.primary,
+          text: (rule) => rule.label ?? rule.rule,
+          cell: (context, rule) => Text(
+            rule.label ?? rule.rule,
+            style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        WaxColumn<HealthRuleCount>(
+          label: 'Failing',
+          width: 96,
+          numeric: true,
+          text: (rule) => '${rule.failing}',
+          cell: (context, rule) => Text(
+            '${rule.failing}',
+            style: WaxType.monoData.copyWith(
+              color: rule.failing == 0 ? colors.textTertiary : colors.error,
+            ),
+          ),
+        ),
+      ],
+      trailing: (context, rule) => rule.fixable && rule.failing > 0
+          ? WaxIconButton(
+              glyph: WaxIcons.success,
+              label: 'Fix ${rule.label ?? rule.rule}',
+              semanticsId: SemanticsIds.healthFix(rule.rule),
+              onPressed: () => onFix(rule.rule),
+            )
+          : const SizedBox.shrink(),
     );
   }
 }
@@ -317,84 +342,78 @@ class _DuplicatesSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final duplicates = ref.watch(duplicatesProvider);
-    final textTheme = Theme.of(context).textTheme;
+    final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Duplicates', style: textTheme.titleMedium),
-        const SizedBox(height: 8),
+      children: <Widget>[
+        const SectionHeader(
+          title: 'Duplicates',
+          overline: 'One thing under two names',
+        ),
         switch (duplicates) {
-          AsyncData(:final value) when value.isEmpty => const Text(
-            'No duplicates detected',
+          AsyncData(:final value) when value.isEmpty => const EmptyState(
+            glyph: WaxIcons.success,
+            title: 'No duplicates detected',
+            message: 'Artists, albums, and shows each appear once.',
           ),
-          AsyncData(:final value) => Column(
-            children: [
-              for (final group in value)
-                _DuplicateCard(group: group, onMerge: () => onMerge(group)),
+          AsyncData(:final value) => WaxTable<DuplicateGroup>(
+            rows: value,
+            rowId: (group) => group.survivor.pid,
+            rowSemanticsId: SemanticsIds.duplicateGroup,
+            rowDetailSemanticsId: SemanticsIds.duplicateDetail,
+            columns: <WaxColumn<DuplicateGroup>>[
+              WaxColumn<DuplicateGroup>(
+                label: 'Survivor',
+                priority: WaxColumnPriority.primary,
+                text: (group) => group.survivor.name,
+                cell: (context, group) => Text(
+                  group.survivor.name,
+                  style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              WaxColumn<DuplicateGroup>(
+                label: 'Absorbs',
+                text: (group) => group.losers.map((l) => l.name).join(', '),
+                cell: (context, group) => Text(
+                  group.losers.map((l) => l.name).join(', '),
+                  style: WaxType.bodySmall.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              WaxColumn<DuplicateGroup>(
+                label: 'Kind',
+                width: 96,
+                text: (group) => group.entityType,
+                cell: (context, group) => CodecChip(group.entityType),
+              ),
+              WaxColumn<DuplicateGroup>(
+                label: 'Why',
+                priority: WaxColumnPriority.detail,
+                text: (group) => group.detail ?? 'Names match',
+                cell: (context, group) => Text(
+                  group.detail ?? 'Names match',
+                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
+            trailing: (context, group) => WaxIconButton(
+              glyph: WaxIcons.check,
+              label: 'Merge into ${group.survivor.name}',
+              semanticsId: SemanticsIds.duplicateMerge(group.survivor.pid),
+              onPressed: () => onMerge(group),
+            ),
           ),
-          AsyncError() => const Text('Could not load duplicates'),
-          _ => const Padding(
-            padding: EdgeInsets.all(8),
-            child: LinearProgressIndicator(),
+          AsyncError() => const ErrorState(
+            title: 'Could not load duplicates',
+            message: 'The clustering pass did not answer.',
           ),
+          _ => const SkeletonShapes(shape: SkeletonShape.list),
         },
       ],
-    );
-  }
-}
-
-class _DuplicateCard extends StatelessWidget {
-  const _DuplicateCard({required this.group, required this.onMerge});
-
-  final DuplicateGroup group;
-  final VoidCallback onMerge;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    return Semantics(
-      identifier: SemanticsIds.duplicateGroup(group.survivor.pid),
-      child: Card(
-        key: ValueKey(SemanticsIds.duplicateGroup(group.survivor.pid)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(group.survivor.name, style: textTheme.titleSmall),
-                    Text(
-                      '${group.entityType}; absorbs '
-                      '${group.losers.map((l) => l.name).join(', ')}',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    if (group.detail != null)
-                      Text(group.detail!, style: textTheme.bodySmall),
-                  ],
-                ),
-              ),
-              Semantics(
-                identifier: SemanticsIds.duplicateMerge(group.survivor.pid),
-                label: 'Merge into ${group.survivor.name}',
-                button: true,
-                child: FilledButton.tonal(
-                  key: ValueKey(
-                    SemanticsIds.duplicateMerge(group.survivor.pid),
-                  ),
-                  onPressed: onMerge,
-                  child: const Text('Merge'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -404,41 +423,8 @@ class _UpgradesSection extends ConsumerWidget {
 
   final void Function(UpgradeGroup) onResolve;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final upgrades = ref.watch(upgradesProvider);
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Quality upgrades', style: textTheme.titleMedium),
-        const SizedBox(height: 8),
-        switch (upgrades) {
-          AsyncData(:final value) when value.isEmpty => const Text(
-            'No duplicate qualities detected',
-          ),
-          AsyncData(:final value) => Column(
-            children: [
-              for (final group in value)
-                _UpgradeCard(group: group, onResolve: () => onResolve(group)),
-            ],
-          ),
-          AsyncError() => const Text('Could not load upgrades'),
-          _ => const Padding(
-            padding: EdgeInsets.all(8),
-            child: LinearProgressIndicator(),
-          ),
-        },
-      ],
-    );
-  }
-}
-
-class _UpgradeCard extends StatelessWidget {
-  const _UpgradeCard({required this.group, required this.onResolve});
-
-  final UpgradeGroup group;
-  final VoidCallback onResolve;
+  static UpgradeMember best(UpgradeGroup group) =>
+      group.members.where((m) => m.best).firstOrNull ?? group.members.first;
 
   static String _memberLine(UpgradeMember member) {
     final parts = [
@@ -449,70 +435,81 @@ class _UpgradeCard extends StatelessWidget {
     return parts.join(', ');
   }
 
-  UpgradeMember get _best =>
-      group.members.where((m) => m.best).firstOrNull ?? group.members.first;
-
   @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-    final best = _best;
-    return Semantics(
-      identifier: SemanticsIds.upgradeGroup(best.itemPid),
-      child: Card(
-        key: ValueKey(SemanticsIds.upgradeGroup(best.itemPid)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                best.artist == null
-                    ? best.title
-                    : '${best.title} by ${best.artist}',
-                style: textTheme.titleSmall,
-              ),
-              const SizedBox(height: 4),
-              for (final member in group.members)
-                Row(
-                  children: [
-                    Icon(
-                      member.best ? Icons.star : Icons.audio_file_outlined,
-                      size: 16,
-                      color: member.best
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(_memberLine(member), style: textTheme.bodySmall),
-                    if (member.best) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        'Best',
-                        style: textTheme.labelSmall?.copyWith(
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                    ],
-                  ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final upgrades = ref.watch(upgradesProvider);
+    final colors = WaxColors.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SectionHeader(
+          title: 'Quality upgrades',
+          overline: 'The same recording twice',
+        ),
+        switch (upgrades) {
+          AsyncData(:final value) when value.isEmpty => const EmptyState(
+            glyph: WaxIcons.success,
+            title: 'No duplicate qualities detected',
+            message: 'Every recording is held once.',
+          ),
+          AsyncData(:final value) => WaxTable<UpgradeGroup>(
+            rows: value,
+            rowId: (group) => best(group).itemPid,
+            rowSemanticsId: SemanticsIds.upgradeGroup,
+            rowDetailSemanticsId: SemanticsIds.upgradeDetail,
+            columns: <WaxColumn<UpgradeGroup>>[
+              WaxColumn<UpgradeGroup>(
+                label: 'Recording',
+                priority: WaxColumnPriority.primary,
+                text: (group) => best(group).artist == null
+                    ? best(group).title
+                    : '${best(group).title} by ${best(group).artist}',
+                cell: (context, group) => Text(
+                  best(group).artist == null
+                      ? best(group).title
+                      : '${best(group).title} by ${best(group).artist}',
+                  style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Semantics(
-                  identifier: SemanticsIds.upgradeResolve(best.itemPid),
-                  label: 'Keep the best version',
-                  button: true,
-                  child: FilledButton.tonal(
-                    key: ValueKey(SemanticsIds.upgradeResolve(best.itemPid)),
-                    onPressed: onResolve,
-                    child: const Text('Resolve'),
-                  ),
+              ),
+              WaxColumn<UpgradeGroup>(
+                label: 'Keeping',
+                width: 180,
+                text: (group) => _memberLine(best(group)),
+                cell: (context, group) =>
+                    CodecChip(_memberLine(best(group)), emphasis: true),
+              ),
+              WaxColumn<UpgradeGroup>(
+                label: 'Trashing',
+                priority: WaxColumnPriority.detail,
+                text: (group) => group.members
+                    .where((m) => m.itemPid != best(group).itemPid)
+                    .map(_memberLine)
+                    .join('; '),
+                cell: (context, group) => Text(
+                  group.members
+                      .where((m) => m.itemPid != best(group).itemPid)
+                      .map(_memberLine)
+                      .join('; '),
+                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
+            trailing: (context, group) => WaxIconButton(
+              glyph: WaxIcons.check,
+              label: 'Keep the best version',
+              semanticsId: SemanticsIds.upgradeResolve(best(group).itemPid),
+              onPressed: () => onResolve(group),
+            ),
           ),
-        ),
-      ),
+          AsyncError() => const ErrorState(
+            title: 'Could not load upgrades',
+            message: 'The quality comparison did not answer.',
+          ),
+          _ => const SkeletonShapes(shape: SkeletonShape.list),
+        },
+      ],
     );
   }
 }
@@ -525,53 +522,22 @@ class HealthIssuesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final sizeClass = WaxSizeClass.of(context);
     final issues = ref.watch(healthIssuesProvider(rule));
-    // A failed "load more" keeps the list intact, so surface it on the flag's
-    // rising edge; scrolling again retries.
+    // A failed "load more" keeps the list intact, so surface it on the
+    // flag's rising edge; scrolling again retries.
     ref.listen(healthIssuesProvider(rule), (prev, next) {
       final failedNow = next.value?.loadError ?? false;
       final failedBefore = prev?.value?.loadError ?? false;
       if (failedNow && !failedBefore) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(
-              content: Text('Could not load more; scroll to retry'),
-            ),
-          );
+        ref
+            .read(shellMessengerProvider.notifier)
+            .show('Could not load more; scroll to retry');
       }
     });
-    return Scaffold(
-      appBar: AppBar(title: Text(rule)),
-      body: switch (issues) {
-        AsyncData(:final value) => _list(context, ref, value),
-        AsyncError(:final error) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                error is WaxDeckApiException
-                    ? error.message
-                    : 'Could not load issues',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => ref.invalidate(healthIssuesProvider(rule)),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
-    );
-  }
-
-  Widget _list(BuildContext context, WidgetRef ref, HealthIssuesState state) {
-    if (state.items.isEmpty) {
-      return const Center(child: Text('Nothing failing this rule'));
-    }
+    // Paged off the scroll rather than from the builder: a `loadMore`
+    // called while the list is building mutates provider state mid-build
+    // and re-fires on every rebuild of the sentinel.
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         final metrics = notification.metrics;
@@ -580,40 +546,108 @@ class HealthIssuesScreen extends ConsumerWidget {
         }
         return false;
       },
-      child: ListView.builder(
-        itemCount: state.items.length + (state.loadingMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= state.items.length) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final issue = state.items[index];
-          return Semantics(
-            identifier: SemanticsIds.healthIssue(issue.pid),
-            label: issue.title,
-            child: ListTile(
-              key: ValueKey(SemanticsIds.healthIssue(issue.pid)),
-              leading: Icon(mediaFallbackIcon(issue.mediaType)),
-              title: Text(
-                issue.artist == null
-                    ? issue.title
-                    : '${issue.title} by ${issue.artist}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+      child: WaxScaffold(
+        title: rule,
+        largeTitle: false,
+        semanticsId: SemanticsIds.adminHealthRule,
+        onBack: () => context.leave(fallback: WaxRoute.health),
+        slivers: <Widget>[
+          switch (issues) {
+            AsyncData(:final value) when value.items.isEmpty =>
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: EmptyState(
+                  glyph: WaxIcons.success,
+                  title: 'Nothing failing this rule',
+                  message: 'Every item the sweeper has seen passes it.',
+                ),
               ),
-              subtitle: Wrap(
-                spacing: 4,
-                children: [
-                  for (final failing in issue.rules)
-                    Chip(
-                      label: Text(failing),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            AsyncData(:final value) => SliverPadding(
+              padding: sizeClass.gutter,
+              sliver: _list(value),
+            ),
+            AsyncError(:final error) => SliverFillRemaining(
+              hasScrollBody: false,
+              child: ErrorState(
+                title: 'Could not load issues',
+                message: error is WaxDeckApiException
+                    ? error.message
+                    : 'The server did not answer.',
+                onRetry: () => ref.invalidate(healthIssuesProvider(rule)),
+              ),
+            ),
+            _ => const SliverFillRemaining(
+              hasScrollBody: false,
+              child: SkeletonShapes(shape: SkeletonShape.list),
+            ),
+          },
+        ],
+      ),
+    );
+  }
+
+  Widget _list(HealthIssuesState state) {
+    return SliverList.builder(
+      itemCount: state.items.length + (state.loadingMore ? 1 : 0),
+      itemBuilder: (context, index) => index >= state.items.length
+          ? const Padding(
+              padding: EdgeInsets.all(WaxSpace.s16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          : _IssueRow(issue: state.items[index]),
+    );
+  }
+}
+
+class _IssueRow extends StatelessWidget {
+  const _IssueRow({required this.issue});
+
+  final HealthIssue issue;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final title = issue.artist == null
+        ? issue.title
+        : '${issue.title} by ${issue.artist}';
+    return Semantics(
+      identifier: SemanticsIds.healthIssue(issue.pid),
+      container: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
+        child: Row(
+          children: <Widget>[
+            DomainBadge(waxDomainOf(issue.mediaType), compact: true),
+            const SizedBox(width: WaxSpace.s12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    title,
+                    style: WaxType.titleItem.copyWith(
+                      color: colors.textPrimary,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    issue.rules.join(', '),
+                    style: WaxType.caption.copyWith(color: colors.textTertiary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }

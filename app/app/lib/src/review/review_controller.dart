@@ -3,10 +3,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
 
-/// Lifecycle filter above the review list. Each value maps to a
-/// server-side status filter, including `decided` (a pseudo-status for
-/// "everything not pending"), so keyset pagination returns full pages
-/// and no client-side row hiding is needed.
+/// Lifecycle filter above the review list. Each value is a server-side
+/// status, `decided` included, so pages come back full rather than
+/// being thinned client-side.
 enum ReviewFilter {
   pending('pending', 'Pending'),
   autoApplied('auto-applied', 'Auto-applied'),
@@ -113,11 +112,8 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
       // retries, and the screen surfaces a transient notice on the flag.
       state = AsyncData(current.copyWith(loadingMore: false, loadError: true));
     } catch (_) {
-      // Anything else is a defect, not a hiccup: a decode failure,
-      // a bad cast. Release the paging guard first - loadingMore is
-      // what keeps two fetches from racing, so leaving it set would
-      // wedge paging permanently and silently - then let the error
-      // reach the zone's handler instead of vanishing here.
+      // A defect, not a hiccup. Release the paging guard first or it
+      // wedges paging silently, then let the error out.
       if (generation == _generation) {
         state = AsyncData(
           current.copyWith(loadingMore: false, loadError: true),
@@ -172,6 +168,25 @@ final reviewQueueProvider =
 final reviewStatsProvider = FutureProvider<ReviewStats>(
   (ref) => ref.watch(repositoryProvider).getReviewStats(),
 );
+
+/// Which candidate an entry is decided against. Shared state because
+/// two controls read it: the pane's Approve, and the queue's `a` on the
+/// row the pane is showing.
+class SelectedCandidate extends Notifier<String?> {
+  SelectedCandidate(this.entryId);
+
+  final String entryId;
+
+  @override
+  String? build() => null;
+
+  void select(String mbid) => state = mbid;
+}
+
+final selectedCandidateProvider =
+    NotifierProvider.family<SelectedCandidate, String?, String>(
+      SelectedCandidate.new,
+    );
 
 /// One entry's full detail (tracks and candidates), with the decisions
 /// that act on it.

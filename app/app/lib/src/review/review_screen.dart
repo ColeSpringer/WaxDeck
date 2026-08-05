@@ -1,25 +1,58 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../admin/admin_console.dart';
 import '../admin/admin_providers.dart';
 import '../auth/auth_controller.dart';
-import '../media_icons.dart';
+import '../media_view.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../shell/shortcuts.dart';
 import 'review_controller.dart';
+import 'review_entry_screen.dart';
+
+/// The review surface: the queue, with one entry beside it where there
+/// is room and in place of it where there is not. Both `/admin/review`
+/// locations land here, so an entry keeps its own URL either way.
+class ReviewSurface extends StatelessWidget {
+  const ReviewSurface({super.key, this.openEntryId});
+
+  final String? openEntryId;
+
+  /// The narrowest content pane that holds a list and an entry beside
+  /// it: the list's fixed width, the divider, and enough room left for
+  /// a candidate row to be readable.
+  static const _twoPaneMinWidth = _ReviewScreenState._listWidth + 1 + 340;
+
+  @override
+  Widget build(BuildContext context) {
+    // Measured, not the window's size class: the shell sidebar and the
+    // console list take ~500px before this screen starts.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoPane = constraints.maxWidth >= _twoPaneMinWidth;
+        if (openEntryId != null && !twoPane) {
+          return ReviewEntryScreen(entryId: openEntryId!);
+        }
+        return ReviewScreen(openEntryId: twoPane ? openEntryId : null);
+      },
+    );
+  }
+}
 
 /// The metadata review queue: filterable, cursor paged, keyboard-first.
-///
-/// j / ArrowDown and k / ArrowUp move the selection, a approves with the
-/// best candidate, s skips, u marks unofficial, e opens the entry, and
-/// Escape leaves the screen (or clears the multi-select). Long-press a
-/// row or use the app bar select button for bulk decisions.
+/// j/k move, a/s/u decide, e opens, Escape leaves. Long-press a row or
+/// use the select button for bulk decisions.
 class ReviewScreen extends ConsumerStatefulWidget {
-  const ReviewScreen({super.key});
+  const ReviewScreen({super.key, this.openEntryId});
+
+  /// The entry drawn in the pane beside the list. Only ever set above
+  /// sidebar width, where there is a pane to draw it in.
+  final String? openEntryId;
 
   @override
   ConsumerState<ReviewScreen> createState() => _ReviewScreenState();
@@ -28,7 +61,12 @@ class ReviewScreen extends ConsumerStatefulWidget {
 class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   /// Fixed row height so keyboard selection can scroll by arithmetic
   /// instead of hunting for offscreen render objects.
-  static const _rowExtent = 88.0;
+  static const _rowExtent = 76.0;
+
+  /// The list's own width once the pane is beside it. Fixed rather than
+  /// shared, because the pane is where the reading happens and a list
+  /// that grew with the window would take the room from it.
+  static const _listWidth = 380.0;
 
   final _scroll = ScrollController();
 
@@ -84,55 +122,53 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     if (_selected < 0 || _selected >= entries.length) return;
     final entry = entries[_selected];
     if (entry.status != 'pending' || entry.identifying) return;
-    await _decide(entry.id, action);
+    // `a` on the row the pane is showing approves what the pane has
+    // selected, or the two controls decide different releases.
+    await _decide(
+      entry.id,
+      action,
+      candidateMbid: action == 'approve'
+          ? ref.read(selectedCandidateProvider(entry.id))
+          : null,
+    );
   }
 
-  Future<void> _decide(String entryId, String action) async {
-    final messenger = ScaffoldMessenger.of(context);
+  Future<void> _decide(
+    String entryId,
+    String action, {
+    String? candidateMbid,
+  }) async {
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final warnings = await ref
           .read(reviewQueueProvider.notifier)
-          .decide(entryId, action);
-      if (warnings.isNotEmpty) {
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(warnings.join('\n'))));
-      }
+          .decide(entryId, action, candidateMbid: candidateMbid);
+      if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
   Future<void> _decideBulk(String action) async {
     final ids = _checked.toList();
     if (ids.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final outcomes = await ref
           .read(reviewQueueProvider.notifier)
           .decideBulk(ids, action);
       final failed = outcomes.where((o) => !o.ok).length;
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              failed == 0
-                  ? 'Decided ${outcomes.length} entries'
-                  : 'Decided ${outcomes.length - failed} entries, $failed failed',
-            ),
-          ),
-        );
+      messenger.show(
+        failed == 0
+            ? 'Decided ${outcomes.length} entries'
+            : 'Decided ${outcomes.length - failed} entries, $failed failed',
+      );
       setState(() {
         _selecting = false;
         _checked.clear();
       });
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
@@ -154,7 +190,9 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       });
       return;
     }
-    if (context.canPop()) context.pop();
+    // One page spans both locations, so leaving the entry is a move
+    // rather than a pop.
+    if (widget.openEntryId != null) context.go(WaxRoute.review);
   }
 
   void _toggleChecked(ReviewEntry entry) {
@@ -163,23 +201,53 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     });
   }
 
+  /// Keeps the cursor on a row that exists, and on the entry the pane
+  /// is showing. Deciding the last row shortens the queue under it, and
+  /// a tap has to move it or the next j resumes from somewhere else.
+  void _syncSelection(List<ReviewEntry> entries) {
+    final open = widget.openEntryId;
+    if (open != null) {
+      if (_selected >= 0 &&
+          _selected < entries.length &&
+          entries[_selected].id == open) {
+        return;
+      }
+      final index = entries.indexWhere((entry) => entry.id == open);
+      if (index >= 0 && index != _selected) {
+        _later(() => _selected = index);
+        return;
+      }
+    }
+    if (_selected >= entries.length) {
+      // Onto the last row rather than off the end: the reviewer was
+      // working down the queue and the next thing they press should
+      // decide something.
+      _later(() => _selected = entries.length - 1);
+    }
+  }
+
+  /// Called from `build`, where `setState` is not allowed.
+  void _later(VoidCallback move) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(move);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final sizeClass = WaxSizeClass.of(context);
     final queue = ref.watch(reviewQueueProvider);
-    // Surface a failed "load more": the queue keeps its rows, so the failure
-    // is otherwise invisible. Firing on the flag's rising edge shows one
-    // notice per failure, and scrolling again retries.
+    _syncSelection(queue.value?.entries ?? const []);
+    // Surface a failed "load more": the queue keeps its rows, so the
+    // failure is otherwise invisible. Firing on the flag's rising edge
+    // shows one notice per failure, and scrolling again retries.
     ref.listen(reviewQueueProvider, (prev, next) {
       final failedNow = next.value?.loadError ?? false;
       final failedBefore = prev?.value?.loadError ?? false;
       if (failedNow && !failedBefore) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(
-              content: Text('Could not load more; scroll to retry'),
-            ),
-          );
+        ref
+            .read(shellMessengerProvider.notifier)
+            .show('Could not load more; scroll to retry');
       }
     });
     return AppShortcuts(
@@ -197,66 +265,120 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
         const SingleActivator(LogicalKeyboardKey.keyE): _openSelected,
         const SingleActivator(LogicalKeyboardKey.escape): _escape,
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Review queue'),
-          actions: [
-            const _MatchingModeMenu(),
-            Semantics(
-              identifier: SemanticsIds.reviewSelectToggle,
-              label: 'Select entries',
-              button: true,
-              child: IconButton(
-                key: const Key(SemanticsIds.reviewSelectToggle),
-                tooltip: _selecting ? 'Leave selection' : 'Select entries',
-                icon: Icon(_selecting ? Icons.close : Icons.checklist),
-                onPressed: () => setState(() {
-                  _selecting = !_selecting;
-                  if (!_selecting) _checked.clear();
-                }),
-              ),
+      child: WaxScaffold(
+        title: 'Review queue',
+        largeTitle: false,
+        semanticsId: SemanticsIds.adminReview,
+        onBack: adminBack(context),
+        actions: <Widget>[
+          const _MatchingModeMenu(),
+          WaxIconButton(
+            glyph: _selecting ? WaxIcons.close : WaxIcons.check,
+            label: _selecting ? 'Leave selection' : 'Select entries',
+            active: _selecting,
+            semanticsId: SemanticsIds.reviewSelectToggle,
+            onPressed: () => setState(() {
+              _selecting = !_selecting;
+              if (!_selecting) _checked.clear();
+            }),
+          ),
+        ],
+        // A filling sliver, not a body: the list needs a bounded height
+        // and a scroll position of its own for j/k to move by arithmetic.
+        slivers: <Widget>[
+          SliverFillRemaining(
+            hasScrollBody: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: sizeClass.gutter.left,
+                    vertical: WaxSpace.s8,
+                  ),
+                  child: const _FilterChips(),
+                ),
+                Expanded(
+                  // One position in the tree either way: moving the
+                  // list rebuilds its Scrollable, and a fresh scroll
+                  // position starts at the top.
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        SizedBox(
+                          width: widget.openEntryId == null
+                              ? constraints.maxWidth
+                              : _listWidth,
+                          child: _queue(sizeClass),
+                        ),
+                        if (widget.openEntryId case final open?) ...<Widget>[
+                          VerticalDivider(
+                            width: 1,
+                            color: WaxColors.of(context).hairline,
+                          ),
+                          Expanded(child: _pane(open)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                if (_selecting)
+                  _BulkBar(count: _checked.length, onDecide: _decideBulk),
+              ],
             ),
-          ],
-        ),
-        body: Column(
-          children: [
-            _FilterChips(),
-            Expanded(
-              child: switch (queue) {
-                AsyncData(:final value) => _list(context, value),
-                AsyncError(:final error) => _errorView(context, error),
-                _ => const Center(child: CircularProgressIndicator()),
-              },
-            ),
-          ],
-        ),
-        bottomNavigationBar: _selecting ? _bulkBar(context) : null,
-      ),
-    );
-  }
-
-  Widget _errorView(BuildContext context, Object error) {
-    final message = error is WaxDeckApiException
-        ? error.message
-        : 'Could not load the review queue';
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () => ref.invalidate(reviewQueueProvider),
-            child: const Text('Retry'),
           ),
         ],
       ),
     );
   }
 
-  Widget _list(BuildContext context, ReviewQueueState state) {
+  Widget _pane(String entryId) {
+    return Semantics(
+      identifier: SemanticsIds.reviewPane,
+      container: true,
+      child: ReviewEntryView(
+        key: ValueKey(entryId),
+        entryId: entryId,
+        onClose: () => context.go(WaxRoute.review),
+      ),
+    );
+  }
+
+  Widget _queue(WaxSizeClass sizeClass) {
+    final queue = ref.watch(reviewQueueProvider);
+    // Rows first, whatever the load state: every decision invalidates
+    // the queue, and flashing 200 rows to a skeleton would lose the
+    // scroll position the pane exists to preserve.
+    final rows = queue.value;
+    if (rows != null) return _list(rows, sizeClass);
+    return switch (queue) {
+      AsyncError(:final error) => Padding(
+        padding: sizeClass.gutter,
+        child: ErrorState(
+          title: 'Could not load the review queue',
+          message: error is WaxDeckApiException
+              ? error.message
+              : 'Something went wrong reading it.',
+          onRetry: () => ref.invalidate(reviewQueueProvider),
+        ),
+      ),
+      _ => const SkeletonShapes(shape: SkeletonShape.list),
+    };
+  }
+
+  Widget _list(ReviewQueueState state, WaxSizeClass sizeClass) {
     if (state.entries.isEmpty) {
-      return const Center(child: Text('Nothing waiting for review'));
+      return Padding(
+        padding: sizeClass.gutter,
+        child: const EmptyState(
+          glyph: WaxIcons.check,
+          title: 'Nothing waiting for review',
+          message:
+              'Uploads and rematches land here when the match needs a '
+              'decision.',
+        ),
+      );
     }
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
@@ -272,12 +394,19 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
         itemCount: state.entries.length + (state.loadingMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= state.entries.length) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
           }
           final entry = state.entries[index];
           return _ReviewRow(
             entry: entry,
             selected: index == _selected,
+            open: entry.id == widget.openEntryId,
             selecting: _selecting,
             checked: _checked.contains(entry.id),
             onTap: () => _selecting ? _toggleChecked(entry) : _open(entry),
@@ -290,42 +419,50 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       ),
     );
   }
+}
 
-  Widget _bulkBar(BuildContext context) {
-    return BottomAppBar(
+/// The bulk decision bar, over the list rather than under the whole
+/// page: the pane beside it keeps its own decision bar, and two bars
+/// across the bottom of one screen read as one control with four verbs.
+class _BulkBar extends StatelessWidget {
+  const _BulkBar({required this.count, required this.onDecide});
+
+  final int count;
+  final void Function(String action) onDecide;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Container(
+      color: colors.surface2,
+      padding: const EdgeInsets.symmetric(
+        horizontal: WaxSpace.s16,
+        vertical: WaxSpace.s8,
+      ),
       child: Row(
-        children: [
-          Text('${_checked.length} selected'),
+        children: <Widget>[
+          Text(
+            '$count selected',
+            style: WaxType.label.copyWith(color: colors.textSecondary),
+          ),
           const Spacer(),
-          Semantics(
-            identifier: SemanticsIds.reviewBulkApprove,
-            label: 'Approve selected',
-            button: true,
-            child: TextButton(
-              key: const Key(SemanticsIds.reviewBulkApprove),
-              onPressed: () => _decideBulk('approve'),
-              child: const Text('Approve'),
-            ),
+          WaxButton(
+            label: 'Approve',
+            kind: WaxButtonKind.text,
+            semanticsId: SemanticsIds.reviewBulkApprove,
+            onPressed: () => onDecide('approve'),
           ),
-          Semantics(
-            identifier: SemanticsIds.reviewBulkAsIs,
-            label: 'Keep selected as is',
-            button: true,
-            child: TextButton(
-              key: const Key(SemanticsIds.reviewBulkAsIs),
-              onPressed: () => _decideBulk('as-is'),
-              child: const Text('Keep as is'),
-            ),
+          WaxButton(
+            label: 'Keep as is',
+            kind: WaxButtonKind.text,
+            semanticsId: SemanticsIds.reviewBulkAsIs,
+            onPressed: () => onDecide('as-is'),
           ),
-          Semantics(
-            identifier: SemanticsIds.reviewBulkSkip,
-            label: 'Skip selected',
-            button: true,
-            child: TextButton(
-              key: const Key(SemanticsIds.reviewBulkSkip),
-              onPressed: () => _decideBulk('skip'),
-              child: const Text('Skip'),
-            ),
+          WaxButton(
+            label: 'Skip',
+            kind: WaxButtonKind.text,
+            semanticsId: SemanticsIds.reviewBulkSkip,
+            onPressed: () => onDecide('skip'),
           ),
         ],
       ),
@@ -333,11 +470,9 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   }
 }
 
-/// The per-library matching-mode control. Admin only: it is hidden for
-/// everyone else, and the endpoints it drives are admin-gated anyway.
-/// A library's mode chooses whether confident matches auto-apply
-/// (`auto`), everything waits for review (`review`), or the library is
-/// never matched (`off`).
+/// The per-library matching mode, admin only. It stays here as well as
+/// on the libraries table: this is where somebody notices a library is
+/// asking too much, and another page would lose the thought.
 class _MatchingModeMenu extends ConsumerWidget {
   const _MatchingModeMenu();
 
@@ -362,74 +497,37 @@ class _MatchingModeMenu extends ConsumerWidget {
     if (!isAdmin) return const SizedBox.shrink();
     final libraries = ref.watch(librariesProvider).value ?? const [];
     if (libraries.isEmpty) return const SizedBox.shrink();
-    // Captured before the menu's async onTap: setting a mode is a network
-    // call that can fail, and the tap must report it rather than throwing
-    // into the void.
-    final messenger = ScaffoldMessenger.of(context);
-    return Semantics(
-      identifier: SemanticsIds.matchingMenu,
+    return WaxMenuButton<(String, String)>(
+      glyph: WaxIcons.filter,
       label: 'Matching mode',
-      button: true,
-      child: PopupMenuButton<void>(
-        key: const Key(SemanticsIds.matchingMenu),
-        tooltip: 'Matching mode',
-        icon: const Icon(Icons.auto_fix_high_outlined),
-        itemBuilder: (context) => [
-          for (final library in libraries) ...[
-            PopupMenuItem<void>(
-              enabled: false,
-              child: Text(
-                library.name,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
+      semanticsId: SemanticsIds.matchingMenu,
+      items: <WaxMenuItem<(String, String)>>[
+        for (final library in libraries)
+          for (final mode in _modes)
+            WaxMenuItem<(String, String)>(
+              value: (library.pid, mode),
+              label: '${library.name}: ${_labels[mode] ?? mode}',
+              semanticsId: SemanticsIds.matchingOption(library.pid, mode),
+              selected:
+                  ref.watch(libraryMatchingProvider(library.pid)).value == mode,
             ),
-            for (final mode in _modes)
-              PopupMenuItem<void>(
-                key: Key('matching-${library.pid}-$mode'),
-                child: _ModeRow(libraryPid: library.pid, mode: mode),
-                onTap: () async {
-                  try {
-                    await ref
-                        .read(libraryMatchingProvider(library.pid).notifier)
-                        .set(mode);
-                  } on WaxDeckApiException catch (e) {
-                    messenger
-                      ..hideCurrentSnackBar()
-                      ..showSnackBar(SnackBar(content: Text(e.message)));
-                  }
-                },
-              ),
-          ],
-        ],
-      ),
+      ],
+      onSelected: (choice) => _set(ref, choice.$1, choice.$2),
     );
   }
-}
 
-/// One mode row inside the menu, showing a check on the library's
-/// current mode.
-class _ModeRow extends ConsumerWidget {
-  const _ModeRow({required this.libraryPid, required this.mode});
-
-  final String libraryPid;
-  final String mode;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final current = ref.watch(libraryMatchingProvider(libraryPid)).value;
-    return Row(
-      children: [
-        SizedBox(
-          width: 24,
-          child: current == mode ? const Icon(Icons.check, size: 18) : null,
-        ),
-        Expanded(child: Text(_MatchingModeMenu._labels[mode] ?? mode)),
-      ],
-    );
+  Future<void> _set(WidgetRef ref, String libraryPid, String mode) async {
+    try {
+      await ref.read(libraryMatchingProvider(libraryPid).notifier).set(mode);
+    } on WaxDeckApiException catch (e) {
+      ref.read(shellMessengerProvider.notifier).show(e.message);
+    }
   }
 }
 
 class _FilterChips extends ConsumerWidget {
+  const _FilterChips();
+
   static int _decidedCount(ReviewStats stats) =>
       stats.applied +
       stats.autoApplied +
@@ -451,27 +549,20 @@ class _FilterChips extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(reviewFilterProvider);
     final stats = ref.watch(reviewStatsProvider).value;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          for (final filter in ReviewFilter.values) ...[
-            Semantics(
-              identifier: SemanticsIds.reviewFilter(filter.name),
-              label: filter.label,
-              button: true,
-              child: ChoiceChip(
-                key: Key(SemanticsIds.reviewFilter(filter.name)),
-                label: Text(_label(filter, stats)),
-                selected: filter == selected,
-                onSelected: (_) =>
-                    ref.read(reviewFilterProvider.notifier).select(filter),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-        ],
-      ),
+    return FilterChipRow(
+      padding: EdgeInsets.zero,
+      selected: selected.name,
+      chips: <WaxFilterChip>[
+        for (final filter in ReviewFilter.values)
+          WaxFilterChip(
+            name: filter.name,
+            label: _label(filter, stats),
+            semanticsId: SemanticsIds.reviewFilter(filter.name),
+          ),
+      ],
+      onSelect: (name) => ref
+          .read(reviewFilterProvider.notifier)
+          .select(ReviewFilter.values.byName(name)),
     );
   }
 }
@@ -480,6 +571,7 @@ class _ReviewRow extends StatelessWidget {
   const _ReviewRow({
     required this.entry,
     required this.selected,
+    required this.open,
     required this.selecting,
     required this.checked,
     required this.onTap,
@@ -487,7 +579,12 @@ class _ReviewRow extends StatelessWidget {
   });
 
   final ReviewEntry entry;
+
+  /// Where the keyboard cursor is. Distinct from [open], which is the
+  /// entry the pane holds: they are the same row almost always, and are
+  /// two different facts the moment the pane is closed.
   final bool selected;
+  final bool open;
   final bool selecting;
   final bool checked;
   final VoidCallback onTap;
@@ -500,103 +597,98 @@ class _ReviewRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    final colors = WaxColors.of(context);
     final best = entry.best;
     final title = entry.artist == null
         ? (entry.title ?? 'Untitled')
         : '${entry.title ?? 'Untitled'} by ${entry.artist}';
-    return Semantics(
-      identifier: SemanticsIds.reviewRow(entry.id),
+    final surface = selected || open ? colors.accentContainer : colors.canvas;
+    return WaxTappable(
       label: title,
-      button: true,
+      semanticsId: SemanticsIds.reviewRow(entry.id),
+      // The tick is inside this control and reports nothing of its own,
+      // so the row carries the checked state for a screen reader.
+      selected: selecting ? checked : open,
+      surface: surface,
+      borderRadius: BorderRadius.zero,
+      onPressed: onTap,
       child: Material(
-        key: ValueKey(SemanticsIds.reviewRow(entry.id)),
-        color: selected ? colorScheme.secondaryContainer : Colors.transparent,
+        color: surface,
         child: InkWell(
           onTap: onTap,
           onLongPress: onLongPress,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(
+              horizontal: WaxSpace.s16,
+              vertical: WaxSpace.s8,
+            ),
             child: Row(
-              children: [
-                if (selecting) ...[
-                  Checkbox(
-                    key: ValueKey('review-check-${entry.id}'),
-                    value: checked,
-                    onChanged: (_) => onTap(),
+              children: <Widget>[
+                if (selecting) ...<Widget>[
+                  WaxIcon(
+                    checked ? WaxIcons.success : WaxIcons.check,
+                    size: 18,
+                    color: checked ? colors.accent : colors.textTertiary,
+                    active: checked,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: WaxSpace.s12),
                 ],
-                Icon(
-                  mediaFallbackIcon(entry.mediaType),
-                  color: colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                    children: <Widget>[
                       Text(
                         title,
-                        style: textTheme.titleSmall,
+                        style: WaxType.titleItem.copyWith(
+                          color: colors.textPrimary,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Text(
-                        '${entry.trackCount} tracks',
-                        style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
+                      const SizedBox(height: WaxSpace.s4),
                       if (entry.identifying)
                         Row(
-                          children: [
+                          children: <Widget>[
                             const SizedBox(
                               width: 12,
                               height: 12,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
-                            const SizedBox(width: 8),
-                            Text('Identifying', style: textTheme.bodySmall),
+                            const SizedBox(width: WaxSpace.s8),
+                            Text(
+                              'Identifying',
+                              style: WaxType.caption.copyWith(
+                                color: colors.textSecondary,
+                              ),
+                            ),
                           ],
-                        )
-                      else if (best != null)
-                        Text(
-                          bestLine(best),
-                          style: textTheme.bodySmall,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         )
                       else
                         Text(
-                          'No candidates',
-                          style: textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+                          best == null
+                              ? '${entry.trackCount} tracks, no candidates'
+                              : '${entry.trackCount} tracks, ${bestLine(best)}',
+                          style: WaxType.caption.copyWith(
+                            color: best == null
+                                ? colors.textTertiary
+                                : colors.textSecondary,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                     ],
                   ),
                 ),
-                if (entry.origin == 'upload' ||
-                    entry.origin == 'acquisition') ...[
-                  const SizedBox(width: 8),
-                  Chip(
-                    label: Text(
-                      entry.origin == 'acquisition' ? 'Acquired' : 'Upload',
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ],
-                if (entry.status != 'pending') ...[
-                  const SizedBox(width: 8),
-                  Chip(
-                    label: Text(entry.status),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
+                const SizedBox(width: WaxSpace.s8),
+                DomainBadge(
+                  waxDomainOf(entry.mediaType),
+                  label: _originLabel(entry),
+                  compact: true,
+                ),
+                if (entry.status != 'pending') ...<Widget>[
+                  const SizedBox(width: WaxSpace.s4),
+                  CodecChip(entry.status),
                 ],
               ],
             ),
@@ -605,4 +697,13 @@ class _ReviewRow extends StatelessWidget {
       ),
     );
   }
+
+  /// Where the unit came from, in the badge that would otherwise say
+  /// the media type twice: the queue is one domain deep at a time and
+  /// "Upload" is the fact a reviewer is actually sorting by.
+  static String _originLabel(ReviewEntry entry) => switch (entry.origin) {
+    'upload' => 'Upload',
+    'acquisition' => 'Acquired',
+    _ => DomainBadge.defaultLabel(waxDomainOf(entry.mediaType)),
+  };
 }

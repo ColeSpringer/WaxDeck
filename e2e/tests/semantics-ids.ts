@@ -245,6 +245,13 @@ export const SemanticsIds = {
 
   // health: Library health: rules, issues, and their fixes.
   adminDiagnostics: 'admin-diagnostics',
+  adminHealth: 'admin-health',
+  adminHealthRule: 'admin-health-rule',
+  diagnosticCode: (code: string | number) => `diagnostic-code-${code}`,
+  diagnosticDetail: (path: string | number) => `diagnostic-detail-${path}`,
+  diagnosticRow: (path: string | number) => `diagnostic-row-${path}`,
+  diagnosticsMore: 'diagnostics-more',
+  duplicateDetail: (pid: string | number) => `duplicate-detail-${pid}`,
   duplicateGroup: (pid: string | number) => `duplicate-group-${pid}`,
   duplicateMerge: (pid: string | number) => `duplicate-merge-${pid}`,
   health: (rule: string | number) => `health-rule-${rule}`,
@@ -253,6 +260,7 @@ export const SemanticsIds = {
   healthScore: 'health-score',
   healthSweep: 'health-sweep',
   healthWarmingUp: 'health-warming-up',
+  upgradeDetail: (itemPid: string | number) => `upgrade-detail-${itemPid}`,
   upgradeGroup: (itemPid: string | number) => `upgrade-group-${itemPid}`,
   upgradeResolve: (itemPid: string | number) => `upgrade-resolve-${itemPid}`,
 
@@ -274,19 +282,35 @@ export const SemanticsIds = {
   offlineBanner: 'offline-banner',
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
+  artSlot: (role: string | number) => `art-slot-${role}`,
+  artSlotClear: (role: string | number) => `art-slot-clear-${role}`,
+  artSlotDrop: (role: string | number) => `art-slot-drop-${role}`,
+  artSlotSet: (role: string | number) => `art-slot-set-${role}`,
+  creditsNames: 'credits-names',
   creditsRole: 'credits-role',
   creditsSave: 'credits-save',
   fieldLock: (name: string | number) => `field-lock-${name}`,
   lyricsClear: 'lyrics-clear',
+  lyricsField: 'lyrics-field',
+  lyricsPreview: 'lyrics-preview',
   lyricsSave: 'lyrics-save',
+  metadataEditor: 'metadata-editor',
   metadataEnrich: 'metadata-enrich',
+  metadataField: (name: string | number) => `metadata-field-${name}`,
   metadataForce: 'metadata-force',
   metadataLock: 'metadata-lock',
+  metadataOpenAlbum: 'metadata-open-album',
+  metadataOpenArtist: 'metadata-open-artist',
+  metadataOpenReleaseGroup: 'metadata-open-release-group',
+  metadataOpenReview: 'metadata-open-review',
   metadataRematch: 'metadata-rematch',
   metadataSave: 'metadata-save',
   metadataWriteback: 'metadata-writeback',
+  metadataWritebackWarning: 'metadata-writeback-warning',
   tagAdd: 'tag-add',
+  tagKey: 'tag-key',
   tagRemove: (key: string | number) => `tag-remove-${key}`,
+  tagValues: 'tag-values',
   unofficialSwitch: 'unofficial-switch',
 
   // music: The music hub, its indexes, and the buckets they drill.
@@ -305,12 +329,15 @@ export const SemanticsIds = {
   musicTile: (name: string | number) => `music-tile-${name}`,
 
   // organize: Organize: previews, duplicates, and upgrade groups.
+  adminOrganize: 'admin-organize',
   organizeApply: 'organize-apply',
   organizeConfirm: 'organize-confirm',
   organizePlan: 'organize-plan',
   organizePreview: 'organize-preview',
   organizeProfile: 'organize-profile',
   organizeReport: 'organize-report',
+  organizeRow: (from: string | number) => `organize-row-${from}`,
+  organizeRowDetail: (from: string | number) => `organize-row-detail-${from}`,
 
   // player: Playback surfaces: transport, stars and ratings, speed, chapters, bookmarks, sleep timer, notes and transcript, lyrics, the visualizer, and car mode.
   addToPlaylist: 'add-to-playlist',
@@ -518,11 +545,14 @@ export const SemanticsIds = {
   radioVolume: 'radio-volume',
 
   // review: The review queue and its keyboard-first controls.
+  adminReview: 'admin-review',
+  adminReviewEntry: 'admin-review-entry',
   candidate: (mbid: string | number) => `candidate-${mbid}`,
   diffMissing: (index: string | number) => `diff-missing-${index}`,
   diffRow: (index: string | number) => `diff-row-${index}`,
   editMetadata: (pid: string | number) => `edit-metadata-${pid}`,
   matchingMenu: 'matching-menu',
+  matchingOption: (libraryPid: string | number, mode: string | number) => `matching-${libraryPid}-${mode}`,
   reviewApprove: 'review-approve',
   reviewAsIs: 'review-as-is',
   reviewBulkApprove: 'review-bulk-approve',
@@ -530,6 +560,8 @@ export const SemanticsIds = {
   reviewBulkSkip: 'review-bulk-skip',
   reviewDiscard: 'review-discard',
   reviewFilter: (name: string | number) => `review-filter-${name}`,
+  reviewPane: 'review-pane',
+  reviewPaneClose: 'review-pane-close',
   reviewRevert: 'review-revert',
   reviewRow: (id: string | number) => `review-row-${id}`,
   reviewSelectToggle: 'review-select-toggle',
@@ -607,6 +639,9 @@ export const SemanticsIds = {
   listenLogClientFilter: 'listen-log-client-filter',
   openListenLog: 'open-listen-log',
   openYearInReview: 'open-year-in-review',
+  shareCardExport: (format: string | number) => `share-card-export-${format}`,
+  shareCardOpen: 'share-card-open',
+  shareCardPreview: (format: string | number) => `share-card-preview-${format}`,
   statsBucket: 'stats-bucket',
   statsRange: (range: string | number) => `stats-range-${range}`,
   top: (kind: string | number) => `top-kind-${kind}`,
@@ -624,6 +659,8 @@ export const SemanticsIds = {
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
   acquireFormat: 'acquire-format',
   acquireSubmit: 'acquire-submit',
+  acquireTasks: 'acquire-tasks',
+  acquireUrl: 'acquire-url',
   addFromUrl: 'add-from-url',
   addUploadFile: 'add-upload-file',
   addUploadFolder: 'add-upload-folder',
@@ -641,6 +678,8 @@ export const SemanticsIds = {
   uploadRetry: (id: string | number) => `upload-retry-${id}`,
   uploadReview: (id: string | number) => `upload-review-${id}`,
   uploadRow: (id: string | number) => `upload-row-${id}`,
+  uploadsMore: 'uploads-more',
+  uploadsScreen: 'uploads-screen',
 } as const;
 
 /// The attribute selector Flutter renders an identifier as.

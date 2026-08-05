@@ -26,11 +26,12 @@ class WaxTextField extends StatefulWidget {
     this.autofocus = false,
     this.textInputAction,
     this.obscureText = false,
+    this.maxLines = 1,
     this.errorText,
     this.semanticsId,
     this.clearSemanticsId,
     super.key,
-  });
+  }) : assert(maxLines >= 1, 'a field has at least one line');
 
   /// The accessible name. Fields with a visible label pass the same
   /// string; fields whose meaning is carried by their placement (a search
@@ -55,6 +56,11 @@ class WaxTextField extends StatefulWidget {
   /// at and decide about, and the button would be a control whose only
   /// effect is invisible.
   final bool obscureText;
+
+  /// How tall the field grows before it scrolls. Above one it takes the
+  /// card radius and drops its clear button, which a paragraph should
+  /// not have.
+  final int maxLines;
 
   /// What went wrong with this value, drawn under the field in the error
   /// colour. Beneath rather than as a toast, because an error about a
@@ -123,9 +129,11 @@ class _WaxTextFieldState extends State<WaxTextField> {
     final motion = WaxMotion.of(context);
 
     final error = widget.errorText;
+    final multiline = widget.maxLines > 1;
+    final radius = multiline ? WaxRadius.card : WaxRadius.pill;
     final field = WaxFocusRing(
       focused: _focused,
-      borderRadius: WaxRadius.pill,
+      borderRadius: radius,
       surface: colors.canvas,
       child: AnimatedContainer(
         duration: motion.quick,
@@ -134,7 +142,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
         padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s12),
         decoration: BoxDecoration(
           color: colors.surface2,
-          borderRadius: WaxRadius.pill,
+          borderRadius: radius,
           border: Border.all(
             color: error != null
                 ? colors.error
@@ -142,6 +150,9 @@ class _WaxTextFieldState extends State<WaxTextField> {
           ),
         ),
         child: Row(
+          crossAxisAlignment: multiline
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.center,
           children: <Widget>[
             if (widget.glyph != null) ...<Widget>[
               WaxIcon(widget.glyph!, size: 18, color: colors.textTertiary),
@@ -163,6 +174,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
                   autofocus: widget.autofocus,
                   textInputAction: widget.textInputAction,
                   obscureText: widget.obscureText,
+                  maxLines: widget.maxLines,
                   onChanged: widget.onChanged,
                   onSubmitted: widget.onSubmitted,
                   style: WaxType.body.copyWith(color: colors.textPrimary),
@@ -195,7 +207,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
             // Built off the controller so it appears with the first
             // character and leaves with the last, without the field
             // rebuilding its ancestors on every keystroke.
-            if (!widget.obscureText)
+            if (!widget.obscureText && !multiline)
               ValueListenableBuilder<TextEditingValue>(
                 valueListenable: _controller,
                 builder: (context, value, _) => value.text.isEmpty

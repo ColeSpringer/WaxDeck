@@ -246,6 +246,13 @@ abstract final class SemanticsIds {
 
   // health: Library health: rules, issues, and their fixes.
   static const String adminDiagnostics = 'admin-diagnostics';
+  static const String adminHealth = 'admin-health';
+  static const String adminHealthRule = 'admin-health-rule';
+  static String diagnosticCode(Object code) => 'diagnostic-code-$code';
+  static String diagnosticDetail(Object path) => 'diagnostic-detail-$path';
+  static String diagnosticRow(Object path) => 'diagnostic-row-$path';
+  static const String diagnosticsMore = 'diagnostics-more';
+  static String duplicateDetail(Object pid) => 'duplicate-detail-$pid';
   static String duplicateGroup(Object pid) => 'duplicate-group-$pid';
   static String duplicateMerge(Object pid) => 'duplicate-merge-$pid';
   static String health(Object rule) => 'health-rule-$rule';
@@ -254,6 +261,7 @@ abstract final class SemanticsIds {
   static const String healthScore = 'health-score';
   static const String healthSweep = 'health-sweep';
   static const String healthWarmingUp = 'health-warming-up';
+  static String upgradeDetail(Object itemPid) => 'upgrade-detail-$itemPid';
   static String upgradeGroup(Object itemPid) => 'upgrade-group-$itemPid';
   static String upgradeResolve(Object itemPid) => 'upgrade-resolve-$itemPid';
 
@@ -275,19 +283,35 @@ abstract final class SemanticsIds {
   static const String offlineBanner = 'offline-banner';
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
+  static String artSlot(Object role) => 'art-slot-$role';
+  static String artSlotClear(Object role) => 'art-slot-clear-$role';
+  static String artSlotDrop(Object role) => 'art-slot-drop-$role';
+  static String artSlotSet(Object role) => 'art-slot-set-$role';
+  static const String creditsNames = 'credits-names';
   static const String creditsRole = 'credits-role';
   static const String creditsSave = 'credits-save';
   static String fieldLock(Object name) => 'field-lock-$name';
   static const String lyricsClear = 'lyrics-clear';
+  static const String lyricsField = 'lyrics-field';
+  static const String lyricsPreview = 'lyrics-preview';
   static const String lyricsSave = 'lyrics-save';
+  static const String metadataEditor = 'metadata-editor';
   static const String metadataEnrich = 'metadata-enrich';
+  static String metadataField(Object name) => 'metadata-field-$name';
   static const String metadataForce = 'metadata-force';
   static const String metadataLock = 'metadata-lock';
+  static const String metadataOpenAlbum = 'metadata-open-album';
+  static const String metadataOpenArtist = 'metadata-open-artist';
+  static const String metadataOpenReleaseGroup = 'metadata-open-release-group';
+  static const String metadataOpenReview = 'metadata-open-review';
   static const String metadataRematch = 'metadata-rematch';
   static const String metadataSave = 'metadata-save';
   static const String metadataWriteback = 'metadata-writeback';
+  static const String metadataWritebackWarning = 'metadata-writeback-warning';
   static const String tagAdd = 'tag-add';
+  static const String tagKey = 'tag-key';
   static String tagRemove(Object key) => 'tag-remove-$key';
+  static const String tagValues = 'tag-values';
   static const String unofficialSwitch = 'unofficial-switch';
 
   // music: The music hub, its indexes, and the buckets they drill.
@@ -306,12 +330,15 @@ abstract final class SemanticsIds {
   static String musicTile(Object name) => 'music-tile-$name';
 
   // organize: Organize: previews, duplicates, and upgrade groups.
+  static const String adminOrganize = 'admin-organize';
   static const String organizeApply = 'organize-apply';
   static const String organizeConfirm = 'organize-confirm';
   static const String organizePlan = 'organize-plan';
   static const String organizePreview = 'organize-preview';
   static const String organizeProfile = 'organize-profile';
   static const String organizeReport = 'organize-report';
+  static String organizeRow(Object from) => 'organize-row-$from';
+  static String organizeRowDetail(Object from) => 'organize-row-detail-$from';
 
   // player: Playback surfaces: transport, stars and ratings, speed, chapters, bookmarks, sleep timer, notes and transcript, lyrics, the visualizer, and car mode.
   static const String addToPlaylist = 'add-to-playlist';
@@ -524,11 +551,15 @@ abstract final class SemanticsIds {
   static const String radioVolume = 'radio-volume';
 
   // review: The review queue and its keyboard-first controls.
+  static const String adminReview = 'admin-review';
+  static const String adminReviewEntry = 'admin-review-entry';
   static String candidate(Object mbid) => 'candidate-$mbid';
   static String diffMissing(Object index) => 'diff-missing-$index';
   static String diffRow(Object index) => 'diff-row-$index';
   static String editMetadata(Object pid) => 'edit-metadata-$pid';
   static const String matchingMenu = 'matching-menu';
+  static String matchingOption(Object libraryPid, Object mode) =>
+      'matching-$libraryPid-$mode';
   static const String reviewApprove = 'review-approve';
   static const String reviewAsIs = 'review-as-is';
   static const String reviewBulkApprove = 'review-bulk-approve';
@@ -536,6 +567,8 @@ abstract final class SemanticsIds {
   static const String reviewBulkSkip = 'review-bulk-skip';
   static const String reviewDiscard = 'review-discard';
   static String reviewFilter(Object name) => 'review-filter-$name';
+  static const String reviewPane = 'review-pane';
+  static const String reviewPaneClose = 'review-pane-close';
   static const String reviewRevert = 'review-revert';
   static String reviewRow(Object id) => 'review-row-$id';
   static const String reviewSelectToggle = 'review-select-toggle';
@@ -618,6 +651,9 @@ abstract final class SemanticsIds {
   static const String listenLogClientFilter = 'listen-log-client-filter';
   static const String openListenLog = 'open-listen-log';
   static const String openYearInReview = 'open-year-in-review';
+  static String shareCardExport(Object format) => 'share-card-export-$format';
+  static const String shareCardOpen = 'share-card-open';
+  static String shareCardPreview(Object format) => 'share-card-preview-$format';
   static const String statsBucket = 'stats-bucket';
   static String statsRange(Object range) => 'stats-range-$range';
   static String top(Object kind) => 'top-kind-$kind';
@@ -635,6 +671,8 @@ abstract final class SemanticsIds {
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
   static const String acquireFormat = 'acquire-format';
   static const String acquireSubmit = 'acquire-submit';
+  static const String acquireTasks = 'acquire-tasks';
+  static const String acquireUrl = 'acquire-url';
   static const String addFromUrl = 'add-from-url';
   static const String addUploadFile = 'add-upload-file';
   static const String addUploadFolder = 'add-upload-folder';
@@ -653,4 +691,6 @@ abstract final class SemanticsIds {
   static String uploadRetry(Object id) => 'upload-retry-$id';
   static String uploadReview(Object id) => 'upload-review-$id';
   static String uploadRow(Object id) => 'upload-row-$id';
+  static const String uploadsMore = 'uploads-more';
+  static const String uploadsScreen = 'uploads-screen';
 }

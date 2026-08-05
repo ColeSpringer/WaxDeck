@@ -58,7 +58,6 @@ import '../queue/queue_persistence.dart';
 import '../queue/queue_refiller.dart';
 import '../queue/queue_screen.dart';
 import '../radio/radio_screen.dart';
-import '../review/review_entry_screen.dart';
 import '../review/review_screen.dart';
 import '../search/search_screen.dart';
 import '../settings/about_screen.dart';
@@ -137,6 +136,12 @@ class _SessionRefresh extends ChangeNotifier {
     }
     super.dispose();
   }
+}
+
+/// The entry id in a review location, or null on the queue itself.
+String? _reviewEntryOf(String location) {
+  const prefix = '${WaxRoute.review}/';
+  return location.startsWith(prefix) ? location.substring(prefix.length) : null;
 }
 
 /// Whether [location] is somewhere this app can send a visitor. A `from`
@@ -588,15 +593,21 @@ List<RouteBase> shellRoutes() => <RouteBase>[
                 path: WaxRoute.genres,
                 builder: (context, state) => const GenreTreeScreen(),
               ),
-              GoRoute(
-                path: WaxRoute.review,
-                builder: (context, state) => const ReviewScreen(),
+              // A shell, so one ReviewSurface spans both locations and
+              // the queue keeps its rows, its scroll, and its cursor
+              // when an entry opens beside it. Nested routes would
+              // stack a second surface over the first.
+              ShellRoute(
+                builder: (context, state, child) =>
+                    ReviewSurface(openEntryId: _reviewEntryOf(state.uri.path)),
                 routes: <RouteBase>[
                   GoRoute(
-                    path: ':entryId',
-                    builder: (context, state) => ReviewEntryScreen(
-                      entryId: state.pathParameters['entryId']!,
-                    ),
+                    path: WaxRoute.review,
+                    builder: (context, state) => const SizedBox.shrink(),
+                  ),
+                  GoRoute(
+                    path: '${WaxRoute.review}/:entryId',
+                    builder: (context, state) => const SizedBox.shrink(),
                   ),
                 ],
               ),

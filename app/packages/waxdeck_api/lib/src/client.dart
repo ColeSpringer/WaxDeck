@@ -135,15 +135,13 @@ abstract interface class WaxDeckRepository {
   /// `GET /library/search`: grouped full-text search.
   Future<SearchResults> search(String q, {int? limit});
 
-  /// The artwork endpoint for [pid], resolved the same way an
-  /// [ItemSummary]'s own `artUrl` is.
+  /// The artwork endpoint for [pid], resolved the way an [ItemSummary]'s
+  /// own `artUrl` is. For callers with a pid and no row: a facet bucket
+  /// carries an entity pid, which this endpoint serves too.
   ///
-  /// The listings hand back a URL with every row, so screens showing
-  /// items never need this. Facet buckets do not: an artist or album
-  /// bucket carries the entity's pid and nothing else, and the endpoint
-  /// serves entity pids as readily as item ones. Building the path here
-  /// keeps it where the rest of the contract's paths live.
-  String artUrlFor(String pid);
+  /// Only the default `front` [role] walks the album/artist chain; the
+  /// rest 404 unless the entity holds that slot itself.
+  String artUrlFor(String pid, {String? role});
 
   /// `GET /items/{pid}/similar`: tracks similar to a seed track, most
   /// similar first. The result names which engine answered (`sonic`
@@ -1650,10 +1648,16 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  String artUrlFor(String pid) => resolveMediaUrl(
-    _baseUrl,
-    '/api/v1/items/${Uri.encodeComponent(pid)}/art',
-  );
+  String artUrlFor(String pid, {String? role}) {
+    final query = <String, String>{
+      if (role != null && role != 'front') 'role': role,
+    };
+    final path = Uri(
+      path: '/api/v1/items/${Uri.encodeComponent(pid)}/art',
+      queryParameters: query.isEmpty ? null : query,
+    ).toString();
+    return resolveMediaUrl(_baseUrl, path);
+  }
 
   @override
   Future<SearchResults> search(String q, {int? limit}) => _guard(() async {

@@ -1,16 +1,13 @@
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:flutter/material.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../shell/semantics_ids.dart';
 import 'file_picker_impl.dart' as impl;
 import 'file_picker_port.dart';
 
-/// Flattens a drop payload into lazy picked-file references, filtered
-/// to [extensions]. Handles the three shapes drops arrive in: web
-/// directory items carry their children recursively (relative
-/// directories rebuild from the nesting), Linux and Windows deliver a
-/// dropped folder as a plain path item (expanded on disk), and macOS
-/// marks it a directory item with no children (same expansion).
+/// Flattens a drop into lazy picked-file references, filtered to
+/// [extensions]. Three shapes arrive: recursive children (web), a plain
+/// path (Linux, Windows), or a childless directory item (macOS).
 Future<List<PickedAudioFile>> normalizeDrop(
   List<DropItem> items,
   Set<String> extensions,
@@ -42,10 +39,8 @@ Future<List<PickedAudioFile>> normalizeDrop(
   return out;
 }
 
-/// A drag-and-drop landing zone for audio (or, with a different
-/// extension set, backup archives): wraps [child], shows a hover
-/// overlay while a drag is over the window, and hands the normalized
-/// files to [onDropped]. The only file that touches desktop_drop.
+/// A drop zone for audio, or with another extension set for archives and
+/// cover images. The only file that touches desktop_drop.
 class AudioDropArea extends StatefulWidget {
   const AudioDropArea({
     super.key,
@@ -54,6 +49,7 @@ class AudioDropArea extends StatefulWidget {
     this.enabled = true,
     this.extensions = kAcceptedAudioExtensions,
     this.hint = 'Drop audio files to upload',
+    this.semanticsId = SemanticsIds.uploadDropTarget,
   });
 
   final Widget child;
@@ -67,6 +63,11 @@ class AudioDropArea extends StatefulWidget {
 
   /// Overlay caption while hovering.
   final String hint;
+
+  /// The zone's own handle. Defaulted to the uploads target, which is
+  /// what a page-sized drop zone is; a screen with several zones on it
+  /// (the artwork slots) names each one.
+  final String semanticsId;
 
   @override
   State<AudioDropArea> createState() => _AudioDropAreaState();
@@ -84,43 +85,48 @@ class _AudioDropAreaState extends State<AudioDropArea> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = WaxColors.of(context);
     return DropTarget(
-      enable: widget.enabled,
+      // Not while something is pushed over it: a screen underneath keeps
+      // its bounds, so a page-wide zone would accept a drop aimed at the
+      // editor on top of it.
+      enable: widget.enabled && (ModalRoute.of(context)?.isCurrent ?? true),
       onDragEntered: (_) => setState(() => _hovering = true),
       onDragExited: (_) => setState(() => _hovering = false),
       onDragDone: _dropped,
       child: Stack(
         fit: StackFit.passthrough,
-        children: [
+        children: <Widget>[
           widget.child,
           if (_hovering)
             Positioned.fill(
               child: IgnorePointer(
                 child: Semantics(
-                  identifier: SemanticsIds.uploadDropTarget,
+                  identifier: widget.semanticsId,
                   label: widget.hint,
+                  container: true,
                   child: Container(
-                    key: const Key(SemanticsIds.uploadDropTarget),
                     decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: 0.08),
-                      border: Border.all(color: colorScheme.primary, width: 2),
+                      color: colors.accent.withValues(alpha: 0.08),
+                      border: Border.all(color: colors.accent, width: 2),
+                      borderRadius: WaxRadius.card,
                     ),
                     alignment: Alignment.center,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
+                        color: colors.accentContainer,
+                        borderRadius: WaxRadius.chip,
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+                          horizontal: WaxSpace.s16,
+                          vertical: WaxSpace.s12,
                         ),
                         child: Text(
                           widget.hint,
-                          style: TextStyle(
-                            color: colorScheme.onPrimaryContainer,
+                          textAlign: TextAlign.center,
+                          style: WaxType.label.copyWith(
+                            color: colors.onAccentContainer,
                           ),
                         ),
                       ),

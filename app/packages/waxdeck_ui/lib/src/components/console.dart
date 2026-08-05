@@ -233,41 +233,45 @@ class _TableRow<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final content = Container(
-      color: striped ? colors.surface1 : Colors.transparent,
-      padding: const EdgeInsets.symmetric(
-        horizontal: WaxSpace.s12,
-        vertical: WaxSpace.s8,
-      ),
-      constraints: const BoxConstraints(minHeight: 44),
+    final cells = Padding(
+      padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
       child: Row(
         children: <Widget>[
           for (final column in columns) _cell(context, column),
-          if (trailing != null)
-            SizedBox(width: WaxSpace.s40, child: trailing!(context, row)),
         ],
       ),
     );
+    final Widget body;
     if (onTap == null) {
-      return Semantics(
-        identifier: semanticsId,
-        container: true,
-        child: content,
+      body = Semantics(identifier: semanticsId, container: true, child: cells);
+    } else {
+      // WaxTappable adds no gesture by design, so the ink is ours or
+      // the row announces as a button and answers no pointer.
+      body = WaxTappable(
+        label: id,
+        semanticsId: semanticsId,
+        borderRadius: BorderRadius.zero,
+        surface: striped ? colors.surface1 : colors.canvas,
+        onPressed: () => onTap!(row),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(onTap: () => onTap!(row), child: cells),
+        ),
       );
     }
-    // The ink is this row's own: WaxTappable carries the ring, the
-    // handle, and the keyboard activation and deliberately adds no
-    // gesture, so a row that skipped this would announce as a button
-    // and answer no pointer.
-    return WaxTappable(
-      label: id,
-      semanticsId: semanticsId,
-      borderRadius: BorderRadius.zero,
-      surface: striped ? colors.surface1 : colors.canvas,
-      onPressed: () => onTap!(row),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(onTap: () => onTap!(row), child: content),
+    return Container(
+      color: striped ? colors.surface1 : Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s12),
+      constraints: const BoxConstraints(minHeight: 44),
+      child: Row(
+        children: <Widget>[
+          Expanded(child: body),
+          // Outside the row's control: a tappable row reports as one
+          // button and excludes what is under it, so a control drawn
+          // within would have no handle at all.
+          if (trailing != null)
+            SizedBox(width: WaxSpace.s40, child: trailing!(context, row)),
+        ],
       ),
     );
   }
@@ -323,8 +327,60 @@ class _RowCard<T> extends StatelessWidget {
     final details = columns
         .where((c) => c.priority == WaxColumnPriority.detail)
         .toList();
-    final card = Container(
-      padding: const EdgeInsets.all(WaxSpace.s12),
+    final fields = Padding(
+      padding: const EdgeInsets.symmetric(vertical: WaxSpace.s12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          for (final column in primary)
+            DefaultTextStyle.merge(
+              style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+              child: column.cell(context, row),
+            ),
+          for (final column in secondary)
+            Padding(
+              padding: const EdgeInsets.only(top: WaxSpace.s4),
+              child: Row(
+                children: <Widget>[
+                  SizedBox(
+                    width: 96,
+                    child: Text(
+                      column.label,
+                      style: WaxType.caption.copyWith(
+                        color: colors.textTertiary,
+                      ),
+                    ),
+                  ),
+                  Expanded(child: column.cell(context, row)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+    final Widget body;
+    if (onTap == null) {
+      body = Semantics(identifier: semanticsId, container: true, child: fields);
+    } else {
+      body = WaxTappable(
+        label: id,
+        semanticsId: semanticsId,
+        borderRadius: WaxRadius.card,
+        surface: colors.canvas,
+        onPressed: () => onTap!(row),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: WaxRadius.card,
+          child: InkWell(
+            onTap: () => onTap!(row),
+            borderRadius: WaxRadius.card,
+            child: fields,
+          ),
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s12),
       decoration: BoxDecoration(
         color: colors.surface1,
         borderRadius: WaxRadius.card,
@@ -333,67 +389,26 @@ class _RowCard<T> extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                for (final column in primary)
-                  DefaultTextStyle.merge(
-                    style: WaxType.titleItem.copyWith(
-                      color: colors.textPrimary,
-                    ),
-                    child: column.cell(context, row),
-                  ),
-                for (final column in secondary)
-                  Padding(
-                    padding: const EdgeInsets.only(top: WaxSpace.s4),
-                    child: Row(
-                      children: <Widget>[
-                        SizedBox(
-                          width: 96,
-                          child: Text(
-                            column.label,
-                            style: WaxType.caption.copyWith(
-                              color: colors.textTertiary,
-                            ),
-                          ),
-                        ),
-                        Expanded(child: column.cell(context, row)),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          Expanded(child: body),
+          // Beside the card's control, never inside it, for the same
+          // reason the table row keeps its trailing outside.
           if (details.isNotEmpty)
-            WaxIconButton(
-              glyph: WaxIcons.info,
-              label: 'Details for $id',
-              size: 16,
-              semanticsId: detailSemanticsId,
-              onPressed: () => _showDetails(context, colors),
+            Padding(
+              padding: const EdgeInsets.only(top: WaxSpace.s12),
+              child: WaxIconButton(
+                glyph: WaxIcons.info,
+                label: 'Details for $id',
+                size: 16,
+                semanticsId: detailSemanticsId,
+                onPressed: () => _showDetails(context, colors),
+              ),
             ),
-          if (trailing != null) trailing!(context, row),
+          if (trailing != null)
+            Padding(
+              padding: const EdgeInsets.only(top: WaxSpace.s12),
+              child: trailing!(context, row),
+            ),
         ],
-      ),
-    );
-    if (onTap == null) {
-      return Semantics(identifier: semanticsId, container: true, child: card);
-    }
-    return WaxTappable(
-      label: id,
-      semanticsId: semanticsId,
-      borderRadius: WaxRadius.card,
-      surface: colors.canvas,
-      onPressed: () => onTap!(row),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: WaxRadius.card,
-        child: InkWell(
-          onTap: () => onTap!(row),
-          borderRadius: WaxRadius.card,
-          child: card,
-        ),
       ),
     );
   }

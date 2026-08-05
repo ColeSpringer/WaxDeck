@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the app's FileProvider is allowed to hand out. Exactly one
+     directory: the share-cards folder under the app cache, which is
+     where a rendered card is written on its way to ACTION_SEND. Nothing
+     else is exposed, so a bug in the sharing path cannot leak the
+     credential store or the offline library. -->
+<paths>
+    <cache-path name="share-cards" path="share-cards/" />
+</paths>

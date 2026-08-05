@@ -1,13 +1,14 @@
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck/src/uploads/uploads_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
@@ -85,7 +86,9 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    final receivingRow = find.byKey(const ValueKey('upload-row-up-1'));
+    final receivingRow = find.bySemanticsIdentifier(
+      SemanticsIds.uploadRow('up-1'),
+    );
     expect(receivingRow, findsOneWidget);
     expect(
       find.descendant(
@@ -95,17 +98,26 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: receivingRow, matching: find.text('25% received')),
+      find.descendant(
+        of: receivingRow,
+        matching: find.text('25% of 4.0 MB received'),
+      ),
       findsOneWidget,
     );
     expect(find.text('staged'), findsOneWidget);
     expect(find.text('imported'), findsOneWidget);
-    expect(find.byKey(const ValueKey('upload-duplicate-up-2')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadDuplicate('up-2')),
+      findsOneWidget,
+    );
     expect(
       find.text('Duplicate (exact copy): Neon Meridian by The Cardinal Waves'),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('upload-review-up-2')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadReview('up-2')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('groups batch members under one header even interleaved', (
@@ -135,9 +147,15 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('upload-batch-ub-1')), findsOneWidget);
-    expect(find.text('Uploaded together · 2 files'), findsOneWidget);
-    expect(find.byKey(const ValueKey('upload-row-up-a')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadBatch('ub-1')),
+      findsOneWidget,
+    );
+    expect(find.text('Uploaded together, 2 files'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadRow('up-a')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows the quota header with usage against the cap', (
@@ -151,8 +169,11 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('upload-quota')), findsOneWidget);
-    expect(find.text('512 KB of 1.0 MB used'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadQuota),
+      findsOneWidget,
+    );
+    expect(find.text('512 KB of 1.0 MB'), findsOneWidget);
   });
 
   testWidgets('hides upload affordances without upload rights', (tester) async {
@@ -161,8 +182,11 @@ void main() {
     await tester.pumpWidget(_host(repo, picker: picker));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('upload-pick')), findsNothing);
-    expect(find.byKey(const Key('upload-from-url')), findsNothing);
+    expect(find.bySemanticsIdentifier(SemanticsIds.uploadPick), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadFromUrl),
+      findsNothing,
+    );
     expect(find.text('No uploads yet'), findsOneWidget);
   });
 
@@ -173,9 +197,12 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('upload-pick')), findsNothing);
+    expect(find.bySemanticsIdentifier(SemanticsIds.uploadPick), findsNothing);
     // URL acquisition needs no picker, only rights.
-    expect(find.byKey(const Key('upload-from-url')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadFromUrl),
+      findsOneWidget,
+    );
   });
 
   testWidgets('add from URL queues an acquisition', (tester) async {
@@ -183,16 +210,16 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('upload-from-url')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadFromUrl));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('acquire-dialog')), findsOneWidget);
+    expect(find.bySemanticsIdentifier(SemanticsIds.acquireUrl), findsOneWidget);
 
     await tester.enterText(
-      find.byKey(const Key('acquire-url')),
+      find.bySemanticsIdentifier(SemanticsIds.acquireUrl),
       'https://tube.example/watch?v=neon-meridian',
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('acquire-submit')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
     await tester.pumpAndSettle();
 
     expect(repo.acquisitionCalls, hasLength(1));
@@ -202,7 +229,7 @@ void main() {
     );
     expect(repo.acquisitionCalls.single.mediaType, MediaType.music);
     expect(repo.acquisitionCalls.single.format, 'best');
-    expect(find.byKey(const Key('acquire-dialog')), findsNothing);
+    expect(find.bySemanticsIdentifier(SemanticsIds.acquireUrl), findsNothing);
   });
 
   testWidgets('acquiring can pick a download format', (tester) async {
@@ -210,21 +237,21 @@ void main() {
     await tester.pumpWidget(_host(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('upload-from-url')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadFromUrl));
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.byKey(const Key('acquire-url')),
+      find.bySemanticsIdentifier(SemanticsIds.acquireUrl),
       'https://tube.example/watch?v=neon-meridian',
     );
     await tester.pumpAndSettle();
 
     // Open the format dropdown and choose MP3.
-    await tester.tap(find.byKey(const Key('acquire-format')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireFormat));
     await tester.pumpAndSettle();
     await tester.tap(find.text('MP3').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('acquire-submit')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
     await tester.pumpAndSettle();
 
     expect(repo.acquisitionCalls.single.format, 'mp3');
@@ -239,11 +266,16 @@ void main() {
     await tester.pumpWidget(_host(repo, picker: picker));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('upload-pick')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
     // A single file asks no grouping question.
-    expect(find.byKey(const Key('upload-grouping')), findsNothing);
-    await tester.tap(find.byKey(const Key('upload-media-confirm')));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadGrouping),
+      findsNothing,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.putUploadDataCalls, hasLength(3));
@@ -269,12 +301,19 @@ void main() {
     await tester.pumpWidget(_host(repo, picker: picker));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('upload-pick')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('upload-grouping')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('upload-grouping-album')));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadGrouping),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadGroupingOption('album')),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('upload-media-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.batchesById, hasLength(1));
@@ -306,9 +345,11 @@ void main() {
     await tester.pumpWidget(_host(repo, picker: picker));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('upload-pick')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('upload-media-confirm')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
     await tester.pumpAndSettle();
 
     // Both good files joined and the finalize ran exactly once.

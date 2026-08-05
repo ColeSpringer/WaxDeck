@@ -1,22 +1,45 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/shell/shortcuts.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
+ProviderContainer _container(FakeRepository repo) {
+  final container = ProviderContainer(
+    overrides: [
+      repositoryProvider.overrideWithValue(repo),
+      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+    ],
+  );
+  addTearDown(container.dispose);
+  return container;
+}
+
+Widget _host(ProviderContainer container) => UncontrolledProviderScope(
+  container: container,
   child: const MaterialApp(home: ReviewScreen()),
 );
+
+/// Narrow enough that the queue is the whole page: the detail pane is
+/// the two-pane arrangement's business and every test here is about the
+/// list and its keys.
+Future<void> _pump(WidgetTester tester, Widget host) async {
+  tester.view.physicalSize = const Size(700, 1400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(host);
+}
+
+Finder _row(String id) =>
+    find.bySemanticsIdentifier(SemanticsIds.reviewRow(id));
 
 void main() {
   testWidgets('renders entries with best-candidate and identifying rows', (
@@ -41,18 +64,17 @@ void main() {
         origin: 'upload',
       ),
     ];
-    await tester.pumpWidget(_host(repo));
+    await _pump(tester, _host(_container(repo)));
     // No pumpAndSettle: the identifying row's spinner animates forever.
     await tester.pump();
     await tester.pump();
 
-    expect(find.byKey(const ValueKey('review-row-rv-1')), findsOneWidget);
+    expect(_row('rv-1'), findsOneWidget);
     expect(
-      find.text('94% Neon Meridian, The Cardinal Waves (2011)'),
+      find.text('10 tracks, 94% Neon Meridian, The Cardinal Waves (2011)'),
       findsOneWidget,
     );
-    expect(find.text('10 tracks'), findsNWidgets(2));
-    final identifyingRow = find.byKey(const ValueKey('review-row-rv-2'));
+    final identifyingRow = _row('rv-2');
     expect(
       find.descendant(
         of: identifyingRow,
@@ -72,7 +94,7 @@ void main() {
       testReviewEntry('rv-1'),
       testReviewEntry('rv-2', title: 'Second Album'),
     ];
-    await tester.pumpWidget(_host(repo));
+    await _pump(tester, _host(_container(repo)));
     await tester.pumpAndSettle();
 
     // Down twice, back up once: the selection must land on the first
@@ -91,24 +113,48 @@ void main() {
     expect(repo.decideReviewCalls.single.action, 'approve');
   });
 
+  testWidgets('deciding the last row keeps the keys working', (tester) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1'),
+      testReviewEntry('rv-2', title: 'Second Album'),
+    ];
+    await _pump(tester, _host(_container(repo)));
+    await tester.pumpAndSettle();
+
+    // Down to the last row and decide it: the queue shortens under the
+    // cursor, which used to leave every decision key guarding itself
+    // out until j or k pulled the index back into range.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls.single.entryId, 'rv-2');
+
+    // The next key decides the row the cursor landed on, with no j or k
+    // in between.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls, hasLength(2));
+    expect(repo.decideReviewCalls.last.entryId, 'rv-1');
+  });
+
   testWidgets('the selected row is highlighted', (tester) async {
     final repo = FakeRepository();
     repo.reviewEntries = [testReviewEntry('rv-1')];
-    await tester.pumpWidget(_host(repo));
+    await _pump(tester, _host(_container(repo)));
     await tester.pumpAndSettle();
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
 
-    // The dual-tagged key sits on the row's Material, whose color is
-    // the selection highlight.
     final material = tester.widget<Material>(
-      find.byKey(const ValueKey('review-row-rv-1')),
+      find.descendant(of: _row('rv-1'), matching: find.byType(Material)).first,
     );
-    final context = tester.element(
-      find.byKey(const ValueKey('review-row-rv-1')),
-    );
-    expect(material.color, Theme.of(context).colorScheme.secondaryContainer);
+    final context = tester.element(_row('rv-1'));
+    expect(material.color, WaxColors.of(context).accentContainer);
   });
 
   testWidgets('typing in a text field does not trigger shortcuts', (
@@ -147,21 +193,22 @@ void main() {
       testReviewEntry('rv-1'),
       testReviewEntry('rv-2', title: 'Second Album'),
     ];
-    await tester.pumpWidget(_host(repo));
+    final container = _container(repo);
+    await _pump(tester, _host(container));
     await tester.pumpAndSettle();
 
-    await tester.longPress(find.byKey(const ValueKey('review-row-rv-1')));
+    await tester.longPress(_row('rv-1'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('review-row-rv-2')));
+    await tester.tap(_row('rv-2'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('review-bulk-skip')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip));
     await tester.pumpAndSettle();
 
     expect(
       repo.reviewEntries.where((e) => e.status == 'skipped'),
       hasLength(2),
     );
-    expect(find.text('Decided 2 entries'), findsOneWidget);
+    expect(container.read(shellMessengerProvider)?.text, 'Decided 2 entries');
   });
 
   testWidgets('a failing queue shows the error with a retry', (tester) async {
@@ -171,17 +218,17 @@ void main() {
       message: 'queue exploded',
       statusCode: 500,
     );
-    await tester.pumpWidget(_host(repo));
+    await _pump(tester, _host(_container(repo)));
     await tester.pumpAndSettle();
 
     expect(find.text('queue exploded'), findsOneWidget);
     repo.reviewError = null;
-    await tester.tap(find.text('Retry'));
+    await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
     expect(find.text('Nothing waiting for review'), findsOneWidget);
   });
 
-  testWidgets('an admin sets a library matching mode from the app bar', (
+  testWidgets('an admin sets a library matching mode from the bar', (
     tester,
   ) async {
     final repo = FakeRepository(
@@ -196,14 +243,16 @@ void main() {
     );
     repo.libraries.add(const LibraryInfo(pid: 'lb-1', name: 'Music'));
     repo.matchingModes['lb-1'] = 'auto';
-    await tester.pumpWidget(_host(repo));
+    await _pump(tester, _host(_container(repo)));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('matching-menu')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.matchingMenu));
     await tester.pumpAndSettle();
-    expect(find.text('Music'), findsOneWidget);
+    expect(find.text('Music: Review everything'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('matching-lb-1-review')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.matchingOption('lb-1', 'review')),
+    );
     await tester.pumpAndSettle();
     expect(repo.matchingModes['lb-1'], 'review');
   });
@@ -220,9 +269,9 @@ void main() {
       ),
     );
     repo.libraries.add(const LibraryInfo(pid: 'lb-1', name: 'Music'));
-    await tester.pumpWidget(_host(repo));
+    await _pump(tester, _host(_container(repo)));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('matching-menu')), findsNothing);
+    expect(find.bySemanticsIdentifier(SemanticsIds.matchingMenu), findsNothing);
   });
 }

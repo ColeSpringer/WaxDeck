@@ -1,17 +1,18 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../music/music_controllers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
+import 'artwork_manager.dart';
 import 'metadata_controller.dart';
 
-/// The per-item metadata editor: a scalar-field form built from the
-/// server's vocabulary, credits, custom tags, lyrics, release status,
-/// and the rematch and enrichment actions. Deep-linkable at
-/// `/metadata/<pid>` for tools and tests.
+/// The per-item metadata editor, deep-linkable at `/metadata/<pid>`.
+/// Always pushed: a review row, a book, and the lyrics view all open it,
+/// so it has three ancestries and a location may declare one.
 class MetadataScreen extends ConsumerStatefulWidget {
   const MetadataScreen({super.key, required this.pid});
 
@@ -51,13 +52,42 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
     super.dispose();
   }
 
+  /// What each field's controller was last seeded with from the server.
+  /// A controller still holding exactly this has not been typed in
+  /// since, which is what makes it safe to adopt a fresh value into.
+  final _seeded = <String, String>{};
+
   TextEditingController _controllerFor(String field, String initial) {
     return _fieldControllers.putIfAbsent(field, () {
+      _seeded[field] = initial;
       final controller = TextEditingController(text: initial);
       // Recompute dirtiness (and the Save button) as the user types.
       controller.addListener(() => setState(() {}));
       return controller;
     });
+  }
+
+  /// Takes server-side changes into the fields nobody is editing.
+  /// Without it a fetched title is invisible and reads as a local edit,
+  /// so Save offers to write the stale text back over it.
+  void _adoptStored(MetadataEditorState state) {
+    for (final field in state.kindFields.fields) {
+      final controller = _fieldControllers[field.name];
+      if (controller == null) continue;
+      final stored = state.metadata.fields[field.name] ?? '';
+      // Already in agreement - the usual case after a save, which
+      // echoes back what was written. Re-seed so the next genuine
+      // change is still recognised as one.
+      if (controller.text == stored) {
+        _seeded[field.name] = stored;
+        continue;
+      }
+      // Typed in since it was seeded: that edit is the user's and
+      // outranks a refetch.
+      if (controller.text != _seeded[field.name]) continue;
+      _seeded[field.name] = stored;
+      controller.text = stored;
+    }
   }
 
   Map<String, String> _changedFields(MetadataEditorState state) {
@@ -74,16 +104,14 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
     setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await action();
     } on WaxDeckApiException catch (e) {
       final hint = e.statusCode == 409
           ? ' Check "Force" to overwrite locked fields.'
           : '';
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('${e.message}.$hint')));
+      messenger.show('${e.message}.$hint');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -93,9 +121,9 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
     if (!mounted) return;
     setState(() => _writeBackFailures = result.writeBackFailures);
     if (result.warnings.isNotEmpty) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(result.warnings.join('\n'))));
+      ref
+          .read(shellMessengerProvider.notifier)
+          .show(result.warnings.join('\n'));
     }
   }
 
@@ -109,15 +137,21 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   });
 
   Future<void> _rematch() => _run(() async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    // Hoisted: the message outlives this screen, and a closure over its
+    // context throws once the editor is popped.
+    final router = GoRouter.maybeOf(context);
     final entryId = await ref
         .read(metadataControllerProvider(widget.pid).notifier)
         .rematch();
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text('Queued for identification ($entryId)')),
-      );
+    messenger.show(
+      'Queued for identification',
+      actionLabel: router == null ? null : 'Open review',
+      actionSemanticsId: SemanticsIds.metadataOpenReview,
+      onAction: router == null
+          ? null
+          : () => router.push<void>(WaxRoute.reviewEntry(entryId)),
+    );
   });
 
   static List<String> _wantsFor(MediaType mediaType) => switch (mediaType) {
@@ -127,7 +161,7 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
   };
 
   Future<void> _enrich(MetadataEditorState state) => _run(() async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final result = await ref
         .read(metadataControllerProvider(widget.pid).notifier)
         .enrich(_wantsFor(state.metadata.mediaType));
@@ -135,579 +169,586 @@ class _MetadataScreenState extends ConsumerState<MetadataScreen> {
       if (result.applied.isNotEmpty) 'Applied: ${result.applied.join(', ')}',
       if (result.skipped.isNotEmpty) 'Skipped: ${result.skipped.join(', ')}',
     ];
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(parts.isEmpty ? 'Nothing to fetch' : parts.join('. ')),
-        ),
-      );
+    messenger.show(parts.isEmpty ? 'Nothing to fetch' : parts.join('. '));
   });
 
   @override
   Widget build(BuildContext context) {
+    final sizeClass = WaxSizeClass.of(context);
     final editor = ref.watch(metadataControllerProvider(widget.pid));
-    return Scaffold(
-      appBar: AppBar(title: const Text('Edit metadata')),
-      body: switch (editor) {
-        AsyncData(:final value) => _body(context, value),
-        AsyncError(:final error) => _errorView(context, error),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
-    );
-  }
-
-  Widget _errorView(BuildContext context, Object error) {
-    final message = error is WaxDeckApiException
-        ? error.message
-        : 'Could not load the metadata';
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () =>
+    ref.listen(metadataControllerProvider(widget.pid), (previous, next) {
+      final value = next.value;
+      if (value != null) _adoptStored(value);
+    });
+    return WaxScaffold(
+      title: 'Edit metadata',
+      largeTitle: false,
+      semanticsId: SemanticsIds.metadataEditor,
+      onBack: () => context.leave(),
+      body: Padding(
+        padding: sizeClass.gutter.add(
+          const EdgeInsets.only(bottom: WaxSpace.s32),
+        ),
+        child: switch (editor) {
+          AsyncData(:final value) => _body(context, value, sizeClass),
+          AsyncError(:final error) => ErrorState(
+            title: 'Could not load the metadata',
+            message: error is WaxDeckApiException
+                ? error.message
+                : 'Something went wrong reading it.',
+            onRetry: () =>
                 ref.invalidate(metadataControllerProvider(widget.pid)),
-            child: const Text('Retry'),
           ),
-        ],
+          _ => const SkeletonShapes(shape: SkeletonShape.detail),
+        },
       ),
     );
   }
 
-  Widget _body(BuildContext context, MetadataEditorState state) {
+  Widget _body(
+    BuildContext context,
+    MetadataEditorState state,
+    WaxSizeClass sizeClass,
+  ) {
     if (!_lyricsSeeded) {
       _lyricsSeeded = true;
       _lyricsController.text = state.metadata.lyrics?.lrc ?? '';
     }
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _fieldsCard(context, state),
-          if (_writeBackFailures.isNotEmpty) _writeBackWarnings(context),
-          _creditsCard(context, state),
-          _artworkCard(context, state),
-          _tagsCard(context, state),
-          _lyricsCard(context),
-          _releaseStatusCard(context, state),
-          _actionsCard(context, state),
-        ],
+    final left = <Widget>[
+      _fieldsSection(context, state),
+      _creditsSection(context, state),
+      _tagsSection(context, state),
+    ];
+    final right = <Widget>[
+      ArtworkManager(
+        pid: widget.pid,
+        title: state.metadata.fields['title'] ?? widget.pid,
+        hasArtwork: state.metadata.hasArtwork,
       ),
+      const SizedBox(height: WaxSpace.s32),
+      _lyricsSection(context),
+      const SizedBox(height: WaxSpace.s32),
+      _releaseSection(context, state),
+      const SizedBox(height: WaxSpace.s32),
+      _actionsSection(context, state),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _Header(state: state),
+        const SizedBox(height: WaxSpace.s24),
+        if (sizeClass.hasSidebar)
+          // No IntrinsicHeight: each column takes the height it needs
+          // and the page scrolls. The form is the wider half because
+          // the fields are what somebody came to change.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: left,
+                ),
+              ),
+              const SizedBox(width: WaxSpace.s32),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: right,
+                ),
+              ),
+            ],
+          )
+        else ...<Widget>[
+          ...left,
+          const SizedBox(height: WaxSpace.s32),
+          ...right,
+        ],
+      ],
     );
   }
 
-  Widget _fieldsCard(BuildContext context, MetadataEditorState state) {
-    final textTheme = Theme.of(context).textTheme;
+  /// The item, its cover, and where its values came from in one line.
+  Widget _fieldsSection(BuildContext context, MetadataEditorState state) {
     final changed = _changedFields(state);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Fields', style: textTheme.titleMedium),
-            const SizedBox(height: 8),
-            for (final field in state.kindFields.fields) ...[
-              _FieldRow(
-                field: field,
-                controller: _controllerFor(
-                  field.name,
-                  state.metadata.fields[field.name] ?? '',
-                ),
-                locked: state.isLocked(field.name),
-                provenance: state.provenanceFor(field.name),
-                onToggleLock: () => _run(
-                  () => ref
-                      .read(metadataControllerProvider(widget.pid).notifier)
-                      .setLock(field.name, locked: !state.isLocked(field.name)),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            // The read carries the entity pids; the lines they belong
-            // to are edit fields, so the doors sit beside the form
-            // rather than turning an input into a link. The release
-            // group is the third of them, and opens the bucket of every
-            // edition of the record rather than a screen of its own.
-            if (state.metadata.artistPid != null ||
-                state.metadata.albumPid != null ||
-                state.metadata.releaseGroupPid != null) ...[
-              Wrap(
-                spacing: 8,
-                children: [
-                  if (state.metadata.artistPid case final artistPid?)
-                    ActionChip(
-                      key: const Key('metadata-open-artist'),
-                      avatar: const Icon(Icons.person_outlined, size: 18),
-                      label: const Text('Open artist'),
-                      onPressed: () => context.push(
-                        WaxRoute.musicBucket(MusicDimension.artists, artistPid),
-                      ),
-                    ),
-                  if (state.metadata.albumPid case final albumPid?)
-                    ActionChip(
-                      key: const Key('metadata-open-album'),
-                      avatar: const Icon(Icons.album_outlined, size: 18),
-                      label: const Text('Open album'),
-                      onPressed: () => context.push(
-                        WaxRoute.musicBucket(MusicDimension.albums, albumPid),
-                      ),
-                    ),
-                  if (state.metadata.releaseGroupPid case final rgPid?)
-                    ActionChip(
-                      key: const Key('metadata-open-release-group'),
-                      avatar: const Icon(
-                        Icons.library_music_outlined,
-                        size: 18,
-                      ),
-                      label: const Text('Open release group'),
-                      onPressed: () => context.push(
-                        WaxRoute.musicBucket(
-                          MusicDimension.releaseGroups,
-                          rgPid,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-            ],
-            Wrap(
-              spacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _flagBox(
-                  id: SemanticsIds.metadataWriteback,
-                  label: 'Write tags to files',
-                  value: _writeBack,
-                  onChanged: (v) => setState(() => _writeBack = v),
-                ),
-                _flagBox(
-                  id: SemanticsIds.metadataLock,
-                  label: 'Lock edited fields',
-                  value: _lock,
-                  onChanged: (v) => setState(() => _lock = v),
-                ),
-                _flagBox(
-                  id: SemanticsIds.metadataForce,
-                  label: 'Force',
-                  value: _force,
-                  onChanged: (v) => setState(() => _force = v),
-                ),
-                Semantics(
-                  identifier: SemanticsIds.metadataSave,
-                  label: 'Save changed fields',
-                  button: true,
-                  child: FilledButton(
-                    key: const Key(SemanticsIds.metadataSave),
-                    onPressed: changed.isEmpty || _busy
-                        ? null
-                        : () => _save(state),
-                    child: const Text('Save'),
-                  ),
-                ),
-              ],
-            ),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SectionHeader(
+          title: 'Fields',
+          overline: 'What this item claims to be',
         ),
-      ),
+        if (_writeBackFailures.isNotEmpty) _writeBackWarning(context),
+        for (final field in state.kindFields.fields) ...<Widget>[
+          _FieldRow(
+            field: field,
+            controller: _controllerFor(
+              field.name,
+              state.metadata.fields[field.name] ?? '',
+            ),
+            locked: state.isLocked(field.name),
+            provenance: state.provenanceFor(field.name),
+            dirty: changed.containsKey(field.name),
+            onToggleLock: () => _run(
+              () => ref
+                  .read(metadataControllerProvider(widget.pid).notifier)
+                  .setLock(field.name, locked: !state.isLocked(field.name)),
+            ),
+          ),
+          const SizedBox(height: WaxSpace.s12),
+        ],
+        _EntityDoors(metadata: state.metadata),
+        const SizedBox(height: WaxSpace.s8),
+        WaxSettingRow(
+          title: 'Write tags to files',
+          help: 'Also rewrite the tags embedded in the backing files',
+          control: WaxSwitch(
+            label: 'Write tags to files',
+            value: _writeBack,
+            semanticsId: SemanticsIds.metadataWriteback,
+            onChanged: (v) => setState(() => _writeBack = v),
+          ),
+        ),
+        WaxSettingRow(
+          title: 'Lock edited fields',
+          help: 'Keep scans and enrichment from overwriting what you type',
+          control: WaxSwitch(
+            label: 'Lock edited fields',
+            value: _lock,
+            semanticsId: SemanticsIds.metadataLock,
+            onChanged: (v) => setState(() => _lock = v),
+          ),
+        ),
+        WaxSettingRow(
+          title: 'Force',
+          help: 'Overwrite fields that are already locked',
+          control: WaxSwitch(
+            label: 'Force',
+            value: _force,
+            semanticsId: SemanticsIds.metadataForce,
+            onChanged: (v) => setState(() => _force = v),
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s16),
+        WaxButton(
+          label: changed.isEmpty
+              ? 'Save'
+              : 'Save ${changed.length} '
+                    '${changed.length == 1 ? 'change' : 'changes'}',
+          icon: WaxIcons.check,
+          semanticsId: SemanticsIds.metadataSave,
+          onPressed: changed.isEmpty || _busy ? null : () => _save(state),
+        ),
+        const SizedBox(height: WaxSpace.s32),
+      ],
     );
   }
 
-  Widget _flagBox({
-    required String id,
-    required String label,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Semantics(
-      identifier: id,
-      label: label,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Checkbox(
-            key: Key(id),
-            value: value,
-            onChanged: (v) => onChanged(v ?? false),
+  /// What the server kept from a write-back. A partial tag write is not
+  /// an error - the catalog holds the edit either way - so it stays on
+  /// screen as a caution rather than passing as a message.
+  Widget _writeBackWarning(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: WaxSpace.s12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          WaxBanner(
+            message: 'Saved, but some files kept their old tags.',
+            tone: WaxBannerTone.caution,
+            semanticsId: SemanticsIds.metadataWritebackWarning,
+            onDismiss: () => setState(() => _writeBackFailures = const []),
           ),
-          Text(label),
+          const SizedBox(height: WaxSpace.s8),
+          // Which file and why is the content of the warning, so it
+          // stays on screen rather than passing as a message.
+          for (final failure in _writeBackFailures)
+            Text(
+              '${failure.path ?? failure.filePid}: ${failure.reason}',
+              style: WaxType.monoData.copyWith(color: colors.textSecondary),
+            ),
         ],
       ),
     );
   }
 
-  Widget _writeBackWarnings(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Card(
-      key: const Key('metadata-writeback-warnings'),
-      color: colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Saved, but some files kept their old tags',
-              style: textTheme.titleSmall,
-            ),
-            const SizedBox(height: 4),
-            for (final failure in _writeBackFailures)
-              Text(
-                '${failure.path ?? failure.filePid}: ${failure.reason}',
-                style: textTheme.bodySmall,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _artworkCard(BuildContext context, MetadataEditorState state) {
-    final textTheme = Theme.of(context).textTheme;
-    final meta = state.metadata;
-    final (String status, IconData icon) = meta.hasOwnArtwork
-        ? ('Has its own cover', Icons.image)
-        : meta.hasArtwork
-        ? ('Inherits a cover from its album or artist', Icons.image_outlined)
-        : ('No cover', Icons.hide_image_outlined);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Artwork', style: textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Row(
-              key: const Key('artwork-status'),
-              children: [
-                Icon(icon),
-                const SizedBox(width: 8),
-                Expanded(child: Text(status)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _creditsCard(BuildContext context, MetadataEditorState state) {
-    final textTheme = Theme.of(context).textTheme;
+  Widget _creditsSection(BuildContext context, MetadataEditorState state) {
+    final colors = WaxColors.of(context);
     final roles = state.kindFields.creditRoles;
     final role = _creditRole ?? (roles.isEmpty ? null : roles.first.name);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Credits', style: textTheme.titleMedium),
-            const SizedBox(height: 8),
-            for (final credit in state.metadata.credits)
-              Text('${credit.role}: ${credit.names.join(', ')}'),
-            if (roles.isEmpty)
-              Text('No credit roles for this kind', style: textTheme.bodySmall)
-            else ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Semantics(
-                    identifier: SemanticsIds.creditsRole,
-                    child: DropdownButton<String>(
-                      key: const Key(SemanticsIds.creditsRole),
-                      value: role,
-                      onChanged: (v) => setState(() => _creditRole = v),
-                      items: [
-                        for (final r in roles)
-                          DropdownMenuItem(value: r.name, child: Text(r.name)),
-                      ],
-                    ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SectionHeader(title: 'Credits', overline: 'Who else is on it'),
+        for (final credit in state.metadata.credits)
+          Padding(
+            padding: const EdgeInsets.only(bottom: WaxSpace.s4),
+            child: MonoDetailRow(
+              label: credit.role,
+              value: credit.names.join(', '),
+            ),
+          ),
+        if (roles.isEmpty)
+          Text(
+            'No credit roles for this kind',
+            style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
+          )
+        else ...<Widget>[
+          const SizedBox(height: WaxSpace.s8),
+          WaxChoice<String>(
+            label: 'Credit role',
+            value: role!,
+            semanticsId: SemanticsIds.creditsRole,
+            options: <String>[for (final r in roles) r.name],
+            labelFor: (name) => name,
+            onChanged: (v) => setState(() => _creditRole = v),
+          ),
+          const SizedBox(height: WaxSpace.s8),
+          WaxTextField(
+            label: 'Names, comma separated',
+            controller: _creditNamesController,
+            semanticsId: SemanticsIds.creditsNames,
+          ),
+          const SizedBox(height: WaxSpace.s8),
+          WaxButton(
+            label: 'Save credits',
+            kind: WaxButtonKind.tonal,
+            semanticsId: SemanticsIds.creditsSave,
+            onPressed: _busy
+                ? null
+                : () => _run(() async {
+                    final names = _creditNamesController.text
+                        .split(',')
+                        .map((n) => n.trim())
+                        .where((n) => n.isNotEmpty)
+                        .toList();
+                    final result = await ref
+                        .read(metadataControllerProvider(widget.pid).notifier)
+                        .saveCredits(role, names);
+                    _showResult(result);
+                  }),
+          ),
+        ],
+        const SizedBox(height: WaxSpace.s32),
+      ],
+    );
+  }
+
+  Widget _tagsSection(BuildContext context, MetadataEditorState state) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SectionHeader(
+          title: 'Custom tags',
+          overline: 'Anything the vocabulary has no field for',
+        ),
+        for (final tag in state.metadata.customTags)
+          Padding(
+            padding: const EdgeInsets.only(bottom: WaxSpace.s4),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: MonoDetailRow(
+                    label: tag.key,
+                    value: tag.values.join(', '),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      key: const Key('credits-names'),
-                      controller: _creditNamesController,
-                      decoration: const InputDecoration(
-                        labelText: 'Names, comma separated',
-                        isDense: true,
-                      ),
-                    ),
+                ),
+                WaxIconButton(
+                  glyph: WaxIcons.close,
+                  label: 'Remove tag ${tag.key}',
+                  size: 16,
+                  semanticsId: SemanticsIds.tagRemove(tag.key),
+                  onPressed: _busy
+                      ? null
+                      : () => _run(
+                          () => ref
+                              .read(
+                                metadataControllerProvider(widget.pid).notifier,
+                              )
+                              .removeTag(tag.key),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: WaxSpace.s8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            SizedBox(
+              width: 140,
+              child: WaxTextField(
+                label: 'Key',
+                controller: _tagKeyController,
+                semanticsId: SemanticsIds.tagKey,
+              ),
+            ),
+            const SizedBox(width: WaxSpace.s8),
+            Expanded(
+              child: WaxTextField(
+                label: 'Values, comma separated',
+                controller: _tagValuesController,
+                semanticsId: SemanticsIds.tagValues,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s8),
+        WaxButton(
+          label: 'Add tag',
+          kind: WaxButtonKind.tonal,
+          icon: WaxIcons.add,
+          semanticsId: SemanticsIds.tagAdd,
+          onPressed: _busy
+              ? null
+              : () => _run(() async {
+                  final key = _tagKeyController.text.trim();
+                  if (key.isEmpty) return;
+                  final values = _tagValuesController.text
+                      .split(',')
+                      .map((v) => v.trim())
+                      .where((v) => v.isNotEmpty)
+                      .toList();
+                  await ref
+                      .read(metadataControllerProvider(widget.pid).notifier)
+                      .setTag(key, values);
+                  _tagKeyController.clear();
+                  _tagValuesController.clear();
+                }),
+        ),
+        const SizedBox(height: WaxSpace.s32),
+      ],
+    );
+  }
+
+  Widget _lyricsSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SectionHeader(
+          title: 'Lyrics',
+          overline: 'Timed LRC, or plain lines',
+        ),
+        WaxTextField(
+          label: 'LRC',
+          hint: '[00:12.00] First line',
+          controller: _lyricsController,
+          maxLines: 8,
+          semanticsId: SemanticsIds.lyricsField,
+        ),
+        const SizedBox(height: WaxSpace.s8),
+        _LyricsPreview(controller: _lyricsController),
+        const SizedBox(height: WaxSpace.s8),
+        Row(
+          children: <Widget>[
+            WaxButton(
+              label: 'Save lyrics',
+              kind: WaxButtonKind.tonal,
+              semanticsId: SemanticsIds.lyricsSave,
+              onPressed: _busy
+                  ? null
+                  : () => _run(() async {
+                      final result = await ref
+                          .read(metadataControllerProvider(widget.pid).notifier)
+                          .saveLyrics(_lyricsController.text);
+                      _showResult(result);
+                    }),
+            ),
+            const SizedBox(width: WaxSpace.s8),
+            WaxButton(
+              label: 'Clear',
+              kind: WaxButtonKind.text,
+              semanticsId: SemanticsIds.lyricsClear,
+              onPressed: _busy
+                  ? null
+                  : () => _run(() async {
+                      await ref
+                          .read(metadataControllerProvider(widget.pid).notifier)
+                          .clearLyrics();
+                      _lyricsController.clear();
+                    }),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _releaseSection(BuildContext context, MetadataEditorState state) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SectionHeader(title: 'Release status'),
+        WaxSettingRow(
+          title: 'Unofficial release',
+          help: 'A bootleg, a promo, or another unofficial issue',
+          control: WaxSwitch(
+            label: 'Unofficial release',
+            value: state.metadata.unofficial,
+            semanticsId: SemanticsIds.unofficialSwitch,
+            onChanged: _busy
+                ? null
+                : (v) => _run(
+                    () => ref
+                        .read(metadataControllerProvider(widget.pid).notifier)
+                        .setUnofficial(unofficial: v),
                   ),
-                  const SizedBox(width: 8),
-                  Semantics(
-                    identifier: SemanticsIds.creditsSave,
-                    label: 'Save credits',
-                    button: true,
-                    child: FilledButton.tonal(
-                      key: const Key(SemanticsIds.creditsSave),
-                      onPressed: role == null || _busy
-                          ? null
-                          : () => _run(() async {
-                              final names = _creditNamesController.text
-                                  .split(',')
-                                  .map((n) => n.trim())
-                                  .where((n) => n.isNotEmpty)
-                                  .toList();
-                              final result = await ref
-                                  .read(
-                                    metadataControllerProvider(
-                                      widget.pid,
-                                    ).notifier,
-                                  )
-                                  .saveCredits(role, names);
-                              _showResult(result);
-                            }),
-                      child: const Text('Save'),
-                    ),
-                  ),
-                ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _actionsSection(BuildContext context, MetadataEditorState state) {
+    final colors = WaxColors.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SectionHeader(title: 'Identification'),
+        Text(
+          'Rematch reopens identification and puts the result in the review '
+          'queue. Fetching metadata applies what the providers already agree '
+          'on, without asking.',
+          style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        Wrap(
+          spacing: WaxSpace.s8,
+          runSpacing: WaxSpace.s8,
+          children: <Widget>[
+            WaxButton(
+              label: 'Rematch',
+              kind: WaxButtonKind.tonal,
+              icon: WaxIcons.search,
+              semanticsId: SemanticsIds.metadataRematch,
+              onPressed: _busy ? null : _rematch,
+            ),
+            WaxButton(
+              label: 'Fetch metadata',
+              kind: WaxButtonKind.tonal,
+              icon: WaxIcons.downloads,
+              semanticsId: SemanticsIds.metadataEnrich,
+              onPressed: _busy ? null : () => _enrich(state),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// The item as it stands: what it is called, and where its values came
+/// from. The provenance summary is one line rather than a chip per
+/// field, which the fields themselves already carry.
+class _Header extends StatelessWidget {
+  const _Header({required this.state});
+
+  final MetadataEditorState state;
+
+  /// "5 from tags, 2 from you, 1 from MusicBrainz", commonest first.
+  static String provenanceSummary(ItemMetadata metadata) {
+    if (metadata.provenance.isEmpty) return 'No recorded sources';
+    final counts = <String, int>{};
+    for (final entry in metadata.provenance) {
+      final source = entry.provider ?? entry.source;
+      counts[source] = (counts[source] ?? 0) + 1;
+    }
+    final ordered = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return ordered.map((e) => '${e.value} from ${e.key}').join(', ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final metadata = state.metadata;
+    final title = metadata.fields['title'] ?? 'Untitled';
+    final artist = metadata.fields['artist'];
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                title,
+                style: WaxType.titleEntity.copyWith(color: colors.textPrimary),
+              ),
+              if (artist != null && artist.isNotEmpty)
+                Text(
+                  artist,
+                  style: WaxType.body.copyWith(color: colors.textSecondary),
+                ),
+              const SizedBox(height: WaxSpace.s8),
+              Text(
+                provenanceSummary(metadata),
+                style: WaxType.caption.copyWith(color: colors.textTertiary),
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _tagsCard(BuildContext context, MetadataEditorState state) {
-    final textTheme = Theme.of(context).textTheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Custom tags', style: textTheme.titleMedium),
-            const SizedBox(height: 8),
-            for (final tag in state.metadata.customTags)
-              Row(
-                children: [
-                  Expanded(child: Text('${tag.key}: ${tag.values.join(', ')}')),
-                  Semantics(
-                    identifier: SemanticsIds.tagRemove(tag.key),
-                    label: 'Remove tag ${tag.key}',
-                    button: true,
-                    child: IconButton(
-                      key: ValueKey(SemanticsIds.tagRemove(tag.key)),
-                      tooltip: 'Remove tag',
-                      icon: const Icon(Icons.close, size: 18),
-                      onPressed: () => _run(
-                        () => ref
-                            .read(
-                              metadataControllerProvider(widget.pid).notifier,
-                            )
-                            .removeTag(tag.key),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            Row(
-              children: [
-                SizedBox(
-                  width: 120,
-                  child: TextField(
-                    key: const Key('tag-key'),
-                    controller: _tagKeyController,
-                    decoration: const InputDecoration(
-                      labelText: 'Key',
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    key: const Key('tag-values'),
-                    controller: _tagValuesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Values, comma separated',
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Semantics(
-                  identifier: SemanticsIds.tagAdd,
-                  label: 'Add tag',
-                  button: true,
-                  child: FilledButton.tonal(
-                    key: const Key(SemanticsIds.tagAdd),
-                    onPressed: _busy
-                        ? null
-                        : () => _run(() async {
-                            final key = _tagKeyController.text.trim();
-                            if (key.isEmpty) return;
-                            final values = _tagValuesController.text
-                                .split(',')
-                                .map((v) => v.trim())
-                                .where((v) => v.isNotEmpty)
-                                .toList();
-                            await ref
-                                .read(
-                                  metadataControllerProvider(
-                                    widget.pid,
-                                  ).notifier,
-                                )
-                                .setTag(key, values);
-                            _tagKeyController.clear();
-                            _tagValuesController.clear();
-                          }),
-                    child: const Text('Add'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _lyricsCard(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Lyrics (LRC)', style: textTheme.titleMedium),
-            const SizedBox(height: 8),
-            TextField(
-              key: const Key('lyrics-field'),
-              controller: _lyricsController,
-              maxLines: 8,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: '[00:12.00] First line',
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Semantics(
-                  identifier: SemanticsIds.lyricsClear,
-                  label: 'Clear lyrics',
-                  button: true,
-                  child: TextButton(
-                    key: const Key(SemanticsIds.lyricsClear),
-                    onPressed: _busy
-                        ? null
-                        : () => _run(() async {
-                            await ref
-                                .read(
-                                  metadataControllerProvider(
-                                    widget.pid,
-                                  ).notifier,
-                                )
-                                .clearLyrics();
-                            _lyricsController.clear();
-                          }),
-                    child: const Text('Clear'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Semantics(
-                  identifier: SemanticsIds.lyricsSave,
-                  label: 'Save lyrics',
-                  button: true,
-                  child: FilledButton.tonal(
-                    key: const Key(SemanticsIds.lyricsSave),
-                    onPressed: _busy
-                        ? null
-                        : () => _run(() async {
-                            final result = await ref
-                                .read(
-                                  metadataControllerProvider(
-                                    widget.pid,
-                                  ).notifier,
-                                )
-                                .saveLyrics(_lyricsController.text);
-                            _showResult(result);
-                          }),
-                    child: const Text('Save'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _releaseStatusCard(BuildContext context, MetadataEditorState state) {
-    return Card(
-      child: Semantics(
-        identifier: SemanticsIds.unofficialSwitch,
-        child: SwitchListTile(
-          key: const Key(SemanticsIds.unofficialSwitch),
-          title: const Text('Unofficial release'),
-          subtitle: const Text(
-            'Marks this release as a bootleg or other unofficial issue.',
           ),
-          value: state.metadata.unofficial,
-          onChanged: _busy
-              ? null
-              : (v) => _run(
-                  () => ref
-                      .read(metadataControllerProvider(widget.pid).notifier)
-                      .setUnofficial(unofficial: v),
-                ),
         ),
-      ),
+        DomainBadge(_domain(metadata.mediaType)),
+      ],
     );
   }
 
-  Widget _actionsCard(BuildContext context, MetadataEditorState state) {
-    final textTheme = Theme.of(context).textTheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Identification', style: textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                Semantics(
-                  identifier: SemanticsIds.metadataRematch,
-                  label: 'Rematch',
-                  button: true,
-                  child: OutlinedButton.icon(
-                    key: const Key(SemanticsIds.metadataRematch),
-                    onPressed: _busy ? null : _rematch,
-                    icon: const Icon(Icons.manage_search),
-                    label: const Text('Rematch'),
-                  ),
-                ),
-                Semantics(
-                  identifier: SemanticsIds.metadataEnrich,
-                  label: 'Fetch metadata',
-                  button: true,
-                  child: OutlinedButton.icon(
-                    key: const Key(SemanticsIds.metadataEnrich),
-                    onPressed: _busy ? null : () => _enrich(state),
-                    icon: const Icon(Icons.cloud_download_outlined),
-                    label: const Text('Fetch metadata'),
-                  ),
-                ),
-              ],
+  static WaxDomain _domain(MediaType type) => switch (type) {
+    MediaType.music => WaxDomain.music,
+    MediaType.podcast => WaxDomain.podcasts,
+    MediaType.audiobook => WaxDomain.audiobooks,
+  };
+}
+
+/// The entities this item belongs to. Doors beside the form rather than
+/// links, because the lines they name are edit fields.
+class _EntityDoors extends StatelessWidget {
+  const _EntityDoors({required this.metadata});
+
+  final ItemMetadata metadata;
+
+  @override
+  Widget build(BuildContext context) {
+    final artistPid = metadata.artistPid;
+    final albumPid = metadata.albumPid;
+    final rgPid = metadata.releaseGroupPid;
+    if (artistPid == null && albumPid == null && rgPid == null) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+      child: Wrap(
+        spacing: WaxSpace.s8,
+        runSpacing: WaxSpace.s8,
+        children: <Widget>[
+          if (artistPid != null)
+            WaxPill(
+              label: 'Open artist',
+              semanticsId: SemanticsIds.metadataOpenArtist,
+              onPressed: () => context.push(
+                WaxRoute.musicBucket(MusicDimension.artists, artistPid),
+              ),
             ),
-          ],
-        ),
+          if (albumPid != null)
+            WaxPill(
+              label: 'Open album',
+              semanticsId: SemanticsIds.metadataOpenAlbum,
+              onPressed: () => context.push(
+                WaxRoute.musicBucket(MusicDimension.albums, albumPid),
+              ),
+            ),
+          if (rgPid != null)
+            WaxPill(
+              label: 'Open release group',
+              semanticsId: SemanticsIds.metadataOpenReleaseGroup,
+              onPressed: () => context.push(
+                WaxRoute.musicBucket(MusicDimension.releaseGroups, rgPid),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -719,6 +760,7 @@ class _FieldRow extends StatelessWidget {
     required this.controller,
     required this.locked,
     required this.provenance,
+    required this.dirty,
     required this.onToggleLock,
   });
 
@@ -726,43 +768,145 @@ class _FieldRow extends StatelessWidget {
   final TextEditingController controller;
   final bool locked;
   final FieldProvenance? provenance;
+
+  /// Whether this field differs from what is stored. Marked on the
+  /// field rather than only counted on the Save button, so a long form
+  /// says which line is about to be written.
+  final bool dirty;
+
   final VoidCallback onToggleLock;
 
   String get _provenanceText {
     final p = provenance;
     if (p == null) return 'Source unknown';
     final provider = p.provider;
-    return provider == null
-        ? 'Source: ${p.source}'
-        : 'Source: ${p.source} ($provider)';
+    return provider == null ? p.source : '${p.source} ($provider)';
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
     return Row(
-      children: [
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: <Widget>[
         Expanded(
-          child: TextField(
-            key: Key('field-${field.name}'),
+          child: WaxTextField(
+            label: field.name,
             controller: controller,
-            decoration: InputDecoration(
-              labelText: field.name,
-              isDense: true,
-              border: const OutlineInputBorder(),
-            ),
+            semanticsId: SemanticsIds.metadataField(field.name),
           ),
         ),
-        Tooltip(
-          message: _provenanceText,
-          child: Semantics(
-            identifier: SemanticsIds.fieldLock(field.name),
-            label: locked ? 'Unlock ${field.name}' : 'Lock ${field.name}',
-            button: true,
-            child: IconButton(
-              key: Key(SemanticsIds.fieldLock(field.name)),
-              icon: Icon(locked ? Icons.lock : Icons.lock_open, size: 18),
-              onPressed: onToggleLock,
+        const SizedBox(width: WaxSpace.s8),
+        Padding(
+          padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+          child: Row(
+            children: <Widget>[
+              CodecChip(_provenanceText, emphasis: dirty),
+              WaxIconButton(
+                glyph: locked ? WaxIcons.bookmark : WaxIcons.edit,
+                label: locked ? 'Unlock ${field.name}' : 'Lock ${field.name}',
+                active: locked,
+                size: 16,
+                color: locked ? colors.accent : null,
+                semanticsId: SemanticsIds.fieldLock(field.name),
+                onPressed: onToggleLock,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// What the LRC will look like played back. The server takes the text as
+/// typed, so this is the only warning that a stamp did not parse.
+class _LyricsPreview extends StatelessWidget {
+  const _LyricsPreview({required this.controller});
+
+  final TextEditingController controller;
+
+  static final _stamp = RegExp(r'^\s*\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)$');
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        final lines = value.text
+            .split('\n')
+            .where((line) => line.trim().isNotEmpty)
+            .toList();
+        if (lines.isEmpty) {
+          return Text(
+            'Nothing to preview',
+            style: WaxType.caption.copyWith(color: colors.textTertiary),
+          );
+        }
+        final synced = lines.where((line) => _stamp.hasMatch(line)).length;
+        return Semantics(
+          identifier: SemanticsIds.lyricsPreview,
+          container: true,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(WaxSpace.s12),
+            decoration: BoxDecoration(
+              color: colors.surface1,
+              borderRadius: WaxRadius.card,
+              border: Border.all(color: colors.hairline),
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  synced == lines.length
+                      ? '${lines.length} lines, all timed'
+                      : '${lines.length} lines, $synced timed',
+                  style: WaxType.overline.copyWith(
+                    color: synced == 0 ? colors.textTertiary : colors.accent,
+                  ),
+                ),
+                const SizedBox(height: WaxSpace.s8),
+                for (final line in lines.take(6)) _previewLine(colors, line),
+                if (lines.length > 6)
+                  Text(
+                    '...',
+                    style: WaxType.caption.copyWith(color: colors.textTertiary),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _previewLine(WaxColors colors, String line) {
+    final match = _stamp.firstMatch(line);
+    if (match == null) {
+      return Text(
+        line.trim(),
+        style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+    final seconds = double.tryParse(match.group(2)!) ?? 0;
+    final stamp =
+        '${match.group(1)!.padLeft(2, '0')}:'
+        '${seconds.floor().toString().padLeft(2, '0')}';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(stamp, style: WaxType.monoTime.copyWith(color: colors.accent)),
+        const SizedBox(width: WaxSpace.s8),
+        Expanded(
+          child: Text(
+            match.group(3)!,
+            style: WaxType.bodySmall.copyWith(color: colors.textPrimary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

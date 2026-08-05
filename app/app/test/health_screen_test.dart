@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/health/health_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
@@ -15,13 +17,30 @@ const _admin = WaxDeckUser(
   roles: ['admin'],
 );
 
-Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [
-    repositoryProvider.overrideWithValue(repo),
-    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
-  ],
+ProviderContainer _container(FakeRepository repo) {
+  final container = ProviderContainer(
+    overrides: [
+      repositoryProvider.overrideWithValue(repo),
+      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+    ],
+  );
+  addTearDown(container.dispose);
+  return container;
+}
+
+Widget _host(ProviderContainer container) => UncontrolledProviderScope(
+  container: container,
   child: routedHost(const HealthScreen()),
 );
+
+/// Wide enough for the console tables to be tables.
+Future<void> _pump(WidgetTester tester, Widget host) async {
+  tester.view.physicalSize = const Size(1280, 2000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(host);
+  await tester.pumpAndSettle();
+}
 
 FakeRepository _repo() {
   final repo = FakeRepository(
@@ -58,21 +77,37 @@ FakeRepository _repo() {
   return repo;
 }
 
+/// Types the word a destructive confirmation asks for, then accepts.
+Future<void> _confirm(WidgetTester tester, String word) async {
+  await tester.enterText(
+    find.bySemanticsIdentifier(SemanticsIds.confirmField),
+    word,
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.confirmAccept));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('renders the score and rule counts', (tester) async {
-    await tester.pumpWidget(_host(_repo()));
-    await tester.pumpAndSettle();
+    await _pump(tester, _host(_container(_repo())));
 
-    expect(find.byKey(const Key('health-score')), findsOneWidget);
-    expect(find.text('87'), findsOneWidget);
-    expect(find.text('Missing artwork'), findsOneWidget);
-    expect(find.text('5 failing'), findsOneWidget);
-    // Only fixable rules with failures get a Fix button.
     expect(
-      find.byKey(const ValueKey('health-fix-missing-art')),
+      find.bySemanticsIdentifier(SemanticsIds.healthScore),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('health-fix-no-mbid')), findsNothing);
+    expect(find.text('87'), findsOneWidget);
+    expect(find.text('Missing artwork'), findsOneWidget);
+    expect(find.text('5'), findsOneWidget);
+    // Only fixable rules with failures get a Fix button.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.healthFix('missing-art')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.healthFix('no-mbid')),
+      findsNothing,
+    );
   });
 
   testWidgets('warming up replaces the score with progress', (tester) async {
@@ -83,36 +118,44 @@ void main() {
       evaluatedItems: 48,
       warmingUp: true,
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _host(_container(repo)));
 
-    expect(find.byKey(const Key('health-warming-up')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.healthWarmingUp),
+      findsOneWidget,
+    );
     expect(find.text('Still warming up'), findsOneWidget);
     expect(find.text('Evaluated 48 of 120 items'), findsOneWidget);
-    expect(find.byKey(const Key('health-score')), findsNothing);
+    expect(find.bySemanticsIdentifier(SemanticsIds.healthScore), findsNothing);
   });
 
   testWidgets('fix queues the failing items', (tester) async {
     final repo = _repo();
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    final container = _container(repo);
+    await _pump(tester, _host(container));
 
-    await tester.tap(find.byKey(const ValueKey('health-fix-missing-art')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.healthFix('missing-art')),
+    );
     await tester.pumpAndSettle();
 
     expect(repo.fixHealthCalls, hasLength(1));
     expect(repo.fixHealthCalls.single.rule, 'missing-art');
-    expect(find.text('Queued 5 items'), findsOneWidget);
+    expect(container.read(shellMessengerProvider)?.text, 'Queued 5 items');
   });
 
   testWidgets('a rule opens its paginated issue list', (tester) async {
-    await tester.pumpWidget(_host(_repo()));
+    await _pump(tester, _host(_container(_repo())));
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.health('missing-art')),
+    );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('health-rule-missing-art')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('health-issue-tr-0')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.healthIssue('tr-0')),
+      findsOneWidget,
+    );
     expect(find.text('Track 0'), findsOneWidget);
   });
 
@@ -127,16 +170,16 @@ void main() {
         losers: [DuplicateEntity(pid: 'ar-2', name: 'Cardinal Waves')],
       ),
     ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _host(_container(repo)));
 
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('duplicate-merge-ar-1')),
+    final merge = find.bySemanticsIdentifier(
+      SemanticsIds.duplicateMerge('ar-1'),
     );
-    await tester.tap(find.byKey(const ValueKey('duplicate-merge-ar-1')));
+    await tester.ensureVisible(merge);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('duplicate-merge-confirm')));
+    await tester.tap(merge);
     await tester.pumpAndSettle();
+    await _confirm(tester, 'merge');
 
     expect(repo.mergeDuplicatesCalls, hasLength(1));
     expect(repo.mergeDuplicatesCalls.single.survivorPid, 'ar-1');
@@ -168,16 +211,16 @@ void main() {
         ],
       ),
     ];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _host(_container(repo)));
 
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('upgrade-resolve-tr-flac')),
+    final resolve = find.bySemanticsIdentifier(
+      SemanticsIds.upgradeResolve('tr-flac'),
     );
-    await tester.tap(find.byKey(const ValueKey('upgrade-resolve-tr-flac')));
+    await tester.ensureVisible(resolve);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('upgrade-resolve-confirm')));
+    await tester.tap(resolve);
     await tester.pumpAndSettle();
+    await _confirm(tester, 'resolve');
 
     expect(repo.resolveUpgradeCalls, hasLength(1));
     expect(repo.resolveUpgradeCalls.single.keepItemPid, 'tr-flac');

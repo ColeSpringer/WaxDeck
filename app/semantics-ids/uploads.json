@@ -3,6 +3,8 @@
   "ids": {
     "acquireFormat": "acquire-format",
     "acquireSubmit": "acquire-submit",
+    "acquireTasks": "acquire-tasks",
+    "acquireUrl": "acquire-url",
     "addFromUrl": "add-from-url",
     "addUploadFile": "add-upload-file",
     "addUploadFolder": "add-upload-folder",
@@ -19,6 +21,8 @@
     "uploadQuota": "upload-quota",
     "uploadRetry": "upload-retry-{id}",
     "uploadReview": "upload-review-{id}",
-    "uploadRow": "upload-row-{id}"
+    "uploadRow": "upload-row-{id}",
+    "uploadsMore": "uploads-more",
+    "uploadsScreen": "uploads-screen"
   }
 }

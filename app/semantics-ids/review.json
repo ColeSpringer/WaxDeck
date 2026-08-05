@@ -1,11 +1,14 @@
 {
   "doc": "The review queue and its keyboard-first controls.",
   "ids": {
+    "adminReview": "admin-review",
+    "adminReviewEntry": "admin-review-entry",
     "candidate": "candidate-{mbid}",
     "diffMissing": "diff-missing-{index}",
     "diffRow": "diff-row-{index}",
     "editMetadata": "edit-metadata-{pid}",
     "matchingMenu": "matching-menu",
+    "matchingOption": "matching-{libraryPid}-{mode}",
     "reviewApprove": "review-approve",
     "reviewAsIs": "review-as-is",
     "reviewBulkApprove": "review-bulk-approve",
@@ -13,6 +16,8 @@
     "reviewBulkSkip": "review-bulk-skip",
     "reviewDiscard": "review-discard",
     "reviewFilter": "review-filter-{name}",
+    "reviewPane": "review-pane",
+    "reviewPaneClose": "review-pane-close",
     "reviewRevert": "review-revert",
     "reviewRow": "review-row-{id}",
     "reviewSelectToggle": "review-select-toggle",

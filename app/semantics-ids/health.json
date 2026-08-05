@@ -2,6 +2,13 @@
   "doc": "Library health: rules, issues, and their fixes.",
   "ids": {
     "adminDiagnostics": "admin-diagnostics",
+    "adminHealth": "admin-health",
+    "adminHealthRule": "admin-health-rule",
+    "diagnosticCode": "diagnostic-code-{code}",
+    "diagnosticDetail": "diagnostic-detail-{path}",
+    "diagnosticRow": "diagnostic-row-{path}",
+    "diagnosticsMore": "diagnostics-more",
+    "duplicateDetail": "duplicate-detail-{pid}",
     "duplicateGroup": "duplicate-group-{pid}",
     "duplicateMerge": "duplicate-merge-{pid}",
     "health": "health-rule-{rule}",
@@ -10,6 +17,7 @@
     "healthScore": "health-score",
     "healthSweep": "health-sweep",
     "healthWarmingUp": "health-warming-up",
+    "upgradeDetail": "upgrade-detail-{itemPid}",
     "upgradeGroup": "upgrade-group-{itemPid}",
     "upgradeResolve": "upgrade-resolve-{itemPid}"
   }

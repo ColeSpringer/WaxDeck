@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 
@@ -12,17 +13,26 @@ Widget _host(FakeRepository repo) => ProviderScope(
   child: const MaterialApp(home: OrganizeScreen()),
 );
 
+/// Wide enough for the plan to be a table rather than a card list.
+Future<void> _pump(WidgetTester tester, Widget host) async {
+  tester.view.physicalSize = const Size(1200, 1600);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(host);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('an empty profile list explains server configuration', (
     tester,
   ) async {
     final repo = FakeRepository();
     repo.organizeProfiles = const [];
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _host(repo));
 
+    expect(find.text('No organize profiles'), findsOneWidget);
     expect(
-      find.textContaining('No organize profiles are configured'),
+      find.textContaining('part of the server configuration'),
       findsOneWidget,
     );
   });
@@ -45,15 +55,17 @@ void main() {
         ),
       ],
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _host(repo));
 
-    await tester.tap(find.byKey(const Key('organize-preview')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
     await tester.pumpAndSettle();
 
     expect(repo.previewOrganizeCalls, hasLength(1));
     expect(repo.previewOrganizeCalls.single.profile, 'default');
-    expect(find.byKey(const Key('organize-plan')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizePlan),
+      findsOneWidget,
+    );
     expect(find.text('2 planned moves'), findsOneWidget);
     expect(find.text('/old/a.flac'), findsOneWidget);
     expect(find.text('/library/waves/b.flac'), findsOneWidget);
@@ -74,33 +86,47 @@ void main() {
       failed: 1,
       failures: [OrganizeFailure(path: '/old/b.flac', reason: 'target exists')],
     );
-    await tester.pumpWidget(_host(repo));
-    await tester.pumpAndSettle();
+    await _pump(tester, _host(repo));
 
-    await tester.tap(find.byKey(const Key('organize-preview')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('organize-apply')));
-    await tester.pumpAndSettle();
-
-    // Confirm stays disabled until the exact profile name is typed.
+    // Apply is refused until a plan says what would move.
     expect(
       tester
-          .widget<FilledButton>(find.byKey(const Key('organize-confirm')))
+          .widget<WaxButton>(
+            find.ancestor(
+              of: find.text('Apply'),
+              matching: find.byType(WaxButton),
+            ),
+          )
           .onPressed,
       isNull,
     );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
+    await tester.pumpAndSettle();
+
+    // Confirm stays disabled until the exact profile name is typed.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
+    await tester.pumpAndSettle();
+    expect(repo.applyOrganizeCalls, isEmpty);
+
     await tester.enterText(
-      find.byKey(const Key('organize-confirm-field')),
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
       'default',
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('organize-confirm')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
     await tester.pumpAndSettle();
 
     expect(repo.applyOrganizeCalls, hasLength(1));
     expect(repo.applyOrganizeCalls.single.profile, 'default');
-    expect(find.byKey(const Key('organize-report')), findsOneWidget);
-    expect(find.text('Moved 1, skipped 0, failed 1'), findsOneWidget);
-    expect(find.text('/old/b.flac: target exists'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizeReport),
+      findsOneWidget,
+    );
+    expect(find.text('Moved'), findsOneWidget);
+    expect(find.text('/old/b.flac'), findsOneWidget);
+    expect(find.text('target exists'), findsOneWidget);
   });
 }

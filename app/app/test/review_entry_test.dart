@@ -1,11 +1,17 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/review/review_entry_screen.dart';
+import 'package:waxdeck/src/review/review_screen.dart';
+import 'package:waxdeck/src/shell/routes.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'routed_host.dart';
 
 Widget _host(FakeRepository repo, String entryId) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
@@ -76,18 +82,33 @@ FakeRepository _repoWith(ReviewEntryDetail detail) {
   return repo;
 }
 
+/// Tall enough for the diff to be laid out below the candidate list
+/// without the decision bar overrunning it.
+Future<void> _pump(WidgetTester tester, Widget host) async {
+  tester.view.physicalSize = const Size(700, 1600);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(host);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('renders candidates and the track diff', (tester) async {
     final repo = _repoWith(_detail());
-    await tester.pumpWidget(_host(repo, 'rv-1'));
-    await tester.pumpAndSettle();
+    await _pump(tester, _host(repo, 'rv-1'));
 
-    expect(find.byKey(const ValueKey('candidate-mb-1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('candidate-mb-2')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.candidate('mb-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.candidate('mb-2')),
+      findsOneWidget,
+    );
     expect(find.text('94%'), findsOneWidget);
     expect(find.text('2011, Cardinal, GB'), findsOneWidget);
 
-    final firstRow = find.byKey(const ValueKey('diff-row-0'));
+    final firstRow = find.bySemanticsIdentifier(SemanticsIds.diffRow(0));
     expect(
       find.descendant(
         of: firstRow,
@@ -102,7 +123,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    final extraRow = find.byKey(const ValueKey('diff-row-1'));
+    final extraRow = find.bySemanticsIdentifier(SemanticsIds.diffRow(1));
     expect(
       find.descendant(
         of: extraRow,
@@ -110,23 +131,27 @@ void main() {
       ),
       findsOneWidget,
     );
-    final missingRow = find.byKey(const ValueKey('diff-missing-0'));
+    final missingRow = find.bySemanticsIdentifier(SemanticsIds.diffMissing(0));
     expect(
       find.descendant(of: missingRow, matching: find.text('Closing Tide')),
       findsOneWidget,
     );
     // Cataloged tracks get the metadata menu; loose files do not.
-    expect(find.byKey(const ValueKey('track-menu-tr-1')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.trackMenu('tr-1')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('approve sends the selected candidate', (tester) async {
     final repo = _repoWith(_detail());
-    await tester.pumpWidget(_host(repo, 'rv-1'));
-    await tester.pumpAndSettle();
+    await _pump(tester, _host(repo, 'rv-1'));
 
-    await tester.tap(find.byKey(const ValueKey('candidate-mb-2')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.candidate('mb-2')),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('review-approve')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewApprove));
     await tester.pumpAndSettle();
 
     expect(repo.decideReviewCalls, hasLength(1));
@@ -138,26 +163,158 @@ void main() {
     tester,
   ) async {
     final repo = _repoWith(_detail());
-    await tester.pumpWidget(_host(repo, 'rv-1'));
-    await tester.pumpAndSettle();
+    await _pump(tester, _host(repo, 'rv-1'));
 
     // Upload entries expose Discard next to the standard actions.
-    expect(find.byKey(const Key('review-as-is')), findsOneWidget);
-    expect(find.byKey(const Key('review-unofficial')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('review-discard')));
+    expect(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewUnofficial),
+      findsOneWidget,
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewDiscard));
     await tester.pumpAndSettle();
 
     expect(repo.decideReviewCalls.single.action, 'discard');
   });
 
-  testWidgets('applied entries show status and revert', (tester) async {
-    final repo = _repoWith(_detail(status: 'applied'));
-    await tester.pumpWidget(_host(repo, 'rv-1'));
+  testWidgets('a wide surface draws the entry beside the queue', (
+    tester,
+  ) async {
+    final repo = _repoWith(_detail());
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+        child: routedHost(const ReviewSurface(openEntryId: 'rv-1')),
+      ),
+    );
     await tester.pumpAndSettle();
 
+    // The queue keeps its rows and its keys while the entry is open.
+    expect(find.bySemanticsIdentifier(SemanticsIds.reviewPane), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewRow('rv-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewPaneClose),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('opening an entry keeps the queue it opened from', (
+    tester,
+  ) async {
+    final repo = _repoWith(_detail());
+    repo.reviewEntries = [
+      for (var i = 0; i < 40; i++) testReviewEntry('rv-$i'),
+    ];
+    repo.reviewEntryDetails['rv-30'] = _detail();
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+        child: routedHost(const Scaffold()),
+      ),
+    );
+    final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
+    router.go(WaxRoute.review);
+    await tester.pumpAndSettle();
+
+    // By its fixed row extent: the console's section list and the
+    // pane's body are ListViews too.
+    final queue = find.byWidgetPredicate(
+      (w) => w is ListView && w.itemExtent != null,
+    );
+    await tester.drag(queue, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    final scroll = tester.widget<ListView>(queue).controller!;
+    expect(scroll.offset, greaterThan(0));
+    final offset = scroll.offset;
+
+    router.go(WaxRoute.reviewEntry('rv-30'));
+    await tester.pumpAndSettle();
+
+    // The same controller at the same offset: a second surface stacked
+    // over the first would build a fresh state scrolled to the top.
+    expect(find.bySemanticsIdentifier(SemanticsIds.reviewPane), findsOneWidget);
+    final after = tester.widget<ListView>(queue);
+    expect(identical(after.controller, scroll), isTrue);
+    expect(scroll.offset, offset);
+  });
+
+  testWidgets('the queue key approves the candidate the pane shows', (
+    tester,
+  ) async {
+    final repo = _repoWith(_detail());
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+        child: routedHost(const ReviewSurface(openEntryId: 'rv-1')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.candidate('mb-2')),
+    );
+    await tester.pumpAndSettle();
+    // `a` in the queue, not the pane's own Approve: the two controls
+    // are on screen together and must decide the same release.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.pumpAndSettle();
+
+    expect(repo.decideReviewCalls.single.action, 'approve');
+    expect(repo.decideReviewCalls.single.candidateMbid, 'mb-2');
+  });
+
+  testWidgets('a narrow surface gives the entry the whole page', (
+    tester,
+  ) async {
+    final repo = _repoWith(_detail());
+    // Above the "sidebar" size class and below the room two panes need:
+    // the arrangement follows what this screen is given, not the window.
+    tester.view.physicalSize = const Size(700, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+        child: routedHost(const ReviewSurface(openEntryId: 'rv-1')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier(SemanticsIds.reviewPane), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewRow('rv-1')),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('applied entries show status and revert', (tester) async {
+    final repo = _repoWith(_detail(status: 'applied'));
+    await _pump(tester, _host(repo, 'rv-1'));
+
     expect(find.text('Decided: applied'), findsOneWidget);
-    expect(find.byKey(const Key('review-approve')), findsNothing);
-    await tester.tap(find.byKey(const Key('review-revert')));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+      findsNothing,
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewRevert));
     await tester.pumpAndSettle();
 
     expect(repo.revertedReviewEntryIds, ['rv-1']);

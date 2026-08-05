@@ -535,7 +535,15 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  String artUrlFor(String pid) => '/api/v1/items/$pid/art';
+  String artUrlFor(String pid, {String? role}) {
+    final query = <String, String>{
+      if (role != null && role != 'front') 'role': role,
+    };
+    return Uri(
+      path: '/api/v1/items/$pid/art',
+      queryParameters: query.isEmpty ? null : query,
+    ).toString();
+  }
 
   /// When set, [getItem] waits on it before answering, so a test can
   /// hold an entry's resolution open - the window before any session
@@ -2886,6 +2894,10 @@ class FakeRepository implements WaxDeckRepository {
 
   final List<ArtRoleInfo> artRoles = [];
 
+  /// Every slot write, so a test can see which role got which bytes.
+  final List<({String pid, String role, int bytes})> setItemArtworkCalls = [];
+  final List<({String pid, String role})> clearItemArtworkCalls = [];
+
   @override
   Future<List<ArtRoleInfo>> getItemArtRoles(String pid) async =>
       List.unmodifiable(artRoles);
@@ -2900,13 +2912,19 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     final error = metadataError;
     if (error != null) throw error;
+    setItemArtworkCalls.add((pid: pid, role: role, bytes: bytes.length));
     artworkPids.add(pid);
+    if (!artRoles.any((r) => r.role == role)) {
+      artRoles.add(ArtRoleInfo(role: role, format: 'png', width: 8, height: 8));
+    }
     return const MetadataEditResult(applied: true);
   }
 
   @override
   Future<void> clearItemArtwork(String pid, {String role = 'front'}) async {
-    artworkPids.remove(pid);
+    clearItemArtworkCalls.add((pid: pid, role: role));
+    artRoles.removeWhere((r) => r.role == role);
+    if (role == 'front') artworkPids.remove(pid);
   }
 
   @override
@@ -3032,6 +3050,11 @@ class FakeRepository implements WaxDeckRepository {
     return entry.id;
   }
 
+  /// Run as the enrichment lands, for a test that needs the stored
+  /// fields to change under an open editor the way a real provider run
+  /// changes them.
+  void Function()? onEnrich;
+
   @override
   Future<EnrichItemResult> enrichItem(
     String pid, {
@@ -3040,6 +3063,7 @@ class FakeRepository implements WaxDeckRepository {
     final error = metadataError;
     if (error != null) throw error;
     enrichItemCalls.add((pid: pid, want: List.of(want)));
+    onEnrich?.call();
     return EnrichItemResult(applied: List.of(want));
   }
 

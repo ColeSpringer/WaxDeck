@@ -1,264 +1,302 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'review_controller.dart';
 
-/// One review entry: the ranked candidate picker, the file-by-file diff
-/// against the selected candidate, and the decision bar.
-class ReviewEntryScreen extends ConsumerStatefulWidget {
+/// One review entry as a page of its own, below the width that can hold
+/// the queue beside it.
+class ReviewEntryScreen extends StatelessWidget {
   const ReviewEntryScreen({super.key, required this.entryId});
 
   final String entryId;
 
   @override
-  ConsumerState<ReviewEntryScreen> createState() => _ReviewEntryScreenState();
+  Widget build(BuildContext context) {
+    return WaxScaffold(
+      title: 'Review entry',
+      largeTitle: false,
+      semanticsId: SemanticsIds.adminReviewEntry,
+      onBack: () => context.leave(fallback: WaxRoute.review),
+      // A filling sliver, not a body: the view pins its decision bar
+      // under a scroll of its own, which needs a bounded height.
+      slivers: <Widget>[
+        SliverFillRemaining(
+          hasScrollBody: true,
+          child: ReviewEntryView(entryId: entryId),
+        ),
+      ],
+    );
+  }
 }
 
-class _ReviewEntryScreenState extends ConsumerState<ReviewEntryScreen> {
-  /// The candidate the diff and Approve act on; null until the detail
-  /// loads, then the top-ranked candidate.
-  String? _candidateMbid;
+/// One review entry: ranked candidates, the file-by-file diff, and the
+/// decision bar. A view rather than a screen because it is both the
+/// pane beside the queue and the page that replaces it.
+class ReviewEntryView extends ConsumerStatefulWidget {
+  const ReviewEntryView({super.key, required this.entryId, this.onClose});
 
+  final String entryId;
+
+  /// Drawn as a close control when the view is a pane. The page has the
+  /// scaffold's own back control and passes null.
+  final VoidCallback? onClose;
+
+  @override
+  ConsumerState<ReviewEntryView> createState() => _ReviewEntryViewState();
+}
+
+class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
   ReviewCandidate? _selectedCandidate(ReviewEntryDetail detail) {
     if (detail.candidates.isEmpty) return null;
-    return detail.candidates
-            .where((c) => c.mbid == _candidateMbid)
-            .firstOrNull ??
+    final chosen = ref.watch(selectedCandidateProvider(widget.entryId));
+    return detail.candidates.where((c) => c.mbid == chosen).firstOrNull ??
         detail.candidates.first;
   }
 
   Future<void> _decide(String action, {String? candidateMbid}) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final warnings = await ref
           .read(reviewEntryProvider(widget.entryId).notifier)
           .decide(action, candidateMbid: candidateMbid);
-      if (warnings.isNotEmpty) {
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(warnings.join('\n'))));
-      }
+      if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
   Future<void> _revert() async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(reviewEntryProvider(widget.entryId).notifier).revert();
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final detail = ref.watch(reviewEntryProvider(widget.entryId));
-    return Scaffold(
-      appBar: AppBar(title: Text(detail.value?.title ?? 'Review entry')),
-      body: switch (detail) {
-        AsyncData(:final value) => _body(context, value),
-        AsyncError(:final error) => _errorView(context, error),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
-      bottomNavigationBar: detail.hasValue
-          ? SafeArea(child: _actionBar(context, detail.value!))
-          : null,
-    );
-  }
-
-  Widget _errorView(BuildContext context, Object error) {
-    final message = error is WaxDeckApiException
-        ? error.message
-        : 'Could not load the entry';
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () =>
-                ref.invalidate(reviewEntryProvider(widget.entryId)),
-            child: const Text('Retry'),
+    return switch (detail) {
+      AsyncData(:final value) => Column(
+        children: <Widget>[
+          Expanded(child: _body(context, value)),
+          _ActionBar(
+            detail: value,
+            candidate: _selectedCandidate(value),
+            onDecide: _decide,
+            onRevert: _revert,
           ),
         ],
       ),
-    );
+      AsyncError(:final error) => Padding(
+        padding: const EdgeInsets.all(WaxSpace.s16),
+        child: ErrorState(
+          title: 'Could not load the entry',
+          message: error is WaxDeckApiException
+              ? error.message
+              : 'Something went wrong reading it.',
+          onRetry: () => ref.invalidate(reviewEntryProvider(widget.entryId)),
+        ),
+      ),
+      _ => const SkeletonShapes(shape: SkeletonShape.detail),
+    };
   }
 
   Widget _body(BuildContext context, ReviewEntryDetail detail) {
-    final textTheme = Theme.of(context).textTheme;
+    final colors = WaxColors.of(context);
     final candidate = _selectedCandidate(detail);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _Header(detail: detail),
-          if (detail.identifying) ...[
-            const SizedBox(height: 16),
-            const Row(
-              children: [
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 8),
-                Text('Identifying: candidate lookup is still running'),
-              ],
-            ),
-          ],
-          const SizedBox(height: 16),
-          Text('Candidates', style: textTheme.titleMedium),
-          const SizedBox(height: 8),
-          if (detail.candidates.isEmpty)
-            const Text('No candidates found')
-          else
-            for (final c in detail.candidates)
-              _CandidateTile(
-                candidate: c,
-                selected: c.mbid == candidate?.mbid,
-                onTap: () => setState(() => _candidateMbid = c.mbid),
+    return ListView(
+      padding: const EdgeInsets.all(WaxSpace.s16),
+      children: <Widget>[
+        _Header(detail: detail, onClose: widget.onClose),
+        if (detail.identifying) ...<Widget>[
+          const SizedBox(height: WaxSpace.s16),
+          Row(
+            children: <Widget>[
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-          const SizedBox(height: 16),
-          Text('Tracks', style: textTheme.titleMedium),
-          const SizedBox(height: 8),
-          _DiffTable(detail: detail, candidate: candidate),
+              const SizedBox(width: WaxSpace.s8),
+              Text(
+                'Identifying: candidate lookup is still running',
+                style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+              ),
+            ],
+          ),
         ],
-      ),
+        const SizedBox(height: WaxSpace.s20),
+        const SectionHeader(title: 'Candidates'),
+        if (detail.candidates.isEmpty)
+          const EmptyState(
+            glyph: WaxIcons.search,
+            title: 'No candidates found',
+            message:
+                'Nothing in the sources matched what these files claim. '
+                'Keep them as they are, or skip and try again later.',
+          )
+        else
+          for (final c in detail.candidates)
+            _CandidateTile(
+              candidate: c,
+              selected: c.mbid == candidate?.mbid,
+              onTap: () => ref
+                  .read(selectedCandidateProvider(widget.entryId).notifier)
+                  .select(c.mbid),
+            ),
+        const SizedBox(height: WaxSpace.s20),
+        const SectionHeader(title: 'Tracks'),
+        _DiffTable(detail: detail, candidate: candidate),
+      ],
     );
   }
+}
 
-  Widget _actionBar(BuildContext context, ReviewEntryDetail detail) {
-    final textTheme = Theme.of(context).textTheme;
-    if (detail.status != 'pending') {
-      final revertible =
-          detail.status == 'applied' || detail.status == 'auto-applied';
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Decided: ${detail.status}',
-                style: textTheme.titleSmall,
+/// The decision bar. Pinned under the scroll rather than in it: it is
+/// what somebody came here to press, and a bar that scrolls away is a
+/// bar that has to be hunted for on every entry.
+class _ActionBar extends StatelessWidget {
+  const _ActionBar({
+    required this.detail,
+    required this.candidate,
+    required this.onDecide,
+    required this.onRevert,
+  });
+
+  final ReviewEntryDetail detail;
+  final ReviewCandidate? candidate;
+  final void Function(String action, {String? candidateMbid}) onDecide;
+  final VoidCallback onRevert;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final decided = detail.status != 'pending';
+    final revertible =
+        detail.status == 'applied' || detail.status == 'auto-applied';
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface1,
+        border: Border(top: BorderSide(color: colors.hairline)),
+      ),
+      padding: const EdgeInsets.all(WaxSpace.s12),
+      child: SafeArea(
+        top: false,
+        child: decided
+            ? Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      'Decided: ${detail.status}',
+                      style: WaxType.label.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  if (revertible)
+                    WaxButton(
+                      label: 'Revert',
+                      kind: WaxButtonKind.tonal,
+                      semanticsId: SemanticsIds.reviewRevert,
+                      onPressed: onRevert,
+                    ),
+                ],
+              )
+            : Wrap(
+                spacing: WaxSpace.s8,
+                runSpacing: WaxSpace.s8,
+                children: <Widget>[
+                  WaxButton(
+                    label: 'Approve',
+                    semanticsId: SemanticsIds.reviewApprove,
+                    onPressed: candidate == null
+                        ? null
+                        : () => onDecide(
+                            'approve',
+                            candidateMbid: candidate!.mbid,
+                          ),
+                  ),
+                  WaxButton(
+                    label: 'Keep as is',
+                    kind: WaxButtonKind.tonal,
+                    semanticsId: SemanticsIds.reviewAsIs,
+                    onPressed: () => onDecide('as-is'),
+                  ),
+                  WaxButton(
+                    label: 'Mark unofficial',
+                    kind: WaxButtonKind.tonal,
+                    semanticsId: SemanticsIds.reviewUnofficial,
+                    onPressed: () => onDecide('unofficial'),
+                  ),
+                  WaxButton(
+                    label: 'Skip',
+                    kind: WaxButtonKind.text,
+                    semanticsId: SemanticsIds.reviewSkip,
+                    onPressed: () => onDecide('skip'),
+                  ),
+                  if (detail.origin == 'upload')
+                    WaxButton(
+                      label: 'Discard',
+                      kind: WaxButtonKind.destructive,
+                      semanticsId: SemanticsIds.reviewDiscard,
+                      onPressed: () => onDecide('discard'),
+                    ),
+                ],
               ),
-            ),
-            if (revertible)
-              Semantics(
-                identifier: SemanticsIds.reviewRevert,
-                label: 'Revert decision',
-                button: true,
-                child: OutlinedButton(
-                  key: const Key(SemanticsIds.reviewRevert),
-                  onPressed: _revert,
-                  child: const Text('Revert'),
-                ),
-              ),
-          ],
-        ),
-      );
-    }
-    final candidate = _selectedCandidate(detail);
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          Semantics(
-            identifier: SemanticsIds.reviewApprove,
-            label: 'Approve with the selected candidate',
-            button: true,
-            child: FilledButton(
-              key: const Key(SemanticsIds.reviewApprove),
-              onPressed: candidate == null
-                  ? null
-                  : () => _decide('approve', candidateMbid: candidate.mbid),
-              child: const Text('Approve'),
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.reviewAsIs,
-            label: 'Keep as is',
-            button: true,
-            child: OutlinedButton(
-              key: const Key(SemanticsIds.reviewAsIs),
-              onPressed: () => _decide('as-is'),
-              child: const Text('Keep as is'),
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.reviewUnofficial,
-            label: 'Mark unofficial',
-            button: true,
-            child: OutlinedButton(
-              key: const Key(SemanticsIds.reviewUnofficial),
-              onPressed: () => _decide('unofficial'),
-              child: const Text('Mark unofficial'),
-            ),
-          ),
-          Semantics(
-            identifier: SemanticsIds.reviewSkip,
-            label: 'Skip',
-            button: true,
-            child: TextButton(
-              key: const Key(SemanticsIds.reviewSkip),
-              onPressed: () => _decide('skip'),
-              child: const Text('Skip'),
-            ),
-          ),
-          if (detail.origin == 'upload')
-            Semantics(
-              identifier: SemanticsIds.reviewDiscard,
-              label: 'Discard upload',
-              button: true,
-              child: TextButton(
-                key: const Key(SemanticsIds.reviewDiscard),
-                onPressed: () => _decide('discard'),
-                child: const Text('Discard'),
-              ),
-            ),
-        ],
       ),
     );
   }
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.detail});
+  const _Header({required this.detail, this.onClose});
 
   final ReviewEntryDetail detail;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = WaxColors.of(context);
     final uploadedBy = detail.uploadedBy;
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(detail.title ?? 'Untitled', style: textTheme.titleLarge),
-        if (detail.artist != null)
-          Text(detail.artist!, style: textTheme.bodyMedium),
-        Text(
-          '${detail.trackCount} tracks, ${detail.origin}'
-          '${uploadedBy == null ? '' : ' by $uploadedBy'}',
-          style: textTheme.bodySmall?.copyWith(
-            color: colorScheme.onSurfaceVariant,
+      children: <Widget>[
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                detail.title ?? 'Untitled',
+                style: WaxType.titleEntity.copyWith(color: colors.textPrimary),
+              ),
+              if (detail.artist != null)
+                Text(
+                  detail.artist!,
+                  style: WaxType.body.copyWith(color: colors.textSecondary),
+                ),
+              const SizedBox(height: WaxSpace.s4),
+              Text(
+                '${detail.trackCount} tracks, ${detail.origin}'
+                '${uploadedBy == null ? '' : ' by $uploadedBy'}',
+                style: WaxType.caption.copyWith(color: colors.textTertiary),
+              ),
+            ],
           ),
         ),
+        if (onClose != null)
+          WaxIconButton(
+            glyph: WaxIcons.close,
+            label: 'Close the entry',
+            semanticsId: SemanticsIds.reviewPaneClose,
+            onPressed: onClose,
+          ),
       ],
     );
   }
@@ -286,60 +324,90 @@ class _CandidateTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Semantics(
-      identifier: SemanticsIds.candidate(candidate.mbid),
-      label: '${candidate.title} by ${candidate.artist}',
-      button: true,
-      child: Card(
-        key: ValueKey(SemanticsIds.candidate(candidate.mbid)),
-        color: selected ? colorScheme.secondaryContainer : null,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      '${candidate.similarityPct.round()}%',
-                      style: textTheme.titleMedium,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        '${candidate.title}, ${candidate.artist}',
-                        style: textTheme.titleSmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (selected)
-                      Icon(Icons.check_circle, color: colorScheme.primary),
-                  ],
+    final colors = WaxColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+      child: WaxTappable(
+        label: '${candidate.title} by ${candidate.artist}',
+        semanticsId: SemanticsIds.candidate(candidate.mbid),
+        selected: selected,
+        borderRadius: WaxRadius.card,
+        onPressed: onTap,
+        // WaxTappable adds no gesture by design, so the ink is ours or
+        // the tile announces as a button and answers no pointer.
+        child: Material(
+          color: selected ? colors.accentContainer : colors.surface1,
+          borderRadius: WaxRadius.card,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: WaxRadius.card,
+            child: Container(
+              padding: const EdgeInsets.all(WaxSpace.s12),
+              decoration: BoxDecoration(
+                borderRadius: WaxRadius.card,
+                border: Border.all(
+                  color: selected ? colors.accent : colors.hairline,
                 ),
-                if (_subtitle.isNotEmpty)
-                  Text(
-                    _subtitle,
-                    style: textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                if (candidate.components.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 4,
-                    children: [
-                      for (final component in candidate.components)
-                        _ComponentBar(component: component),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Text(
+                        '${candidate.similarityPct.round()}%',
+                        style: WaxType.monoData.copyWith(
+                          color: selected
+                              ? colors.onAccentContainer
+                              : colors.accent,
+                        ),
+                      ),
+                      const SizedBox(width: WaxSpace.s12),
+                      Expanded(
+                        child: Text(
+                          '${candidate.title}, ${candidate.artist}',
+                          style: WaxType.titleItem.copyWith(
+                            color: selected
+                                ? colors.onAccentContainer
+                                : colors.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (selected)
+                        WaxIcon(
+                          WaxIcons.check,
+                          size: 16,
+                          color: colors.onAccentContainer,
+                        ),
                     ],
                   ),
+                  if (_subtitle.isNotEmpty)
+                    Text(
+                      _subtitle,
+                      style: WaxType.caption.copyWith(
+                        color: selected
+                            ? colors.onAccentContainer
+                            : colors.textTertiary,
+                      ),
+                    ),
+                  if (candidate.components.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: WaxSpace.s8),
+                    Wrap(
+                      spacing: WaxSpace.s16,
+                      runSpacing: WaxSpace.s4,
+                      children: <Widget>[
+                        for (final component in candidate.components)
+                          _ComponentBar(
+                            component: component,
+                            selected: selected,
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -351,71 +419,117 @@ class _CandidateTile extends StatelessWidget {
 /// One similarity component as a small labeled bar with its percentage
 /// (100% means identical, so the bar shows 1 - distance).
 class _ComponentBar extends StatelessWidget {
-  const _ComponentBar({required this.component});
+  const _ComponentBar({required this.component, required this.selected});
 
   final CandidateComponent component;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
+    final colors = WaxColors.of(context);
     final closeness = (1 - component.distance).clamp(0.0, 1.0);
+    final tint = selected ? colors.onAccentContainer : colors.textSecondary;
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(component.name, style: textTheme.labelSmall),
-        const SizedBox(width: 4),
-        SizedBox(width: 48, child: LinearProgressIndicator(value: closeness)),
-        const SizedBox(width: 4),
-        Text('${(closeness * 100).round()}%', style: textTheme.labelSmall),
+      children: <Widget>[
+        Text(component.name, style: WaxType.caption.copyWith(color: tint)),
+        const SizedBox(width: WaxSpace.s4),
+        SizedBox(
+          width: 48,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(WaxRadius.r6),
+            child: LinearProgressIndicator(
+              value: closeness,
+              minHeight: 4,
+              backgroundColor: colors.surface3,
+              valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
+            ),
+          ),
+        ),
+        const SizedBox(width: WaxSpace.s4),
+        Text(
+          '${(closeness * 100).round()}%',
+          style: WaxType.monoData.copyWith(color: tint),
+        ),
       ],
     );
   }
 }
 
-/// The side-by-side diff: one row per local file against the selected
-/// candidate's pairing, then the candidate tracks missing locally.
+/// The side-by-side diff: one row per local file, then the candidate
+/// tracks missing locally. Columns at every width rather than a
+/// [WaxTable]: which line faces which is the whole content.
 class _DiffTable extends StatelessWidget {
   const _DiffTable({required this.detail, required this.candidate});
 
   final ReviewEntryDetail detail;
   final ReviewCandidate? candidate;
 
+  static const _minWidth = 420.0;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = WaxColors.of(context);
     final pairings = <int, CandidatePairing>{
       for (final p in candidate?.pairings ?? const <CandidatePairing>[])
         p.trackIndex: p,
     };
     final extra = (candidate?.extraTrackIndexes ?? const <int>[]).toSet();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _headerRow(theme),
-        for (var i = 0; i < detail.tracks.length; i++)
-          _TrackDiffRow(
-            index: i,
-            track: detail.tracks[i],
-            pairing: pairings[i],
-            extra: extra.contains(i),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: WaxRadius.card,
+        border: Border.all(color: colors.hairline),
+      ),
+      clipBehavior: Clip.antiAlias,
+      // Measured outside the scroll view, where the width is still
+      // bounded: sizing to the window would lay the diff out at 1600
+      // inside a 700-pixel pane and push Proposed off the edge.
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: _minWidth,
+              maxWidth: constraints.maxWidth < _minWidth
+                  ? _minWidth
+                  : constraints.maxWidth,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _headerRow(colors),
+                for (var i = 0; i < detail.tracks.length; i++)
+                  _TrackDiffRow(
+                    index: i,
+                    track: detail.tracks[i],
+                    pairing: pairings[i],
+                    extra: extra.contains(i),
+                    striped: i.isOdd,
+                  ),
+                for (var i = 0; i < (candidate?.missingTitles.length ?? 0); i++)
+                  _MissingRow(index: i, title: candidate!.missingTitles[i]),
+              ],
+            ),
           ),
-        for (var i = 0; i < (candidate?.missingTitles.length ?? 0); i++)
-          _MissingRow(index: i, title: candidate!.missingTitles[i]),
-      ],
+        ),
+      ),
     );
   }
 
-  Widget _headerRow(ThemeData theme) {
-    final style = theme.textTheme.labelLarge;
+  Widget _headerRow(WaxColors colors) {
+    final style = WaxType.overline.copyWith(color: colors.textSecondary);
     return Container(
-      color: theme.colorScheme.surfaceContainerHighest,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: colors.surface2,
+      padding: const EdgeInsets.symmetric(
+        horizontal: WaxSpace.s12,
+        vertical: WaxSpace.s8,
+      ),
       child: Row(
-        children: [
+        children: <Widget>[
           Expanded(child: Text('Current', style: style)),
-          const SizedBox(width: 8),
+          const SizedBox(width: WaxSpace.s8),
           Expanded(child: Text('Proposed', style: style)),
-          const SizedBox(width: 40),
+          const SizedBox(width: WaxSpace.s40),
         ],
       ),
     );
@@ -428,12 +542,14 @@ class _TrackDiffRow extends StatelessWidget {
     required this.track,
     required this.pairing,
     required this.extra,
+    required this.striped,
   });
 
   final int index;
   final ReviewTrack track;
   final CandidatePairing? pairing;
   final bool extra;
+  final bool striped;
 
   static String _numbered(int? number, String title, String? artist) {
     final prefix = number == null ? '' : '$number. ';
@@ -443,80 +559,69 @@ class _TrackDiffRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = WaxColors.of(context);
     final paired = pairing;
     final pid = track.pid;
     return Semantics(
       identifier: SemanticsIds.diffRow(index),
+      container: true,
       child: Container(
-        key: ValueKey(SemanticsIds.diffRow(index)),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: theme.dividerColor)),
+        color: striped ? colors.surface1 : Colors.transparent,
+        padding: const EdgeInsets.symmetric(
+          horizontal: WaxSpace.s12,
+          vertical: WaxSpace.s4,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        constraints: const BoxConstraints(minHeight: 36),
         child: Row(
-          children: [
+          children: <Widget>[
             Expanded(
               child: Text(
                 _numbered(track.trackNo, track.title, track.artist),
-                style: theme.textTheme.bodySmall,
+                style: WaxType.bodySmall.copyWith(color: colors.textPrimary),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: WaxSpace.s8),
             Expanded(
               child: extra
                   ? Text(
                       'Extra file, no counterpart',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.error,
-                      ),
+                      style: WaxType.bodySmall.copyWith(color: colors.error),
                     )
                   : paired == null
                   ? Text(
                       'Unmatched',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                      style: WaxType.bodySmall.copyWith(
+                        color: colors.textTertiary,
                       ),
                     )
                   : Text(
                       _numbered(paired.position, paired.title, paired.artist),
-                      style: theme.textTheme.bodySmall,
+                      style: WaxType.bodySmall.copyWith(
+                        color: colors.textSecondary,
+                      ),
                     ),
             ),
             SizedBox(
-              width: 40,
+              width: WaxSpace.s40,
               child: pid == null
                   ? null
-                  : Semantics(
-                      identifier: SemanticsIds.trackMenu(pid),
+                  : WaxMenuButton<String>(
+                      glyph: WaxIcons.moreVertical,
                       label: 'Track actions',
-                      button: true,
-                      child: PopupMenuButton<String>(
-                        key: ValueKey(SemanticsIds.trackMenu(pid)),
-                        tooltip: 'Track actions',
-                        icon: const Icon(Icons.more_vert, size: 18),
-                        onSelected: (action) {
-                          if (action == 'edit') {
-                            // An editor opened on one row, pushed so
-                            // closing it returns to the entry being
-                            // reviewed. The location still resolves for
-                            // anyone who types it.
-                            context.push(WaxRoute.metadata(pid));
-                          }
-                        },
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Semantics(
-                              identifier: SemanticsIds.editMetadata(pid),
-                              child: Text(
-                                'Edit metadata',
-                                key: ValueKey(SemanticsIds.editMetadata(pid)),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      size: 16,
+                      semanticsId: SemanticsIds.trackMenu(pid),
+                      items: <WaxMenuItem<String>>[
+                        WaxMenuItem<String>(
+                          value: 'edit',
+                          label: 'Edit metadata',
+                          glyph: WaxIcons.edit,
+                          semanticsId: SemanticsIds.editMetadata(pid),
+                        ),
+                      ],
+                      // An editor opened on one row, pushed so closing
+                      // it returns to the entry being reviewed. The
+                      // location still resolves for anyone who types it.
+                      onSelected: (_) => context.push(WaxRoute.metadata(pid)),
                     ),
             ),
           ],
@@ -534,28 +639,32 @@ class _MissingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = WaxColors.of(context);
     return Semantics(
       identifier: SemanticsIds.diffMissing(index),
+      container: true,
       child: Container(
-        key: ValueKey(SemanticsIds.diffMissing(index)),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: theme.dividerColor)),
+        padding: const EdgeInsets.symmetric(
+          horizontal: WaxSpace.s12,
+          vertical: WaxSpace.s4,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        constraints: const BoxConstraints(minHeight: 36),
         child: Row(
-          children: [
+          children: <Widget>[
             Expanded(
               child: Text(
                 'Missing locally',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
+                style: WaxType.bodySmall.copyWith(color: colors.error),
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(title, style: theme.textTheme.bodySmall)),
-            const SizedBox(width: 40),
+            const SizedBox(width: WaxSpace.s8),
+            Expanded(
+              child: Text(
+                title,
+                style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+              ),
+            ),
+            const SizedBox(width: WaxSpace.s40),
           ],
         ),
       ),

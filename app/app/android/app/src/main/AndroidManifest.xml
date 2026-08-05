@@ -66,6 +66,19 @@
                 <data android:mimeType="audio/*"/>
             </intent-filter>
         </activity>
+        <!-- Grants read access to one cache directory, for the share
+             cards this app sends out through ACTION_SEND. A receiving
+             app runs as another uid, so a plain file: URI is one it
+             cannot open; a content: URI from here is. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.shares"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- The audio_service media session: the browse service Android
              Auto binds to, and the media-button receiver. -->
         <service
