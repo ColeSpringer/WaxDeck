@@ -1,5 +1,5 @@
 .PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-mirror lint spec-lint test test-server test-fixtures test-app \
-        web build run up down logs drift-check oasdiff e2e e2e-desktop dist clean
+        web build run up down reset logs drift-check oasdiff e2e e2e-desktop dist clean
 
 SPEC        := api/openapi.yaml
 SPEC_SRC    := api/spec
@@ -230,6 +230,24 @@ deploy/.env:
 
 down:
 	$(COMPOSE) down
+
+# Down, and take the state with it. `down` keeps the named volumes, which
+# is what makes a restart resume where it left off - and what makes "it
+# still has the old accounts" the default. This is the first-run stack
+# again: no accounts, an empty catalog, no fetched episodes, a cold
+# sidecar cache.
+#
+# Your music is not in a volume. It is a bind mount from WAXDECK_LIBRARY,
+# and neither this nor `down` touches it; the same goes for deploy/.env
+# (keys and settings) and deploy/waxflow-config/. Delete those by hand if
+# a truly bare first run is what you want - `make up` seeds both again.
+#
+# Images are a separate cache: add --no-cache (and --pull for fresh
+# bases) to the up build if a layer is what is stale.
+reset:
+	$(COMPOSE) down -v
+	@echo "stack down and volumes dropped: catalog, accounts, episodes, sidecar cache"
+	@echo "kept: your library, deploy/.env, deploy/waxflow-config/  ->  make up"
 
 logs:
 	$(COMPOSE) logs -f --tail=100

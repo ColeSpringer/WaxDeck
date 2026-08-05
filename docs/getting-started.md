@@ -17,7 +17,15 @@ engine. Everything below the "Run with Docker Compose" section covers
 make up      # builds the images, generates deploy/.env, starts the stack
 make logs    # follow the logs
 make down    # stop it
+make reset   # stop it and drop the data, for a first-run stack again
 ```
+
+`make down` keeps the catalog, the accounts, the fetched episodes, and
+the engine's cache, so `make up` resumes where you left off. `make reset`
+is the one that does not: it drops those volumes and the next `make up`
+is a first run, asking you to create the administrator again. Your music
+is a bind mount rather than a volume, so neither command touches it -
+nor `deploy/.env`, which holds your keys and settings.
 
 `make up` writes `deploy/.env` with fresh internal keys on the first
 run. Set `WAXDECK_LIBRARY` in it to point at your music (it defaults to
