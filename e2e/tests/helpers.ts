@@ -1,25 +1,37 @@
 import { expect, APIRequestContext, Locator, Page } from '@playwright/test';
 import { SemanticsIds, sem } from './semantics-ids';
 
-// Type into a flutter text field and verify every keystroke landed.
-// Clicking focuses the DOM input, but flutter attaches its editing
-// session asynchronously and quietly drops keys typed in the gap, so
-// the only reliable protocol is: select-all, type, check the value,
-// and redo the whole round if anything went missing.
+// Type into a flutter text field and verify the app took the text.
+//
+// Clicking focuses the DOM input, but flutter binds its editing session
+// asynchronously and keys typed in the gap land in the element with
+// nothing listening - so the element can hold the whole string over an
+// empty controller, and a value check alone reports a field that is
+// about to fail its own validator. Flutter rewrites the element from its
+// controller when it does bind, which is what makes the second read
+// below the app's answer rather than the DOM's.
 export async function typeInto(page: Page, field: Locator, text: string) {
   // Bounded: an absent field must fail here with a page snapshot, not
   // silently consume the whole test budget.
   await field.waitFor({ timeout: 30_000 });
-  // The locator may be the input itself (role-based) or a semantics
-  // container wrapping it (identifier-based).
-  const inner = field.locator('input, textarea');
-  const input = (await inner.count()) > 0 ? inner.first() : field;
-  await input.click();
-  await expect(input).toBeFocused();
   await expect(async () => {
+    // Re-located and re-clicked every attempt: a lost editing session is
+    // re-established by the click, and the handle is never held across a
+    // round in which flutter may have rebuilt the node.
+    const inner = field.locator('input, textarea');
+    const input = (await inner.count()) > 0 ? inner.first() : field;
+    await input.click();
+    await expect(input).toBeFocused({ timeout: 5_000 });
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type(text);
     await expect(input).toHaveValue(text, { timeout: 1_000 });
+    // Two matching reads a beat apart, like the menu-at-rest check
+    // below: a value flutter never received is gone by the second one.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(await input.inputValue()).toBe(text);
+    // 20s, not more: `loginAsAdmin` fills two fields, and two of these
+    // budgets plus their waits have to leave room inside the 120s a spec
+    // gets, or a missing field dies on the test timeout with no snapshot.
   }).toPass({ timeout: 20_000 });
 }
 
@@ -83,6 +95,62 @@ export async function clickThrough(trigger: Locator, appears: Locator) {
     }
     await appears.waitFor({ timeout: 5_000 });
   }).toPass({ timeout: 30_000 });
+}
+
+// Click a control the driver cannot reach on its own, as one retried
+// unit.
+//
+// Two shapes of the same refusal. A routed screen animates in from
+// below, so its nodes resolve while their rects are still off the bottom
+// of the window; and a row inside a flutter list sits wherever the list
+// left it, because playwright scrolls DOM containers and a canvas list
+// moves for a wheel over it and nothing else. Either way the click is
+// refused as outside the viewport with the node resolved and the scroll
+// reported done, which reads like anything but a rect that has not
+// arrived.
+//
+// `surface` is the list to wheel, for a row below the fold; omit it for
+// a control that is only still arriving. `settled` is what proves the
+// click took, and - as in `chooseFromMenu` - it is checked before
+// anything else, so a click that landed and then lost its own wait is
+// never fired a second time. Pass it for anything that is not idempotent
+// and give it something only this click can produce.
+export async function clickInView(
+  page: Page,
+  target: Locator,
+  options: { surface?: Locator; settled?: Locator } = {},
+) {
+  const { surface, settled } = options;
+  const view = page.viewportSize();
+  // The config sets a viewport, so this is the fallback for a run that
+  // does not rather than a live path.
+  const height =
+    view?.height ?? (await page.evaluate(() => window.innerHeight));
+  const inside = (box: { y: number; height: number } | null) =>
+    box !== null && box.y >= 0 && box.y + box.height <= height;
+  await expect(async () => {
+    if (settled !== undefined && (await settled.isVisible())) return;
+    // A missing box fails the attempt rather than picking a scroll
+    // direction from nothing: the node churn this exists for is exactly
+    // when boundingBox comes back null.
+    let box = await target.boundingBox();
+    expect(box, 'the control reports a box').toBeTruthy();
+    if (surface !== undefined && !inside(box)) {
+      const over = await surface.boundingBox();
+      expect(over, 'the surface reports a box to scroll').toBeTruthy();
+      await page.mouse.move(
+        over!.x + over!.width / 2,
+        Math.min(over!.y + over!.height / 2, height - 2),
+      );
+      await page.mouse.wheel(0, box!.y < 0 ? -120 : 120);
+      box = await target.boundingBox();
+    }
+    expect(inside(box), 'the control is in view').toBe(true);
+    // No click timeout of its own: one expiring after the press was
+    // dispatched is what would let a retry fire the control twice.
+    await target.click({ force: true });
+    if (settled !== undefined) await settled.waitFor({ timeout: 5_000 });
+  }).toPass({ timeout: 20_000 });
 }
 
 // Open a menu and choose a row from it, as one retried unit.

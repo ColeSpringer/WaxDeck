@@ -201,7 +201,16 @@ class AdminConsole extends StatelessWidget {
         children: <Widget>[
           _SectionList(location: location),
           VerticalDivider(width: 1, color: colors.hairline),
-          Expanded(child: child),
+          // A boundary, like the shell frame's content region: `child` is
+          // a navigator, and the `ModalBarrier` in its route would
+          // otherwise block the section list painted before it.
+          Expanded(
+            child: Semantics(
+              container: true,
+              explicitChildNodes: true,
+              child: child,
+            ),
+          ),
         ],
       ),
     );

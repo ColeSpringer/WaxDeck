@@ -3,7 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_console.dart';
 import 'package:waxdeck/src/admin/dashboard_screen.dart';
 import 'package:waxdeck/src/admin/genres_screen.dart';
+import 'package:waxdeck/src/app.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -88,6 +91,53 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Libraries'), findsOneWidget);
+  });
+
+  // Through the real table: a stub child carries no `ModalBarrier`, and
+  // the barrier is what erased the section list from the semantics tree.
+  testWidgets('the section list is exposed beside a routed page', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(
+          FakeRepository(
+            sessionState: const SessionState(
+              authenticated: true,
+              user: WaxDeckUser(
+                id: 'us-1',
+                username: 'admin',
+                roles: ['admin'],
+              ),
+            ),
+          ),
+        ),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+    );
+    addTearDown(container.dispose);
+    // The e2e viewport.
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const WaxDeckApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    container.read(routerProvider).go(WaxRoute.admin);
+    await tester.pumpAndSettle();
+
+    for (final section in AdminSection.values) {
+      expect(
+        find.bySemanticsIdentifier(section.semanticsId),
+        findsOneWidget,
+        reason: '${section.title} must be reachable from the console',
+      );
+    }
   });
 
   testWidgets('below sidebar width the console is the page alone', (

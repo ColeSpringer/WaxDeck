@@ -77,20 +77,37 @@ test('review a queued match with the keyboard', async ({ page, request }) => {
     page.locator(sem(SemanticsIds.navGroup('curation'))),
     page.locator(sem(SemanticsIds.navDestination('review'))),
   );
+  const row = page.locator(sem(SemanticsIds.reviewRow(entryId)));
   await clickThrough(
     page.locator(sem(SemanticsIds.navDestination('review'))),
-    page.locator(sem(SemanticsIds.reviewRow(entryId))),
+    row,
   );
 
-  // Keyboard-first: j selects the first row, e opens it. The shortcuts
-  // layer autofocuses the queue, so the keys reach it without a click.
-  await page.keyboard.press('j');
-  await page.keyboard.press('e');
+  // The cursor is put on this spec's own row by opening it, never
+  // assumed to be at the top: the queue is shared and newest-first, so
+  // an entry another worker seeds sorts in above this one. Escape
+  // returns to the queue with the cursor where the open entry left it
+  // and `e` reopens it - but nothing re-anchors the cursor once the pane
+  // is closed, so an entry arriving between the two keys shifts this row
+  // down and `e` opens its neighbour. The whole round repeats in that
+  // case: re-opening this row by hand is what puts the cursor back.
+  //
+  // Cursor movement itself (j, k, arrows) is covered deterministically
+  // in review_screen_test.dart, over a queue that holds still.
+  const asIs = page.locator(sem(SemanticsIds.reviewAsIs));
+  await expect(async () => {
+    await row.click({ force: true });
+    await asIs.waitFor({ timeout: 15_000 });
+    expect(page.url(), 'this row is what opened').toContain(entryId);
+    await page.keyboard.press('Escape');
+    await expect(asIs).toBeHidden({ timeout: 15_000 });
+    await page.keyboard.press('e');
+    await asIs.waitFor({ timeout: 15_000 });
+    expect(page.url(), 'the cursor stayed on this entry').toContain(entryId);
+  }).toPass({ timeout: 60_000 });
 
   // The entry screen offers the as-is decision (no candidates to
   // approve). Accept it, which returns to the queue.
-  const asIs = page.locator(sem(SemanticsIds.reviewAsIs));
-  await asIs.waitFor({ timeout: 15_000 });
   await asIs.click();
 
   // The entry is decided: it leaves the pending queue, and the API

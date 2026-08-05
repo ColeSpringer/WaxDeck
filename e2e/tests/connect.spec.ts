@@ -8,6 +8,7 @@ import {
 } from './fixtures';
 import {
   authed,
+  clickInView,
   clickThrough,
   ensureAdmin,
   itemRow,
@@ -148,18 +149,23 @@ test('a session mirrors to the server and relays remote control', async ({
   // than on a budget shared with anything that could dismiss it.
   const sessionRow = locate(b.page, SemanticsIds.session(session!.id));
   await sessionRow.waitFor({ timeout: 15_000 });
-  // Clicked without scrolling to it first: that is a second action
-  // against a list relisting under it, and the node it resolved can be
-  // gone by the time it runs, which is how this failed in CI. A click
-  // scrolls as part of itself and re-resolves when the node goes away.
-  await sessionRow.click({ force: true });
+  // "Playing elsewhere" is the last section in the sheet, so on a short
+  // window the row sits below the fold and the click is refused as
+  // outside the viewport. Scrolled and clicked as one unit against a
+  // list that relists whenever any session changes, and A plays
+  // throughout; the remote screen is what proves the row was hit.
+  const remoteToggle = locate(b.page, SemanticsIds.remoteToggle);
+  await clickInView(b.page, sessionRow, {
+    surface: locate(b.page, SemanticsIds.picker),
+    settled: remoteToggle,
+  });
 
   // The remote screen renders A's playback and pauses it; the pause
   // must land on A's real engine, observed through the session state
-  // the server republishes.
-  const remoteToggle = locate(b.page, SemanticsIds.remoteToggle);
-  await remoteToggle.waitFor({ timeout: 30_000 });
-  await remoteToggle.click({ force: true });
+  // the server republishes. No `settled` here: the toggle's own label is
+  // whatever the session last reported, so it cannot say which press
+  // produced it - and the poll below is the real witness.
+  await clickInView(b.page, remoteToggle);
   await expect
     .poll(
       async () => {

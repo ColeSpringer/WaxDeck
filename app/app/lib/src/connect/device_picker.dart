@@ -40,6 +40,11 @@ Future<void> showDevicePicker(
   );
   return showModalBottomSheet<void>(
     context: context,
+    // The list sizes the sheet. Left to the default the sheet stops at
+    // nine sixteenths of the window with no sign it has more to show, and
+    // "Playing elsewhere" - the section the picker exists for - falls
+    // below the fold on a short window.
+    isScrollControlled: true,
     builder: (sheetContext) => _DevicePickerSheet(
       handles: handles,
       source: from,

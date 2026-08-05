@@ -522,21 +522,55 @@ func TestCueSplitEndToEnd(t *testing.T) {
 		t.Fatalf("resultPids = %v, want two", done.ResultPids)
 	}
 
-	// The real files replaced the virtual carvings under the same
-	// titles, and per-track play state followed each piece.
-	byTitle = map[string]ItemSummary{}
-	for _, it := range h.items(t, "?mediaType=music").Items {
-		byTitle[it.Title] = it
+	// The real files replaced the virtual carvings under the same titles,
+	// and per-track play state followed each piece.
+	//
+	// Polled, because the task reporting done is not the listing carrying
+	// the replacements: the drain returns when there is no more work, and
+	// this read has come back without them. Asked by pid rather than by
+	// title, because the archived carvings answer to the same two titles
+	// (see docs/bugs.md - trashed items are still listed) and a title
+	// lookup cannot tell the pair apart. resultPids are in sibling order,
+	// so [1] is Cue Two's replacement.
+	pieces := *done.ResultPids
+	listed := map[string]ItemSummary{}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		listed = map[string]ItemSummary{}
+		for _, it := range h.items(t, "?mediaType=music").Items {
+			listed[it.Pid] = it
+		}
+		_, gotOne := listed[pieces[0]]
+		_, gotTwo := listed[pieces[1]]
+		if gotOne && gotTwo {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("split pieces %v never reached the listing: %v", pieces, listed)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	newOne, okOne := byTitle["Cue One"]
-	newTwo, okTwo := byTitle["Cue Two"]
-	if !okOne || !okTwo {
-		t.Fatalf("split pieces missing: %v", byTitle)
+	if got, want := listed[pieces[0]].Title, "Cue One"; got != want {
+		t.Fatalf("piece %s title = %q, want %q", pieces[0], got, want)
 	}
-	if newOne.Pid == one.Pid || newTwo.Pid == two.Pid {
-		t.Fatalf("pieces kept the virtual pids: %s %s", newOne.Pid, newTwo.Pid)
+	if got, want := listed[pieces[1]].Title, "Cue Two"; got != want {
+		t.Fatalf("piece %s title = %q, want %q", pieces[1], got, want)
 	}
-	resp = get(t, h.ts, "/api/v1/items/"+newTwo.Pid+"/play-state", h.token)
+
+	// The carvings were retired, which the listing cannot show while
+	// archived items keep answering it: the shared rip is in the trash.
+	trash := decode[TrashList](t, get(t, h.ts, "/api/v1/admin/trash", h.token)).Entries
+	retired := false
+	for _, e := range trash {
+		if strings.HasSuffix(e.Name, "Cue Album.flac") {
+			retired = true
+		}
+	}
+	if !retired {
+		t.Fatalf("the shared rip was not trashed: %+v", trash)
+	}
+
+	resp = get(t, h.ts, "/api/v1/items/"+pieces[1]+"/play-state", h.token)
 	st := decode[PlayState](t, resp)
 	if st.PositionMs != 1500 {
 		t.Fatalf("carried position = %d, want 1500", st.PositionMs)
