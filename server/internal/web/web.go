@@ -67,6 +67,15 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.serveFile(w, r, name) {
 		return
 	}
+	// Past here the answer depends on the request headers rather than on
+	// the path alone, so it has to say so: without Vary a shared cache in
+	// front of WaxDeck keys on the URL and will hand one of these two
+	// answers to a request that asked the other way - the shell to a font
+	// or wasm loader, which is exactly what the 404 below exists to
+	// prevent, or a cached 404 to a real deep link. Every location in the
+	// route table resolves through here, so this is the whole app's
+	// surface, not an edge.
+	w.Header().Set("Vary", "Sec-Fetch-Mode, Accept")
 	// The shell answers navigations only. A subresource miss (a font the
 	// engine's fallback probes for, a wasm path, an icon) must fail as a
 	// 404: answering it with HTML feeds the shell to font and wasm
@@ -76,12 +85,17 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// (Sec-Fetch-Mode); anything older or hand-rolled says what it can
 	// render in Accept.
 	if !isNavigation(r) {
+		// A 404 with no cache directive is heuristically cacheable, and a
+		// stored one outlives the deploy that would have made the path
+		// real. Nothing about a miss is worth keeping.
+		w.Header().Set("Cache-Control", "no-store")
 		http.NotFound(w, r)
 		return
 	}
 	// SPA fallback: unknown paths and directories get the app shell so
 	// client-side routing can take over.
 	if !h.serveFile(w, r, "index.html") {
+		w.Header().Set("Cache-Control", "no-store")
 		http.Error(w, "index.html not found", http.StatusNotFound)
 	}
 }

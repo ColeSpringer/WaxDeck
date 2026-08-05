@@ -57,8 +57,29 @@ export default defineConfig({
     },
     {
       name: 'chromium',
-      testIgnore: [/first-run\.spec\.ts/, /editing-prototype\.spec\.ts/, /a11y-audit\.spec\.ts/],
+      testIgnore: [
+        /first-run\.spec\.ts/,
+        /editing-prototype\.spec\.ts/,
+        /a11y-audit\.spec\.ts/,
+        /radio-cast\.spec\.ts/,
+      ],
       dependencies: ['setup'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    // The two specs that write the preference document, kept off each
+    // other. `PUT /users/me/prefs` replaces the whole document and every
+    // writer builds its body from a snapshot it read earlier, so two of
+    // them in flight is last-writer-wins over fields neither meant to
+    // touch - settings.spec.ts says so and keeps to keys nobody else
+    // reads, which is not enough, because the clobbering is per document
+    // and not per key. The symptom was radio-cast pinning a station and
+    // watching the dial disappear under a settings write. Settings keeps
+    // the parallel wave (it is the only writer left in it) and radio
+    // runs after.
+    {
+      name: 'prefs-radio',
+      testMatch: /radio-cast\.spec\.ts/,
+      dependencies: ['chromium'],
       use: { ...devices['Desktop Chrome'] },
     },
     // Focus-sensitive specs run after the parallel wave, one at a
@@ -68,7 +89,7 @@ export default defineConfig({
     {
       name: 'focus-a11y',
       testMatch: /a11y-audit\.spec\.ts/,
-      dependencies: ['chromium'],
+      dependencies: ['prefs-radio'],
       use: { ...devices['Desktop Chrome'] },
     },
     {

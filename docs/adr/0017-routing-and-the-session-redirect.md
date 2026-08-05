@@ -92,11 +92,18 @@ adaptive shell replaces this builder later without touching the table.
 **`/prototype/editing` stays outside the session.** It is a rendering
 harness with no session of its own and the e2e suite opens it cold.
 
-**The web build keeps the default hash strategy for now.** Path URLs are
-a one-line change (`usePathUrlStrategy()`) plus reverse-proxy notes, and
-they are deliberately deferred to the end of the rewrite so months of
-`/#/...` links in bookmarks and share messages get a redirect shim
-rather than a break.
+**The web build kept the default hash strategy until the rewrite was
+done, then flipped to path URLs.** The flip is `usePathUrlStrategy()`
+behind a conditional import (`useWaxUrlStrategy`, a no-op off the web)
+plus reverse-proxy notes; it was deliberately held to the end so months
+of `/#/...` links in bookmarks and share messages got a shim rather than
+a break. The shim lives in `web/index.html` and runs before the engine
+boots, because a fragment never reaches the server and the page is the
+only thing that can see one: a `#/...` on the root path is rewritten
+into the path with `replaceState`, so an old link lands on the screen it
+names with no flash of home and no second navigation, and a fragment
+pasted into an already-open tab reloads onto the rewritten path. It is
+kept through v1.
 
 ## Consequences
 

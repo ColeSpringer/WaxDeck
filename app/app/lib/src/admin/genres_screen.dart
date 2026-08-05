@@ -306,6 +306,7 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
         SectionHeader(
           title: 'Vocabulary',
           actionLabel: 'Add genre',
+          semanticsId: SemanticsIds.genreAdd,
           onAction: _busy ? null : _add,
         ),
         if (_genres.isEmpty)

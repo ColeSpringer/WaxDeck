@@ -112,11 +112,16 @@ test('an instant mix starts from any playing track', async ({ page, request }) =
   );
   await expect(page.getByText('Instant mix', { exact: true }).first()).toBeVisible();
   // The basis chip reports whichever engine answered; coverage may or
-  // may not have landed by the time this spec runs. The chip surfaces
-  // in the semantics tree as a checkbox named for the basis.
-  await expect(
-    page.getByRole('checkbox', { name: /^(metadata|sonic)$/ }),
-  ).toBeVisible();
+  // may not have landed by the time this spec runs. Since the rebuild
+  // onto the design system it is a labelled readout rather than the
+  // Material chip that announced itself as a checkbox - so the handle is
+  // generated, scoped to this screen rather than shared with the
+  // similar-tracks one, and matched by text: a plain labelled readout
+  // carries no role, so flutter puts its name in the node's text content
+  // and leaves aria-label off (a control's name would be the attribute).
+  await expect(page.locator(sem(SemanticsIds.mixBasis('mix')))).toHaveText(
+    /^Answered by the (metadata|sonic) engine$/,
+  );
 });
 
 test('sonic coverage answers similar tracks and a sonic path', async ({ request }) => {

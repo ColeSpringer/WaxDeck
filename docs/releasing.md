@@ -41,6 +41,48 @@ The tag, minus its `v` prefix, becomes the version everywhere:
   `app/app/pubspec.yaml` (a four-part number), so bump it there as
   part of preparing a release.
 
+## What the web bundle weighs
+
+The server binaries carry the web UI inside them (`-tags withweb`), so
+the bundle is both a download budget for browsers and a floor under the
+binary. Measured on Flutter 3.44, `make web`, WasmGC target:
+
+| First paint | Raw | gzip |
+|---|---|---|
+| `main.dart.wasm` (the app) | 5.31 MB | 1.84 MB |
+| `canvaskit/skwasm.wasm` (the renderer) | 3.42 MB | 1.46 MB |
+| Eager fonts (Archivo, Inter, Spline Sans Mono, two Phosphor subsets) | 1.33 MB | 615 KB |
+| Loader, glue, manifests, `index.html` | 145 KB | 41 KB |
+| **Total** | **10.2 MB** | **3.95 MB** |
+
+Nothing else is fetched to draw the first screen. What is on disk and
+not in that total:
+
+- **`main.dart.js`, 5.76 MB** (1.51 MB gzipped). The JS fallback for
+  browsers without WasmGC, fetched *instead of* the wasm, never beside
+  it.
+- **The rest of `canvaskit/`, 33 MB.** Every renderer variant Flutter
+  ships - CanvasKit, the Chromium build, the multi-threaded
+  `skwasm_heavy`, WIMP, and the `.symbols` files for each. One is
+  loaded; the loader picks it, and the app pins single-threaded skwasm
+  (see the deferred-work entry on flutter/flutter#190039). They are
+  embedded because the engine resolves them at runtime from this origin
+  and a LAN-only instance cannot reach Google's CDN.
+- **On-demand fonts.** Noto Sans CJK 15.7 MB, Arabic 598 KB, Thai
+  89 KB, Hebrew 32 KB - fetched only when metadata in those scripts
+  appears on screen. CJK is unsubset by decision (ADR-0016): a curated
+  core still renders tofu for names outside it.
+- **`NOTICES`, 1.49 MB**, fetched only if somebody opens the licence
+  page.
+
+The whole embedded tree is 67.5 MB, which is what a server binary
+gains from `-tags withweb`. Note that WaxDeck serves these
+uncompressed; a reverse proxy that compresses is worth roughly the
+gzip column on every cold load.
+
+Re-measure when the engine version moves, when a font joins the eager
+chain, or when the single-threaded skwasm force is lifted.
+
 ## After the workflow finishes
 
 Package-channel manifests are updated by hand per release; the

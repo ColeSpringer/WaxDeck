@@ -118,6 +118,29 @@ Local accounts keep working alongside; group-based role mapping is
 available via `WAXDECK_OIDC_GROUPS_CLAIM` and
 `WAXDECK_OIDC_ADMIN_GROUP`.
 
+## Every screen has an address
+
+Screens in the web UI are real paths, so anything you are looking at
+can be bookmarked, pasted into a chat, or typed by hand:
+`/music/albums`, `/podcasts/pc-01J.../episodes/ep-01J...`,
+`/settings/playback`, `/admin/backups`. Opening one signed out sends
+you to the login form and then on to where you were going.
+
+Overlays are the exception, and only in one direction: opening the
+player, the queue, the visualizer, or car mode from inside the app does
+not move the address bar, because each is a layer over the page you were
+on rather than a page of its own. Typed or reloaded they still resolve -
+`/now-playing` and `/queue` open on whatever is playing.
+
+The one thing that genuinely cannot be reopened is a computed answer: an
+instant mix or a similar-tracks list is held in memory and has no id to
+put in a URL, so `/tracks` sends you home rather than showing an empty
+screen.
+
+Links from before this changed carried the location in a `#` fragment
+(`/#/music/albums`). Those still work: the page rewrites them into the
+path before the app starts.
+
 ## Uploads and acquiring from YouTube
 
 WaxDeck can bring new audio into the library two ways, both of which

@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import '../artwork/artwork_box.dart';
-import '../media_icons.dart';
+import '../artwork/artwork_providers.dart';
+import '../media_view.dart';
 import '../player/now_playing_controller.dart';
 import '../queue/queue_state.dart';
 import '../shell/routes.dart';
@@ -13,7 +13,7 @@ import '../shell/semantics_ids.dart';
 /// A computed list of playable tracks (an instant mix or a
 /// similar-tracks answer) in play order, with the answering engine
 /// shown as a basis chip. Rows play on tap, like library rows.
-class TrackListScreen extends StatelessWidget {
+class TrackListScreen extends ConsumerWidget {
   const TrackListScreen({
     super.key,
     required this.title,
@@ -26,110 +26,96 @@ class TrackListScreen extends StatelessWidget {
   final MixBasis basis;
   final List<ItemSummary> items;
 
-  /// Prefix for the rows' Semantics identifiers and keys.
+  /// Scope for this screen's Semantics identifiers - the rows and the
+  /// basis readout alike. A mix and a similar-tracks answer are both
+  /// this screen, so an unscoped handle would let a spec that opened
+  /// the wrong one pass anyway.
   final String idPrefix;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Chip(
-              key: const Key('discovery-basis'),
-              avatar: Icon(
-                basis == MixBasis.sonic
-                    ? Icons.graphic_eq
-                    : Icons.library_music_outlined,
-                size: 18,
-              ),
-              label: Text(basis.wireName),
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          Expanded(
-            child: items.isEmpty
-                ? const Center(child: Text('Nothing found'))
-                : ListView.builder(
-                    itemCount: items.length,
-                    itemBuilder: (context, index) => _TrackRow(
-                      idPrefix: idPrefix,
-                      index: index,
-                      items: items,
-                      title: title,
-                    ),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TrackRow extends ConsumerWidget {
-  const _TrackRow({
-    required this.idPrefix,
-    required this.index,
-    required this.items,
-    required this.title,
-  });
-
-  final String idPrefix;
-  final int index;
-
-  /// The whole answer, in the order it is shown: tapping a row plays it
-  /// from there, so the rest of the list is the queue.
-  final List<ItemSummary> items;
-
-  /// The list's own name, which is what the queue was built from.
-  final String title;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final item = items[index];
-    final colorScheme = Theme.of(context).colorScheme;
-    final artUrl = item.artUrl;
-    final placeholder = ColoredBox(
-      color: colorScheme.surfaceContainerHighest,
-      child: Icon(
-        mediaFallbackIcon(item.mediaType),
-        color: colorScheme.onSurfaceVariant,
-      ),
-    );
-    return Semantics(
-      identifier: SemanticsIds.scopedItem(idPrefix, index),
-      label: item.artist == null
-          ? item.title
-          : '${item.title} by ${item.artist}',
-      button: true,
-      child: ListTile(
-        key: Key(SemanticsIds.scopedItem(idPrefix, index)),
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: SizedBox(
-            width: 48,
-            height: 48,
-            child: ArtworkBox(artUrl: artUrl, placeholder: placeholder),
+    final store = ref.watch(artworkStoreProvider);
+    return WaxScaffold(
+      title: title,
+      largeTitle: false,
+      // An answer has no location of its own (it rides an in-memory
+      // payload), so there is nothing under it on a cold open: home is
+      // where a dropped stack lands.
+      onBack: () => context.leave(fallback: WaxRoute.home),
+      slivers: <Widget>[
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              WaxSpace.s16,
+              WaxSpace.s12,
+              WaxSpace.s16,
+              WaxSpace.s4,
+            ),
+            // Which engine answered, in the words the contract uses. A
+            // chip rather than a subtitle: it is a property of the
+            // answer, not part of its name. The wire word is drawn and
+            // the sentence is spoken - "sonic" alone says nothing aloud.
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Semantics(
+                identifier: SemanticsIds.mixBasis(idPrefix),
+                label: 'Answered by the ${basis.wireName} engine',
+                excludeSemantics: true,
+                child: CodecChip(
+                  basis.wireName,
+                  emphasis: basis == MixBasis.sonic,
+                ),
+              ),
+            ),
           ),
         ),
-        title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: item.artist == null
-            ? null
-            : Text(item.artist!, maxLines: 1, overflow: TextOverflow.ellipsis),
-        onTap: () {
-          ref
-              .read(nowPlayingProvider.notifier)
-              .play(
-                items,
-                source: QueueSource(kind: QueueSourceKind.mix, label: title),
-                startIndex: index,
+        if (items.isEmpty)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              glyph: WaxIcons.music,
+              title: 'Nothing found',
+              message: 'This answer came back empty. Try another track.',
+            ),
+          )
+        else
+          SliverList.builder(
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return MediaListRow(
+                data: MediaTileData(
+                  title: item.title,
+                  subtitle: item.artist,
+                  artwork: waxArtwork(store, item.artUrl),
+                  domain: waxDomainOf(item.mediaType),
+                  shape: waxShapeOf(item.mediaType),
+                  trailingText: formatTimecode(
+                    Duration(milliseconds: item.durationMs),
+                  ),
+                  // Addressed by position: this is a running order, and
+                  // the same item can answer more than one mix.
+                  semanticsId: SemanticsIds.scopedItem(idPrefix, index),
+                ),
+                // Tapping a row plays the answer from there, so the rest
+                // of the list is the queue.
+                onTap: () {
+                  ref
+                      .read(nowPlayingProvider.notifier)
+                      .play(
+                        items,
+                        source: QueueSource(
+                          kind: QueueSourceKind.mix,
+                          label: title,
+                        ),
+                        startIndex: index,
+                      );
+                  context.push(WaxRoute.nowPlaying);
+                },
               );
-          context.push(WaxRoute.nowPlaying);
-        },
-      ),
+            },
+          ),
+      ],
     );
   }
 }

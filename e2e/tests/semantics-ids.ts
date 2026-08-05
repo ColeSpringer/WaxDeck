@@ -45,7 +45,6 @@ export const SemanticsIds = {
   inviteRevoke: (id: string | number) => `invite-revoke-${id}`,
   inviteRow: (id: string | number) => `invite-row-${id}`,
   inviteToken: 'invite-token',
-  libraryAdd: 'library-add',
   libraryDetail: (id: string | number) => `library-detail-${id}`,
   libraryManaged: 'library-managed',
   libraryMatching: (id: string | number) => `library-matching-${id}`,
@@ -228,6 +227,7 @@ export const SemanticsIds = {
   // discovery: Instant mixes, similar tracks, and the track lists they open.
   instantMixRun: 'instant-mix-run',
   mixAdventurousness: 'mix-adventurousness',
+  mixBasis: (scope: string | number) => `${scope}-basis`,
   scopedItem: (scope: string | number, index: string | number) => `${scope}-item-${index}`,
 
   // downloads: The downloads manager: what this device holds and the transfers in flight.

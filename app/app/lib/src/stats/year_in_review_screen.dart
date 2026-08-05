@@ -1,19 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
-import 'package:waxdeck_ui/waxdeck_ui.dart'
-    show
-        FilterChipRow,
-        WaxButton,
-        WaxButtonKind,
-        WaxColors,
-        WaxFilterChip,
-        WaxIconButton,
-        WaxIcons,
-        WaxScaffold,
-        WaxSizeClass,
-        WaxSpace,
-        WaxType;
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -160,32 +147,32 @@ class _PersonalRecap extends ConsumerWidget {
                     spacing: 24,
                     runSpacing: 12,
                     children: [
-                      StatTile(
+                      StatFigure(
                         keyName: 'yir-total',
                         value: formatListenTime(value.totalMs),
                         label: 'listened',
                       ),
-                      StatTile(
+                      StatFigure(
                         keyName: 'yir-sessions',
                         value: '${value.sessions}',
                         label: 'sessions',
                       ),
-                      StatTile(
+                      StatFigure(
                         keyName: 'yir-distinct',
                         value: '${value.distinctItems}',
                         label: 'different things played',
                       ),
-                      StatTile(
+                      StatFigure(
                         keyName: 'yir-new',
                         value: '${value.newInLibrary}',
                         label: 'new in the library',
                       ),
-                      StatTile(
+                      StatFigure(
                         keyName: 'yir-streak',
                         value: '${value.longestStreakDays} days',
                         label: 'longest streak',
                       ),
-                      StatTile(
+                      StatFigure(
                         keyName: 'yir-saved',
                         value: formatListenTime(value.timeSavedMs),
                         label: 'time saved',
@@ -258,17 +245,17 @@ class _ServerRecap extends ConsumerWidget {
                     spacing: 24,
                     runSpacing: 12,
                     children: [
-                      StatTile(
+                      StatFigure(
                         keyName: 'yir-participants',
                         value: '${value.participants}',
                         label: 'listeners counted in',
                       ),
-                      StatTile(
+                      StatFigure(
                         keyName: 'yir-server-total',
                         value: formatListenTime(value.totalMs),
                         label: 'listened together',
                       ),
-                      StatTile(
+                      StatFigure(
                         keyName: 'yir-server-sessions',
                         value: '${value.sessions}',
                         label: 'sessions',

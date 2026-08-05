@@ -272,17 +272,34 @@ export async function openMusicSection(page: Page) {
 // pid. Home is shelves now, and a shelf is a dozen cards drawn from a
 // list rather than an enumeration, so a spec that wants one known track
 // comes here - which is what the deleted library grid was doing for it.
+//
+// **Call this from the shell, not from over it.** It walks the chrome,
+// so the nav has to be on screen: with the player, the queue, the
+// visualizer or car mode pushed on top, the route is opaque and the
+// chrome's handles are gone from the semantics tree, and both clicks
+// below would spend their full retry budget finding nothing. Leave the
+// pushed route first. (The `goto` this replaced worked from anywhere,
+// and would still - by restarting the app, which is the whole reason it
+// is gone.)
 export async function itemRow(page: Page, pid: string): Promise<Locator> {
   const row = page.locator(sem(SemanticsIds.item(pid)));
   if (await row.count()) return row;
-  // The chrome first. Several callers reach here straight off a login
-  // click, and a goto issued while that request is in flight aborts it -
-  // the app never signs in and the row never arrives, which reads as a
-  // missing track rather than as a cancelled login.
-  await page
-    .locator(sem(SemanticsIds.navDestination('music')))
-    .waitFor({ timeout: 30_000 });
-  await page.goto('/#/music/tracks');
+  // Walked through the chrome rather than reached by `goto`, which since
+  // the path-URL flip is a real page load: every caller arrives here with
+  // an app it has already set up - just signed in, sometimes already
+  // playing - and a reload throws that instance away and boots a new one
+  // over whatever was in flight. Under the old fragment strategy the same
+  // call was a same-document hop and cost nothing, which is why it was
+  // written this way. Two clicks, each retried as a unit, land on the
+  // same index.
+  await clickThrough(
+    page.locator(sem(SemanticsIds.navDestination('music'))),
+    page.locator(sem(SemanticsIds.musicTile('tracks'))),
+  );
+  await clickThrough(
+    page.locator(sem(SemanticsIds.musicTile('tracks'))),
+    row,
+  );
   await row.waitFor({ timeout: 30_000 });
   return row;
 }

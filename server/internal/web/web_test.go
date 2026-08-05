@@ -143,6 +143,51 @@ func TestShellAnswersNavigationsOnly(t *testing.T) {
 	}
 }
 
+// A path the client owns is answered two ways depending on how it was
+// asked for, so a cache in front of WaxDeck has to be told. Without
+// this, one shared cache entry keyed on the URL alone serves the shell
+// to a font loader or a stored 404 to a real deep link - and the
+// reverse-proxy guide's whole premise is that operators put something in
+// front.
+func TestNegotiatedAnswersVaryAndMissesAreNotStored(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"),
+		[]byte("<html><title>WaxDeck shell</title></html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(Handler(dir))
+	defer ts.Close()
+
+	// Both answers for one client-owned location.
+	nav := get(t, ts.URL+"/music/albums/al-01JQZX", map[string]string{"Sec-Fetch-Mode": "navigate"})
+	nav.Body.Close()
+	sub := get(t, ts.URL+"/music/albums/al-01JQZX", map[string]string{"Sec-Fetch-Mode": "no-cors"})
+	sub.Body.Close()
+
+	if nav.StatusCode != 200 || sub.StatusCode != 404 {
+		t.Fatalf("negotiation broke: navigation %d, subresource %d", nav.StatusCode, sub.StatusCode)
+	}
+	for _, resp := range []*http.Response{nav, sub} {
+		if got := resp.Header.Get("Vary"); !strings.Contains(got, "Sec-Fetch-Mode") ||
+			!strings.Contains(got, "Accept") {
+			t.Errorf("Vary = %q, want both negotiated headers named", got)
+		}
+	}
+	// A miss must not be stored: a deploy makes the path real, and a
+	// cached 404 would outlive it.
+	if got := sub.Header.Get("Cache-Control"); got != "no-store" {
+		t.Errorf("miss Cache-Control = %q, want no-store", got)
+	}
+
+	// A real file is the same bytes however it was asked for, so it keeps
+	// its revalidating cache entry and needs no Vary of its own.
+	asset := get(t, ts.URL+"/index.html", nil)
+	asset.Body.Close()
+	if got := asset.Header.Get("Cache-Control"); got != "no-cache" {
+		t.Errorf("file Cache-Control = %q, want no-cache", got)
+	}
+}
+
 func TestConditionalRequestsRevalidate(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"),

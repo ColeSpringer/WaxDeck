@@ -39,13 +39,13 @@ test('the music hub opens an index, and a bucket is its own location', async ({
     page.locator(sem(SemanticsIds.navDestination('music'))),
     page.locator(sem(SemanticsIds.musicTile('artists'))),
   );
-  await expect(page).toHaveURL(/#\/music$/);
+  await expect(page).toHaveURL(/\/music$/);
 
   await clickThrough(
     page.locator(sem(SemanticsIds.musicTile('artists'))),
     page.locator(sem(SemanticsIds.indexBucket(0))),
   );
-  await expect(page).toHaveURL(/#\/music\/artists$/);
+  await expect(page).toHaveURL(/\/music\/artists$/);
 
   // Artists lead A to Z, which is the only order the rail is honest
   // over, so it is drawn beside them.
@@ -57,7 +57,7 @@ test('the music hub opens an index, and a bucket is its own location', async ({
     page.locator(sem(SemanticsIds.indexBucket(0))),
     page.locator(sem(SemanticsIds.indexItem(0))),
   );
-  await expect(page).toHaveURL(/#\/music\/artists\/ar-/);
+  await expect(page).toHaveURL(/\/music\/artists\/ar-/);
   const shared = page.url();
 
   // And a reload lands back on the same list, which is what a shared
@@ -75,7 +75,7 @@ test('the sort toggle swaps the index order and the rail with it', async ({
   await waitForLibrary(request, token);
   await login(page);
 
-  await page.goto('/#/music/artists');
+  await page.goto('/music/artists');
   await page.locator(sem(SemanticsIds.indexBucket(0))).waitFor({ timeout: 30_000 });
   await expect(page.locator(sem(SemanticsIds.indexRail))).toBeVisible();
 
@@ -112,7 +112,7 @@ test('search answers a typed query and opens what it finds', async ({
     page.locator(sem(SemanticsIds.searchLauncher)),
     page.locator(sem(SemanticsIds.searchField)),
   );
-  await expect(page).toHaveURL(/#\/search$/);
+  await expect(page).toHaveURL(/\/search$/);
 
   await typeInto(page, page.getByRole('textbox', { name: 'Search' }), 'Alpha');
   await page.locator(sem(SemanticsIds.searchHit('tracks', 0))).waitFor({ timeout: 30_000 });
@@ -146,5 +146,5 @@ test('playlists is reachable from the music section at sidebar width', async ({
     page.locator(sem(SemanticsIds.navDestination('playlists'))),
     page.locator(sem(SemanticsIds.playlistAdd)),
   );
-  await expect(page).toHaveURL(/#\/playlists$/);
+  await expect(page).toHaveURL(/\/playlists$/);
 });

@@ -43,7 +43,7 @@ const anyItemRow = (page: Page): Locator =>
 // through the chrome where nothing is playing, which is every use but
 // the playing-scroll scenario's second visit.
 async function openTracks(page: Page): Promise<void> {
-  await page.goto(base + '/#/music/tracks');
+  await page.goto(base + '/music/tracks');
   await anyItemRow(page).waitFor({ timeout: 60_000 });
 }
 
@@ -190,14 +190,14 @@ test.describe('large-library web gate', () => {
 
       console.log(`perf-web index verdicts against ${base}`);
 
-      await page.goto(base + '/#/music/artists');
+      await page.goto(base + '/music/artists');
       await page.locator(sem(SemanticsIds.indexBucket(0))).waitFor({ timeout: 60_000 });
       const artists = await measureScrollPacing(page);
       reportScrollPacing('artist index', artists);
 
       // Albums are the same list shape carrying the artwork load the
       // artist index does not.
-      await page.goto(base + '/#/music/albums');
+      await page.goto(base + '/music/albums');
       await page.locator(sem(SemanticsIds.indexBucket(0))).waitFor({ timeout: 60_000 });
       const albums = await measureScrollPacing(page);
       reportScrollPacing('album index', albums);
@@ -228,6 +228,14 @@ test.describe('large-library web gate', () => {
     await waitForCorpus(() => playwright.request.newContext({ baseURL: base }));
     await measuring(browser, async (page) => {
       await login(page);
+      // The chrome first, as the index scenarios do: `login` ends on the
+      // click and awaits nothing, and `openTracks` navigates for real
+      // since the path-URL flip - issued while the login POST is in
+      // flight it cancels it, the app boots signed out, and this reads as
+      // a blown perf budget rather than as a cancelled login.
+      await page
+        .locator(sem(SemanticsIds.navDestination('music')))
+        .waitFor({ timeout: 60_000 });
       await openTracks(page);
 
       // Opening an item plays it and raises the deck bar.

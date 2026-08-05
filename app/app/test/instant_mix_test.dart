@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -40,11 +39,11 @@ void main() {
 
     // The sheet: slide fully right for maximum adventurousness, then mix.
     await tester.drag(
-      find.byKey(const Key('mix-adventurousness')),
+      find.bySemanticsIdentifier(SemanticsIds.mixAdventurousness),
       const Offset(400, 0),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('instant-mix-run')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMixRun));
     await tester.pumpAndSettle();
 
     expect(repo.instantMixCalls, hasLength(1));
@@ -63,7 +62,10 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerBack));
     await tester.pumpAndSettle();
     expect(find.text('Instant mix'), findsOneWidget);
-    expect(find.byKey(const Key('mix-item-1')), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.scopedItem('mix', 1)),
+      findsOneWidget,
+    );
     await harness.endPlayback(tester);
   });
 
@@ -89,11 +91,11 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMix));
     await tester.pumpAndSettle();
     await tester.drag(
-      find.byKey(const Key('mix-adventurousness')),
+      find.bySemanticsIdentifier(SemanticsIds.mixAdventurousness),
       const Offset(400, 0),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('instant-mix-run')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMixRun));
     await tester.pumpAndSettle();
 
     // Back out of the mix player and list, then open the sheet again.
@@ -105,7 +107,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMix));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('instant-mix-run')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMixRun));
     await tester.pumpAndSettle();
 
     expect(repo.instantMixCalls, hasLength(2));
@@ -130,11 +132,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMix));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('instant-mix-run')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.instantMixRun));
     await tester.pumpAndSettle();
 
     expect(find.text('No mix available for this track'), findsOneWidget);
-    expect(find.byKey(const Key('discovery-basis')), findsNothing);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.mixBasis('mix')),
+      findsNothing,
+    );
     await harness.endPlayback(tester);
   });
 }

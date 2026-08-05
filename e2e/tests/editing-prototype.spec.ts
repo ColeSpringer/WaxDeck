@@ -12,7 +12,7 @@ test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/#/prototype/editing');
+  await page.goto('/prototype/editing');
   await page.locator(sem(SemanticsIds.protoTable)).waitFor({ timeout: 30_000 });
 });
 

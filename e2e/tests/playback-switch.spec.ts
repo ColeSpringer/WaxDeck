@@ -41,7 +41,7 @@ test('switching tracks mid-play fetches the new media', async ({ page, request }
   await page
     .locator(sem(SemanticsIds.navDestination('music')))
     .waitFor({ timeout: 30_000 });
-  await page.goto('/#/music/tracks');
+  await page.goto('/music/tracks');
   const rows = page.locator('[flt-semantics-identifier^="item-tr-"]');
   await rows.nth(1).waitFor({ timeout: 30_000 });
   const rowIds = (await rows.evaluateAll((els) =>

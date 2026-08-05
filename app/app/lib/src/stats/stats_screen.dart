@@ -95,12 +95,12 @@ class _ListeningSection extends ConsumerWidget {
             spacing: WaxSpace.s32,
             runSpacing: WaxSpace.s12,
             children: <Widget>[
-              StatTile(
+              StatFigure(
                 keyName: 'stats-total',
                 value: formatListenTime(value.totalMs),
                 label: 'listened',
               ),
-              StatTile(
+              StatFigure(
                 keyName: 'stats-sessions',
                 value: '${value.sessions}',
                 label: 'sessions',
@@ -108,7 +108,7 @@ class _ListeningSection extends ConsumerWidget {
               // The general claim, now that it is true: the client
               // counts what playing faster saved as well as what
               // trimming skipped, so the honest word is the plain one.
-              StatTile(
+              StatFigure(
                 keyName: 'stats-saved',
                 value: formatListenTime(value.timeSavedMs),
                 label: 'time saved',
@@ -193,8 +193,12 @@ class _ListeningSection extends ConsumerWidget {
 }
 
 /// One headline number with its caption underneath.
-class StatTile extends StatelessWidget {
-  const StatTile({
+///
+/// Not the design system's `StatTile`, which is a bordered console card
+/// with a glyph and somewhere to go; this is the bare figure a row of
+/// them is built from, and the listener's stats want the row.
+class StatFigure extends StatelessWidget {
+  const StatFigure({
     super.key,
     required this.keyName,
     required this.value,

@@ -1,5 +1,13 @@
 import { test, expect, Page, APIRequestContext } from './fixtures';
-import { authed, chooseFromMenu, clickThrough, ensureAdmin, itemRow, loginAsAdmin } from './helpers';
+import {
+  authed,
+  chooseFromMenu,
+  clickInView,
+  clickThrough,
+  ensureAdmin,
+  itemRow,
+  loginAsAdmin,
+} from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The radio slice and the Connect surfaces over the real stack: a station
@@ -181,8 +189,12 @@ test.describe.serial('radio and cast', () => {
 
     // Tuning in through the dial takes the engine: the deck bar picks the
     // station up, with a live pill and stop rather than pause.
-    await page.locator(sem(SemanticsIds.radioTune)).click({ force: true });
+    // Same treatment: the dial has just appeared and settles into place,
+    // so its control is a moving target for one forced click.
     const bar = page.locator(sem(SemanticsIds.deckBar));
+    await clickInView(page, page.locator(sem(SemanticsIds.radioTune)), {
+      settled: bar,
+    });
     await bar.waitFor({ timeout: 30_000 });
     // The station's name is in the bar's accessible name, not in its text:
     // the title block is excluded from semantics so the bar announces once
@@ -301,9 +313,16 @@ test.describe.serial('radio and cast', () => {
     // every canvas-rendered click in this suite: a semantics node laid
     // over the content pane reports itself as intercepting the pointer,
     // and playwright's actionability check believes it.
-    await page
-      .locator(sem(SemanticsIds.playerBack))
-      .click({ force: true });
+    // Through clickInView, which re-reads the rect on every attempt: the
+    // player animates in from below and this fires the moment its
+    // transport resolves, so a single forced click against a box read
+    // then lands on whatever has slid into that spot - and with no retry
+    // the step just waits out a deck bar that never comes. `settled` is
+    // the bar itself, so a click that did land is never repeated into a
+    // second pop.
+    await clickInView(page, page.locator(sem(SemanticsIds.playerBack)), {
+      settled: page.locator(sem(SemanticsIds.deckBar)),
+    });
     await page.locator(sem(SemanticsIds.deckBar)).waitFor({ timeout: 30_000 });
 
     await clickThrough(

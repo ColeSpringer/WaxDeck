@@ -3,6 +3,7 @@ import {
   ADMIN_PASS,
   ADMIN_USER,
   authed,
+  clickInView,
   clickThrough,
   ensureAdmin,
   typeInto,
@@ -161,7 +162,21 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   // session seeks over the lead silence, which is the observable proof
   // the jump happened (positions stay honest, so only the counter can
   // tell trimmed playback from ordinary playback this quickly).
-  await clickThrough(episodeRow, page.locator(sem(SemanticsIds.playerToggle)));
+  // clickInView, not clickThrough: an episode row sits directly under
+  // the filter chips, and a forced click against a rect read while the
+  // list was still settling lands on a chip instead. Selecting
+  // "Downloaded" there removes the episode the click was aimed at, so
+  // every retry then clicks a row that is no longer in the list and the
+  // step spins out its whole budget. clickInView re-reads the box each
+  // attempt and refuses to click until it is fully in view.
+  await clickInView(page, episodeRow, {
+    // The list scrolls under a fixed header, so a row past the first is
+    // below the fold; the search field is a stable place inside the same
+    // scroll view to put the cursor before wheeling.
+    surface: page.locator(sem(SemanticsIds.showEpisodeSearch)),
+    settled: page.locator(sem(SemanticsIds.playerToggle)),
+  });
+  await page.locator(sem(SemanticsIds.playerToggle)).waitFor({ timeout: 30_000 });
   await expect(page.locator(sem(SemanticsIds.playerTrim))).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(sem(SemanticsIds.playerTrim))).toHaveAccessibleName(/saved/, {
     timeout: 30_000,
@@ -305,7 +320,12 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ pag
   await clickThrough(showTile, episodeList());
   const thirdRow = page.locator(sem(SemanticsIds.episode(third.pid)));
   await thirdRow.waitFor({ timeout: 30_000 });
-  await clickThrough(thirdRow, page.locator(sem(SemanticsIds.playerToggle)));
+  // Same hazard as the first play above, and the same answer.
+  await clickInView(page, thirdRow, {
+    surface: page.locator(sem(SemanticsIds.showEpisodeSearch)),
+    settled: page.locator(sem(SemanticsIds.playerToggle)),
+  });
+  await page.locator(sem(SemanticsIds.playerToggle)).waitFor({ timeout: 30_000 });
   const relayed = await request.get(`/api/v1/items/${third.pid}/play-info`, authed(token));
   expect(relayed.status(), 'a never-fetched episode still mints a URL').toBe(200);
   expect((await relayed.json()).url as string).toContain('/media/enclosure?');

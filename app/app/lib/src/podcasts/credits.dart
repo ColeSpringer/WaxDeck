@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 /// Renders `<podcast:person>` credits as a titled list of names with their

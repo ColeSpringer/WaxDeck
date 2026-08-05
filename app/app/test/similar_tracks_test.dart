@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -37,7 +36,7 @@ void main() {
     expect(repo.similarTracksCalls.single.pid, _seedPid);
     expect(
       find.descendant(
-        of: find.byKey(const Key('discovery-basis')),
+        of: find.bySemanticsIdentifier(SemanticsIds.mixBasis('similar')),
         matching: find.text('sonic'),
       ),
       findsOneWidget,
@@ -45,7 +44,13 @@ void main() {
     expect(find.text('Kindred Groove'), findsOneWidget);
 
     // Rows play like library rows.
-    await tester.tap(find.byKey(const Key('similar-item-0')));
+    // warnIfMissed: a row's identifier sits on its content region rather
+    // than on the whole row (MediaListRow says why), so the tap lands on
+    // the row's own handler and not on the node the finder matched.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.scopedItem('similar', 0)),
+      warnIfMissed: false,
+    );
     await tester.pumpAndSettle();
     expect(engine.loadedUrl, contains(_similarPid));
     expect(engine.playing, isTrue);
@@ -71,7 +76,7 @@ void main() {
 
     expect(
       find.descendant(
-        of: find.byKey(const Key('discovery-basis')),
+        of: find.bySemanticsIdentifier(SemanticsIds.mixBasis('similar')),
         matching: find.text('metadata'),
       ),
       findsOneWidget,

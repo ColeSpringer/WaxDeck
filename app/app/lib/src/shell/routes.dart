@@ -9,9 +9,11 @@ import '../settings/settings_registry.dart';
 ///
 /// Screens never type a path literal: they call these constants and
 /// builders, so renaming a route is a single edit and the compiler finds
-/// the callers. Paths follow the route map in the UI plan; the web build
-/// keeps Flutter's default hash strategy for now, so these read as
-/// `/#/podcasts/pc-...` in the address bar until the path-URL flip.
+/// the callers. Paths follow the route map in the UI plan, and the web
+/// build puts them in the path rather than the fragment
+/// (`useWaxUrlStrategy`), so a location reads as
+/// `/podcasts/pc-...` in the address bar and is the same string a
+/// stranger can open.
 abstract final class WaxRoute {
   /// The signed-in landing surface (the library grid today).
   static const home = '/';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'entity_play_state_controller.dart';

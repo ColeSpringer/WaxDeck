@@ -27,6 +27,12 @@ import { SemanticsIds, sem } from './semantics-ids';
 // last-writer-wins race that clears the other one's field - and the
 // loser is whichever poll is still watching for it. Same hazard, and the
 // same answer, as admin-ops.spec.ts's server-global switches.
+//
+// Key disjointness is not the protection it reads as, for that same
+// reason: the clobbering is per document. The other writer is
+// radio-cast.spec.ts (radio favourites), and it is in a project of its
+// own after this wave rather than beside it - see playwright.config.ts.
+// Anything new that writes prefs belongs there too.
 
 async function openSettings(page: Page) {
   await loginAsAdmin(page, page.locator(sem(SemanticsIds.navDestination('music'))));

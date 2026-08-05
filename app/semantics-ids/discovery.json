@@ -3,6 +3,7 @@
   "ids": {
     "instantMixRun": "instant-mix-run",
     "mixAdventurousness": "mix-adventurousness",
+    "mixBasis": "{scope}-basis",
     "scopedItem": "{scope}-item-{index}"
   }
 }

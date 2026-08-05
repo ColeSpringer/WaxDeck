@@ -68,7 +68,7 @@ test('a shelf\'s Show all opens the enumeration behind it', async ({
   // is why the click is answered by where it actually went rather than
   // by waiting out an enumeration that was never coming.
   const showAll = page.locator(sem(SemanticsIds.shelfAll('recent')));
-  const tracks = /#\/music\/tracks$/;
+  const tracks = /\/music\/tracks$/;
   const anyItem = page
     .locator(`[flt-semantics-identifier^="${SemanticsIds.item('')}"]`)
     .first();
@@ -79,8 +79,15 @@ test('a shelf\'s Show all opens the enumeration behind it', async ({
     // home out from under it is the one thing this must not do.
     if (!tracks.test(page.url())) {
       // Home first where the last attempt left the app somewhere with no
-      // handle on it; the handle only exists here.
-      if (!(await showAll.isVisible())) await page.goto('/#/');
+      // handle on it; the handle only exists here. Since the path-URL
+      // flip this is a whole engine reboot rather than a route change, so
+      // the shelf is waited for rather than clicked at on a five-second
+      // budget - otherwise every recovery spends an attempt proving the
+      // app had not finished starting.
+      if (!(await showAll.isVisible())) {
+        await page.goto('/');
+        await showAll.waitFor({ timeout: 30_000 });
+      }
       await showAll.click({ timeout: 5_000, force: true });
       await expect(page).toHaveURL(tracks, { timeout: 5_000 });
     }
@@ -116,7 +123,7 @@ test('the account menu is in the app bar and still reaches settings', async ({
     account,
     page.locator(sem(SemanticsIds.navDestination('settings'))),
   );
-  await expect(page).toHaveURL(/#\/settings$/);
+  await expect(page).toHaveURL(/\/settings$/);
 });
 
 test('the shares list is a location under settings', async ({
@@ -128,14 +135,14 @@ test('the shares list is a location under settings', async ({
 
   // Opened from the Account section's own row, which goes rather than
   // pushes now that the location is declared beneath settings.
-  await page.goto('/#/settings/account');
+  await page.goto('/settings/account');
   await clickThrough(
     page.locator(sem(SemanticsIds.openShareLinks)),
     page.locator(sem(SemanticsIds.sharesEmpty)).or(
       page.locator(`[flt-semantics-identifier^="share-row-"]`).first(),
     ),
   );
-  await expect(page).toHaveURL(/#\/settings\/shares$/);
+  await expect(page).toHaveURL(/\/settings\/shares$/);
 
   // And a stranger opening the link cold gets the page with settings
   // underneath it, which is the whole point of the re-homing.
@@ -145,5 +152,5 @@ test('the shares list is a location under settings', async ({
       page.locator(`[flt-semantics-identifier^="share-row-"]`).first(),
     ),
   ).toBeVisible({ timeout: 30_000 });
-  expect(page.url()).toMatch(/#\/settings\/shares$/);
+  expect(page.url()).toMatch(/\/settings\/shares$/);
 });

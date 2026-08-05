@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
@@ -8,10 +8,15 @@ import 'src/artwork/artwork_providers.dart';
 import 'src/auto/media_session_init.dart';
 import 'src/desktop/desktop_ports_io.dart'
     if (dart.library.js_interop) 'src/desktop/desktop_ports_stub.dart';
+import 'src/shell/url_strategy/url_strategy.dart';
 import 'src/sync/refresh_pacing.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Before the router reads the launch location: the web build's
+  // locations live in the path, so this has to be set before anything
+  // parses one. No-op off the web.
+  useWaxUrlStrategy();
   // Before anything can decode a cover: this app draws grids of them,
   // and the framework's defaults are sized for apps that draw a few.
   applyArtworkImageCacheBounds();

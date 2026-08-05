@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter/services.dart';
 import '../shell/semantics_ids.dart';
 

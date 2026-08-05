@@ -45,7 +45,6 @@ abstract final class SemanticsIds {
   static String inviteRevoke(Object id) => 'invite-revoke-$id';
   static String inviteRow(Object id) => 'invite-row-$id';
   static const String inviteToken = 'invite-token';
-  static const String libraryAdd = 'library-add';
   static String libraryDetail(Object id) => 'library-detail-$id';
   static const String libraryManaged = 'library-managed';
   static String libraryMatching(Object id) => 'library-matching-$id';
@@ -229,6 +228,7 @@ abstract final class SemanticsIds {
   // discovery: Instant mixes, similar tracks, and the track lists they open.
   static const String instantMixRun = 'instant-mix-run';
   static const String mixAdventurousness = 'mix-adventurousness';
+  static String mixBasis(Object scope) => '$scope-basis';
   static String scopedItem(Object scope, Object index) => '$scope-item-$index';
 
   // downloads: The downloads manager: what this device holds and the transfers in flight.

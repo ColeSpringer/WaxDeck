@@ -98,6 +98,97 @@
   </div>
 
   <script>
+    // Hash-URL shim, kept through v1. WaxDeck served its locations as
+    // fragments until the path-URL flip, so months of `/#/music/albums/al-x`
+    // links live in bookmarks and share messages. A fragment never reaches
+    // the server, so this is the only place that can see one: rewrite it
+    // into the path before the engine boots and the router parses its
+    // launch location, and the old link lands on the screen it names with
+    // no flash of home and no second navigation.
+    //
+    // replaceState rather than a redirect: the entry the visitor arrived
+    // on is the one being corrected, so there is nothing to go back to.
+    (function () {
+      // Only `#/...` was ever a location; a bare `#` or an anchor-shaped
+      // fragment is somebody else's and is left alone.
+      //
+      // What comes back is resolved by the browser's own parser and
+      // refused unless it lands on this origin, which is the only check
+      // that cannot be out-spelled. `#//evil.example` is protocol-relative
+      // and would navigate off-site; `#/\evil.example` is the same attack,
+      // because the URL parser folds a backslash into a slash; a tab
+      // inside the path is stripped before resolution and can rebuild
+      // either. A self-hosted origin quietly bouncing its visitors
+      // somewhere else is what all of that adds up to, and it is the same
+      // rule the server applies to every redirect it is handed
+      // (`safeRedirectPath`, `server/internal/api/oidc.go`). Navigating to
+      // the parsed path rather than the raw string closes the loop: what
+      // is checked is what is used.
+      function pathFor(hash) {
+        if (hash.slice(0, 2) !== '#/') return null;
+        var url;
+        try {
+          url = new URL(hash.slice(1), window.location.origin);
+        } catch (e) {
+          return null;
+        }
+        if (url.origin !== window.location.origin) return null;
+        return url.pathname + url.search;
+      }
+      // Carries a query that sat before the fragment
+      // (`/?ref=x#/music/albums`) across the rewrite, so this is a change
+      // of form and not of content. Skipped where the fragment brought
+      // its own query, since merging two of them invites a collision for
+      // a shape nothing mints; the fragment's is the one that was part of
+      // the location.
+      function withSearch(path) {
+        var search = window.location.search;
+        return search && path.indexOf('?') < 0 ? path + search : path;
+      }
+      // A hash pasted into an already-open tab is a same-document
+      // navigation: no request, no reboot, and the engine ignores it under
+      // the path strategy. Reload onto the rewritten path so the link
+      // works from a running app too. The rewrite drops the fragment, so
+      // the reloaded page finds none and this cannot loop.
+      //
+      // The fragment is read off the event and not off `location`: the
+      // engine owns the URL under the path strategy and normalises a
+      // fragment it did not put there straight back off, synchronously,
+      // before this callback is reached - so by the time it runs
+      // `location.hash` is already empty. `newURL` is the snapshot taken
+      // when the event was made, which is the only copy left.
+      //
+      // No `withSearch` here, and the asymmetry is the point: a
+      // same-document hash change is one where the path and the query did
+      // not move, so whatever is in `location.search` belongs to the page
+      // being left rather than to the link being followed. A pasted link
+      // that does carry its own query differs in more than the fragment,
+      // which makes it a page load and sends it through the cold-load
+      // branch below.
+      window.addEventListener('hashchange', function (event) {
+        var url = (event && event.newURL) || window.location.href;
+        var at = url.indexOf('#');
+        var next = at < 0 ? null : pathFor(url.slice(at));
+        if (next) window.location.replace(next);
+      });
+
+      // Registered before the cold-load rewrite runs, so that anything
+      // unexpected thrown below leaves the in-tab half of the shim alive
+      // rather than taking it down with the page load that hit it.
+      var target = pathFor(window.location.hash);
+      // Only from the root: a fragment sitting on a real path is not a
+      // link this app ever minted, and rewriting it would throw the path
+      // away. The root is also the only place WaxDeck is served from -
+      // subpath hosting is unsupported by decision (docs/reverse-proxy.md)
+      // and `<base href>` above says so - which is what lets everything
+      // here treat a leading `/` as the whole story.
+      if (target && window.location.pathname === '/') {
+        window.history.replaceState(null, '', withSearch(target));
+      }
+    })();
+  </script>
+
+  <script>
     // Remove the skeleton when the engine has painted rather than on a
     // timer: a slow LAN should keep the mark on screen for exactly as
     // long as it actually takes.

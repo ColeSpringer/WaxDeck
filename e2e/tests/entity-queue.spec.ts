@@ -2,6 +2,7 @@ import { test, expect, Page } from './fixtures';
 import {
   ADMIN_PASS,
   ADMIN_USER,
+  clickInView,
   clickThrough,
   ensureAdmin,
   typeInto,
@@ -32,14 +33,14 @@ test('an album is its own location, and playing a row queues the album', async (
   await waitForLibrary(request, token);
   await login(page);
 
-  await page.goto('/#/music/albums');
+  await page.goto('/music/albums');
   await clickThrough(
     page.locator(sem(SemanticsIds.indexBucket(0))),
     page.locator(sem(SemanticsIds.entityPlay)),
   );
   // The album's own pid in the address bar: an entity screen, not a
   // filtered listing, at the location the index already handed over.
-  await expect(page).toHaveURL(/#\/music\/albums\/al-/);
+  await expect(page).toHaveURL(/\/music\/albums\/al-/);
   const shared = page.url();
 
   // And a reload lands back on it, which is what makes it a link.
@@ -63,14 +64,14 @@ test('an artist bucket opens the artist, not a filtered list', async ({
   await waitForLibrary(request, token);
   await login(page);
 
-  await page.goto('/#/music/artists');
+  await page.goto('/music/artists');
   await clickThrough(
     page.locator(sem(SemanticsIds.indexBucket(0))),
     page.locator(sem(SemanticsIds.entityShuffle)),
   );
   // The entity's own pid, and the entity's own screen behind it: the
   // header's verbs are what a listing at this location never had.
-  await expect(page).toHaveURL(/#\/music\/artists\/ar-/);
+  await expect(page).toHaveURL(/\/music\/artists\/ar-/);
   await expect(page.locator(sem(SemanticsIds.entityPlay))).toBeVisible();
 
   // The bucket the fixture library sorts first is an audiobook author,
@@ -90,7 +91,7 @@ test('the queue is a place, and it reorders and clears', async ({
   await login(page);
 
   // Something to queue: an album played from its first row.
-  await page.goto('/#/music/albums');
+  await page.goto('/music/albums');
   await clickThrough(
     page.locator(sem(SemanticsIds.indexBucket(0))),
     page.locator(sem(SemanticsIds.indexItem(0))),
@@ -100,10 +101,23 @@ test('the queue is a place, and it reorders and clears', async ({
     page.locator(sem(SemanticsIds.playerToggle)),
   );
 
-  // Opened by location rather than by the deck bar's control, which at
-  // this width toggles the panel: the queue's own screen is the compact
-  // answer, and it has to resolve for anyone who types it.
-  await page.goto('/#/queue');
+  // Opened from the player rather than from the deck bar, whose control
+  // at this width toggles the panel instead: over the shell there is no
+  // panel slot to use, so the player's own control pushes the queue's
+  // screen, which is the surface under test. Not by `goto` either, since
+  // the path-URL flip made that a real page load - it would restart the
+  // app and take the queue with it, which is the next assertion's job
+  // rather than this one's.
+  // clickInView rather than clickThrough, because this control is one
+  // small glyph in a row of them on a screen that animates in from
+  // below: a forced click against a rect read a moment earlier lands on
+  // the neighbour, and the neighbour is Discover, whose menu then covers
+  // the queue button so every retry clicks the barrier instead. Seen
+  // once. clickInView re-reads the box each attempt and refuses to click
+  // until it is fully in view.
+  await clickInView(page, page.locator(sem(SemanticsIds.playerQueue)), {
+    settled: page.locator(sem(SemanticsIds.queueShuffle)),
+  });
   await page.locator(sem(SemanticsIds.queueShuffle)).waitFor({ timeout: 30_000 });
 
   // It names where the queue came from, and what follows the current
@@ -116,4 +130,12 @@ test('the queue is a place, and it reorders and clears', async ({
   // blank.
   await page.locator(sem(SemanticsIds.queueClear)).click();
   await expect(page.getByText('Nothing queued')).toBeVisible({ timeout: 15_000 });
+
+  // And the location resolves for anyone who types it. Cold, on the web
+  // build, that is an empty queue: the queue persists to the local
+  // mirror and the web build has none, so a launch there offers the
+  // server's last session to resume rather than restoring a queue. The
+  // surface says so instead of going blank, which is the assertion.
+  await page.goto('/queue');
+  await expect(page.getByText('Nothing queued')).toBeVisible({ timeout: 30_000 });
 });

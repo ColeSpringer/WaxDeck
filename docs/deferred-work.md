@@ -135,6 +135,15 @@ here waits on upstream.
   a track playing alongside the plain tracks-index scenario. What is left
   is running it and recording the numbers.
 
+  **Still owed after the hardening phase, deliberately.** The phase that
+  scheduled this is the one that flipped the URL strategy, swept the
+  remnants, and recorded the bundle (`docs/releasing.md`); the run itself
+  is a multi-hour manual job on a half-gigabyte corpus whose result is
+  provisional while the skwasm force stands, which is the same reason it
+  was split off in the first place. The miss policy below was named
+  before the run so a red number is a decision rather than an argument,
+  and it still stands.
+
   The scenarios moved with the shelf home (ADR-0038): the landing wait is
   login-to-home, which is eight browse reads rather than one grid page,
   and every scroll scenario is over a listing rather than over the
@@ -205,6 +214,32 @@ here waits on upstream.
   desktop is mirroring through Connect. The binder reads local playback
   only, which is the honest half - "listening to" is a claim about this
   machine's ears - and a remote session is what the deck bar names.
+
+- `[hardware]` **The low-end validation pass has not run.** The overhaul's
+  performance section asks for one pass on a low-end Android device
+  profile and one against a Raspberry-Pi-class server before the work is
+  called done - startup, listing scroll, player open, palette extraction
+  timings. Neither device exists here: there is no Android hardware in
+  this environment and no ARM single-board machine, and an emulator on a
+  workstation prices the workstation. It is the same gate as the
+  real-device cast checklist and waits on the same thing. Whoever runs it
+  should take the web perf gate's corpus with them, since the two answer
+  adjacent questions.
+
+- `[in-repo]` **The artwork precacher is built, tested, and wired to
+  nothing.** `ArtworkPrecacher` warms the covers just past the viewport
+  when a scroll stops - batched three at a time, superseded by the next
+  call, never during a fling - and `artworkPrecacherProvider` scopes one
+  to the screen watching it. No screen watches it. The performance design
+  lists idle precache alongside the sized rungs and the bounded decodes
+  that did ship, so this is the one lever of that set that is still
+  potential rather than actual. What it needs is a caller: a scrolling
+  surface that notices its own scroll ending and can name the covers just
+  past its viewport, which the music listing and the index screens both
+  can (they already read `metrics.pixels` against `maxScrollExtent` to
+  page). Left unwired rather than guessed at because "when a scroll stops"
+  and "how far ahead" are numbers worth setting against the perf run's
+  measurements rather than before them - so take it with the entry above.
 
 ## Connect and casting
 
@@ -368,6 +403,23 @@ here waits on upstream.
   no such scope exists, and whoever introduces one takes the fan-out's
   enumeration with it. The reasoning lives in the ADR's consequences
   section.
+- `[in-repo]` **The components that landed after the design system have CI
+  goldens and no readable ones.** The golden suite runs twice: CI goldens
+  block out text and are compared with a tolerance, so they gate layout,
+  spacing, and colour on any host; the readable platform goldens render
+  real type and are the only thing that catches a wrong weight or a lost
+  variable axis, and they are baselined on Linux and skipped everywhere
+  else. `components_late_golden_test.dart` - the transport, settings
+  rows, the console table, the entity header, the palette and its
+  shortcut sheet, the station dial, the mini player, and the later
+  controls - was written on a macOS host, which cannot produce a Linux
+  baseline, so it declares itself CI-only rather than shipping a suite
+  that goes red on CI. The gap is narrower than it sounds: the readable
+  pass is a statement about `WaxType`, and the P0 set plus the composites
+  already render the whole type ramp readably. To close it, run
+  `flutter test test/components_late_golden_test.dart --update-goldens`
+  on Linux and drop the `ciOnly` config from that file's `main`.
+
 - `[hardware]` **Compose e2e harness with the real dex IdP.** The browser SSO
   journey runs against the bare-binary test IdP; dex returns when the
   compose harness exists.
