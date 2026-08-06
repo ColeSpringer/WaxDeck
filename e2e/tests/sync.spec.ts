@@ -1,4 +1,4 @@
-import { test, expect, APIRequestContext } from './fixtures';
+import { legacyTest as test, expect, APIRequestContext } from './fixtures';
 import crypto from 'node:crypto';
 import { authed, ensureAdmin, itemRow, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';

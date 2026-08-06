@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { legacyTest as test, expect } from './fixtures';
 import { authed, ensureAdmin, loginAsAdmin, waitForLibrary, openMusicSection } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 

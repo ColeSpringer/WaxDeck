@@ -1,4 +1,4 @@
-import { test, expect, Page, APIRequestContext } from './fixtures';
+import { legacyTest as test, expect, Page, APIRequestContext } from './fixtures';
 import {
   authed,
   chooseFromMenu,

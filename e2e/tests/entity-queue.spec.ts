@@ -1,4 +1,4 @@
-import { test, expect, Page } from './fixtures';
+import { legacyTest as test, expect, Page } from './fixtures';
 import {
   ADMIN_PASS,
   ADMIN_USER,
@@ -8,7 +8,7 @@ import {
   typeInto,
   waitForLibrary,
 } from './helpers';
-import { SemanticsIds, sem } from './semantics-ids';
+import { SemanticsIds, SemanticsIdPrefixes, sem, semPrefix } from './semantics-ids';
 
 // The entity screens and the queue surface over the real stack: an
 // artist bucket opening the artist rather than a filtered list, an
@@ -123,7 +123,7 @@ test('the queue is a place, and it reorders and clears', async ({
   // It names where the queue came from, and what follows the current
   // entry can be dragged.
   await expect(page.getByText(/Playing from /)).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('[flt-semantics-identifier^="queue-entry-drag-"]'))
+  await expect(page.locator(semPrefix(SemanticsIdPrefixes.queueEntryDrag)))
     .not.toHaveCount(0);
 
   // Clearing empties it, and the surface says so rather than going

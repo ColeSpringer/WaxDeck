@@ -682,6 +682,262 @@ export const SemanticsIds = {
   uploadsScreen: 'uploads-screen',
 } as const;
 
+/// The fixed head of a parameterized identifier, for
+/// matching a whole family at once: every share row, every
+/// item, every queue entry. `SemanticsIds` builds one id
+/// from its arguments and cannot answer "any of them", so
+/// specs used to write the prefix out by hand - which is a
+/// literal that survives a rename in silence, the one hole
+/// left in the registry.
+///
+/// An id whose first character is a placeholder has no fixed
+/// head and is absent here.
+export const SemanticsIdPrefixes = {
+
+  // admin: The admin console: its shell and dashboard, libraries, genres, users, settings, schedules, backups, trash, audit, migration.
+  adminAction: 'admin-action-',
+  adminSection: 'admin-section-',
+  adminTile: 'admin-tile-',
+  auditRow: 'audit-row-',
+  backupRow: 'backup-row-',
+  genreNode: 'genre-node-',
+  inviteRevoke: 'invite-revoke-',
+  inviteRow: 'invite-row-',
+  libraryDetail: 'library-detail-',
+  libraryMatching: 'library-matching-',
+  libraryReadOnly: 'library-read-only-',
+  libraryRescan: 'library-rescan-',
+  libraryRow: 'library-row-',
+  requestApprove: 'request-approve-',
+  requestReject: 'request-reject-',
+  requestRow: 'request-row-',
+  scheduleCron: 'schedule-cron-',
+  scheduleEnabled: 'schedule-enabled-',
+  scheduleRow: 'schedule-row-',
+  scheduleSave: 'schedule-save-',
+  trashDetail: 'trash-detail-',
+  trashPurge: 'trash-purge-',
+  trashRestore: 'trash-restore-',
+  trashRow: 'trash-row-',
+  userDetail: 'user-detail-',
+  userLibrary: 'user-library-',
+  userRow: 'user-row-',
+
+  // auth: Sign-in, first-run setup, and signup. The names here are frozen vocabulary for the accessibility audit.
+  oidcLogin: 'oidc-login-',
+
+  // books: Audiobooks: the hub, the book screen, its chapters, and its per-book settings.
+  book: 'book-',
+  bookAuthorFilter: 'book-author-',
+  bookContinue: 'book-continue-',
+  bookFinishedFilter: 'book-finished-',
+  bookSort: 'book-sort-',
+  chapter: 'chapter-',
+
+  // commands: The command palette, the keyboard reference sheet, and the rows in each.
+  commandPaletteEntry: 'command-palette-entry-',
+  shortcutSheetRow: 'shortcut-sheet-row-',
+
+  // connect: Connect: the device picker, the disconnect triad, cast preflight, remote sessions, and cast controls.
+  endpoint: 'endpoint-',
+  preflightBase: 'cast-preflight-base-',
+  session: 'session-',
+
+  // deck: The deck bar, the side panel it opens, and the shell's lifecycle banners.
+  queueEntry: 'queue-entry-',
+  queueEntryDrag: 'queue-entry-drag-',
+  queueEntryRemove: 'queue-entry-remove-',
+  queueHistoryEntry: 'queue-history-',
+  queueRestoreSession: 'queue-restore-session-',
+
+  // downloads: The downloads manager: what this device holds and the transfers in flight.
+  downloadCancel: 'download-cancel-',
+  downloadPause: 'download-pause-',
+  downloadRemove: 'download-remove-',
+  downloadResume: 'download-resume-',
+  downloadRow: 'download-row-',
+
+  // health: Library health: rules, issues, and their fixes.
+  diagnosticCode: 'diagnostic-code-',
+  diagnosticDetail: 'diagnostic-detail-',
+  diagnosticRow: 'diagnostic-row-',
+  duplicateDetail: 'duplicate-detail-',
+  duplicateGroup: 'duplicate-group-',
+  duplicateMerge: 'duplicate-merge-',
+  health: 'health-rule-',
+  healthFix: 'health-fix-',
+  healthIssue: 'health-issue-',
+  upgradeDetail: 'upgrade-detail-',
+  upgradeGroup: 'upgrade-group-',
+  upgradeResolve: 'upgrade-resolve-',
+
+  // home: Home and the shelf component it shares with the music hub, plus the notifications bell and the account control in the top app bar.
+  homeMix: 'home-mix-',
+  notificationRow: 'notification-row-',
+  shelf: 'shelf-',
+  shelfAll: 'shelf-',
+  shelfCard: 'shelf-',
+
+  // library: The complete item listings and the per-item rows the sync specs drive.
+  item: 'item-',
+
+  // metadata: The metadata editor: fields, locks, candidates, and artwork.
+  artSlot: 'art-slot-',
+  artSlotClear: 'art-slot-clear-',
+  artSlotDrop: 'art-slot-drop-',
+  artSlotSet: 'art-slot-set-',
+  fieldLock: 'field-lock-',
+  metadataField: 'metadata-field-',
+  tagRemove: 'tag-remove-',
+
+  // music: The music hub, its indexes, and the buckets they drill.
+  entityAlbum: 'entity-album-',
+  indexBucket: 'index-bucket-',
+  indexItem: 'index-item-',
+  indexRailLetter: 'index-rail-',
+  musicTile: 'music-tile-',
+
+  // organize: Organize: previews, duplicates, and upgrade groups.
+  organizeRow: 'organize-row-',
+  organizeRowDetail: 'organize-row-detail-',
+
+  // player: Playback surfaces: transport, stars and ratings, speed, chapters, bookmarks, sleep timer, notes and transcript, lyrics, the visualizer, and car mode.
+  lyricsLine: 'lyrics-line-',
+  playerBookmark: 'player-bookmark-',
+  playerBookmarkDelete: 'player-bookmark-delete-',
+  playerChapter: 'player-chapter-',
+  playerRegion: 'player-region-',
+  playerSpeedPreset: 'player-speed-',
+  playerTimeline: 'player-timeline-',
+  sleepTimer: 'sleep-timer-',
+  visualizerMode: 'visualizer-mode-',
+
+  // playlists: Playlists, their entries, and the smart-rule editor.
+  addToPlaylistTarget: 'add-to-playlist-target-',
+  playlist: 'playlist-',
+  playlistAddResult: 'playlist-add-result-',
+  playlistCreateKind: 'playlist-create-kind-',
+  playlistEntry: 'playlist-entry-',
+  playlistEntryDrag: 'playlist-entry-drag-',
+  playlistEntryRemove: 'playlist-entry-remove-',
+  playlistImportSource: 'playlist-import-source-',
+  ruleConditionRemove: 'rule-condition-remove-',
+  ruleField: 'rule-field-',
+  ruleGroupMode: 'rule-group-mode-',
+  ruleGroupRemove: 'rule-group-remove-',
+  ruleOp: 'rule-op-',
+  ruleSortDirection: 'rule-sort-direction-',
+  ruleSortField: 'rule-sort-field-',
+  ruleSortRemove: 'rule-sort-remove-',
+  ruleValue: 'rule-value-',
+  ruleValueHigh: 'rule-value-high-',
+
+  // podcasts: Podcasts: shows, episodes, and subscription actions.
+  episode: 'episode-',
+  episodeContinue: 'episode-continue-',
+  episodeFetch: 'episode-fetch-',
+  episodeInfo: 'episode-info-',
+  episodeRemove: 'episode-remove-',
+  episodeSection: 'episode-section-',
+  episodeSelect: 'episode-select-',
+  markOlderPreset: 'mark-older-preset-',
+  notesLink: 'notes-link-',
+  podcast: 'podcast-',
+  podcastFolder: 'podcast-folder-',
+  podcastSort: 'podcast-sort-',
+  showEpisodeFilter: 'show-episode-filter-',
+  transcriptCue: 'transcript-cue-',
+
+  // prototype: The editing prototype kept behind its own route for the e2e keyboard contract.
+  protoCellArtist: 'proto-cell-',
+  protoCellCurrent: 'proto-cell-',
+  protoEdit: 'proto-edit-',
+  protoKebab: 'proto-kebab-',
+  protoRow: 'proto-row-',
+
+  // radio: The radio hub: the favorites dial, the station grid, and the add-station flow.
+  radio: 'radio-',
+  radioAddDirectory: 'radio-add-directory-',
+  radioDelete: 'radio-delete-',
+  radioEdit: 'radio-edit-',
+  radioFavorite: 'radio-favorite-',
+  radioMenu: 'radio-menu-',
+  radioSearchAdd: 'radio-search-add-',
+
+  // review: The review queue and its keyboard-first controls.
+  candidate: 'candidate-',
+  diffMissing: 'diff-missing-',
+  diffRow: 'diff-row-',
+  editMetadata: 'edit-metadata-',
+  matchingOption: 'matching-',
+  reviewFilter: 'review-filter-',
+  reviewRow: 'review-row-',
+  trackMenu: 'track-menu-',
+
+  // search: The search screen, its filters, and the chrome that opens it.
+  searchFilter: 'search-filter-',
+  searchHit: 'search-hit-',
+  searchRecent: 'search-recent-',
+  searchRecentRemove: 'search-recent-remove-',
+  searchShowAll: 'search-show-all-',
+
+  // settings: Settings: the searchable sections, every leaf control, account, devices, app passwords, notifications, scrobblers.
+  appPasswordRevoke: 'app-password-revoke-',
+  deviceRename: 'device-rename-',
+  deviceRevoke: 'device-revoke-',
+  deviceRow: 'device-row-',
+  notifyTargetTest: 'notify-target-test-',
+  scrobbler: 'scrobbler-',
+  scrobblerConnect: 'scrobbler-connect-',
+  scrobblerDisconnect: 'scrobbler-disconnect-',
+  setting: 'setting-',
+  settingsResult: 'settings-result-',
+  settingsSection: 'settings-section-',
+
+  // sharing: Shares and share links.
+  shareCopy: 'share-copy-',
+  shareRevoke: 'share-revoke-',
+  shareRow: 'share-row-',
+
+  // shell: The adaptive shell's navigation chrome: tabs, icon rail, sidebar, the account menu, and the skip link.
+  navAccountAction: 'nav-account-',
+  navDestination: 'nav-',
+  navDisclose: 'nav-disclose-',
+  navGroup: 'nav-group-',
+
+  // stats: Listening stats and year in review.
+  shareCardExport: 'share-card-export-',
+  shareCardPreview: 'share-card-preview-',
+  statsRange: 'stats-range-',
+  top: 'top-kind-',
+  topEntry: 'top-entry-',
+
+  // tools: Long-running tools and their progress rows.
+  taskDismiss: 'task-dismiss-',
+  taskRow: 'task-row-',
+
+  // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
+  uploadBatch: 'upload-batch-',
+  uploadDelete: 'upload-delete-',
+  uploadDuplicate: 'upload-duplicate-',
+  uploadGroupingOption: 'upload-grouping-',
+  uploadRetry: 'upload-retry-',
+  uploadReview: 'upload-review-',
+  uploadRow: 'upload-row-',
+} as const;
+
+/// The attribute Flutter renders an identifier into.
+/// Named so that nothing has to spell it: a hand-typed
+/// copy is what the conformance ratchet is looking for,
+/// and reading the attribute off an element is a real
+/// need that should not have to earn an exemption.
+export const SEMANTICS_ATTRIBUTE = 'flt-semantics-identifier';
+
 /// The attribute selector Flutter renders an identifier as.
 export const sem = (id: string) =>
-  `[flt-semantics-identifier="${id}"]`;
+  `[${SEMANTICS_ATTRIBUTE}="${id}"]`;
+
+/// The same selector, matching every identifier that starts
+/// with [prefix] - a `SemanticsIdPrefixes` member.
+export const semPrefix = (prefix: string) =>
+  `[${SEMANTICS_ATTRIBUTE}^="${prefix}"]`;

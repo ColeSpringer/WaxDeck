@@ -343,8 +343,50 @@ String _typescript(List<_Group> groups) {
   buffer
     ..writeln('} as const;')
     ..writeln()
+    ..writeln('/// The fixed head of a parameterized identifier, for')
+    ..writeln('/// matching a whole family at once: every share row, every')
+    ..writeln('/// item, every queue entry. `SemanticsIds` builds one id')
+    ..writeln('/// from its arguments and cannot answer "any of them", so')
+    ..writeln('/// specs used to write the prefix out by hand - which is a')
+    ..writeln('/// literal that survives a rename in silence, the one hole')
+    ..writeln('/// left in the registry.')
+    ..writeln('///')
+    ..writeln('/// An id whose first character is a placeholder has no fixed')
+    ..writeln('/// head and is absent here.')
+    ..writeln('export const SemanticsIdPrefixes = {');
+  for (final group in groups) {
+    final prefixed = group.entries
+        .where((e) => e.params.isNotEmpty)
+        .where((e) => !e.id.startsWith('{'))
+        .toList();
+    if (prefixed.isEmpty) continue;
+    buffer
+      ..writeln()
+      ..writeln('  // ${group.name}: ${group.doc}');
+    for (final entry in prefixed) {
+      final head = entry.id.substring(0, entry.id.indexOf('{'));
+      buffer.writeln("  ${entry.name}: '$head',");
+    }
+  }
+  buffer
+    ..writeln('} as const;')
+    ..writeln()
+    ..writeln('/// The attribute Flutter renders an identifier into.')
+    ..writeln('/// Named so that nothing has to spell it: a hand-typed')
+    ..writeln('/// copy is what the conformance ratchet is looking for,')
+    ..writeln('/// and reading the attribute off an element is a real')
+    ..writeln('/// need that should not have to earn an exemption.')
+    ..writeln(
+      "export const SEMANTICS_ATTRIBUTE = 'flt-semantics-identifier';",
+    )
+    ..writeln()
     ..writeln('/// The attribute selector Flutter renders an identifier as.')
     ..writeln("export const sem = (id: string) =>")
-    ..writeln('  `[flt-semantics-identifier="\${id}"]`;');
+    ..writeln('  `[\${SEMANTICS_ATTRIBUTE}="\${id}"]`;')
+    ..writeln()
+    ..writeln('/// The same selector, matching every identifier that starts')
+    ..writeln('/// with [prefix] - a `SemanticsIdPrefixes` member.')
+    ..writeln('export const semPrefix = (prefix: string) =>')
+    ..writeln('  `[\${SEMANTICS_ATTRIBUTE}^="\${prefix}"]`;');
   return buffer.toString();
 }

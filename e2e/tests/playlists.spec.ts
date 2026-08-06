@@ -1,4 +1,4 @@
-import { test, expect, APIRequestContext, Page } from './fixtures';
+import { legacyTest as test, expect, APIRequestContext, Page } from './fixtures';
 import crypto from 'node:crypto';
 import { authed, chooseFromMenu, clickThrough, ensureAdmin, itemRow, openMusicSection, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';

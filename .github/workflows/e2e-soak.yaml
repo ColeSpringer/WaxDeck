@@ -1,0 +1,90 @@
+name: e2e soak
+
+# The suite run the way a flake hunt needs it: no retries, every test
+# three times, quarantined tests included. CI's e2e job is the opposite
+# by design - one retry, quarantine excluded - because its job is to
+# answer whether a change is safe to merge, and this one's is to find
+# the tests that are not yet reliable. Weekly, and on demand.
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays, 06:17 UTC
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: Runs per test
+        required: false
+        default: "3"
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.x"
+  FLUTTER_VERSION: "3.44.6"
+  NODE_VERSION: "24"
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: server/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Pub get (workspace root)
+        run: cd app && flutter pub get
+      # Built here rather than downloaded: this workflow does not run
+      # beside the CI build that publishes the web-dist artifact.
+      - name: Build web (wasm)
+        run: cd app/app && flutter build web --wasm
+      - name: Stage the web bundle for embedding
+        run: |
+          mkdir -p server/internal/web/dist
+          cp -R app/app/build/web/. server/internal/web/dist/
+      - name: Build server with embedded web
+        run: cd server && go build -tags withweb -o waxdeck ./cmd/waxdeck
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install e2e dependencies
+        run: cd e2e && npm ci --no-audit --no-fund
+      - name: Typecheck and conform
+        run: cd e2e && npm run typecheck && npm run conform
+      - name: Cache Playwright browsers
+        id: browser-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+      - name: Install Playwright browser
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: cd e2e && npx playwright install --with-deps chromium
+      - name: Install Playwright system dependencies
+        if: steps.browser-cache.outputs.cache-hit == 'true'
+        run: cd e2e && npx playwright install-deps chromium
+      - name: Soak
+        env:
+          E2E_RETRIES: "0"
+          E2E_QUARANTINE: include
+          REPEAT: ${{ inputs.repeat || '3' }}
+        run: cd e2e && npx playwright test --repeat-each="$REPEAT"
+      - name: Surface flaky tests
+        if: always()
+        run: node e2e/tools/flaky-summary.mjs e2e/test-results/report.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: soak-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 14

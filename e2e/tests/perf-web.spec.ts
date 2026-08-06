@@ -1,7 +1,7 @@
-import { test, expect, APIRequestContext, Browser, Locator, Page } from './fixtures';
+import { legacyTest as test, expect, APIRequestContext, Browser, Locator, Page } from './fixtures';
 import { clickThrough, typeInto } from './helpers';
-import { measureScrollPacing, reportScrollPacing, ScrollPacing } from './scroll-pacing';
-import { SemanticsIds, sem } from './semantics-ids';
+import { measureScrollPacing, reportScrollPacing, ScrollPacing } from './support/scroll-pacing';
+import { SemanticsIds, SemanticsIdPrefixes, sem, semPrefix } from './semantics-ids';
 
 // The web half of the large-library gate, run on demand against a
 // server holding the synthesized 100k-item corpus:
@@ -37,7 +37,7 @@ const CORPUS_PASS = 'wax-e2e-pass';
 // now, so the surface that enumerates the whole catalog - the one whose
 // paging this gate is about - is the tracks index.
 const anyItemRow = (page: Page): Locator =>
-  page.locator(`[flt-semantics-identifier^="${SemanticsIds.item('')}"]`).first();
+  page.locator(semPrefix(SemanticsIdPrefixes.item)).first();
 
 // The tracks index over the corpus. Reached by location rather than
 // through the chrome where nothing is playing, which is every use but

@@ -1,4 +1,4 @@
-import { test, expect, APIRequestContext, Page } from './fixtures';
+import { legacyTest as test, expect, APIRequestContext, Page } from './fixtures';
 import { authed, clickThrough, ensureAdmin, typeInto, waitForLibrary } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 

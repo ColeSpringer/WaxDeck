@@ -5,6 +5,35 @@ import { defineConfig, devices } from '@playwright/test';
 const baseURL = process.env.WAXDECK_BASE_URL ?? 'http://localhost:4420';
 const external = !!process.env.WAXDECK_BASE_URL;
 
+// Retries hide flakes, so the two runs that are supposed to find them get
+// none: E2E_RETRIES=0 is what the soak workflow and a local repeat-each
+// run set. CI keeps one, not the two it used to: a test that needs three
+// attempts is a quarantine candidate, not a pass.
+const retries =
+  process.env.E2E_RETRIES !== undefined
+    ? Number(process.env.E2E_RETRIES)
+    : process.env.CI
+      ? 1
+      : 0;
+
+// A project's motion mode in one place: the browser's own accessibility
+// channel, and the copy of it the suite asserts against. `metadata` is
+// what the canary reads (tests/fixtures.ts), so a project that forgets
+// to declare a mode fails loudly rather than inheriting one silently.
+//
+// reducedMotion rides `contextOptions` because Playwright has no
+// top-level `use.reducedMotion`; note that makes it whole-object, so a
+// project setting contextOptions replaces the inherited object rather
+// than merging into it - which is why the mode is spread from here
+// instead of being written per project.
+const motion = (mode: 'reduce' | 'no-preference') => ({
+  metadata: { motion: mode },
+  use: {
+    ...devices['Desktop Chrome'],
+    contextOptions: { reducedMotion: mode },
+  },
+});
+
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
@@ -21,9 +50,32 @@ export default defineConfig({
   // `test.setTimeout` at a time; the ones that need longer than that
   // still say so themselves.
   timeout: 120_000,
+  // The assert tier from tests/driver/budgets.ts, as the default every
+  // `expect` and `expect.poll` gets. Playwright's own default is 5s,
+  // which is a browser-speed number and too short for anything that
+  // waits on this server; a spec that needs longer says which tier
+  // (`{ timeout: T.fetch }`), and a spec that says nothing gets the
+  // right answer instead of a surprise. Spelled here rather than
+  // imported so the config stays free of the tests' module graph.
+  expect: { timeout: 15_000 },
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  retries,
+  // A quarantined test is one the suite has stopped believing and has
+  // not yet fixed; it keeps running in the soak, where its failures are
+  // information rather than a red PR. Every `@quarantine` tag owes a
+  // docs/deferred-work.md entry in the same commit, so the exclusion is
+  // a tracked debt rather than a place things go to be forgotten.
+  grepInvert: process.env.E2E_QUARANTINE === 'include' ? undefined : /@quarantine/,
+  // The JSON report is what the CI job walks to annotate flaky tests; it
+  // lands under test-results/ so the artifact upload carries it next to
+  // the traces and hang evidence that explain them.
+  reporter: process.env.CI
+    ? [
+        ['list'],
+        ['html', { open: 'never' }],
+        ['json', { outputFile: 'test-results/report.json' }],
+      ]
+    : 'list',
   use: {
     baseURL,
     // Kept on failure rather than on first retry: local runs do not
@@ -53,8 +105,17 @@ export default defineConfig({
     {
       name: 'setup',
       testMatch: /first-run\.spec\.ts/,
-      use: { ...devices['Desktop Chrome'] },
+      ...motion('reduce'),
     },
+    // Every blocking project asks the browser for reduced motion, which
+    // Flutter 3.44's web engine reads as AccessibilityFeatures
+    // .disableAnimations: route transitions, sheets and every default
+    // AnimationController collapse to 5% of their duration, and
+    // WaxMotion.of hands widgets its `reduced` token set. That removes
+    // the whole class of failure where a click lands on a rect that is
+    // still moving. It is the browser's real accessibility channel, not
+    // a test seam - a listener who asks for reduced motion gets exactly
+    // this app.
     {
       name: 'chromium',
       testIgnore: [
@@ -64,7 +125,7 @@ export default defineConfig({
         /radio-cast\.spec\.ts/,
       ],
       dependencies: ['setup'],
-      use: { ...devices['Desktop Chrome'] },
+      ...motion('reduce'),
     },
     // The two specs that write the preference document, kept off each
     // other. `PUT /users/me/prefs` replaces the whole document and every
@@ -80,7 +141,7 @@ export default defineConfig({
       name: 'prefs-radio',
       testMatch: /radio-cast\.spec\.ts/,
       dependencies: ['chromium'],
-      use: { ...devices['Desktop Chrome'] },
+      ...motion('reduce'),
     },
     // Focus-sensitive specs run after the parallel wave, one at a
     // time (projects chain through dependencies): text selection,
@@ -90,13 +151,29 @@ export default defineConfig({
       name: 'focus-a11y',
       testMatch: /a11y-audit\.spec\.ts/,
       dependencies: ['prefs-radio'],
-      use: { ...devices['Desktop Chrome'] },
+      ...motion('reduce'),
     },
     {
       name: 'focus-editing',
       testMatch: /editing-prototype\.spec\.ts/,
       dependencies: ['focus-a11y'],
-      use: { ...devices['Desktop Chrome'] },
+      ...motion('reduce'),
+    },
+    // Animated paths stay covered. Everything above runs the app with
+    // motion switched off, so the transitions, the deck expanding, and
+    // the sheets sliding are code no blocking project exercises any
+    // more. This re-runs the walking skeleton - the one spec that logs
+    // in through the form, walks the chrome and plays a track - with
+    // motion on, last, where a failure is unambiguous: the app is
+    // broken when it animates. Roughly a minute on the tail of the
+    // suite, and no second copy of the journey to keep in step.
+    {
+      name: 'motion-smoke',
+      // Anchored both ends: a bare /ui\.spec\.ts/ is a substring match
+      // over the whole path and picks up signup-ui.spec.ts too.
+      testMatch: /[\\/]ui\.spec\.ts$/,
+      dependencies: ['focus-editing'],
+      ...motion('no-preference'),
     },
   ],
   // run-stack.sh synthesizes the fixture library, starts the WaxFlow

@@ -1,4 +1,4 @@
-import { test, expect, Page } from './fixtures';
+import { legacyTest as test, expect, Page } from './fixtures';
 import {
   authed,
   chooseFromMenu,
@@ -7,7 +7,7 @@ import {
   loginAsAdmin,
   waitForLibrary,
 } from './helpers';
-import { SemanticsIds, sem } from './semantics-ids';
+import { SemanticsIds, SemanticsIdPrefixes, sem, semPrefix } from './semantics-ids';
 
 // The landing surface over the real stack: shelves drawn from the
 // discovery lists (two of which this phase added to the contract), the
@@ -70,7 +70,7 @@ test('a shelf\'s Show all opens the enumeration behind it', async ({
   const showAll = page.locator(sem(SemanticsIds.shelfAll('recent')));
   const tracks = /\/music\/tracks$/;
   const anyItem = page
-    .locator(`[flt-semantics-identifier^="${SemanticsIds.item('')}"]`)
+    .locator(semPrefix(SemanticsIdPrefixes.item))
     .first();
   await expect(async () => {
     if (await anyItem.isVisible()) return;
@@ -139,7 +139,7 @@ test('the shares list is a location under settings', async ({
   await clickThrough(
     page.locator(sem(SemanticsIds.openShareLinks)),
     page.locator(sem(SemanticsIds.sharesEmpty)).or(
-      page.locator(`[flt-semantics-identifier^="share-row-"]`).first(),
+      page.locator(semPrefix(SemanticsIdPrefixes.shareRow)).first(),
     ),
   );
   await expect(page).toHaveURL(/\/settings\/shares$/);
@@ -149,7 +149,7 @@ test('the shares list is a location under settings', async ({
   await page.reload();
   await expect(
     page.locator(sem(SemanticsIds.sharesEmpty)).or(
-      page.locator(`[flt-semantics-identifier^="share-row-"]`).first(),
+      page.locator(semPrefix(SemanticsIdPrefixes.shareRow)).first(),
     ),
   ).toBeVisible({ timeout: 30_000 });
   expect(page.url()).toMatch(/\/settings\/shares$/);

@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
-import { test, expect } from './fixtures';
+import { legacyTest as test, expect } from './fixtures';
 
 // The desktop loopback sign-on round trip with a real browser in the
 // middle: a plain-Dart probe runs the app's genuine flow (ephemeral

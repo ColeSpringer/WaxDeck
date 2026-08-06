@@ -1,5 +1,5 @@
 import {
-  test,
+  legacyTest as test,
   expect,
   Page,
   BrowserContext,

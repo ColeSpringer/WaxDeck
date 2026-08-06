@@ -1,4 +1,4 @@
-import { test, expect, APIRequestContext } from './fixtures';
+import { legacyTest as test, expect, APIRequestContext } from './fixtures';
 import { ADMIN_PASS, ADMIN_USER, clickThrough, ensureAdmin, itemRow, typeInto } from './helpers';
 import { SemanticsIds, sem } from './semantics-ids';
 
@@ -53,6 +53,19 @@ test('login, browse the grid, and play a track', async ({ page, request }) => {
   });
 
   await page.goto('/');
+
+  // The in-app reduce-motion override, which is additive to the
+  // platform's answer and so could still motion off a run that asked for
+  // it on. This spec is the one motion-smoke re-runs with motion
+  // enabled, and a stale override would make that project quietly
+  // identical to the rest of the suite. Per device today, so a fresh
+  // context cannot carry one; asserted anyway, because the day the
+  // setting moves into the account's preference document it would carry
+  // between runs and nothing else would notice.
+  expect(
+    await page.evaluate(() => localStorage.getItem('waxdeck.a11y.reduceMotion')),
+    'no in-app reduce-motion override is in force',
+  ).not.toBe('true');
 
   // The login form is the first thing an unauthenticated visitor sees.
   // Click-and-type drives flutter's real text-editing path; a direct

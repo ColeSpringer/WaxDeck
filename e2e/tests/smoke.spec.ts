@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { legacyTest as test, expect } from './fixtures';
 
 // Walking-skeleton smoke: the embedded web UI is served and the API answers.
 

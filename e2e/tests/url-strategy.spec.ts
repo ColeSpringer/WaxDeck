@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { legacyTest as test, expect } from './fixtures';
 import {
   ADMIN_PASS,
   ADMIN_USER,

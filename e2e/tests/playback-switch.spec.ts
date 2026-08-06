@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { legacyTest as test, expect } from './fixtures';
 import {
   ADMIN_PASS,
   ADMIN_USER,
@@ -8,7 +8,13 @@ import {
   typeInto,
   waitForLibrary,
 } from './helpers';
-import { SemanticsIds, sem } from './semantics-ids';
+import {
+  SEMANTICS_ATTRIBUTE,
+  SemanticsIds,
+  SemanticsIdPrefixes,
+  sem,
+  semPrefix,
+} from './semantics-ids';
 
 // Switching items mid-play must replace what the engine is playing.
 // just_audio's web backend caches source players by playlist id, and the
@@ -42,13 +48,22 @@ test('switching tracks mid-play fetches the new media', async ({ page, request }
     .locator(sem(SemanticsIds.navDestination('music')))
     .waitFor({ timeout: 30_000 });
   await page.goto('/music/tracks');
-  const rows = page.locator('[flt-semantics-identifier^="item-tr-"]');
+  const rows = page.locator(semPrefix(SemanticsIdPrefixes.item));
   await rows.nth(1).waitFor({ timeout: 30_000 });
-  const rowIds = (await rows.evaluateAll((els) =>
-    els.map((e) => e.getAttribute('flt-semantics-identifier')),
+  const rowIds = (await rows.evaluateAll(
+    (els, attribute) => els.map((e) => e.getAttribute(attribute)),
+    SEMANTICS_ATTRIBUTE,
   )) as string[];
-  const a = { pid: rowIds[0].replace('item-', '') };
-  const b = { pid: rowIds[1].replace('item-', '') };
+  // The registry's prefix covers every item row, not only tracks, so
+  // the type prefix is filtered here rather than written into the
+  // selector - a selector that spells out `item-tr-` is a literal the
+  // id registry cannot rename.
+  const pids = rowIds
+    .map((id) => id.slice(SemanticsIdPrefixes.item.length))
+    .filter((pid) => pid.startsWith('tr-'));
+  expect(pids.length, 'the tracks index lists at least two tracks').toBeGreaterThan(1);
+  const a = { pid: pids[0] };
+  const b = { pid: pids[1] };
 
   // Play the first track and see its media actually fetched.
   const mediaA = page.waitForRequest(

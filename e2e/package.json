@@ -5,11 +5,14 @@
   "description": "End-to-end smoke tests for WaxDeck (Playwright)",
   "scripts": {
     "test": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "conform": "node lint/conformance.mjs",
+    "gen-types": "openapi-typescript ../api/openapi.yaml -o tests/api-types.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
     "@types/node": "26.1.2",
+    "openapi-typescript": "7.13.0",
     "typescript": "5.9.3"
   }
 }

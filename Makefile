@@ -1,4 +1,4 @@
-.PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-mirror lint spec-lint test test-server test-fixtures test-app \
+.PHONY: generate spec-bundle gen-go gen-dart gen-semantics gen-api-types gen-mirror lint spec-lint test test-server test-fixtures test-app \
         web build run up down reset logs drift-check oasdiff e2e e2e-desktop dist clean
 
 SPEC        := api/openapi.yaml
@@ -8,7 +8,7 @@ APP_WEB_OUT := app/app/build/web
 
 ## --- codegen -----------------------------------------------------------------
 
-generate: gen-go gen-dart gen-semantics gen-version gen-mirror gen-notices
+generate: gen-go gen-dart gen-semantics gen-api-types gen-version gen-mirror gen-notices
 
 # The contract is authored as fragments in api/spec/ (one file per API
 # domain); specbundle assembles the single bundled spec that every
@@ -35,6 +35,18 @@ gen-dart: spec-bundle
 gen-semantics:
 	dart run tools/gen-semantics-ids.dart
 	dart format app/app/lib/src/shell/semantics_ids.dart >/dev/null
+
+# The e2e suite's view of the same contract. Every API call the specs
+# make goes through tests/driver/api.ts, which is typed against this, so
+# a renamed or removed endpoint fails `npm run typecheck` instead of
+# arriving as a 404 that reads like a missing feature. Drift-checked like
+# every other generated artifact.
+#
+# The install is guarded rather than unconditional: this target runs
+# inside `generate`, which a Go- or Dart-only change also runs, and
+# `npm ci` on every one of those is a minute nobody asked for.
+gen-api-types: spec-bundle
+	cd e2e && { test -d node_modules || npm ci --no-audit --no-fund; } && npm run --silent gen-types
 
 # The app's own version, from the pubspec that declares it, so About
 # reports the build somebody is actually running. Flutter answers no
@@ -91,6 +103,7 @@ lint: spec-lint
 	cd fixtures && go vet ./... && test -z "$$(gofmt -l .)"
 	cd app && dart format --set-exit-if-changed app/lib app/test app/integration_test app/tool packages/waxdeck_api/lib packages/waxdeck_api/test packages/waxdeck_player/lib packages/waxdeck_player_testing/lib packages/waxdeck_player_testing/test packages/waxdeck_data/lib packages/waxdeck_data/test packages/waxdeck_ui/lib packages/waxdeck_ui/test packages/waxdeck_ui/example/lib packages/waxdeck_ui/example/test >/dev/null
 	cd app && flutter analyze --no-pub
+	cd e2e && { test -d node_modules || npm ci --no-audit --no-fund; } && npm run --silent conform
 
 # Lints the committed bundle as-is (lint never mutates the tree);
 # bundle freshness against the fragments is drift-check's job.
@@ -117,6 +130,7 @@ test-app:
 drift-check: generate
 	git diff --exit-code -- $(SPEC) server/internal/api app/packages/waxdeck_api_gen \
 		app/app/lib/src/shell/semantics_ids.dart e2e/tests/semantics-ids.ts \
+		e2e/tests/api-types.ts \
 		app/app/lib/src/shell/app_version.dart \
 		app/packages/waxdeck_data/lib/src/database.g.dart \
 		server/internal/notices/third_party_notices.txt app/app/LICENSE
@@ -277,7 +291,7 @@ ifndef WAXDECK_BASE_URL
 	$(MAKE) $(WEB_STAMP)
 	$(MAKE) build
 endif
-	cd e2e && npm ci --no-audit --no-fund && npm run typecheck && npx playwright test
+	cd e2e && npm ci --no-audit --no-fund && npm run typecheck && npm run --silent conform && npx playwright test
 
 # The desktop app journey plus the engine conformance suite against the
 # real mpv backend, which is where clip windows and gapless crossings are

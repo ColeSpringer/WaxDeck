@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { legacyTest as test, expect } from './fixtures';
 import { ADMIN_PASS, ADMIN_USER, ensureAdmin, typeInto, waitForLibrary } from './helpers';
 
 // The screen-reader groundwork audit: complete login, browse, and play
