@@ -80,3 +80,43 @@ test('a server-scope webhook target delivers a test end to end', async ({ app })
     await sink.close();
   }
 });
+
+// The bell: the in-app half of the same news. Web has no sync engine, so
+// this exercises notifications_binder's puller end to end.
+
+test('the bell reports what happened while the app was open', async ({ app }) => {
+  await app.nav.enter('home');
+  await expect(app.shell.notificationsBell()).toBeVisible();
+
+  // The cheapest change that emits a marker: no bytes move.
+  const session = await app.api.post('/uploads', {
+    data: { fileName: 'bell.mp3', sizeBytes: 1024, mediaType: 'music' },
+  });
+  expect(session.id).toMatch(/^up-/);
+
+  try {
+    await app.shell.notificationsBadged();
+    await app.shell.openNotifications();
+    // The copy is the contract, so the spec names it. On the accessible
+    // name because a menu row is a labelled node with no text of its own.
+    await expect(app.shell.notificationRow(0)).toHaveAccessibleName(
+      'Uploads: An upload changed.',
+    );
+
+    // And the row is a link, not a label.
+    await app.shell.notificationRow(0).click();
+    await app.nav.expectAt('uploads');
+
+    // Clear empties the bell rather than only unbadging it. Walked
+    // rather than re-entered: the list is what this client saw while it
+    // was running, so a real page load would empty it first.
+    await app.nav.to('home');
+    await app.shell.openNotifications();
+    await app.shell.notificationsClear().click();
+    await expect(app.shell.notificationRow(0)).toBeHidden();
+  } finally {
+    await app.api.delete('/uploads/{uploadId}', {
+      path: { uploadId: session.id },
+    });
+  }
+});

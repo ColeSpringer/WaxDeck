@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers.dart';
+import '../settings/prefs_controller.dart';
 
 /// Whether the platform turned down the last programmatic resume.
 ///
@@ -37,6 +38,21 @@ class AutoplayGate extends Notifier<bool> {
       refusals.cancel();
       transitions.cancel();
     });
+    return false;
+  }
+
+  /// Whether a start with no gesture behind it may go ahead; absent is
+  /// allowed. Awaited, not read: the document is still loading in the
+  /// seconds after a launch, which is when a handover arrives.
+  Future<bool> allowed() async =>
+      (await ref.read(prefsControllerProvider.future)).autoplay ?? true;
+
+  /// Claims a start no gesture led to. A refusal is recorded like the
+  /// platform's own, because downstream it is the same state: loaded,
+  /// waiting for a tap.
+  Future<bool> claimStart() async {
+    if (await allowed()) return true;
+    state = true;
     return false;
   }
 }

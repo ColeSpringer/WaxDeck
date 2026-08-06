@@ -1,6 +1,6 @@
 // The door, and the chrome every screen hangs off.
 
-import { Locator } from '@playwright/test';
+import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Api } from '../api';
 import { T } from '../budgets';
@@ -182,6 +182,35 @@ export class Shell {
   /// what finds them and the spec is what names it.
   snackAction(name: string): Locator {
     return this.ctx.page.getByRole('button', { name });
+  }
+
+  /// The bell in the top app bar.
+  notificationsBell(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.notificationsBell));
+  }
+
+  /// One row of the open bell, newest first.
+  notificationRow(index: number): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.notificationRow(index)));
+  }
+
+  notificationsClear(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.notificationsClear));
+  }
+
+  /// Waits until the bell has something unseen. A row does not arrive
+  /// with the change that caused it: the socket says the stream moved,
+  /// then the client walks it.
+  async notificationsBadged(): Promise<void> {
+    await expect(this.notificationsBell()).toHaveAccessibleName(/unread/, {
+      timeout: T.fetch,
+    });
+  }
+
+  /// Opens the bell and waits for its first row, for the same reason
+  /// the account menu is opened rather than clicked through.
+  async openNotifications(): Promise<void> {
+    await openMenu(this.notificationsBell(), this.notificationRow(0));
   }
 }
 

@@ -55,7 +55,7 @@ class NotificationsBell extends ConsumerWidget {
         // a stale index would open somebody else's surface.
         final held = ref.read(notificationsProvider);
         if (index >= held.length) return;
-        context.go(held[index].kind.location);
+        context.go(held[index].location);
       },
     );
   }

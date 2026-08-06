@@ -281,6 +281,12 @@ const settingsRegistry = <SettingEntry>[
     nativeOnly: true,
   ),
   SettingEntry(
+    id: 'autoplay',
+    title: 'Start playing without asking',
+    section: SettingsSection.playback,
+    keywords: <String>['autoplay', 'resume', 'handover', 'connect', 'browser'],
+  ),
+  SettingEntry(
     id: 'car-button',
     title: 'Car mode button',
     section: SettingsSection.playback,
@@ -302,6 +308,20 @@ const settingsRegistry = <SettingEntry>[
     keywords: <String>['codec', 'bitrate', 'format', 'flac', 'provenance'],
   ),
   SettingEntry(
+    id: 'browse-unknown',
+    title: 'Show unknown groups',
+    section: SettingsSection.library,
+    keywords: <String>['unknown', 'untagged', 'missing', 'no genre', 'browse'],
+  ),
+  // One entry for the set: five near-identical results would bury
+  // whatever else the word matched.
+  SettingEntry(
+    id: 'browse-sort-artists',
+    title: 'Default order',
+    section: SettingsSection.library,
+    keywords: <String>['sort', 'order', 'alphabetical', 'browse', 'index'],
+  ),
+  SettingEntry(
     id: 'library-access',
     title: 'What I can see',
     section: SettingsSection.library,
@@ -314,6 +334,13 @@ const settingsRegistry = <SettingEntry>[
     title: 'Download on wifi only',
     section: SettingsSection.downloads,
     keywords: <String>['data', 'metered', 'mobile', 'cellular'],
+    nativeOnly: true,
+  ),
+  SettingEntry(
+    id: 'auto-remove-finished',
+    title: 'Remove finished episodes',
+    section: SettingsSection.downloads,
+    keywords: <String>['tidy', 'reclaim', 'space', 'listened', 'podcast'],
     nativeOnly: true,
   ),
   SettingEntry(

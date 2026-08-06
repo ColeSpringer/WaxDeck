@@ -80,6 +80,9 @@ class PrefsController extends AsyncNotifier<Prefs> {
       crossfadeSeconds: current.crossfadeSeconds,
       replayGain: current.replayGain,
       radioScrobbleOptOut: current.radioScrobbleOptOut,
+      browseShowUnknown: current.browseShowUnknown,
+      browseSorts: current.browseSorts,
+      autoplay: current.autoplay,
     ),
   );
 
@@ -111,6 +114,26 @@ class PrefsController extends AsyncNotifier<Prefs> {
   /// out of an absent list.
   Future<void> setRadioFavorites(List<String> pids) =>
       _write((current) => current.copyWith(radioFavorites: pids));
+
+  /// Stores whether a browse index draws the bucket for the items a
+  /// dimension is absent from.
+  Future<void> setBrowseShowUnknown(bool show) =>
+      _write((current) => current.copyWith(browseShowUnknown: show));
+
+  /// Merged rather than replaced: a build that draws five dimensions
+  /// must not drop a sixth one's stored order on the way past.
+  Future<void> setBrowseSort(String dimension, FacetSort sort) => _write(
+    (current) => current.copyWith(
+      browseSorts: <String, String>{
+        ...?current.browseSorts,
+        dimension: sort.wireName,
+      },
+    ),
+  );
+
+  /// Stores whether playback may start with no gesture behind it.
+  Future<void> setAutoplay(bool allowed) =>
+      _write((current) => current.copyWith(autoplay: allowed));
 }
 
 final prefsControllerProvider = AsyncNotifierProvider<PrefsController, Prefs>(

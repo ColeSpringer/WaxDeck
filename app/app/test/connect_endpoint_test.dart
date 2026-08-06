@@ -4,6 +4,8 @@ import 'package:waxdeck/src/connect/connect_bus.dart';
 import 'package:waxdeck/src/connect/connect_controller.dart';
 import 'package:waxdeck/src/connect/connect_providers.dart';
 import 'package:waxdeck/src/connect/queue_gateway.dart';
+import 'package:waxdeck/src/player/autoplay_gate.dart';
+import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
@@ -37,7 +39,7 @@ const _album = QueueSource(
   FakeRepository repo,
   FakeEngine engine,
 })
-_build() {
+_build({Prefs? prefs}) {
   final sent = <Map<String, Object?>>[];
   final repo = FakeRepository(
     items: [testItem(pidA), testItem(pidB), testItem(pidC)],
@@ -56,6 +58,8 @@ _build() {
             return true;
           },
       ),
+      if (prefs != null)
+        prefsControllerProvider.overrideWith(() => _StubPrefs(prefs)),
     ],
   );
   addTearDown(container.dispose);
@@ -68,6 +72,17 @@ _build() {
     repo: repo,
     engine: engine,
   );
+}
+
+/// A settled preference document. The real controller waits on a
+/// session, which a bare container has none of.
+class _StubPrefs extends PrefsController {
+  _StubPrefs(this._prefs);
+
+  final Prefs _prefs;
+
+  @override
+  Future<Prefs> build() async => _prefs;
 }
 
 extension on ProviderContainer {
@@ -374,6 +389,46 @@ void main() {
     // says so rather than claiming a shuffle the queue does not show.
     expect(h.container.queue.pids, [pidA, pidB, pidC]);
     expect(h.container.queue.shuffled, isFalse);
+  });
+
+  test('a handover waits to be tapped when autoplay is off', () async {
+    final h = _build(prefs: const Prefs(autoplay: false));
+    // The document is read at the moment the start is claimed, so it has
+    // to have landed first.
+    await h.container.read(prefsControllerProvider.future);
+    await _cmd(
+      h,
+      'load',
+      args: {
+        'itemPids': [pidA, pidB],
+        'index': 0,
+        'play': true,
+      },
+    );
+
+    // The handover still lands; only the audio is declined.
+    expect(h.container.queue.pids, [pidA, pidB]);
+    expect(h.engine.playing, isFalse);
+    // Left in the same state a browser's own refusal leaves.
+    expect(h.container.read(autoplayBlockedProvider), isTrue);
+  });
+
+  test('a handover in the startup window still honours autoplay', () async {
+    // The document is still loading in the seconds after a launch, which
+    // is exactly when another device hands a queue over. Reading it as
+    // absent there would play out loud for an account that said not to.
+    final h = _build(prefs: const Prefs(autoplay: false));
+    await _cmd(
+      h,
+      'load',
+      args: {
+        'itemPids': [pidA],
+        'index': 0,
+        'play': true,
+      },
+    );
+    expect(h.engine.playing, isFalse);
+    expect(h.container.read(autoplayBlockedProvider), isTrue);
   });
 
   test('stop ends the queue and the reports with it', () async {

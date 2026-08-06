@@ -18,6 +18,10 @@ type AdminSettings struct {
 	// a periodic sweep; 0 disables retention (the trash keeps entries until
 	// emptied by hand).
 	TrashRetentionDays int
+	// TaskRetentionDays clears terminal tool tasks older than this many
+	// days on the scheduled prune; 0 keeps them, unset answers
+	// defaultTaskRetentionDays.
+	TaskRetentionDays int
 }
 
 // TranscodingLimits cap transcode sessions at the media proxy; zero
@@ -35,11 +39,17 @@ const (
 	settingBackupKeepBytes = "backup:keep-bytes"
 	settingTranscodeLimits = "transcode:limits"
 	settingTrashRetention  = "trash:retention-days"
+	settingTaskRetention   = "tasks:retention-days"
 	readOnlyLibPrefix      = "read-only:"
 
-	// maxTrashRetentionDays bounds the retention window at 100 years, far
-	// under the ~106752-day point where days*24h overflows time.Duration.
-	maxTrashRetentionDays = 36500
+	// maxRetentionDays bounds both retention windows at 100 years, far
+	// under the ~106752 days where days*24h overflows time.Duration.
+	maxRetentionDays = 36500
+
+	// defaultTaskRetentionDays is what the prune ran on before the knob.
+	// Unset rather than zero, unlike trash retention: an unconfigured
+	// task list was already being swept.
+	defaultTaskRetentionDays = 30
 )
 
 // runtimeToggles is the hot-path cache of settings consulted per
@@ -104,6 +114,7 @@ func (l *Library) AdminSettingsGet(ctx context.Context) (AdminSettings, error) {
 		out.BackupKeepBytes, _ = strconv.ParseInt(v, 10, 64)
 	}
 	out.TrashRetentionDays = l.TrashRetentionDays(ctx)
+	out.TaskRetentionDays = l.TaskRetentionDays(ctx)
 	return out, nil
 }
 
@@ -121,8 +132,25 @@ func (l *Library) TrashRetentionDays(ctx context.Context) int {
 	// Clamp at read too: a value stored before the cap existed (or set
 	// out-of-band) must never reach the sweep's day-to-duration conversion
 	// large enough to overflow.
-	if days > maxTrashRetentionDays {
-		return maxTrashRetentionDays
+	if days > maxRetentionDays {
+		return maxRetentionDays
+	}
+	return days
+}
+
+// TaskRetentionDays reads the tool-task retention window. Unset answers
+// the default; a stored 0 is "keep them", so the two are told apart.
+func (l *Library) TaskRetentionDays(ctx context.Context) int {
+	v, err := l.db.SettingGet(ctx, settingTaskRetention)
+	if err != nil {
+		return defaultTaskRetentionDays
+	}
+	days, err := strconv.Atoi(v)
+	if err != nil || days < 0 {
+		return defaultTaskRetentionDays
+	}
+	if days > maxRetentionDays {
+		return maxRetentionDays
 	}
 	return days
 }
@@ -136,8 +164,11 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 	// Cap well under the point where days*24h overflows time.Duration's
 	// int64 nanoseconds (~106752 days): a wrapped negative would silently
 	// disable the sweep and a wrapped-positive-small could over-purge.
-	if s.TrashRetentionDays < 0 || s.TrashRetentionDays > maxTrashRetentionDays {
+	if s.TrashRetentionDays < 0 || s.TrashRetentionDays > maxRetentionDays {
 		return AdminSettings{}, errInvalid("trash retention must be between 0 and 36500 days")
+	}
+	if s.TaskRetentionDays < 0 || s.TaskRetentionDays > maxRetentionDays {
+		return AdminSettings{}, errInvalid("task retention must be between 0 and 36500 days")
 	}
 	now := time.Now().UnixNano()
 	writes := map[string]string{
@@ -147,6 +178,7 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 		settingBackupKeep:      strconv.Itoa(s.BackupKeepCount),
 		settingBackupKeepBytes: strconv.FormatInt(s.BackupKeepBytes, 10),
 		settingTrashRetention:  strconv.Itoa(s.TrashRetentionDays),
+		settingTaskRetention:   strconv.Itoa(s.TaskRetentionDays),
 	}
 	for k, v := range writes {
 		if err := l.db.SettingSet(ctx, k, v, now); err != nil {
@@ -158,7 +190,8 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 		map[string]any{"signupEnabled": s.SignupEnabled, "readOnly": s.ReadOnly,
 			"sonicAnalysis":   s.SonicAnalysis,
 			"backupKeepCount": s.BackupKeepCount, "backupKeepBytes": s.BackupKeepBytes,
-			"trashRetentionDays": s.TrashRetentionDays})
+			"trashRetentionDays": s.TrashRetentionDays,
+			"taskRetentionDays":  s.TaskRetentionDays})
 	return l.AdminSettingsGet(ctx)
 }
 

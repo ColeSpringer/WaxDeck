@@ -45,6 +45,8 @@ var notifyEventCatalog = []NotifyEvent{
 		Description: "A subscribed feed kept failing and was disabled."},
 	{Name: "review-ready", Scope: NotifyScopeUser,
 		Description: "An upload or acquisition finished identification and waits in the review queue."},
+	{Name: "import-completed", Scope: NotifyScopeUser,
+		Description: "An upload or acquisition identified confidently enough to file itself, with no review."},
 }
 
 // NotifyEvents returns the event catalog.

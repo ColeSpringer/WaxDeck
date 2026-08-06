@@ -225,6 +225,7 @@ Serializers _$serializers =
           ..add(PortableRef.serializer)
           ..add(PortableRefKindEnum.serializer)
           ..add(Prefs.serializer)
+          ..add(PrefsBrowseSortsEnum.serializer)
           ..add(PrefsThemeEnum.serializer)
           ..add(PushRegistration.serializer)
           ..add(PushRegistrationCreate.serializer)
@@ -1003,10 +1004,6 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(String)]),
-            () => ListBuilder<String>(),
-          )
-          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
           )
@@ -1025,6 +1022,17 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(WriteBackFailure)]),
             () => ListBuilder<WriteBackFailure>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType(PrefsBrowseSortsEnum),
+            ]),
+            () => MapBuilder<String, PrefsBrowseSortsEnum>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

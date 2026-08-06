@@ -34,8 +34,32 @@ final BuiltSet<PrefsThemeEnum> _$prefsThemeEnumValues =
       _$prefsThemeEnum_oled,
     ]);
 
+const PrefsBrowseSortsEnum _$prefsBrowseSortsEnum_count =
+    const PrefsBrowseSortsEnum._('count');
+const PrefsBrowseSortsEnum _$prefsBrowseSortsEnum_label =
+    const PrefsBrowseSortsEnum._('label');
+
+PrefsBrowseSortsEnum _$prefsBrowseSortsEnumValueOf(String name) {
+  switch (name) {
+    case 'count':
+      return _$prefsBrowseSortsEnum_count;
+    case 'label':
+      return _$prefsBrowseSortsEnum_label;
+    default:
+      throw ArgumentError(name);
+  }
+}
+
+final BuiltSet<PrefsBrowseSortsEnum> _$prefsBrowseSortsEnumValues =
+    BuiltSet<PrefsBrowseSortsEnum>(const <PrefsBrowseSortsEnum>[
+      _$prefsBrowseSortsEnum_count,
+      _$prefsBrowseSortsEnum_label,
+    ]);
+
 Serializer<PrefsThemeEnum> _$prefsThemeEnumSerializer =
     _$PrefsThemeEnumSerializer();
+Serializer<PrefsBrowseSortsEnum> _$prefsBrowseSortsEnumSerializer =
+    _$PrefsBrowseSortsEnumSerializer();
 
 class _$PrefsThemeEnumSerializer
     implements PrimitiveSerializer<PrefsThemeEnum> {
@@ -74,6 +98,39 @@ class _$PrefsThemeEnumSerializer
   );
 }
 
+class _$PrefsBrowseSortsEnumSerializer
+    implements PrimitiveSerializer<PrefsBrowseSortsEnum> {
+  static const Map<String, Object> _toWire = const <String, Object>{
+    'count': 'count',
+    'label': 'label',
+  };
+  static const Map<Object, String> _fromWire = const <Object, String>{
+    'count': 'count',
+    'label': 'label',
+  };
+
+  @override
+  final Iterable<Type> types = const <Type>[PrefsBrowseSortsEnum];
+  @override
+  final String wireName = 'PrefsBrowseSortsEnum';
+
+  @override
+  Object serialize(
+    Serializers serializers,
+    PrefsBrowseSortsEnum object, {
+    FullType specifiedType = FullType.unspecified,
+  }) => _toWire[object.name] ?? object.name;
+
+  @override
+  PrefsBrowseSortsEnum deserialize(
+    Serializers serializers,
+    Object serialized, {
+    FullType specifiedType = FullType.unspecified,
+  }) => PrefsBrowseSortsEnum.valueOf(
+    _fromWire[serialized] ?? (serialized is String ? serialized : ''),
+  );
+}
+
 class _$Prefs extends Prefs {
   @override
   final String? timezone;
@@ -90,6 +147,12 @@ class _$Prefs extends Prefs {
   @override
   final bool? replayGain;
   @override
+  final bool? browseShowUnknown;
+  @override
+  final BuiltMap<String, PrefsBrowseSortsEnum>? browseSorts;
+  @override
+  final bool? autoplay;
+  @override
   final bool? radioScrobbleOptOut;
 
   factory _$Prefs([void Function(PrefsBuilder)? updates]) =>
@@ -103,6 +166,9 @@ class _$Prefs extends Prefs {
     this.radioFavorites,
     this.crossfadeSeconds,
     this.replayGain,
+    this.browseShowUnknown,
+    this.browseSorts,
+    this.autoplay,
     this.radioScrobbleOptOut,
   }) : super._();
   @override
@@ -123,6 +189,9 @@ class _$Prefs extends Prefs {
         radioFavorites == other.radioFavorites &&
         crossfadeSeconds == other.crossfadeSeconds &&
         replayGain == other.replayGain &&
+        browseShowUnknown == other.browseShowUnknown &&
+        browseSorts == other.browseSorts &&
+        autoplay == other.autoplay &&
         radioScrobbleOptOut == other.radioScrobbleOptOut;
   }
 
@@ -136,6 +205,9 @@ class _$Prefs extends Prefs {
     _$hash = $jc(_$hash, radioFavorites.hashCode);
     _$hash = $jc(_$hash, crossfadeSeconds.hashCode);
     _$hash = $jc(_$hash, replayGain.hashCode);
+    _$hash = $jc(_$hash, browseShowUnknown.hashCode);
+    _$hash = $jc(_$hash, browseSorts.hashCode);
+    _$hash = $jc(_$hash, autoplay.hashCode);
     _$hash = $jc(_$hash, radioScrobbleOptOut.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -151,6 +223,9 @@ class _$Prefs extends Prefs {
           ..add('radioFavorites', radioFavorites)
           ..add('crossfadeSeconds', crossfadeSeconds)
           ..add('replayGain', replayGain)
+          ..add('browseShowUnknown', browseShowUnknown)
+          ..add('browseSorts', browseSorts)
+          ..add('autoplay', autoplay)
           ..add('radioScrobbleOptOut', radioScrobbleOptOut))
         .toString();
   }
@@ -191,6 +266,21 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
   bool? get replayGain => _$this._replayGain;
   set replayGain(bool? replayGain) => _$this._replayGain = replayGain;
 
+  bool? _browseShowUnknown;
+  bool? get browseShowUnknown => _$this._browseShowUnknown;
+  set browseShowUnknown(bool? browseShowUnknown) =>
+      _$this._browseShowUnknown = browseShowUnknown;
+
+  MapBuilder<String, PrefsBrowseSortsEnum>? _browseSorts;
+  MapBuilder<String, PrefsBrowseSortsEnum> get browseSorts =>
+      _$this._browseSorts ??= MapBuilder<String, PrefsBrowseSortsEnum>();
+  set browseSorts(MapBuilder<String, PrefsBrowseSortsEnum>? browseSorts) =>
+      _$this._browseSorts = browseSorts;
+
+  bool? _autoplay;
+  bool? get autoplay => _$this._autoplay;
+  set autoplay(bool? autoplay) => _$this._autoplay = autoplay;
+
   bool? _radioScrobbleOptOut;
   bool? get radioScrobbleOptOut => _$this._radioScrobbleOptOut;
   set radioScrobbleOptOut(bool? radioScrobbleOptOut) =>
@@ -210,6 +300,9 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       _radioFavorites = $v.radioFavorites?.toBuilder();
       _crossfadeSeconds = $v.crossfadeSeconds;
       _replayGain = $v.replayGain;
+      _browseShowUnknown = $v.browseShowUnknown;
+      _browseSorts = $v.browseSorts?.toBuilder();
+      _autoplay = $v.autoplay;
       _radioScrobbleOptOut = $v.radioScrobbleOptOut;
       _$v = null;
     }
@@ -242,6 +335,9 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
             radioFavorites: _radioFavorites?.build(),
             crossfadeSeconds: crossfadeSeconds,
             replayGain: replayGain,
+            browseShowUnknown: browseShowUnknown,
+            browseSorts: _browseSorts?.build(),
+            autoplay: autoplay,
             radioScrobbleOptOut: radioScrobbleOptOut,
           );
     } catch (_) {
@@ -249,6 +345,9 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       try {
         _$failedField = 'radioFavorites';
         _radioFavorites?.build();
+
+        _$failedField = 'browseSorts';
+        _browseSorts?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(r'Prefs', _$failedField, e.toString());
       }

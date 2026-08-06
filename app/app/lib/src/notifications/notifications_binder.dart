@@ -81,6 +81,16 @@ class UserEventPuller {
 final notificationsBinderProvider = Provider.autoDispose<void>((ref) {
   final notifications = ref.read(notificationsProvider.notifier);
 
+  // This device's own transfers, which no server event describes. Null
+  // on web, which has no local download manager.
+  final downloads = ref.watch(downloadManagerProvider);
+  if (downloads != null) {
+    final transfers = downloads.progress.listen((update) {
+      if (update.complete) notifications.recordDownloadCompleted();
+    });
+    ref.onDispose(transfers.cancel);
+  }
+
   final engine = ref.watch(syncEngineProvider);
   if (engine != null) {
     final subscription = engine.serverEvents.listen(

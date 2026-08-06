@@ -88,6 +88,7 @@
     "trashPurge": "trash-purge-{id}",
     "trashPurgeConfirm": "trash-purge-confirm",
     "trashRestore": "trash-restore-{id}",
+    "taskRetentionDays": "task-retention-days",
     "trashRetentionDays": "trash-retention-days",
     "trashRetentionSave": "trash-retention-save",
     "trashRow": "trash-row-{id}",

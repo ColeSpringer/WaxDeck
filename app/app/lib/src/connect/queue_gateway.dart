@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../player/autoplay_gate.dart';
 import '../player/now_playing_controller.dart';
 import '../player/playback_session.dart';
 import '../queue/queue_controller.dart';
@@ -154,6 +155,10 @@ class LocalQueueGateway implements QueueGateway {
     // must not reorder what was handed over, or the two ends disagree
     // about what plays next.
     _queue.setShuffle(false);
+    // The one start here with no gesture behind it. Off declines the
+    // audio, not the handover: the queue still arrives.
+    final start =
+        play && await _ref.read(autoplayBlockedProvider.notifier).claimStart();
     await _playback.playPids(
       pids,
       // Pids and nothing else arrive with a load; the entity they came
@@ -161,7 +166,7 @@ class LocalQueueGateway implements QueueGateway {
       source: QueueSource.none,
       startIndex: index.clamp(0, pids.length - 1),
       positionMs: positionMs > 0 ? positionMs : null,
-      autoplay: play,
+      autoplay: start,
       offerUndo: false,
     );
     _throwOnFailedStart(began);

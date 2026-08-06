@@ -19,6 +19,8 @@ class _$AdminSettings extends AdminSettings {
   final int backupKeepBytes;
   @override
   final int? trashRetentionDays;
+  @override
+  final int? taskRetentionDays;
 
   factory _$AdminSettings([void Function(AdminSettingsBuilder)? updates]) =>
       (AdminSettingsBuilder()..update(updates))._build();
@@ -30,6 +32,7 @@ class _$AdminSettings extends AdminSettings {
     required this.backupKeepCount,
     required this.backupKeepBytes,
     this.trashRetentionDays,
+    this.taskRetentionDays,
   }) : super._();
   @override
   AdminSettings rebuild(void Function(AdminSettingsBuilder) updates) =>
@@ -47,7 +50,8 @@ class _$AdminSettings extends AdminSettings {
         sonicAnalysis == other.sonicAnalysis &&
         backupKeepCount == other.backupKeepCount &&
         backupKeepBytes == other.backupKeepBytes &&
-        trashRetentionDays == other.trashRetentionDays;
+        trashRetentionDays == other.trashRetentionDays &&
+        taskRetentionDays == other.taskRetentionDays;
   }
 
   @override
@@ -59,6 +63,7 @@ class _$AdminSettings extends AdminSettings {
     _$hash = $jc(_$hash, backupKeepCount.hashCode);
     _$hash = $jc(_$hash, backupKeepBytes.hashCode);
     _$hash = $jc(_$hash, trashRetentionDays.hashCode);
+    _$hash = $jc(_$hash, taskRetentionDays.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -71,7 +76,8 @@ class _$AdminSettings extends AdminSettings {
           ..add('sonicAnalysis', sonicAnalysis)
           ..add('backupKeepCount', backupKeepCount)
           ..add('backupKeepBytes', backupKeepBytes)
-          ..add('trashRetentionDays', trashRetentionDays))
+          ..add('trashRetentionDays', trashRetentionDays)
+          ..add('taskRetentionDays', taskRetentionDays))
         .toString();
   }
 }
@@ -109,6 +115,11 @@ class AdminSettingsBuilder
   set trashRetentionDays(int? trashRetentionDays) =>
       _$this._trashRetentionDays = trashRetentionDays;
 
+  int? _taskRetentionDays;
+  int? get taskRetentionDays => _$this._taskRetentionDays;
+  set taskRetentionDays(int? taskRetentionDays) =>
+      _$this._taskRetentionDays = taskRetentionDays;
+
   AdminSettingsBuilder() {
     AdminSettings._defaults(this);
   }
@@ -122,6 +133,7 @@ class AdminSettingsBuilder
       _backupKeepCount = $v.backupKeepCount;
       _backupKeepBytes = $v.backupKeepBytes;
       _trashRetentionDays = $v.trashRetentionDays;
+      _taskRetentionDays = $v.taskRetentionDays;
       _$v = null;
     }
     return this;
@@ -166,6 +178,7 @@ class AdminSettingsBuilder
             'backupKeepBytes',
           ),
           trashRetentionDays: trashRetentionDays,
+          taskRetentionDays: taskRetentionDays,
         );
     replace(_$result);
     return _$result;

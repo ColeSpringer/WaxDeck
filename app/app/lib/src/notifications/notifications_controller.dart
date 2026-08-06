@@ -13,7 +13,11 @@ import '../shell/routes.dart';
 enum NotificationKind {
   review('Review queue', WaxIcons.check, WaxRoute.review),
   upload('Uploads', WaxIcons.add, WaxRoute.uploads),
-  task('Background tasks', WaxIcons.refresh, WaxRoute.tasks);
+  task('Background tasks', WaxIcons.refresh, WaxRoute.tasks),
+  feedDisabled('Podcasts', WaxIcons.warning, WaxRoute.podcasts),
+  episodeDownloaded('Podcasts', WaxIcons.podcasts, WaxRoute.podcasts),
+  importCompleted('Imports', WaxIcons.success, WaxRoute.uploads),
+  download('Downloads', WaxIcons.downloads, WaxRoute.downloads);
 
   const NotificationKind(this.label, this.glyph, this.location);
 
@@ -22,7 +26,7 @@ enum NotificationKind {
 
   final WaxGlyph glyph;
 
-  /// Where tapping the row goes.
+  /// Where tapping the row goes when the row names nowhere better.
   final String location;
 }
 
@@ -32,6 +36,7 @@ class WaxNotification {
     required this.kind,
     required this.message,
     required this.at,
+    this.locationOverride,
   });
 
   final NotificationKind kind;
@@ -40,6 +45,12 @@ class WaxNotification {
   final String message;
 
   final DateTime at;
+
+  /// Where a row goes when the event named something more specific than
+  /// its kind's surface: a disabled feed opens its own show.
+  final String? locationOverride;
+
+  String get location => locationOverride ?? kind.location;
 }
 
 /// What this client has seen happen this session.
@@ -83,11 +94,27 @@ class NotificationsController extends Notifier<List<WaxNotification>> {
     return state.where((n) => n.at.isAfter(seen)).length;
   }
 
-  void record(NotificationKind kind, String message, {required DateTime at}) {
+  void record(
+    NotificationKind kind,
+    String message, {
+    required DateTime at,
+    String? location,
+  }) {
+    final row = WaxNotification(
+      kind: kind,
+      message: message,
+      at: at,
+      locationOverride: location,
+    );
+    // Deduplicated on the location too: two shows whose feeds both
+    // failed say the same sentence and must stay two rows.
     final kept = <WaxNotification>[
-      WaxNotification(kind: kind, message: message, at: at),
+      row,
       for (final existing in state)
-        if (existing.kind != kind || existing.message != message) existing,
+        if (existing.kind != kind ||
+            existing.message != message ||
+            existing.location != row.location)
+          existing,
     ];
     state = kept.length <= cap ? kept : kept.sublist(0, cap);
   }
@@ -122,14 +149,46 @@ class NotificationsController extends Notifier<List<WaxNotification>> {
   /// run is an empty message waiting to be drawn by whoever adds the
   /// producer.
   void recordServerEvent(ServerSyncEvent event, {DateTime? at}) {
-    final (NotificationKind? kind, String message) = switch (event.kind) {
-      'review' => (NotificationKind.review, 'The review queue changed.'),
-      'upload' => (NotificationKind.upload, 'An upload changed.'),
-      'task' => (NotificationKind.task, 'A background task changed.'),
-      _ => (null, ''),
+    final pid = event.pid;
+    final (
+      NotificationKind? kind,
+      String message,
+      String? location,
+    ) = switch (event.kind) {
+      'review' => (NotificationKind.review, 'The review queue changed.', null),
+      'upload' => (NotificationKind.upload, 'An upload changed.', null),
+      'task' => (NotificationKind.task, 'A background task changed.', null),
+      // The announcements. Generic messages because a marker carries no
+      // detail; the surface it opens has it.
+      'feed-disabled' => (
+        NotificationKind.feedDisabled,
+        'A show kept failing to refresh and was disabled.',
+        pid == null ? null : WaxRoute.show(pid),
+      ),
+      'import-completed' => (
+        NotificationKind.importCompleted,
+        'An upload was identified and added to the library.',
+        null,
+      ),
+      'episode-downloaded' => (
+        NotificationKind.episodeDownloaded,
+        'A new episode finished downloading.',
+        pid == null ? null : WaxRoute.episode(pid),
+      ),
+      _ => (null, '', null),
     };
     if (kind == null) return;
-    record(kind, message, at: at ?? DateTime.now());
+    record(kind, message, at: at ?? DateTime.now(), location: location);
+  }
+
+  /// Native only: web has no local download manager, so no transfer of
+  /// its own to announce. Server-side fetches ride the stream above.
+  void recordDownloadCompleted({DateTime? at}) {
+    record(
+      NotificationKind.download,
+      'A download finished.',
+      at: at ?? DateTime.now(),
+    );
   }
 }
 

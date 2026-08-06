@@ -27,6 +27,7 @@ import '../books/books_screen.dart';
 import '../connect/remote_screen.dart';
 import '../connect/remote_session.dart';
 import '../discovery/track_list_screen.dart';
+import '../downloads/downloads_controller.dart';
 import '../downloads/downloads_screen.dart';
 import '../health/diagnostics_screen.dart';
 import '../health/health_screen.dart';
@@ -749,6 +750,9 @@ class _SignedInScope extends ConsumerWidget {
     // cold arrival on a deep link never does - and which of the two you
     // got would be decided by a rendering detail.
     ref.watch(notificationsBinderProvider);
+    // Same reasoning: whoever asked for finished episodes to clear
+    // themselves did it to stop visiting the downloads screen.
+    ref.watch(downloadsTidyBinderProvider);
     // The notifier, not its state: playback has to be listening to the
     // queue for the whole session, but what it is playing changes
     // constantly and nothing under here should rebuild for that. The

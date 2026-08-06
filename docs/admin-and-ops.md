@@ -261,3 +261,12 @@ migration imports (with their reports), and the catalog's own jobs
 the WebSocket channel; `GET /api/v1/tools/tasks/{id}/events` serves
 the same lifecycle as server-sent events for anything that prefers a
 plain HTTP stream.
+
+A finished task is a receipt, and receipts pile up on an account that
+never opens this screen. The scheduled prune clears terminal rows past
+`taskRetentionDays` (Settings > Server); the default is 30 days, and 0
+keeps them indefinitely. Only terminal rows go - a task still running or
+still waiting to be claimed is work in progress whatever its age - and
+the setting is re-read on every pass, so a change takes effect at the
+next run rather than at the next restart. Clearing by hand, per row or
+all-finished-at-once, still works and is unaffected.

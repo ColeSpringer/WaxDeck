@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../settings/client_prefs.dart';
 import '../sync/sync_providers.dart';
 
 /// One row of the downloads manager: the bytes on disk, and who they
@@ -35,6 +36,15 @@ class DownloadEntry {
 
   /// Listened to the end. What "Remove finished episodes" is about.
   bool get finished => progress?.finished ?? false;
+
+  /// The stamp moves on any play-state write, not just the one that set
+  /// `finished`, so this only ever keeps a file longer than asked.
+  /// A missing stamp is not "long ago": it must not sweep.
+  bool finishedBefore(DateTime cutoff) {
+    if (!finished) return false;
+    final at = progress?.updatedAt;
+    return at != null && at.isBefore(cutoff);
+  }
 }
 
 /// What this device holds, and what it is fetching.
@@ -154,21 +164,20 @@ class DownloadsController extends AsyncNotifier<DownloadsState> {
     await future;
   }
 
-  /// Every downloaded episode the caller has listened to the end of.
-  ///
-  /// Episodes rather than everything finished: a book or an album played
-  /// through is one somebody may want again, and an episode is the medium
-  /// whose whole point is that it is done with. Answers how many went.
-  ///
-  /// Sequential for [removeAll]'s reason: shared-file detection reads the
-  /// rows the other removals are about to delete.
-  Future<int> removeFinishedEpisodes() async {
+  /// Episodes only: a book played through is one somebody may want
+  /// again. Sequential for [removeAll]'s reason. [finishedBefore] is the
+  /// sweep's grace window; the menu item passes none.
+  Future<int> removeFinishedEpisodes({DateTime? finishedBefore}) async {
     final port = _port;
     if (port == null) return 0;
     final store = ref.read(artworkStoreProvider);
     final done = <DownloadEntry>[
       for (final entry in state.value?.stored ?? const <DownloadEntry>[])
-        if (entry.mediaType == MediaType.podcast && entry.finished) entry,
+        if (entry.mediaType == MediaType.podcast &&
+            (finishedBefore == null
+                ? entry.finished
+                : entry.finishedBefore(finishedBefore)))
+          entry,
     ];
     for (final entry in done) {
       await port.remove(entry.pid);
@@ -250,3 +259,36 @@ final downloadProgressProvider =
         return Map<String, double>.unmodifiable(fractions);
       });
     });
+
+/// As fine as an hours-long grace window can use.
+const _tidyInterval = Duration(hours: 1);
+
+/// Reclaims finished episodes, on the shell rather than on the downloads
+/// screen: whoever turned this on did it to stop visiting that screen.
+final downloadsTidyBinderProvider = Provider.autoDispose<void>((ref) {
+  // Web has no local download manager, so nothing of its own to reclaim.
+  if (ref.watch(downloadManagerProvider) == null) return;
+  // Watched, so this holds no timer while the setting is off and sweeps
+  // as soon as it goes on.
+  if (!ref.watch(autoRemoveFinishedProvider)) return;
+  final hours = ref.watch(autoRemoveFinishedAfterHoursProvider);
+
+  Future<void> sweep() async {
+    final cutoff = DateTime.now().subtract(Duration(hours: hours));
+    try {
+      // Awaited first: the sweep reads the loaded listing, and on a cold
+      // start - or a switch flipped from Settings, where nothing built
+      // this - there is none yet, so it would find nothing to reclaim.
+      await ref.read(downloadsProvider.future);
+      await ref
+          .read(downloadsProvider.notifier)
+          .removeFinishedEpisodes(finishedBefore: cutoff);
+    } on Object {
+      // Housekeeping with no surface to report on; the next pass retries.
+    }
+  }
+
+  final timer = Timer.periodic(_tidyInterval, (_) => unawaited(sweep()));
+  ref.onDispose(timer.cancel);
+  unawaited(sweep());
+});

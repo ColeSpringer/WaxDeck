@@ -190,6 +190,12 @@ const (
 	// album, which the item-shaped play-state payload cannot carry, and
 	// the entity state endpoints are live reads anyway.
 	eventEntityState = "entity-state"
+	// Announcements: no client was going to refetch for these, so the
+	// marker is the whole news. Both ride the same emit as the
+	// notification event of the same name.
+	eventFeedDisabled      = "feed-disabled"
+	eventImportCompleted   = "import-completed"
+	eventEpisodeDownloaded = "episode-downloaded"
 )
 
 // ErrSyncReset marks a cursor the stream can no longer serve
@@ -950,7 +956,8 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 	seenPrefs := false
 	for _, e := range events {
 		switch e.Kind {
-		case eventReview, eventUpload, eventTask, eventEntityState:
+		case eventReview, eventUpload, eventTask, eventEntityState,
+			eventFeedDisabled, eventImportCompleted, eventEpisodeDownloaded:
 			// Marker kinds hydrate nothing: the pid names what to
 			// refetch and the surfaces are live reads.
 			key := e.Kind + "\x00" + e.ItemPID

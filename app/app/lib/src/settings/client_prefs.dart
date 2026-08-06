@@ -327,6 +327,44 @@ final downloadsOnWifiOnlyProvider = NotifierProvider<DownloadsOnWifiOnly, bool>(
   DownloadsOnWifiOnly.new,
 );
 
+/// Off by default: deleting somebody's files unasked cannot be undone,
+/// and the downloads screen already offers the manual sweep.
+class AutoRemoveFinished extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.autoRemoveFinished;
+
+  @override
+  bool get defaultValue => false;
+}
+
+final autoRemoveFinishedProvider = NotifierProvider<AutoRemoveFinished, bool>(
+  AutoRemoveFinished.new,
+);
+
+/// How long after finishing a download is reclaimed. `finished` flips
+/// the instant playback reaches the end, so no window would delete an
+/// episode out from under somebody scrubbing back thirty seconds.
+class AutoRemoveFinishedAfterHours extends IntSetting {
+  static const options = <int>[1, 6, 24, 72, 168];
+
+  @override
+  String get settingKey => ClientSettingKeys.autoRemoveFinishedAfterHours;
+
+  @override
+  int get minValue => 1;
+
+  @override
+  int get maxValue => 168;
+
+  @override
+  int get defaultValue => 24;
+}
+
+final autoRemoveFinishedAfterHoursProvider =
+    NotifierProvider<AutoRemoveFinishedAfterHours, int>(
+      AutoRemoveFinishedAfterHours.new,
+    );
+
 /// Whether a desktop left alone with music playing opens the visualizer
 /// by itself.
 ///
@@ -523,6 +561,15 @@ String spellSeconds(int seconds) {
     return minutes == 1 ? '1 minute' : '$minutes minutes';
   }
   return '$seconds seconds';
+}
+
+/// How a wait reads on a control: "a day", not "24 hours".
+String spellHours(int hours) {
+  if (hours % 24 == 0 && hours >= 24) {
+    final days = hours ~/ 24;
+    return days == 1 ? '1 day' : '$days days';
+  }
+  return hours == 1 ? '1 hour' : '$hours hours';
 }
 
 /// How a speed reads on a control: `1x`, `1.2x`, never `1.0x`.

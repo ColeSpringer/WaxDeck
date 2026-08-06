@@ -95,6 +95,7 @@ abstract final class SemanticsIds {
   static String trashPurge(Object id) => 'trash-purge-$id';
   static const String trashPurgeConfirm = 'trash-purge-confirm';
   static String trashRestore(Object id) => 'trash-restore-$id';
+  static const String taskRetentionDays = 'task-retention-days';
   static const String trashRetentionDays = 'trash-retention-days';
   static const String trashRetentionSave = 'trash-retention-save';
   static String trashRow(Object id) => 'trash-row-$id';

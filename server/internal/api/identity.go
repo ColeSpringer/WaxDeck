@@ -512,12 +512,22 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 		CrossfadeSeconds:    derefFloat(req.Body.CrossfadeSeconds),
 		ReplayGain:          derefBool(req.Body.ReplayGain),
 		RadioScrobbleOptOut: derefBool(req.Body.RadioScrobbleOptOut),
+		// Pointers, not flattened: absent and false differ, and the
+		// document is replaced whole.
+		BrowseShowUnknown: req.Body.BrowseShowUnknown,
+		Autoplay:          req.Body.Autoplay,
 	}
 	if req.Body.Theme != nil {
 		in.Theme = string(*req.Body.Theme)
 	}
 	if req.Body.RadioFavorites != nil {
 		in.RadioFavorites = *req.Body.RadioFavorites
+	}
+	if req.Body.BrowseSorts != nil {
+		in.BrowseSorts = make(map[string]string, len(*req.Body.BrowseSorts))
+		for dim, sort := range *req.Body.BrowseSorts {
+			in.BrowseSorts[dim] = string(sort)
+		}
 	}
 	stored, err := s.svc.PutPrefs(ctx, uc, in)
 	if err != nil {
@@ -555,6 +565,15 @@ func prefsJSON(p service.Prefs) Prefs {
 	}
 	if p.RadioScrobbleOptOut {
 		out.RadioScrobbleOptOut = ptr(true)
+	}
+	out.BrowseShowUnknown = p.BrowseShowUnknown
+	out.Autoplay = p.Autoplay
+	if len(p.BrowseSorts) > 0 {
+		sorts := make(map[string]PrefsBrowseSorts, len(p.BrowseSorts))
+		for dim, sort := range p.BrowseSorts {
+			sorts[dim] = PrefsBrowseSorts(sort)
+		}
+		out.BrowseSorts = &sorts
 	}
 	return out
 }

@@ -95,6 +95,12 @@ abstract final class ClientSettingKeys {
   /// Whether downloads wait for an unmetered connection.
   static const downloadsOnWifiOnly = 'waxdeck.downloads.wifiOnly';
 
+  /// Whether a finished episode's download is reclaimed on its own, and
+  /// how long after. Per device because the files are.
+  static const autoRemoveFinished = 'waxdeck.downloads.autoRemoveFinished';
+  static const autoRemoveFinishedAfterHours =
+      'waxdeck.downloads.autoRemoveFinishedAfterHours';
+
   /// Whether codec, bitrate, and provenance chips are drawn.
   static const technicalDetails = 'waxdeck.library.technicalDetails';
 

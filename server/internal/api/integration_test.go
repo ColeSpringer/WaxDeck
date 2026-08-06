@@ -177,7 +177,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	mux.HandleFunc("GET /media/enclosure", srv.ServeEnclosure)
 	mux.HandleFunc("GET /media/art", srv.ServeMediaArt)
 	mux.HandleFunc("GET /media/radio/{pid}", srv.ServeRadio)
-	mux.Handle("/rest/", subsonic.New(svc, bridge, media, "test"))
+	mux.Handle("/rest/", subsonic.New(svc, bridge, media, "test", log))
 	if bridge != nil {
 		mux.HandleFunc("/media/stream", bridge.ServeStream)
 		mux.HandleFunc("/media/hls/", bridge.ServeHLS)

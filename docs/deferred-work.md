@@ -68,13 +68,6 @@ here waits on upstream.
   catalog exposes `PeaksForItem(itemPID) []model.ItemPeaks`, every
   part's envelope in one read, which is the shape a book-timeline
   waveform is built from.
-- `[in-repo]` **Playback defaults 6.13 asks for that Settings does not
-  offer.** The section ships skip intervals, per-domain speed, casting
-  crossfade and leveling, the wifi-only preload brake (ADR-0037),
-  rewind-on-resume (ADR-0041), and the trim-silence and voice-boost
-  device defaults. One remains: **the web autoplay-overlay preference**,
-  which needs a mechanism rather than a control - the autoplay gate
-  reports a refusal without offering a standing preference about it.
 - `[in-repo]` **A place cannot be marked offline.** Audiobook bookmarks
   are a live read against the server (ADR-0041): the sheet fetches on
   open and marking one needs a round trip. Everything else a listener
@@ -98,19 +91,12 @@ here waits on upstream.
   Worth taking with the next plugin that lands for another reason. See
   ADR-0033.
 - `[in-repo]` **Settings the layout blueprint specifies and Settings does
-  not draw.** Beyond the playback defaults recorded above (ADR-0037):
-  browse defaults (show unknown buckets, per-dimension default sorts),
-  the artwork-glow toggle, always-show captions on cards, and language.
-  The first three have nothing to wire to - no screen reads a browse
-  default, `WaxBackdrop`'s glow is drawn by one screen and takes no
-  parameter, and `MediaCard` has no caption mode to force. Language is
-  further off: `Prefs.locale` is stored and the app has no localization
-  behind it, so a picker there would change nothing.
-
-  One more is per-section rather than per-setting. **Auto-remove
-  finished episodes**: the manual action exists on the downloads screen,
-  and making it automatic wants a sweep with its own timing rules rather
-  than a switch.
+  not draw.** Three remain, and all three have nothing to wire to: the
+  artwork-glow toggle (`WaxBackdrop`'s glow is drawn by one screen and
+  takes no parameter), always-show captions on cards (`MediaCard` has no
+  caption mode to force), and language, which is further off -
+  `Prefs.locale` is stored and the app has no localization behind it, so
+  a picker there would change nothing.
 - `[in-repo]` **The web build's per-device settings binding is not covered
   by an automated test.** `BrowserClientSettingsStore` - the probe, the
   fallback to memory, the write-through shadow, the key semantics - is
@@ -307,9 +293,6 @@ here waits on upstream.
 
 ## Compatibility
 
-- `[in-repo]` **Playlist durations on Subsonic list rows.** Exact on detail
-  responses; list rows report zero for smart playlists because
-  membership is computed on read.
 - `[in-repo]` **NSP import and export.**
 - `[hardware]` **Driving a real client binary in CI.** No Docker in the dev
   distro, and the web-based Subsonic clients need CORS headers
@@ -590,8 +573,8 @@ here waits on upstream.
   `SOURCE_ID` instead of re-downloading, with an append-mode tombstone
   so a track the user hand-removed is not re-added (mirror mode re-adds
   by design); and a sync notification event (added N, or failed) on the
-  existing event catalog, which also closes the
-  import-completed-notification gap recorded under Admin and ops. The
+  existing event catalog, beside the `import-completed` event an
+  auto-applied upload already emits. The
   worker gating is worth noting: the `feed-refresh` sweep only spawns
   when a podcast directory is configured, so a music-only instance
   wants a sibling sweeper (WaxDeck-owned composition-root wiring, no
@@ -609,17 +592,16 @@ here waits on upstream.
 
 ## Discovery and stats
 
-- `[in-repo]` **The bell reports markers, not the three events 6.19
-  names.** What the notifications bell lists is the user stream's marker
-  kinds (`review`, `upload`, `task`), each naming a surface that moved
-  (ADR-0038). Two of the three examples the section gives have no signal
-  on the wire at all. "Episode downloaded" is a server-side fetch, which
-  is a catalog change and emits no user event; the local download manager
-  does know when its own transfers finish, so the native half of it is a
-  listener away and the web half is not. "Feed disabled" is the feed
-  auto-disable the refresh endpoint documents, and `SubscriptionSettings`
-  carries no flag for it, so a client cannot tell a disabled feed from a
-  quiet one - that half needs a contract field before it needs a row.
+- `[in-repo]` **The web build has no downloads of its own to announce.**
+  The bell now reports what this device finished transferring
+  (`NotificationKind.download`), which the web build can never produce:
+  it has no local download manager at all, so there is no transfer of
+  its own whose completion it could announce. Not a platform-notification
+  limitation and not a missing API - what is missing is the download
+  manager, which is ADR-0033's whole subject. Recorded here so the next
+  reader does not go looking for a notification API to fix it with.
+  Server-side enclosure fetches are a different event and do reach every
+  platform, through the `episode-downloaded` marker on the user stream.
 - `[in-repo]` **Virtual tracks are not sonically analyzed.** A track
   carved out of a shared single-file rip by a cue sheet shares its
   backing file's audio essence, and embeddings are keyed by essence,
@@ -710,14 +692,6 @@ here waits on upstream.
 
 ## Admin and ops
 
-- `[in-repo]` **No server-side retention sweep for old finished tool
-  tasks.** Rows now clear by hand - a per-row delete and a
-  clear-finished sweep, both caller-scoped - but an account that never
-  visits the tasks screen still accumulates finished rows forever. A
-  cron-side sweep of terminal rows past some age is hygiene the manual
-  clear is not; it wants a retention knob and a place in the
-  maintenance loop rather than growing the bug-batch that added the
-  manual clear.
 - `[in-repo]` **Three admin console sections are declared and unbuilt.**
   The console holds fourteen sections; the layout blueprint's 6.15 names
   three more that have no server-scope surface at all yet. Notification
@@ -895,12 +869,6 @@ here waits on upstream.
   ADR-0050's preference for scheduling facts living in the config rather
   than in the file, which is why it was written this way.
 
-- `[in-repo]` **No import-completed notification event.** The
-  review-ready event deliberately skips entries that auto-apply, so
-  a fully automatic import is silent end to end. Probably right (the
-  uploader is usually watching the uploads screen, which updates
-  live), but it is a decision: an import-completed user event would
-  close the gap for fire-and-forget uploads.
 
 ## Decided, not deferred
 

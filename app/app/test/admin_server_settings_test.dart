@@ -111,9 +111,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Named, not just refused: one save writes two windows.
     expect(
       container.read(shellMessengerProvider)?.text,
-      contains('whole number of days'),
+      allOf(contains('whole number of days'), contains('Purge trashed files')),
     );
 
     await tester.enterText(
@@ -128,5 +129,67 @@ void main() {
     expect(repo.adminSettings.trashRetentionDays, 7);
     // Reflected back as what was stored, not as what was typed.
     expect(find.text('7'), findsOneWidget);
+    // The task window rode along untouched.
+    expect(repo.adminSettings.taskRetentionDays, 30);
+  });
+
+  testWidgets('a bad task window names itself, not the trash one', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    // The trash field is fine; the message has to name the other one.
+    await tester.enterText(
+      find.bySemanticsIdentifier('task-retention-days'),
+      'never',
+    );
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier('trash-retention-save'),
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier('trash-retention-save'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(shellMessengerProvider)?.text,
+      allOf(contains('whole number of days'), contains('Clear finished tasks')),
+    );
+    // And nothing was stored: a refused save writes neither window.
+    expect(repo.adminSettings.taskRetentionDays, 30);
+  });
+
+  testWidgets('the task window saves beside the trash one', (tester) async {
+    final repo = FakeRepository();
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    await tester.enterText(
+      find.bySemanticsIdentifier('task-retention-days'),
+      '14',
+    );
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier('trash-retention-save'),
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier('trash-retention-save'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(repo.adminSettings.taskRetentionDays, 14);
+    // Zero is a choice here, not a default, so it has to store.
+    await tester.enterText(
+      find.bySemanticsIdentifier('task-retention-days'),
+      '0',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier('trash-retention-save'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(repo.adminSettings.taskRetentionDays, 0);
   });
 }

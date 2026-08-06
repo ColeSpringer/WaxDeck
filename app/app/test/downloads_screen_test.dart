@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/downloads/downloads_controller.dart';
 import 'package:waxdeck/src/downloads/downloads_screen.dart';
+import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
@@ -219,6 +221,75 @@ void main() {
 
     expect(downloads.removed, [_episode]);
     expect(find.text('Removed 1 episode'), findsOneWidget);
+  });
+
+  test('the sweep waits out its grace window', () async {
+    // Two finished episodes, one past the window and one not.
+    const stale = 'tr-01JZX5N8QW3F4V9T2B7KDEP0002';
+    downloads.setStored(<DownloadedItem>[_stored(_episode), _stored(stale)]);
+    final db = await _mirror();
+    await db
+        .into(db.mirrorItems)
+        .insert(
+          MirrorItemsCompanion.insert(
+            pid: stale,
+            ulid: stale.substring(3),
+            mediaType: 'podcast',
+            title: 'Second Breakfast',
+            durationMs: 3600000,
+            sortKey: 'second breakfast',
+          ),
+        );
+    for (final row in <(String, DateTime)>[
+      (_episode, DateTime.now().subtract(const Duration(minutes: 10))),
+      (stale, DateTime.now().subtract(const Duration(days: 3))),
+    ]) {
+      await db
+          .into(db.mirrorPlayStates)
+          .insert(
+            MirrorPlayStatesCompanion.insert(
+              pid: row.$1,
+              positionMs: const Value(3600000),
+              finished: const Value(true),
+              updatedAt: Value(row.$2),
+            ),
+          );
+    }
+
+    final repo = FakeRepository();
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        mirrorDatabaseProvider.overrideWithValue(db),
+        downloadManagerProvider.overrideWithValue(downloads),
+        artworkStoreProvider.overrideWithValue(artwork),
+        syncEngineProvider.overrideWithValue(
+          SyncEngine(
+            db: db,
+            repository: repo,
+            channelFactory: deadChannelFactory(),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(downloadsProvider.future);
+
+    // Off is off: the binder holds no timer and sweeps nothing.
+    final idle = container.listen(downloadsTidyBinderProvider, (_, _) {});
+    await Future<void>.delayed(Duration.zero);
+    expect(downloads.removed, isEmpty);
+    idle.close();
+
+    container.read(autoRemoveFinishedProvider.notifier).set(true);
+    container.read(autoRemoveFinishedAfterHoursProvider.notifier).set(24);
+    final alive = container.listen(downloadsTidyBinderProvider, (_, _) {});
+    addTearDown(alive.close);
+    await container.read(downloadsProvider.future);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(downloads.removed, <String>[stale]);
+    expect(artwork.unpinned, <String>[stale]);
   });
 
   testWidgets('remove-finished says so when there is nothing to remove', (

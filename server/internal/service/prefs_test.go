@@ -9,7 +9,8 @@ import (
 func isZeroPrefs(p Prefs) bool {
 	return p.Timezone == "" && p.Locale == "" && p.Theme == "" &&
 		!p.SharedStatsOptOut && len(p.RadioFavorites) == 0 &&
-		p.CrossfadeSeconds == 0 && !p.ReplayGain && !p.RadioScrobbleOptOut
+		p.CrossfadeSeconds == 0 && !p.ReplayGain && !p.RadioScrobbleOptOut &&
+		p.BrowseShowUnknown == nil && len(p.BrowseSorts) == 0 && p.Autoplay == nil
 }
 
 // TestPrefsRoundTripsTheServerAppliedFields pins the three preferences
@@ -105,5 +106,84 @@ func TestPrefsSurviveACorruptDocument(t *testing.T) {
 	}
 	if read := svc.PrefsForUser(ctx, admin.ID); read.Theme != "dark" {
 		t.Fatalf("the next write did not replace the corrupt document: %+v", read)
+	}
+}
+
+// Validated against the same two tables the browse endpoint parses with,
+// so a stored default can never name something it would refuse.
+func TestPutPrefsValidatesBrowseSorts(t *testing.T) {
+	ctx, svc, admin := newAdminFixture(t)
+
+	stored, err := svc.PutPrefs(ctx, admin, Prefs{
+		BrowseSorts: map[string]string{
+			"genre":    string(FacetSortLabel),
+			"year":     string(FacetSortCount),
+			"tag.MOOD": string(FacetSortLabel),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.BrowseSorts["genre"] != string(FacetSortLabel) || len(stored.BrowseSorts) != 3 {
+		t.Fatalf("stored = %+v", stored.BrowseSorts)
+	}
+
+	if _, err := svc.PutPrefs(ctx, admin, Prefs{
+		BrowseSorts: map[string]string{"invented": string(FacetSortLabel)},
+	}); KindOf(err) != KindInvalid {
+		t.Fatalf("an unknown dimension answered %v, want invalid-request", err)
+	}
+	if _, err := svc.PutPrefs(ctx, admin, Prefs{
+		BrowseSorts: map[string]string{"genre": "sideways"},
+	}); KindOf(err) != KindInvalid {
+		t.Fatalf("an unknown order answered %v, want invalid-request", err)
+	}
+	// "" is the absent query parameter, not a storable value: stored, it
+	// would answer outside the response enum and throw in the generated
+	// client on every later prefs read.
+	if _, err := svc.PutPrefs(ctx, admin, Prefs{
+		BrowseSorts: map[string]string{"genre": ""},
+	}); KindOf(err) != KindInvalid {
+		t.Fatalf("an empty order answered %v, want invalid-request", err)
+	}
+	// A tag dimension goes through the catalog's own key rules rather
+	// than a prefix check, so "tag." plus anything is refused.
+	if _, err := svc.PutPrefs(ctx, admin, Prefs{
+		BrowseSorts: map[string]string{"tag.": string(FacetSortLabel)},
+	}); KindOf(err) != KindInvalid {
+		t.Fatalf("an empty tag key answered %v, want invalid-request", err)
+	}
+}
+
+// Absent is the default and false is a choice, so both have to survive a
+// round trip as themselves.
+func TestPrefsKeepFalseApartFromAbsent(t *testing.T) {
+	ctx, svc, admin := newAdminFixture(t)
+
+	off := false
+	stored, err := svc.PutPrefs(ctx, admin, Prefs{BrowseShowUnknown: &off, Autoplay: &off})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.BrowseShowUnknown == nil || *stored.BrowseShowUnknown ||
+		stored.Autoplay == nil || *stored.Autoplay {
+		t.Fatalf("stored = %+v", stored)
+	}
+	read, err := svc.Prefs(ctx, admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.BrowseShowUnknown == nil || *read.BrowseShowUnknown ||
+		read.Autoplay == nil || *read.Autoplay {
+		t.Fatalf("read back = %+v, want both stored as an explicit no", read)
+	}
+
+	// A document that never mentioned them reads as unset.
+	cleared, err := svc.PutPrefs(ctx, admin, Prefs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.BrowseShowUnknown != nil || cleared.Autoplay != nil {
+		t.Fatalf("cleared = %+v", cleared)
 	}
 }

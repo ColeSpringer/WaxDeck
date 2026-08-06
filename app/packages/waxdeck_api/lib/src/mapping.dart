@@ -118,6 +118,7 @@ gen.PrefsThemeEnum themePrefToGen(ThemePref theme) =>
 Prefs prefsFromGen(gen.Prefs prefs) {
   final theme = prefs.theme;
   final favorites = prefs.radioFavorites;
+  final sorts = prefs.browseSorts;
   return Prefs(
     timezone: prefs.timezone,
     locale: prefs.locale,
@@ -129,12 +130,22 @@ Prefs prefsFromGen(gen.Prefs prefs) {
     crossfadeSeconds: prefs.crossfadeSeconds,
     replayGain: prefs.replayGain,
     radioScrobbleOptOut: prefs.radioScrobbleOptOut,
+    browseShowUnknown: prefs.browseShowUnknown,
+    // Carried in wire form, unrecognized values included: see
+    // Prefs.browseSorts.
+    browseSorts: sorts == null
+        ? null
+        : <String, String>{
+            for (final entry in sorts.entries) entry.key: entry.value.name,
+          },
+    autoplay: prefs.autoplay,
   );
 }
 
 gen.Prefs prefsToGen(Prefs prefs) {
   final theme = prefs.theme;
   final favorites = prefs.radioFavorites;
+  final sorts = prefs.browseSorts;
   return gen.Prefs(
     (b) => b
       ..timezone = prefs.timezone
@@ -150,7 +161,17 @@ gen.Prefs prefsToGen(Prefs prefs) {
           : ListBuilder<String>(favorites)
       ..crossfadeSeconds = prefs.crossfadeSeconds
       ..replayGain = prefs.replayGain
-      ..radioScrobbleOptOut = prefs.radioScrobbleOptOut,
+      ..radioScrobbleOptOut = prefs.radioScrobbleOptOut
+      ..browseShowUnknown = prefs.browseShowUnknown
+      ..browseSorts = sorts == null
+          ? null
+          : MapBuilder<String, gen.PrefsBrowseSortsEnum>(
+              <String, gen.PrefsBrowseSortsEnum>{
+                for (final entry in sorts.entries)
+                  entry.key: gen.PrefsBrowseSortsEnum.valueOf(entry.value),
+              },
+            )
+      ..autoplay = prefs.autoplay,
   );
 }
 
@@ -1808,6 +1829,8 @@ AdminSettings adminSettingsFromGen(gen.AdminSettings settings) {
     backupKeepCount: settings.backupKeepCount,
     backupKeepBytes: settings.backupKeepBytes,
     trashRetentionDays: settings.trashRetentionDays ?? 0,
+    // Absent is a server predating the field, whose prune ran on 30 days.
+    taskRetentionDays: settings.taskRetentionDays ?? 30,
   );
 }
 
@@ -1819,7 +1842,8 @@ gen.AdminSettings adminSettingsToGen(AdminSettings settings) {
       ..sonicAnalysis = settings.sonicAnalysis
       ..backupKeepCount = settings.backupKeepCount
       ..backupKeepBytes = settings.backupKeepBytes
-      ..trashRetentionDays = settings.trashRetentionDays,
+      ..trashRetentionDays = settings.trashRetentionDays
+      ..taskRetentionDays = settings.taskRetentionDays,
   );
 }
 

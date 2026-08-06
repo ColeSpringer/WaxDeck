@@ -79,9 +79,60 @@ func (h *Handler) getPlaylists(w http.ResponseWriter, r *http.Request, uc *servi
 	}
 	out := &playlists{}
 	for _, pl := range rows {
-		out.Playlists = append(out.Playlists, playlistHeader(pl))
+		shape := playlistHeader(pl)
+		// Both fields: a count disagreeing with the duration beside it
+		// would be the same bug in a new place. Best effort, and said
+		// out loud: the fallback is the stored count, which is the wrong
+		// answer this computation exists to replace.
+		if songs, seconds, err := h.playlistTotals(r.Context(), uc, pl); err == nil {
+			shape.SongCount, shape.Duration = songs, seconds
+		} else {
+			h.warn("subsonic playlist totals", "playlist", pl.PID, "err", err)
+		}
+		out.Playlists = append(out.Playlists, shape)
 	}
 	h.ok(w, r, envelope{Playlists: out})
+}
+
+// playlistTotals answers one playlist's song count and duration as this
+// caller sees it, from the cache where the answer still holds.
+func (h *Handler) playlistTotals(ctx context.Context, uc *service.UserCtx, pl service.Playlist) (int, int, error) {
+	key := playlistTotalKey{userID: uc.ID, pid: pl.PID}
+	updated := pl.UpdatedAt.UnixNano()
+	now := time.Now()
+
+	h.totalsMu.Lock()
+	held, ok := h.totals[key]
+	h.totalsMu.Unlock()
+	if ok && held.updatedAtNS == updated && now.Sub(held.at) < playlistTotalsTTL {
+		return held.songs, held.seconds, nil
+	}
+
+	entries, err := h.playlistEntries(ctx, uc, pl.PID)
+	if err != nil {
+		return 0, 0, err
+	}
+	var durMS int64
+	for _, e := range entries {
+		durMS += e.Item.DurationMS
+	}
+	fresh := playlistTotal{
+		updatedAtNS: updated,
+		at:          now,
+		songs:       len(entries),
+		seconds:     int(durMS / 1000),
+	}
+
+	h.totalsMu.Lock()
+	if h.totals == nil {
+		h.totals = make(map[playlistTotalKey]playlistTotal)
+	} else if len(h.totals) >= playlistTotalsCap {
+		// Emptied, not replaced: a fresh map would regrow from nothing.
+		clear(h.totals)
+	}
+	h.totals[key] = fresh
+	h.totalsMu.Unlock()
+	return fresh.songs, fresh.seconds, nil
 }
 
 func (h *Handler) getPlaylist(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {

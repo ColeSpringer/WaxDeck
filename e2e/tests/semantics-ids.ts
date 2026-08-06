@@ -95,6 +95,7 @@ export const SemanticsIds = {
   trashPurge: (id: string | number) => `trash-purge-${id}`,
   trashPurgeConfirm: 'trash-purge-confirm',
   trashRestore: (id: string | number) => `trash-restore-${id}`,
+  taskRetentionDays: 'task-retention-days',
   trashRetentionDays: 'trash-retention-days',
   trashRetentionSave: 'trash-retention-save',
   trashRow: (id: string | number) => `trash-row-${id}`,

@@ -106,7 +106,7 @@ func TestNotificationEventCatalog(t *testing.T) {
 	if !scopes["server"] || !scopes["user"] {
 		t.Fatalf("catalog scopes = %v, want both", scopes)
 	}
-	for _, want := range []string{"signup-requested", "backup-completed", "backup-failed", "episode-downloaded", "feed-disabled", "review-ready"} {
+	for _, want := range []string{"signup-requested", "backup-completed", "backup-failed", "episode-downloaded", "feed-disabled", "review-ready", "import-completed"} {
 		found := false
 		for _, e := range list.Events {
 			if e.Name == want {

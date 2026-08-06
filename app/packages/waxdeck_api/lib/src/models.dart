@@ -240,6 +240,9 @@ class Prefs {
     this.crossfadeSeconds,
     this.replayGain,
     this.radioScrobbleOptOut,
+    this.browseShowUnknown,
+    this.browseSorts,
+    this.autoplay,
   });
 
   /// IANA timezone name, for example Europe/Amsterdam.
@@ -284,6 +287,32 @@ class Prefs {
   /// means enrolled, the default.
   final bool? radioScrobbleOptOut;
 
+  /// Whether a browse index draws the bucket for the items a dimension is
+  /// absent from. Absent means shown. A presentation choice, not a server
+  /// filter: the bucket still drills either way.
+  final bool? browseShowUnknown;
+
+  /// The order each browse index opens in, by dimension name, in wire
+  /// form; read through [browseSortFor]. Strings rather than [FacetSort]
+  /// so a value this build cannot read survives the round trip instead
+  /// of being erased by the next write to another dimension.
+  final Map<String, String>? browseSorts;
+
+  /// The stored order for one dimension, or null when there is none and
+  /// when this build does not know the one stored.
+  FacetSort? browseSortFor(String dimension) {
+    final stored = browseSorts?[dimension];
+    if (stored == null) return null;
+    for (final value in FacetSort.values) {
+      if (value.wireName == stored) return value;
+    }
+    return null;
+  }
+
+  /// Whether playback may start with no gesture behind it. Absent is
+  /// allowed.
+  final bool? autoplay;
+
   /// Copy with individual fields replaced. Passing null keeps the current
   /// value; clearing a stored field is not something the UI needs yet.
   Prefs copyWith({
@@ -295,6 +324,9 @@ class Prefs {
     double? crossfadeSeconds,
     bool? replayGain,
     bool? radioScrobbleOptOut,
+    bool? browseShowUnknown,
+    Map<String, String>? browseSorts,
+    bool? autoplay,
   }) {
     return Prefs(
       timezone: timezone ?? this.timezone,
@@ -305,6 +337,9 @@ class Prefs {
       crossfadeSeconds: crossfadeSeconds ?? this.crossfadeSeconds,
       replayGain: replayGain ?? this.replayGain,
       radioScrobbleOptOut: radioScrobbleOptOut ?? this.radioScrobbleOptOut,
+      browseShowUnknown: browseShowUnknown ?? this.browseShowUnknown,
+      browseSorts: browseSorts ?? this.browseSorts,
+      autoplay: autoplay ?? this.autoplay,
     );
   }
 }
@@ -3381,6 +3416,7 @@ class AdminSettings {
     required this.backupKeepCount,
     required this.backupKeepBytes,
     required this.trashRetentionDays,
+    required this.taskRetentionDays,
   });
 
   final bool signupEnabled;
@@ -3403,6 +3439,11 @@ class AdminSettings {
   /// periodic sweep (0 disables retention).
   final int trashRetentionDays;
 
+  /// Task retention: clear finished tool tasks older than this many days
+  /// on the scheduled prune. Unlike [trashRetentionDays], 0 is a choice
+  /// ("keep them") rather than the default, which is 30.
+  final int taskRetentionDays;
+
   AdminSettings copyWith({
     bool? signupEnabled,
     bool? readOnly,
@@ -3410,6 +3451,7 @@ class AdminSettings {
     int? backupKeepCount,
     int? backupKeepBytes,
     int? trashRetentionDays,
+    int? taskRetentionDays,
   }) => AdminSettings(
     signupEnabled: signupEnabled ?? this.signupEnabled,
     readOnly: readOnly ?? this.readOnly,
@@ -3417,6 +3459,7 @@ class AdminSettings {
     backupKeepCount: backupKeepCount ?? this.backupKeepCount,
     backupKeepBytes: backupKeepBytes ?? this.backupKeepBytes,
     trashRetentionDays: trashRetentionDays ?? this.trashRetentionDays,
+    taskRetentionDays: taskRetentionDays ?? this.taskRetentionDays,
   );
 }
 

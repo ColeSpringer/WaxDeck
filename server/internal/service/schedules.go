@@ -173,9 +173,6 @@ func (l *Library) RunPrune(ctx context.Context) error {
 		keepAudit       = 50_000
 		stampRetention  = 365 * 24 * time.Hour
 		keepSessionsPer = 5
-		// A finished task is a receipt somebody may want to read; a month
-		// outlives any question about last night's split.
-		keepToolTasks = 30 * 24 * time.Hour
 		// A week since the row last tried, because it is a give-up rather
 		// than a receipt and deleting it re-opens the work. Long enough
 		// that a file broken for good costs about five attempts a week
@@ -210,10 +207,16 @@ func (l *Library) RunPrune(ctx context.Context) error {
 		l.log.Info("pruned audit log", "rows", an)
 	}
 	record("playback sessions", l.db.PrunePlaybackSessions(ctx, keepSessionsPer))
-	tn, err := l.db.PruneFinishedToolTasks(ctx, time.Now().Add(-keepToolTasks).UnixNano())
-	record("tool tasks", err)
-	if tn > 0 {
-		l.log.Info("pruned finished tool tasks", "rows", tn)
+	// The one horizon here that is not a server-owned constant: how long
+	// a receipt is worth keeping is an operator's policy. Re-read every
+	// pass, so a change needs no restart; 0 is an explicit "keep them".
+	if days := l.TaskRetentionDays(ctx); days > 0 {
+		tn, err := l.db.PruneFinishedToolTasks(ctx,
+			time.Now().Add(-time.Duration(days)*24*time.Hour).UnixNano())
+		record("tool tasks", err)
+		if tn > 0 {
+			l.log.Info("pruned finished tool tasks", "rows", tn, "retentionDays", days)
+		}
 	}
 	qn, err := l.db.PruneExhaustedAnalysis(ctx,
 		time.Now().Add(-keepExhaustedAnalysis).UnixNano(), analysisMaxAttempts)

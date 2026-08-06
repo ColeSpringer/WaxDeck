@@ -152,18 +152,16 @@ func (l *Library) notifyReview(ctx context.Context, entryID, uploadedBy string) 
 	}
 }
 
-// notifyReviewReady announces one entry whose identification just
-// finished and which still needs a human decision. Emitted here, not
-// at entry open, so an entry that auto-applies seconds later never
-// notifies; scan and rematch entries stay silent too (bulk operations
-// would flood, and their operator is already watching the queue). The
-// entry re-reads so an auto-apply that landed meanwhile wins.
-func (l *Library) notifyReviewReady(ctx context.Context, entryID string) {
+// notifyIdentified announces one finished identification in whichever of
+// its two terminal shapes it landed: waiting for a decision, or already
+// filed. Emitted here, not at entry open, so the re-read sees an
+// auto-apply that landed in between; scan and rematch stay silent.
+func (l *Library) notifyIdentified(ctx context.Context, entryID string) {
 	entry, err := l.db.ReviewEntryByID(ctx, entryID)
 	if err != nil {
 		return
 	}
-	if entry.Status != reviewPending {
+	if entry.Status != reviewPending && entry.Status != reviewAutoApplied {
 		return
 	}
 	if entry.Origin != reviewOriginUpload && entry.Origin != reviewOriginAcquire {
@@ -173,19 +171,41 @@ func (l *Library) notifyReviewReady(ctx context.Context, entryID string) {
 	if admins, err := l.db.EnabledAdminIDs(ctx); err == nil {
 		recipients = append(recipients, admins...)
 	} else {
-		l.log.Warn("listing admins for review notification", "err", err)
+		l.log.Warn("listing admins for identification notification", "err", err)
 	}
 	if entry.UploadedBy != "" {
 		recipients = append(recipients, entry.UploadedBy)
 	}
-	what := entry.Title
-	if entry.Artist != "" && what != "" {
-		what = entry.Artist + ": " + what
+	if entry.Status == reviewPending {
+		l.EmitNotification(ctx, "review-ready", "Ready for review",
+			entryWhat(entry.Artist, entry.Title, entry.TrackCount)+
+				" finished identification and waits for a decision.", recipients)
+		return
 	}
-	if what == "" {
-		what = fmt.Sprintf("%d files", entry.TrackCount)
+	// Best* rather than the entry's own tags: an applied entry names what
+	// it was identified *as*, which is what landed in the library.
+	l.EmitNotification(ctx, "import-completed", "Import finished",
+		entryWhat(entry.BestArtist, entry.BestTitle, entry.TrackCount)+
+			" was identified and added to the library.", recipients)
+	seen := map[string]bool{}
+	for _, uid := range recipients {
+		if uid == "" || seen[uid] {
+			continue
+		}
+		seen[uid] = true
+		l.emitUserEvent(ctx, uid, eventImportCompleted, entry.ID)
 	}
-	l.EmitNotification(ctx, "review-ready", "Ready for review", what+" finished identification and waits for a decision.", recipients)
+}
+
+// entryWhat names an entry for a notification body.
+func entryWhat(artist, title string, tracks int) string {
+	if title == "" {
+		return fmt.Sprintf("%d files", tracks)
+	}
+	if artist != "" {
+		return artist + ": " + title
+	}
+	return title
 }
 
 // openReviewEntry stores a pending entry and queues it for the
@@ -519,7 +539,7 @@ func (l *Library) finishIdentifyEmpty(ctx context.Context, entryID, note string)
 		l.log.Info("identification closed without candidates", "entry", entryID, "note", note)
 	}
 	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
-	l.notifyReviewReady(ctx, entry.ID)
+	l.notifyIdentified(ctx, entry.ID)
 }
 
 // identifyEntry runs the engine for one entry and applies the
@@ -536,7 +556,7 @@ func (l *Library) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) err
 			return err
 		}
 		l.notifyReview(ctx, entry.ID, entry.UploadedBy)
-		l.notifyReviewReady(ctx, entry.ID)
+		l.notifyIdentified(ctx, entry.ID)
 		return nil
 	}
 
@@ -590,7 +610,7 @@ func (l *Library) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) err
 		}
 	}
 	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
-	l.notifyReviewReady(ctx, entry.ID)
+	l.notifyIdentified(ctx, entry.ID)
 	return nil
 }
 

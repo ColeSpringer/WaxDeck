@@ -4,6 +4,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../providers.dart';
 import '../queue/queue_state.dart';
+import '../settings/prefs_controller.dart';
 
 /// A dimension the music hub offers an index of.
 ///
@@ -193,13 +194,35 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
   /// list that no longer exists.
   var _generation = 0;
 
+  /// Watched in [build], so flipping the preference reloads open indexes.
+  var _showUnknown = true;
+
+  /// Here rather than at the three places the screen reads a bucket list,
+  /// so rows, rail, and letter seek cannot disagree. Paging is unharmed:
+  /// the cursor is minted from the unfiltered page.
+  List<FacetBucket> _shown(List<FacetBucket> buckets) {
+    if (_showUnknown) return buckets;
+    return <FacetBucket>[
+      for (final bucket in buckets)
+        if (!bucket.unknown) bucket,
+    ];
+  }
+
   @override
   Future<MusicIndexState> build() async {
     _generation++;
+    _showUnknown = ref.watch(
+      prefsControllerProvider.select(
+        (prefs) => prefs.value?.browseShowUnknown ?? true,
+      ),
+    );
     final page = await ref
         .watch(repositoryProvider)
         .listFacets(key.dimension.wireName, sort: key.sort, limit: pageSize);
-    return MusicIndexState(buckets: page.buckets, nextCursor: page.nextCursor);
+    return MusicIndexState(
+      buckets: _shown(page.buckets),
+      nextCursor: page.nextCursor,
+    );
   }
 
   /// Fetches the next page and appends it. Answers whether anything was
@@ -223,7 +246,7 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
       if (generation != _generation) return false;
       state = AsyncData(
         MusicIndexState(
-          buckets: <FacetBucket>[...current.buckets, ...page.buckets],
+          buckets: <FacetBucket>[...current.buckets, ..._shown(page.buckets)],
           nextCursor: page.nextCursor,
           // An append does not drop the floor: losing it here would take
           // the way back to the head away mid-scroll.
@@ -286,7 +309,7 @@ class MusicIndexController extends AsyncNotifier<MusicIndexState> {
       }
       state = AsyncData(
         MusicIndexState(
-          buckets: page.buckets,
+          buckets: _shown(page.buckets),
           nextCursor: page.nextCursor,
           anchoredAt: letter,
         ),
@@ -318,28 +341,56 @@ final musicIndexProvider =
       MusicIndexKey
     >(MusicIndexController.new);
 
+/// What an index opens in with no stored order. A-to-Z where an alphabet
+/// is how anyone looks for a thing; biggest-first for genres and years,
+/// since an alphabet of years is the years again.
+FacetSort defaultBrowseSort(MusicDimension dimension) => switch (dimension) {
+  MusicDimension.artists ||
+  MusicDimension.albums ||
+  MusicDimension.releaseGroups => FacetSort.label,
+  MusicDimension.genres || MusicDimension.years => FacetSort.count,
+};
+
+String browseSortLabel(FacetSort sort) => switch (sort) {
+  FacetSort.label => 'A to Z',
+  FacetSort.count => 'Most first',
+};
+
 /// Which order an index is showing. Per dimension, because the choice is
 /// about the list in front of you.
-///
-/// A-to-Z leads where an alphabet is how anyone looks for a thing:
-/// artists, albums, release groups. Genres and years lead biggest-first,
-/// because an alphabet of years is the years again, and the genre with
-/// two tracks in it is not where a visitor starts. Either way the toggle
-/// is there.
 class MusicIndexSort extends Notifier<FacetSort> {
   MusicIndexSort(this.dimension);
 
   final MusicDimension dimension;
 
-  @override
-  FacetSort build() => switch (dimension) {
-    MusicDimension.artists ||
-    MusicDimension.albums ||
-    MusicDimension.releaseGroups => FacetSort.label,
-    MusicDimension.genres || MusicDimension.years => FacetSort.count,
-  };
+  /// Outranks the stored default. Dropped when that value itself
+  /// changes: the provider outlives its screen, so a toolbar tap would
+  /// otherwise make the setting dead for the session.
+  FacetSort? _chosen;
+  FacetSort? _storedAtChoice;
 
-  void select(FacetSort sort) => state = sort;
+  @override
+  FacetSort build() {
+    // Watched: an index opened before the document landed would keep the
+    // built-in order for the rest of the session.
+    final stored = ref.watch(
+      prefsControllerProvider.select(
+        (prefs) => prefs.value?.browseSortFor(dimension.wireName),
+      ),
+    );
+    if (stored != _storedAtChoice) _chosen = null;
+    return _chosen ?? stored ?? defaultBrowseSort(dimension);
+  }
+
+  void select(FacetSort sort) {
+    _chosen = sort;
+    _storedAtChoice = ref.read(
+      prefsControllerProvider.select(
+        (prefs) => prefs.value?.browseSortFor(dimension.wireName),
+      ),
+    );
+    state = sort;
+  }
 }
 
 final musicIndexSortProvider =

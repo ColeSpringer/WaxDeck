@@ -23,6 +23,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math/rand/v2"
 	"net/http"
@@ -31,6 +32,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
@@ -54,6 +56,7 @@ type Handler struct {
 	bridge  streamer
 	media   *auth.MediaTokens
 	version string
+	log     *slog.Logger
 
 	// The full-visibility grouped index, cached against the catalog
 	// feed position (polling clients browse far more often than the
@@ -62,14 +65,44 @@ type Handler struct {
 	idxMu     sync.Mutex
 	idxTail   int64
 	idxShared *index
+
+	// Playlist totals for the list response, which has no members to add
+	// up.
+	totalsMu sync.Mutex
+	totals   map[playlistTotalKey]playlistTotal
 }
+
+// playlistTotalKey scopes a total to who asked: membership is filtered
+// per caller, so a cache keyed on the pid alone would leak.
+type playlistTotalKey struct {
+	userID string
+	pid    string
+}
+
+// playlistTotal is one computed answer, valid until the playlist is
+// edited or playlistTotalsTTL passes. A TTL rather than the catalog feed
+// position, which is wrong both ways: a play-state write moves no
+// catalog change, and one scan invalidates every entry at once.
+type playlistTotal struct {
+	updatedAtNS int64
+	at          time.Time
+	songs       int
+	seconds     int
+}
+
+// playlistTotalsTTL bounds how stale a list row's totals can be.
+const playlistTotalsTTL = time.Minute
+
+// playlistTotalsCap bounds the cache. Cleared whole rather than evicted:
+// an entry is four integers and cheap to rebuild.
+const playlistTotalsCap = 4096
 
 // New builds the adapter. bridge may be nil: stream then serves
 // original bytes directly through the tokenized download endpoint
 // (media mints the tokens), refusing only span-carved tracks it
 // cannot cut.
-func New(svc *service.Library, bridge *flow.Bridge, media *auth.MediaTokens, version string) *Handler {
-	h := &Handler{svc: svc, media: media, version: version}
+func New(svc *service.Library, bridge *flow.Bridge, media *auth.MediaTokens, version string, log *slog.Logger) *Handler {
+	h := &Handler{svc: svc, media: media, version: version, log: log}
 	if bridge != nil {
 		h.bridge = bridge
 	}
@@ -971,4 +1004,11 @@ func formInt(r *http.Request, name string, def int) int {
 		return def
 	}
 	return n
+}
+
+// warn logs, tolerating a handler built without a logger (tests).
+func (h *Handler) warn(msg string, args ...any) {
+	if h.log != nil {
+		h.log.Warn(msg, args...)
+	}
 }

@@ -8,6 +8,7 @@ import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
 import '../connect/cast_preflight.dart';
 import '../connect/device_picker.dart';
+import '../music/music_controllers.dart';
 import '../player/smart_rewind.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
@@ -282,6 +283,23 @@ class _PlaybackBody extends ConsumerWidget {
             ),
           ],
         ),
+        _Group(
+          title: 'Starting on its own',
+          children: <Widget>[
+            WaxSettingRow(
+              title: 'Start playing without asking',
+              help:
+                  'Lets a queue another device hands over start here. Off '
+                  'means it arrives ready and waits to be tapped',
+              control: WaxSwitch(
+                value: prefs?.autoplay ?? true,
+                label: 'Start playing without asking',
+                semanticsId: SemanticsIds.setting('autoplay'),
+                onChanged: prefs == null ? null : prefsController.setAutoplay,
+              ),
+            ),
+          ],
+        ),
         if (!kIsWeb)
           _Group(
             title: 'Data',
@@ -312,6 +330,8 @@ class _LibraryBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final prefs = ref.watch(prefsControllerProvider).value;
+    final prefsController = ref.read(prefsControllerProvider.notifier);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -328,6 +348,49 @@ class _LibraryBody extends ConsumerWidget {
                 onChanged: ref.read(technicalDetailsProvider.notifier).set,
               ),
             ),
+            WaxSettingRow(
+              title: 'Show unknown groups',
+              help:
+                  'Lists the group for what has no genre, no album, or no '
+                  'year of its own',
+              control: WaxSwitch(
+                value: prefs?.browseShowUnknown ?? true,
+                label: 'Show unknown groups',
+                semanticsId: SemanticsIds.setting('browse-unknown'),
+                onChanged: prefs == null
+                    ? null
+                    : prefsController.setBrowseShowUnknown,
+              ),
+            ),
+          ],
+        ),
+        _Group(
+          title: 'Default order',
+          children: <Widget>[
+            for (final dimension in MusicDimension.values)
+              WaxSettingRow(
+                title: dimension.label,
+                help:
+                    'The order the ${dimension.label.toLowerCase()} '
+                    'index opens in',
+                control: WaxChoice<FacetSort>(
+                  value:
+                      prefs?.browseSortFor(dimension.wireName) ??
+                      defaultBrowseSort(dimension),
+                  options: FacetSort.values,
+                  labelFor: browseSortLabel,
+                  label: '${dimension.label} order',
+                  semanticsId: SemanticsIds.setting(
+                    'browse-sort-${dimension.segment}',
+                  ),
+                  onChanged: prefs == null
+                      ? null
+                      : (value) => prefsController.setBrowseSort(
+                          dimension.wireName,
+                          value,
+                        ),
+                ),
+              ),
           ],
         ),
         const _Group(title: 'Access', children: <Widget>[_LibraryAccessRow()]),
@@ -397,6 +460,34 @@ class _DownloadsBody extends ConsumerWidget {
                   onChanged: ref.read(downloadsOnWifiOnlyProvider.notifier).set,
                 ),
               ),
+              WaxSettingRow(
+                title: 'Remove finished episodes',
+                help:
+                    'Reclaims a downloaded episode once it has been '
+                    'finished for a while. Books and albums are left alone',
+                control: WaxSwitch(
+                  value: ref.watch(autoRemoveFinishedProvider),
+                  label: 'Remove finished episodes',
+                  semanticsId: SemanticsIds.setting('auto-remove-finished'),
+                  onChanged: ref.read(autoRemoveFinishedProvider.notifier).set,
+                ),
+              ),
+              // Only where it decides something.
+              if (ref.watch(autoRemoveFinishedProvider))
+                WaxSettingRow(
+                  title: 'Wait before removing',
+                  help: 'How long a finished episode stays before it goes',
+                  control: WaxChoice<int>(
+                    value: ref.watch(autoRemoveFinishedAfterHoursProvider),
+                    options: AutoRemoveFinishedAfterHours.options,
+                    labelFor: spellHours,
+                    label: 'Wait before removing',
+                    semanticsId: SemanticsIds.setting('auto-remove-after'),
+                    onChanged: ref
+                        .read(autoRemoveFinishedAfterHoursProvider.notifier)
+                        .set,
+                  ),
+                ),
               WaxOptionRow(
                 title: 'Manage downloads',
                 subtitle: 'What this device holds offline, and how to free it',

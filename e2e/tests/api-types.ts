@@ -4424,6 +4424,8 @@ export interface components {
             backupKeepBytes: number;
             /** @description Automatically purge trashed files older than this many days on a periodic sweep; 0 disables retention (the trash keeps entries until an administrator empties it). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. */
             trashRetentionDays?: number;
+            /** @description Clear finished tool tasks older than this many days on the scheduled prune; terminal rows only. 0 keeps them, and an unconfigured server answers 30 - so unlike `trashRetentionDays`, 0 here is a choice rather than the default. Optional on PUT (absent keeps the current value), always present in responses. */
+            taskRetentionDays?: number;
         };
         /** @description Transcode session limits, enforced at the media proxy when a stream engages the streaming engine (direct-played originals never count). */
         TranscodingLimits: {
@@ -8385,7 +8387,9 @@ export interface components {
         /** @description One change to server-side state visible to the calling user (their own state, plus other users' shared playlists), with the current value hydrated fresh. `kind` is a string, not a closed enum, so new kinds can appear; clients must skip events whose `kind` they do not recognize. Hydrated `playlist` payloads omit a smart playlist's computed `itemCount`, like list pages. */
         ServerSyncEvent: {
             /**
-             * @description What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). Curation surfaces emit marker kinds carrying only `pid`: `review` (a review entry changed; refetch the review endpoints), `upload` (an upload session changed), and `task` (a tool task changed). Markers hydrate nothing because those surfaces are live reads, not mirrored state.
+             * @description What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). Curation surfaces emit marker kinds carrying only `pid`: `review` (a review entry changed; refetch the review endpoints), `upload` (an upload session changed), `task` (a tool task changed), and `entity-state` (an artist or album was starred or rated). Markers hydrate nothing because those surfaces are live reads, not mirrored state.
+             *
+             *     Two further markers are announcements rather than refetch hints, carrying the same news as the notification-target event of the same name: `feed-disabled` (`pid` is the show whose scheduled refresh was suspended) and `import-completed` (`pid` is the review entry that filed itself).
              * @example play-state
              */
             kind: string;
@@ -8843,6 +8847,20 @@ export interface components {
              *     Same reason as `crossfadeSeconds` for living on the account rather than on the device, and the same labeling: nothing local reads it yet.
              */
             replayGain?: boolean;
+            /** @description Whether a browse index draws the bucket for the items a dimension is absent from (`[No Genre]`, `[Non-Album]`). Absent means shown. A presentation preference, not a server filter: the bucket stays enumerated and drillable whatever this says. */
+            browseShowUnknown?: boolean;
+            /**
+             * @description The order each browse index opens in, keyed by the dimension name `GET /library/browse` spells (`genre`, `artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a `tag.<KEY>` dimension); values are that endpoint's `sort` values. Sparse: a dimension with no entry opens in the client's own default, so a write must merge rather than replace. Capped at 32 entries.
+             * @example {
+             *       "genre": "label",
+             *       "year": "count"
+             *     }
+             */
+            browseSorts?: {
+                [key: string]: "count" | "label";
+            };
+            /** @description Whether playback may start with no gesture behind it - a queue another device hands over through Connect. Absent means allowed. Off means the client loads what it was asked for and waits to be tapped, which is what a browser enforces on the web build anyway. It does not gate a gesture made somewhere other than the screen: a browse-tree tap on a head unit still plays. */
+            autoplay?: boolean;
             /** @description Stop scrobbling radio. Listeners with a scrobble connection have their radio segments reported by default, which is right for a music station whose stream titles are honest and wrong for a talk station whose titles happen to parse. Opting out silences radio only; library listening is unaffected. */
             radioScrobbleOptOut?: boolean;
         };

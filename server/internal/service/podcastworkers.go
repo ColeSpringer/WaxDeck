@@ -101,6 +101,12 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID) (int, error) 
 					"Podcast feed disabled: "+pod.Title,
 					fmt.Sprintf("The feed failed %d refreshes in a row and was disabled. A manual refresh re-enables it.", st.ConsecutiveFailures),
 					userIDs)
+				// The same news to whoever is running a client; the pid is
+				// the api show one so the row opens the show.
+				apiShow := apiPID(PrefixPodcast, showPID)
+				for _, uid := range userIDs {
+					l.emitUserEvent(ctx, uid, eventFeedDisabled, apiShow)
+				}
 			}
 		}
 		return 0, l.classifyFeedErr(ctx, err, pod.FeedURL, l.showIsPrivate(ctx, pod))
@@ -225,6 +231,11 @@ func (l *Library) notifyEpisodeDownloaded(ctx context.Context, episodePID model.
 		show = "podcast"
 	}
 	l.EmitNotification(ctx, "episode-downloaded", "New episode: "+show, det.Episode.Title, userIDs)
+	// The same news to whoever is running a client; the pid is the
+	// episode so the row opens it.
+	for _, uid := range userIDs {
+		l.emitUserEvent(ctx, uid, eventEpisodeDownloaded, apiPID(PrefixEpisode, det.Episode.PID))
+	}
 }
 
 // SweepRetention re-evaluates every queued show: pushes the union

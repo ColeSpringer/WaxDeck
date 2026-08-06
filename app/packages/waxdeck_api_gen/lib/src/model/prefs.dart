@@ -19,6 +19,9 @@ part 'prefs.g.dart';
 /// * [radioFavorites] - Radio stations this user has pinned, in the order the dial presents them. The station library itself is shared by every account, so this is the one piece of per-user station state there is: which of the household's stations are *yours*.  Ordered, and the order is the client's to set - new pins go on the end, so a dial does not reshuffle under a thumb. Entries are station PIDs (`rs-...`) and are not resolved on write: a station deleted by another household member leaves its pid here, and a client renders only the pids it can still find, because failing a whole preference write over one departed station would be worse than a dial one slot shorter.  Capped at 64, which is a bound on the document rather than on the feature: clients present about a dozen, and that cap is theirs. A client presenting fewer than the document holds must still write back what it did not draw - the cap belongs to the dial, not to the list.  Stored in the canonical upper-case form the pattern above declares, whatever case a write used, so a pin always names the station the server named. Absent when nothing is pinned: unpinning everything drops the field rather than storing `[]`, and nothing reads a default set of pins out of an absent list, so absent and empty are one answer on the way back. 
 /// * [crossfadeSeconds] - Equal-power crossfade applied at every seam of a queue the server renders as one stream, in seconds. Zero or absent is a gapless butt join.  Here rather than in a client's own per-device storage because the server is what applies it: a cast session is re-rendered server-side on every queue edit, shuffle, and repeat reload, and those arrive over the control socket carrying no client state at all. A per-device value would reach the first load and none of the reloads, so the queue would change how it sounds halfway through. Local playback does not read this yet, which is why clients label it for casting. 
 /// * [replayGain] - Level a server-rendered queue to a common loudness. The gain is derived from the measured loudness the analyze pass stores per file and applied once to the whole stream, so a queue whose files were never analyzed plays unlevelled whatever this says.  Same reason as `crossfadeSeconds` for living on the account rather than on the device, and the same labeling: nothing local reads it yet. 
+/// * [browseShowUnknown] - Whether a browse index draws the bucket for the items a dimension is absent from (`[No Genre]`, `[Non-Album]`). Absent means shown. A presentation preference, not a server filter: the bucket stays enumerated and drillable whatever this says. 
+/// * [browseSorts] - The order each browse index opens in, keyed by the dimension name `GET /library/browse` spells (`genre`, `artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a `tag.<KEY>` dimension); values are that endpoint's `sort` values. Sparse: a dimension with no entry opens in the client's own default, so a write must merge rather than replace. Capped at 32 entries. 
+/// * [autoplay] - Whether playback may start with no gesture behind it - a queue another device hands over through Connect. Absent means allowed. Off means the client loads what it was asked for and waits to be tapped, which is what a browser enforces on the web build anyway. It does not gate a gesture made somewhere other than the screen: a browse-tree tap on a head unit still plays. 
 /// * [radioScrobbleOptOut] - Stop scrobbling radio. Listeners with a scrobble connection have their radio segments reported by default, which is right for a music station whose stream titles are honest and wrong for a talk station whose titles happen to parse. Opting out silences radio only; library listening is unaffected. 
 @BuiltValue()
 abstract class Prefs implements Built<Prefs, PrefsBuilder> {
@@ -50,6 +53,19 @@ abstract class Prefs implements Built<Prefs, PrefsBuilder> {
   /// Level a server-rendered queue to a common loudness. The gain is derived from the measured loudness the analyze pass stores per file and applied once to the whole stream, so a queue whose files were never analyzed plays unlevelled whatever this says.  Same reason as `crossfadeSeconds` for living on the account rather than on the device, and the same labeling: nothing local reads it yet. 
   @BuiltValueField(wireName: r'replayGain')
   bool? get replayGain;
+
+  /// Whether a browse index draws the bucket for the items a dimension is absent from (`[No Genre]`, `[Non-Album]`). Absent means shown. A presentation preference, not a server filter: the bucket stays enumerated and drillable whatever this says. 
+  @BuiltValueField(wireName: r'browseShowUnknown')
+  bool? get browseShowUnknown;
+
+  /// The order each browse index opens in, keyed by the dimension name `GET /library/browse` spells (`genre`, `artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a `tag.<KEY>` dimension); values are that endpoint's `sort` values. Sparse: a dimension with no entry opens in the client's own default, so a write must merge rather than replace. Capped at 32 entries. 
+  @BuiltValueField(wireName: r'browseSorts')
+  BuiltMap<String, PrefsBrowseSortsEnum>? get browseSorts;
+  // enum browseSortsEnum {  count,  label,  };
+
+  /// Whether playback may start with no gesture behind it - a queue another device hands over through Connect. Absent means allowed. Off means the client loads what it was asked for and waits to be tapped, which is what a browser enforces on the web build anyway. It does not gate a gesture made somewhere other than the screen: a browse-tree tap on a head unit still plays. 
+  @BuiltValueField(wireName: r'autoplay')
+  bool? get autoplay;
 
   /// Stop scrobbling radio. Listeners with a scrobble connection have their radio segments reported by default, which is right for a music station whose stream titles are honest and wrong for a talk station whose titles happen to parse. Opting out silences radio only; library listening is unaffected. 
   @BuiltValueField(wireName: r'radioScrobbleOptOut')
@@ -124,6 +140,27 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
       yield r'replayGain';
       yield serializers.serialize(
         object.replayGain,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.browseShowUnknown != null) {
+      yield r'browseShowUnknown';
+      yield serializers.serialize(
+        object.browseShowUnknown,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.browseSorts != null) {
+      yield r'browseSorts';
+      yield serializers.serialize(
+        object.browseSorts,
+        specifiedType: const FullType(BuiltMap, [FullType(String), FullType(PrefsBrowseSortsEnum)]),
+      );
+    }
+    if (object.autoplay != null) {
+      yield r'autoplay';
+      yield serializers.serialize(
+        object.autoplay,
         specifiedType: const FullType(bool),
       );
     }
@@ -206,6 +243,27 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
           ) as bool;
           result.replayGain = valueDes;
           break;
+        case r'browseShowUnknown':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.browseShowUnknown = valueDes;
+          break;
+        case r'browseSorts':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltMap, [FullType(String), FullType(PrefsBrowseSortsEnum)]),
+          ) as BuiltMap<String, PrefsBrowseSortsEnum>;
+          result.browseSorts.replace(valueDes);
+          break;
+        case r'autoplay':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.autoplay = valueDes;
+          break;
         case r'radioScrobbleOptOut':
           final valueDes = serializers.deserialize(
             value,
@@ -263,5 +321,20 @@ class PrefsThemeEnum extends EnumClass {
 
   static BuiltSet<PrefsThemeEnum> get values => _$prefsThemeEnumValues;
   static PrefsThemeEnum valueOf(String name) => _$prefsThemeEnumValueOf(name);
+}
+
+class PrefsBrowseSortsEnum extends EnumClass {
+
+  @BuiltValueEnumConst(wireName: r'count')
+  static const PrefsBrowseSortsEnum count = _$prefsBrowseSortsEnum_count;
+  @BuiltValueEnumConst(wireName: r'label')
+  static const PrefsBrowseSortsEnum label = _$prefsBrowseSortsEnum_label;
+
+  static Serializer<PrefsBrowseSortsEnum> get serializer => _$prefsBrowseSortsEnumSerializer;
+
+  const PrefsBrowseSortsEnum._(String name): super(name);
+
+  static BuiltSet<PrefsBrowseSortsEnum> get values => _$prefsBrowseSortsEnumValues;
+  static PrefsBrowseSortsEnum valueOf(String name) => _$prefsBrowseSortsEnumValueOf(name);
 }
 

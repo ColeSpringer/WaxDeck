@@ -1336,6 +1336,16 @@ components:
             entries until an administrator empties it). Optional on PUT
             so settings writers predating this field never change it:
             absent keeps the current value. Always present in responses.
+        taskRetentionDays:
+          type: integer
+          minimum: 0
+          description: >
+            Clear finished tool tasks older than this many days on the
+            scheduled prune; terminal rows only. 0 keeps them, and an
+            unconfigured server answers 30 - so unlike
+            `trashRetentionDays`, 0 here is a choice rather than the
+            default. Optional on PUT (absent keeps the current value),
+            always present in responses.
 
     TranscodingLimits:
       type: object

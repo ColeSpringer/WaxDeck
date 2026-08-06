@@ -95,6 +95,10 @@ const (
 	FacetSortLabel FacetSort = "label"
 )
 
+// validFacetSorts is the closed set a stored sort may hold, unlike
+// ParseFacetSort's input, where "" is the absent query parameter.
+var validFacetSorts = map[FacetSort]bool{FacetSortCount: true, FacetSortLabel: true}
+
 // ParseFacetSort validates a sort name, treating the empty string as the
 // default rather than as an error: the parameter is optional. Exported
 // so the handler parses at the edge and Facets takes the type, which is

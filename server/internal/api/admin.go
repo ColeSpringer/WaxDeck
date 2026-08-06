@@ -108,6 +108,10 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 	if req.Body.TrashRetentionDays != nil {
 		retentionDays = *req.Body.TrashRetentionDays
 	}
+	taskDays := s.svc.TaskRetentionDays(ctx)
+	if req.Body.TaskRetentionDays != nil {
+		taskDays = *req.Body.TaskRetentionDays
+	}
 	st, err := s.svc.AdminSettingsPut(ctx, uc, service.AdminSettings{
 		SignupEnabled:      req.Body.SignupEnabled,
 		ReadOnly:           req.Body.ReadOnly,
@@ -115,6 +119,7 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 		BackupKeepCount:    req.Body.BackupKeepCount,
 		BackupKeepBytes:    req.Body.BackupKeepBytes,
 		TrashRetentionDays: retentionDays,
+		TaskRetentionDays:  taskDays,
 	})
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {
@@ -133,6 +138,7 @@ func adminSettingsJSON(st service.AdminSettings) AdminSettings {
 		BackupKeepCount:    st.BackupKeepCount,
 		BackupKeepBytes:    st.BackupKeepBytes,
 		TrashRetentionDays: ptr(st.TrashRetentionDays),
+		TaskRetentionDays:  ptr(st.TaskRetentionDays),
 	}
 }
 

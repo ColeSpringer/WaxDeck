@@ -159,3 +159,36 @@ func TestEntityStarEmitsOnlyOnChange(t *testing.T) {
 		t.Fatalf("a value-identical entity re-rating emitted %+v, want nothing", evs)
 	}
 }
+
+// The switch in the delta builder is the whole mechanism: a kind missing
+// from it is silently dropped, and nothing else would notice.
+func TestAnnouncementMarkersReachTheDelta(t *testing.T) {
+	ctx, svc, uc := newCatalogFixture(t)
+
+	since, err := svc.MintServerCursor(ctx)
+	if err != nil {
+		t.Fatalf("minting a cursor: %v", err)
+	}
+
+	const show = "pc-01JZX5N8QW3F4V9T2B7KD3M9R6"
+	svc.emitUserEvent(ctx, uc.ID, eventFeedDisabled, show)
+	svc.emitUserEvent(ctx, uc.ID, eventImportCompleted, "rv-01JZX5N8QW3F4V9T2B7KD3M9R6")
+
+	delta, err := svc.SyncServerDelta(ctx, uc, since, 100)
+	if err != nil {
+		t.Fatalf("reading the delta: %v", err)
+	}
+	if len(delta.Events) != 2 {
+		t.Fatalf("events = %+v, want both announcements", delta.Events)
+	}
+	if delta.Events[0].Kind != eventFeedDisabled || delta.Events[0].PID != show {
+		t.Fatalf("feed-disabled event = %+v, want the api show pid", delta.Events[0])
+	}
+	if delta.Events[1].Kind != eventImportCompleted {
+		t.Fatalf("second event = %+v, want import-completed", delta.Events[1])
+	}
+	// A marker hydrates nothing.
+	if delta.Events[0].Subscription != nil || delta.Events[0].PlayState != nil {
+		t.Fatalf("a marker carried a payload: %+v", delta.Events[0])
+	}
+}

@@ -1073,7 +1073,7 @@ func run() error {
 	// The read-only OpenSubsonic compatibility surface. App-password
 	// authenticated; third-party clients browse and stream while the
 	// first-party clients mature.
-	mux.Handle("/rest/", httpm.instrument("subsonic", subsonic.New(svc, bridge, media, version).ServeHTTP))
+	mux.Handle("/rest/", httpm.instrument("subsonic", subsonic.New(svc, bridge, media, version, log).ServeHTTP))
 	// The gpodder.net-compatible sync surface (AntennaPod and friends):
 	// app passwords over Basic plus its own stateless session cookie.
 	gp := gpodder.New(svc, secret, log)

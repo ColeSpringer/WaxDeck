@@ -9838,6 +9838,16 @@ components:
             entries until an administrator empties it). Optional on PUT
             so settings writers predating this field never change it:
             absent keeps the current value. Always present in responses.
+        taskRetentionDays:
+          type: integer
+          minimum: 0
+          description: >
+            Clear finished tool tasks older than this many days on the
+            scheduled prune; terminal rows only. 0 keeps them, and an
+            unconfigured server answers 30 - so unlike
+            `trashRetentionDays`, 0 here is a choice rather than the
+            default. Optional on PUT (absent keeps the current value),
+            always present in responses.
 
     TranscodingLimits:
       type: object
@@ -16703,9 +16713,17 @@ components:
             was deleted or replaced under a new pid). Curation surfaces
             emit marker kinds carrying only `pid`: `review` (a review
             entry changed; refetch the review endpoints), `upload` (an
-            upload session changed), and `task` (a tool task changed).
+            upload session changed), `task` (a tool task changed), and
+            `entity-state` (an artist or album was starred or rated).
             Markers hydrate nothing because those surfaces are live
             reads, not mirrored state.
+
+
+            Two further markers are announcements rather than refetch
+            hints, carrying the same news as the notification-target
+            event of the same name: `feed-disabled` (`pid` is the show
+            whose scheduled refresh was suspended) and `import-completed`
+            (`pid` is the review entry that filed itself).
           example: play-state
         pid:
           type: string
@@ -17502,6 +17520,39 @@ components:
             Same reason as `crossfadeSeconds` for living on the account
             rather than on the device, and the same labeling: nothing
             local reads it yet.
+        browseShowUnknown:
+          type: boolean
+          description: >
+            Whether a browse index draws the bucket for the items a
+            dimension is absent from (`[No Genre]`, `[Non-Album]`).
+            Absent means shown. A presentation preference, not a server
+            filter: the bucket stays enumerated and drillable whatever
+            this says.
+        browseSorts:
+          type: object
+          description: >
+            The order each browse index opens in, keyed by the dimension
+            name `GET /library/browse` spells (`genre`, `artist`,
+            `album-artist`, `album`, `release-group`, `year`, `kind`, or
+            a `tag.<KEY>` dimension); values are that endpoint's `sort`
+            values. Sparse: a dimension with no entry opens in the
+            client's own default, so a write must merge rather than
+            replace. Capped at 32 entries.
+          additionalProperties:
+            type: string
+            enum: [count, label]
+          maxProperties: 32
+          example: { genre: label, year: count }
+        autoplay:
+          type: boolean
+          description: >
+            Whether playback may start with no gesture behind it - a
+            queue another device hands over through Connect. Absent
+            means allowed. Off means the client loads what it was asked
+            for and waits to be tapped, which is what a browser enforces
+            on the web build anyway. It does not gate a gesture made
+            somewhere other than the screen: a browse-tree tap on a head
+            unit still plays.
         radioScrobbleOptOut:
           type: boolean
           description: >

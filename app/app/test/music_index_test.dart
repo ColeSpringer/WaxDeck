@@ -10,6 +10,7 @@ import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/music/music_hub_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -42,12 +43,24 @@ ItemSummary _track(String title, {String artist = 'Nightjar'}) => ItemSummary(
   durationMs: 245000,
 );
 
+/// Overridden rather than reached through the real controller, which
+/// waits on a session a widget test's container has nobody signed in to.
+class _StubPrefs extends PrefsController {
+  _StubPrefs(this._prefs);
+
+  final Prefs _prefs;
+
+  @override
+  Future<Prefs> build() async => _prefs;
+}
+
 Future<ProviderContainer> _pump(
   WidgetTester tester,
   Widget screen,
   FakeRepository repository, {
   Size size = const Size(900, 1200),
   bool engine = false,
+  Prefs? prefs,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -56,6 +69,8 @@ Future<ProviderContainer> _pump(
     overrides: [
       repositoryProvider.overrideWithValue(repository),
       if (engine) audioEngineProvider.overrideWithValue(FakeEngine()),
+      if (prefs != null)
+        prefsControllerProvider.overrideWith(() => _StubPrefs(prefs)),
     ],
   );
   addTearDown(container.dispose);
@@ -330,6 +345,87 @@ void main() {
     // An empty key is a real bucket and an empty path segment is not a
     // location, so the sentinel carries it there and back.
     expect(repository.facetDrills.last, ('genre', ''));
+  });
+
+  testWidgets('the unknown bucket goes where the preference says', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..facets['genre'] = <FacetBucket>[
+        const FacetBucket(key: '01JZXA', label: 'Ambient', count: 6),
+        const FacetBucket(
+          key: '',
+          label: '[No Genre]',
+          count: 4,
+          unknown: true,
+        ),
+      ];
+    await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.genres),
+      repository,
+      prefs: const Prefs(browseShowUnknown: false),
+    );
+
+    expect(find.text('Ambient'), findsOneWidget);
+    expect(
+      find.text('[No Genre]'),
+      findsNothing,
+      reason: 'hiding it is the index screen, not a server filter',
+    );
+  });
+
+  testWidgets('an index opens in the order the account stored', (tester) async {
+    // Artists lead A-to-Z by default; this account said otherwise.
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[_artist('Zebra'), _artist('abba')];
+    await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+      prefs: const Prefs(browseSorts: <String, String>{'artist': 'count'}),
+    );
+
+    expect(repository.facetSorts.last, FacetSort.count);
+    expect(
+      find.byType(FastScrollRail),
+      findsNothing,
+      reason: 'a rail over a biggest-first list would be lying about it',
+    );
+  });
+
+  testWidgets('setting the default outranks an earlier toolbar tap', (
+    tester,
+  ) async {
+    // The provider outlives its screen, so a session-local choice would
+    // otherwise make the setting look dead for the rest of the session.
+    final repository = FakeRepository()
+      ..facets['artist'] = <FacetBucket>[_artist('Zebra'), _artist('abba')];
+    final container = await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.artists),
+      repository,
+      prefs: const Prefs(),
+    );
+    final sort = container.read(
+      musicIndexSortProvider(MusicDimension.artists).notifier,
+    );
+    sort.select(FacetSort.count);
+    await tester.pumpAndSettle();
+    expect(
+      container.read(musicIndexSortProvider(MusicDimension.artists)),
+      FacetSort.count,
+    );
+
+    container.read(prefsControllerProvider.notifier).state = const AsyncData(
+      Prefs(browseSorts: <String, String>{'artist': 'label'}),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(musicIndexSortProvider(MusicDimension.artists)),
+      FacetSort.label,
+      reason: 'a stored default set later wins over an earlier tap',
+    );
   });
 
   testWidgets('a listing opened cold names itself from what it loads', (

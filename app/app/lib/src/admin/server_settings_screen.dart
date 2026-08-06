@@ -247,25 +247,36 @@ class _RetentionGroup extends ConsumerStatefulWidget {
 
 class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
   final TextEditingController _days = TextEditingController();
+  final TextEditingController _taskDays = TextEditingController();
   bool _seeded = false;
   bool _busy = false;
 
   @override
   void dispose() {
     _days.dispose();
+    _taskDays.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     if (_busy) return;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    // Refused outright rather than silently falling back to the stored
-    // value and still reporting success.
+    // Refused outright rather than falling back to the stored value and
+    // still reporting success. One save writes both windows, so each
+    // message names its own field.
     final parsed = int.tryParse(_days.text.trim());
     if (parsed == null || parsed < 0) {
       messenger.show(
-        'Enter a whole number of days (0 keeps them until '
-        'you empty the trash)',
+        'Purge trashed files after: enter a whole number of days '
+        '(0 keeps them until you empty the trash)',
+      );
+      return;
+    }
+    final parsedTasks = int.tryParse(_taskDays.text.trim());
+    if (parsedTasks == null || parsedTasks < 0) {
+      messenger.show(
+        'Clear finished tasks after: enter a whole number of days '
+        '(0 keeps every finished task)',
       );
       return;
     }
@@ -273,10 +284,16 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
     try {
       await ref
           .read(adminSettingsProvider.notifier)
-          .save(widget.settings.copyWith(trashRetentionDays: parsed));
+          .save(
+            widget.settings.copyWith(
+              trashRetentionDays: parsed,
+              taskRetentionDays: parsedTasks,
+            ),
+          );
       // Reflect what was stored, so a padded "007" reads back as 7.
       _days.text = '$parsed';
-      messenger.show('Trash retention saved');
+      _taskDays.text = '$parsedTasks';
+      messenger.show('Retention saved');
     } on WaxDeckApiException catch (error) {
       messenger.show(error.message);
     } finally {
@@ -289,6 +306,7 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
     if (!_seeded) {
       _seeded = true;
       _days.text = '${widget.settings.trashRetentionDays}';
+      _taskDays.text = '${widget.settings.taskRetentionDays}';
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -304,6 +322,16 @@ class _RetentionGroupState extends ConsumerState<_RetentionGroup> {
                 hint: '0 keeps them until the trash is emptied by hand',
                 controller: _days,
                 semanticsId: SemanticsIds.trashRetentionDays,
+              ),
+              const SizedBox(height: WaxSpace.s16),
+              // Beside the trash rather than on the tasks screen: both
+              // are the operator's policy on how long a record outlives
+              // its use.
+              WaxTextField(
+                label: 'Clear finished tasks after (days)',
+                hint: '0 keeps every finished task',
+                controller: _taskDays,
+                semanticsId: SemanticsIds.taskRetentionDays,
               ),
               const SizedBox(height: WaxSpace.s16),
               WaxButton(

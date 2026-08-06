@@ -34,6 +34,16 @@ type Prefs struct {
 	ReplayGain       bool    `json:"replayGain,omitempty"`
 	// RadioScrobbleOptOut silences radio scrobbling for this listener.
 	RadioScrobbleOptOut bool `json:"radioScrobbleOptOut,omitempty"`
+	// BrowseShowUnknown draws the bucket for items a dimension is absent
+	// from. A presentation choice, not a server filter. Pointer here and
+	// on Autoplay because absent means on and false is a choice.
+	BrowseShowUnknown *bool `json:"browseShowUnknown,omitempty"`
+	// BrowseSorts is the order each browse index opens in, by dimension
+	// name. Sparse: an absent dimension opens in the client's default.
+	BrowseSorts map[string]string `json:"browseSorts,omitempty"`
+	// Autoplay lets playback start with no gesture behind it: a queue
+	// handed over through Connect. A head-unit tap is a gesture.
+	Autoplay *bool `json:"autoplay,omitempty"`
 }
 
 // maxCrossfadeSeconds matches the timeline endpoint's own bound, since
@@ -47,6 +57,10 @@ var validThemes = map[string]bool{"system": true, "dark": true, "light": true, "
 // that cap is theirs, while this one exists so a preference document
 // cannot be grown without limit.
 const maxRadioFavorites = 64
+
+// maxBrowseSorts bounds the document, like maxRadioFavorites: seven
+// named dimensions plus room for custom-tag ones.
+const maxBrowseSorts = 32
 
 // Prefs returns the acting user's stored preferences.
 func (l *Library) Prefs(ctx context.Context, uc *UserCtx) (Prefs, error) {
@@ -107,6 +121,33 @@ func (l *Library) PutPrefs(ctx context.Context, uc *UserCtx, p Prefs) (Prefs, er
 	}
 	if p.CrossfadeSeconds < 0 || p.CrossfadeSeconds > maxCrossfadeSeconds {
 		return Prefs{}, errInvalid(fmt.Sprintf("crossfadeSeconds must be between 0 and %d", maxCrossfadeSeconds))
+	}
+	if len(p.BrowseSorts) > maxBrowseSorts {
+		return Prefs{}, errInvalid(fmt.Sprintf("at most %d browse sorts", maxBrowseSorts))
+	}
+	if len(p.BrowseSorts) > 0 {
+		// Through facetGroupFor, which is what the browse endpoint itself
+		// parses with: a prefix check would take "tag." followed by
+		// anything, and the canonical form is what keeps two spellings of
+		// one tag key from becoming two entries.
+		sorts := make(map[string]string, len(p.BrowseSorts))
+		for dim, sort := range p.BrowseSorts {
+			_, canonical, err := facetGroupFor(dim)
+			if err != nil {
+				return Prefs{}, err
+			}
+			if _, dup := sorts[canonical]; dup {
+				return Prefs{}, errInvalid("duplicate browse dimension " + canonical)
+			}
+			// Not through ParseFacetSort alone: it reads "" as the default
+			// because the query parameter is optional, and storing that
+			// would put a value outside the response enum in the document.
+			if _, ok := validFacetSorts[FacetSort(sort)]; !ok {
+				return Prefs{}, errInvalid("unknown facet sort " + sort)
+			}
+			sorts[canonical] = sort
+		}
+		p.BrowseSorts = sorts
 	}
 	seen := make(map[string]bool, len(p.RadioFavorites))
 	favorites := make([]string, 0, len(p.RadioFavorites))

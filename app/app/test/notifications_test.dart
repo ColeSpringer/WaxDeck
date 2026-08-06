@@ -4,7 +4,9 @@ import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/notifications/notifications_binder.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 
 import 'fakes.dart';
 
@@ -86,6 +88,62 @@ void main() {
         expect(kind.location, startsWith('/'));
       }
     });
+
+    test('a disabled feed opens its own show', () {
+      notifications.recordServerEvent(
+        _marker('feed-disabled', pid: 'pc-01JZX5N8QW3F4V9T2B7KD3M9R6'),
+      );
+      final row = container.read(notificationsProvider).single;
+      expect(row.kind, NotificationKind.feedDisabled);
+      expect(row.location, '/podcasts/pc-01JZX5N8QW3F4V9T2B7KD3M9R6');
+    });
+
+    test('two failing feeds are two rows, not one', () {
+      // Same sentence on both; collapsing loses one show.
+      notifications
+        ..recordServerEvent(_marker('feed-disabled', pid: 'pc-A'))
+        ..recordServerEvent(_marker('feed-disabled', pid: 'pc-B'));
+      final rows = container.read(notificationsProvider);
+      expect(rows, hasLength(2));
+      expect(rows.map((n) => n.location), <String>[
+        '/podcasts/pc-B',
+        '/podcasts/pc-A',
+      ]);
+    });
+
+    test('a feed-disabled marker with no pid still opens the hub', () {
+      notifications.recordServerEvent(
+        const ServerSyncEvent(kind: 'feed-disabled'),
+      );
+      expect(
+        container.read(notificationsProvider).single.location,
+        '/podcasts',
+      );
+    });
+
+    test('a fetched episode opens the episode', () {
+      notifications.recordServerEvent(
+        _marker('episode-downloaded', pid: 'ep-01JZX5N8QW3F4V9T2B7KD3M9R6'),
+      );
+      final row = container.read(notificationsProvider).single;
+      expect(row.kind, NotificationKind.episodeDownloaded);
+      expect(row.location, contains('ep-01JZX5N8QW3F4V9T2B7KD3M9R6'));
+    });
+
+    test('an automatic import says so', () {
+      notifications.recordServerEvent(_marker('import-completed'));
+      final row = container.read(notificationsProvider).single;
+      expect(row.kind, NotificationKind.importCompleted);
+      expect(row.location, NotificationKind.importCompleted.location);
+    });
+
+    test("this device's own finished transfer is a row", () {
+      notifications.recordDownloadCompleted();
+      expect(
+        container.read(notificationsProvider).single.kind,
+        NotificationKind.download,
+      );
+    });
   });
 
   test('a new account starts with an empty list', () async {
@@ -119,6 +177,34 @@ void main() {
     container.invalidate(authControllerProvider);
     await container.read(authControllerProvider.future);
     expect(container.read(notificationsProvider), isEmpty);
+  });
+
+  test("the binder announces this device's own finished transfers", () async {
+    final downloads = FakeDownloads();
+    final container = ProviderContainer(
+      overrides: [
+        downloadManagerProvider.overrideWithValue(downloads),
+        // Web's shape: no engine, so the download listener has to be
+        // registered before the puller branch returns.
+        syncEngineProvider.overrideWithValue(null),
+        repositoryProvider.overrideWithValue(FakeRepository()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final alive = container.listen(notificationsBinderProvider, (_, _) {});
+    addTearDown(alive.close);
+
+    downloads.emit(
+      const DownloadProgress(pid: 'tr-1', fraction: 0.4, complete: false),
+    );
+    downloads.emit(
+      const DownloadProgress(pid: 'tr-1', fraction: 1, complete: true),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    final rows = container.read(notificationsProvider);
+    expect(rows, hasLength(1), reason: 'progress is not news; finishing is');
+    expect(rows.single.kind, NotificationKind.download);
   });
 
   group('the web build walks the stream itself', () {
