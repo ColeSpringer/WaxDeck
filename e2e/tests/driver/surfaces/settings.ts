@@ -33,6 +33,14 @@ export class Settings {
     await clickThrough(this.section(name), this.setting(containing));
   }
 
+  /// Open a section by its own location, cold. Sections are links a
+  /// stranger can follow, which is what makes "it is under Playback"
+  /// something you can send somebody.
+  async enterSection(name: string, showing: Locator): Promise<void> {
+    await this.ctx.page.goto(`/settings/${name}`);
+    await showing.waitFor({ timeout: T.nav });
+  }
+
   /// The same, for a section whose landmark control publishes its own
   /// handle rather than a `setting-<id>` - the scrobbling switches do.
   async openSectionShowing(name: string, id: string): Promise<void> {

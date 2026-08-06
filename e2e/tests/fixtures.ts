@@ -1,6 +1,7 @@
 import {
   test as base,
   expect,
+  APIRequestContext,
   BrowserContext,
   Page,
   PlaywrightTestArgs,
@@ -16,7 +17,9 @@ import {
   accountName,
   ensureAdmin,
   mintAccount,
+  NO_ACCOUNT,
   shapeFor,
+  signInDevice,
 } from './accounts';
 import { App, createApp } from './driver';
 import { Api } from './driver/api';
@@ -119,14 +122,6 @@ const instrumentedPage = async (
   }
 };
 
-// The specs that have not been migrated to the driver yet. Identical to
-// what every spec used to get: the real `Page`, the shared
-// administrator, no account of its own. Migrating a file is switching
-// this import to `test` and letting the compiler list the work; the
-// `legacy-import` ratchet rule counts what is left, and this export goes
-// when the count reaches zero.
-export const legacyTest = base.extend({ page: instrumentedPage });
-
 /// What a spec may do with the page directly.
 ///
 /// Everything else - finding a control, clicking it, going somewhere -
@@ -154,15 +149,59 @@ export type SpecPage = Pick<
   | 'video'
 >;
 
+/// How this test's browser starts, for the few specs whose subject is
+/// the door itself.
+///
+/// - `planted` (the default): the account's session cookie is in the jar
+///   before the first navigation, so the app boots signed in. What every
+///   spec that is about something else wants.
+/// - `signed-out`: the account exists and the browser has never heard of
+///   it, so the app lands on the login form. For the specs that drive
+///   that form - the walking skeleton, the accessibility walk, the
+///   sign-up path, the identity scenarios.
+/// - `virgin`: no account is minted and the bootstrap door is not
+///   touched. Exactly one spec wants this, and it is the one whose
+///   subject is a server that has no accounts yet.
+export type SessionMode = 'planted' | 'signed-out' | 'virgin';
+
+interface SpecOptions {
+  /// What the browser knows about this test's account when it opens.
+  /// Declared per file with `test.use({ session: ... })`.
+  session: SessionMode;
+}
+
 interface SpecFixtures {
   /// The app, as something to talk to. What a migrated spec drives.
   app: App;
   /// This test's own account. Minted from its title, so it is the same
   /// account across a retry and across a run on a reused stack.
   account: Account;
+  /// A second listener, on demand.
+  ///
+  /// For the scenarios about two people rather than one: state that must
+  /// not leak between them, a permission one holds and the other does
+  /// not. Named off the same test title with a suffix, so it is as
+  /// stable and as bounded as the first, and minted only if asked for.
+  otherAccount: (suffix?: string) => Promise<Account>;
+  /// Another device signed in as this test's own account, on demand.
+  ///
+  /// The household case: two clients, one listener - which is what the
+  /// connect and sync scenarios are about. Each gets a browser context
+  /// of its own with the same session planted, and its own `App` to
+  /// drive; all of them close at teardown.
+  device: (options?: { as?: Account; name?: string }) => Promise<App>;
   /// The server side, typed against the contract and authenticated as
   /// `account`.
   api: Api;
+  /// The server as a stranger sees it: its own request context, its own
+  /// cookie jar, never logged in.
+  ///
+  /// `app.api.as('')` drops the bearer but keeps the connection, so once
+  /// anything on that hand has logged in it carries a session cookie -
+  /// "no Authorization header" rather than "unauthenticated". A spec
+  /// asserting a 401 or a 403 for want of credentials means the second
+  /// thing, and this is what says it.
+  anonApi: Api;
   /// The real page, by name.
   ///
   /// The escape hatch for a spec the driver genuinely cannot serve. No
@@ -177,12 +216,26 @@ interface SpecWorkerFixtures {
   /// The bootstrap administrator's token: the minting authority, and
   /// nothing else. Worker-scoped, so the door is tried once per worker
   /// rather than once per test.
-  adminToken: string;
+  ///
+  /// A thunk rather than a value because resolving it is not free - it
+  /// walks through the one-shot bootstrap door, and first-run.spec.ts is
+  /// the test of that door being open. A fixture that opened it just by
+  /// being in a signature would turn that spec into a permanent skip on
+  /// a fresh stack, which is the one stack it has anything to say about.
+  /// Memoized, so the door is still tried once per worker and no more.
+  adminToken: () => Promise<string>;
   /// The startup scan having found the fixture library. Worker-scoped
   /// for the same reason: it is a property of the installation, not of
-  /// a test, and it used to be polled at 42 separate call sites.
-  libraryReady: void;
+  /// a test, and it used to be polled at 42 separate call sites. A thunk
+  /// for the same reason as `adminToken`, which it needs.
+  libraryReady: () => Promise<void>;
 }
+
+/// Runs `work` at most once, whatever the arrival order of its callers.
+const once = <T>(work: () => Promise<T>): (() => Promise<T>) => {
+  let started: Promise<T> | undefined;
+  return () => (started ??= work());
+};
 
 /// `baseURL` is a test-scoped option, so a worker-scoped fixture cannot
 /// ask for it; the resolved project carries the merged `use`, which is
@@ -190,46 +243,65 @@ interface SpecWorkerFixtures {
 const workerBaseURL = (info: { project: { use: { baseURL?: string } } }) =>
   info.project.use.baseURL;
 
-const extended = base.extend<SpecFixtures, SpecWorkerFixtures>({
+const extended = base.extend<SpecFixtures & SpecOptions, SpecWorkerFixtures>({
+  session: ['planted', { option: true }],
+
   adminToken: [
     async ({ playwright }, use, workerInfo) => {
-      const request = await playwright.request.newContext({
-        baseURL: workerBaseURL(workerInfo),
-      });
-      const token = await ensureAdmin(request);
-      await use(token);
-      await request.dispose();
+      let request: APIRequestContext | undefined;
+      await use(
+        once(async () => {
+          request = await playwright.request.newContext({
+            baseURL: workerBaseURL(workerInfo),
+          });
+          return ensureAdmin(request);
+        }),
+      );
+      await request?.dispose();
     },
     { scope: 'worker' },
   ],
 
   libraryReady: [
     async ({ playwright, adminToken }, use, workerInfo) => {
-      const request = await playwright.request.newContext({
-        baseURL: workerBaseURL(workerInfo),
-      });
-      const api = new Api(request, adminToken);
-      // tryGet, not get: `expect.poll` fails outright on a callback that
-      // throws rather than retrying it, so one 503 while the catalog is
-      // still coming up would take down every test in this worker.
-      await expect
-        .poll(async () => (await api.tryGet('/library/items'))?.items?.length ?? 0, {
-          timeout: T.fetch,
-          message: 'the startup scan should populate the fixture library',
-        })
-        .toBeGreaterThanOrEqual(4);
-      await use();
-      await request.dispose();
+      let request: APIRequestContext | undefined;
+      await use(
+        once(async () => {
+          request = await playwright.request.newContext({
+            baseURL: workerBaseURL(workerInfo),
+          });
+          const api = new Api(request, await adminToken());
+          // tryGet, not get: `expect.poll` fails outright on a callback
+          // that throws rather than retrying it, so one 503 while the
+          // catalog is still coming up would take down every test in
+          // this worker.
+          await expect
+            .poll(async () => (await api.tryGet('/library/items'))?.items?.length ?? 0, {
+              timeout: T.fetch,
+              message: 'the startup scan should populate the fixture library',
+            })
+            .toBeGreaterThanOrEqual(4);
+        }),
+      );
+      await request?.dispose();
     },
     { scope: 'worker' },
   ],
 
-  account: async ({ playwright, baseURL, adminToken }, use, testInfo) => {
+  account: async ({ playwright, baseURL, adminToken, session }, use, testInfo) => {
+    // A virgin session is a server with no accounts on it, which is the
+    // whole subject of first-run.spec.ts: minting one here - or even
+    // asking for the token that would - closes the door the spec exists
+    // to walk through.
+    if (session === 'virgin') {
+      await use(NO_ACCOUNT);
+      return;
+    }
     const request = await playwright.request.newContext({ baseURL });
     const account = await mintAccount(
       request,
-      adminToken,
-      accountName(testInfo.titlePath, testInfo.repeatEachIndex),
+      await adminToken(),
+      accountName(testInfo.titlePath, testInfo.repeatEachIndex, testInfo.project.name),
       shapeFor(testInfo.file),
     );
     await use(account);
@@ -257,15 +329,78 @@ const extended = base.extend<SpecFixtures, SpecWorkerFixtures>({
   // The project's own `use` options - the viewport, the motion mode -
   // still apply: inside the test runner `browser.newContext` is the
   // instrumented one, which merges them in and wires up tracing.
-  context: async ({ browser, account }, use) => {
-    const context = await browser.newContext({ storageState: account.storageState });
+  context: async ({ browser, account, session }, use) => {
+    const context = await browser.newContext(
+      session === 'planted' ? { storageState: account.storageState } : {},
+    );
     await use(context);
     await context.close();
+  },
+
+  otherAccount: async ({ playwright, baseURL, adminToken }, use, testInfo) => {
+    const minted = new Map<string, Promise<Account>>();
+    const contexts: APIRequestContext[] = [];
+    await use((suffix = 'other') => {
+      const held = minted.get(suffix);
+      if (held !== undefined) return held;
+      const minting = (async () => {
+        const request = await playwright.request.newContext({ baseURL });
+        contexts.push(request);
+        return mintAccount(
+          request,
+          await adminToken(),
+          accountName(
+            [...testInfo.titlePath, suffix],
+            testInfo.repeatEachIndex,
+            testInfo.project.name,
+          ),
+          {},
+        );
+      })();
+      minted.set(suffix, minting);
+      return minting;
+    });
+    for (const request of contexts) await request.dispose();
+  },
+
+  device: async (
+    { browser, playwright, baseURL, account, api, libraryReady, session },
+    use,
+  ) => {
+    if (session !== 'virgin') await libraryReady();
+    const opened: BrowserContext[] = [];
+    const requests: APIRequestContext[] = [];
+    await use(async ({ as = account, name } = {}) => {
+      const deviceName = name ?? `Playwright device ${opened.length + 1}`;
+      let storageState;
+      if (session === 'planted' || as !== account) {
+        const request = await playwright.request.newContext({ baseURL });
+        requests.push(request);
+        storageState = await signInDevice(request, as, deviceName);
+      }
+      const context = await browser.newContext(
+        storageState === undefined ? {} : { storageState },
+      );
+      opened.push(context);
+      return createApp({
+        page: await context.newPage(),
+        api: as === account ? api : api.as(as.token),
+        account: as,
+      });
+    });
+    for (const context of opened) await context.close();
+    for (const request of requests) await request.dispose();
   },
 
   api: async ({ playwright, baseURL, account }, use) => {
     const request = await playwright.request.newContext({ baseURL });
     await use(new Api(request, account.token));
+    await request.dispose();
+  },
+
+  anonApi: async ({ playwright, baseURL }, use) => {
+    const request = await playwright.request.newContext({ baseURL });
+    await use(new Api(request, ''));
     await request.dispose();
   },
 
@@ -275,8 +410,11 @@ const extended = base.extend<SpecFixtures, SpecWorkerFixtures>({
     await use(page);
   },
 
-  app: async ({ page, api, account, libraryReady }, use) => {
-    void libraryReady;
+  app: async ({ page, api, account, libraryReady, session }, use) => {
+    // Not for a virgin session: the scan poll authenticates as the
+    // bootstrap administrator, and on the stack first-run runs against
+    // there is not one yet.
+    if (session !== 'virgin') await libraryReady();
     await use(createApp({ page, api, account }));
   },
 });
@@ -289,6 +427,7 @@ const extended = base.extend<SpecFixtures, SpecWorkerFixtures>({
 /// spec is able to say.
 export const test = extended as unknown as TestType<
   Omit<PlaywrightTestArgs & PlaywrightTestOptions, 'page'> &
-    SpecFixtures & { page: SpecPage; context: BrowserContext },
+    SpecFixtures &
+    SpecOptions & { page: SpecPage; context: BrowserContext },
   PlaywrightWorkerArgs & PlaywrightWorkerOptions & SpecWorkerFixtures
 >;

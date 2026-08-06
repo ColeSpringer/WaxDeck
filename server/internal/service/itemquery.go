@@ -31,9 +31,15 @@ func visibleTracks() *query.Builder {
 	return unarchived(query.New(query.EntityTracks))
 }
 
-// unarchived applies the state predicate to a builder. Exported within
-// the package for the two call sites that must build their query some
-// other way and still filter.
+// unarchived applies the state predicate to a builder.
+//
+// Named rather than inlined so the predicate has one spelling where a
+// builder is what is in hand. It is not the only spelling in the tree,
+// and that is worth knowing before renaming the field or adding a
+// fourth state: playlists.go's withoutArchived conjoins the same
+// condition onto a rule's node tree, which is not a builder and cannot
+// call this, and `archived` below asks the same question of a hydrated
+// view. Three encodings, one meaning.
 func unarchived(b *query.Builder) *query.Builder {
 	return b.Where("state", query.OpIsNot, string(model.StateArchived))
 }

@@ -845,21 +845,128 @@ here waits on upstream.
   per-station bit, and the only per-user station state that exists is the
   favourites list; whoever adds a second one should decide whether they
   share a shape.
+- `[in-repo]` **`editing-prototype`'s right-click selection check is
+  quarantined.** It drives a secondary click over selected canvas text,
+  which on the web build opens the BROWSER's native context menu - an OS
+  window, outside the DOM, dismissed by an Escape that a sibling stealing
+  focus swallows. It passes alone and passes most full runs; across a few
+  dozen it has failed twice, which is the bar this suite set for no
+  longer believing a test (ADR-0050). Tagged `@quarantine`, so it is out
+  of the blocking projects and still runs in the soak. To retire the
+  entry: either pin the selection through something that does not depend
+  on the native menu closing, or decide the prototype's go/no-go record
+  no longer needs this probe and delete it.
+
+- `[in-repo]` **The auth limiter keys on `RemoteAddr`, so behind a
+  reverse proxy every visitor shares one budget.** `remoteIP` reads the
+  socket address and nothing else, deliberately - `handlers.go` around
+  1091 records why: an unauthenticated `X-Forwarded-For` would let anyone
+  dodge the limiter, and trusted-proxy support is "a config surface for
+  later". The consequence was never written down, and it has teeth for
+  the deployment this project documents. `Login` checks
+  `Allowed(login-ip:…) || Allowed(login-acct:…)` - a locked IP key
+  refuses everyone - so five failed logins from any one person behind the
+  proxy lock out the whole household for 30s, and each further failure
+  doubles the wait (a minute, two, four, eight) until the window lapses
+  and the count restarts. The ladder is pinned in `ratelimit_test.go`.
+  Self-healing in the ordinary case: a successful login calls
+  `Success(ipKey)`, which deletes the key, so one person typing their
+  password right clears it for everybody. What it does not survive is
+  someone hammering deliberately, which keeps the shared key locked and
+  denies the service to the household for as long as they care to. Signup
+  has no such release - it never calls `Success` - so it caps signups
+  server-wide at five attempts (successes included) per fifteen minutes.
+  The fix is the
+  config surface the comment names: a trusted-proxy setting that makes
+  the forwarded header authoritative only when it comes from a
+  configured hop. Until then a deployment behind a proxy should know
+  that the limiter counts the proxy, not the caller.
+
+- `[in-repo]` **Sync tombstones read the whole trash journal to answer
+  one boolean.** `restorableItems` calls `l.lib.Trash(ctx, false, 0)`,
+  and waxbin documents limit 0 as "returns all". ADR-0048 makes every
+  trashed item a delete entry, so the thunk fires on the first delta page
+  after any trash operation - and a bulk delete-to-trash produces
+  tombstone-bearing pages on every device at once. A 100k-row journal
+  means a full scan and a 100k-entry map per page, per device, per poll.
+  Laziness bounds how often it runs, not how much it reads. A
+  restorable-by-pid lookup, or a bounded query, is what this wants. (It
+  also hand-rolls once-only memoization with a `bool` flag where
+  `sync.OnceValue` - already used in service/sanitize.go - is one line
+  and goroutine-safe.)
+
+- `[in-repo]` **The skip-map GET resolves a file path synchronously.**
+  `SkipMapFor` calls `analysisSource`, which relocates on a cache miss - a
+  stat, potentially a directory walk - inside the request. The
+  correctness intent is right and documented (it is what tells a stale
+  located-path entry from real absence), but on a slow or unmounted
+  network root the request blocks rather than answering pending. The
+  resolution belongs off the request path or behind a short cache.
+
+- `[in-repo]` **Every browse now compiles a query and takes the user
+  join.** waxbin's `browseFilter` short-circuits only when the query has
+  neither an entity nor a where clause, and since ADR-0048 a built query
+  never is - so `/music/tracks`, `/music/albums`, `/music/artists` and
+  every alphabetical browse resolve `UserPID` through `userIDByPID` even
+  where `NeedsUser` is false. Cost rather than breakage (CreateAccount
+  does create the row), but it is a new hard dependency on that
+  invariant, and waxbin warns the other half: it makes
+  `Browse(alphabetical, {UserPID: "bogus"})` start erroring where the
+  field is ignored today.
+
+- `[in-repo]` **The public share page fetches the playlist twice.**
+  `playlistMemberViews` re-issues `Playlists().Get` that
+  `playlistNameAndOwner` already did three lines earlier, purely to read
+  `pl.Rule`, unconditionally. ADR-0048 says the share and the owner's
+  listing "have to honour it identically", and they are now two
+  independent copies of `keepArchived := ruleNamesState(...)` plus two
+  copies of the skip - which is the shape that drifts.
+
+- `[in-repo]` **The e2e driver has grown duplicated shapes worth
+  folding.** `text()` is written nine times and has already drifted -
+  seven copies return `.first()`, two (discovery, settings) take an
+  `exact` flag and return the unfiltered locator, so the same call means
+  "first match" on seven surfaces and a strict-mode violation on two;
+  settings.spec.ts already writes `.first()` at a call site to paper over
+  it. `constructor(private readonly ctx: Ctx) {}` appears twenty times
+  and belongs on an abstract `Surface` in driver/context.ts. The
+  hand-rolled retry unit appears three times with the same `2_000`
+  literal, and `async function subsonic(...)` is defined twice
+  (sync.spec.ts and playlists.spec.ts). Roughly thirty exported surface
+  methods have no callers at all (Sharing.row/revoke/copy, Review.approve
+  /skip/filter, Admin.console/section, Queue.screen/entry,
+  Player.ready/control/choose, Playlists.open/overflow, Music.sort
+  /anyItem, Auth.error/signOut, Shell.ready, Settings.ready, Books.hub,
+  Radio.hub, Home.card, Stats.listenLog) - each an unexercised locator
+  contract that a semantics-id rename rots silently, and `strict: true`
+  without `noUnusedLocals` cannot see them.
+
+- `[in-repo]` **`mutators-admin` runs seven tests single-file to protect
+  two.** The project sets `fullyParallel: false` so the pair that
+  read-modify-writes `/admin/settings` cannot interleave; the other five
+  share nothing, and the project is itself a dependency barrier, so three
+  of four workers idle for the length of it. Wrapping the settings pair
+  in `test.describe.serial` would give the rest back - weighed against
+  ADR-0050's preference for scheduling facts living in the config rather
+  than in the file, which is why it was written this way.
+
 - `[in-repo]` **No import-completed notification event.** The
   review-ready event deliberately skips entries that auto-apply, so
   a fully automatic import is silent end to end. Probably right (the
   uploader is usually watching the uploads screen, which updates
   live), but it is a decision: an import-completed user event would
   close the gap for fire-and-forget uploads.
-- `[in-repo]` **The read-only e2e scenario flips a switch the whole suite
-  shares.** The two settings scenarios no longer race each other (one
-  serial group), but read-only is server-global, so for the one request it
-  is on, another worker's write would be refused too. The uploads specs
-  are what that would hit; the window is a single round trip and it has
-  not fired. Fix if it does: give the switch scenarios their own project
-  after the parallel wave, as focus-a11y is.
 
 ## Decided, not deferred
+
+The snapshot path's tombstone guard is deliberate belt, not dead code:
+`sync.go`'s snapshot builds its page from `visibleItems()`, so
+`archived(it)` inside `itemSyncEntry` cannot be true there and the
+`entry.Op == syncOpDelete` half never fires. The comment beside it says
+so ("The query above already drops them; this is the belt for the pids
+the delta path tombstones"), and the same goes for the nil argument and
+`tombstoneReason`'s nil branch. Removing them would make the delta path's
+correctness depend on the snapshot query never changing.
 
 Recorded so they are not re-read as gaps: gpodder episode delete
 actions stay echo-only (a per-device client delete must not reclaim a

@@ -57,6 +57,18 @@ export interface Account {
 
 type StorageState = Awaited<ReturnType<APIRequestContext['storageState']>>;
 
+/// No account at all: what a test gets when its subject is the server
+/// before anybody has one. An empty token means the API hand sends no
+/// Authorization header, which is the anonymous caller a fresh server
+/// answers `GET /auth/bootstrap` for.
+export const NO_ACCOUNT: Account = {
+  username: '',
+  password: '',
+  token: '',
+  admin: false,
+  storageState: { cookies: [], origins: [] },
+};
+
 /// What an account needs to be, where the default will not do.
 ///
 /// The default is a plain user with `libraryAccess: all` - which is what
@@ -120,22 +132,31 @@ export async function ensureAdmin(request: APIRequestContext): Promise<string> {
 /// the first attempt left. The hash is what makes truncation safe: two
 /// tests whose titles agree for the first fifty characters still get
 /// different accounts.
-/// `repeatEachIndex` is part of the key, not decoration. `titlePath` is
-/// the file and the titles above the test and nothing else, so under
-/// `--repeat-each=3` - which is exactly what the soak runs - all three
-/// copies of a test would derive the same name and log in as the same
-/// account. One copy asserting an untouched backlog while another has
-/// already played an episode is the same-login aliasing this whole
-/// module exists to remove, manufactured by the workflow built to find
-/// it. A retry is deliberately NOT in the key: a retried test is meant
-/// to land on the account its first attempt used.
+/// The project is part of the key for the same reason `repeatEachIndex`
+/// is: `titlePath` is the file and the titles above the test and nothing
+/// else, so a spec matched by two projects derives one name from both.
+/// ui.spec.ts is matched by `wave` and by `motion-smoke` today, and only
+/// the dependency chain between them keeps the two from running at once
+/// - which is a scheduling fact holding up an isolation guarantee. Any
+/// project added off that chain (a mobile-viewport pass, a dark-theme
+/// pass) would put two copies of a test on one login, which is the
+/// aliasing this module exists to remove.
+///
+/// `repeatEachIndex` is part of it for the same reason. Under
+/// `--repeat-each=3` all three copies of a test would otherwise derive
+/// one name: one copy asserting an untouched backlog while another has
+/// already played an episode is that same aliasing, manufactured by the
+/// workflow built to find it.
+///
+/// A retry is deliberately NOT in the key: a retried test is meant to
+/// land on the account its first attempt used.
 export function accountName(
   titlePath: readonly string[],
   repeatEachIndex = 0,
+  project = '',
 ): string {
-  const full = repeatEachIndex === 0
-    ? titlePath.join('/')
-    : `${titlePath.join('/')}#${repeatEachIndex}`;
+  const keyed = project === '' ? titlePath.join('/') : `${project}/${titlePath.join('/')}`;
+  const full = repeatEachIndex === 0 ? keyed : `${keyed}#${repeatEachIndex}`;
   const slug = full
     .replace(/\.spec\.ts/g, '')
     .toLowerCase()
@@ -238,6 +259,34 @@ export async function mintAccount(
     storageState: await request.storageState(),
     admin: shape.role === 'admin',
   };
+}
+
+/// Another device on an account: a second session, with its own cookie
+/// jar and its own name in the device list.
+///
+/// A real second login rather than a copy of the first one's cookie, and
+/// the difference is load-bearing. A client endpoint's id is derived
+/// from the session it registered over (`connect/registry.go`), so two
+/// browsers sharing one session cookie are one endpoint as far as the
+/// server is concerned - and the device picker filters out sessions on
+/// its own endpoint, because listing them would offer a trip to where
+/// the visitor already is. Two browsers on one cookie would therefore
+/// never see each other, which is the whole subject of the Connect
+/// scenarios.
+///
+/// The sessions this leaves behind are cleared the next time this
+/// account is minted, which is what keeps a reused stack's device list
+/// short.
+export async function signInDevice(
+  request: APIRequestContext,
+  account: Account,
+  deviceName: string,
+): Promise<StorageState> {
+  const login = await request.post('/api/v1/auth/login', {
+    data: { username: account.username, password: account.password, deviceName },
+  });
+  expect(login.ok(), `signing ${account.username} in as ${deviceName}`).toBeTruthy();
+  return request.storageState();
 }
 
 /// An account's id by its name. `/users` offers no name filter, so this

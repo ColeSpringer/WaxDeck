@@ -15,7 +15,21 @@ import { J, T, retryCatalogBusy } from './driver';
 // to exist, which is a precondition, and preconditions are seeded.
 //
 // Every test owns its account, so a subscription made here is nobody
-// else's, and the backlog the tile draws is exactly the feed's.
+// else's. The feed's three EPISODES are not: a download is one file in
+// one catalog, shared by every subscriber, and removing one is refused
+// while anybody is listening to it. So the episodes are divided by role,
+// one owner each for anything that writes:
+//
+//   [0] fetched by the unsubscribe test and left that way; played by the
+//       speed and location tests. Never unfetched.
+//   [1] the passthrough test's alone: it fetches it, unfetches it - that
+//       unfetch is its subject - and then plays it with no bytes there.
+//   [2] the journey's alone: unfetched as a precondition, fetched
+//       through the UI, played.
+//
+// Written down because rediscovering it costs a soak: two tests sharing
+// a mutable episode is a test waiting sixty seconds for a file a sibling
+// is playing, reported as a broken unfetch.
 
 const FEED_URL = 'http://127.0.0.1:4421/feed.xml';
 
@@ -43,26 +57,47 @@ test('subscribe, fetch, and play an episode with silence trimming', async ({ app
     )
     .toBeTruthy();
 
-  // Exactly the feed's three episodes, because this account has played
-  // none of them. The old assertion could only ask the server what it
-  // thought the backlog was and compare the tile against that, since a
-  // sibling spec played the same feed as the same login.
-  // The nav tier, not the assert tier: the tile is drawn from a feed the
-  // server is still fetching, parsing and ingesting when the dialog
-  // closes, which is a longer wait than a value settling.
-  await expect(app.podcasts.show(showPid)).toHaveAccessibleName(/\b3 unplayed\b/, {
-    timeout: T.nav,
-  });
+  // Nothing here has been played, so the whole backlog is unplayed and
+  // the tile says what the server counts.
+  //
+  // The *fraction* is this account's own and is asserted exactly; the
+  // count is not one to write down. A show's episode set belongs to the
+  // catalog, and one subscriber unfetching an episode archives the item
+  // for everybody - which today takes it out of the hub's count while
+  // leaving it in the show's listing (docs/bugs.md, "unfetching an
+  // episode drops it from the hub's count"). Three copies of this file
+  // in flight is exactly when that bites, and "3 unplayed" written down
+  // reads as a wrong count rather than as somebody else's unfetch.
+  //
+  // Both numbers re-read each attempt, on the fetch tier: they are a
+  // live query over the episodes ingested so far, and the ingest is a
+  // feed fetch and parse the server does off the request that returned
+  // the subscription.
+  await expect(async () => {
+    const subs = await app.api.tryGet('/podcasts');
+    const row = (subs?.items ?? []).find((s) => s.show.pid === showPid);
+    expect(row, 'the subscription should be listed').toBeTruthy();
+    const total = row!.show.episodeCount ?? 0;
+    expect(total, 'the feed should have landed its episodes').toBeGreaterThan(0);
+    expect(row!.unplayedCount, 'a fresh subscriber has played none of it').toBe(total);
+    await expect(app.podcasts.show(showPid)).toHaveAccessibleName(
+      new RegExp(`\\b${total} unplayed\\b`),
+      { timeout: T.step },
+    );
+  }).toPass({ timeout: T.fetch });
 
   // Silence trimming is a per-subscription setting, and this test is
   // about what playback does with it rather than how it is chosen.
   await app.seed.podcastSettings(showPid, { trimSilence: true });
 
-  await app.podcasts.openShow(showPid);
   const episodes = await app.seed.episodes(showPid);
-  expect(episodes.length).toBe(3);
-  const episode = episodes[0];
-  expect(episode.downloaded).toBeFalsy();
+  const episode = episodes[2];
+
+  // Made unfetched rather than asserted to be: a downloaded file is a
+  // catalog fact rather than an account's, so a run against a stack this
+  // test has used before meets its own earlier download.
+  await app.seed.unfetchEpisode(showPid, episode.pid);
+  await app.podcasts.openShow(showPid);
 
   // Queue the server-side fetch from the UI; the background worker lands
   // it and the row flips to downloaded.
@@ -165,7 +200,6 @@ test('an unfetched episode still streams by enclosure passthrough', async ({ app
   const showPid = await app.seed.subscribePodcast(FEED_URL);
   const episodes = await app.seed.episodes(showPid);
   const second = episodes[1];
-  const third = episodes[2];
   await app.seed.fetchEpisode(showPid, second.pid);
 
   // The fetch's inverse: remove (archive, not delete) and fall back to
@@ -196,14 +230,15 @@ test('an unfetched episode still streams by enclosure passthrough', async ({ app
   expect((await ranged.body()).length).toBe(100);
 
   // The client half of passthrough: an episode this server holds no
-  // bytes for plays from the row rather than queueing a fetch. The third
-  // episode has never been fetched, so nothing but the relay can be
-  // answering.
+  // bytes for plays from the row rather than queueing a fetch. The same
+  // episode the unfetch above emptied, which is a stronger subject than
+  // one that was never fetched - it proves the removal really took the
+  // bytes away, and it keeps this test to the one episode it owns.
   await app.nav.enter('podcasts');
   await app.podcasts.openShow(showPid);
-  await app.podcasts.playEpisode(third.pid);
-  const relayed = await app.api.get('/items/{pid}/play-info', { path: { pid: third.pid } });
-  expect(relayed.url, 'a never-fetched episode still mints a relay URL').toContain(
+  await app.podcasts.playEpisode(second.pid);
+  const relayed = await app.api.get('/items/{pid}/play-info', { path: { pid: second.pid } });
+  expect(relayed.url, 'an unfetched episode still mints a relay URL').toContain(
     '/media/enclosure?',
   );
   // It is really playing, which is the part the row's tap is about: the

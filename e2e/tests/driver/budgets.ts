@@ -27,6 +27,14 @@ export const T = {
   /// server, a value propagating into the UI.
   assert: 15_000,
 
+  /// The live channel, as a promise rather than a kind of wait: an edit
+  /// made elsewhere reaching an open client over the invalidation
+  /// socket. Deliberately tighter than `step`, because the whole claim
+  /// is that it arrives on the socket and not on whatever poll would
+  /// eventually notice - a budget loose enough for the fallback is a
+  /// budget that passes while the subject is broken.
+  live: 3_000,
+
   /// Work the server does off the request: a download landing, a scan
   /// picking a file up, a worker draining a queue.
   fetch: 60_000,

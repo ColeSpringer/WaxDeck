@@ -1,14 +1,5 @@
-import { legacyTest as test, expect, APIRequestContext } from './fixtures';
-import {
-  ADMIN_PASS,
-  ADMIN_USER,
-  authed,
-  clickThrough,
-  ensureAdmin,
-  typeInto,
-  waitForLibrary,
-} from './helpers';
-import { SemanticsIds, sem } from './semantics-ids';
+import { test, expect } from './fixtures';
+import { J, T } from './driver';
 
 // The curation journey: seed a pending review entry by requesting a
 // rematch of a scanned track (the stack runs with matching off, so the
@@ -17,34 +8,17 @@ import { SemanticsIds, sem } from './semantics-ids';
 // decide it. This exercises the app's first shortcuts layer and the
 // review surface end to end.
 
-
-async function firstMusicPid(
-  request: APIRequestContext,
-  token: string,
-): Promise<string> {
-  const resp = await request.get(
-    '/api/v1/library/items?mediaType=music&limit=1',
-    authed(token),
-  );
-  expect(resp.ok()).toBeTruthy();
-  const items = (await resp.json()).items ?? [];
-  expect(items.length).toBeGreaterThan(0);
-  return items[0].pid;
-}
-
-test('review a queued match with the keyboard', async ({ page, request }) => {
-  test.setTimeout(180_000);
-  const token = await ensureAdmin(request);
-  await waitForLibrary(request, token);
+test('review a queued match with the keyboard', async ({ app }) => {
+  test.setTimeout(J.long);
 
   // Seed a pending entry through the API: a rematch queues one unit.
-  const pid = await firstMusicPid(request, token);
-  const rematch = await request.post(
-    `/api/v1/items/${pid}/rematch`,
-    authed(token),
-  );
-  expect(rematch.status()).toBe(202);
-  const entryId = (await rematch.json()).reviewEntryId as string;
+  const music = await app.api.get('/library/items', {
+    query: { mediaType: 'music', limit: 1 },
+  });
+  const pid = (music.items ?? [])[0]?.pid;
+  expect(pid, 'the fixture library should hold a music item to rematch').toBeTruthy();
+  const rematch = await app.api.post('/items/{pid}/rematch', { path: { pid: pid! } });
+  const entryId = rematch.reviewEntryId;
   expect(entryId).toMatch(/^rv-/);
 
   // The entry settles to pending (matching is off, so the identify
@@ -52,77 +26,56 @@ test('review a queued match with the keyboard', async ({ page, request }) => {
   await expect
     .poll(
       async () => {
-        const resp = await request.get(
-          `/api/v1/review/queue/${entryId}`,
-          authed(token),
-        );
-        if (!resp.ok()) return 'missing';
-        const entry = await resp.json();
+        const entry = await app.api.tryGet('/review/queue/{entryId}', {
+          path: { entryId },
+        });
+        if (entry === undefined) return 'missing';
         return entry.identifying ? 'identifying' : entry.status;
       },
-      { timeout: 30_000, message: 'the entry should settle to pending' },
+      { timeout: T.fetch, message: 'the entry should settle to pending' },
     )
     .toBe('pending');
 
-  // Log in through the UI.
-  await page.goto('/');
-  const username = page.getByRole('textbox', { name: 'Username' });
-  await username.waitFor({ timeout: 30_000 });
-  await typeInto(page, username, ADMIN_USER);
-  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
-  await page.getByRole('button', { name: 'Log in' }).click();
-
-  // Open the review queue through the sidebar's curation group.
-  await clickThrough(
-    page.locator(sem(SemanticsIds.navGroup('curation'))),
-    page.locator(sem(SemanticsIds.navDestination('review'))),
-  );
-  const row = page.locator(sem(SemanticsIds.reviewRow(entryId)));
-  await clickThrough(
-    page.locator(sem(SemanticsIds.navDestination('review'))),
-    row,
-  );
+  // The queue has a curation row of its own in the chrome; walked
+  // rather than entered, because reaching a daily surface in one click
+  // is part of what it is.
+  await app.nav.to('review');
 
   // The cursor is put on this spec's own row by opening it, never
-  // assumed to be at the top: the queue is shared and newest-first, so
-  // an entry another worker seeds sorts in above this one. Escape
-  // returns to the queue with the cursor where the open entry left it
-  // and `e` reopens it - but nothing re-anchors the cursor once the pane
-  // is closed, so an entry arriving between the two keys shifts this row
+  // assumed to be at the top: the queue is server-global and
+  // newest-first, so an entry another worker seeds sorts in above this
+  // one - per-test accounts do not change that, because a rematch is a
+  // catalog decision rather than a per-listener one. Escape returns to
+  // the queue with the cursor where the open entry left it and `e`
+  // reopens it, but nothing re-anchors the cursor once the pane is
+  // closed, so an entry arriving between the two keys shifts this row
   // down and `e` opens its neighbour. The whole round repeats in that
   // case: re-opening this row by hand is what puts the cursor back.
   //
   // Cursor movement itself (j, k, arrows) is covered deterministically
   // in review_screen_test.dart, over a queue that holds still.
-  const asIs = page.locator(sem(SemanticsIds.reviewAsIs));
   await expect(async () => {
-    await row.click({ force: true });
-    await asIs.waitFor({ timeout: 15_000 });
-    expect(page.url(), 'this row is what opened').toContain(entryId);
-    await page.keyboard.press('Escape');
-    await expect(asIs).toBeHidden({ timeout: 15_000 });
-    await page.keyboard.press('e');
-    await asIs.waitFor({ timeout: 15_000 });
-    expect(page.url(), 'the cursor stayed on this entry').toContain(entryId);
-  }).toPass({ timeout: 60_000 });
+    await app.review.open(entryId);
+    expect(app.nav.location(), 'this row is what opened').toContain(entryId);
+    await app.review.press('Escape');
+    await expect(app.review.asIs()).toBeHidden();
+    await app.review.press('e');
+    await app.review.asIs().waitFor({ timeout: T.assert });
+    expect(app.nav.location(), 'the cursor stayed on this entry').toContain(entryId);
+  }).toPass({ timeout: T.fetch });
 
   // The entry screen offers the as-is decision (no candidates to
   // approve). Accept it, which returns to the queue.
-  await asIs.click();
+  await app.review.asIs().click();
 
   // The entry is decided: it leaves the pending queue, and the API
   // agrees.
   await expect
     .poll(
-      async () => {
-        const resp = await request.get(
-          `/api/v1/review/queue/${entryId}`,
-          authed(token),
-        );
-        if (!resp.ok()) return 'missing';
-        return (await resp.json()).status;
-      },
-      { timeout: 30_000, message: 'the entry should be decided as-is' },
+      async () =>
+        (await app.api.tryGet('/review/queue/{entryId}', { path: { entryId } }))?.status ??
+        'missing',
+      { timeout: T.fetch, message: 'the entry should be decided as-is' },
     )
     .toBe('as-is');
 });

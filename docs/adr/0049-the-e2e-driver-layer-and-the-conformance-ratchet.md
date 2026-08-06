@@ -121,8 +121,32 @@ mutation without the header is refused 403, and a mutation the app itself
 makes succeeds.
 
 The login form is still driven, by the specs about the door: first run,
-sign-up, identity, the accessibility walk, and the walking skeleton.
-`auth.signInViaForm(who)` is for exactly those.
+sign-up, identity, the accessibility walk, the walking skeleton, and the
+hash-shim scenarios. Those declare it, per file or per describe block,
+with `test.use({ session: ... })`:
+
+- `planted` (the default) is the cookie above.
+- `signed-out` mints the account and tells the browser nothing, so the
+  app lands on the form. `auth.signInViaForm(who)` opens the app cold and
+  signs in; `auth.signInHere(who, lands)` fills the form where it stands,
+  for a spec that arrived at the door by a route of its own - a deep link
+  the redirect carried through - where opening the app afresh would throw
+  away the location under test.
+- `virgin` mints nothing and does not touch the bootstrap door. Exactly
+  one spec asks for it, and it is the one whose subject is a server with
+  no accounts on it. That is also why `adminToken` and `libraryReady` are
+  worker-scoped *thunks* rather than values: resolving the token walks
+  through the one-shot bootstrap door, and a fixture that opened it just
+  by appearing in a signature would turn first-run into a permanent skip
+  on the only stack it can say anything about.
+
+A second live client is `device()`, which opens another browser context
+with a session of its own. Of its own, and not a copy of the first's
+cookie, because a client endpoint's id is derived from the session it
+registered over (`connect/registry.go`) and the device picker filters out
+sessions on its own endpoint - so two browsers sharing one cookie are one
+device to the server and would never see each other, which is the entire
+subject of the Connect scenarios.
 
 **Timeout tiers.** `budgets.ts` names every wait by what it is waiting
 for: `T.step` 5s, `T.action` 20s, `T.nav` 30s, `T.assert` 15s, `T.fetch`
@@ -158,9 +182,12 @@ Playwright's fixture types intersect rather than replace:
 `Page`, and no narrowing at all. The value really is a `Page` at runtime;
 what changes is what a spec is able to say.
 
-Unmigrated specs import `legacyTest`, which is the old full-`Page`
-fixture. Migrating a file is switching that import and letting the
-compiler list the work.
+During the migration, unmigrated specs imported `legacyTest` - the old
+full-`Page` fixture - and migrating a file was switching that import and
+letting the compiler list the work. Both `legacyTest` and the
+`helpers.ts` toolbox are deleted now that the count is zero; the
+`legacy-import` and `helpers-import` rules stay as hard zeros, so
+re-creating either is a lint failure rather than a habit.
 
 **Generated API types.** `openapi-typescript` (pinned) emits
 `tests/api-types.ts` from `api/openapi.yaml` as part of `make generate`,
@@ -207,8 +234,14 @@ Exemptions each state a reason, so the set is auditable:
 the perf specs (own contexts, platform instrumentation),
 `desktop-loopback.spec.ts` (drives the test IdP's plain HTML form, not
 the app), `editing-prototype.spec.ts` (canvas go/no-go probes are the
-subject), `smoke.spec.ts` (API-only), `tests/support/*` (raw-page
-infrastructure), and the two generated files.
+subject), `tests/support/*` (raw-page infrastructure), and the two
+generated files. The four spec exemptions are exactly the four files that
+ask for `rawPage`, and that is meant to stay true: a file needing the
+real `Page` is one whose subject is not the app - somebody else's HTML
+form, the canvas itself, the accessibility tree the driver may not use,
+or the platform's own instrumentation. `smoke.spec.ts` was on this list
+while it drove a page to read a document title; it fetches the document
+instead now, and needs no exemption.
 
 ## Consequences
 
@@ -225,9 +258,17 @@ infrastructure), and the two generated files.
   behind a destination check or a rect-at-rest check, because forcing is
   not dropping the actionability wait but replacing it: over canvas,
   Playwright's own stability heuristics never settle on a live seek bar.
-- The allowlist is a public count of the debt. It started at 610 findings
-  across 27 files; it is empty when the migration is done, and `legacyTest`
-  and `helpers.ts` are deleted at that point.
+- The allowlist was a public count of the debt. It started at 615
+  findings across 26 files and is empty; `legacyTest` and `helpers.ts`
+  are gone with it. An empty allowlist means every rule is a hard zero
+  suite-wide, so the file stays in the tree as the seam for the next rule
+  rather than as a tolerance.
+- The typed API found real contract gaps in bodies the suite had been
+  hand-writing, each of which the server was quietly defaulting: a listen
+  session with no `source`, an instant mix with no `adventurousness`, a
+  delete with no `mode` or `dryRun`, a library create with no `media` or
+  `managed`. Every one of those was the suite asking for something the
+  app itself would never ask for.
 - A spec that genuinely needs the raw page asks for `rawPage` and appears
   in the exemption ledger. That is deliberate friction, and the ledger is
   short.

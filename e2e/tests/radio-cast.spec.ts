@@ -1,14 +1,5 @@
-import { legacyTest as test, expect, Page, APIRequestContext } from './fixtures';
-import {
-  authed,
-  chooseFromMenu,
-  clickInView,
-  clickThrough,
-  ensureAdmin,
-  itemRow,
-  loginAsAdmin,
-} from './helpers';
-import { SemanticsIds, sem } from './semantics-ids';
+import { test, expect } from './fixtures';
+import { T } from './driver';
 
 // The radio slice and the Connect surfaces over the real stack: a station
 // added over the API is drawn from the server's own logo proxy, tuned in
@@ -20,344 +11,190 @@ import { SemanticsIds, sem } from './semantics-ids';
 // lets the stream proxy relay a loopback URL.
 const LOGO_HOST = 'http://127.0.0.1:4421';
 
-/// This spec's own stations, named so a parallel worker's rows cannot be
-/// mistaken for them: the library is shared by every account and every
-/// worker, and a grid picked over by name would otherwise catch another
-/// spec's station.
-const STATION = 'E2E Dial FM';
-const LOGO_STATION = 'E2E Logo FM';
+/// The station library is server-global, so these names are claims on
+/// shared rows and each test owns its own - the two that want a station
+/// with no logo want it for different reasons, and one name between them
+/// would be a race the moment the serial group went away. A distinct
+/// stream URL per station for the same reason the library demands one:
+/// it refuses a duplicate.
+const LOGO_STATION = { name: 'E2E Logo FM', stream: `${LOGO_HOST}/wd-fixture-ep-002.mp3` };
+const BARE_STATION = { name: 'E2E Bare FM', stream: `${LOGO_HOST}/wd-fixture-ep-003.mp3` };
+const DIAL_STATION = { name: 'E2E Dial FM', stream: `${LOGO_HOST}/wd-fixture-ep-001.mp3` };
 
-async function station(
-  request: APIRequestContext,
-  token: string,
-  name: string,
-  stream: string,
-  logo?: string,
-): Promise<{ pid: string }> {
-  const existing = await (
-    await request.get('/api/v1/radio/stations', authed(token))
-  ).json();
-  const already = (existing.stations as Array<{ pid: string; name: string }>).find(
-    (s) => s.name === name,
+test('a station logo is served from this origin, not from the station host', async ({
+  app,
+}) => {
+  const withLogo = await app.seed.radioStation(
+    LOGO_STATION.name,
+    LOGO_STATION.stream,
+    `${LOGO_HOST}/station-logo.png`,
   );
-  if (already) return { pid: already.pid };
-  const res = await request.post('/api/v1/radio/stations', {
-    ...authed(token),
-    data: {
-      // A distinct stream URL per station, because the library refuses a
-      // duplicate: two of this spec's stations pointed at one file would
-      // conflict on the second create rather than on anything real.
-      name,
-      streamUrl: stream,
-      ...(logo ? { logoUrl: logo } : {}),
-    },
-  });
-  expect(res.status(), await res.text()).toBe(201);
-  return { pid: (await res.json()).pid };
-}
 
-/// Clears the account's pinned stations.
-///
-/// Favourites are per account now, so they outlive a browser context and a
-/// re-run against a reused stack would find yesterday's pin still there -
-/// which is exactly what the dial test asserts the absence of. The rest of
-/// the preference document is carried through by hand, because PUT replaces
-/// the whole thing.
-async function clearFavorites(request: APIRequestContext, token: string) {
-  const current = await (
-    await request.get('/api/v1/users/me/prefs', authed(token))
-  ).json();
-  const res = await request.put('/api/v1/users/me/prefs', {
-    ...authed(token),
-    data: { ...current, radioFavorites: [] },
+  // The reversal API item 12 records: a client never fetches a station
+  // host directly, because on web that has no CORS headers to offer, an
+  // http logo is mixed content on an https page, and the fetch hands the
+  // listener's IP to a stranger.
+  const logo = await app.api.raw.get('/radio/stations/{pid}/logo', {
+    path: { pid: withLogo },
   });
-  expect(res.status(), await res.text()).toBe(200);
-}
+  expect(logo.status()).toBe(200);
+  // Sniffed from the bytes rather than passed through: hosts label
+  // favicons every which way, and what a browser is handed has to match
+  // what it is told.
+  expect(logo.headers()['content-type']).toBe('image/png');
+  expect((await logo.body()).length).toBeGreaterThan(0);
+  const etag = logo.headers()['etag'];
+  expect(etag).toBeTruthy();
+  expect(logo.headers()['cache-control']).toContain('private');
+  // No Vary: the station library is shared, so these bytes do not depend
+  // on who asked.
+  expect(logo.headers()['vary']).toBeUndefined();
+  // The hardening pair. A logo URL is attacker-supplied - any account may
+  // add a station pointing anywhere - and these bytes are served from
+  // this origin, so a browser must not be free to re-decide the body, and
+  // a document opened straight from this URL must not run anything. SVG
+  // is refused outright upstream of this, which is what makes the raster
+  // set safe rather than merely mitigated.
+  expect(logo.headers()['x-content-type-options']).toBe('nosniff');
+  expect(logo.headers()['content-security-policy']).toContain("default-src 'none'");
 
-async function openRadio(page: Page) {
-  await clickThrough(
-    page.locator(sem(SemanticsIds.navDestination('radio'))),
-    page.locator(sem(SemanticsIds.radioHub)),
+  // A matching validator answers 304, so a warm dial repaints for free.
+  const revalidated = await app.api.raw.get('/radio/stations/{pid}/logo', {
+    path: { pid: withLogo },
+    headers: { 'If-None-Match': etag },
+  });
+  expect(revalidated.status()).toBe(304);
+
+  // The size a client's artwork ladder appends is accepted and changes
+  // nothing, so one URL builder serves covers and logos alike.
+  const sized = await app.api.raw.get('/radio/stations/{pid}/logo', {
+    path: { pid: withLogo },
+    query: { size: 256 },
+  });
+  expect(sized.status()).toBe(200);
+
+  // A station with no logo is a 404 and a monogram, not a broken image.
+  const bare = await app.seed.radioStation(BARE_STATION.name, BARE_STATION.stream);
+  const none = await app.api.raw.get('/radio/stations/{pid}/logo', {
+    path: { pid: bare },
+  });
+  expect(none.status()).toBe(404);
+
+  // The tokenless 401 is not asserted here: it is covered where a client
+  // can actually have no credential at all - TestRadioStationLogoProxy.
+});
+
+test('the hub pins a station to the dial and tunes it in', async ({ app }) => {
+  const station = await app.seed.radioStation(DIAL_STATION.name, DIAL_STATION.stream);
+  await app.seed.clearRadioFavorites();
+
+  await app.nav.enter('radio');
+  await app.radio.station(station).waitFor({ timeout: T.nav });
+
+  // No dial until something is pinned: a band under a needle with
+  // nothing on it is a stripe of chrome.
+  await expect(app.radio.dial()).toHaveCount(0);
+
+  await app.radio.pin(station);
+  // The dial's own control names what it will do.
+  await expect(app.radio.tune()).toBeVisible();
+
+  // Tuning in through the dial takes the engine: the deck bar picks the
+  // station up, with a live pill and stop rather than pause.
+  await app.radio.tuneIn();
+  await expect(app.radio.deckBar()).toHaveAttribute(
+    'aria-label',
+    new RegExp(`Live, ${DIAL_STATION.name}`),
+    { timeout: T.nav },
   );
-}
-
-test.describe.serial('radio and cast', () => {
-  test('a station logo is served from this origin, not from the station host', async ({
-    request,
-  }) => {
-    const token = await ensureAdmin(request);
-    const withLogo = await station(
-      request,
-      token,
-      LOGO_STATION,
-      `${LOGO_HOST}/wd-fixture-ep-002.mp3`,
-      `${LOGO_HOST}/station-logo.png`,
-    );
-
-    // The reversal API item 12 records: a client never fetches a station
-    // host directly, because on web that has no CORS headers to offer, an
-    // http logo is mixed content on an https page, and the fetch hands the
-    // listener's IP to a stranger.
-    const logo = await request.get(
-      `/api/v1/radio/stations/${withLogo.pid}/logo`,
-      authed(token),
-    );
-    expect(logo.status()).toBe(200);
-    // Sniffed from the bytes rather than passed through: hosts label
-    // favicons every which way, and what a browser is handed has to match
-    // what it is told.
-    expect(logo.headers()['content-type']).toBe('image/png');
-    expect((await logo.body()).length).toBeGreaterThan(0);
-    const etag = logo.headers()['etag'];
-    expect(etag).toBeTruthy();
-    expect(logo.headers()['cache-control']).toContain('private');
-    // No Vary: the station library is shared, so these bytes do not depend
-    // on who asked.
-    expect(logo.headers()['vary']).toBeUndefined();
-    // The hardening pair. A logo URL is attacker-supplied - any account may
-    // add a station pointing anywhere - and these bytes are served from
-    // this origin, so a browser must not be free to re-decide the body, and
-    // a document opened straight from this URL must not run anything. SVG
-    // is refused outright upstream of this, which is what makes the raster
-    // set safe rather than merely mitigated.
-    expect(logo.headers()['x-content-type-options']).toBe('nosniff');
-    expect(logo.headers()['content-security-policy']).toContain("default-src 'none'");
-
-    // A matching validator answers 304, so a warm dial repaints for free.
-    const revalidated = await request.get(
-      `/api/v1/radio/stations/${withLogo.pid}/logo`,
-      { ...authed(token), headers: { ...authed(token).headers, 'If-None-Match': etag } },
-    );
-    expect(revalidated.status()).toBe(304);
-
-    // The size a client's artwork ladder appends is accepted and changes
-    // nothing, so one URL builder serves covers and logos alike.
-    const sized = await request.get(
-      `/api/v1/radio/stations/${withLogo.pid}/logo?size=256`,
-      authed(token),
-    );
-    expect(sized.status()).toBe(200);
-
-    // A station with no logo is a 404 and a monogram, not a broken image.
-    const bare = await station(
-      request,
-      token,
-      STATION,
-      `${LOGO_HOST}/wd-fixture-ep-003.mp3`,
-    );
-    const none = await request.get(
-      `/api/v1/radio/stations/${bare.pid}/logo`,
-      authed(token),
-    );
-    expect(none.status()).toBe(404);
-
-    // The tokenless 401 is not asserted here: this request context carries
-    // the session cookie the login set, and dropping the Authorization
-    // header does not drop that. It is covered where a client can actually
-    // have no credential at all - TestRadioStationLogoProxy.
+  // Stop rather than pause: a paused live stream resumes at the live edge
+  // anyway, and the transport does not pretend otherwise. (Or "Tap to
+  // resume" where the browser refused the programmatic start, which is
+  // the same control saying the other true thing.)
+  await expect(app.radio.transport(/^(Stop|Tap to resume)$/)).toBeVisible({
+    timeout: T.nav,
   });
+  // A station has no per-user state, so the bar draws no star over one.
+  await expect(app.radio.deckStar()).toHaveCount(0);
 
-  test('the hub pins a station to the dial and tunes it in', async ({
-    page,
-    request,
-  }) => {
-    const token = await ensureAdmin(request);
-    const bare = await station(
-      request,
-      token,
-      STATION,
-      `${LOGO_HOST}/wd-fixture-ep-003.mp3`,
-    );
-    await clearFavorites(request, token);
+  // Stopping it puts the bar away, because radio never enters the queue
+  // and there is nothing left for the bar to be about.
+  await app.radio.stop();
+  await expect(app.radio.deckBar()).toHaveCount(0, { timeout: T.nav });
 
-    await loginAsAdmin(page, page.locator(sem(SemanticsIds.navDestination('radio'))));
-    await openRadio(page);
+  // The pin reached the account rather than this browser: which of the
+  // household's stations are yours is a fact about you, so it is in the
+  // synced preference document and a phone gets it too. Exactly this one
+  // station - the document belongs to this test.
+  await expect
+    .poll(async () => (await app.api.tryGet('/users/me/prefs'))?.radioFavorites ?? [], {
+      message: 'the pin should reach the prefs document',
+    })
+    .toEqual([station]);
 
-    const row = page.locator(sem(SemanticsIds.radio(bare.pid)));
-    await row.waitFor({ timeout: 30_000 });
+  // Unpinning takes the dial with it and clears the stored list: the
+  // server drops the field rather than storing `[]`, and no client reads a
+  // default set of pins out of an absent one, so both read as none pinned.
+  // What has to survive is the *clear*, which is what this checks.
+  await app.radio.unpin(station);
+  await expect(app.radio.dial()).toHaveCount(0);
+  await expect
+    .poll(async () => (await app.api.tryGet('/users/me/prefs'))?.radioFavorites ?? [])
+    .toEqual([]);
+});
 
-    // No dial until something is pinned: a band under a needle with
-    // nothing on it is a stripe of chrome.
-    await expect(page.locator(sem(SemanticsIds.radioDial))).toHaveCount(0);
+test('search reaches the station directory under its own chip', async ({ app }) => {
+  await app.nav.enter('radio');
 
-    await clickThrough(
-      page.locator(sem(SemanticsIds.radioFavorite(bare.pid))),
-      page.locator(sem(SemanticsIds.radioDial)),
-    );
-    // The dial's own control names what it will do.
-    await expect(page.locator(sem(SemanticsIds.radioTune))).toBeVisible();
+  // The hub carries the search control in its own bar, which is its
+  // share of the compact-search entry: the shell owns no top app bar, so
+  // every rebuilt screen brings the control with it.
+  await expect(app.radio.searchAction()).toBeVisible();
 
-    // Tuning in through the dial takes the engine: the deck bar picks the
-    // station up, with a live pill and stop rather than pause.
-    // Same treatment: the dial has just appeared and settles into place,
-    // so its control is a moving target for one forced click.
-    const bar = page.locator(sem(SemanticsIds.deckBar));
-    await clickInView(page, page.locator(sem(SemanticsIds.radioTune)), {
-      settled: bar,
-    });
-    await bar.waitFor({ timeout: 30_000 });
-    // The station's name is in the bar's accessible name, not in its text:
-    // the title block is excluded from semantics so the bar announces once
-    // rather than re-reading its own elapsed time at every tick.
-    await expect(bar).toHaveAttribute(
-      'aria-label',
-      new RegExp(`Live, ${STATION}`),
-      { timeout: 30_000 },
-    );
-    // Stop rather than pause: a paused live stream resumes at the live edge
-    // anyway, and the transport does not pretend otherwise. (Or "Tap to
-    // resume" where the browser refused the programmatic start, which is
-    // the same control saying the other true thing.)
-    await expect(
-      page.getByRole('button', { name: /^(Stop|Tap to resume)$/ }).first(),
-    ).toBeVisible({ timeout: 30_000 });
-    // A station has no per-user state, so the bar draws no star over one:
-    // a permanently greyed control reads as broken rather than as absent.
-    await expect(page.locator(sem(SemanticsIds.deckStar))).toHaveCount(0);
+  // The sidebar header is a live field at this width. Clicking it opens
+  // the screen and keeps the caret, so nothing has to be typed to get
+  // here - which this case needs, because the chip below answers with
+  // an empty query.
+  await app.search.open();
 
-    // Stopping it puts the bar away, because radio never enters the queue
-    // and there is nothing left for the bar to be about.
-    await page.locator(sem(SemanticsIds.deckPlay)).click({ force: true });
-    await expect(bar).toHaveCount(0, { timeout: 30_000 });
+  // The chip is a different question of a different surface: with
+  // nothing typed it says what it is for rather than showing the
+  // library's own empty state.
+  await app.search.narrowTo('radio');
+  await expect(app.radio.text('Search the station directory')).toBeVisible();
 
-    // The pin reached the account rather than this browser: which of the
-    // household's stations are yours is a fact about you, so it is in the
-    // synced preference document and a phone gets it too.
-    await expect
-      .poll(
-        async () => {
-          const prefs = await (
-            await request.get('/api/v1/users/me/prefs', authed(token))
-          ).json();
-          return (prefs.radioFavorites ?? []) as string[];
-        },
-        { timeout: 15_000, message: 'the pin should reach the prefs document' },
-      )
-      .toEqual([bare.pid]);
+  // The directory itself is a public service over the internet, so this
+  // stack does not query it: what is pinned here is the chip, the scope
+  // it selects, and that the screen offers the add flow rather than a
+  // library search with every group hidden. The add path from a
+  // directory match is covered by radio_hub_test.dart against a fake.
+});
 
-    // Unpinning takes the dial with it and clears the stored list: the
-    // server drops the field rather than storing `[]`, and no client reads a
-    // default set of pins out of an absent one, so both read as none pinned.
-    // What has to survive is the *clear*, which is what this checks.
-    await page.locator(sem(SemanticsIds.radioFavorite(bare.pid))).click({ force: true });
-    await expect(page.locator(sem(SemanticsIds.radioDial))).toHaveCount(0);
-    await expect
-      .poll(async () => {
-        const prefs = await (
-          await request.get('/api/v1/users/me/prefs', authed(token))
-        ).json();
-        return (prefs.radioFavorites ?? []) as string[];
-      }, { timeout: 15_000 })
-      .toEqual([]);
-  });
+test('the device picker lists this device and checks the cast bases', async ({ app }) => {
+  const target = await app.seed.item('Alpha Song');
 
-  test('search reaches the station directory under its own chip', async ({
-    page,
-    request,
-  }) => {
-    await ensureAdmin(request);
-    await loginAsAdmin(page, page.locator(sem(SemanticsIds.navDestination('radio'))));
-    await openRadio(page);
+  await app.nav.enter('tracks');
+  // Something has to be playing for the bar's cast control to exist:
+  // there is no device to send silence to. A row tap plays and pushes
+  // the player over the chrome, so the bar is behind it until that is
+  // left.
+  await app.music.play(target.pid);
+  await app.player.collapse(app.radio.deckBar());
+  await app.radio.deckBar().waitFor({ timeout: T.nav });
 
-    // The hub carries the search control in its own bar, which is this
-    // phase's share of the compact-search entry: the shell owns no top app
-    // bar, so every rebuilt screen brings the control with it.
-    await expect(page.locator(sem(SemanticsIds.searchAction))).toBeVisible();
+  await app.cast.openPicker();
 
-    // The sidebar header is a live field at this width. Clicking it opens
-    // the screen and keeps the caret, so nothing has to be typed to get
-    // here - which this case needs, because the chip below answers with
-    // an empty query.
-    await clickThrough(
-      page.locator(sem(SemanticsIds.searchField)),
-      page.locator(sem(SemanticsIds.searchFilter('all'))),
-    );
+  // Playback is here, and the picker says so rather than offering a trip
+  // to where the visitor already is.
+  await expect(app.cast.thisDevice()).toBeVisible();
+  await expect(app.cast.thisDevice()).toContainText('Playing here');
 
-    // The chip is a different question of a different surface: with
-    // nothing typed it says what it is for rather than showing the
-    // library's own empty state.
-    await page.locator(sem(SemanticsIds.searchFilter('radio'))).click();
-    await expect(page.getByText('Search the station directory')).toBeVisible({
-      timeout: 15_000,
-    });
+  // The connection check, one level in: a cast that fails is silent, and
+  // this is the surface that says why.
+  await app.cast.runCheck();
 
-    // The directory itself is a public service over the internet, so this
-    // stack does not query it: what is pinned here is the chip, the scope
-    // it selects, and that the screen offers the add flow rather than a
-    // library search with every group hidden. The add path from a
-    // directory match is covered by radio_hub_test.dart against a fake.
-  });
-
-  test('the device picker lists this device and checks the cast bases', async ({
-    page,
-    request,
-  }) => {
-    const token = await ensureAdmin(request);
-    const items = await (
-      await request.get('/api/v1/library/items', authed(token))
-    ).json();
-    const target = (items.items as Array<{ pid: string; title: string }>).find(
-      (it) => it.title === 'Alpha Song',
-    )!;
-
-    await loginAsAdmin(page, page.locator(sem(SemanticsIds.navDestination('music'))));
-    // Something has to be playing for the bar's cast control to exist:
-    // there is no device to send silence to. A grid tap plays and pushes
-    // the player over the chrome, so the bar is behind it until that is
-    // left - and the bar's own cast control is what this phase changed.
-    const card = await itemRow(page, target.pid);
-    await card.waitFor({ timeout: 30_000 });
-    await card.click();
-    await page.locator(sem(SemanticsIds.playerToggle)).waitFor({ timeout: 30_000 });
-    // The player's own back control, by handle: the listing underneath
-    // has a back button too, and picking one of two by document order is
-    // how this scenario started popping the wrong screen. Forced, like
-    // every canvas-rendered click in this suite: a semantics node laid
-    // over the content pane reports itself as intercepting the pointer,
-    // and playwright's actionability check believes it.
-    // Through clickInView, which re-reads the rect on every attempt: the
-    // player animates in from below and this fires the moment its
-    // transport resolves, so a single forced click against a box read
-    // then lands on whatever has slid into that spot - and with no retry
-    // the step just waits out a deck bar that never comes. `settled` is
-    // the bar itself, so a click that did land is never repeated into a
-    // second pop.
-    await clickInView(page, page.locator(sem(SemanticsIds.playerBack)), {
-      settled: page.locator(sem(SemanticsIds.deckBar)),
-    });
-    await page.locator(sem(SemanticsIds.deckBar)).waitFor({ timeout: 30_000 });
-
-    await clickThrough(
-      page.locator(sem(SemanticsIds.deckCast)),
-      page.locator(sem(SemanticsIds.picker)),
-    );
-
-    // Playback is here, and the picker says so rather than offering a trip
-    // to where the visitor already is.
-    await expect(page.locator(sem(SemanticsIds.pickerThisDevice))).toBeVisible();
-    await expect(
-      page.locator(sem(SemanticsIds.pickerThisDevice)),
-    ).toContainText('Playing here');
-
-    // The connection check, one level in: a cast that fails is silent, and
-    // this is the surface that says why. It had no UI at all before this,
-    // so reading it meant curling the API.
-    // `chooseFromMenu`, not `clickThrough`: that helper re-clicks its
-    // trigger while it waits, which is right for a navigation and wrong
-    // for a menu - under a loaded stack the second click closed the menu
-    // the first had opened, and a third dismissed the sheet under it. A
-    // single un-retried click is not the answer either, and was failing
-    // about half the time under a full parallel run.
-    const preflight = page.locator(sem(SemanticsIds.preflight));
-    await chooseFromMenu(
-      page.locator(sem(SemanticsIds.pickerOverflow)),
-      page.locator(sem(SemanticsIds.pickerCheck)),
-      preflight,
-    );
-
-    // The server advertises the configured public base, so there is at
-    // least one candidate and it is drawn with its verdict.
-    await expect(page.locator(sem(SemanticsIds.preflightBase(0)))).toBeVisible();
-    await expect(preflight).toContainText('localhost:4420');
-  });
+  // The server advertises the configured public base, so there is at
+  // least one candidate and it is drawn with its verdict.
+  await expect(app.cast.base(0)).toBeVisible();
+  await expect(app.cast.preflight()).toContainText('localhost:4420');
 });

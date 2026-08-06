@@ -136,10 +136,28 @@ author has to keep in mind:
 
 ### Scheduling
 
-Projects run: `setup` (first run) → the parallel wave → the catalog
-mutators, uploads before admin-ops so the read-only window cannot overlap
-an upload → the focus-sensitive specs → `motion-smoke`. Four workers and
-the 120-second default test timeout stay.
+Projects run: `setup` (first run) → `wave` → `mutators-uploads` →
+`mutators-admin` → `focus-a11y` → `focus-editing` → `motion-smoke`. Four
+workers and the 120-second default test timeout stay.
+
+`wave` is everything that owns its own state, which after this change is
+almost everything: no serial groups inside it, and the `prefs-radio`
+project between it and the focus specs is gone, because two accounts are
+two preference documents.
+
+The two mutator projects are the surfaces per-test accounts cannot
+divide - the files on disk, the mutation lease, the trash, the library
+table, the admin settings row. Uploads runs before the admin console
+because admin-ops flips the read-only switch, which refuses every upload
+server-wide while it is on; chaining the projects means that window
+cannot overlap an upload. `mutators-admin` also sets `fullyParallel:
+false`, which for a single-file project is one worker running its tests
+in order - and that is what the `describe.serial` wrapper around the two
+settings scenarios used to buy. Both of them read the whole settings
+object, change one field and put it back, and the endpoint stores each
+field as its own row, so concurrent replaces interleave and drop each
+other's change. That is a fact about scheduling, so it lives in the
+config rather than in the file.
 
 Retries are `E2E_RETRIES`, defaulting to 1 in CI and 0 locally - down
 from 2, because a test that needs three attempts is a quarantine
@@ -148,12 +166,29 @@ run via `grepInvert` and included in the soak; every quarantined test
 owes a `docs/deferred-work.md` entry in the same commit, so the exclusion
 is tracked debt rather than a place things go to be forgotten.
 
-The soak (`e2e-soak.yaml`, weekly and on demand) runs
-`E2E_RETRIES=0 --repeat-each=3` with quarantine included. CI's e2e job
-walks the JSON report afterwards and annotates any test that only passed
-on a retry, and keeps `test-results/` - the traces and hang evidence -
-for a flaky run as well as a failed one, which is the run whose evidence
-was previously discarded.
+The soak (`e2e-soak.yaml`, weekly and on demand) runs the whole suite
+three times over with `E2E_RETRIES=0` and quarantine included. The suite,
+not `--repeat-each=3`, for two reasons found by trying the other way.
+
+Playwright repeats only the projects it is *asked* for: a project pulled
+in as another's dependency runs its tests once however high
+`--repeat-each` is, and naming every project in one invocation does not
+change that. Since each project here depends on the last, a single
+`--repeat-each=3` over the graph repeated exactly one of them.
+
+And repeating a test is the wrong stress for this suite anyway.
+Per-test accounts divide per-user state and deliberately do not divide
+the catalog, so three copies of a spec that fetches and unfetches one
+show's episodes are three writers on one shared file - a collision this
+ADR says is not a supported shape, manufactured by the workflow meant to
+find real ones. Repeating the suite keeps its real shape: one copy of
+each test, four workers, contending exactly as in CI, and each pass after
+the first running against a stack that has been used.
+
+CI's e2e job walks the JSON report afterwards and annotates any test that
+only passed on a retry, and keeps `test-results/` - the traces and hang
+evidence - for a flaky run as well as a failed one, which is the run
+whose evidence was previously discarded.
 
 ## Consequences
 
@@ -171,10 +206,41 @@ was previously discarded.
   worker-scoped fixture.
 - A stack that is reused across many runs accumulates a bounded set of
   accounts. `make reset` still drops them; nothing needs to.
-- A spec that wants a second account in the same test mints one
-  explicitly and drives it with `createApp` on its own page. That is the
-  multi-client shape (connect, identity, sync), and it is now explicit
-  rather than implicit in everything.
-- The suite no longer proves that two sessions of one account behave. It
-  never deliberately did; that was an accident of the old model, and the
-  specs that mean it now say so.
+- A spec that wants a second listener asks for `otherAccount()`, which
+  mints one off the same test title with a suffix, and talks to it with
+  `app.api.as(their.token)`. A spec that wants a second device asks for
+  `device()`, which opens a browser context with a fresh session on the
+  same account. Both are lazy, so a test that wants neither pays for
+  neither, and both are named at the call site - where the old model made
+  every page a second device by accident.
+- Two sessions of one account are still exercised, and now deliberately:
+  `device()` is what the Connect scenarios drive, and its second login is
+  load-bearing rather than incidental. A client endpoint's id is derived
+  from the session it registered over, and the device picker hides
+  sessions on its own endpoint, so two browsers sharing one planted
+  cookie are one device and see nothing of each other.
+- The fixed accounts written into spec files - `merry` in identity,
+  `connect-e2e` in connect - are gone. Both existed to work around the
+  shared administrator, and both were themselves shared across every run
+  and every worker.
+- The account outliving the run is the model's sharpest edge, and the
+  soak is what finds where a spec forgot it. Four did: a settings switch
+  left flipped for the next run to meet, a book left marked finished with
+  no way to unmark it, an upload batch counted across every run that
+  made one, and a podcast episode whose file the spec assumed nobody had
+  ever fetched. Each is the same mistake - asserting a starting state
+  rather than establishing it - and the rule that falls out is that a
+  precondition is seeded, never assumed, whether it belongs to the
+  account or to the catalog.
+- Two of those turned out to be product defects rather than test
+  assumptions, and are recorded in `docs/bugs.md`: unfetching an episode
+  drops it from the hub's count while leaving it in the show's listing,
+  and undoing "mark finished" gives the position back but leaves the book
+  finished for good. Both were invisible while the suite ran once per
+  stack.
+- The suite provokes authentication failures on purpose (the closed-door
+  signup assertion), and the limiter that answers them is a per-IP budget
+  of five failures per fifteen minutes shared by every test. That puts a
+  ceiling of about five suite runs in a quarter of an hour on one
+  address. The soak's three passes sit under it; a developer hammering a
+  stack locally will meet it, and restarting the stack clears it.

@@ -71,15 +71,58 @@ jobs:
       - name: Install Playwright system dependencies
         if: steps.browser-cache.outputs.cache-hit == 'true'
         run: cd e2e && npx playwright install-deps chromium
+      # The whole suite, N times over, rather than `--repeat-each=N`.
+      # Two reasons, and both were found by trying the other way.
+      #
+      # Playwright repeats only the projects it was *asked* for: a
+      # project pulled in as another's dependency runs its tests once,
+      # however high --repeat-each is, and naming them all in one
+      # invocation does not change that. Every project here is a
+      # dependency of the next, so a single `--repeat-each=3` over the
+      # graph repeated exactly one of them - the last - and the workflow
+      # built to find flakes ran almost every test once.
+      #
+      # And repeating a *test* is the wrong stress for this suite anyway.
+      # Per-test accounts divide per-user state and deliberately do not
+      # divide the catalog (ADR-0050), so three copies of a spec that
+      # fetches and unfetches the same show's episodes are three writers
+      # on one shared row - a collision the account model says is not a
+      # supported shape, manufactured by the workflow meant to find real
+      # ones. Repeating the *suite* keeps its real shape: one copy of
+      # each test, four workers, contending exactly as they do in CI.
+      #
+      # Each pass keeps its own output directory, because Playwright
+      # clears that at the start of a run and the traces from the pass
+      # that found something are the whole point of keeping any.
       - name: Soak
         env:
           E2E_RETRIES: "0"
           E2E_QUARANTINE: include
           REPEAT: ${{ inputs.repeat || '3' }}
-        run: cd e2e && npx playwright test --repeat-each="$REPEAT"
+        run: |
+          cd e2e
+          status=0
+          for pass in $(seq 1 "$REPEAT"); do
+            echo "::group::soak pass $pass of $REPEAT"
+            # Kept going rather than aborted: a soak that stops at the
+            # first pass with a problem answers less than it was asked,
+            # and the later passes are the ones running against a stack
+            # that has been used - which is half of what this is for.
+            npx playwright test --output="test-results/pass-$pass" || status=1
+            if [ -f test-results/report.json ]; then
+              mv test-results/report.json "test-results/pass-$pass-report.json"
+            fi
+            echo "::endgroup::"
+          done
+          exit $status
       - name: Surface flaky tests
         if: always()
-        run: node e2e/tools/flaky-summary.mjs e2e/test-results/report.json
+        run: |
+          for report in e2e/test-results/pass-*-report.json; do
+            [ -e "$report" ] || continue
+            pass=$(basename "$report" -report.json)
+            node e2e/tools/flaky-summary.mjs "$report" "soak: $pass"
+          done
       - uses: actions/upload-artifact@v7
         if: always()
         with:

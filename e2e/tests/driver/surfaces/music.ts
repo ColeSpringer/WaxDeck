@@ -44,6 +44,45 @@ export class Music {
     await clickThrough(this.bucket(nth), this.entry(0));
   }
 
+  /// The verbs an entity screen's header carries, which a filtered
+  /// listing at the same location never had.
+  entityPlay(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.entityPlay));
+  }
+
+  entityShuffle(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.entityShuffle));
+  }
+
+  /// Open an index bucket as the entity it names, rather than as a list.
+  /// Settles on the header's verbs, which is what tells the two apart.
+  async openEntity(nth = 0): Promise<void> {
+    await clickThrough(this.bucket(nth), this.entityShuffle());
+  }
+
+  /// Start an entity playing from its header.
+  async playEntity(how: 'play' | 'shuffle' = 'shuffle'): Promise<void> {
+    await clickThrough(
+      how === 'shuffle' ? this.entityShuffle() : this.entityPlay(),
+      this.ctx.page.locator(sem(SemanticsIds.playerToggle)),
+    );
+  }
+
+  /// Play one row of an opened bucket, which queues what it belongs to.
+  async playEntry(nth = 0): Promise<void> {
+    await clickThrough(
+      this.entry(nth),
+      this.ctx.page.locator(sem(SemanticsIds.playerToggle)),
+    );
+  }
+
+  /// Text on a listing or an entity screen - a section heading, a name.
+  /// Prose rather than a control, so it carries no identifier and the
+  /// spec is what supplies the words.
+  text(what: string | RegExp): Locator {
+    return this.ctx.page.getByText(what).first();
+  }
+
   /// The A-to-Z rail, drawn only beside an index that is actually in
   /// alphabetical order.
   rail(): Locator {

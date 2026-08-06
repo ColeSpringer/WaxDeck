@@ -1,39 +1,20 @@
-import { legacyTest as test, expect, APIRequestContext } from './fixtures';
-import { ADMIN_PASS, ADMIN_USER, clickThrough, ensureAdmin, itemRow, typeInto } from './helpers';
-import { SemanticsIds, sem } from './semantics-ids';
+import { test, expect } from './fixtures';
+import { T } from './driver';
 
 // The first-party web UI journey: log in through the real login form,
-// find a scanned fixture track in the library grid, open the player,
-// and observe the stream actually being fetched through the media
-// proxy. The flutter app enables semantics at startup; widgets carry
-// flt-semantics-identifier attributes for exactly this suite.
+// walk the chrome to the tracks index, open the player, and observe the
+// stream actually being fetched through the media proxy. The flutter app
+// enables semantics at startup; widgets carry flt-semantics-identifier
+// attributes for exactly this suite.
+//
+// One of the few specs that still drives the door. Everywhere else the
+// session is planted as a cookie and the app opens signed in; here the
+// login form IS the contract, which is also why `motion-smoke` re-runs
+// this file with animations at full length.
+test.use({ session: 'signed-out' });
 
-
-// Wait for the startup scan through a separate cookie jar, so the page
-// context still sees the login screen.
-async function waitForAlpha(request: APIRequestContext): Promise<string> {
-  const token = await ensureAdmin(request);
-  let pid = '';
-  await expect
-    .poll(
-      async () => {
-        const resp = await request.get('/api/v1/library/search?q=Alpha', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!resp.ok()) return false;
-        const tracks = (await resp.json()).tracks ?? [];
-        if (tracks.length === 0) return false;
-        pid = tracks[0].pid;
-        return true;
-      },
-      { timeout: 60_000, message: 'startup scan should index Alpha Song' },
-    )
-    .toBeTruthy();
-  return pid;
-}
-
-test('login, browse the grid, and play a track', async ({ page, request }) => {
-  const pid = await waitForAlpha(request);
+test('login, browse the grid, and play a track', async ({ app, page }) => {
+  const { pid } = await app.seed.item('Alpha Song');
 
   // Browser-side diagnostics: playback-start failures render a terse
   // error pane, so the console and failed requests are the evidence.
@@ -52,7 +33,11 @@ test('login, browse the grid, and play a track', async ({ page, request }) => {
     }
   });
 
-  await page.goto('/');
+  // The login form is the first thing an unauthenticated visitor sees.
+  // Click-and-type drives flutter's real text-editing path; a direct
+  // value fill can leave the framework-side controller empty, and the
+  // driver's typeInto retypes until every keystroke verifiably landed.
+  await app.auth.signInViaForm();
 
   // The in-app reduce-motion override, which is additive to the
   // platform's answer and so could still motion off a run that asked for
@@ -67,38 +52,33 @@ test('login, browse the grid, and play a track', async ({ page, request }) => {
     'no in-app reduce-motion override is in force',
   ).not.toBe('true');
 
-  // The login form is the first thing an unauthenticated visitor sees.
-  // Click-and-type drives flutter's real text-editing path; a direct
-  // value fill can leave the framework-side controller empty, and
-  // typeInto retypes until every keystroke verifiably landed.
-  const username = page.getByRole('textbox', { name: 'Username' });
-  await username.waitFor({ timeout: 30_000 });
-  await typeInto(page, username, ADMIN_USER);
-  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
-  await page.getByRole('button', { name: 'Log in' }).click();
+  // What this account has already been credited with. A delta rather
+  // than an absolute: the account is keyed on the test's title, so a
+  // reused stack hands this test the play it recorded last time and
+  // `playCount >= 1` would be true before the browser opened.
+  const before = (await app.api.get('/items/{pid}/play-state', { path: { pid } })).playCount ?? 0;
 
-  // The tracks index enumerates the scanned fixture album.
-  const card = await itemRow(page, pid);
+  // The tracks index enumerates the scanned fixture album. Walked
+  // through the chrome rather than entered by location: this is the
+  // walking skeleton, and getting there is part of what it covers.
+  await app.nav.to('tracks');
+  await app.music.play(pid);
 
   // Opening the item starts playback through the single-origin media
   // proxy. The rendered duration proves the stream's metadata decoded.
-  await clickThrough(card, page.locator(sem(SemanticsIds.playerToggle)));
-  await expect(page.getByText(/0:0[2-9]/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(app.player.text(/0:0[2-9]/)).toBeVisible({ timeout: T.nav });
 
   // The fixture is two seconds long; when it completes, the client
   // reports its listen session and checkpoints state. Observing the
-  // server mark the item played closes the whole loop: UI login, grid,
-  // stream fetch, engine completion, listen ingest. page.request rides
-  // the session cookie the login form just established.
+  // server count another play closes the whole loop: UI login, index,
+  // stream fetch, engine completion, listen ingest.
   await expect
     .poll(
       async () => {
-        const resp = await page.request.get(`/api/v1/items/${pid}/play-state`);
-        if (!resp.ok()) return false;
-        const state = await resp.json();
-        return state.played === true && state.playCount >= 1;
+        const state = await app.api.tryGet('/items/{pid}/play-state', { path: { pid } });
+        return state?.played === true && (state.playCount ?? 0) > before;
       },
-      { timeout: 45_000, message: 'completed playback should be accounted as a play' },
+      { timeout: T.fetch, message: 'completed playback should be accounted as a play' },
     )
     .toBeTruthy();
 });

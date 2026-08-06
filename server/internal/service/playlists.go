@@ -374,6 +374,14 @@ func withoutArchived(where query.Node) query.Node {
 // state field anywhere, at any depth or polarity. Deliberately coarse:
 // a rule that reasons about state at all gets to keep saying what it
 // means, rather than having WaxDeck guess which arm it meant.
+//
+// The arms here must cover every node type ruleNodeToEngine can emit.
+// They do today, and the two are meant to move together: a node type
+// added there and forgotten here reads as "this rule says nothing about
+// state", so ADR-0048's predicate is conjoined on top of a rule that
+// explicitly asked for archived items and the list comes back empty.
+// The direction is at least safe - archived stays hidden rather than
+// leaking - but the rule is silently not the one that was written.
 func ruleNamesState(n query.Node) bool {
 	switch t := n.(type) {
 	case query.Cond:

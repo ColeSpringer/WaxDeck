@@ -25,7 +25,7 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { SemanticsIds, sem } from '../semantics-ids';
 import { T } from './budgets';
-import { clickThrough } from './gestures';
+import { clickThrough, openMenu } from './gestures';
 
 /// A destination: the location a stranger can open, the control that
 /// proves the screen is up, and - when the chrome can reach it - the
@@ -150,6 +150,20 @@ export const DEST = {
       );
     },
   },
+  albums: {
+    path: '/music/albums',
+    arrival: at(SemanticsIds.indexSort),
+    walk: async (page) => {
+      await clickThrough(
+        page.locator(sem(SemanticsIds.navDestination('music'))),
+        page.locator(sem(SemanticsIds.musicTile('albums'))),
+      );
+      await clickThrough(
+        page.locator(sem(SemanticsIds.musicTile('albums'))),
+        page.locator(sem(SemanticsIds.indexSort)),
+      );
+    },
+  },
   playlists: {
     path: '/playlists',
     arrival: at(SemanticsIds.playlistAdd),
@@ -214,6 +228,17 @@ export const DEST = {
     path: '/admin',
     arrival: at(SemanticsIds.adminConsole),
     walk: curationTo('admin', at(SemanticsIds.adminConsole)),
+  },
+  // The review queue keeps a curation row of its own as well as a place
+  // in the console's section list: it is the surface an administrator
+  // opens daily, and burying the keyboard-first screen a level deeper
+  // would cost more than the tidiness is worth. Two doors to one
+  // location, so the smoke walk opens both - this entry is the rail's,
+  // `adminReview` below is the console's.
+  review: {
+    path: '/admin/review',
+    arrival: at(SemanticsIds.adminReview),
+    walk: curationTo('review', at(SemanticsIds.adminReview)),
   },
   // The console's own sections. Their walk is the console's section
   // list rather than the nav rail, so it goes through /admin first -
@@ -289,15 +314,25 @@ export class Nav {
     }
   }
 
-  /// The account menu in the nav, which is where signing out and the
-  /// account rows live.
-  async accountMenu(): Promise<Locator> {
+  /// Open the account menu in the chrome.
+  ///
+  /// Settled on the sign-out verb, which is the one entry the menu
+  /// always carries. What else is in it depends on the width: below rail
+  /// width the menu is the only route to the destinations that are not
+  /// domains, so Settings and the listening stats appear in it - under
+  /// their own destination identifiers, not under an account-action one.
+  /// Waiting for `nav-account-settings` would be waiting for a node the
+  /// app has never published.
+  /// `chooseFromMenu` with no row to choose: opening is all this does,
+  /// and the caller picks. `clickThrough` is wrong for a menu - it
+  /// re-clicks its trigger while it waits, and on a retry that click
+  /// lands on the modal barrier and closes what the last attempt opened.
+  async accountMenu(): Promise<void> {
     await this.ensureChrome();
-    await clickThrough(
+    await openMenu(
       this.page.locator(sem(SemanticsIds.navAccount)),
-      this.page.locator(sem(SemanticsIds.navAccountAction('settings'))),
+      this.page.locator(sem(SemanticsIds.navAccountAction('signOut'))),
     );
-    return this.page.locator(sem(SemanticsIds.navAccountAction('settings')));
   }
 
   /// Assert where the app says it is. The `page` a spec holds is
@@ -341,12 +376,14 @@ export class Nav {
   /// caller a page that has not booted Flutter yet - and the assertion
   /// after it then spends the assert tier covering a wasm boot that
   /// wants the nav tier.
-  async reload(arriveAt?: Destination): Promise<void> {
+  async reload(arriveAt?: Destination | Locator): Promise<void> {
     await this.page.reload();
     const arrival =
       arriveAt === undefined
         ? this.page.locator(sem(SemanticsIds.navRegion))
-        : DEST[arriveAt].arrival(this.page);
+        : typeof arriveAt === 'string'
+          ? DEST[arriveAt].arrival(this.page)
+          : arriveAt;
     await arrival.waitFor({ timeout: T.nav });
   }
 

@@ -1,59 +1,22 @@
-import { legacyTest as test, expect, APIRequestContext, Page } from './fixtures';
-import { authed, clickThrough, ensureAdmin, typeInto, waitForLibrary } from './helpers';
-import { SemanticsIds, sem } from './semantics-ids';
+import { test, expect } from './fixtures';
+import { J } from './driver';
 
 // Listening stats and public share links over the real stack: sessions
 // reported through the listen API surface in the stats screen and the
 // year in review, and a share link's whole life from creation through
 // anonymous playback to revocation.
 
-
-// The stack's own origin, for request contexts created outside the
-// test fixtures (mirrors playwright.config.ts).
-const baseURL = process.env.WAXDECK_BASE_URL ?? 'http://localhost:4420';
-
-async function login(page: Page) {
-  await page.goto('/');
-  const username = page.getByRole('textbox', { name: 'Username' });
-  await username.waitFor({ timeout: 30_000 });
-  await typeInto(page, username, 'admin');
-  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), 'wax-e2e-pass');
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem(SemanticsIds.navDestination('music'))).waitFor({ timeout: 30_000 });
-}
-
-async function trackPid(
-  request: APIRequestContext,
-  token: string,
-  title: string,
-): Promise<string> {
-  const search = await (
-    await request.get(
-      `/api/v1/library/search?q=${encodeURIComponent(title)}`,
-      authed(token),
-    )
-  ).json();
-  const hit = (search.tracks as Array<{ pid: string; title: string }>).find(
-    (t) => t.title === title,
-  );
-  expect(hit, `the fixture track "${title}" is indexed`).toBeTruthy();
-  return hit!.pid;
-}
-
-test('reported listens surface in stats and the year in review', async ({
-  page,
-  request,
-}) => {
-  test.setTimeout(150_000);
-  const token = await ensureAdmin(request);
-  await waitForLibrary(request, token);
-  const pid = await trackPid(request, token, 'Charlie Song');
+test('reported listens surface in stats and the year in review', async ({ app }) => {
+  test.setTimeout(J.long);
+  const { pid } = await app.seed.item('Charlie Song');
 
   // Four sessions with distinct start times: one two-hour listen ten
   // days back (inside 30d, outside 7d, so the range switch visibly
   // changes the totals), three short recent ones, one carrying the
   // time-saved counter. Session ids are fixed so retries and reruns
-  // against the same stack deduplicate instead of inflating totals.
+  // against the same stack deduplicate instead of inflating totals -
+  // and the account is this test's own, so the totals on screen are
+  // these four sessions and nothing else.
   const now = Date.now();
   const hour = 3_600_000;
   const report = {
@@ -64,6 +27,7 @@ test('reported listens surface in stats and the year in review', async ({
         startedAt: new Date(now - 10 * 24 * hour).toISOString(),
         msPlayed: 2 * hour,
         finished: true,
+        source: 'live' as const,
       },
       {
         sessionId: 'e2e-stats-recent-a',
@@ -71,6 +35,7 @@ test('reported listens surface in stats and the year in review', async ({
         startedAt: new Date(now - 3 * hour).toISOString(),
         msPlayed: 120_000,
         finished: true,
+        source: 'live' as const,
       },
       {
         sessionId: 'e2e-stats-recent-b',
@@ -79,6 +44,7 @@ test('reported listens surface in stats and the year in review', async ({
         msPlayed: 120_000,
         skippedMs: 60_000,
         finished: true,
+        source: 'live' as const,
       },
       {
         sessionId: 'e2e-stats-recent-c',
@@ -86,99 +52,50 @@ test('reported listens surface in stats and the year in review', async ({
         startedAt: new Date(now - 1 * hour).toISOString(),
         msPlayed: 120_000,
         finished: true,
+        source: 'live' as const,
       },
     ],
   };
-  const ingest = await request.post('/api/v1/listens', {
-    ...authed(token),
-    data: report,
-  });
-  expect(ingest.ok()).toBeTruthy();
-  const outcome = await ingest.json();
+  const outcome = await app.api.post('/listens', { data: report });
   expect(outcome.accepted + outcome.duplicates).toBe(4);
 
-  await login(page);
-  await clickThrough(page.locator(sem(SemanticsIds.navDestination('stats'))), page.locator(sem(SemanticsIds.statsRange('7d'))));
+  await app.nav.enter('stats');
 
   // The default 30d view includes the backdated two-hour session, so
-  // the listened headline reads in hours. Other specs' live playback
-  // adds seconds at most and never moves the hour.
-  // The stat tiles merge into one semantics span whose raw text joins
-  // the segments with newlines, and Playwright regexes run against the
-  // raw text, so separators match \s+ rather than a literal space.
-  const hoursTotal = page.getByText(/\d+h \d+m\s+listened/);
-  await expect(hoursTotal.first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText(/\d+\s+sessions/).first()).toBeVisible();
+  // the listened headline reads in hours.
+  const hoursTotal = app.stats.figure(/\d+h \d+m\s+listened/);
+  await expect(hoursTotal.first()).toBeVisible();
+  await expect(app.stats.figure(/\d+\s+sessions/).first()).toBeVisible();
 
   // Switching to 7d drops the backdated session: every hours-scale
-  // figure leaves the screen and a minutes-scale total remains. The
-  // click retries because a canvas click can be swallowed while
-  // handlers attach.
-  await expect(async () => {
-    await page
-      .locator(sem(SemanticsIds.statsRange('7d')))
-      .click({ timeout: 2_000, force: true })
-      .catch(() => {});
-    await expect(hoursTotal).toHaveCount(0, { timeout: 3_000 });
-  }).toPass({ timeout: 30_000 });
-  await expect(page.getByText(/\d+m\s+listened/).first()).toBeVisible({
-    timeout: 15_000,
-  });
-
-  // The recap door sits at the bottom of the stats list; wheel it into
-  // the semantics tree first (offscreen rows are culled).
-  const viewport = page.viewportSize()!;
-  await page.mouse.move(viewport.width / 2, viewport.height / 2);
-  await expect(async () => {
-    await page.mouse.wheel(0, 1_200);
-    await expect(page.locator(sem(SemanticsIds.openYearInReview))).toBeVisible({
-      timeout: 1_000,
-    });
-  }).toPass({ timeout: 30_000 });
+  // figure leaves the screen and a minutes-scale total remains.
+  await app.stats.narrowTo('7d', hoursTotal);
+  await expect(app.stats.figure(/\d+m\s+listened/).first()).toBeVisible();
 
   // The year in review: this year renders with the same nonzero
-  // totals (the year holds every reported session). Recap content
-  // surfaces as merged text on some nodes and as a group's accessible
-  // name on others, so matching accepts either rendering.
-  const textOrLabel = (matcher: string | RegExp) =>
-    page.getByText(matcher).or(page.getByLabel(matcher));
-  await clickThrough(
-    page.locator(sem(SemanticsIds.openYearInReview)),
-    page.locator(sem(SemanticsIds.yirPersonal)),
-  );
+  // totals (the year holds every reported session).
+  await app.stats.openYearInReview();
   const year = new Date().getFullYear();
-  await expect(textOrLabel(`${year}`).first()).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(textOrLabel(/\d+h \d+m\s+listened/).first()).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(app.stats.figure(`${year}`).first()).toBeVisible();
+  await expect(app.stats.figure(/\d+h \d+m\s+listened/).first()).toBeVisible();
 
-  // The server-wide recap aggregates every enrolled listener; on this
-  // stack that is the administrator alone.
-  await clickThrough(
-    page.locator(sem(SemanticsIds.yirServer)),
-    textOrLabel('listeners counted in').first(),
-  );
-  await expect(
-    textOrLabel(/\d+h \d+m\s+listened together/).first(),
-  ).toBeVisible({ timeout: 15_000 });
+  // The server-wide recap aggregates every enrolled listener, which is
+  // a number this test does not own and does not assert - what it
+  // asserts is that the view renders a total at all.
+  await app.stats.openServerRecap(app.stats.figure('listeners counted in').first());
+  await expect(app.stats.figure(/\d+h \d+m\s+listened together/).first()).toBeVisible();
 });
 
 test('a share link plays anonymously and dies on revocation', async ({
-  request,
+  app,
   playwright,
+  baseURL,
 }) => {
-  const token = await ensureAdmin(request);
-  await waitForLibrary(request, token);
-  const pid = await trackPid(request, token, 'Bravo Song');
+  const { pid } = await app.seed.item('Bravo Song');
 
-  const created = await request.post('/api/v1/shares', {
-    ...authed(token),
+  const share = await app.api.post('/shares', {
     data: { pid, allowDownload: false },
   });
-  expect(created.status()).toBe(201);
-  const share = await created.json();
   expect(share.pid).toMatch(/^sh-/);
   expect(share.url).toMatch(/^\/s\//);
   expect(share.allowDownload).toBe(false);
@@ -212,17 +129,17 @@ test('a share link plays anonymously and dies on revocation', async ({
       (share.url[at] === 'A' ? 'B' : 'A') +
       share.url.slice(at + 1);
     expect(tampered).not.toBe(share.url);
-    const forged = await anon.get(tampered);
-    expect(forged.status()).toBe(404);
+    expect((await anon.get(tampered)).status()).toBe(404);
 
     // Revocation bites immediately.
-    const revoked = await request.delete(`/api/v1/shares/${share.pid}`, authed(token));
+    const revoked = await app.api.raw.delete('/shares/{shareId}', {
+      path: { shareId: share.pid },
+    });
     expect(revoked.status()).toBe(204);
     const gone = await anon.get(share.url);
     expect(gone.status()).toBe(404);
     expect(await gone.text()).toContain('revoked');
-    const deadStream = await anon.get(`${share.url}/stream`);
-    expect(deadStream.status()).toBe(404);
+    expect((await anon.get(`${share.url}/stream`)).status()).toBe(404);
   } finally {
     await anon.dispose();
   }

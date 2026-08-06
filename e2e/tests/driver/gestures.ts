@@ -130,6 +130,53 @@ export async function clickInView(
   }).toPass({ timeout: T.action });
 }
 
+// Bring something below the fold into existence.
+//
+// A flutter list is slivers: a row or a shelf that is not laid out is
+// not built at all, so it publishes no semantics node, there is nothing
+// to scroll to, and playwright's own scrolling - which moves DOM
+// containers - moves nothing. A wheel over the canvas is the only thing
+// that moves the list, and what proves it worked is the node existing.
+//
+// `over` is where to put the cursor first, for a scroll view that is not
+// the one under the middle of the window.
+export async function wheelIntoView(
+  page: Page,
+  target: Locator,
+  options: { over?: Locator; by?: number } = {},
+) {
+  const { over, by = 600 } = options;
+  const view = page.viewportSize();
+  const width = view?.width ?? (await page.evaluate(() => window.innerWidth));
+  const height = view?.height ?? (await page.evaluate(() => window.innerHeight));
+  const box = over === undefined ? null : await over.boundingBox();
+  await page.mouse.move(
+    box === null ? width / 2 : box.x + box.width / 2,
+    box === null ? height / 2 : Math.min(box.y + box.height / 2, height - 2),
+  );
+  await expect(async () => {
+    await page.mouse.wheel(0, by);
+    await expect(target).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: T.nav });
+}
+
+// Drag one row of a canvas list onto another.
+//
+// Coordinates rather than a drop target: a flutter reorderable list
+// publishes no DOM element to drop onto, and the framework's own drag
+// recognizer wants a press, some travel, and a release. The travel is
+// stepped because a single jump reads as a teleport and the recognizer
+// never starts at all.
+export async function dragOnto(page: Page, handle: Locator, onto: Locator) {
+  const from = await handle.boundingBox();
+  const to = await onto.boundingBox();
+  expect(from && to, 'both drag handles are on screen').toBeTruthy();
+  await page.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to!.x + to!.width / 2, to!.y + to!.height / 2, { steps: 12 });
+  await page.mouse.up();
+}
+
 // A menu may have to be re-opened from scratch several times over, so
 // its whole-unit budget sits above the action tier rather than on it:
 // a barrier click closes the menu the previous attempt opened, and each
@@ -193,4 +240,22 @@ export async function chooseFromMenu(
       await expect(item).toBeHidden({ timeout: T.step });
     }
   }).toPass({ timeout: MENU_UNIT });
+}
+
+// Open a menu and leave it standing, as one retried unit.
+//
+// The opening half of `chooseFromMenu`, for the callers that open a menu
+// and let somebody else pick from it. The distinction from
+// `clickThrough` is the whole reason this exists: that one re-clicks its
+// trigger whenever the thing it waits for is missing, and for a menu the
+// trigger is behind the modal barrier - so the retry closes the menu the
+// previous attempt opened, and the round repeats until the budget runs
+// out.
+export async function openMenu(trigger: Locator, shows: Locator) {
+  await expect(async () => {
+    if (!(await shows.isVisible())) {
+      await trigger.click({ timeout: 2_000, force: true }).catch(() => {});
+    }
+    await shows.waitFor({ timeout: T.step });
+  }).toPass({ timeout: T.nav });
 }

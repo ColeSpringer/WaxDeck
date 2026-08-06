@@ -87,15 +87,32 @@ test('an account setting reaches the preference document', async ({ app }) => {
     .poll(async () => (await app.api.tryGet('/users/me/prefs'))?.crossfadeSeconds)
     .toBe(6);
 
-  // Off has to survive the round trip too: zero is a value, not an
-  // absent field the next write would keep.
+  // Off has to survive the round trip too, and the contract says what
+  // that means: "Zero or absent is a gapless butt join". So the server
+  // dropping the zero is a legal way to store off, and asserting a
+  // literal 0 on the field would be asserting something nobody promised.
+  //
+  // What must NOT pass as off is a document that never arrived - which a
+  // plain `?? 0` would, since `tryGet` answers undefined on any non-2xx.
+  // So the read and the field are separated: an unread document reports
+  // itself and keeps polling, and only then is absent read as zero.
   await app.settings.choose('crossfade', app.settings.menuItem('Off'));
   await expect
-    .poll(async () => (await app.api.tryGet('/users/me/prefs'))?.crossfadeSeconds ?? 0)
+    .poll(async () => {
+      const prefs = await app.api.tryGet('/users/me/prefs');
+      return prefs === undefined ? 'the prefs document did not read' : prefs.crossfadeSeconds ?? 0;
+    })
     .toBe(0);
 });
 
 test('the radio scrobbling switch stores the opt-out inverted', async ({ app }) => {
+  // Seeded on, because nothing puts it back at the end. The account is
+  // this test's own and nobody else reads it, so restoring it for a
+  // sibling is one of the things the account model removes - but the
+  // account outlives the run, and a second run against the same stack
+  // would meet the switch already off and fail on its first assertion.
+  // The precondition is "scrobbling is on"; establishing it is seeding.
+  await app.seed.prefs({ radioScrobbleOptOut: false });
   await app.nav.enter('settings');
   await app.settings.openSectionShowing(
     'integrations',
@@ -113,7 +130,14 @@ test('the radio scrobbling switch stores the opt-out inverted', async ({ app }) 
     // so the two are inverses and this is where that stays honest.
     .toBe(true);
 
-  // Nothing is put back. The account is this test's own and nobody else
-  // reads it; restoring the shared administrator's setting is one of the
-  // things the account model removes.
+  // And back on, which is the half that makes it a round trip: a switch
+  // that writes the opt-out and never clears it satisfies everything
+  // above. Not cleanup - the account is this test's own and the seed at
+  // the top is what guarantees the starting state - but the other
+  // direction of the same claim.
+  await radio.click();
+  await expect(radio).toBeChecked();
+  await expect
+    .poll(async () => (await app.api.tryGet('/users/me/prefs'))?.radioScrobbleOptOut ?? false)
+    .toBe(false);
 });

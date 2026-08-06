@@ -15,7 +15,13 @@ func (s *Server) Signup(ctx context.Context, req SignupRequestObject) (SignupRes
 		return Signup400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", msg))}, nil
 	}
 	// One shared per-address budget covers open signups and invite
-	// probes alike; failures burn it, successes do not.
+	// probes alike. What burns it is every outcome the caller controls:
+	// a refusal, a taken name, and a created account (see the note on
+	// the success path for why success counts). A malformed request and
+	// an internal error do not - there is nothing to farm by sending
+	// rubbish, and a server fault is not the caller's to pay for. So the
+	// budget caps meaningful signup attempts from an address, not
+	// requests to this handler.
 	ip := remoteIPFromContext(ctx)
 	ipKey := "signup-ip:" + ip
 	if !s.limiter.Allowed(ipKey) {

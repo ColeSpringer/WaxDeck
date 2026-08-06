@@ -1,5 +1,5 @@
-import { legacyTest as test, expect } from './fixtures';
-import { typeInto } from './helpers';
+import { test, expect } from './fixtures';
+import { typeInto } from './driver/gestures';
 import { SemanticsIds, sem } from './semantics-ids';
 
 // The data-dense editing prototype: a review-queue-shaped table probed
@@ -11,12 +11,12 @@ import { SemanticsIds, sem } from './semantics-ids';
 test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ rawPage: page }) => {
   await page.goto('/prototype/editing');
   await page.locator(sem(SemanticsIds.protoTable)).waitFor({ timeout: 30_000 });
 });
 
-test('a dense column of text fields edits reliably', async ({ page }) => {
+test('a dense column of text fields edits reliably', async ({ rawPage: page }) => {
   const cell = page.locator(sem(SemanticsIds.protoEdit(2)));
   await cell.scrollIntoViewIfNeeded();
   await typeInto(page, cell, 'Corrected Title 02');
@@ -29,7 +29,7 @@ test('a dense column of text fields edits reliably', async ({ page }) => {
 });
 
 test('the row action menu opens and copies to the clipboard', async ({
-  page,
+  rawPage: page,
 }) => {
   await page.locator(sem(SemanticsIds.protoKebab(4))).click();
   const copy = page.locator(sem(SemanticsIds.protoMenuCopy));
@@ -42,7 +42,15 @@ test('the row action menu opens and copies to the clipboard', async ({
     .toBe('Proposed Title 04');
 });
 
-test('a right click does not destroy the selection', async ({ page }) => {
+// @quarantine - it opens the browser's own context menu, which is an OS
+// window: a sibling stealing focus while it is up loses the Escape that
+// dismisses it and the selection with it. Passes alone and passes most
+// full runs; it has now failed twice across a few dozen, which is the
+// bar this suite set for not believing a test any more. It keeps running
+// in the soak, where a failure is information. See docs/deferred-work.md.
+test('a right click does not destroy the selection @quarantine', async ({
+  rawPage: page,
+}) => {
   // On the web build a secondary click over selected canvas text opens
   // the BROWSER's native context menu (Flutter defers to it by
   // default), which lives outside the DOM and cannot be scripted or
@@ -89,7 +97,7 @@ test('a right click does not destroy the selection', async ({ page }) => {
 });
 
 test('static cell text selects with the pointer and copies', async ({
-  page,
+  rawPage: page,
 }) => {
   const cell = page.locator(sem(SemanticsIds.protoCellCurrent(5)));
   await cell.scrollIntoViewIfNeeded();

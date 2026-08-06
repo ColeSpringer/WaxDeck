@@ -16497,8 +16497,14 @@ components:
             deleted outright rather than to the trash, or the catalog
             dropped the row. `hidden` means it left this caller's view
             and is recoverable: deleted to the trash with its undo
-            journal, a show unsubscribed, a file re-homed under a library
-            they are not granted.
+            journal, or a file re-homed under a library they are not
+            granted.
+
+
+            Unsubscribing from a show sends no tombstone at all. It bumps
+            the caller's grant epoch, which retires their cursors and
+            forces a clean re-mirror, so the rows go with the old mirror
+            rather than one delete at a time.
 
             Both tombstone the mirror row identically. The difference is
             what a client may reclaim: bytes it already downloaded, and

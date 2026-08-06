@@ -8310,7 +8310,9 @@ export interface components {
              */
             pid: string;
             /**
-             * @description Why a `delete` arrived, absent on every other operation. `removed` means the server cannot put it back: the audio was deleted outright rather than to the trash, or the catalog dropped the row. `hidden` means it left this caller's view and is recoverable: deleted to the trash with its undo journal, a show unsubscribed, a file re-homed under a library they are not granted.
+             * @description Why a `delete` arrived, absent on every other operation. `removed` means the server cannot put it back: the audio was deleted outright rather than to the trash, or the catalog dropped the row. `hidden` means it left this caller's view and is recoverable: deleted to the trash with its undo journal, or a file re-homed under a library they are not granted.
+             *
+             *     Unsubscribing from a show sends no tombstone at all. It bumps the caller's grant epoch, which retires their cursors and forces a clean re-mirror, so the rows go with the old mirror rather than one delete at a time.
              *     Both tombstone the mirror row identically. The difference is what a client may reclaim: bytes it already downloaded, and the artwork pinned beside them, are dead weight after `removed`, and worth keeping after `hidden`, where undoing the transition would otherwise cost the whole transfer again.
              *     One case answers `hidden` and later becomes unrecoverable: an item trashed and purged afterwards was tombstoned when it was trashed, and emptying the trash is not itself a catalog change, so no second entry follows it. A client keeps those bytes.
              *     Open, like `op`, and deliberately not an enum: a closed one generates a Dart `EnumClass` whose serializer throws on an unrecognized wire value, so adding a third reason later would fail the whole page's deserialization and stop sync rather than degrade. A client that does not recognize a value must treat it as `hidden`, which is the conservative half.

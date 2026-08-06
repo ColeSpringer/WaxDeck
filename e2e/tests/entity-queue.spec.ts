@@ -1,141 +1,71 @@
-import { legacyTest as test, expect, Page } from './fixtures';
-import {
-  ADMIN_PASS,
-  ADMIN_USER,
-  clickInView,
-  clickThrough,
-  ensureAdmin,
-  typeInto,
-  waitForLibrary,
-} from './helpers';
-import { SemanticsIds, SemanticsIdPrefixes, sem, semPrefix } from './semantics-ids';
+import { test, expect } from './fixtures';
 
 // The entity screens and the queue surface over the real stack: an
 // artist bucket opening the artist rather than a filtered list, an
-// album playing from a row, and the queue answering the deck bar's
+// album playing from a row, and the queue answering the player's
 // control with something that can be reordered and cleared.
 
-async function login(page: Page) {
-  await page.goto('/');
-  const username = page.getByRole('textbox', { name: 'Username' });
-  await username.waitFor({ timeout: 30_000 });
-  await typeInto(page, username, ADMIN_USER);
-  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await page.locator(sem(SemanticsIds.navDestination('music'))).waitFor({ timeout: 30_000 });
-}
-
 test('an album is its own location, and playing a row queues the album', async ({
-  page,
-  request,
+  app,
 }) => {
-  const token = await ensureAdmin(request);
-  await waitForLibrary(request, token);
-  await login(page);
+  await app.nav.enter('albums');
+  await app.music.openEntity(0);
 
-  await page.goto('/music/albums');
-  await clickThrough(
-    page.locator(sem(SemanticsIds.indexBucket(0))),
-    page.locator(sem(SemanticsIds.entityPlay)),
-  );
   // The album's own pid in the address bar: an entity screen, not a
   // filtered listing, at the location the index already handed over.
-  await expect(page).toHaveURL(/\/music\/albums\/al-/);
-  const shared = page.url();
+  const shared = app.nav.location();
+  expect(shared).toMatch(/\/music\/albums\/al-/);
 
   // And a reload lands back on it, which is what makes it a link.
-  await page.reload();
-  await page.locator(sem(SemanticsIds.entityPlay)).waitFor({ timeout: 30_000 });
-  expect(page.url()).toBe(shared);
+  await app.nav.reload(app.music.entityPlay());
+  expect(app.nav.location()).toBe(shared);
 
   // Shuffle is the first one in the app, and it starts playback rather
   // than only setting a toggle.
-  await clickThrough(
-    page.locator(sem(SemanticsIds.entityShuffle)),
-    page.locator(sem(SemanticsIds.playerToggle)),
-  );
+  await app.music.playEntity('shuffle');
 });
 
-test('an artist bucket opens the artist, not a filtered list', async ({
-  page,
-  request,
-}) => {
-  const token = await ensureAdmin(request);
-  await waitForLibrary(request, token);
-  await login(page);
+test('an artist bucket opens the artist, not a filtered list', async ({ app }) => {
+  await app.nav.enter('artists');
+  await app.music.openEntity(0);
 
-  await page.goto('/music/artists');
-  await clickThrough(
-    page.locator(sem(SemanticsIds.indexBucket(0))),
-    page.locator(sem(SemanticsIds.entityShuffle)),
-  );
   // The entity's own pid, and the entity's own screen behind it: the
   // header's verbs are what a listing at this location never had.
-  await expect(page).toHaveURL(/\/music\/artists\/ar-/);
-  await expect(page.locator(sem(SemanticsIds.entityPlay))).toBeVisible();
+  expect(app.nav.location()).toMatch(/\/music\/artists\/ar-/);
+  await expect(app.music.entityPlay()).toBeVisible();
 
   // The bucket the fixture library sorts first is an audiobook author,
   // which is exactly the case a music-only screen gets wrong: the list
   // has to hold what the bucket counted, and the verbs have to be off
   // rather than queueing a twelve-hour file.
-  await expect(page.getByText('Audiobooks')).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator(sem(SemanticsIds.entityPlay))).toBeDisabled();
+  await expect(app.music.text('Audiobooks')).toBeVisible();
+  await expect(app.music.entityPlay()).toBeDisabled();
 });
 
-test('the queue is a place, and it reorders and clears', async ({
-  page,
-  request,
-}) => {
-  const token = await ensureAdmin(request);
-  await waitForLibrary(request, token);
-  await login(page);
-
+test('the queue is a place, and it reorders and clears', async ({ app }) => {
   // Something to queue: an album played from its first row.
-  await page.goto('/music/albums');
-  await clickThrough(
-    page.locator(sem(SemanticsIds.indexBucket(0))),
-    page.locator(sem(SemanticsIds.indexItem(0))),
-  );
-  await clickThrough(
-    page.locator(sem(SemanticsIds.indexItem(0))),
-    page.locator(sem(SemanticsIds.playerToggle)),
-  );
+  await app.nav.enter('albums');
+  await app.music.openBucket(0);
+  await app.music.playEntry(0);
 
-  // Opened from the player rather than from the deck bar, whose control
-  // at this width toggles the panel instead: over the shell there is no
-  // panel slot to use, so the player's own control pushes the queue's
-  // screen, which is the surface under test. Not by `goto` either, since
-  // the path-URL flip made that a real page load - it would restart the
-  // app and take the queue with it, which is the next assertion's job
-  // rather than this one's.
-  // clickInView rather than clickThrough, because this control is one
-  // small glyph in a row of them on a screen that animates in from
-  // below: a forced click against a rect read a moment earlier lands on
-  // the neighbour, and the neighbour is Discover, whose menu then covers
-  // the queue button so every retry clicks the barrier instead. Seen
-  // once. clickInView re-reads the box each attempt and refuses to click
-  // until it is fully in view.
-  await clickInView(page, page.locator(sem(SemanticsIds.playerQueue)), {
-    settled: page.locator(sem(SemanticsIds.queueShuffle)),
-  });
-  await page.locator(sem(SemanticsIds.queueShuffle)).waitFor({ timeout: 30_000 });
+  await app.queue.openFromPlayer();
 
   // It names where the queue came from, and what follows the current
   // entry can be dragged.
-  await expect(page.getByText(/Playing from /)).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator(semPrefix(SemanticsIdPrefixes.queueEntryDrag)))
-    .not.toHaveCount(0);
+  await expect(app.queue.text(/Playing from /)).toBeVisible();
+  await expect(app.queue.dragHandles()).not.toHaveCount(0);
 
   // Clearing empties it, and the surface says so rather than going
-  // blank.
-  await page.locator(sem(SemanticsIds.queueClear)).click();
-  await expect(page.getByText('Nothing queued')).toBeVisible({ timeout: 15_000 });
+  // blank. Exact, not "fewer than before": the queue belongs to this
+  // test's own account and nothing else is writing to it.
+  await app.queue.clear().click();
+  await expect(app.queue.text('Nothing queued')).toBeVisible();
 
   // And the location resolves for anyone who types it. Cold, on the web
   // build, that is an empty queue: the queue persists to the local
   // mirror and the web build has none, so a launch there offers the
   // server's last session to resume rather than restoring a queue. The
   // surface says so instead of going blank, which is the assertion.
-  await page.goto('/queue');
-  await expect(page.getByText('Nothing queued')).toBeVisible({ timeout: 30_000 });
+  await app.nav.enter('queue');
+  await expect(app.queue.text('Nothing queued')).toBeVisible();
 });

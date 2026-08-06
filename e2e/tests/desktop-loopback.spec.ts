@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
-import { legacyTest as test, expect } from './fixtures';
+import { test, expect } from './fixtures';
 
 // The desktop loopback sign-on round trip with a real browser in the
 // middle: a plain-Dart probe runs the app's genuine flow (ephemeral
@@ -79,7 +79,7 @@ class ProbeOutput {
   }
 }
 
-test('desktop loopback sign-on completes through a real browser', async ({ page, request, baseURL }) => {
+test('desktop loopback sign-on completes through a real browser', async ({ rawPage: page, request, baseURL }) => {
   const probe = spawn('dart', ['run', 'tool/oidc_loopback_probe.dart', baseURL!], {
     cwd: APP_DIR,
     stdio: ['ignore', 'pipe', 'pipe'],

@@ -26,11 +26,24 @@ import { Nav } from './nav';
 import { Seed } from './seed';
 import { Ctx } from './context';
 import { Auth, Shell } from './surfaces/auth';
+import { Admin } from './surfaces/admin';
+import { Books } from './surfaces/books';
+import { Cast } from './surfaces/cast';
+import { Discovery } from './surfaces/discovery';
+import { Home } from './surfaces/home';
 import { Music } from './surfaces/music';
 import { Player } from './surfaces/player';
+import { Playlists } from './surfaces/playlists';
 import { Podcasts } from './surfaces/podcasts';
+import { Queue } from './surfaces/queue';
+import { Radio } from './surfaces/radio';
+import { Review } from './surfaces/review';
 import { Search } from './surfaces/search';
 import { Settings } from './surfaces/settings';
+import { Sso } from './surfaces/sso';
+import { Stats } from './surfaces/stats';
+import { Uploads } from './surfaces/uploads';
+import { Sharing } from './surfaces/sharing';
 
 /// One account driving one page.
 export class App {
@@ -38,22 +51,48 @@ export class App {
   readonly seed: Seed;
   readonly auth: Auth;
   readonly shell: Shell;
+  readonly admin: Admin;
+  readonly books: Books;
+  readonly cast: Cast;
+  readonly home: Home;
+  readonly discovery: Discovery;
   readonly music: Music;
   readonly search: Search;
   readonly player: Player;
+  readonly queue: Queue;
+  readonly radio: Radio;
+  readonly playlists: Playlists;
   readonly podcasts: Podcasts;
+  readonly review: Review;
   readonly settings: Settings;
+  readonly sharing: Sharing;
+  readonly sso: Sso;
+  readonly stats: Stats;
+  readonly uploads: Uploads;
 
   constructor(readonly ctx: Ctx) {
     this.nav = new Nav(ctx.page);
     this.seed = new Seed(ctx.api);
     this.auth = new Auth(ctx);
     this.shell = new Shell(ctx);
+    this.admin = new Admin(ctx);
+    this.books = new Books(ctx);
+    this.cast = new Cast(ctx);
+    this.home = new Home(ctx);
+    this.discovery = new Discovery(ctx);
     this.music = new Music(ctx);
     this.search = new Search(ctx);
     this.player = new Player(ctx);
+    this.queue = new Queue(ctx);
+    this.radio = new Radio(ctx);
+    this.playlists = new Playlists(ctx);
     this.podcasts = new Podcasts(ctx);
+    this.review = new Review(ctx);
     this.settings = new Settings(ctx);
+    this.sharing = new Sharing(ctx);
+    this.sso = new Sso(ctx);
+    this.stats = new Stats(ctx);
+    this.uploads = new Uploads(ctx);
   }
 
   get api(): Api {
@@ -93,44 +132,16 @@ export function createApp(ctx: Ctx): App {
 /// rule less well than the rule does, and the first spec that needs one
 /// can write it against a real case.
 
-/// Retry around the file-mutation lease.
-///
-/// One installation, four workers: a delete, an upload, a rescan and an
-/// unfetch all take the same catalog lease, and a spec that wants it
-/// while a sibling holds it is refused with `catalog-busy`. That refusal
-/// clears on its own and is nothing to do with the code under test - any
-/// other refusal is, and is rethrown with the server's own message.
-/// The budget is the fetch tier, not the assert tier: what is being
-/// waited on is another worker's upload, rescan or delete finishing,
-/// which is server-side work off the request and exactly what that tier
-/// names. It costs nothing on the failure path either - a refusal that
-/// is not `catalog-busy` is rethrown on the first attempt rather than
-/// waiting the budget out.
-export async function retryCatalogBusy<T>(
-  attempt: () => Promise<T>,
-  options: { what?: string; within?: number } = {},
-): Promise<T> {
-  const { what = 'the catalog lease should free', within = T.fetch } = options;
-  let result: T;
-  await expect
-    .poll(
-      async () => {
-        try {
-          result = await attempt();
-          return true;
-        } catch (e) {
-          if (String(e).includes('catalog-busy')) return false;
-          throw e;
-        }
-      },
-      { timeout: within, message: what },
-    )
-    .toBe(true);
-  return result!;
-}
+export { retryCatalogBusy } from './retry';
 
 export { T, J } from './budgets';
-export { clickInView, clickThrough, chooseFromMenu, typeInto } from './gestures';
+export {
+  clickInView,
+  clickThrough,
+  chooseFromMenu,
+  typeInto,
+  wheelIntoView,
+} from './gestures';
 export { DEST } from './nav';
 export type { Ctx } from './context';
 export type { Dest, Destination } from './nav';

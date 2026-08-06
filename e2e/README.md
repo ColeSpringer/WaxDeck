@@ -35,15 +35,25 @@ Everything else is `app`:
 
 | | |
 | --- | --- |
-| `app.nav` | `enter(dest)` (by URL), `to(dest)` (through the chrome), `expectAt`, `reload`, `location()` |
-| `app.api` | the server, typed against `api/openapi.yaml` |
+| `app.nav` | `enter(dest)` (by URL), `to(dest)` (through the chrome), `expectAt`, `back`, `reload`, `open(url)`, `location()` |
+| `app.api` | the server, typed against `api/openapi.yaml`; `as(token)` for another credential |
 | `app.seed` | preconditions, set through the API rather than driven |
-| `app.auth`, `app.shell`, `app.music`, `app.search`, `app.player`, `app.settings`, `app.podcasts` | one surface per area of the app |
+| `app.admin` `app.auth` `app.books` `app.cast` `app.discovery` `app.home` `app.music` `app.player` `app.playlists` `app.podcasts` `app.queue` `app.radio` `app.review` `app.search` `app.settings` `app.sharing` `app.shell` `app.sso` `app.stats` `app.uploads` | one surface per area of the app |
 
 `nav.enter` is the default way to start. `nav.to` walks the sidebar and
 belongs to the specs where navigation itself is under test;
 `driver-smoke.spec.ts` walks the whole table so the other specs do not
 have to.
+
+Two more fixtures, both lazy - ask and you pay, otherwise you do not:
+
+- `otherAccount(suffix?)` mints a second listener off this test's title.
+  Talk to them with `app.api.as(their.token)`.
+- `device(options?)` opens a second browser as this account, with a
+  session of its own, and hands back its own `App`. That second login is
+  load-bearing: a client endpoint's id comes from the session it
+  registered over, so two browsers on one cookie are one device and the
+  picker will not show them each other.
 
 **No numbers.** Timeouts are the tiers in `driver/budgets.ts` - `T.step`,
 `T.action`, `T.nav`, `T.assert`, `T.fetch`, `T.analyze`, and `J.long` /
@@ -76,6 +86,14 @@ it. An account that needs the admin role declares it in `accountShapes`
 (`tests/accounts.ts`) *and* in the pinned list in
 `lint/conformance.mjs` - two files, so it shows up in review.
 
+The session is planted as a cookie, so a spec opens signed in. The few
+whose subject is the door say so per file (or per `describe`):
+
+```ts
+test.use({ session: 'signed-out' });   // the app lands on the form
+test.use({ session: 'virgin' });       // no account, no bootstrap - first-run only
+```
+
 Anything else created by name - a playlist, a station, a share, an app
 password - gets a deterministic per-spec name with create-or-reuse
 semantics, or a `finally` that cleans up. There is no reset endpoint and
@@ -103,26 +121,34 @@ npx playwright test
 
 `make e2e` runs all three; `make lint` runs `conform`.
 
-`lint/allowlist.json` holds a per-file, per-rule count of what has not
-been migrated yet. It fails when a count goes **up or down** - "ratchet:
-lower it to N" is as loud as a new violation. A file with no entry has no
-tolerance at all.
+`lint/allowlist.json` is **empty**, and every rule is a hard zero
+suite-wide: hand-typed identifiers, `force: true`, numeric timeouts, bare
+sleeps, `/api/v1/` literals, and any use of the bootstrap administrator.
+It fails when a count goes **up or down** - "ratchet: lower it to N" is
+as loud as a new violation - so the file stays as the seam for the next
+rule rather than as a tolerance. `--write-baseline` re-seeds it, and is
+only for the commit that adds a rule.
 
-## Migrating a spec
+Four spec files are exempt, each with its reason stated in
+`lint/conformance.mjs`, and they are exactly the four that ask for
+`rawPage`: the accessibility walk (roles and names only, by contract),
+the perf specs, the desktop loopback (it drives the IdP's own HTML form),
+and the editing prototype (raw canvas gestures are its subject). If you
+need the real `Page`, the question to answer first is whether your
+subject is really the app.
 
-The unmigrated specs import `legacyTest as test`, which is the old full
-`Page` and the shared administrator. To migrate one:
+## Projects
 
-1. Change the import to `{ test, expect } from './fixtures'`.
-2. Let `tsc` list every place the spec reached past the driver, and give
-   each one a home on a surface.
-3. Replace the login with nothing - the session is already planted.
-4. Replace setup journeys with `app.seed`, and tighten the assertions the
-   shared account used to prevent.
-5. Delete the file's entry from `lint/allowlist.json`.
+```
+setup → wave → mutators-uploads → mutators-admin → focus-a11y → focus-editing → motion-smoke
+```
 
-When the last one is done, `legacyTest`, `helpers.ts` and the allowlist
-all go.
+`wave` is everything that owns its own state, four workers wide. The two
+mutator projects hold what per-test accounts cannot divide - the files on
+disk, the trash, the library table, the admin settings row - and uploads
+runs before the console because the read-only switch refuses every upload
+while it is on. `mutators-admin` is not parallel with itself. The focus
+projects need OS focus and so run alone.
 
 ## Running
 
@@ -155,6 +181,16 @@ real HTTP IdP, and a feed host for the podcast specs.
 A `@quarantine` tag takes a test out of the blocking run and leaves it to
 the soak. Every one owes an entry in `docs/deferred-work.md` in the same
 commit.
+
+**About one run per fifteen minutes, locally.** The signup limiter is a
+per-source-IP budget of five attempts in a quarter hour - successes burn
+it too - and the suite spends four: the closed-door assertion, two
+signups in `admin-ops`, and `signup-ui`'s walk-up. Past that the next
+signup is refused, and `signup-ui` is what meets it, failing like a
+broken form rather than like a limiter. The limiter lives in memory, so
+restarting the stack clears it. The soak survives because the lockout
+starts at thirty seconds and the attempts are spread out; a tight local
+edit loop will not.
 
 ## Soak
 

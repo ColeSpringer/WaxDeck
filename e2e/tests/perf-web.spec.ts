@@ -1,5 +1,5 @@
-import { legacyTest as test, expect, APIRequestContext, Browser, Locator, Page } from './fixtures';
-import { clickThrough, typeInto } from './helpers';
+import { test, expect, APIRequestContext, Browser, Locator, Page } from './fixtures';
+import { clickThrough, typeInto } from './driver/gestures';
 import { measureScrollPacing, reportScrollPacing, ScrollPacing } from './support/scroll-pacing';
 import { SemanticsIds, SemanticsIdPrefixes, sem, semPrefix } from './semantics-ids';
 

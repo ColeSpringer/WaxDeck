@@ -92,9 +92,15 @@ type Options<T> = {
 /// cookie-borne credentials, which ride along on every browser request
 /// and so need proof the app itself sent them). The browser half of the
 /// suite is the cookie half; this is the spec's own hand.
-export const authed = (token: string) => ({
-  headers: { Authorization: `Bearer ${token}` },
-});
+///
+/// An empty token sends no header at all rather than an empty bearer.
+/// Two callers mean it: the spec whose subject is a server with no
+/// accounts on it, and a hand built over the browser's own request
+/// context, where the session cookie is what should be doing the
+/// authenticating. `Bearer ` with nothing after it is a credential the
+/// server refuses, which would read as a permission failure in both.
+export const authed = (token: string): { headers: Record<string, string> } =>
+  token === '' ? { headers: {} } : { headers: { Authorization: `Bearer ${token}` } };
 
 function fill(template: string, params: Record<string, unknown> | undefined) {
   const url = template.replace(/\{([^}]+)\}/g, (_, name: string) => {
@@ -184,8 +190,28 @@ export class RawApi {
 export class Api {
   readonly raw: RawApi;
 
-  constructor(request: APIRequestContext, readonly token: string) {
+  constructor(
+    private readonly request: APIRequestContext,
+    readonly token: string,
+  ) {
     this.raw = new RawApi(request, token);
+  }
+
+  /// The same server and the same connection, spoken to with a different
+  /// bearer: nobody at all (an empty token sends no header), or a
+  /// credential that is not a session - the similarity worker's shared
+  /// token, an app password.
+  ///
+  /// The connection is shared, and that is the part to hold in mind: one
+  /// `APIRequestContext` means one cookie jar, so a login made through
+  /// `as('')` leaves a session cookie that every later call on this hand
+  /// carries. An empty token is therefore "no Authorization header",
+  /// which is not the same claim as "unauthenticated" once anything on
+  /// this hand has logged in. A spec that needs provable anonymity -
+  /// asserting a 401 - takes `anonApi`, which has a jar of its own and
+  /// never logs in.
+  as(token: string): Api {
+    return new Api(this.request, token);
   }
 
   async get<P extends PathOf<'get'>>(
@@ -210,7 +236,18 @@ export class Api {
     const resp = await this.raw.get(path, options);
     if (!resp.ok()) return undefined;
     const text = await resp.text();
-    return (text === '' ? undefined : JSON.parse(text)) as Body<Operation<P, 'get'>>;
+    if (text === '') return undefined;
+    try {
+      return JSON.parse(text) as Body<Operation<P, 'get'>>;
+    } catch {
+      // A 2xx that is not JSON. The server's SPA fallback answers any
+      // path its mux does not match with index.html at 200, so a route
+      // that was removed or misspelled comes back as HTML that `ok()`
+      // is perfectly happy with - and a parse error thrown from inside
+      // `expect.poll` is not retried, it ends the poll. This method's
+      // whole contract is that it never does that.
+      return undefined;
+    }
   }
 
   async post<P extends PathOf<'post'>>(

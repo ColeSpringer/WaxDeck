@@ -356,9 +356,16 @@ class SyncEngine {
               // download or an artwork pin for an audiobook was written
               // under `bk-`. Reclaiming on the wire pid would miss every
               // one of them.
-              final rows = await (db.select(
-                db.mirrorItems,
-              )..where((t) => t.ulid.equals(ulid))).get();
+              // Read only for the branch that uses it, and still before
+              // the delete. `hidden` is the common tombstone - it is what
+              // trashing sends, which is what ADR-0048 was written for -
+              // and reading a row to discard it costs one round trip per
+              // item: two hundred of them for a discography.
+              final rows = e.reason == 'removed'
+                  ? await (db.select(
+                      db.mirrorItems,
+                    )..where((t) => t.ulid.equals(ulid))).get()
+                  : const <MirrorItem>[];
               await (db.delete(
                 db.mirrorItems,
               )..where((t) => t.ulid.equals(ulid))).go();

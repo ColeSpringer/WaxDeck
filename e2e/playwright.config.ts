@@ -9,12 +9,17 @@ const external = !!process.env.WAXDECK_BASE_URL;
 // none: E2E_RETRIES=0 is what the soak workflow and a local repeat-each
 // run set. CI keeps one, not the two it used to: a test that needs three
 // attempts is a quarantine candidate, not a pass.
-const retries =
-  process.env.E2E_RETRIES !== undefined
-    ? Number(process.env.E2E_RETRIES)
-    : process.env.CI
-      ? 1
-      : 0;
+// Parsed rather than coerced: `Number('')` is 0 and `Number('x')` is
+// NaN, and Playwright reads both as "no retries" - so a workflow that
+// sets E2E_RETRIES from an input nobody filled in, or a typo, silently
+// turns CI's one retry off and reports flakes as failures. Only an
+// actual integer counts as having asked.
+const askedRetries = Number(process.env.E2E_RETRIES);
+const retries = Number.isInteger(askedRetries) && askedRetries >= 0
+  ? askedRetries
+  : process.env.CI
+    ? 1
+    : 0;
 
 // A project's motion mode in one place: the browser's own accessibility
 // channel, and the copy of it the suite asserts against. `metadata` is
@@ -116,41 +121,86 @@ export default defineConfig({
     // still moving. It is the browser's real accessibility channel, not
     // a test seam - a listener who asks for reduced motion gets exactly
     // this app.
+    //
+    // The wave is everything that owns its own state. Every test in it
+    // holds an account minted from its own title (ADR-0050), so nothing
+    // here shares a queue, a star, a position or a preference document
+    // with anything else - which is what lets it stay fully parallel
+    // with no serial groups inside it. `prefs-radio` used to sit between
+    // this and the focus projects, because settings and radio both
+    // replace the whole preference document and the clobbering is per
+    // document rather than per key; two accounts is two documents, so it
+    // is gone.
     {
-      name: 'chromium',
+      name: 'wave',
       testIgnore: [
         /first-run\.spec\.ts/,
+        /uploads\.spec\.ts/,
+        /admin-ops\.spec\.ts/,
         /editing-prototype\.spec\.ts/,
         /a11y-audit\.spec\.ts/,
-        /radio-cast\.spec\.ts/,
       ],
       dependencies: ['setup'],
       ...motion('reduce'),
     },
-    // The two specs that write the preference document, kept off each
-    // other. `PUT /users/me/prefs` replaces the whole document and every
-    // writer builds its body from a snapshot it read earlier, so two of
-    // them in flight is last-writer-wins over fields neither meant to
-    // touch - settings.spec.ts says so and keeps to keys nobody else
-    // reads, which is not enough, because the clobbering is per document
-    // and not per key. The symptom was radio-cast pinning a station and
-    // watching the dial disappear under a settings write. Settings keeps
-    // the parallel wave (it is the only writer left in it) and radio
-    // runs after.
+    // The catalog mutators, which per-test accounts cannot divide: the
+    // files on disk, the mutation lease, the trash, the library table
+    // and the admin settings row are one installation's, however many
+    // accounts are looking at them.
+    //
+    // Uploads first, then the admin console, and the order is the point:
+    // admin-ops flips the read-only switch, which refuses every upload
+    // server-wide while it is on. With the two projects chained, that
+    // window cannot overlap an upload - the deferred-work entry that
+    // used to describe this hazard is closed by the ordering.
     {
-      name: 'prefs-radio',
-      testMatch: /radio-cast\.spec\.ts/,
-      dependencies: ['chromium'],
+      name: 'mutators-uploads',
+      testMatch: /uploads\.spec\.ts/,
+      dependencies: ['wave'],
       ...motion('reduce'),
     },
-    // Focus-sensitive specs run after the parallel wave, one at a
-    // time (projects chain through dependencies): text selection,
-    // clipboard, native context menus, and the semantics walk all
-    // lose OS focus to sibling workers' pages and flake.
+    // Not parallel with itself. Two tests here read the whole settings
+    // object, change one field and put it back, and the endpoint stores
+    // each field as its own row - so concurrent replaces interleave and
+    // drop each other's change. One file with `fullyParallel: false` is
+    // one worker running it in order, which is what the `describe.serial`
+    // wrapper in that file used to buy.
+    {
+      name: 'mutators-admin',
+      testMatch: /admin-ops\.spec\.ts/,
+      dependencies: ['mutators-uploads'],
+      fullyParallel: false,
+      ...motion('reduce'),
+    },
+    // Animated paths stay covered, and this sits BEFORE the focus
+    // projects rather than at the very end. Playwright skips a project
+    // whose dependency had failures, and the focus projects are where
+    // the quarantined test lives - so with this last, one test the suite
+    // has already stopped believing would take the only unreduced
+    // coverage in the run down with it, in the soak especially, where
+    // quarantine is included on purpose.
+    //
+    // It still may not run beside `wave`: both match ui.spec.ts, and two
+    // copies of one test at once is the aliasing ADR-0050 removes. The
+    // account key names the project now, so that is belt and braces
+    // rather than the only thing holding it.
+    {
+      name: 'motion-smoke',
+      // Anchored both ends: a bare /ui\.spec\.ts/ is a substring match
+      // over the whole path and picks up signup-ui.spec.ts too.
+      testMatch: /[\\/]ui\.spec\.ts$/,
+      dependencies: ['mutators-admin'],
+      ...motion('no-preference'),
+    },
+    // Focus-sensitive specs run last, one at a time (projects chain
+    // through dependencies): text selection, clipboard, native context
+    // menus, and the semantics walk all lose OS focus to sibling
+    // workers' pages and flake. Last also means a quarantined failure
+    // here costs no other project its run.
     {
       name: 'focus-a11y',
       testMatch: /a11y-audit\.spec\.ts/,
-      dependencies: ['prefs-radio'],
+      dependencies: ['motion-smoke'],
       ...motion('reduce'),
     },
     {
@@ -158,22 +208,6 @@ export default defineConfig({
       testMatch: /editing-prototype\.spec\.ts/,
       dependencies: ['focus-a11y'],
       ...motion('reduce'),
-    },
-    // Animated paths stay covered. Everything above runs the app with
-    // motion switched off, so the transitions, the deck expanding, and
-    // the sheets sliding are code no blocking project exercises any
-    // more. This re-runs the walking skeleton - the one spec that logs
-    // in through the form, walks the chrome and plays a track - with
-    // motion on, last, where a failure is unambiguous: the app is
-    // broken when it animates. Roughly a minute on the tail of the
-    // suite, and no second copy of the journey to keep in step.
-    {
-      name: 'motion-smoke',
-      // Anchored both ends: a bare /ui\.spec\.ts/ is a substring match
-      // over the whole path and picks up signup-ui.spec.ts too.
-      testMatch: /[\\/]ui\.spec\.ts$/,
-      dependencies: ['focus-editing'],
-      ...motion('no-preference'),
     },
   ],
   // run-stack.sh synthesizes the fixture library, starts the WaxFlow

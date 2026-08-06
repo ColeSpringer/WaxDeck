@@ -24,6 +24,10 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 const reportPath = process.argv[2] ?? 'test-results/report.json';
+// What to call this pass in the job summary. The soak walks the project
+// graph one project at a time and so writes several sections; without a
+// label they would all be headed "e2e" and read as one.
+const label = process.argv[3] ?? 'e2e';
 
 if (!existsSync(reportPath)) {
   // A run that died before the reporter wrote anything - the failure is
@@ -33,7 +37,19 @@ if (!existsSync(reportPath)) {
   process.exit(0);
 }
 
-const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+// Parsed defensively for the same reason the writes are guarded: a run
+// that was killed leaves a half-written report, `existsSync` is happy
+// with it, and a SyntaxError here would take the job red for a reason
+// that has nothing to do with the tests. In the soak the loop runs under
+// `set -e`, so the first corrupt report would abort the whole step.
+let report;
+try {
+  report = JSON.parse(readFileSync(reportPath, 'utf8'));
+} catch (e) {
+  console.log(`could not read the JSON report at ${reportPath}: ${e}`);
+  emit(0);
+  process.exit(0);
+}
 const rootDir = report.config?.rootDir ?? process.cwd();
 
 // Specs live on the file suite and on every `describe` nested under it.
@@ -60,7 +76,7 @@ for (const suite of report.suites ?? []) walk(suite);
 
 const stats = report.stats ?? {};
 console.log(
-  `e2e: ${stats.expected ?? 0} passed, ${stats.unexpected ?? 0} failed, ` +
+  `${label}: ${stats.expected ?? 0} passed, ${stats.unexpected ?? 0} failed, ` +
     `${flaky.length} flaky, ${stats.skipped ?? 0} skipped`,
 );
 
@@ -75,7 +91,7 @@ for (const t of flaky) {
 const summaryPath = process.env.GITHUB_STEP_SUMMARY;
 if (summaryPath) {
   const lines = [
-    '## e2e',
+    `## ${label}`,
     '',
     `${stats.expected ?? 0} passed | ${stats.unexpected ?? 0} failed | ` +
       `${flaky.length} flaky | ${stats.skipped ?? 0} skipped`,
@@ -101,7 +117,7 @@ if (summaryPath) {
     ...table('### Failed', failed),
     ...table('### Flaky (passed on retry)', flaky),
   );
-  appendFileSync(summaryPath, `${lines.join('\n')}\n`);
+  append(summaryPath, `${lines.join('\n')}\n`, 'the job summary');
 }
 
 emit(flaky.length);
@@ -109,5 +125,21 @@ emit(flaky.length);
 function emit(count) {
   const out = process.env.GITHUB_OUTPUT;
   if (!out) return;
-  appendFileSync(out, `count=${count}\nflaky=${count > 0}\n`);
+  append(out, `count=${count}\nflaky=${count > 0}\n`, "the step's outputs");
+}
+
+/// Report-writing never fails the job.
+///
+/// The line at the top of this file is a promise: the run's own exit
+/// code already decided whether the suite passed, and a summary that
+/// could not be written must not change that answer. Both destinations
+/// are paths handed over in the environment - a runner sets them, and
+/// anybody reproducing a CI failure locally may well export a stale one
+/// - so an unwritable path says so on stdout and the script carries on.
+function append(path, text, what) {
+  try {
+    appendFileSync(path, text);
+  } catch (e) {
+    console.log(`could not write ${what} to ${path}: ${e}`);
+  }
 }

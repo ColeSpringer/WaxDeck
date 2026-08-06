@@ -1,20 +1,5 @@
-import { legacyTest as test, expect } from './fixtures';
-import {
-  ADMIN_PASS,
-  ADMIN_USER,
-  clickThrough,
-  ensureAdmin,
-  itemRow,
-  typeInto,
-  waitForLibrary,
-} from './helpers';
-import {
-  SEMANTICS_ATTRIBUTE,
-  SemanticsIds,
-  SemanticsIdPrefixes,
-  sem,
-  semPrefix,
-} from './semantics-ids';
+import { test, expect } from './fixtures';
+import { T } from './driver';
 
 // Switching items mid-play must replace what the engine is playing.
 // just_audio's web backend caches source players by playlist id, and the
@@ -26,17 +11,7 @@ import {
 // against it. The engine stops the platform player before every
 // replacement now; this spec pins the observable half of that promise -
 // the switched-to item's media is actually fetched.
-test('switching tracks mid-play fetches the new media', async ({ page, request }) => {
-  const token = await ensureAdmin(request);
-  await waitForLibrary(request, token);
-
-  await page.goto('/');
-  const username = page.getByRole('textbox', { name: 'Username' });
-  await username.waitFor({ timeout: 30_000 });
-  await typeInto(page, username, ADMIN_USER);
-  await typeInto(page, page.getByRole('textbox', { name: 'Password' }), ADMIN_PASS);
-  await page.getByRole('button', { name: 'Log in' }).click();
-
+test('switching tracks mid-play fetches the new media', async ({ app, page }) => {
   // The tracks index, and the first two rows it actually draws: a lazy
   // list only builds what its viewport holds, so the pair is read off
   // the screen rather than assumed from any listing order. Which two
@@ -44,34 +19,17 @@ test('switching tracks mid-play fetches the new media', async ({ page, request }
   // on every load issued while the platform was still active, mid-play
   // or already run out (completed is not idle), so the fixtures'
   // few-second lengths do not matter either.
-  await page
-    .locator(sem(SemanticsIds.navDestination('music')))
-    .waitFor({ timeout: 30_000 });
-  await page.goto('/music/tracks');
-  const rows = page.locator(semPrefix(SemanticsIdPrefixes.item));
-  await rows.nth(1).waitFor({ timeout: 30_000 });
-  const rowIds = (await rows.evaluateAll(
-    (els, attribute) => els.map((e) => e.getAttribute(attribute)),
-    SEMANTICS_ATTRIBUTE,
-  )) as string[];
-  // The registry's prefix covers every item row, not only tracks, so
-  // the type prefix is filtered here rather than written into the
-  // selector - a selector that spells out `item-tr-` is a literal the
-  // id registry cannot rename.
-  const pids = rowIds
-    .map((id) => id.slice(SemanticsIdPrefixes.item.length))
-    .filter((pid) => pid.startsWith('tr-'));
+  await app.nav.enter('tracks');
+  const pids = await app.music.visiblePids('tr');
   expect(pids.length, 'the tracks index lists at least two tracks').toBeGreaterThan(1);
-  const a = { pid: pids[0] };
-  const b = { pid: pids[1] };
+  const [a, b] = pids;
 
   // Play the first track and see its media actually fetched.
   const mediaA = page.waitForRequest(
-    (req) => req.url().includes('/media/') && req.url().includes(`pid=${a.pid}`),
-    { timeout: 30_000 },
+    (req) => req.url().includes('/media/') && req.url().includes(`pid=${a}`),
+    { timeout: T.nav },
   );
-  const rowA = await itemRow(page, a.pid);
-  await clickThrough(rowA, page.locator(sem(SemanticsIds.playerToggle)));
+  await app.music.play(a);
   await mediaA;
 
   // Tap the second track and hold the switch to its promise: the engine
@@ -80,17 +38,18 @@ test('switching tracks mid-play fetches the new media', async ({ page, request }
   // item played on (or replayed) under the second item's face - and
   // this request never happened.
   const mediaB = page.waitForRequest(
-    (req) => req.url().includes('/media/') && req.url().includes(`pid=${b.pid}`),
-    { timeout: 30_000 },
+    (req) => req.url().includes('/media/') && req.url().includes(`pid=${b}`),
+    { timeout: T.nav },
   );
   // The player screen sits over the tracks index; its own collapse
   // control pops it (browser history against flutter's navigator is
   // handled asynchronously and can pop the wrong thing).
-  const rowB = page.locator(sem(SemanticsIds.item(b.pid)));
-  await clickThrough(
-    page.getByRole('button', { name: 'Collapse player' }).first(),
-    rowB,
-  );
-  await rowB.click({ force: true });
+  await app.player.collapse(app.music.item(b));
+  // Really gone, not merely behind the index: the gesture that plays the
+  // second row skips its own click when the player is already showing,
+  // so a collapse that has not finished would make the tap a no-op and
+  // the request below would never come.
+  await expect(app.player.toggle()).toBeHidden();
+  await app.music.play(b);
   await mediaB;
 });
