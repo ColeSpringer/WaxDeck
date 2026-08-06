@@ -6,7 +6,6 @@
     "searchField": "search-field",
     "searchFilter": "search-filter-{name}",
     "searchHit": "search-hit-{kind}-{index}",
-    "searchLauncher": "search-launcher",
     "searchRecent": "search-recent-{index}",
     "searchRecentRemove": "search-recent-remove-{index}",
     "searchShowAll": "search-show-all-{kind}",

@@ -264,11 +264,13 @@ test.describe.serial('radio and cast', () => {
     // bar, so every rebuilt screen brings the control with it.
     await expect(page.locator(sem(SemanticsIds.searchAction))).toBeVisible();
 
-    // The sidebar header is the launcher at this width; the screen it
-    // opens owns the query.
+    // The sidebar header is a live field at this width. Clicking it opens
+    // the screen and keeps the caret, so nothing has to be typed to get
+    // here - which this case needs, because the chip below answers with
+    // an empty query.
     await clickThrough(
-      page.locator(sem(SemanticsIds.searchLauncher)),
       page.locator(sem(SemanticsIds.searchField)),
+      page.locator(sem(SemanticsIds.searchFilter('all'))),
     );
 
     // The chip is a different question of a different surface: with

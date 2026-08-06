@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../radio/add_station.dart';
+import '../shell/adaptive_shell.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'search_controller.dart';
@@ -148,6 +149,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final scope = ref.watch(searchScopeProvider);
     final query = ref.watch(searchQueryProvider);
     final results = ref.watch(searchResultsProvider);
+    // The shell's sidebar header is a live field wherever it is drawn, so
+    // this screen draws one only where it is not: two fields holding one
+    // query is the synchronisation problem the launcher used to avoid by
+    // being dead. A collapsed sidebar drops the header, so the width
+    // alone is not the question.
+    final ownField =
+        !WaxSizeClass.of(context).hasSidebar ||
+        ref.watch(sidebarCollapsedProvider);
 
     return WaxScaffold(
       title: 'Search',
@@ -162,17 +171,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                SearchField(
-                  controller: _field,
-                  focusNode: _focus,
-                  autofocus: true,
-                  hint: 'Artists, albums, shows, books',
-                  onChanged: _onChanged,
-                  onSubmitted: _onSubmitted,
-                  semanticsId: SemanticsIds.searchField,
-                  clearSemanticsId: SemanticsIds.searchClear,
-                ),
-                const SizedBox(height: WaxSpace.s12),
+                if (ownField) ...<Widget>[
+                  SearchField(
+                    controller: _field,
+                    focusNode: _focus,
+                    autofocus: true,
+                    hint: 'Artists, albums, shows, books',
+                    onChanged: _onChanged,
+                    onSubmitted: _onSubmitted,
+                    semanticsId: SemanticsIds.searchField,
+                    clearSemanticsId: SemanticsIds.searchClear,
+                  ),
+                  const SizedBox(height: WaxSpace.s12),
+                ],
                 FilterChipRow(
                   chips: <WaxFilterChip>[
                     for (final value in SearchScope.values)

@@ -353,7 +353,7 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 // context; the album_pid facet field addresses the album by entity
 // identity rather than a display-string match.
 func (l *Library) albumMemberViews(ctx context.Context, albumPID model.PID, cap int) ([]*model.ItemView, error) {
-	q := query.New(query.EntityTracks).
+	q := visibleTracks().
 		Where("album_pid", query.OpIs, string(albumPID)).
 		OrderBy("disc_no", false).
 		OrderBy("track_no", false).
@@ -438,13 +438,31 @@ func (l *Library) playlistNameAndOwner(ctx context.Context, pid model.PID) (stri
 // playlistMemberViews answers a playlist's members in play order,
 // evaluated as the owner (the share publishes the owner's list),
 // capped so a pathological playlist cannot balloon a public page.
+// Trashed members are dropped before the cap, so a share that would
+// otherwise be the most visible copy of a deleted track does not carry
+// one (ADR-0048).
 func (l *Library) playlistMemberViews(ctx context.Context, pid, ownerPID model.PID, cap int) ([]*model.ItemView, error) {
-	items, err := l.lib.Playlists().Items(ctx, pid, ownerPID)
+	members, err := l.lib.Playlists().Items(ctx, pid, ownerPID)
 	if err != nil {
 		return nil, classify(err)
 	}
-	if len(items) > cap {
-		items = items[:cap]
+	// The same exemption PlaylistItems makes, because a share publishes
+	// the owner's list rather than a second interpretation of it: a rule
+	// that names `state` is honoured as written, and a share of one that
+	// asks for archived rows would otherwise resolve to nothing.
+	keepArchived := false
+	if pl, err := l.lib.Playlists().Get(ctx, pid); err == nil && pl.Rule != nil {
+		keepArchived = ruleNamesState(pl.Rule.Where)
+	}
+	items := make([]*model.ItemView, 0, min(len(members), cap))
+	for _, it := range members {
+		if archived(it) && !keepArchived {
+			continue
+		}
+		if len(items) == cap {
+			break
+		}
+		items = append(items, it)
 	}
 	return items, nil
 }

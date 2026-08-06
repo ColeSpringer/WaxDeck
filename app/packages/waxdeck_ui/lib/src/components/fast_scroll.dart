@@ -107,6 +107,10 @@ class _FastScrollRailState extends State<FastScrollRail> {
           return Semantics(
             identifier: widget.semanticsId,
             container: true,
+            // Same boundary as the chip row: each letter is its own
+            // button, and merged they become one rail-sized tap target
+            // that jumps to whichever letter merged last.
+            explicitChildNodes: true,
             label: 'Jump to a letter',
             child: GestureDetector(
               // Drag only: a tap belongs to the letter it lands on, and a

@@ -411,6 +411,12 @@ func (l *Library) edgesToSummaries(ctx context.Context, uc *UserCtx, edges []sim
 		if v == nil || v.Kind != model.KindTrack {
 			continue
 		}
+		// Neighbours arrive as pids from the similarity index, so the mix's
+		// other half filters by query and this half has to filter here
+		// (ADR-0048).
+		if archived(v) {
+			continue
+		}
 		if !uc.AllLibraries && !l.itemVisible(ctx, uc, v.PID) {
 			continue
 		}
@@ -425,7 +431,7 @@ func (l *Library) edgesToSummaries(ctx context.Context, uc *UserCtx, edges []sim
 // tracksWhere pages music tracks matching one text field exactly
 // (case-insensitively, matching the engine's text semantics), capped.
 func (l *Library) tracksWhere(ctx context.Context, uc *UserCtx, field, value string, cap int) ([]*model.ItemView, error) {
-	q := query.New(query.EntityItems).
+	q := visibleItems().
 		Where("kind", query.OpIs, string(model.KindTrack)).
 		Where(field, query.OpIs, value).
 		OrderBy("title", false).Build()
@@ -474,7 +480,7 @@ func (l *Library) metadataMix(ctx context.Context, uc *UserCtx, genre, artist st
 		UserPID: model.PID(uc.CatalogPID),
 		Seed:    rand.Int63(),
 		Limit:   300,
-		Query: query.New(query.EntityItems).
+		Query: visibleItems().
 			Where("kind", query.OpIs, string(model.KindTrack)).Build(),
 	})
 	if err != nil {

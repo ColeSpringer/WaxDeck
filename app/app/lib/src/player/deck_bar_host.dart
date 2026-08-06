@@ -43,6 +43,7 @@ final skipIntervalsProvider = Provider<({Duration back, Duration forward})>(
 /// design system emits no identifier strings of its own (ADR-0016).
 const _ids = DeckBarIds(
   bar: SemanticsIds.deckBar,
+  expand: SemanticsIds.deckExpand,
   play: SemanticsIds.deckPlay,
   next: SemanticsIds.deckNext,
   previous: SemanticsIds.deckPrevious,
@@ -238,7 +239,7 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
                       .read(playStateControllerProvider(item.pid).notifier)
                       .setStarred(value),
                 ),
-          onExpand: () => context.push(WaxRoute.nowPlaying),
+          onExpand: () => context.pushOnce(WaxRoute.nowPlaying),
           onLongPress: item == null
               ? null
               : () => unawaited(_showActions(context, ref, item, session)),
@@ -355,7 +356,7 @@ class _RadioDeckBar extends ConsumerWidget {
           // means "show me what is playing", and since P19 that is a
           // station's own face rather than the hub it was tuned from.
           // The hub is still one row away, in the face's overflow.
-          onExpand: () => context.push(WaxRoute.nowPlaying),
+          onExpand: () => context.pushOnce(WaxRoute.nowPlaying),
         ),
       ),
     );
@@ -429,7 +430,7 @@ class _RemoteDeckBar extends ConsumerWidget {
         // has nowhere to remember what it silenced, so the glyph stays a
         // label rather than becoming a control that cannot undo itself.
         // The slider reaches zero on its own.
-        onExpand: () => context.push(WaxRoute.remote),
+        onExpand: () => context.pushOnce(WaxRoute.remote),
         // The cast control is how you get back: the picker is where
         // leaving a remote session is spelled out as a choice.
         onCast: () =>
@@ -566,7 +567,7 @@ Future<void> _showActions(
             title: const Text('Open the player'),
             onTap: () {
               Navigator.of(sheetContext).pop();
-              router.push<void>(WaxRoute.nowPlaying);
+              router.pushOnce(WaxRoute.nowPlaying);
             },
           ),
           // Desktop, and only where the window layer answered: the

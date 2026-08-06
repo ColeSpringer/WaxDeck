@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -778,12 +779,17 @@ class FakeRepository implements WaxDeckRepository {
     );
   }
 
+  /// Catalog pages to hand back in order, ahead of the default one built
+  /// from [libraryItems]. Lets a test script a tombstone.
+  final catalogPages = <CatalogSyncPage>[];
+
   @override
   Future<CatalogSyncPage> syncCatalog({
     String? since,
     String? cursor,
     int? limit,
   }) async {
+    if (catalogPages.isNotEmpty) return catalogPages.removeAt(0);
     return CatalogSyncPage(
       entries: [
         for (final item in libraryItems)
@@ -4652,11 +4658,25 @@ class FakeDownloads implements DownloadManagerPort {
   @override
   Future<void> download(String pid) async => downloaded.add(pid);
 
+  /// How many removals are in flight at once. The real port refuses to
+  /// unlink a file another row still references, so two removals racing
+  /// each other both see the other's row and leave the bytes behind;
+  /// `removeAll` is sequential for that reason and every other caller
+  /// has to be too.
+  int inFlightRemovals = 0;
+  int peakConcurrentRemovals = 0;
+
   @override
   Future<void> remove(String pid) async {
+    inFlightRemovals++;
+    peakConcurrentRemovals = math.max(peakConcurrentRemovals, inFlightRemovals);
+    // A suspension point, so an unserialized caller genuinely overlaps
+    // here rather than running to completion synchronously.
+    await Future<void>.delayed(Duration.zero);
     removed.add(pid);
     byPid.remove(pid);
     _items = _items.where((i) => i.pid != pid).toList();
+    inFlightRemovals--;
   }
 
   @override

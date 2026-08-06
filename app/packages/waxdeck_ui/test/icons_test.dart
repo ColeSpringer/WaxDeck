@@ -63,7 +63,7 @@ void main() {
         isFalse,
         reason:
             'WaxIcons must stay unannotated: the subsets are already '
-            'curated to exactly these 57 glyphs, and the annotation trades '
+            'curated to exactly these 60 glyphs, and the annotation trades '
             '16 KB for release-only blanks. See ADR-0022.',
       );
     });

@@ -10,12 +10,11 @@ import '../tokens/typography.dart';
 
 /// Which drawn form a playing indicator takes.
 enum PlayingIndicatorForm {
-  /// The VU needle: the signature element, used only where it has room
-  /// to breathe (the deck bar at 24 px and up, the players, the
-  /// visualiser).
-  needle,
+  /// The tonearm: the signature element, used only where it has room to
+  /// breathe (the deck bar at 24 px and up, the players, the visualiser).
+  tonearm,
 
-  /// Three amber bars: what an active list row gets. At 16 px a needle
+  /// Three amber bars: what an active list row gets. At 16 px a tonearm
   /// is illegible mush, and coarse reads better small.
   bars,
 }
@@ -23,12 +22,14 @@ enum PlayingIndicatorForm {
 /// Says "this is the thing that is playing".
 ///
 /// Motion here is the app's heartbeat, so it obeys the reduced-motion
-/// token without any call site having to remember: the needle parks at
-/// 60 percent deflection and the bars hold a static profile.
+/// token without any call site having to remember: the bars hold a
+/// static profile, and the tonearm rests wherever the track stands,
+/// which is what a paused record player looks like.
 class PlayingIndicator extends StatefulWidget {
   const PlayingIndicator({
     required this.playing,
-    this.form = PlayingIndicatorForm.needle,
+    this.form = PlayingIndicatorForm.tonearm,
+    this.progress,
     this.size = 24,
     this.color,
     this.semanticLabel,
@@ -37,6 +38,23 @@ class PlayingIndicator extends StatefulWidget {
 
   final bool playing;
   final PlayingIndicatorForm form;
+
+  /// How far into the track playback stands, 0 to 1.
+  ///
+  /// This is what moves the arm, and it is why the element was worth
+  /// keeping rather than restyling: the form it replaces swept a VU
+  /// needle on a synthetic waveform, because there is no level to meter
+  /// (`AudioEnginePort` exposes output volume, not peak or RMS, and
+  /// neither just_audio nor the other engines offer one). A faked meter
+  /// is decoration that claims to be a reading. Position is a real
+  /// signal already in hand, and an arm crossing a record is what this
+  /// app's own metaphor says it means.
+  ///
+  /// Null where the caller has no position (live radio, an unmeasured
+  /// stream): the arm rests partway in, which reads as a record playing
+  /// rather than as a stuck one at the edge.
+  final double? progress;
+
   final double size;
   final Color? color;
   final String? semanticLabel;
@@ -64,10 +82,15 @@ class _PlayingIndicatorState extends State<PlayingIndicator>
     _sync();
   }
 
-  /// The ticker runs only while this is on screen and playing: a needle
-  /// animating behind a closed sheet is a battery bug.
+  /// The ticker runs only while this is on screen, playing, and drawing
+  /// something a clock has to move: an indicator animating behind a
+  /// closed sheet is a battery bug, and the tonearm needs no ticker at
+  /// all because the position it follows already arrives as rebuilds.
   void _sync() {
-    final animate = widget.playing && WaxMotion.of(context).animationsEnabled;
+    final animate =
+        widget.playing &&
+        widget.form == PlayingIndicatorForm.bars &&
+        WaxMotion.of(context).animationsEnabled;
     if (animate && !_controller.isAnimating) {
       _controller.repeat();
     } else if (!animate && _controller.isAnimating) {
@@ -91,16 +114,18 @@ class _PlayingIndicatorState extends State<PlayingIndicator>
       label: label,
       child: SizedBox(
         width: widget.size,
-        height: widget.form == PlayingIndicatorForm.needle
-            ? widget.size * 0.72
+        height: widget.form == PlayingIndicatorForm.tonearm
+            ? widget.size * _TonearmPainter.aspect
             : widget.size,
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, _) => CustomPaint(
             painter: switch (widget.form) {
-              PlayingIndicatorForm.needle => _NeedlePainter(
-                phase: _controller.value,
-                playing: widget.playing,
+              PlayingIndicatorForm.tonearm => _TonearmPainter(
+                // Partway in when the caller has no position: an arm
+                // parked at the outer edge reads as a record that never
+                // started.
+                progress: (widget.progress ?? 0.35).clamp(0.0, 1.0),
                 color: color,
                 track: colors.hairline,
               ),
@@ -117,69 +142,117 @@ class _PlayingIndicatorState extends State<PlayingIndicator>
   }
 }
 
-/// The VU needle: a dial arc with a needle that settles like a real
-/// meter, weighted toward the upper range rather than sweeping evenly.
-class _NeedlePainter extends CustomPainter {
-  _NeedlePainter({
-    required this.phase,
-    required this.playing,
+/// A record with the arm across it, the stylus where the track stands.
+///
+/// The arm is a fixed length pivoting at the corner, exactly as a real
+/// one is, so the stylus travels from the outer edge in toward the
+/// spindle as the track plays and the angle follows from the geometry
+/// rather than being animated separately.
+class _TonearmPainter extends CustomPainter {
+  _TonearmPainter({
+    required this.progress,
     required this.color,
     required this.track,
   });
 
-  final double phase;
-  final bool playing;
+  /// 0 at the lead-in groove, 1 at the run-out.
+  final double progress;
   final Color color;
   final Color track;
 
+  // The deck's proportions, in units of the box's width. Fixed rather
+  // than derived so the arm's travel is the same shape at 24 px and at
+  // 40, and chosen so the two circles below always intersect.
+  static const double _discX = 0.42;
+  static const double _discY = 0.42;
+  static const double _discR = 0.34;
+  static const double _pivotX = 0.90;
+  static const double _pivotY = 0.10;
+  static const double _armLength = 0.62;
+
+  /// Where the stylus rides at each end of the record.
+  static const double _leadIn = 0.34;
+  static const double _runOut = 0.11;
+
+  /// How tall the box has to be, as a fraction of its width.
+  ///
+  /// Derived rather than chosen, and read by the widget rather than
+  /// duplicated there: the disc alone reaches `_discY + _discR` = 0.76
+  /// down, and the headshell dot rides its rim. Against the 0.72 this
+  /// inherited from the meter it replaced, the bottom of the record fell
+  /// nearly two pixels outside the render object at deck-bar size -
+  /// invisible only because nothing above it happens to clip.
+  static const double aspect = 0.82;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final pivot = Offset(size.width / 2, size.height * 0.98);
-    final radius = size.width * 0.46;
-    const sweep = math.pi * 0.62;
-    final start = -math.pi / 2 - sweep / 2;
+    final s = size.width;
+    final centre = Offset(_discX * s, _discY * s);
+    final pivot = Offset(_pivotX * s, _pivotY * s);
 
-    final arc = Paint()
+    final line = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = math.max(1, size.width * 0.05)
       ..strokeCap = StrokeCap.round
       ..color = track;
-    canvas.drawArc(
-      Rect.fromCircle(center: pivot, radius: radius),
-      start,
-      sweep,
-      false,
-      arc,
+
+    // The record and one groove inside it, which is what says the disc
+    // is a disc rather than a ring at this size.
+    canvas.drawCircle(
+      centre,
+      _discR * s,
+      line..strokeWidth = math.max(1, s * 0.05),
+    );
+    canvas.drawCircle(
+      centre,
+      _discR * s * 0.62,
+      line..strokeWidth = math.max(0.6, s * 0.025),
     );
 
-    // Parked at 60 percent when still: a frozen needle at zero reads as
-    // broken equipment rather than as paused.
-    final deflection = playing
-        ? 0.5 +
-              0.34 * math.sin(phase * math.pi * 2) +
-              0.12 * math.sin(phase * math.pi * 6.3)
-        : 0.6;
-    final angle = start + sweep * deflection.clamp(0.04, 0.96);
-    final tip = pivot + Offset(math.cos(angle), math.sin(angle)) * radius;
-
+    final stylus = _stylus(s, centre, pivot);
     canvas.drawLine(
       pivot,
-      tip,
+      stylus,
       Paint()
-        ..strokeWidth = math.max(1.2, size.width * 0.06)
+        ..strokeWidth = math.max(1.2, s * 0.06)
         ..strokeCap = StrokeCap.round
         ..color = color,
     );
-    canvas.drawCircle(
-      pivot,
-      math.max(1.4, size.width * 0.07),
-      Paint()..color = color,
-    );
+    // The bearing and the headshell, the two ends that make the line
+    // read as an arm rather than as a stray rule across the disc.
+    final solid = Paint()..color = color;
+    canvas.drawCircle(pivot, math.max(1.4, s * 0.07), solid);
+    canvas.drawCircle(stylus, math.max(1, s * 0.045), solid);
+    // The spindle, so the centre of the record is where the arm is
+    // heading rather than an empty hole.
+    canvas.drawCircle(centre, math.max(0.8, s * 0.035), solid);
+  }
+
+  /// Where the stylus sits: on the record at the radius [progress] names,
+  /// and an arm's length from the bearing.
+  ///
+  /// Those two conditions are two circles, and the intersection is the
+  /// answer; the lower of the two is the one on the near side of the
+  /// deck. The geometry constants keep the circles overlapping across the
+  /// whole travel, so the guarded square root is for arithmetic error
+  /// rather than for a case that can happen.
+  Offset _stylus(double s, Offset centre, Offset pivot) {
+    final grooveR = (_leadIn - progress * (_leadIn - _runOut)) * s;
+    final armLen = _armLength * s;
+    final span = centre - pivot;
+    final d = span.distance;
+    final along = (armLen * armLen - grooveR * grooveR + d * d) / (2 * d);
+    final off = math.sqrt(math.max(0, armLen * armLen - along * along));
+    final unit = span / d;
+    final base = pivot + unit * along;
+    final perp = Offset(-unit.dy, unit.dx) * off;
+    final a = base + perp;
+    final b = base - perp;
+    return a.dy >= b.dy ? a : b;
   }
 
   @override
-  bool shouldRepaint(_NeedlePainter old) =>
-      old.phase != phase || old.playing != playing || old.color != color;
+  bool shouldRepaint(_TonearmPainter old) =>
+      old.progress != progress || old.color != color || old.track != track;
 }
 
 /// Three bars for list rows, where a needle would be mush.

@@ -185,6 +185,7 @@ abstract final class SemanticsIds {
   static const String bannerUpdatedReload = 'banner-updated-reload';
   static const String deckBar = 'deck-bar';
   static const String deckCast = 'deck-cast';
+  static const String deckExpand = 'deck-expand';
   static const String deckLyrics = 'deck-lyrics';
   static const String deckMore = 'deck-more';
   static const String deckMute = 'deck-mute';
@@ -583,7 +584,6 @@ abstract final class SemanticsIds {
   static String searchFilter(Object name) => 'search-filter-$name';
   static String searchHit(Object kind, Object index) =>
       'search-hit-$kind-$index';
-  static const String searchLauncher = 'search-launcher';
   static String searchRecent(Object index) => 'search-recent-$index';
   static String searchRecentRemove(Object index) =>
       'search-recent-remove-$index';

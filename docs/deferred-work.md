@@ -344,14 +344,21 @@ here waits on upstream.
   request, so this is resource use rather than an open proxy. Fix both
   together when it is worth a bound, since they have the same shape: a
   per-user cap plus an idle-read deadline, not an overall one.
-- `[in-repo]` **A skip map stays pending for audio deleted behind the
-  server's back.** The item is still `present` in the catalog, so
-  `SkipMapFor` enqueues and answers pending, while the worker drops the
-  entry as moot: a client polling gets pending forever, re-queuing work
-  that is dropped again. Harmless (playback of that item fails anyway)
-  and self-correcting once a scan retires the item, but the honest fix is
-  for the worker's discovery that the bytes are gone to reach the
-  catalog, not just the queue.
+
+- `[upstream]` **Emptying the trash does not reclaim an offline client's
+  download.** ADR-0048 tells the two delete tombstones apart by the trash
+  journal, so deleting audio outright reclaims the bytes on every
+  mirrored device and trashing it keeps them, which is what makes a
+  restore free. Purging that trash entry afterwards is where it stops:
+  the item was already tombstoned as `hidden` when it was trashed, and a
+  purge writes no catalog change (it removes a file and a journal row,
+  and the item was archived already), so no second entry tells the client
+  the bytes are now unrecoverable. They survive until the account signs
+  out or the download is removed by hand. The ask is a change-log entry
+  when a purge makes an archived item unrecoverable; without one the
+  alternatives are a client that re-checks every tombstoned pid it holds
+  bytes for, or WaxDeck keeping a parallel record of purged items to fold
+  into the delta, and both are more machinery than the gap is worth.
 
 ## Compatibility
 

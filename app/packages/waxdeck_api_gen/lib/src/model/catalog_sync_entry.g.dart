@@ -12,6 +12,8 @@ class _$CatalogSyncEntry extends CatalogSyncEntry {
   @override
   final String pid;
   @override
+  final String? reason;
+  @override
   final ItemSummary? item;
   @override
   final EpisodeSummary? episode;
@@ -25,6 +27,7 @@ class _$CatalogSyncEntry extends CatalogSyncEntry {
   _$CatalogSyncEntry._({
     required this.op,
     required this.pid,
+    this.reason,
     this.item,
     this.episode,
     this.show_,
@@ -43,6 +46,7 @@ class _$CatalogSyncEntry extends CatalogSyncEntry {
     return other is CatalogSyncEntry &&
         op == other.op &&
         pid == other.pid &&
+        reason == other.reason &&
         item == other.item &&
         episode == other.episode &&
         show_ == other.show_;
@@ -53,6 +57,7 @@ class _$CatalogSyncEntry extends CatalogSyncEntry {
     var _$hash = 0;
     _$hash = $jc(_$hash, op.hashCode);
     _$hash = $jc(_$hash, pid.hashCode);
+    _$hash = $jc(_$hash, reason.hashCode);
     _$hash = $jc(_$hash, item.hashCode);
     _$hash = $jc(_$hash, episode.hashCode);
     _$hash = $jc(_$hash, show_.hashCode);
@@ -65,6 +70,7 @@ class _$CatalogSyncEntry extends CatalogSyncEntry {
     return (newBuiltValueToStringHelper(r'CatalogSyncEntry')
           ..add('op', op)
           ..add('pid', pid)
+          ..add('reason', reason)
           ..add('item', item)
           ..add('episode', episode)
           ..add('show_', show_))
@@ -83,6 +89,10 @@ class CatalogSyncEntryBuilder
   String? _pid;
   String? get pid => _$this._pid;
   set pid(String? pid) => _$this._pid = pid;
+
+  String? _reason;
+  String? get reason => _$this._reason;
+  set reason(String? reason) => _$this._reason = reason;
 
   ItemSummary? _item;
   ItemSummary? get item => _$this._item;
@@ -105,6 +115,7 @@ class CatalogSyncEntryBuilder
     if ($v != null) {
       _op = $v.op;
       _pid = $v.pid;
+      _reason = $v.reason;
       _item = $v.item;
       _episode = $v.episode;
       _show_ = $v.show_?.toBuilder();
@@ -142,6 +153,7 @@ class CatalogSyncEntryBuilder
               r'CatalogSyncEntry',
               'pid',
             ),
+            reason: reason,
             item: item,
             episode: episode,
             show_: _show_?.build(),

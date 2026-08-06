@@ -335,6 +335,7 @@ CatalogSyncPage catalogSyncPageFromGen(
           (e) => CatalogSyncEntry(
             op: e.op,
             pid: e.pid,
+            reason: e.reason,
             item: e.item == null
                 ? null
                 : itemSummaryFromGen(e.item!, baseUrl: baseUrl),

@@ -694,6 +694,7 @@ class CatalogSyncEntry {
   const CatalogSyncEntry({
     required this.op,
     required this.pid,
+    this.reason,
     this.item,
     this.episode,
     this.show,
@@ -703,6 +704,14 @@ class CatalogSyncEntry {
   /// op are dropped.
   final String op;
   final String pid;
+
+  /// Why a delete arrived: `removed` when the catalog no longer holds it
+  /// at all, `hidden` when it left this caller's view and could come
+  /// back (trash, an unsubscribe, a grant they lost). Null on every
+  /// other op, and on a delete from a server too old to say. Treat an
+  /// unrecognized value as `hidden`, which is the half that reclaims
+  /// nothing.
+  final String? reason;
   final ItemSummary? item;
 
   /// Episode payload accompanying podcast-episode upserts, when present.

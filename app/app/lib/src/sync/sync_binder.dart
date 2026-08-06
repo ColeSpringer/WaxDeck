@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
@@ -153,6 +155,38 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   if (engine != null) {
     final catalogSub = engine.catalogChanged.listen((_) => catalog.hint());
     final stateSub = engine.playStateChanged.listen((_) => user.hint());
+    // An item whose audio the server cannot give back takes its download
+    // and its pinned artwork with it. Only `removed` reaches this stream:
+    // trash tombstones the mirror row as well and keeps the bytes,
+    // because a restore would otherwise cost the whole transfer again
+    // (ADR-0048). `remove` is the one call that does both halves.
+    //
+    // Chained rather than fired in parallel, for the reason `removeAll`
+    // is sequential: `remove` decides whether to unlink a file by asking
+    // whether any *other* row still holds the same essence, so two items
+    // sharing one (CUE siblings share an image) reclaimed at once each
+    // see the other's row, each conclude the file is shared, and leave it
+    // on disk with nothing pointing at it. A delta page that retires a
+    // pair delivers both tombstones together, so this is the ordinary
+    // case rather than a race. It also keeps N reclaims from launching N
+    // concurrent rebuilds of the downloads list.
+    var reclaiming = Future<void>.value();
+    final removedSub = engine.itemsRemoved.listen((pid) {
+      reclaiming = reclaiming.then((_) async {
+        // Checked per link rather than once: the chain outlives the
+        // frame that queued it, and signing out disposes this binder
+        // while reclaims are still draining. Reading `ref` past that
+        // throws, which would take the rest of the queue with it.
+        if (!ref.mounted) return;
+        try {
+          await ref.read(downloadsProvider.notifier).remove(pid);
+        } catch (_) {
+          // One pid that cannot be reclaimed must not stall the queue
+          // behind it; the bytes stay and the next sweep sees them.
+        }
+      });
+      unawaited(reclaiming);
+    });
     connect.bind(
       sender: engine.sendControl,
       routeControl: (handler) => engine.onControlFrame = handler,
@@ -163,6 +197,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     ref.onDispose(() {
       catalogSub.cancel();
       stateSub.cancel();
+      removedSub.cancel();
       engine.stop();
     });
     return;

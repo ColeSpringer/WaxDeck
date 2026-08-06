@@ -42,6 +42,15 @@ class EmptyState extends StatelessWidget {
     return Semantics(
       identifier: semanticsId,
       container: true,
+      // Without this the button's own node folds into this one, and this
+      // one wraps a Center filling the whole remaining viewport: on web a
+      // tappable node draws flt-tappable with pointer-events over its
+      // entire rect, so a click anywhere on an empty page fires the
+      // invitation's action. WaxBanner documents the same failure.
+      explicitChildNodes: true,
+      // A container that stops merging its descendants keeps no text of
+      // its own, so the label has to be carried across with the boundary.
+      label: '$title. $message',
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
@@ -54,6 +63,12 @@ class EmptyState extends StatelessWidget {
                   WaxIcon(glyph!, size: 32, color: colors.textTertiary),
                   const SizedBox(height: WaxSpace.s16),
                 ],
+                // Left in the tree, unlike WaxBanner's message, which the
+                // banner excludes because its label repeats it verbatim
+                // on a one-line bar. Here the lines are the page's own
+                // content: excluding them costs a reader the ability to
+                // navigate to the text, and costs a spec the ability to
+                // find it. Announced twice is the smaller price.
                 Text(
                   title,
                   textAlign: TextAlign.center,
@@ -118,7 +133,14 @@ class ErrorState extends StatelessWidget {
     return Semantics(
       identifier: semanticsId,
       container: true,
+      // As on EmptyState: the pane fills the viewport, so without a
+      // boundary the retry button's tap belongs to the whole page.
+      explicitChildNodes: true,
       liveRegion: true,
+      // Carried across with the boundary, and here it is load-bearing
+      // twice over: this pane is a live region, so a container with no
+      // text of its own would announce an empty string on every error.
+      label: '$title. $message',
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
@@ -129,6 +151,9 @@ class ErrorState extends StatelessWidget {
               children: <Widget>[
                 WaxIcon(WaxIcons.errorCircle, size: 28, color: colors.error),
                 const SizedBox(height: WaxSpace.s12),
+                // Kept in the tree for the same reason as EmptyState's:
+                // the live region above announces the failure once, and
+                // these are what a reader navigates to afterwards.
                 Text(
                   title,
                   textAlign: TextAlign.center,

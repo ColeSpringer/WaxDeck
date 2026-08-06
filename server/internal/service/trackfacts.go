@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/colespringer/waxbin/model"
-	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
 )
 
@@ -84,7 +83,7 @@ func (l *Library) TrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFacts, er
 }
 
 func (l *Library) sweepTrackFacts(ctx context.Context, uc *UserCtx) ([]TrackFacts, error) {
-	q := query.New(query.EntityTracks).Build()
+	q := visibleTracks().Build()
 	var out []TrackFacts
 	cursor := read.Cursor("")
 	for {

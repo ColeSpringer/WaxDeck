@@ -560,8 +560,11 @@ func facetLess(a, b FacetBucket) bool {
 
 // facetScopeQuery is the enumeration's base query: everything for a
 // full-visibility caller, and the caller's granted libraries otherwise.
+// A different builder from the drill's, so it has to carry the same
+// state predicate or a bucket's count and the listing it opens disagree
+// (TestFacetDimensionsDrillToTheirCount).
 func (l *Library) facetScopeQuery(uc *UserCtx) query.Query {
-	b := query.New(query.EntityItems)
+	b := visibleItems()
 	if uc.AllLibraries {
 		return b.Build()
 	}

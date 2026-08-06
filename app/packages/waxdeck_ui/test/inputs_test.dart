@@ -70,21 +70,6 @@ void main() {
     });
   });
 
-  group('SearchField', () {
-    testWidgets('a launcher is a button that carries no text', (tester) async {
-      var taps = 0;
-      await tester.pumpWidget(
-        _host(SearchField(onTap: () => taps++), height: 80),
-      );
-
-      // No field at all: the screen it opens owns the query, so there is
-      // no second text state to keep in step.
-      expect(find.byType(TextField), findsNothing);
-      await tester.tap(find.byType(SearchField));
-      expect(taps, 1);
-    });
-  });
-
   group('WaxSegmented', () {
     testWidgets('unequal labels still get equal segments', (tester) async {
       await tester.pumpWidget(

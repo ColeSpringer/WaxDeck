@@ -98,6 +98,53 @@ sidecar injection seam) all landed and are not repeated here.
   both a lookup, and it needs no new storage: the column is already
   there and already joined.
 
+- **A state filter on `read.SearchOptions`.** ADR-0048 keeps archived
+  items out of every listing, and every listing but one gets a real
+  predicate through `query.Builder`. Search is the exception:
+  `SearchOptions` carries `Limit`, `MaxCandidates`, and `Libraries`, and
+  no query, so nothing WaxDeck can express reaches the FTS join. The
+  shipped workaround filters hits after the fact in `convItem`
+  (`server/internal/service/reads.go`), which is correct but pays for it
+  three times over. The per-group cap is applied by FTS before the filter
+  runs, so archived hits consume slots and can empty a group whose
+  survivors would have filled it - a bulk delete matches its own names
+  best and takes the top of the ranking - which costs a conditional
+  second pass at a wider per-group limit to fill back up. The entity
+  groups need a separate facet per kind to answer the same question for
+  artists and albums with no live members left. And every item hit is
+  hydrated to read its state. A `State`/`Query` narrowing on
+  `SearchOptions` - even just "exclude these states" - would make all of
+  that one predicate, and would turn the widening pass from a mitigation
+  into something that could simply be deleted. `Libraries` is the
+  precedent: it exists for exactly this reason on the visibility axis.
+
+- **A way for a consumer to mark an item missing.** The catalog can say
+  `present` while the bytes are gone, and WaxDeck discovers that
+  routinely: the silence-analysis worker resolves each queued entry's
+  path and drops the entry as moot when there is no file
+  (`analysisSource`, `server/internal/service/skipmaps.go`). It has no
+  way to tell the catalog, so the item stays `present` and the next
+  request queues the same doomed work. The facade exposes state
+  transitions through scanning only. The shipped workaround is for
+  `SkipMapFor` to resolve the path itself before enqueuing and answer
+  `unavailable`, which stops the pending-forever loop but leaves the
+  catalog wrong until a scan reaches that path. A `MarkMissing(pid)` on
+  the facade, or an equivalent the analysis surface can reach, would let
+  the discovery land where it belongs.
+
+- **A change-log entry when a trash purge makes an item unrecoverable.**
+  ADR-0048 tells an undoable archive from a permanent one by reading the
+  trash journal at tombstone time, which covers deleting audio outright.
+  What it cannot see is the later transition: purging a trash entry (by
+  hand or by the retention sweep) removes a file and a journal row while
+  the item was already `archived`, so nothing lands on the change log and
+  no client learns that the bytes it kept are now unrecoverable. An
+  `OpUpdate` on the item at purge time would be enough - the state does
+  not have to change, only the fact that something about it did. The
+  shipped workaround is that those downloads survive until the account
+  signs out or somebody removes them by hand, which is a space leak
+  rather than a correctness problem.
+
 ## Recorded upstream non-goals
 
 Deliberate upstream decisions WaxDeck designs around; listed so they

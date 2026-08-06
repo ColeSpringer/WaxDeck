@@ -823,21 +823,29 @@ func TestFacetCursorBelongsToItsDimension(t *testing.T) {
 	}
 }
 
-// An unfiltered browse must pass the catalog a zero Query. A built query
-// always names its entity, so passing one unconditionally would defeat
-// the unfiltered short-circuit: the list grows a user lookup per page
-// and starts rejecting the stale user pid it has always ignored.
-func TestUnfilteredBrowseIgnoresAStaleUser(t *testing.T) {
+// Every browse resolves the acting user's catalog pid, filtered or not.
+//
+// Before ADR-0048 an unfiltered browse passed the catalog a zero Query
+// and so skipped the lookup, which meant a stale pid was ignored on one
+// list and rejected on the next. The state predicate is always present
+// now, so there is no unfiltered case left to short-circuit and the
+// answer is the same either way. Pinned because the asymmetry it
+// replaces was itself pinned: whichever way this goes it should be a
+// decision, not a side effect of what the query happened to carry.
+func TestBrowseRejectsAStaleUserOnEveryList(t *testing.T) {
 	f := newGenreFixture(t)
 	stale := &UserCtx{ID: f.uc.ID, CatalogPID: "us-01JZXNOTAUSERATALL0000000", AllLibraries: true}
 
-	if _, err := f.svc.Browse(f.ctx, stale, "alphabetical", ItemFilter{}, 0, "", 10); err != nil {
-		t.Fatalf("an unfiltered list must ignore the user pid: %v", err)
+	for _, filter := range []ItemFilter{{}, {MediaType: "music"}} {
+		if _, err := f.svc.Browse(f.ctx, stale, "alphabetical", filter, 0, "", 10); err == nil {
+			t.Errorf("browse with filter %+v resolved a user that does not exist", filter)
+		}
 	}
-	// And a filtered one legitimately resolves it, so the filter is what
-	// makes the lookup happen rather than nothing at all.
-	if _, err := f.svc.Browse(f.ctx, stale, "alphabetical",
-		ItemFilter{MediaType: "music"}, 0, "", 10); err == nil {
-		t.Error("a filtered list resolved a user that does not exist")
+	// The live user still pages both ways, so the rejection is about the
+	// pid rather than about the predicate the query now always carries.
+	for _, filter := range []ItemFilter{{}, {MediaType: "music"}} {
+		if _, err := f.svc.Browse(f.ctx, f.uc, "alphabetical", filter, 0, "", 10); err != nil {
+			t.Errorf("browse with filter %+v: %v", filter, err)
+		}
 	}
 }

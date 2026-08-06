@@ -11,11 +11,12 @@ import 'package:built_value/serializer.dart';
 
 part 'catalog_sync_entry.g.dart';
 
-/// One mirrored catalog change: an `upsert` carrying the item's current summary, an `upsert-show` carrying a podcast show's current summary (shows are catalog entities but not items, so they ride their own operation and clients from before this operation existed drop them harmlessly), or a `delete` tombstone carrying only the PID (which removes the PID from whichever mirror table holds it). An `upsert` for a podcast episode carries `item` and additionally `episode`, the full episode summary; clients that only know items keep reading `item`. Snapshot pages contain only upserts, of both kinds. `op` is a string, not a closed enum, so new operations can appear; clients must drop entries whose `op` they do not recognize. 
+/// One mirrored catalog change: an `upsert` carrying the item's current summary, an `upsert-show` carrying a podcast show's current summary (shows are catalog entities but not items, so they ride their own operation and clients from before this operation existed drop them harmlessly), or a `delete` tombstone carrying the PID and a `reason` (which removes the PID from whichever mirror table holds it). An `upsert` for a podcast episode carries `item` and additionally `episode`, the full episode summary; clients that only know items keep reading `item`. Snapshot pages contain only upserts, of both kinds. `op` is a string, not a closed enum, so new operations can appear; clients must drop entries whose `op` they do not recognize. 
 ///
 /// Properties:
 /// * [op] - What the mirror should do with this entry: `upsert` (store `item`, and `episode` when present), `upsert-show` (store `show`), or `delete` (remove the PID). 
 /// * [pid] - The item or show the entry is about.
+/// * [reason] - Why a `delete` arrived, absent on every other operation. `removed` means the server cannot put it back: the audio was deleted outright rather than to the trash, or the catalog dropped the row. `hidden` means it left this caller's view and is recoverable: deleted to the trash with its undo journal, a show unsubscribed, a file re-homed under a library they are not granted. Both tombstone the mirror row identically. The difference is what a client may reclaim: bytes it already downloaded, and the artwork pinned beside them, are dead weight after `removed`, and worth keeping after `hidden`, where undoing the transition would otherwise cost the whole transfer again. One case answers `hidden` and later becomes unrecoverable: an item trashed and purged afterwards was tombstoned when it was trashed, and emptying the trash is not itself a catalog change, so no second entry follows it. A client keeps those bytes. Open, like `op`, and deliberately not an enum: a closed one generates a Dart `EnumClass` whose serializer throws on an unrecognized wire value, so adding a third reason later would fail the whole page's deserialization and stop sync rather than degrade. A client that does not recognize a value must treat it as `hidden`, which is the conservative half. 
 /// * [item] 
 /// * [episode] 
 /// * [show_] 
@@ -28,6 +29,10 @@ abstract class CatalogSyncEntry implements Built<CatalogSyncEntry, CatalogSyncEn
   /// The item or show the entry is about.
   @BuiltValueField(wireName: r'pid')
   String get pid;
+
+  /// Why a `delete` arrived, absent on every other operation. `removed` means the server cannot put it back: the audio was deleted outright rather than to the trash, or the catalog dropped the row. `hidden` means it left this caller's view and is recoverable: deleted to the trash with its undo journal, a show unsubscribed, a file re-homed under a library they are not granted. Both tombstone the mirror row identically. The difference is what a client may reclaim: bytes it already downloaded, and the artwork pinned beside them, are dead weight after `removed`, and worth keeping after `hidden`, where undoing the transition would otherwise cost the whole transfer again. One case answers `hidden` and later becomes unrecoverable: an item trashed and purged afterwards was tombstoned when it was trashed, and emptying the trash is not itself a catalog change, so no second entry follows it. A client keeps those bytes. Open, like `op`, and deliberately not an enum: a closed one generates a Dart `EnumClass` whose serializer throws on an unrecognized wire value, so adding a third reason later would fail the whole page's deserialization and stop sync rather than degrade. A client that does not recognize a value must treat it as `hidden`, which is the conservative half. 
+  @BuiltValueField(wireName: r'reason')
+  String? get reason;
 
   @BuiltValueField(wireName: r'item')
   ItemSummary? get item;
@@ -71,6 +76,13 @@ class _$CatalogSyncEntrySerializer implements PrimitiveSerializer<CatalogSyncEnt
       object.pid,
       specifiedType: const FullType(String),
     );
+    if (object.reason != null) {
+      yield r'reason';
+      yield serializers.serialize(
+        object.reason,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.item != null) {
       yield r'item';
       yield serializers.serialize(
@@ -128,6 +140,13 @@ class _$CatalogSyncEntrySerializer implements PrimitiveSerializer<CatalogSyncEnt
             specifiedType: const FullType(String),
           ) as String;
           result.pid = valueDes;
+          break;
+        case r'reason':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.reason = valueDes;
           break;
         case r'item':
           final valueDes = serializers.deserialize(

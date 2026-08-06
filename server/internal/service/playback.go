@@ -54,6 +54,12 @@ func (l *Library) RecentlyPositionedItems(ctx context.Context, uc *UserCtx, limi
 		if it.Kind != model.KindEpisode && it.Kind != model.KindBook {
 			continue
 		}
+		// Hydrated by pid rather than by query, so the state predicate
+		// cannot reach it (ADR-0048). Subsonic's resume surface reads this
+		// list, so a trashed book would come back there alone.
+		if archived(it) {
+			continue
+		}
 		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
 			continue
 		}

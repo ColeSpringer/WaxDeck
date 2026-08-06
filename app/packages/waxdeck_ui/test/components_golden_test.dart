@@ -18,7 +18,7 @@ Widget _themed(WaxThemeVariant variant, Widget child, {WaxDensity? density}) {
   );
 }
 
-/// Animated components (the VU needle, the row bars, the skeletons) never
+/// Animated components (the row bars, the skeletons) never
 /// settle by design, so goldens pump a fixed number of frames instead of
 /// waiting for stillness that will not come. The frame count is what
 /// makes the captured phase deterministic.
@@ -423,7 +423,14 @@ void main() {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    const PlayingIndicator(playing: false, size: 40),
+                    // A fixed position, so the arm is pinned somewhere
+                    // rather than resting at the default and drifting the
+                    // day the default changes.
+                    const PlayingIndicator(
+                      playing: false,
+                      progress: 0.4,
+                      size: 40,
+                    ),
                     const SizedBox(width: 12),
                     const PlayingIndicator(
                       playing: false,
@@ -606,8 +613,6 @@ void main() {
                                   hint: 'Search your library',
                                   onChanged: (_) {},
                                 ),
-                                const SizedBox(height: WaxSpace.s12),
-                                SearchField(onTap: () {}),
                                 const SizedBox(height: WaxSpace.s12),
                                 FilterChipRow(
                                   chips: const <WaxFilterChip>[

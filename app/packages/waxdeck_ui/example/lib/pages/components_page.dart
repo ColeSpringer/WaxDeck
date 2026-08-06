@@ -98,8 +98,6 @@ class _ComponentsPageState extends State<ComponentsPage> {
           child: SearchField(hint: 'Search your library', onChanged: (_) {}),
         ),
         const SizedBox(height: WaxSpace.s12),
-        SizedBox(width: 248, child: SearchField(onTap: () {})),
-        const SizedBox(height: WaxSpace.s12),
         FilterChipRow(
           chips: const <WaxFilterChip>[
             WaxFilterChip(name: 'all', label: 'All'),

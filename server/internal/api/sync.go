@@ -65,6 +65,10 @@ func catalogEntriesJSON(entries []service.CatalogSyncEntry) []CatalogSyncEntry {
 	out := make([]CatalogSyncEntry, 0, len(entries))
 	for _, e := range entries {
 		je := CatalogSyncEntry{Op: e.Op, Pid: e.PID}
+		if e.Reason != "" {
+			reason := e.Reason
+			je.Reason = &reason
+		}
 		if e.Item != nil {
 			item := summaryJSON(*e.Item)
 			je.Item = &item

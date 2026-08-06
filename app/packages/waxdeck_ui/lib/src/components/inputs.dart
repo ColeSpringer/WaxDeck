@@ -242,14 +242,13 @@ class _WaxTextFieldState extends State<WaxTextField> {
   }
 }
 
-/// The search input.
+/// The search input: a real field the caller drives.
 ///
-/// Two shapes, because search has two jobs. Given [onChanged] it is a
-/// real field the caller drives; given [onTap] instead it is a launcher
-/// a field-shaped control that opens the search screen, which is what
-/// the sidebar header holds. A launcher never carries text of its own, so
-/// there is no second field to keep in step with the one that owns the
-/// query.
+/// It had a second shape once, a field-shaped launcher that opened the
+/// search screen instead of accepting text, because the sidebar header
+/// could not own a query. That is what the header is now, so the launcher
+/// went with the bug it caused: clicking a field and having the typing
+/// start somewhere else.
 class SearchField extends StatelessWidget {
   const SearchField({
     this.controller,
@@ -258,16 +257,11 @@ class SearchField extends StatelessWidget {
     this.label = 'Search',
     this.onChanged,
     this.onSubmitted,
-    this.onTap,
     this.autofocus = false,
     this.semanticsId,
     this.clearSemanticsId,
     super.key,
-  }) : assert(
-         onTap == null || (onChanged == null && controller == null),
-         'a launcher holds no text: give SearchField onTap or a controller, '
-         'not both',
-       );
+  });
 
   final TextEditingController? controller;
   final FocusNode? focusNode;
@@ -276,67 +270,24 @@ class SearchField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
 
-  /// Makes this a launcher: tapping it opens the screen that owns search.
-  final VoidCallback? onTap;
-
   final bool autofocus;
   final String? semanticsId;
   final String? clearSemanticsId;
 
   @override
   Widget build(BuildContext context) {
-    if (onTap == null) {
-      return WaxTextField(
-        label: label,
-        hint: hint,
-        glyph: WaxIcons.search,
-        controller: controller,
-        focusNode: focusNode,
-        autofocus: autofocus,
-        textInputAction: TextInputAction.search,
-        onChanged: onChanged,
-        onSubmitted: onSubmitted,
-        semanticsId: semanticsId,
-        clearSemanticsId: clearSemanticsId,
-      );
-    }
-
-    final colors = WaxColors.of(context);
-    return WaxTappable(
+    return WaxTextField(
       label: label,
-      onPressed: onTap,
+      hint: hint,
+      glyph: WaxIcons.search,
+      controller: controller,
+      focusNode: focusNode,
+      autofocus: autofocus,
+      textInputAction: TextInputAction.search,
+      onChanged: onChanged,
+      onSubmitted: onSubmitted,
       semanticsId: semanticsId,
-      borderRadius: WaxRadius.pill,
-      child: Material(
-        color: colors.surface2,
-        borderRadius: WaxRadius.pill,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: WaxRadius.pill,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: WaxSpace.touchTarget),
-            padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s12),
-            decoration: BoxDecoration(
-              borderRadius: WaxRadius.pill,
-              border: Border.all(color: colors.hairline),
-            ),
-            child: Row(
-              children: <Widget>[
-                WaxIcon(WaxIcons.search, size: 18, color: colors.textTertiary),
-                const SizedBox(width: WaxSpace.s8),
-                Expanded(
-                  child: Text(
-                    hint,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: WaxType.body.copyWith(color: colors.textTertiary),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      clearSemanticsId: clearSemanticsId,
     );
   }
 }
@@ -527,6 +478,12 @@ class FilterChipRow extends StatelessWidget {
     return Semantics(
       identifier: semanticsId,
       container: true,
+      // Every chip is tappable, so without a boundary they merge into one
+      // row-sized node that answers to whichever tap merged last: a press
+      // on the row selects a chip nobody aimed at, and no chip is
+      // individually reachable. No label here, unlike the state panes:
+      // the chips carry all the text this row has.
+      explicitChildNodes: true,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: padding,

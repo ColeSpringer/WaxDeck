@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -338,6 +339,56 @@ func ruleToQuery(r SmartRule) (query.Query, error) {
 	return q, nil
 }
 
+// evaluableRule is the stored rule as a smart playlist evaluates it:
+// archived members excluded, unless the rule names `state` itself.
+//
+// ADR-0048. `state` is a documented rule field reachable through
+// /playlists/rule-fields, so a blanket predicate would make `state is
+// archived` answer nothing and quietly kill a contract-visible
+// capability. Excluding archived unless the rule asks is what someone
+// writing that rule means either way.
+//
+// The stored rule is never rewritten, only the copy that gets evaluated,
+// so the editor keeps showing what its author typed.
+func evaluableRule(q query.Query) query.Query {
+	if ruleNamesState(q.Where) {
+		return q
+	}
+	out := q
+	out.Where = withoutArchived(q.Where)
+	return out
+}
+
+// withoutArchived conjoins the state predicate onto a rule's condition
+// tree. A nil tree is a rule that matches everything, so the predicate
+// becomes the whole condition.
+func withoutArchived(where query.Node) query.Node {
+	cond := query.Cond{Field: "state", Op: query.OpIsNot, Value: string(model.StateArchived)}
+	if where == nil {
+		return cond
+	}
+	return query.And{Nodes: []query.Node{where, cond}}
+}
+
+// ruleNamesState reports whether a rule's condition tree mentions the
+// state field anywhere, at any depth or polarity. Deliberately coarse:
+// a rule that reasons about state at all gets to keep saying what it
+// means, rather than having WaxDeck guess which arm it meant.
+func ruleNamesState(n query.Node) bool {
+	switch t := n.(type) {
+	case query.Cond:
+		return t.Field == "state"
+	case query.And:
+		return slices.ContainsFunc(t.Nodes, ruleNamesState)
+	case query.Or:
+		return slices.ContainsFunc(t.Nodes, ruleNamesState)
+	case query.Not:
+		return ruleNamesState(t.Node)
+	default:
+		return false
+	}
+}
+
 func ruleNodeToEngine(n RuleNode, depth int, count *int) (query.Node, error) {
 	if depth > maxRuleDepth {
 		return nil, errInvalid(fmt.Sprintf("rule nesting exceeds %d levels", maxRuleDepth))
@@ -648,7 +699,9 @@ func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playli
 		r := queryToRule(*pl.Rule)
 		out.Rule = &r
 		if withCount {
-			if n, err := l.lib.Count(ctx, *pl.Rule, pl.OwnerPID); err == nil {
+			// evaluableRule, so the count matches the members the listing
+			// will actually hand back.
+			if n, err := l.lib.Count(ctx, evaluableRule(*pl.Rule), pl.OwnerPID); err == nil {
 				out.ItemCount = &n
 			}
 		}
@@ -962,6 +1015,12 @@ func (l *Library) PlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylistPID
 	// belongs to the playlist, like its name, not to whoever is reading it.
 	l.syncPlaylistCover(ctx, pl, items)
 	static := pl.Kind == model.PlaylistStatic
+	// The catalog evaluates a smart rule inside Items, so the state
+	// predicate cannot ride the query in (ADR-0048); members are filtered
+	// here instead, honouring a rule that names `state` for itself.
+	// Positions still count off the full member list, exactly as they do
+	// for members the caller cannot see, so a restore lands where it was.
+	keepArchived := pl.Rule != nil && ruleNamesState(pl.Rule.Where)
 	subs := l.newSubscriptionFilter(uc)
 	out := PlaylistItemsPage{Entries: []PlaylistEntry{}}
 	for i := off; i < len(items); i++ {
@@ -970,6 +1029,9 @@ func (l *Library) PlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylistPID
 			break
 		}
 		it := items[i]
+		if archived(it) && !keepArchived {
+			continue
+		}
 		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
 			continue
 		}
@@ -1091,6 +1153,9 @@ func (l *Library) PreviewRule(ctx context.Context, uc *UserCtx, rule SmartRule, 
 	if err != nil {
 		return PlaylistPreview{}, err
 	}
+	// The preview has to evaluate what the saved playlist would, or a
+	// rule looks right in the editor and comes back shorter once saved.
+	q = evaluableRule(q)
 	user := model.PID(uc.CatalogPID)
 	// Total is the condition-match count, ignoring the rule's own limit.
 	// A random or budget mode rejects a zero limit, so count as a plain

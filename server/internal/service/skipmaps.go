@@ -100,6 +100,23 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 			// false without one, so only a true miss reaches here.
 			return SkipMapResult{State: skipStateUnavailable}, nil
 		}
+		// The catalog can say present while the bytes are gone (deleted
+		// behind the server's back), and it exposes no state mutator for
+		// WaxDeck to correct that with. Left alone, this queues work the
+		// worker drops as moot and answers pending forever, so the same
+		// resolution the worker does happens here first and the miss is
+		// reported honestly. Resolving the path is also what tells a stale
+		// located-path entry from real absence, since analysisSource
+		// relocates before writing anything off.
+		if _, err := l.analysisSource(ctx, string(it.PID), filePID); err != nil {
+			if errors.Is(err, errAnalysisMoot) {
+				return SkipMapResult{State: skipStateUnavailable}, nil
+			}
+			// A root that is not mounted is storage that has not arrived
+			// rather than audio that is gone: queue and answer pending, so
+			// the map appears once it is back.
+			l.log.Warn("resolving audio for skip map", "item", string(it.PID), "err", err)
+		}
 		key := string(it.PID)
 		if filePID != "" {
 			key = key + "|" + filePID

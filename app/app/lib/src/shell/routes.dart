@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -245,6 +247,36 @@ class RuleDraftArgs {
 
   final String name;
   final bool shared;
+}
+
+/// Opening a pushed destination without stacking a second copy of it.
+extension WaxPushOnce on GoRouter {
+  /// Pushes [location] unless it is already the top of the stack.
+  ///
+  /// The deck bar's expand is one `onTap`, and a double click fires it
+  /// twice: without this the second click pushes a second player over
+  /// the first, and backing out once looks like nothing happened. An
+  /// `onDoubleTap` recognizer is not the fix - it would introduce the
+  /// disambiguation delay and swallow the first tap, trading a
+  /// hit-testing bug for a latency one. Two taps firing the action twice
+  /// is correct behaviour once the action is idempotent.
+  ///
+  /// The check reads the match stack rather than the reported URL,
+  /// because go_router deliberately keeps imperative pushes out of that
+  /// URL (ADR-0022) and `optionURLReflectsImperativeAPIs` is not the way
+  /// back. The stack does carry them.
+  void pushOnce(String location) {
+    final matches = routerDelegate.currentConfiguration.matches;
+    if (matches.isNotEmpty && matches.last.matchedLocation == location) {
+      return;
+    }
+    unawaited(push<void>(location));
+  }
+}
+
+/// The same on a context, for call sites that do not outlive it.
+extension WaxPushOnceContext on BuildContext {
+  void pushOnce(String location) => GoRouter.of(this).pushOnce(location);
 }
 
 /// Leaving a screen that can be arrived at directly.

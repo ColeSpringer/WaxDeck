@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/model"
-	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
 	"github.com/oklog/ulid/v2"
 )
@@ -29,11 +28,117 @@ import (
 // show upserts, which travel as their own operation because shows are
 // catalog entities but not items.
 type CatalogSyncEntry struct {
-	Op      string
-	PID     string
+	Op  string
+	PID string
+	// Reason qualifies a delete, and is empty on every other op. It is
+	// what tells a client whether the bytes it already downloaded are
+	// dead weight or worth keeping; see the two constants.
+	Reason  string
 	Item    *ItemSummary
 	Episode *EpisodeSummary
 	Show    *PodcastShow
+}
+
+// Mirror instructions a catalog entry can carry.
+const (
+	syncOpUpsert     = "upsert"
+	syncOpUpsertShow = "upsert-show"
+	syncOpDelete     = "delete"
+)
+
+// Why a delete arrived.
+//
+// The pair exists because ADR-0048 gave archiving a tombstone of its
+// own: an item deleted to the trash and one deleted outright now both
+// reach a mirror as a delete, and only one of them can be undone. A
+// client reclaiming a download on the wrong one costs somebody the whole
+// transfer again after a restore, which is the reason the ADR left the
+// download in place.
+//
+// The catalog is no help in telling them apart, and that is worth
+// stating because it is the obvious first guess: every delete mode
+// "preserves the logical item, archiving it when it loses its last
+// file" (model.DeleteMode), so trash and permanent alike emit OpUpdate
+// to archived and neither ever drops the row. What differs is whether
+// the bytes are recoverable, which is what the trash journal answers.
+const (
+	// syncReasonRemoved: gone for good. A permanent or prune delete
+	// unlinked the file, so nothing on the server can put it back.
+	syncReasonRemoved = "removed"
+	// syncReasonHidden: out of this caller's sight, and recoverable. A
+	// trashed file with its journal row, a show unsubscribed, a file
+	// re-homed out of their grant.
+	syncReasonHidden = "hidden"
+)
+
+// restorableItems answers the item pids the trash journal can still put
+// back, which is what makes an archive undoable.
+//
+// Returned as a thunk that reads at most once, and only when something
+// actually asks: the journal query carries no LIMIT (upstream adds one
+// only for a positive limit), and the overwhelmingly common delta page
+// is all upserts with no tombstone on it at all. Reading eagerly would
+// put a full unbounded scan on every poll of every mirrored device to
+// answer a question most pages never ask.
+//
+// A read failure answers nil, and nil reads as recoverable rather than
+// as unrecoverable: see tombstoneReason.
+func (l *Library) restorableItems(ctx context.Context) func() map[string]bool {
+	var (
+		once bool
+		out  map[string]bool
+	)
+	return func() map[string]bool {
+		if once {
+			return out
+		}
+		once = true
+		entries, err := l.lib.Trash(ctx, false, 0)
+		if err != nil {
+			l.log.Warn("reading the trash journal for sync tombstones", "err", err)
+			return nil
+		}
+		out = make(map[string]bool, len(entries))
+		for _, e := range entries {
+			if e.RestoredAt == 0 && string(e.ItemPID) != "" {
+				out[string(e.ItemPID)] = true
+			}
+		}
+		return out
+	}
+}
+
+// tombstoneReason says what a client may reclaim for an archived item.
+//
+// A nil thunk means the caller has no journal to consult (the snapshot,
+// which drops its tombstones anyway) and a nil map means the read
+// failed; both answer hidden. Keeping bytes that could have gone is
+// cheaper than deleting bytes that should have stayed.
+func tombstoneReason(restorable func() map[string]bool, pid model.PID) string {
+	if restorable == nil {
+		return syncReasonHidden
+	}
+	live := restorable()
+	if live == nil || live[string(pid)] {
+		return syncReasonHidden
+	}
+	return syncReasonRemoved
+}
+
+// archivedTombstone is the entry an item in the trash mirrors as.
+//
+// The pid carries the item's real prefix, unlike the tombstone a true
+// deletion mints: that one cannot know the kind because the row is
+// already gone, and this one is holding the view. A client keying its
+// downloads on the pid it stored gets a hit either way only if it
+// matches on the ULID, so saying the honest thing here costs nothing and
+// removes one reason to have to.
+func (l *Library) archivedTombstone(it *model.ItemView, restorable func() map[string]bool) CatalogSyncEntry {
+	return CatalogSyncEntry{
+		Op:     syncOpDelete,
+		PID:    itemAPIPID(it),
+		Reason: tombstoneReason(restorable, it.PID),
+	}
 }
 
 // CatalogDelta is one page of catalog changes.
@@ -480,7 +585,7 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 		}
 	}
 
-	q := query.New(query.EntityItems).Build()
+	q := visibleItems().Build()
 	page, err := l.lib.QueryPage(ctx, q, inner, limit, false, model.PID(uc.CatalogPID))
 	if err != nil {
 		return CatalogSnapshotPage{}, classify(err)
@@ -490,9 +595,16 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 		if !l.viewVisible(ctx, uc, it) {
 			continue
 		}
-		if entry, ok := l.itemSyncEntry(ctx, uc, subs, it); ok {
-			out.Entries = append(out.Entries, entry)
+		entry, ok := l.itemSyncEntry(ctx, uc, subs, nil, it)
+		if !ok || entry.Op == syncOpDelete {
+			// A fresh mirror has nothing to tombstone, so an archived
+			// item is simply absent here rather than one delete per
+			// trashed item padding the first page (ADR-0048). The query
+			// above already drops them; this is the belt for the pids the
+			// delta path tombstones.
+			continue
 		}
+		out.Entries = append(out.Entries, entry)
 	}
 	if page.HasMore {
 		out.NextCursor = encodeSnapshotCursor(since, page.Next)
@@ -538,13 +650,13 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 		if err != nil {
 			return nil, "", err
 		}
-		entries = append(entries, CatalogSyncEntry{Op: "upsert-show", PID: show.PID, Show: &show})
+		entries = append(entries, CatalogSyncEntry{Op: syncOpUpsertShow, PID: show.PID, Show: &show})
 		last = string(pod.PID)
 	}
 	return entries, "", nil
 }
 
-// itemSyncEntry builds the upsert entry for one item view, attaching
+// itemSyncEntry builds the mirror entry for one item view, attaching
 // the episode summary for podcast episodes. Episodes of shows the
 // caller does not subscribe to are excluded (ok false): skipping is
 // sound because the only transition that carries a mirrored episode
@@ -552,9 +664,23 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 // their grant epoch and forces a clean re-mirror. One episode lookup
 // serves both the membership check and the payload; the generic
 // allowsItem path would fetch it twice per row on the hot sync path.
-func (l *Library) itemSyncEntry(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, it *model.ItemView) (CatalogSyncEntry, bool) {
+//
+// Both the snapshot and the delta build their entries here, which is why
+// the archived tombstone lives here too (ADR-0048). Filtering only the
+// delta would tombstone correctly for a running client and still hand a
+// fresh mirror every trashed item on first sync, shedding them only if
+// some later change happened to touch that pid.
+func (l *Library) itemSyncEntry(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, restorable func() map[string]bool, it *model.ItemView) (CatalogSyncEntry, bool) {
+	if archived(it) {
+		// Archiving emits OpUpdate, not OpDelete (the item survives so a
+		// restore can find it), so a mirror following the change log would
+		// keep a deleted track. The tombstone the client already knows how
+		// to apply says it plainly; a restore re-scans to present and
+		// re-adds by the ordinary upsert path.
+		return l.archivedTombstone(it, restorable), true
+	}
 	s := summary(it)
-	entry := CatalogSyncEntry{Op: "upsert", PID: s.PID, Item: &s}
+	entry := CatalogSyncEntry{Op: syncOpUpsert, PID: s.PID, Item: &s}
 	if it.Kind == model.KindEpisode {
 		det, err := l.lib.Podcasts().Episode(ctx, it.PID)
 		if err != nil || !subs.allowsShow(ctx, l, string(det.Episode.PodcastPID)) {
@@ -650,6 +776,9 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 	}
 	showsVisible := l.podcastsVisible(ctx, uc)
 	subs := l.newSubscriptionFilter(uc)
+	// Once for the page, not once per archived row: it decides only
+	// whether a tombstone lets the client reclaim what it downloaded.
+	restorable := l.restorableItems(ctx)
 	for _, key := range order {
 		if key.kind == "podcast" {
 			if !showsVisible {
@@ -657,7 +786,20 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			}
 			pod, err := l.lib.Podcasts().Get(ctx, key.pid)
 			if ops[key] == string(model.OpDelete) || err != nil {
-				out.Entries = append(out.Entries, CatalogSyncEntry{Op: "delete", PID: apiPID(PrefixPodcast, key.pid)})
+				// Both tombstone, but they do not mean the same thing: a
+				// dropped row is gone for good, while a read that failed
+				// is this poll going wrong and the next one repairing it.
+				// Calling the second one removed would tell every device
+				// to reclaim over a transient IO error.
+				reason := syncReasonRemoved
+				if err != nil {
+					reason = syncReasonHidden
+				}
+				out.Entries = append(out.Entries, CatalogSyncEntry{
+					Op:     syncOpDelete,
+					PID:    apiPID(PrefixPodcast, key.pid),
+					Reason: reason,
+				})
 				continue
 			}
 			// Show rows fan out only to their subscribers; everyone else
@@ -669,15 +811,32 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			if err != nil {
 				return CatalogDelta{}, err
 			}
-			out.Entries = append(out.Entries, CatalogSyncEntry{Op: "upsert-show", PID: show.PID, Show: &show})
+			out.Entries = append(out.Entries, CatalogSyncEntry{Op: syncOpUpsertShow, PID: show.PID, Show: &show})
 			continue
 		}
 		pid := key.pid
 		it := byPID[pid]
 		if ops[key] == string(model.OpDelete) || it == nil {
 			// The kind is unknowable once the item is gone; tombstones
-			// carry the track prefix and mirrors match on the ULID.
-			out.Entries = append(out.Entries, CatalogSyncEntry{Op: "delete", PID: apiPID(PrefixTrack, pid)})
+			// carry the track prefix and mirrors match on the ULID. This
+			// is the one delete the catalog cannot take back, so it is
+			// the one that lets a client reclaim what it downloaded.
+			out.Entries = append(out.Entries, CatalogSyncEntry{
+				Op:     syncOpDelete,
+				PID:    apiPID(PrefixTrack, pid),
+				Reason: syncReasonRemoved,
+			})
+			continue
+		}
+		// Before the visibility check, and that order is load-bearing.
+		// Archiving is what an item does when it loses its last file, so
+		// an archived view carries no path - and viewVisible answers
+		// false for any caller without AllLibraries the moment the path
+		// is empty. Checked the other way round, every restricted caller
+		// took the visibility branch below and the reclaim worked for
+		// administrators only.
+		if archived(it) {
+			out.Entries = append(out.Entries, l.archivedTombstone(it, restorable))
 			continue
 		}
 		if !l.viewVisible(ctx, uc, it) {
@@ -685,11 +844,17 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			// no grant change to bump the epoch (a file re-homed under
 			// an ungranted root keeps its item PID). Skipping would
 			// strand the stale row in the client's mirror, so the
-			// transition tombstones instead.
-			out.Entries = append(out.Entries, CatalogSyncEntry{Op: "delete", PID: apiPID(PrefixTrack, pid)})
+			// transition tombstones instead. Hidden, not removed: a
+			// regrant or a move back puts it in sight again, and the
+			// bytes would otherwise have to come down a second time.
+			out.Entries = append(out.Entries, CatalogSyncEntry{
+				Op:     syncOpDelete,
+				PID:    apiPID(PrefixTrack, pid),
+				Reason: syncReasonHidden,
+			})
 			continue
 		}
-		if entry, ok := l.itemSyncEntry(ctx, uc, subs, it); ok {
+		if entry, ok := l.itemSyncEntry(ctx, uc, subs, restorable, it); ok {
 			out.Entries = append(out.Entries, entry)
 		}
 	}

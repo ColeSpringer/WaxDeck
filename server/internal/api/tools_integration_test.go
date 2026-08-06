@@ -523,15 +523,15 @@ func TestCueSplitEndToEnd(t *testing.T) {
 	}
 
 	// The real files replaced the virtual carvings under the same titles,
-	// and per-track play state followed each piece.
+	// the carvings left the listing, and per-track play state followed
+	// each piece.
 	//
 	// Polled, because the task reporting done is not the listing carrying
 	// the replacements: the drain returns when there is no more work, and
 	// this read has come back without them. Asked by pid rather than by
-	// title, because the archived carvings answer to the same two titles
-	// (see docs/bugs.md - trashed items are still listed) and a title
-	// lookup cannot tell the pair apart. resultPids are in sibling order,
-	// so [1] is Cue Two's replacement.
+	// title, because both pairs answer to the same two titles and the
+	// swap is the whole question. resultPids are in sibling order, so [1]
+	// is Cue Two's replacement.
 	pieces := *done.ResultPids
 	listed := map[string]ItemSummary{}
 	deadline := time.Now().Add(30 * time.Second)
@@ -542,11 +542,14 @@ func TestCueSplitEndToEnd(t *testing.T) {
 		}
 		_, gotOne := listed[pieces[0]]
 		_, gotTwo := listed[pieces[1]]
-		if gotOne && gotTwo {
+		_, keptOne := listed[one.Pid]
+		_, keptTwo := listed[two.Pid]
+		if gotOne && gotTwo && !keptOne && !keptTwo {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("split pieces %v never reached the listing: %v", pieces, listed)
+			t.Fatalf("split pieces %v never replaced the carvings %v in the listing: %v",
+				pieces, []string{one.Pid, two.Pid}, listed)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -557,8 +560,8 @@ func TestCueSplitEndToEnd(t *testing.T) {
 		t.Fatalf("piece %s title = %q, want %q", pieces[1], got, want)
 	}
 
-	// The carvings were retired, which the listing cannot show while
-	// archived items keep answering it: the shared rip is in the trash.
+	// The carvings were retired: the shared rip is in the trash, which is
+	// the one surface that does still name them (ADR-0048).
 	trash := decode[TrashList](t, get(t, h.ts, "/api/v1/admin/trash", h.token)).Entries
 	retired := false
 	for _, e := range trash {

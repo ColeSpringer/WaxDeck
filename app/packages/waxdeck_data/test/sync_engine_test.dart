@@ -24,9 +24,13 @@ class ScriptedRepository implements WaxDeckRepository {
   int duplicateListens = 0;
   int failNextMutations = 0;
 
-  ItemSummary item(String pid, String title) => ItemSummary(
+  ItemSummary item(
+    String pid,
+    String title, {
+    MediaType mediaType = MediaType.music,
+  }) => ItemSummary(
     pid: pid,
-    mediaType: MediaType.music,
+    mediaType: mediaType,
     title: title,
     durationMs: 1000,
   );
@@ -259,6 +263,95 @@ void main() {
       expect(rows.map((r) => r.pid), ['tr-AAA']);
     },
   );
+
+  test('only an unrecoverable delete publishes a pid to reclaim', () async {
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-AAA',
+            item: repo.item('tr-AAA', 'Alpha'),
+          ),
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-BBB',
+            item: repo.item('tr-BBB', 'Bravo'),
+          ),
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-CCC',
+            item: repo.item('tr-CCC', 'Charlie'),
+          ),
+        ],
+        nextSince: 'cur-1',
+      ),
+    );
+    await engine.pullCatalog();
+
+    final reclaimed = <String>[];
+    final sub = engine.itemsRemoved.listen(reclaimed.add);
+
+    repo.catalogPages.add(
+      const CatalogSyncPage(
+        entries: [
+          // Trashed: the row goes, the bytes stay, because a restore
+          // would otherwise cost the whole download again.
+          CatalogSyncEntry(op: 'delete', pid: 'tr-AAA', reason: 'hidden'),
+          // Deleted outright: nothing on the server can put it back.
+          CatalogSyncEntry(op: 'delete', pid: 'tr-BBB', reason: 'removed'),
+          // A server too old to say, or a value this build does not
+          // know, is treated as the half that reclaims nothing.
+          CatalogSyncEntry(op: 'delete', pid: 'tr-CCC'),
+        ],
+        nextSince: 'cur-2',
+      ),
+    );
+    await engine.pullCatalog();
+    await pumpEventQueue();
+    await sub.cancel();
+
+    // Every one of them left the mirror; only one freed anything.
+    expect(await mirror(), isEmpty);
+    expect(reclaimed, ['tr-BBB']);
+  });
+
+  test('reclaim names the pid the mirror stored, not the wire pid', () async {
+    // A tombstone for an item that is genuinely gone cannot know its
+    // kind, so it carries the track prefix whatever the item was. A
+    // download and an artwork pin for an audiobook were written under
+    // `bk-`, so publishing the wire pid reclaims nothing at all.
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'bk-DDD',
+            item: repo.item('bk-DDD', 'Delta', mediaType: MediaType.audiobook),
+          ),
+        ],
+        nextSince: 'cur-1',
+      ),
+    );
+    await engine.pullCatalog();
+
+    final reclaimed = <String>[];
+    final sub = engine.itemsRemoved.listen(reclaimed.add);
+    repo.catalogPages.add(
+      const CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(op: 'delete', pid: 'tr-DDD', reason: 'removed'),
+        ],
+        nextSince: 'cur-2',
+      ),
+    );
+    await engine.pullCatalog();
+    await pumpEventQueue();
+    await sub.cancel();
+
+    expect(await mirror(), isEmpty, reason: 'the ULID still matches');
+    expect(reclaimed, ['bk-DDD']);
+  });
 
   test(
     'upsert-show entries are dropped without corrupting the mirror',

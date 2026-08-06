@@ -665,3 +665,91 @@ func TestPlaylistReplaceRefusesUnsubscribedMembers(t *testing.T) {
 		t.Fatalf("replace error = %+v, want the subscription refusal", e)
 	}
 }
+
+// A smart playlist drops trashed members, except when its rule asks
+// about state itself (ADR-0048). `state` is a documented rule field the
+// contract exposes through /playlists/rule-fields, so the blanket
+// predicate every other listing gets would quietly make `state is
+// archived` answer nothing.
+func TestSmartPlaylistStateRuleSeesArchivedItems(t *testing.T) {
+	h := newHarness(t)
+	items := h.items(t, "?mediaType=music")
+	if len(items.Items) < 2 {
+		t.Fatalf("need at least 2 music items, have %d", len(items.Items))
+	}
+	doomed := items.Items[0].Pid
+
+	everything := map[string]any{
+		"root":  map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+		"sorts": []any{map[string]any{"field": "title"}},
+	}
+	onlyTrashed := map[string]any{
+		"root": map[string]any{
+			"type": "all",
+			"nodes": []any{
+				map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+				map[string]any{"type": "condition", "field": "state", "op": "is", "value": "archived"},
+			},
+		},
+		"sorts": []any{map[string]any{"field": "title"}},
+	}
+
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "All Music", "kind": "smart", "rule": everything,
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("plain smart create status = %d", resp.StatusCode)
+	}
+	plain := decode[Playlist](t, resp)
+	resp = h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Deleted Music", "kind": "smart", "rule": onlyTrashed,
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("state-rule smart create status = %d", resp.StatusCode)
+	}
+	stateRule := decode[Playlist](t, resp)
+
+	before := len(playlistItems(t, h, h.token, plain.Pid))
+	if before == 0 {
+		t.Fatal("the plain smart playlist matched nothing to begin with")
+	}
+	if n := len(playlistItems(t, h, h.token, stateRule.Pid)); n != 0 {
+		t.Fatalf("state-rule members before any delete = %d, want 0", n)
+	}
+
+	resp = h.postJSON(t, "/api/v1/library/items/delete", map[string]any{
+		"pids": []string{doomed}, "mode": "trash",
+	})
+	wantStatus(t, resp, 200, "delete to trash")
+
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		plainPids := entryPids(playlistItems(t, h, h.token, plain.Pid))
+		statePids := entryPids(playlistItems(t, h, h.token, stateRule.Pid))
+		if len(plainPids) == before-1 && samePids(statePids, []string{doomed}) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("plain members = %v (want %d, without %s); state-rule members = %v (want just %s)",
+				plainPids, before-1, doomed, statePids, doomed)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// The count on the playlist row agrees with the members it hands
+	// back, on both rules.
+	for _, pl := range []Playlist{plain, stateRule} {
+		det := decode[Playlist](t, get(t, h.ts, "/api/v1/playlists/"+pl.Pid, h.token))
+		want := len(playlistItems(t, h, h.token, pl.Pid))
+		if det.ItemCount == nil || *det.ItemCount != want {
+			t.Errorf("%s itemCount = %v, want %d", pl.Name, det.ItemCount, want)
+		}
+	}
+
+	// The editor still shows what its author wrote: the predicate rides
+	// the evaluation, never the stored rule.
+	det := decode[Playlist](t, get(t, h.ts, "/api/v1/playlists/"+plain.Pid, h.token))
+	if det.Rule == nil || det.Rule.Root.Field == nil || *det.Rule.Root.Field != "mediaType" {
+		t.Fatalf("stored rule came back rewritten: %+v", det.Rule)
+	}
+}

@@ -17,6 +17,7 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
+import 'package:waxdeck/src/search/search_controller.dart';
 import 'package:waxdeck/src/settings/settings_screen.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
 import 'package:waxdeck/src/shell/adaptive_shell.dart';
@@ -93,8 +94,8 @@ Future<ProviderContainer> _pumpShell(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      // Animations off: the deck bar's VU needle repeats for as long as
-      // something is playing, which is the point of it and the end of
+      // Animations off: the deck bar's indicators run for as long as
+      // something is playing, which is the point of them and the end of
       // `pumpAndSettle`. Built from the view, so the size class every
       // one of these tests keys off is still the window's own.
       child: MediaQuery(
@@ -774,6 +775,146 @@ void main() {
 
     expect(find.byType(HomeScreen), findsOneWidget);
     expect(_location(container), WaxRoute.home);
+  });
+
+  group('the sidebar search field', () {
+    testWidgets('is live, and the only field on the search screen', (
+      tester,
+    ) async {
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+
+      // One field, in the chrome, before anything has been searched: the
+      // header used to be a launcher that opened a screen with a second
+      // field in it, so the click landed somewhere the typing did not.
+      final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
+      expect(field, findsOne);
+      expect(_location(container), WaxRoute.home);
+
+      // Focusing it is what opens the screen, and the caret stays put
+      // because the field is in the shell frame rather than in the route.
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      expect(_location(container), startsWith(WaxRoute.search));
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus,
+        isTrue,
+      );
+
+      await tester.enterText(field, 'night');
+      await tester.pump(SearchQuery.debounce);
+      await tester.pumpAndSettle();
+
+      // Still one field: the screen brings none of its own.
+      expect(find.bySemanticsIdentifier(SemanticsIds.searchField), findsOne);
+      expect(container.read(searchQueryProvider), 'night');
+    });
+
+    testWidgets('navigates once, however many characters are typed', (
+      tester,
+    ) async {
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+      final router = container.read(routerProvider);
+      final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      final depth = router.routerDelegate.currentConfiguration.matches.length;
+
+      // On web every `go` mints a history entry, so routing per keystroke
+      // would make one word several back presses. The one navigation this
+      // feature makes is the focus one, already spent above.
+      for (final prefix in <String>['n', 'ni', 'nig', 'nigh', 'night']) {
+        await tester.enterText(field, prefix);
+        await tester.pump(SearchQuery.debounce);
+      }
+      await tester.pumpAndSettle();
+
+      expect(_location(container), startsWith(WaxRoute.search));
+      expect(
+        router.routerDelegate.currentConfiguration.matches,
+        hasLength(depth),
+      );
+    });
+
+    testWidgets('takes its text with it when focus opens the screen', (
+      tester,
+    ) async {
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+      final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
+
+      // Typed here, then carried away and back: the search screen adopts
+      // the location's query as the one being answered, so opening it
+      // with a bare `/search` would submit an empty query and the shell
+      // would write that emptiness straight back into the field - the
+      // same class of failure as the launcher this replaced.
+      await tester.enterText(field, 'nightjar');
+      await tester.pump(SearchQuery.debounce);
+      await tester.pumpAndSettle();
+      container.read(routerProvider).go(WaxRoute.music);
+      await tester.pumpAndSettle();
+
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      expect(_location(container), startsWith(WaxRoute.search));
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'nightjar',
+      );
+      expect(container.read(searchQueryProvider), 'nightjar');
+    });
+
+    testWidgets(
+      'remembers what was submitted, like the screen own field does',
+      (tester) async {
+        final container = await _pumpShell(tester, size: const Size(1000, 900));
+        final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
+
+        // At sidebar width the screen draws no field, so this is the only
+        // one there is: without the second step a desktop session never
+        // accumulates a recent search and the surface offering them back
+        // stays empty for good.
+        await tester.enterText(field, 'nightjar');
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pumpAndSettle();
+
+        expect(container.read(recentSearchesProvider), contains('nightjar'));
+      },
+    );
+
+    testWidgets('keeps its text when the branch under it swaps', (
+      tester,
+    ) async {
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+      final field = find.bySemanticsIdentifier(SemanticsIds.searchField);
+      await tester.enterText(field, 'night');
+      await tester.pump(SearchQuery.debounce);
+      await tester.pumpAndSettle();
+
+      // The controller lives in the shell frame, above the routed
+      // navigator, which is the whole reason this shape works: results
+      // swap in underneath and the field keeps what was typed in it.
+      container.read(routerProvider).go(WaxRoute.music);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'night',
+      );
+    });
+
+    testWidgets('is absent below sidebar width, where the screen owns one', (
+      tester,
+    ) async {
+      final container = await _pumpShell(tester, size: const Size(400, 800));
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.searchField),
+        findsNothing,
+      );
+
+      container.read(routerProvider).go(WaxRoute.search);
+      await tester.pumpAndSettle();
+      // Exactly one, and it is the screen's: two would be the
+      // synchronisation problem the launcher used to avoid by being dead.
+      expect(find.bySemanticsIdentifier(SemanticsIds.searchField), findsOne);
+    });
   });
 
   group('active destination', () {

@@ -54,7 +54,7 @@ func applyItemFilter(b *query.Builder, filter ItemFilter) (*query.Builder, []str
 // one browse-dimension bucket) in stable (title, pid) order for the
 // acting user. The cursor is WaxBin's token inside a scope envelope.
 func (l *Library) Items(ctx context.Context, uc *UserCtx, filter ItemFilter, cursor string, limit int) (Page, error) {
-	b, scope, err := applyItemFilter(query.New(query.EntityItems).OrderBy("title", false), filter)
+	b, scope, err := applyItemFilter(visibleItems().OrderBy("title", false), filter)
 	if err != nil {
 		return Page{}, err
 	}
@@ -131,7 +131,7 @@ var collectionLists = map[string]func() query.Node{
 // comes back full. It is the same filter the bucket's own listing uses,
 // so a count, the list it opens, and a shuffle over it cannot disagree.
 func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter ItemFilter, seed int64, cursor string, limit int) (Page, error) {
-	b, scope, err := applyItemFilter(query.New(query.EntityItems), filter)
+	b, scope, err := applyItemFilter(visibleItems(), filter)
 	if err != nil {
 		return Page{}, err
 	}
@@ -157,18 +157,18 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter I
 	if err := browseScopeKindError(dl, list, filter, scope[1], scope[2]); err != nil {
 		return Page{}, err
 	}
+	// Unconditionally, unlike before ADR-0048: the state predicate is
+	// always there now, so there is no longer an unfiltered case to
+	// short-circuit. The catalog validates UserPID whenever it compiles a
+	// query, so every list resolves the acting user where only a filtered
+	// one used to. Nothing an ItemFilter can name is a per-user field, so
+	// the join it guards is still never built; the lookup is validation.
 	opts := read.BrowseOptions{
 		UserPID: model.PID(uc.CatalogPID),
 		Seed:    seed,
 		Cursor:  read.Cursor(token),
 		Limit:   limit,
-	}
-	// Only when something narrows it: a built query always names its
-	// entity, so passing one unconditionally would never be the zero
-	// Query the catalog short-circuits on, and an unfiltered list would
-	// grow a user lookup and start rejecting a stale UserPID.
-	if filter != (ItemFilter{}) {
-		opts.Query = b.Build()
+		Query:   b.Build(),
 	}
 	page, err := l.lib.Browse(ctx, dl, opts)
 	if err != nil {
@@ -313,10 +313,32 @@ func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page, scope 
 // the pool and SearchResults.Truncated reports when it filled.
 const searchMaxCandidates = 5000
 
+// searchWidenFactor is how much wider the second pass asks for when the
+// first came back short. Four rather than a smaller nudge because the
+// case it exists for is not one stray hit: an album or a discography
+// deleted to the trash in one go matches its own name best, so the
+// archived rows take the *top* of the ranking and can fill a whole
+// group. Bounded and one-shot, so the worst case is one extra pass over
+// a pool that was ranked anyway.
+const searchWidenFactor = 4
+
 // Search runs grouped full-text search. Restricted callers get item
 // hits filtered by library visibility, and artist and album groups
 // filtered by entity library attribution: an entity survives when one
 // of the libraries holding its members is granted to the caller.
+//
+// Every filter here runs after the catalog has already capped each group,
+// so a group can come back short of `limit`. Three of them only ever bite
+// a restricted caller; the archived filter (ADR-0048) bites everyone,
+// which is why this widens and retries where the others never had to: on
+// a single-administrator install, which is most of them, search could not
+// come back short before archived items were filtered out of it.
+//
+// The retry is conditional, not a blanket over-fetch, because the pass
+// that pays for it is the rare one. A blanket multiplier would widen the
+// hydration batch on every keystroke of a debounced field to compensate
+// for a trash that is usually empty, and it would still not fill a group
+// the trash had emptied outright.
 func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) (SearchResults, error) {
 	// A restricted caller with no granted libraries can see nothing: every
 	// item hit fails the visibility check below and entity groups are
@@ -325,7 +347,37 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 	if !uc.AllLibraries && len(uc.Libraries) == 0 {
 		return SearchResults{Query: q}, nil
 	}
-	opts := read.SearchOptions{Limit: limit, MaxCandidates: searchMaxCandidates}
+	out, short, err := l.searchPass(ctx, uc, q, limit, limit)
+	if err != nil || !short {
+		return out, err
+	}
+	// Some group was cut off by the cap *and* lost hits to filtering, so
+	// there are more matches behind the cap and they might be real ones.
+	wider, _, err := l.searchPass(ctx, uc, q, limit*searchWidenFactor, limit)
+	if err != nil {
+		// The narrow answer is already valid, just possibly short: a
+		// second failure right after a first success is catalog trouble,
+		// and serving what is in hand beats failing the search over it.
+		l.log.Warn("widening a short search", "err", err)
+		return out, nil
+	}
+	return wider, nil
+}
+
+// searchPass runs one grouped search: `fetch` hits per group out of the
+// catalog, filtered, then truncated to `want`.
+//
+// The two differ only on the widening pass. `want` is the contract's
+// per-group cap (`limit`), so a wider fetch never hands back more than
+// was asked for.
+//
+// The bool reports whether widening could help: some group came back
+// exactly at `fetch` (so the cap, not the corpus, is what ended it), lost
+// hits to filtering, and is still short of `want`. A group the corpus
+// ended has nothing more behind it and re-asking would rank the same
+// rows again.
+func (l *Library) searchPass(ctx context.Context, uc *UserCtx, q string, fetch, want int) (SearchResults, bool, error) {
+	opts := read.SearchOptions{Limit: fetch, MaxCandidates: searchMaxCandidates}
 	// A restricted caller's item hits are filtered by library visibility
 	// below; scoping the FTS pool to the same libraries up front shrinks
 	// the worst-case ranking set and drops fileless items, which fail
@@ -340,9 +392,22 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 	}
 	res, err := l.lib.Search(ctx, q, opts)
 	if err != nil {
-		return SearchResults{}, classify(err)
+		return SearchResults{}, false, classify(err)
 	}
-	convEntity := func(hits []read.SearchHit, prefix string, kind read.EntityKind) ([]SearchHit, error) {
+	// Set by each group that came back cap-bound and shorter than asked.
+	short := false
+	// truncate cuts a filtered group to the contract's cap and records
+	// whether widening could still fill it.
+	truncate := func(hits []SearchHit, raw int) []SearchHit {
+		if raw == fetch && len(hits) < raw && len(hits) < want {
+			short = true
+		}
+		if len(hits) > want {
+			return hits[:want]
+		}
+		return hits
+	}
+	convEntity := func(hits []read.SearchHit, prefix string, kind read.EntityKind, group read.GroupBy, field string) ([]SearchHit, error) {
 		// Entities carry no stored library column, so a restricted caller's
 		// hits are attributed through the libraries holding their member
 		// items, in one batched lookup per kind. Full-visibility callers
@@ -361,8 +426,15 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 				return nil, classify(err)
 			}
 		}
+		live, err := l.entitiesWithLiveMembers(ctx, hits, group, field)
+		if err != nil {
+			return nil, err
+		}
 		out := make([]SearchHit, 0, len(hits))
 		for _, h := range hits {
+			if !live[h.PID] {
+				continue
+			}
 			if !uc.AllLibraries && !l.entityInLibraries(infos[h.PID], uc) {
 				continue
 			}
@@ -373,12 +445,26 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 				Subtitle: h.Subtitle,
 			})
 		}
-		return out, nil
+		return truncate(out, len(hits)), nil
+	}
+	// read.SearchOptions carries no query, so the state predicate cannot
+	// reach the FTS join and archived hits are dropped after the fact
+	// instead (ADR-0048; a real predicate is an upstream ask). One batch
+	// for every item group, since the whole result set is in hand.
+	trashed, err := l.archivedHits(ctx, res.Tracks, res.Books, res.Episodes)
+	if err != nil {
+		return SearchResults{}, false, err
 	}
 	subs := l.newSubscriptionFilter(uc)
 	convItem := func(hits []read.SearchHit, prefix string) []SearchHit {
 		out := make([]SearchHit, 0, len(hits))
 		for _, h := range hits {
+			// Like the three filters below it, this one runs after the
+			// per-group cap; unlike them it applies to every caller, so it
+			// is what makes the widening pass worth having.
+			if trashed[h.PID] {
+				continue
+			}
 			if !uc.AllLibraries && !l.itemVisible(ctx, uc, h.PID) {
 				continue
 			}
@@ -397,17 +483,23 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 				Subtitle: h.Subtitle,
 			})
 		}
-		return out
+		return truncate(out, len(hits))
 	}
-	artists, err := convEntity(res.Artists, PrefixArtist, read.EntityArtist)
+	artists, err := convEntity(res.Artists, PrefixArtist, read.EntityArtist, read.GroupArtist, "artist_pid")
 	if err != nil {
-		return SearchResults{}, err
+		return SearchResults{}, false, err
 	}
-	albums, err := convEntity(res.Albums, PrefixAlbum, read.EntityAlbum)
+	albums, err := convEntity(res.Albums, PrefixAlbum, read.EntityAlbum, read.GroupAlbum, "album_pid")
 	if err != nil {
-		return SearchResults{}, err
+		return SearchResults{}, false, err
 	}
-	return SearchResults{
+	// Built before the return rather than inside it: `truncate` is what
+	// sets `short`, and the spec orders the calls in a composite literal
+	// against each other but not against the read of a variable beside
+	// it. Today's compiler evaluates them first; a return that quietly
+	// stopped doing so would disable the widening pass with nothing
+	// failing but the one test that covers it.
+	out := SearchResults{
 		Query:     res.Query,
 		Artists:   artists,
 		Albums:    albums,
@@ -415,7 +507,69 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 		Books:     convItem(res.Books, PrefixBook),
 		Episodes:  convItem(res.Episodes, PrefixEpisode),
 		Truncated: res.Truncated,
-	}, nil
+	}
+	return out, short, nil
+}
+
+// archivedHits reports which of the search's item hits are in the trash,
+// in one batched hydration across every group. Nothing to look up
+// answers an empty set rather than a nil error path, so the caller reads
+// the same either way.
+func (l *Library) archivedHits(ctx context.Context, groups ...[]read.SearchHit) (map[model.PID]bool, error) {
+	var pids []model.PID
+	for _, g := range groups {
+		for _, h := range g {
+			pids = append(pids, h.PID)
+		}
+	}
+	if len(pids) == 0 {
+		return nil, nil
+	}
+	views, err := l.lib.GetMany(ctx, pids)
+	if err != nil {
+		return nil, classify(err)
+	}
+	out := make(map[model.PID]bool, len(views))
+	for _, v := range views {
+		if archived(v) {
+			out[v.PID] = true
+		}
+	}
+	return out, nil
+}
+
+// entitiesWithLiveMembers reports which of a search's entity hits still
+// hold at least one item a listing would offer.
+//
+// Artist and album hits come from entity FTS with no item join, so the
+// per-hit filter convItem uses is not available (ADR-0048). Left
+// unfiltered, an artist whose every track is in the trash stays a search
+// hit and opens onto an empty facet drill, while the browse index has
+// already dropped them because facetScopeQuery aggregates over items.
+//
+// One facet over the hit pids answers the whole group: the same
+// dimension the drill pairs with, so search and browse cannot disagree
+// about what "this artist has something" means.
+func (l *Library) entitiesWithLiveMembers(ctx context.Context, hits []read.SearchHit, group read.GroupBy, field string) (map[model.PID]bool, error) {
+	if len(hits) == 0 {
+		return nil, nil
+	}
+	arms := make([]query.Node, 0, len(hits))
+	for _, h := range hits {
+		arms = append(arms, query.Cond{Field: field, Op: query.OpIs, Value: string(h.PID)})
+	}
+	q := visibleItems().WhereNode(query.Or{Nodes: arms}).Build()
+	res, err := l.lib.Facet(ctx, q, group, read.FacetOrderLabel, 0, model.PID(""))
+	if err != nil {
+		return nil, classify(err)
+	}
+	out := make(map[model.PID]bool, len(res.Buckets))
+	for _, b := range res.Buckets {
+		if b.EntityPID != "" && b.Count > 0 {
+			out[b.EntityPID] = true
+		}
+	}
+	return out, nil
 }
 
 // EntityNames resolves the catalog's display name for a batch of API

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/connect/connect_bus.dart';
 import 'package:waxdeck/src/connect/connect_providers.dart';
@@ -17,6 +18,7 @@ import 'package:waxdeck/src/queue/queue_panel.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/side_panel.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -28,6 +30,12 @@ import 'fakes.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
 import 'queue_persistence_test.dart' show RecordingQueueStore;
+
+/// The widget carrying one semantics handle. By widget rather than by
+/// semantics node, because these tests do not enable the semantics tree.
+Finder _byId(String id) => find.byWidgetPredicate(
+  (widget) => widget is Semantics && widget.properties.identifier == id,
+);
 
 const _album = QueueSource(
   kind: QueueSourceKind.album,
@@ -847,6 +855,87 @@ void main() {
       expect(find.text('Somewhere Else'), findsNothing);
 
       harness.container.read(remoteSessionProvider.notifier).release();
+      await harness.endPlayback(tester);
+    });
+  });
+
+  group('opening the player', () {
+    testWidgets('is one push however many times the bar is clicked', (
+      tester,
+    ) async {
+      // The expand is one onTap, so a double click fires it twice. That
+      // is correct behaviour and it has to be idempotent: without the
+      // guard the second click stacks a second player over the first, and
+      // backing out once looks like nothing happened. A double-tap
+      // recogniser would be the wrong fix - it costs the disambiguation
+      // delay and swallows the first tap.
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: FakeEngine(),
+        routed: true,
+      );
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+
+      final router = GoRouter.of(tester.element(find.byType(DeckBar)));
+      final before = router.routerDelegate.currentConfiguration.matches.length;
+
+      final expand = _byId(SemanticsIds.deckExpand);
+      expect(expand, findsOne, reason: 'the bar says how to open the player');
+      await tester.tap(expand);
+      await tester.pumpAndSettle();
+      expect(
+        router.routerDelegate.currentConfiguration.matches,
+        hasLength(before + 1),
+      );
+
+      // And again on a stack that already has it, which is what the
+      // second half of a double click is. `pushOnce` is what makes it a
+      // no-op; the bar itself is gone from this host once the player is
+      // up, so the guard is exercised through the router.
+      router.pushOnce(WaxRoute.nowPlaying);
+      await tester.pumpAndSettle();
+      expect(
+        router.routerDelegate.currentConfiguration.matches,
+        hasLength(before + 1),
+        reason: 'a second click must not stack a second player',
+      );
+
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('takes a click on the padding, not only on what is drawn', (
+      tester,
+    ) async {
+      // deferToChild left the horizontal padding, the gutter between the
+      // artwork and the title, and the slack around a shrink-wrapped
+      // title block all falling through, which is the half of the bug
+      // that reads as "sometimes works and sometimes does not".
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final harness = await _pumpDeck(
+        tester,
+        repo: repo,
+        engine: FakeEngine(),
+        size: const Size(500, 900),
+        routed: true,
+      );
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+
+      final router = GoRouter.of(tester.element(find.byType(DeckBar)));
+      final before = router.routerDelegate.currentConfiguration.matches.length;
+
+      // The bar's left edge, inside its padding and over nothing drawn.
+      final bar = tester.getRect(find.byType(DeckBar));
+      await tester.tapAt(Offset(bar.left + 3, bar.center.dy));
+      await tester.pumpAndSettle();
+      expect(
+        router.routerDelegate.currentConfiguration.matches,
+        hasLength(before + 1),
+      );
+
       await harness.endPlayback(tester);
     });
   });

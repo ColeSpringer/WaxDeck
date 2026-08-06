@@ -834,9 +834,15 @@ class _Monogram extends StatelessWidget {
 
   final String name;
 
-  /// The disc matches the glyph box a destination draws, so an account
-  /// row sits on the same baseline as the rows above it.
-  static const double size = 24;
+  /// Bigger than the 22 px glyph a destination draws, deliberately.
+  ///
+  /// At 24 with a 12 px letter this was the smallest thing in a bar whose
+  /// neighbours draw 20 to 22 px glyphs in 44 px boxes, and it is the one
+  /// control somebody has to find without already knowing where it is.
+  /// A disc reads smaller than a glyph of the same box anyway, because
+  /// the letter inside it is what carries the meaning; 32 puts the letter
+  /// at 16 and still leaves six pixels a side inside the touch target.
+  static const double size = 32;
 
   @override
   Widget build(BuildContext context) {
@@ -871,7 +877,7 @@ class _Monogram extends StatelessWidget {
               maxLines: 1,
               softWrap: false,
               // Upper-casing can lengthen a cluster (ß becomes SS), and
-              // the disc is a fixed 24: clip rather than paint over it.
+              // the disc is a fixed width: clip rather than paint over it.
               overflow: TextOverflow.clip,
               style: WaxType.label.copyWith(
                 color: colors.onAccentContainer,

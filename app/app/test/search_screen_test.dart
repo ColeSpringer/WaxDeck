@@ -40,7 +40,11 @@ Future<ProviderContainer> _pump(
   /// to reproduce.
   bool atOwnLocation = false,
 }) async {
-  tester.view.physicalSize = const Size(900, 1400);
+  // Below sidebar width, which is where the screen owns a field. At and
+  // above it the shell's header is the live field and the screen draws
+  // none, so these cases would have nothing to type into; the pairing is
+  // covered at its own width by `the sidebar's field is the only one`.
+  tester.view.physicalSize = const Size(800, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final container = ProviderContainer(

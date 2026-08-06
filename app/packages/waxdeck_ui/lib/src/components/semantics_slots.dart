@@ -16,6 +16,7 @@ import 'package:flutter/foundation.dart';
 class DeckBarIds {
   const DeckBarIds({
     this.bar,
+    this.expand,
     this.play,
     this.next,
     this.previous,
@@ -34,6 +35,12 @@ class DeckBarIds {
   });
 
   final String? bar;
+
+  /// The visible way into the full player. Its own handle, because the
+  /// two gesture surfaces that also expand the bar are excluded from the
+  /// semantics tree, so this button is the only expand a spec or a
+  /// screen reader can reach.
+  final String? expand;
   final String? play;
   final String? next;
   final String? previous;

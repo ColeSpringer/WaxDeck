@@ -77,6 +77,34 @@ func (h *harness) mirror(t *testing.T, limit int) (map[string]ItemSummary, strin
 	}
 }
 
+// deleteReasons drains the delta from `since` and answers each
+// tombstone's reason by pid. Read-only: it does not advance the caller's
+// cursor, so the assertion and the mirror stay independent.
+func (h *harness) deleteReasons(t *testing.T, since string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	for {
+		page, status := h.syncCatalog(t, "?since="+since)
+		if status != 200 {
+			t.Fatalf("delta status = %d", status)
+		}
+		for _, e := range page.Entries {
+			if e.Op != "delete" {
+				continue
+			}
+			// Tombstones carry the track prefix whatever the item was, so
+			// the map keys on the ULID's own pid form the caller holds.
+			if e.Reason != nil {
+				out[e.Pid] = *e.Reason
+			}
+		}
+		since = page.NextSince
+		if page.More == nil || !*page.More {
+			return out
+		}
+	}
+}
+
 // applyDelta folds delta pages into the mirror until the stream is
 // drained, returning the advanced cursor.
 func (h *harness) applyDelta(t *testing.T, items map[string]ItemSummary, since string) string {
@@ -167,8 +195,67 @@ func TestSyncCatalogMirror(t *testing.T) {
 		t.Fatal("missing-state item dropped from the mirror; only true deletions tombstone")
 	}
 
+	// Trashing is the state that does leave the mirror. Archiving emits
+	// an update rather than a delete on the catalog stream, so without
+	// ADR-0048's tombstone an offline client keeps a track the online
+	// listing has already dropped.
+	var doomed string
+	for pid, it := range items {
+		if it.Title == "Alpha Song" {
+			doomed = pid
+		}
+	}
+	if doomed == "" {
+		t.Fatal("no Alpha Song in the mirror to trash")
+	}
+	resp := h.postJSON(t, "/api/v1/library/items/delete", map[string]any{
+		"pids": []string{doomed}, "mode": "trash",
+	})
+	wantStatus(t, resp, 200, "delete to trash")
+	trashed := h.deleteReasons(t, since)
+	since = h.applyDelta(t, items, since)
+	if _, alive := items[doomed]; alive {
+		t.Fatal("trashed item survived in the mirror; archiving must tombstone")
+	}
+	// Hidden, not removed: the row goes and the bytes stay, because a
+	// restore would otherwise cost the whole download again (ADR-0048).
+	if got := trashed[doomed]; got != "hidden" {
+		t.Fatalf("trash tombstone reason = %q, want hidden", got)
+	}
+
+	// And a client mirroring from scratch never hears about it at all:
+	// the snapshot drops archived items rather than paying a delete per
+	// trashed row for a mirror that never held one. h.mirror fails on any
+	// entry that is not a hydrated upsert, which is that assertion.
+	fresh, _ := h.mirror(t, 3)
+	if _, there := fresh[doomed]; there {
+		t.Fatal("a fresh snapshot carried the trashed item")
+	}
+
+	// A permanent delete is the other tombstone, and the one that lets a
+	// client reclaim what it downloaded: this one cannot be taken back.
+	// A different item, because the first is already archived and its
+	// bytes are in the trash.
+	var erased string
+	for pid, it := range items {
+		if it.Title == "Bravo Song" {
+			erased = pid
+		}
+	}
+	if erased == "" {
+		t.Fatalf("no Bravo Song in the mirror to delete: %v", items)
+	}
+	resp = h.postJSON(t, "/api/v1/library/items/delete", map[string]any{
+		"pids": []string{erased}, "mode": "permanent",
+	})
+	wantStatus(t, resp, 200, "permanent delete")
+	reasons := h.deleteReasons(t, since)
+	if got := reasons[erased]; got != "removed" {
+		t.Fatalf("permanent-delete tombstone reason = %q, want removed", got)
+	}
+
 	// Parameter validation.
-	resp := get(t, h.ts, "/api/v1/sync/catalog?since=notacursor", h.token)
+	resp = get(t, h.ts, "/api/v1/sync/catalog?since=notacursor", h.token)
 	if resp.StatusCode != 400 {
 		t.Fatalf("malformed cursor status = %d, want 400", resp.StatusCode)
 	}
@@ -771,4 +858,76 @@ func (h *harness) deleteReq(t *testing.T, path string) *http.Response {
 		t.Fatal(err)
 	}
 	return resp
+}
+
+// A restricted caller gets the same tombstone reasons an administrator
+// does, which is not free: archiving is what an item does when it loses
+// its last file, so an archived view carries no path at all - and
+// viewVisible answers false for every caller without AllLibraries the
+// moment the path is empty. Decided in that order, every restricted
+// caller took the visibility branch, every tombstone they saw said
+// hidden, and the reclaim worked for administrators only.
+func TestSyncCatalogTombstoneReasonsForARestrictedCaller(t *testing.T) {
+	h := newHarness(t)
+
+	libs := decode[Libraries](t, get(t, h.ts, "/api/v1/libraries", h.token))
+	if len(libs.Libraries) != 1 {
+		t.Fatalf("libraries = %d, want 1", len(libs.Libraries))
+	}
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "scoped", "password": "scoped-pass-123",
+		"libraryAccess": map[string]any{
+			"mode": "granted", "libraryPids": []string{libs.Libraries[0].Pid},
+		},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create user status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+	token := loginAs(t, h.ts, "scoped", "scoped-pass-123").Token
+
+	snap := decode[CatalogSyncPage](t, get(t, h.ts, "/api/v1/sync/catalog?limit=100", token))
+	mirrored := map[string]string{}
+	for _, e := range snap.Entries {
+		if e.Item != nil {
+			mirrored[e.Item.Title] = e.Pid
+		}
+	}
+	trashed, gone := mirrored["Alpha Song"], mirrored["Bravo Song"]
+	if trashed == "" || gone == "" {
+		t.Fatalf("restricted snapshot did not carry both fixtures: %v", mirrored)
+	}
+
+	// Both deletes run as the administrator; what is under test is what
+	// the *restricted* caller's delta says about them.
+	resp = h.postJSON(t, "/api/v1/library/items/delete", map[string]any{
+		"pids": []string{trashed}, "mode": "trash",
+	})
+	wantStatus(t, resp, 200, "delete to trash")
+	resp = h.postJSON(t, "/api/v1/library/items/delete", map[string]any{
+		"pids": []string{gone}, "mode": "permanent",
+	})
+	wantStatus(t, resp, 200, "permanent delete")
+
+	reasons := map[string]string{}
+	since := snap.NextSince
+	for {
+		page := decode[CatalogSyncPage](t,
+			get(t, h.ts, "/api/v1/sync/catalog?since="+since, token))
+		for _, e := range page.Entries {
+			if e.Op == "delete" && e.Reason != nil {
+				reasons[e.Pid] = *e.Reason
+			}
+		}
+		since = page.NextSince
+		if page.More == nil || !*page.More {
+			break
+		}
+	}
+	if got := reasons[trashed]; got != "hidden" {
+		t.Errorf("trash reason for a restricted caller = %q, want hidden", got)
+	}
+	if got := reasons[gone]; got != "removed" {
+		t.Errorf("permanent-delete reason for a restricted caller = %q, want removed", got)
+	}
 }

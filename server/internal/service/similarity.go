@@ -232,7 +232,7 @@ func (l *Library) SimilarityStatusFor(ctx context.Context, uc *UserCtx) (Similar
 // analyzed per window, but they are a small minority and the coverage
 // figure tolerates them.
 func (l *Library) countAnalyzableTracks(ctx context.Context, catalogPID string) (int, error) {
-	q := query.New(query.EntityItems).Where("kind", query.OpIs, string(model.KindTrack)).Build()
+	q := visibleItems().Where("kind", query.OpIs, string(model.KindTrack)).Build()
 	n, err := l.lib.Count(ctx, q, model.PID(catalogPID))
 	if err != nil {
 		return 0, classify(err)
@@ -400,7 +400,7 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 		return worked, classify(err)
 	}
 	live := map[string]bool{}
-	q := query.New(query.EntityItems).Where("kind", query.OpIs, string(model.KindTrack)).OrderBy("title", false).Build()
+	q := visibleItems().Where("kind", query.OpIs, string(model.KindTrack)).OrderBy("title", false).Build()
 	cursor := ""
 	for {
 		page, err := l.lib.QueryPage(ctx, q, read.Cursor(cursor), 500, false, defaultUser.PID)

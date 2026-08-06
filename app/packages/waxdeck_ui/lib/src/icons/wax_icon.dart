@@ -433,6 +433,12 @@ abstract final class WaxIcons {
     IconData(0xE2CE, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
+  /// Phosphor `bell`.
+  static const bell = WaxGlyph(
+    IconData(0xE0CE, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE0CE, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
   /// Phosphor `clock-counter-clockwise`.
   static const recent = WaxGlyph(
     IconData(0xE1A0, fontFamily: _regularFamily, fontPackage: _fontPackage),
@@ -515,6 +521,7 @@ abstract final class WaxIcons {
     'errorCircle': errorCircle,
     'success': success,
     'info': info,
+    'bell': bell,
     'recent': recent,
     'waveform': waveform,
     'headphones': headphones,

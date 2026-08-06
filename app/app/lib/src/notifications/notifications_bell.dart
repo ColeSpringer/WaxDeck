@@ -23,13 +23,7 @@ class NotificationsBell extends ConsumerWidget {
     final rows = ref.watch(notificationsProvider);
     final unseen = ref.watch(unseenNotificationsProvider);
     return WaxMenuButton<int>(
-      // The vendored icon subsets carry no bell (ADR-0016: the set is
-      // fixed at `make icons` time, which is network-bound and not part
-      // of `generate`), so this wears the information glyph, which is
-      // what the rows behind it are. Recorded rather than approximated
-      // with a warning triangle, which would say something false about
-      // every row.
-      glyph: WaxIcons.info,
+      glyph: WaxIcons.bell,
       label: unseen == 0 ? 'Notifications' : 'Notifications, $unseen unread',
       semanticsId: SemanticsIds.notificationsBell,
       badge: unseen == 0 ? null : '$unseen',

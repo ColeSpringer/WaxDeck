@@ -216,6 +216,20 @@ class DeckBar extends StatelessWidget {
           ),
         Expanded(
           child: GestureDetector(
+            // Opaque, exactly as WaxPlayerScaffold's collapse detector
+            // is and for the same reason: with deferToChild the padding,
+            // the gutter between artwork and title, and the vertical
+            // slack around a shrink-wrapped title block all fall
+            // through, so the bar expands from some of its surface and
+            // not the rest. Children are hit-tested first, so the
+            // transport keeps its own taps.
+            behavior: HitTestBehavior.opaque,
+            // A pointer gesture and nothing else: the expand affordance
+            // a screen reader uses is the button in the row, which says
+            // what it does. Left in the tree this detector publishes a
+            // tap on a bar-sized node, which is the merge the bar's
+            // explicitChildNodes exists to prevent.
+            excludeFromSemantics: true,
             onTap: actions.onExpand,
             onLongPress: actions.onLongPress,
             onVerticalDragEnd: (details) {
@@ -292,8 +306,21 @@ class DeckBar extends StatelessWidget {
           // clips, so the zone yields before anything overflows.
           Expanded(
             child: GestureDetector(
+              // Same opaque surface and the same semantics exclusion as
+              // the compact bar's, so the desktop zone expands from its
+              // whole rect rather than only where something is drawn.
+              behavior: HitTestBehavior.opaque,
+              excludeFromSemantics: true,
               onTap: actions.onExpand,
               onLongPress: actions.onLongPress,
+              // The compact bar has had this since it shipped, and there
+              // is no reason a mouse-and-trackpad window should not: a
+              // trackpad swipe up over the bar is the same gesture.
+              onVerticalDragEnd: (details) {
+                if ((details.primaryVelocity ?? 0) < -100) {
+                  actions.onExpand?.call();
+                }
+              },
               child: Row(
                 children: <Widget>[
                   _artwork(56),
@@ -320,7 +347,20 @@ class DeckBar extends StatelessWidget {
                   ],
                   if (now.playing) ...<Widget>[
                     const SizedBox(width: WaxSpace.s8),
-                    PlayingIndicator(playing: now.playing, size: 26),
+                    // The same ticker the progress hairline reads, so the
+                    // arm crosses the record at the rate the track plays
+                    // rather than on a clock of its own. Live radio has no
+                    // end to be a fraction of, so it passes none and the
+                    // arm rests partway in.
+                    _Ticking(
+                      ticker: positionTicker,
+                      fallback: now.position,
+                      builder: (context, position) => PlayingIndicator(
+                        playing: now.playing,
+                        progress: now.live ? null : now.fractionAt(position),
+                        size: 26,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -473,23 +513,64 @@ class DeckBar extends StatelessWidget {
     );
   }
 
-  Widget _artwork(double size) => Stack(
-    clipBehavior: Clip.none,
-    children: <Widget>[
-      ArtworkImage(
-        size: size,
-        artwork: now.artwork,
-        monogram: now.title,
-        shape: now.shape,
-        domain: now.domain,
+  /// The cover, and the visible way into the full player.
+  ///
+  /// The bar has always been tappable and swipeable and neither said so,
+  /// which is the whole of the bug: the gesture was discoverable only by
+  /// trying it, and it is the one thing a listener does with this bar
+  /// that had no control. It is also the only expand affordance a screen
+  /// reader or a spec can reach, since both gesture surfaces are excluded
+  /// from the semantics tree.
+  ///
+  /// On the cover rather than beside it, because a 44 px button in the
+  /// left zone is width this bar has not got: at 1000 px the zone is
+  /// already tight enough that adding one overflowed it by four pixels.
+  /// The cover is 48 to 56 px of target that was doing nothing, and a
+  /// caret in its corner says what pressing it does.
+  Widget _artwork(double size) => WaxTappable(
+    label: 'Open the player',
+    semanticsId: ids.expand,
+    onPressed: actions.onExpand,
+    borderRadius: WaxRadius.thumb,
+    // WaxTappable contributes the semantics, the focus, and the ring, and
+    // says in its own doc that it adds no gesture: the child keeps its
+    // own. Without this one the cover would only be pressable by falling
+    // through to the zone detector behind it, so the control would be
+    // real to a screen reader and to the keyboard and an accident to
+    // everyone else.
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: actions.onExpand,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          ArtworkImage(
+            size: size,
+            artwork: now.artwork,
+            monogram: now.title,
+            shape: now.shape,
+            domain: now.domain,
+          ),
+          // Only where the caller wired it, the rule the right cluster
+          // already follows: a caret over a cover that opens nothing
+          // advertises an affordance the node beside it reports as
+          // disabled. Opposite corner from the cast badge, so a routed
+          // session shows both marks rather than one over the other.
+          if (actions.onExpand != null)
+            Positioned(
+              left: -2,
+              bottom: -2,
+              child: WaxIcon(WaxIcons.expand, size: 14, active: true),
+            ),
+          if (now.remoteEndpoint != null)
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: WaxIcon(WaxIcons.cast, size: 14, active: true),
+            ),
+        ],
       ),
-      if (now.remoteEndpoint != null)
-        Positioned(
-          right: -2,
-          bottom: -2,
-          child: WaxIcon(WaxIcons.cast, size: 14, active: true),
-        ),
-    ],
+    ),
   );
 
   Widget _titleBlock(WaxColors colors, {required bool compact}) {

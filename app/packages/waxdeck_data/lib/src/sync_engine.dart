@@ -92,6 +92,31 @@ class SyncEngine {
   /// decided by which build somebody is running.
   Stream<ServerSyncEvent> get serverEvents => _serverEvents.stream;
 
+  /// Pids whose audio the server cannot give back.
+  ///
+  /// A `delete` entry means one of two things and the server says which:
+  /// `removed` is audio deleted outright or a catalog row dropped,
+  /// `hidden` is a transition this caller can come back from (deleted to
+  /// the trash, a grant they lost). Only the first is published, because
+  /// the one thing anybody does with it is reclaim what was downloaded,
+  /// and doing that on a `hidden` would cost the whole transfer again the
+  /// moment somebody restored the item.
+  ///
+  /// The pids are the mirror's own, not the wire's: a tombstone for a
+  /// vanished item cannot name its kind and carries the track prefix
+  /// whatever it was.
+  ///
+  /// Published rather than acted on: the mirror is this package's job,
+  /// and the downloads store and the artwork pins are the app's. An
+  /// unrecognised reason is treated as `hidden` and stays unpublished,
+  /// which is the half that reclaims nothing. **Consumers must reclaim
+  /// one pid at a time**: removing two downloads concurrently lets each
+  /// see the other's row and conclude a shared file is still referenced,
+  /// which leaves it on disk with nothing pointing at it.
+  Stream<String> get itemsRemoved => _itemsRemoved.stream;
+
+  final _itemsRemoved = StreamController<String>.broadcast();
+
   /// Whether the first walk of this session has been made, after which
   /// what arrives is news rather than backlog.
   bool _caughtUp = false;
@@ -117,6 +142,7 @@ class SyncEngine {
     _catalogChanged.close();
     _playStateChanged.close();
     _serverEvents.close();
+    _itemsRemoved.close();
   }
 
   void _setStatus(SyncConnection c) {
@@ -323,9 +349,36 @@ class SyncEngine {
               // Tombstones match on the ULID; the prefix carries no
               // meaning once the item is gone.
               final ulid = _ulidOf(e.pid);
+              // Read before the delete, because the mirror row is what
+              // knows the pid everything else stored. A tombstone for an
+              // item that is genuinely gone cannot name its kind, so it
+              // carries the track prefix whatever the item was - and a
+              // download or an artwork pin for an audiobook was written
+              // under `bk-`. Reclaiming on the wire pid would miss every
+              // one of them.
+              final rows = await (db.select(
+                db.mirrorItems,
+              )..where((t) => t.ulid.equals(ulid))).get();
               await (db.delete(
                 db.mirrorItems,
               )..where((t) => t.ulid.equals(ulid))).go();
+              // The row goes either way; the bytes only when the catalog
+              // has genuinely dropped it.
+              if (e.reason == 'removed') {
+                // The wire pid when nothing was mirrored under that ULID,
+                // which is not the same as nothing to reclaim: a mirror
+                // reset re-snapshots without the archived items, so a
+                // later tombstone for one finds no row to name it. A
+                // reclaim for a pid this client never downloaded is a
+                // no-op, so the fallback costs nothing and rescues the
+                // case where the stored pid did carry the track prefix.
+                if (rows.isEmpty) {
+                  _itemsRemoved.add(e.pid);
+                }
+                for (final row in rows) {
+                  _itemsRemoved.add(row.pid);
+                }
+              }
               changed = true;
             // Unrecognized ops are dropped by contract.
           }

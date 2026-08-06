@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -7,6 +9,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../auth/auth_controller.dart';
 import '../player/deck_bar_host.dart';
 import '../providers.dart';
+import '../search/search_controller.dart';
 import '../settings/client_settings_providers.dart';
 import '../sync/sync_providers.dart';
 import 'lifecycle_banners.dart';
@@ -521,6 +524,142 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   /// offer replaces its predecessor rather than queueing behind it.
   String? _lastRaised;
 
+  /// The sidebar header's search field, owned here and nowhere else.
+  ///
+  /// They belong to the shell frame, above the routed navigator, and that
+  /// is the whole reason the live field works: results swap in underneath
+  /// while the field keeps its focus and its cursor. Owned by anything
+  /// the router rebuilds and every keystroke would drop focus, which is
+  /// worse than the launcher this replaces.
+  final TextEditingController _searchField = TextEditingController();
+  final FocusNode _searchFocus = FocusNode(debugLabel: 'shell-search');
+
+  @override
+  void initState() {
+    super.initState();
+    _searchFocus.addListener(_onSearchFocus);
+  }
+
+  @override
+  void dispose() {
+    _searchFocus.removeListener(_onSearchFocus);
+    _searchField.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  /// Opens the search screen when the field takes the caret.
+  ///
+  /// On focus rather than on the first keystroke, which is the whole
+  /// answer to the bug: the header used to be a launcher that navigated
+  /// on click and left the field somebody was already aiming at behind,
+  /// so the click and the typing landed in different places. The field
+  /// lives above the routed navigator, so it keeps the caret across the
+  /// navigation it triggers, and typing carries on into results that
+  /// swap in underneath. Focusing it is also the only way to reach the
+  /// screen with nothing typed, which the Radio chip needs.
+  void _onSearchFocus() {
+    if (!_searchFocus.hasFocus || !mounted) return;
+    if (widget.location.startsWith(WaxRoute.search)) return;
+    // Carrying whatever is already in the field, not a bare `/search`.
+    // The arriving screen adopts the location's query as the one being
+    // answered, so a bare arrival submits an empty one - and the listener
+    // below then writes that emptiness back into the field, clearing the
+    // text under the caret that just landed there. Which is the failure
+    // this whole change exists to stop, on the way in instead of the way
+    // out. An empty field yields a bare `/search` anyway.
+    context.go(WaxRoute.searchFor(_searchField.text.trim()));
+  }
+
+  @override
+  void didUpdateWidget(AdaptiveShell old) {
+    super.didUpdateWidget(old);
+    // Arriving at search puts the caret in the field, which is what the
+    // screen's own autofocus used to do before the header took the field
+    // over. On the transition only: this rebuilds on every navigation,
+    // and asking for focus on each one would pull it out of whatever a
+    // visitor already had it in.
+    if (old.location.startsWith(WaxRoute.search)) return;
+    if (!widget.location.startsWith(WaxRoute.search)) return;
+    if (!_headerFieldShowing) return;
+    unawaited(_focusHeaderField());
+  }
+
+  /// Puts the caret in the header field once the arriving route has
+  /// settled, which is what the search screen's own autofocus used to do
+  /// before the header took the field over.
+  ///
+  /// Two frames rather than one, and the reason is worth writing down:
+  /// navigating installs the arriving page's focus scope on the frame
+  /// after this shell rebuilds, and a scope that finds nothing focused
+  /// inside itself claims the focus. Asking any earlier is asking and
+  /// then losing it a frame later.
+  Future<void> _focusHeaderField() async {
+    await WidgetsBinding.instance.endOfFrame;
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted && _headerFieldShowing) _searchFocus.requestFocus();
+  }
+
+  /// Whether the sidebar header (and so the live field) is on screen.
+  /// Below sidebar width there is no header, and a collapsed sidebar
+  /// drops it too; the search screen draws its own field in both cases.
+  bool get _headerFieldShowing =>
+      WaxSizeClass.of(context).hasSidebar &&
+      !ref.read(sidebarCollapsedProvider);
+
+  /// Keeps the header field in step with the query, whoever set it.
+  ///
+  /// A recent search, a command-palette hit, and a link all write the
+  /// provider, and the field has to follow them. Typing writes it too, so
+  /// the guard is what stops that from feeding back: the text is already
+  /// what the query says, and assigning it anyway would move the caret to
+  /// the end mid-word.
+  void _listenForQuery() {
+    ref.listen<String>(searchQueryProvider, (previous, next) {
+      if (_searchField.text.trim() == next) return;
+      _searchField.text = next;
+    });
+  }
+
+  /// Takes a keystroke from the header field.
+  ///
+  /// No navigation here: focusing the field already did it, so by the
+  /// time anything is typed the screen is up and the settled query
+  /// reaches the URL through the screen's own debounced `replace`. Going
+  /// per keystroke would mint a browser history entry per character on
+  /// web, which turns "nightjar" into eight back presses.
+  ///
+  /// The guard covers the one case focus does not: text set into the
+  /// field without the caret ever landing in it. It carries the query, so
+  /// the arriving screen adopts what was typed instead of adopting an
+  /// empty location and wiping it.
+  void _onSearchChanged(String value) {
+    ref.read(searchQueryProvider.notifier).type(value);
+    final query = value.trim();
+    if (query.isEmpty) return;
+    if (widget.location.startsWith(WaxRoute.search)) return;
+    context.go(WaxRoute.searchFor(query));
+  }
+
+  /// Takes a submit from the header field.
+  ///
+  /// The same two steps the search screen's own field takes, because at
+  /// sidebar width the screen draws no field and this is the only one
+  /// there is: without the second, a desktop session never accumulates a
+  /// recent search and the surface that offers them back stays empty
+  /// forever. Library queries only, matching the screen: recents are
+  /// offered under the library chips and not the Radio one, so an entry
+  /// stored here would be a shortcut that runs a library search for a
+  /// station name.
+  void _onSearchSubmitted(String value) {
+    final query = value.trim();
+    ref.read(searchQueryProvider.notifier).submit(query);
+    if (query.isEmpty) return;
+    if (!ref.read(searchScopeProvider).isDirectory) {
+      ref.read(recentSearchesProvider.notifier).remember(query);
+    }
+  }
+
   /// Raises the shell's transient messages.
   void _listenForMessages() {
     ref.listen(shellMessengerProvider, (_, next) {
@@ -582,6 +721,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   Widget build(BuildContext context) {
     final chrome = ref.watch(shellChromeProvider);
     _listenForMessages();
+    _listenForQuery();
 
     final router = GoRouter.of(context);
     final frame = WaxShellFrame(
@@ -607,13 +747,20 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
         final verb = WaxAccountVerb.named(name);
         if (verb != null) runAccountVerb(ref, verb);
       },
-      // The search field, where the layout system puts it. A launcher
-      // rather than a live field: the search screen owns the query and
-      // autofocuses its own field, and two fields holding one query is a
-      // synchronisation problem nobody asked for.
+      // The search field, where the layout system puts it, and a real one:
+      // it was a launcher that only opened the screen, so the field
+      // somebody had just clicked went dead under the cursor and the
+      // typing started somewhere else. The screen draws no field of its
+      // own while this one is showing, so there is still exactly one
+      // field holding the query.
       sidebarHeader: SearchField(
-        semanticsId: SemanticsIds.searchLauncher,
-        onTap: () => context.go(WaxRoute.search),
+        controller: _searchField,
+        focusNode: _searchFocus,
+        hint: 'Artists, albums, shows, books',
+        semanticsId: SemanticsIds.searchField,
+        clearSemanticsId: SemanticsIds.searchClear,
+        onChanged: _onSearchChanged,
+        onSubmitted: _onSearchSubmitted,
       ),
       collapsed: ref.watch(sidebarCollapsedProvider),
       onToggleCollapsed: ref.read(sidebarCollapsedProvider.notifier).toggle,

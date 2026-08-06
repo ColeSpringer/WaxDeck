@@ -107,12 +107,14 @@ test('search answers a typed query and opens what it finds', async ({
   await login(page);
 
   // The sidebar header is where the layout system puts search at this
-  // width; it is a launcher, so the screen it opens owns the query.
-  await clickThrough(
-    page.locator(sem(SemanticsIds.searchLauncher)),
-    page.locator(sem(SemanticsIds.searchField)),
-  );
-  await expect(page).toHaveURL(/\/search$/);
+  // width, and it is a real field now: clicking it opens the screen and
+  // keeps the caret, where the launcher it replaces opened a screen and
+  // abandoned the field the cursor was already in. One field throughout,
+  // because the screen draws none of its own while this one is showing.
+  const field = page.locator(sem(SemanticsIds.searchField));
+  await clickThrough(field, page.locator(sem(SemanticsIds.searchFilter('all'))));
+  await expect(page).toHaveURL(/\/search/);
+  await expect(field).toHaveCount(1);
 
   await typeInto(page, page.getByRole('textbox', { name: 'Search' }), 'Alpha');
   await page.locator(sem(SemanticsIds.searchHit('tracks', 0))).waitFor({ timeout: 30_000 });

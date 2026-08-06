@@ -569,9 +569,10 @@ func (l *Library) countShow(
 // showEpisodeQuery is the item-query form of "this show's episodes".
 // `kind is episode` is redundant beside podcast_pid but states intent.
 // The counts are honest because an items query counts an episode nobody
-// has fetched: the file join is a LEFT JOIN with no state filter.
+// has fetched: the file join is a LEFT JOIN with no state filter, and
+// visibleItems drops only archived episodes, keeping remote ones.
 func showEpisodeQuery(pod *model.Podcast) *query.Builder {
-	return query.New(query.EntityItems).
+	return visibleItems().
 		Where("kind", query.OpIs, string(model.KindEpisode)).
 		Where("podcast_pid", query.OpIs, string(pod.PID))
 }
@@ -1164,7 +1165,7 @@ func subscribedEpisodeScope(uc *UserCtx, showPIDs []string) *query.Builder {
 	for _, pid := range showPIDs {
 		arms = append(arms, query.Cond{Field: "podcast_pid", Op: query.OpIs, Value: pid})
 	}
-	q := query.New(query.EntityItems).
+	q := visibleItems().
 		Where("kind", query.OpIs, string(model.KindEpisode)).
 		WhereNode(query.Or{Nodes: arms})
 	if !uc.Explicit {
