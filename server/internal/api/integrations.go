@@ -84,19 +84,29 @@ func (s *Server) DeleteRadioStation(ctx context.Context, req DeleteRadioStationR
 }
 
 func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoRequestObject) (GetRadioPlayInfoResponseObject, error) {
-	_, p, err := s.requireUserCtx(ctx)
+	uc, p, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.svc.RadioStationByPID(ctx, req.Pid); err != nil {
+	station, err := s.svc.RadioStationByPID(ctx, req.Pid)
+	if err != nil {
 		return nil, err
 	}
 	token, _ := s.media.Mint(p.User.ID, req.Pid)
 	out := RadioPlayInfo{
 		Url: "/media/radio/" + url.PathEscape(req.Pid) + "?mt=" + url.QueryEscape(token),
 	}
+	// Read once and passed along, so the two fields describe the same
+	// song: the relay rewrites the title whenever the station announces
+	// one, and a second read could land on the next track.
 	if title := s.svc.RadioNowPlaying(req.Pid); title != "" {
 		out.NowPlaying = ptr(title)
+		// Resolved against this caller's own visibility, since the pid
+		// is going to be used to fetch cover art. Absent is the ordinary
+		// answer and the client falls back to the station's logo.
+		if pid := s.svc.RadioNowPlayingItem(ctx, uc, req.Pid, station.Name, title); pid != "" {
+			out.NowPlayingItemPid = ptr(pid)
+		}
 	}
 	return GetRadioPlayInfo200JSONResponse(out), nil
 }
@@ -188,14 +198,17 @@ func (s *Server) GetRadioStationLogo(ctx context.Context, req GetRadioStationLog
 }
 
 func (s *Server) SearchRadioDirectory(ctx context.Context, req SearchRadioDirectoryRequestObject) (SearchRadioDirectoryResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
 		return nil, err
 	}
 	limit := 25
 	if req.Params.Limit != nil {
 		limit = *req.Params.Limit
 	}
-	entries, err := s.svc.SearchRadioDirectory(ctx, req.Params.Query, limit)
+	// The caller is needed for their locale: the directory's own ranking
+	// is by votes, which knows nothing about where the listener is.
+	entries, err := s.svc.SearchRadioDirectory(ctx, uc, req.Params.Query, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -239,6 +252,15 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "missing or invalid media token")
 		return
 	}
+	// Shared with the enclosure relay: the same account holding the same
+	// kind of resource, counted once.
+	release, ok := s.relayStreams.acquire(user)
+	if !ok {
+		writeError(w, http.StatusTooManyRequests, "rate-limited",
+			"too many concurrent relayed streams for this account")
+		return
+	}
+	defer release()
 	streamURL, err := s.svc.RadioStreamSource(r.Context(), pid)
 	if err != nil {
 		switch service.KindOf(err) {
@@ -251,7 +273,9 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, streamURL, nil)
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, streamURL, nil)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "service-unreachable", "the station could not be contacted")
 		return
@@ -330,19 +354,49 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		}
 		segTitle, segSince = title, time.Now()
 	}
+	// A station is not finite, so neither a size cap nor a rate floor
+	// belongs here: both would eventually cut a healthy listen, which is
+	// the one thing this endpoint exists to allow. The idle deadline is
+	// the bound that survives that argument, since a station sending
+	// nothing at all has stopped being a station and the socket is being
+	// held for no audio.
+	guard := newRelayGuard(relayLimits{idle: radioIdle}, cancel)
+	defer guard.stop()
 	for {
 		n, readErr := resp.Body.Read(buf)
+		// Noted before the write, and the write bracketed, so a listener
+		// whose link cannot keep up with the station is never mistaken
+		// for a station that stopped sending.
+		if !guard.note(n) {
+			// The one thing worth a line on this endpoint. A stream
+			// ending is ordinary and logs nothing, either side of it -
+			// but this is neither side, it is the server cutting a
+			// listener off, and a station that goes quiet for a minute
+			// while somebody is listening to it is a fact the operator
+			// wants.
+			relayed, elapsed := guard.stats()
+			s.log.Warn("the station relay was cut short",
+				"pid", pid, "reason", guard.reason(),
+				"bytes", relayed, "elapsed", elapsed.Round(time.Second))
+			return
+		}
 		if n > 0 {
+			done := guard.writing()
 			if relay != nil {
 				relay.feed(buf[:n], emit, onBlock)
 			} else {
 				emit(buf[:n])
 			}
+			if writeErr == nil {
+				// Live audio wants low latency; flush every chunk. Inside
+				// the bracket with the write, since this is where a
+				// listener who has stopped reading actually blocks.
+				rc.Flush()
+			}
+			done()
 			if writeErr != nil {
 				return
 			}
-			// Live audio wants low latency; flush every chunk.
-			rc.Flush()
 		}
 		if readErr != nil {
 			return

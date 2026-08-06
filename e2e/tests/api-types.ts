@@ -2864,6 +2864,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/podcasts/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the podcast directory
+         * @description Searches a public podcast directory (the iTunes search API) by name, so a show can be subscribed to without finding its feed URL first. Every match carries the `feedUrl` to POST to `/podcasts`, which is why a directory result needs no source kind: it is always an RSS feed. Requires internet; when the directory cannot be reached the endpoint answers `directory-unavailable` and subscribing by URL still works.
+         */
+        get: operations["searchPodcastDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/episodes/{pid}": {
         parameters: {
             query?: never;
@@ -7449,6 +7469,29 @@ export interface components {
             /** @description Cues ordered by `startMs`. */
             cues: components["schemas"]["TranscriptCue"][];
         };
+        /** @description One podcast directory match. */
+        PodcastDirectoryEntry: {
+            /** @description Show name as the directory lists it. */
+            name: string;
+            /** @description The show's RSS feed URL, ready to POST to `/podcasts`. A match with no usable feed URL is dropped server-side rather than returned as unsubscribable. */
+            feedUrl: string;
+            /** @description Publisher or author name. */
+            author?: string;
+            /** @description Show artwork as the directory lists it, drawn directly by the client. There is no proxy for a directory match: cover art is addressed by show pid and a match has none until it is subscribed to. */
+            artworkUrl?: string;
+            /**
+             * @description Primary directory genre.
+             * @example Music
+             */
+            genre?: string;
+            /** @description Directory-reported episode count, 0 when unknown. */
+            episodeCount?: number;
+        };
+        /** @description Podcast directory matches. */
+        PodcastDirectoryResults: {
+            /** @description Matches, best first. */
+            entries: components["schemas"]["PodcastDirectoryEntry"][];
+        };
         /** @description A show's funding pointer from its feed's `<podcast:funding>` tag: a donation or support URL with the label text the feed suggests. */
         PodcastFunding: {
             /**
@@ -7542,6 +7585,11 @@ export interface components {
              * @example Charlie Parker - Ornithology
              */
             nowPlaying?: string;
+            /**
+             * @description A library track this server matched `nowPlaying` to, when it recognised one. Present so a full-screen player can draw the song's own cover art instead of the station logo; absent is the common case and is not a failure, so a client that cannot match must fall back to the station's artwork rather than showing a gap. The match is a best-effort text lookup against the catalog and is never authoritative: it does not mean this server is playing that file, and it is deliberately not used for scrobbling, which reports what the station announced.
+             * @example tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            nowPlayingItemPid?: string;
         };
         /** @description One station directory match. */
         RadioDirectoryEntry: {
@@ -13848,6 +13896,42 @@ export interface operations {
             404: components["responses"]["NotFound"];
             502: components["responses"]["FeedUnreachable"];
             503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    searchPodcastDirectory: {
+        parameters: {
+            query: {
+                /** @description Show name search terms. */
+                query: string;
+                /** @description Maximum directory entries to return. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Directory matches, best first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PodcastDirectoryResults"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            /** @description The podcast directory could not be reached, or refused this server's request rate (code `directory-unavailable`). Subscribing by feed URL is unaffected. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getEpisode: {

@@ -1701,10 +1701,39 @@ class RadioDirectoryEntry {
   final int? bitrateKbps;
 }
 
+/// One podcast directory match, ready to subscribe to.
+///
+/// [feedUrl] is the whole point of a match: it is what a subscribe
+/// request takes, which is why a directory result needs no source kind
+/// to be chosen for it. [artworkUrl] is the directory's own URL, drawn
+/// directly, because a show has no pid to address cover art by until it
+/// is subscribed to.
+class PodcastDirectoryEntry {
+  const PodcastDirectoryEntry({
+    required this.name,
+    required this.feedUrl,
+    this.author,
+    this.artworkUrl,
+    this.genre,
+    this.episodeCount,
+  });
+
+  final String name;
+  final String feedUrl;
+  final String? author;
+  final String? artworkUrl;
+  final String? genre;
+  final int? episodeCount;
+}
+
 /// A resolved, tokenized station stream, absolute against the client
 /// base URL.
 class RadioPlayInfo {
-  const RadioPlayInfo({required this.url, this.nowPlaying});
+  const RadioPlayInfo({
+    required this.url,
+    this.nowPlaying,
+    this.nowPlayingItemPid,
+  });
 
   final String url;
 
@@ -1713,6 +1742,12 @@ class RadioPlayInfo {
   /// playing to keep it fresh; keep the open stream and ignore the
   /// fresh url.
   final String? nowPlaying;
+
+  /// A library track the server matched [nowPlaying] to, when it
+  /// recognised one, so a full-screen player can draw the song's own
+  /// cover. Absent is the common case and not a failure: fall back to
+  /// the station's artwork rather than showing a gap.
+  final String? nowPlayingItemPid;
 }
 
 /// One outbound scrobbling connection slot.

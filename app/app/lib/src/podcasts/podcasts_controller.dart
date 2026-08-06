@@ -46,6 +46,19 @@ final subscriptionsProvider =
       SubscriptionsController.new,
     );
 
+/// What a directory match says under its name: who makes it, what it is
+/// about, and how much of it there is, which is how a listener picks
+/// between six shows sharing a word in their titles.
+String? describePodcastDirectoryEntry(PodcastDirectoryEntry entry) {
+  final parts = <String>[
+    if (entry.author != null && entry.author!.isNotEmpty) entry.author!,
+    if (entry.genre != null && entry.genre!.isNotEmpty) entry.genre!,
+    if (entry.episodeCount != null && entry.episodeCount! > 0)
+      '${entry.episodeCount} ${entry.episodeCount == 1 ? 'episode' : 'episodes'}',
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
+}
+
 /// How the hub orders the subscription grid.
 enum SubscriptionSort {
   /// Newest episode first: what a listener opening the app wants.

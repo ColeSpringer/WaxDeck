@@ -85,6 +85,35 @@ func (s *Server) SubscribePodcast(ctx context.Context, req SubscribePodcastReque
 	return SubscribePodcast200JSONResponse(subscriptionJSON(sub)), nil
 }
 
+// SearchPodcastDirectory answers show name searches. Every result
+// carries the feed URL to subscribe with, so a match needs no source
+// kind: a directory hit is always RSS.
+func (s *Server) SearchPodcastDirectory(ctx context.Context, req SearchPodcastDirectoryRequestObject) (SearchPodcastDirectoryResponseObject, error) {
+	if _, _, err := s.requireUserCtx(ctx); err != nil {
+		return nil, err
+	}
+	limit := 25
+	if req.Params.Limit != nil {
+		limit = *req.Params.Limit
+	}
+	entries, err := s.svc.SearchPodcastDirectory(ctx, req.Params.Query, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := PodcastDirectoryResults{Entries: make([]PodcastDirectoryEntry, 0, len(entries))}
+	for _, e := range entries {
+		w := PodcastDirectoryEntry{Name: e.Name, FeedUrl: e.FeedURL}
+		setOpt(&w.Author, e.Author)
+		setOpt(&w.ArtworkUrl, e.ArtworkURL)
+		setOpt(&w.Genre, e.Genre)
+		if e.EpisodeCount > 0 {
+			w.EpisodeCount = ptr(e.EpisodeCount)
+		}
+		out.Entries = append(out.Entries, w)
+	}
+	return SearchPodcastDirectory200JSONResponse(out), nil
+}
+
 func (s *Server) GetPodcast(ctx context.Context, req GetPodcastRequestObject) (GetPodcastResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {

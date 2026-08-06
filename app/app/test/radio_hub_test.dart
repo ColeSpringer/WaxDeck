@@ -67,8 +67,15 @@ ProviderContainer _container(
   FakeEngine? engine,
   FakeArtworkStore? artwork,
   List<Override> extra = const <Override>[],
+
+  /// Riverpod retries a failed provider on a backoff of its own, which
+  /// leaves a timer pending past the end of a test that is *about* the
+  /// failure. Those tests turn it off so the error state holds still;
+  /// everything else keeps the real behaviour.
+  bool retryFailures = true,
 }) {
   final container = ProviderContainer(
+    retry: retryFailures ? ProviderContainer.defaultRetry : (_, _) => null,
     overrides: [
       repositoryProvider.overrideWithValue(repo),
       audioEngineProvider.overrideWithValue(engine ?? FakeEngine()),
@@ -171,10 +178,17 @@ void main() {
       isFalse,
     );
 
-    // A station with no logo asks for nothing at all, rather than spending
-    // a 404 per paint to learn what the row already knows.
+    // A station whose row names no logo is asked for too, and that is the
+    // bug this closes rather than a regression. It used to ask for
+    // nothing, on the reasoning that the row already knew there was
+    // nothing to get - but that is every By-URL station and every
+    // directory entry whose favicon was blank, SVG, or dead, and they all
+    // drew a monogram forever. The server now goes looking for one, so a
+    // blank logoUrl no longer means there is nothing to fetch. A genuine
+    // miss is still the 404 the monogram covers, cached server-side.
     final deck = cards.firstWhere((c) => c.data.title == 'Deck Radio');
-    expect(deck.data.artwork, isNull);
+    expect(deck.data.artwork, isNotNull);
+    expect(artwork.requested, contains(repo.radioLogoUrlFor('rs-2')));
   });
 
   testWidgets('pinning puts a station on the dial and unpinning takes it '
@@ -605,7 +619,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('By URL'));
     await tester.pumpAndSettle();
-    await tester.enterText(_byId(SemanticsIds.radioNameField), 'Dupe FM');
     await tester.enterText(
       _byId(SemanticsIds.radioUrlField),
       'https://stream.example/rs-1',
@@ -619,6 +632,91 @@ void main() {
       find.text('a station with this stream URL already exists'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('By URL is one paste field, with the rest behind a disclosure', (
+    tester,
+  ) async {
+    // What somebody has when they choose By URL is an address on the
+    // clipboard. The name, website, and logo are answers nobody is
+    // waiting on: the server discovers the last two, and the first
+    // falls back to the stream's own host.
+    final repo = _repo();
+    await _pumpHub(tester, _container(repo));
+
+    await tester.tap(_byId(SemanticsIds.radioAdd));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('By URL'));
+    await tester.pumpAndSettle();
+
+    expect(_byId(SemanticsIds.radioUrlField), findsOneWidget);
+    expect(_byId(SemanticsIds.radioNameField), findsNothing);
+    expect(_byId(SemanticsIds.radioHomepageField), findsNothing);
+    expect(_byId(SemanticsIds.radioLogoField), findsNothing);
+
+    await tester.enterText(
+      _byId(SemanticsIds.radioUrlField),
+      'http://www.somafm.com/groovesalad',
+    );
+    await tester.tap(_byId(SemanticsIds.radioAddConfirm));
+    await tester.pumpAndSettle();
+
+    final added = repo.radioStationsByPid.values.last;
+    expect(added.streamUrl, 'http://www.somafm.com/groovesalad');
+    // The host, minus a `www.` that says nothing about the station.
+    expect(added.name, 'somafm.com');
+  });
+
+  testWidgets('the disclosure brings back the optional fields', (tester) async {
+    final repo = _repo();
+    await _pumpHub(tester, _container(repo));
+
+    await tester.tap(_byId(SemanticsIds.radioAdd));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('By URL'));
+    await tester.pumpAndSettle();
+    await tester.tap(_byId(SemanticsIds.radioMoreOptions));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(_byId(SemanticsIds.radioNameField), 'Groove Salad');
+    await tester.enterText(
+      _byId(SemanticsIds.radioUrlField),
+      'https://ice.somafm.com/groovesalad',
+    );
+    await tester.enterText(
+      _byId(SemanticsIds.radioHomepageField),
+      'https://somafm.com',
+    );
+    await tester.tap(_byId(SemanticsIds.radioAddConfirm));
+    await tester.pumpAndSettle();
+
+    final added = repo.radioStationsByPid.values.last;
+    expect(added.name, 'Groove Salad');
+    expect(added.homepageUrl, 'https://somafm.com');
+  });
+
+  testWidgets('clearing a name while editing asks rather than renaming', (
+    tester,
+  ) async {
+    // The host fallback belongs to adding, where there is no name to
+    // fall back to. An edit opened with the name visible and filled in,
+    // so blanking it is deliberate - and answering that by silently
+    // renaming the station after its stream host is the edit doing
+    // something nobody asked for.
+    final repo = _repo();
+    await _pumpHub(tester, _container(repo));
+
+    await tester.tap(_byId(SemanticsIds.radioMenu('rs-2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit station').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(_byId(SemanticsIds.radioNameField), '');
+    await tester.tap(_byId(SemanticsIds.radioAddConfirm));
+    await tester.pumpAndSettle();
+
+    expect(find.text('A station needs a name.'), findsOneWidget);
+    expect(repo.radioStationsByPid['rs-2']?.name, 'Deck Radio');
   });
 
   testWidgets('editing a station keeps its pid and re-points its logo', (
@@ -696,6 +794,94 @@ void main() {
       expect(
         repo.radioStationsByPid.values.map((s) => s.name),
         contains('Jazz24'),
+      );
+    });
+
+    testWidgets('stations already here are listed above the directory', (
+      tester,
+    ) async {
+      // Stations are not in the FTS index and never will be - they live
+      // in their own table - so a station somebody added five minutes
+      // ago was unfindable by the surface built for finding things.
+      final repo = _repo()
+        ..directoryEntries = const [
+          RadioDirectoryEntry(
+            name: 'Jazz24',
+            streamUrl: 'https://jazz24.example/stream',
+            country: 'United States',
+          ),
+        ];
+      final container = _container(repo, engine: FakeEngine());
+      await pumpSearch(tester, container);
+
+      await tester.tap(_byId(SemanticsIds.searchFilter('radio')));
+      await tester.pumpAndSettle();
+      await tester.enterText(_byId(SemanticsIds.searchField), 'jazz');
+      await tester.pump(SearchQuery.debounce);
+      await tester.pumpAndSettle();
+
+      // The library's own match and the directory's, both listed, with
+      // the one already here first.
+      expect(find.text('Night Jazz'), findsOneWidget);
+      expect(find.text('Jazz24'), findsOneWidget);
+      final local = tester.getTopLeft(find.text('Night Jazz'));
+      final remote = tester.getTopLeft(find.text('Jazz24'));
+      expect(local.dy, lessThan(remote.dy));
+
+      // It plays rather than offering to be added: it is already here.
+      await tester.tap(_byId(SemanticsIds.searchHit('station', 0)));
+      await tester.pumpAndSettle();
+      expect(container.read(radioPlaybackProvider).station?.name, 'Night Jazz');
+
+      // A tuned station polls play-info for its in-stream title, so it
+      // has to come off the air before the tree goes.
+      await container.read(radioPlaybackProvider.notifier).stop();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a station shows under All, with no directory call', (
+      tester,
+    ) async {
+      // The bug is "added radio stations don't show when searching", and
+      // somebody who adds a station and types its name has no reason to
+      // have picked a chip first. Fixing it only under Radio would leave
+      // the reported case failing. Free to include here because the
+      // station list is already loaded - it is the *directory* call that
+      // All must never fire.
+      final repo = _repo();
+      final container = _container(repo, engine: FakeEngine());
+      await pumpSearch(tester, container);
+
+      expect(container.read(searchScopeProvider), SearchScope.all);
+      await tester.enterText(_byId(SemanticsIds.searchField), 'jazz');
+      await tester.pump(SearchQuery.debounce);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Night Jazz'), findsOneWidget);
+      expect(repo.directoryQueries, isEmpty);
+    });
+
+    testWidgets('a matching station survives a silent directory', (
+      tester,
+    ) async {
+      // The stations already here are not the directory's to lose.
+      final repo = _repo()
+        ..directoryError = const WaxDeckApiException(
+          code: 'directory-unavailable',
+          message: 'the station directory could not be reached',
+        );
+      await pumpSearch(tester, _container(repo, retryFailures: false));
+
+      await tester.tap(_byId(SemanticsIds.searchFilter('radio')));
+      await tester.pumpAndSettle();
+      await tester.enterText(_byId(SemanticsIds.searchField), 'jazz');
+      await tester.pump(SearchQuery.debounce);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Night Jazz'), findsOneWidget);
+      expect(
+        find.textContaining('only your own stations are listed'),
+        findsOneWidget,
       );
     });
 

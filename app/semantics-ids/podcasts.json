@@ -28,6 +28,7 @@
     "podcastSettingsRetention": "podcast-settings-retention",
     "podcastSettingsSave": "podcast-settings-save",
     "podcastSettingsSpeed": "podcast-settings-speed",
+    "podcastSearchSubscribe": "podcast-search-subscribe-{index}",
     "podcastSort": "podcast-sort-{name}",
     "podcastSubscribe": "podcast-subscribe",
     "podcastSubscribeConfirm": "podcast-subscribe-confirm",

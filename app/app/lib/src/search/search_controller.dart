@@ -6,13 +6,45 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart' show ClientSettingKeys;
 
 import '../providers.dart';
+import '../radio/radio_controller.dart';
 import '../settings/client_settings_providers.dart';
+
+/// Where a scope's answers come from.
+///
+/// This started life as a boolean on the radio chip, which worked for
+/// exactly as long as one chip asked a directory. Two do now, and they
+/// want different things: radio has no library answer at all, while
+/// podcasts has both - the library's own episodes, and shows this
+/// server has never seen. A boolean cannot say which, and the one that
+/// wants both is the one a boolean would get wrong.
+enum SearchSource {
+  /// `GET /library/search` and nothing else.
+  library,
+
+  /// A directory and nothing else: the library has no answer to give.
+  directory,
+
+  /// Both, library hits first.
+  libraryAndDirectory;
+
+  /// Whether a directory call is made under this source at all.
+  bool get asksDirectory => this != SearchSource.library;
+
+  /// Whether the library search is worth making. False for [directory],
+  /// where every group is hidden and the round trip buys nothing.
+  bool get asksLibrary => this != SearchSource.directory;
+}
 
 /// Which kinds of result the filter chips narrow to.
 enum SearchScope {
   all('all', 'All'),
   music('music', 'Music'),
-  podcasts('podcasts', 'Podcasts'),
+
+  /// Library episodes, plus shows from the public podcast directory
+  /// that this server has never seen. Both, because a listener typing a
+  /// show name means the show whether or not they are already
+  /// subscribed to it, and answering only one of those is the bug.
+  podcasts('podcasts', 'Podcasts', SearchSource.libraryAndDirectory),
   books('books', 'Audiobooks'),
 
   /// The one chip that does not narrow the library search: it asks a
@@ -23,12 +55,19 @@ enum SearchScope {
   /// with no chip chosen must not fire a directory call over the internet
   /// on every keystroke, and a station that is not in the library is not a
   /// search result in the sense the other groups are.
-  radio('radio', 'Radio');
+  radio('radio', 'Radio', SearchSource.directory);
 
-  const SearchScope(this.name, this.label);
+  const SearchScope(
+    this.name,
+    this.label, [
+    this.source = SearchSource.library,
+  ]);
 
   final String name;
   final String label;
+
+  /// Where this scope's answers come from.
+  final SearchSource source;
 
   /// The result groups this scope shows. Artists, albums, and tracks are
   /// all music; a scope that hid two of the three would be a filter on
@@ -43,10 +82,6 @@ enum SearchScope {
     SearchScope.books => kind == SearchHitKind.books,
     SearchScope.radio => false,
   };
-
-  /// Whether this scope answers from the station directory rather than
-  /// from the library.
-  bool get isDirectory => this == SearchScope.radio;
 
   static SearchScope byName(String name) =>
       SearchScope.values.firstWhere((s) => s.name == name);
@@ -137,14 +172,19 @@ final searchScopeProvider =
 ///
 /// Not asked at all under the radio chip: that scope answers from the
 /// station directory, and a library search whose every group is hidden is
-/// a round trip spent on nothing.
+/// a round trip spent on nothing. The podcasts chip does ask, because
+/// its directory results sit under library episodes rather than instead
+/// of them.
 /// Selected down to the one thing about the scope this reads: the library
 /// chips filter an answer already in hand, so watching the whole chip
 /// refires the identical query, behind a skeleton, on every tap.
 final searchResultsProvider = FutureProvider<SearchResults?>((ref) async {
   final query = ref.watch(searchQueryProvider);
   if (query.isEmpty) return null;
-  if (ref.watch(searchScopeProvider.select((s) => s.isDirectory))) return null;
+  final asks = ref.watch(
+    searchScopeProvider.select((s) => s.source.asksLibrary),
+  );
+  if (!asks) return null;
   return ref.watch(repositoryProvider).search(query);
 });
 
@@ -158,12 +198,66 @@ final searchResultsProvider = FutureProvider<SearchResults?>((ref) async {
 /// minimum.
 final radioDirectoryResultsProvider =
     FutureProvider<List<RadioDirectoryEntry>?>((ref) async {
-      if (!ref.watch(searchScopeProvider.select((s) => s.isDirectory))) {
-        return null;
-      }
+      if (ref.watch(searchScopeProvider) != SearchScope.radio) return null;
       final query = ref.watch(searchQueryProvider);
       if (query.length < 2) return null;
       return ref.watch(repositoryProvider).searchRadioDirectory(query);
+    });
+
+/// Stations already in this library whose names match, under the radio
+/// chip.
+///
+/// Matched here rather than by the server, and that is by construction
+/// rather than by preference: `GET /library/search` answers artists,
+/// albums, tracks, books, and episodes, and stations live in their own
+/// table that is never fed to FTS. A station group in that response
+/// would be a spec change against a store the catalog does not own, so
+/// the match happens where the station list already is - the same shape
+/// the command palette settled on, for the same reason.
+///
+/// Substring rather than prefix, because a station's name is routinely
+/// not what someone calls it ("Groove Salad" under "soma").
+///
+/// Answered under All as well as Radio, which is what actually closes
+/// "added radio stations don't show when searching": somebody who adds a
+/// station and then types its name means that station, and they have no
+/// reason to have chosen a chip first. All is safe to include because
+/// this costs no round trip - the list is already loaded, and it is the
+/// *directory* call that All must not fire. The type chips (Music,
+/// Podcasts, Audiobooks) are excluded because they name a medium a
+/// station is not.
+final localRadioMatchesProvider = Provider<List<RadioStation>>((ref) {
+  final scope = ref.watch(searchScopeProvider);
+  if (scope != SearchScope.radio && scope != SearchScope.all) {
+    return const <RadioStation>[];
+  }
+  final query = ref.watch(searchQueryProvider).trim().toLowerCase();
+  if (query.isEmpty) return const <RadioStation>[];
+  // A list that has not loaded answers empty rather than making the
+  // directory results wait behind it.
+  final stations = ref.watch(radioStationsProvider).value;
+  if (stations == null) return const <RadioStation>[];
+  return <RadioStation>[
+    for (final station in stations)
+      if (station.name.toLowerCase().contains(query)) station,
+  ];
+});
+
+/// Podcast directory matches for the current query, under the podcasts
+/// chip. Same posture as the station directory above: a public service
+/// over the internet, asked only under its own chip and only for the
+/// settled query.
+///
+/// A failure here is not a failed search. The library half answered, and
+/// it is the half that holds what the listener already has; the screen
+/// draws that and reports the directory's silence beside it rather than
+/// replacing everything with an error.
+final podcastDirectoryResultsProvider =
+    FutureProvider<List<PodcastDirectoryEntry>?>((ref) async {
+      if (ref.watch(searchScopeProvider) != SearchScope.podcasts) return null;
+      final query = ref.watch(searchQueryProvider);
+      if (query.length < 2) return null;
+      return ref.watch(repositoryProvider).searchPodcastDirectory(query);
     });
 
 /// The last few queries, newest first.

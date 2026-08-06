@@ -85,6 +85,7 @@ func run() error {
 		allowPrivateScrobble = flag.Bool("allow-private-scrobble-hosts", envOr("WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS", "false") == "true", "allow ListenBrainz-compatible API bases on private addresses (LAN Maloja)")
 		allowPrivateNotify   = flag.Bool("allow-private-notify-hosts", envOr("WAXDECK_ALLOW_PRIVATE_NOTIFY_HOSTS", "false") == "true", "allow user-pointed notification destinations on private addresses (LAN ntfy or Gotify)")
 		radioDirBase         = flag.String("radio-directory-base", envOr("WAXDECK_RADIO_DIRECTORY_BASE", ""), "radio-browser directory API base URL (empty selects the public instance)")
+		podcastDirBase       = flag.String("podcast-directory-base", envOr("WAXDECK_PODCAST_DIRECTORY_BASE", ""), "podcast name-search API base URL (empty selects the public iTunes search endpoint)")
 		lastfmKey            = flag.String("lastfm-api-key", envOr("WAXDECK_LASTFM_API_KEY", ""), "Last.fm API key for outbound scrobbling (empty leaves Last.fm unavailable)")
 		lastfmSecret         = flag.String("lastfm-secret", envOr("WAXDECK_LASTFM_SECRET", ""), "Last.fm API shared secret")
 
@@ -313,6 +314,7 @@ func run() error {
 		AllowPrivateScrobbleHosts: *allowPrivateScrobble,
 		AllowPrivateNotifyHosts:   *allowPrivateNotify,
 		RadioDirectoryBase:        *radioDirBase,
+		PodcastDirectoryBase:      *podcastDirBase,
 		LastfmAPIKey:              *lastfmKey,
 		LastfmSecret:              *lastfmSecret,
 		EnrichmentProviders:       enrichProviders,

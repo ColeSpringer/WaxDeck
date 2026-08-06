@@ -66,6 +66,10 @@ type Server struct {
 	// shareStreams caps concurrent anonymous streams per share so a
 	// public link never becomes a bandwidth faucet.
 	shareStreams shareStreamGate
+	// relayStreams caps concurrent third-party relays per account, so
+	// no one caller can pin goroutines and upstream sockets against
+	// remote files this server does not control.
+	relayStreams relayGate
 }
 
 // logger is the slice of slog the API layer uses (a seam tests can

@@ -504,6 +504,8 @@ abstract final class SemanticsIds {
   static const String podcastSettingsRetention = 'podcast-settings-retention';
   static const String podcastSettingsSave = 'podcast-settings-save';
   static const String podcastSettingsSpeed = 'podcast-settings-speed';
+  static String podcastSearchSubscribe(Object index) =>
+      'podcast-search-subscribe-$index';
   static String podcastSort(Object name) => 'podcast-sort-$name';
   static const String podcastSubscribe = 'podcast-subscribe';
   static const String podcastSubscribeConfirm = 'podcast-subscribe-confirm';
@@ -539,8 +541,11 @@ abstract final class SemanticsIds {
   static const String radioDial = 'radio-dial';
   static String radioEdit(Object pid) => 'radio-edit-$pid';
   static String radioFavorite(Object pid) => 'radio-favorite-$pid';
+  static const String radioHomepageField = 'radio-homepage-field';
   static const String radioHub = 'radio-hub';
+  static const String radioLogoField = 'radio-logo-field';
   static String radioMenu(Object pid) => 'radio-menu-$pid';
+  static const String radioMoreOptions = 'radio-more-options';
   static const String radioMute = 'radio-mute';
   static const String radioNameField = 'radio-name-field';
   static const String radioNowPlaying = 'radio-now-playing';

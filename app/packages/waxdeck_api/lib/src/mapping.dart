@@ -939,6 +939,19 @@ RadioDirectoryEntry radioDirectoryEntryFromGen(gen.RadioDirectoryEntry e) {
   );
 }
 
+PodcastDirectoryEntry podcastDirectoryEntryFromGen(
+  gen.PodcastDirectoryEntry e,
+) {
+  return PodcastDirectoryEntry(
+    name: e.name,
+    feedUrl: e.feedUrl,
+    author: e.author,
+    artworkUrl: e.artworkUrl,
+    genre: e.genre,
+    episodeCount: e.episodeCount,
+  );
+}
+
 Scrobbler scrobblerFromGen(gen.Scrobbler s) {
   return Scrobbler(
     service: s.service,

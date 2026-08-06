@@ -194,7 +194,12 @@ final radioDialProvider = Provider<List<RadioStation>>((ref) {
 
 /// What the radio player is doing right now.
 class RadioPlayback {
-  const RadioPlayback({this.station, this.starting = false, this.nowPlaying});
+  const RadioPlayback({
+    this.station,
+    this.starting = false,
+    this.nowPlaying,
+    this.nowPlayingItemPid,
+  });
 
   /// The station currently loaded through the engine, if any.
   final RadioStation? station;
@@ -204,6 +209,12 @@ class RadioPlayback {
 
   /// The station's current in-stream title, when it announces one.
   final String? nowPlaying;
+
+  /// A library track the server matched [nowPlaying] to, when it
+  /// recognised one. The full player draws that track's cover; the deck
+  /// bar keeps the station's logo, because a bar that changed its
+  /// picture every few minutes would read as the station changing.
+  final String? nowPlayingItemPid;
 }
 
 /// Drives live radio through the shared audio engine. Radio has no
@@ -278,7 +289,11 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
       if (tuning != _tuning) return;
       await engine.play();
       if (tuning != _tuning) return;
-      state = RadioPlayback(station: station, nowPlaying: info.nowPlaying);
+      state = RadioPlayback(
+        station: station,
+        nowPlaying: info.nowPlaying,
+        nowPlayingItemPid: info.nowPlayingItemPid,
+      );
       _startTitlePoll(station.pid);
     } on Object {
       // A tune that was overtaken is nobody's failure to hear about: it
@@ -396,7 +411,11 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     try {
       await ref.read(audioEngineProvider).stop();
     } on Object {
-      state = RadioPlayback(station: station, nowPlaying: held.nowPlaying);
+      state = RadioPlayback(
+        station: station,
+        nowPlaying: held.nowPlaying,
+        nowPlayingItemPid: held.nowPlayingItemPid,
+      );
       _startTitlePoll(station.pid);
       rethrow;
     }
@@ -436,10 +455,14 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
       // announces every few minutes, and [RadioPlayback] has no value
       // equality, so an identical assignment rebuilds the dial band, every
       // visible tile, and the deck bar for the same words.
-      if (info.nowPlaying == state.nowPlaying) return;
+      if (info.nowPlaying == state.nowPlaying &&
+          info.nowPlayingItemPid == state.nowPlayingItemPid) {
+        return;
+      }
       state = RadioPlayback(
         station: state.station,
         nowPlaying: info.nowPlaying,
+        nowPlayingItemPid: info.nowPlayingItemPid,
       );
     } on WaxDeckApiException {
       // Metadata is decoration; playback carries on without it.
@@ -451,3 +474,26 @@ final radioPlaybackProvider =
     NotifierProvider<RadioPlaybackController, RadioPlayback>(
       RadioPlaybackController.new,
     );
+
+/// The cover of the library track the server matched the station's ICY
+/// title to, or null when it matched none - which is most of the time,
+/// and is not a failure: the caller falls back to the station's logo.
+///
+/// A URL rather than a fetch. `artUrlFor` addresses the art endpoint by
+/// pid, exactly as `radioLogoUrlFor` addresses a station's, so there is
+/// nothing to await: pulling a whole `ItemDetail` over the network to
+/// read one field off it would be a round trip per song for a string
+/// this can build. The endpoint walks the album and artist chain, so a
+/// track with no cover of its own still draws its album's; one with
+/// none anywhere falls to the monogram, like any other coverless track
+/// in the app.
+///
+/// Selected down to the pid alone, so the title moving without the match
+/// moving does not rebuild this.
+final radioNowPlayingArtProvider = Provider<String?>((ref) {
+  final pid = ref.watch(
+    radioPlaybackProvider.select((p) => p.nowPlayingItemPid),
+  );
+  if (pid == null) return null;
+  return ref.watch(repositoryProvider).artUrlFor(pid);
+});

@@ -143,8 +143,20 @@ info:
       URL: the enclosure is read from the episode in the catalog, so a
       token for one episode reaches that episode's audio and nothing
       else, and the relay copies only `Content-Type`, `Content-Length`,
-      `Content-Range`, `Accept-Ranges`, `ETag`, and `Last-Modified` back
-      from the podcast host. `/media/art` exists because a device
+      `Content-Range`, `Accept-Ranges`, `ETag`, `Last-Modified`, and
+      `Content-Encoding` back from the podcast host.
+      The two relays that carry a third party's bytes
+      (`/media/enclosure` and `/media/radio/{pid}`) are bounded, which
+      is the one place token expiry is not the only thing that ends a
+      transfer. An account holding too many relayed streams at once is
+      refused a new one with `429 rate-limited`; retry when one ends.
+      And a relay whose upstream stops sending, or (for an episode,
+      which is a finite file) runs past a size ceiling or below a usable
+      transfer rate, is ended mid-body: there are no trailers and no
+      error document, so a client sees a truncated response and should
+      treat it as it would any interrupted download. Time the server
+      spends blocked writing to a slow client is never counted against
+      these bounds, so a paused player is not a reason to be cut. `/media/art` exists because a device
       endpoint has no session to present: it takes an optional `size` (16
       to 2048, defaulting to 600) and is `no-store`, since the URL
       carries a credential and is minted per listener. First-party

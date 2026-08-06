@@ -118,6 +118,11 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
   /// Editing a station has nothing to search for, so it opens on the form.
   late bool _manual = widget.editing != null;
   bool _busy = false;
+
+  /// Whether the optional fields are showing. Open when editing, where
+  /// they hold the station's existing values.
+  late bool _details = _editing;
+
   List<RadioDirectoryEntry>? _results;
 
   /// The message the dialog is showing, from a search or from a save.
@@ -163,12 +168,29 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
 
   Future<void> _save() async {
     if (_busy) return;
-    final name = _name.text.trim();
     final url = _url.text.trim();
-    if (name.isEmpty || url.isEmpty) {
-      setState(() => _error = 'A station needs a name and a stream URL.');
+    if (url.isEmpty) {
+      setState(() => _error = 'A station needs a stream URL.');
       return;
     }
+    // The one required answer is the URL; a blank name takes the stream's
+    // own host rather than blocking on a box the listener does not have
+    // an answer to.
+    //
+    // Adding only. An edit began with the name field populated and
+    // visible, so clearing it is a deliberate act, and answering it by
+    // silently renaming the station after its stream host would be the
+    // edit doing something nobody asked for. There is no name to fall
+    // back to there, so it asks.
+    final typed = _name.text.trim();
+    if (_editing && typed.isEmpty) {
+      setState(() {
+        _error = 'A station needs a name.';
+        _details = true;
+      });
+      return;
+    }
+    final name = typed.isEmpty ? stationNameFromUrl(url) : typed;
     setState(() {
       _busy = true;
       _error = null;
@@ -335,25 +357,62 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
       ),
   ];
 
-  /// The three fields a station is, plus the logo the proxy will fetch.
+  /// One paste field, with everything optional behind a disclosure.
+  ///
+  /// What somebody has when they choose By URL is a stream address on
+  /// the clipboard, and that is the only thing here they cannot supply
+  /// another way: the name is derivable, and the website and logo are
+  /// things the server now discovers on its own. Four boxes asked the
+  /// listener to fill in three answers nobody was waiting for.
+  ///
+  /// The disclosure opens by default when editing, because then those
+  /// fields hold a station's existing values and collapsing them would
+  /// be hiding data rather than deferring a question.
   List<Widget> _form(WaxColors colors) => <Widget>[
-    WaxTextField(
-      label: 'Station name',
-      controller: _name,
-      autofocus: !_editing,
-      semanticsId: SemanticsIds.radioNameField,
-    ),
-    const SizedBox(height: WaxSpace.s8),
     WaxTextField(
       label: 'Stream URL',
       controller: _url,
       hint: 'https://example.com/stream',
+      autofocus: !_editing,
+      textInputAction: TextInputAction.done,
+      onSubmitted: (_) => unawaited(_save()),
       semanticsId: SemanticsIds.radioUrlField,
     ),
     const SizedBox(height: WaxSpace.s8),
-    WaxTextField(label: 'Website (optional)', controller: _homepage),
-    const SizedBox(height: WaxSpace.s8),
-    WaxTextField(label: 'Logo URL (optional)', controller: _logo),
+    Align(
+      alignment: Alignment.centerLeft,
+      child: WaxButton(
+        label: _details ? 'Fewer options' : 'Name, website, and logo',
+        kind: WaxButtonKind.text,
+        // Matching every other disclosure in the app (the audit rows, the
+        // podcast folders, the queue's history): open shows the caret
+        // that closes it.
+        icon: _details ? WaxIcons.collapse : WaxIcons.expand,
+        semanticsId: SemanticsIds.radioMoreOptions,
+        onPressed: () => setState(() => _details = !_details),
+      ),
+    ),
+    if (_details) ...<Widget>[
+      const SizedBox(height: WaxSpace.s8),
+      WaxTextField(
+        label: 'Station name',
+        controller: _name,
+        hint: 'Taken from the stream address when left blank',
+        semanticsId: SemanticsIds.radioNameField,
+      ),
+      const SizedBox(height: WaxSpace.s8),
+      WaxTextField(
+        label: 'Website (optional)',
+        controller: _homepage,
+        semanticsId: SemanticsIds.radioHomepageField,
+      ),
+      const SizedBox(height: WaxSpace.s8),
+      WaxTextField(
+        label: 'Logo URL (optional)',
+        controller: _logo,
+        semanticsId: SemanticsIds.radioLogoField,
+      ),
+    ],
     if (_error != null)
       Padding(
         padding: const EdgeInsets.only(top: WaxSpace.s8),
@@ -363,4 +422,19 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
         ),
       ),
   ];
+}
+
+/// The name a pasted stream takes when nobody typed one.
+///
+/// The stream's host, which is what the listener would call it anyway
+/// ("somafm.com"), minus a `www.` that says nothing. Deliberately the
+/// whole host rather than a guess at the registrable part: without a
+/// public-suffix list "bbc.co.uk" would come back as "co.uk", and a
+/// station named after the wrong half of its own address is worse than
+/// one named after all of it. It is a placeholder either way - the
+/// station is editable the moment it exists.
+String stationNameFromUrl(String url) {
+  final host = Uri.tryParse(url.trim())?.host ?? '';
+  final trimmed = host.startsWith('www.') ? host.substring(4) : host;
+  return trimmed.isEmpty ? 'Station' : trimmed;
 }

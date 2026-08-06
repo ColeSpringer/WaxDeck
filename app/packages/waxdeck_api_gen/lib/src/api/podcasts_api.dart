@@ -15,6 +15,7 @@ import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/opml_import.dart';
 import 'package:waxdeck_api_gen/src/model/opml_import_result.dart';
 import 'package:waxdeck_api_gen/src/model/podcast_detail.dart';
+import 'package:waxdeck_api_gen/src/model/podcast_directory_results.dart';
 import 'package:waxdeck_api_gen/src/model/refresh_result.dart';
 import 'package:waxdeck_api_gen/src/model/subscribe_request.dart';
 import 'package:waxdeck_api_gen/src/model/subscription.dart';
@@ -1128,6 +1129,100 @@ class PodcastsApi {
     );
 
     return _response;
+  }
+
+  /// Search the podcast directory
+  /// Searches a public podcast directory (the iTunes search API) by name, so a show can be subscribed to without finding its feed URL first. Every match carries the &#x60;feedUrl&#x60; to POST to &#x60;/podcasts&#x60;, which is why a directory result needs no source kind: it is always an RSS feed. Requires internet; when the directory cannot be reached the endpoint answers &#x60;directory-unavailable&#x60; and subscribing by URL still works. 
+  ///
+  /// Parameters:
+  /// * [query] - Show name search terms.
+  /// * [limit] - Maximum directory entries to return.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [PodcastDirectoryResults] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<PodcastDirectoryResults>> searchPodcastDirectory({ 
+    required String query,
+    int? limit = 25,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/podcasts/directory';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      r'query': encodeQueryParameter(_serializers, query, const FullType(String)),
+      if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    PodcastDirectoryResults? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(PodcastDirectoryResults),
+      ) as PodcastDirectoryResults;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<PodcastDirectoryResults>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// Subscribe to a podcast

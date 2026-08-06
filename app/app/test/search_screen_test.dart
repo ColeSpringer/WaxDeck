@@ -39,6 +39,11 @@ Future<ProviderContainer> _pump(
   /// app does, and what a test about the filter surviving a keystroke has
   /// to reproduce.
   bool atOwnLocation = false,
+
+  /// Riverpod retries a failed provider on a backoff of its own, which
+  /// leaves a timer pending past the end of a test that is *about* the
+  /// failure. Those tests turn it off so the error state holds still.
+  bool retryFailures = true,
 }) async {
   // Below sidebar width, which is where the screen owns a field. At and
   // above it the shell's header is the live field and the screen draws
@@ -48,6 +53,7 @@ Future<ProviderContainer> _pump(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
+    retry: retryFailures ? ProviderContainer.defaultRetry : (_, _) => null,
     overrides: [repositoryProvider.overrideWithValue(repository)],
   );
   addTearDown(container.dispose);
@@ -454,6 +460,126 @@ void main() {
       container.read(recentSearchesProvider),
       hasLength(RecentSearches.limit - 1),
     );
+  });
+
+  testWidgets('the podcasts chip lists library episodes and directory shows', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        episodes: <SearchHit>[_hit('episode', 'Night Shift Ep. 4')],
+      )
+      ..podcastDirectoryEntries = <PodcastDirectoryEntry>[
+        const PodcastDirectoryEntry(
+          name: 'Nightjar Radio Hour',
+          feedUrl: 'https://feeds.example/nightjar',
+          author: 'Nightjar Media',
+        ),
+      ];
+    await _pump(tester, repository, initialQuery: 'night');
+
+    // The library half is not asked to make room for the directory half:
+    // this chip answers from both.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('podcasts')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Night Shift Ep. 4'), findsOneWidget);
+    expect(find.text('Nightjar Radio Hour'), findsOneWidget);
+    expect(repository.podcastDirectoryQueries, <String>['night']);
+
+    // Subscribing takes the feed URL the match carried and asks no source
+    // kind: a directory hit is always RSS.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSearchSubscribe(0)),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.subscribeCalls, <({String url, String? sourceType})>[
+      (url: 'https://feeds.example/nightjar', sourceType: null),
+    ]);
+  });
+
+  testWidgets('no directory call goes out under the library chips', (
+    tester,
+  ) async {
+    // The directory is a public service over the internet. A query typed
+    // with no chip chosen must not reach it.
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        artists: <SearchHit>[_hit('artist', 'Nightjar')],
+      );
+    await _pump(tester, repository, initialQuery: 'night');
+
+    for (final chip in <String>['all', 'music', 'books']) {
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.searchFilter(chip)),
+      );
+      await tester.pumpAndSettle();
+    }
+    expect(repository.podcastDirectoryQueries, isEmpty);
+  });
+
+  testWidgets('a silent podcast directory leaves the library half standing', (
+    tester,
+  ) async {
+    // The library answered, and it holds what the listener already has.
+    // Replacing that with an error page would lose the half that worked.
+    final repository = FakeRepository()
+      ..searchResults['night'] = _results(
+        episodes: <SearchHit>[_hit('episode', 'Night Shift Ep. 4')],
+      )
+      ..podcastDirectoryError = WaxDeckApiException(
+        statusCode: 502,
+        code: 'directory-unavailable',
+        message: 'the podcast directory could not be reached',
+      );
+    await _pump(
+      tester,
+      repository,
+      initialQuery: 'night',
+      retryFailures: false,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('podcasts')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Night Shift Ep. 4'), findsOneWidget);
+    expect(find.textContaining('directory did not answer'), findsOneWidget);
+  });
+
+  testWidgets('a failed library search does not take the directory with it', (
+    tester,
+  ) async {
+    // Two servers, two questions. The directory used to be read only
+    // inside the library result's data branch, so a library search that
+    // failed meant the directory half was never even asked for.
+    final repository = FakeRepository()
+      ..searchError = const WaxDeckApiException(
+        code: 'internal',
+        message: 'the catalog is busy',
+      )
+      ..podcastDirectoryEntries = <PodcastDirectoryEntry>[
+        const PodcastDirectoryEntry(
+          name: 'Nightjar Radio Hour',
+          feedUrl: 'https://feeds.example/nightjar',
+        ),
+      ];
+    await _pump(
+      tester,
+      repository,
+      initialQuery: 'night',
+      retryFailures: false,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.searchFilter('podcasts')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('the catalog is busy'), findsOneWidget);
+    expect(find.text('Nightjar Radio Hour'), findsOneWidget);
+    expect(repository.podcastDirectoryQueries, <String>['night']);
   });
 
   test('forgetting a query matches it the way remembering does', () {

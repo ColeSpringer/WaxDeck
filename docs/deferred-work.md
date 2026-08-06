@@ -288,63 +288,8 @@ here waits on upstream.
 
 ## Podcasts
 
-- `[in-repo]` **A show can only be subscribed to by URL.** The Add
-  subscription sheet is one field - "Feed or channel URL" - beside an
-  RSS/YouTube segmented control, and `SubscribeRequest.url` is the whole
-  contract: an RSS feed URL, or a channel or playlist URL when
-  `sourceType` is `youtube`. So subscribing means knowing the feed URL
-  already, which means leaving WaxDeck to find it. Searching a directory
-  by name and subscribing from a result is the missing half.
-
-  **Radio already has this exact feature, and it is the template rather
-  than an analogy.** `GET /radio/directory?query=` searches a public
-  station directory by name "so stations can be added without pasting
-  stream URLs" (`api/spec/radio.yaml`), `Library.SearchRadioDirectory`
-  is the one server-side call, `KindDirectory` and the
-  `directory-unavailable` code already exist for a directory that cannot
-  be reached, the base URL is overridable for a mirror
-  (`WAXDECK_RADIO_DIRECTORY_BASE`), and the client half is a chip on the
-  search screen with an add action per result
-  (`radioDirectoryResultsProvider`, "Add station" on each row). A
-  podcast directory is that shape against a different upstream, and only
-  four of the pieces are new: a `GET /podcasts/directory`, its service
-  call, a Podcasts chip beside the Radio one, and a Subscribe action per
-  result that posts the `feedUrl` the entry carries. The error kind, the
-  code, and the mirror override are reused rather than rebuilt, and
-  nothing about `SubscribeRequest` changes - the point of the search is
-  to produce the URL it already takes.
-
-  **The upstream to use is probably iTunes, and this repo already speaks
-  it.** `providers/itunes.go` talks to the key-free
-  `https://itunes.apple.com/search` for album artwork; the same endpoint
-  with `entity=podcast` answers a name search where every result carries
-  `feedUrl`, which is precisely the name-to-URL step that is missing.
-  Key-free matters: it is what lets this ship the way radio-browser did,
-  without asking every install to register credentials. Podcast Index is
-  the fuller directory and wants a per-install API key, so it belongs
-  behind the same endpoint as a second source rather than as the first
-  one. Whoever builds it should decide whether the two providers share
-  the enrichment provider chain or sit beside it - the chain is shaped
-  around enriching a known entity, and this is a search that returns
-  candidates nobody has claimed yet.
-
-  Worth taking with it, since they are the same screen: the sheet's
-  RSS/YouTube segmented control is a question a searcher should not have
-  to answer, and a directory result knows its own kind.
-
 - `[in-repo]` **PodPing update notifications.** Polling is the only feed refresh
   trigger.
-- `[in-repo]` **No concurrency or byte bound on the media relays.**
-  `/s/{token}` caps concurrent anonymous streams; `/media/enclosure` and
-  `/media/radio/{pid}` cap nothing, and both deliberately carry no
-  overall client timeout because a stream runs as long as someone
-  listens. So a user can point either at an endless or enormous remote
-  file and hold a goroutine and an upstream connection per request. The
-  URL comes from a feed or station the user chose rather than from the
-  request, so this is resource use rather than an open proxy. Fix both
-  together when it is worth a bound, since they have the same shape: a
-  per-user cap plus an idle-read deadline, not an overall one.
-
 - `[upstream]` **Emptying the trash does not reclaim an offline client's
   download.** ADR-0048 tells the two delete tombstones apart by the trash
   journal, so deleting audio outright reclaims the bytes on every

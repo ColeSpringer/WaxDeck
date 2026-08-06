@@ -444,6 +444,20 @@ components:
             before anyone has the stream open, the field is
             necessarily absent.
           example: Charlie Parker - Ornithology
+        nowPlayingItemPid:
+          type: string
+          description: >
+            A library track this server matched `nowPlaying` to, when it
+            recognised one. Present so a full-screen player can draw the
+            song's own cover art instead of the station logo; absent is
+            the common case and is not a failure, so a client that
+            cannot match must fall back to the station's artwork rather
+            than showing a gap. The match is a best-effort text lookup
+            against the catalog and is never authoritative: it does not
+            mean this server is playing that file, and it is
+            deliberately not used for scrobbling, which reports what the
+            station announced.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     RadioDirectoryEntry:
       type: object

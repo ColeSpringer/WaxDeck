@@ -41,8 +41,18 @@ WaxArtwork? waxArtwork(ArtworkStore store, String? url) => store.source(url);
 ///
 /// Never the station host's own URL: on web it offers no CORS headers, an
 /// http logo is mixed content on an https page, and the fetch hands the
-/// listener's IP to a stranger. `logoUrl` is the signal there is anything
-/// to ask for; the proxy 404s otherwise and the monogram covers it.
+/// listener's IP to a stranger.
+///
+/// Asked for unconditionally, and that is the fix rather than an
+/// oversight. This used to gate on `logoUrl` being set, on the reasoning
+/// that the proxy would only 404 otherwise - but that is every By-URL
+/// station and every directory entry whose favicon was blank, SVG, or
+/// dead, which is most of them, and they all drew a monogram forever.
+/// The server now discovers a logo for a station whose row names none,
+/// so a blank `logoUrl` no longer means there is nothing to fetch, and
+/// asking is the only way to find out. A genuine miss is still a 404 the
+/// monogram covers, and the server caches it so the second paint costs
+/// nothing.
 ///
 /// Shared because two copies is how the deck bar's radio face kept
 /// fetching from the station after the hub was converted.
@@ -50,6 +60,4 @@ WaxArtwork? waxStationLogo(
   ArtworkStore store,
   WaxDeckRepository repository,
   RadioStation station,
-) => station.logoUrl == null
-    ? null
-    : store.source(repository.radioLogoUrlFor(station.pid));
+) => store.source(repository.radioLogoUrlFor(station.pid));

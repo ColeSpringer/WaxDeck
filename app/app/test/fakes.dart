@@ -529,9 +529,15 @@ class FakeRepository implements WaxDeckRepository {
   /// what the debounce let through.
   final List<String> searchCalls = [];
 
+  /// Thrown by [search] when set, for the screens that draw a library
+  /// failure beside a surface that answered.
+  WaxDeckApiException? searchError;
+
   @override
   Future<SearchResults> search(String q, {int? limit}) async {
     searchCalls.add(q);
+    final error = searchError;
+    if (error != null) throw error;
     return searchResults[q] ?? SearchResults(query: q);
   }
 
@@ -1837,6 +1843,27 @@ class FakeRepository implements WaxDeckRepository {
     final error = directoryError;
     if (error != null) throw error;
     return directoryEntries;
+  }
+
+  /// Directory entries served by [searchPodcastDirectory], and the
+  /// queries it was asked. Separate from the station directory's: the
+  /// podcast chip asks both surfaces, so a shared spy could not say
+  /// which one a query reached.
+  List<PodcastDirectoryEntry> podcastDirectoryEntries = const [];
+  final List<String> podcastDirectoryQueries = [];
+
+  /// Thrown by [searchPodcastDirectory] when set.
+  WaxDeckApiException? podcastDirectoryError;
+
+  @override
+  Future<List<PodcastDirectoryEntry>> searchPodcastDirectory(
+    String query, {
+    int? limit,
+  }) async {
+    podcastDirectoryQueries.add(query);
+    final error = podcastDirectoryError;
+    if (error != null) throw error;
+    return podcastDirectoryEntries;
   }
 
   /// What [getCastPreflight] answers; the surface renders whatever is

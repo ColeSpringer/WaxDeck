@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../podcasts/podcasts_controller.dart';
 import '../radio/add_station.dart';
+import '../radio/radio_screen.dart';
 import '../shell/adaptive_shell.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -117,7 +119,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // Library queries only. Recents are offered under the library chips
     // and not the Radio one, so an entry stored here would be a shortcut
     // that runs a library search for a station name.
-    if (!ref.read(searchScopeProvider).isDirectory) {
+    if (ref.read(searchScopeProvider).source.asksLibrary) {
       ref.read(recentSearchesProvider.notifier).remember(trimmed);
     }
   }
@@ -217,13 +219,33 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // under a chip that searches the station directory would put a shortcut
     // to the wrong surface behind them. What an empty Radio chip owes is
     // "here is what typing will do".
-    if (scope.isDirectory) return _directory(query);
+    if (scope.source == SearchSource.directory) return _directory(query);
     if (query.isEmpty) return _recents();
+
+    // Built here rather than inside the library results, and that is
+    // what makes the two halves independent. Reading it only in the
+    // AsyncData branch meant the directory was not even *watched* until
+    // the library search had come back, so two calls that could have
+    // gone out together went out one after the other - and a library
+    // search that failed took the whole directory half down with it,
+    // even though the two ask different servers different questions.
+    final directory = scope.source.asksDirectory
+        ? _podcastDirectory(query)
+        : const <Widget>[];
+    // Local stations cost no round trip at all: the list is already
+    // loaded. They belong under any chip that shows library results.
+    final stations = _localStations();
+
     return switch (results) {
-      AsyncData(:final value) when value != null => _groups(value, scope),
-      AsyncError(:final error) => <Widget>[
-        SliverFillRemaining(
-          hasScrollBody: false,
+      AsyncData(:final value) when value != null => _groups(
+        value,
+        scope,
+        stations,
+        directory,
+      ),
+      AsyncValue(hasError: true, :final error) => <Widget>[
+        ...stations,
+        SliverToBoxAdapter(
           child: ErrorState(
             title: 'Could not search',
             message: error is WaxDeckApiException
@@ -232,12 +254,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             onRetry: () => ref.invalidate(searchResultsProvider),
           ),
         ),
+        ...directory,
       ],
-      _ => const <Widget>[
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: SkeletonShapes(shape: SkeletonShape.list),
-        ),
+      _ => <Widget>[
+        ...stations,
+        // Not SliverFillRemaining while there is a directory half to
+        // draw: filling the viewport would push it past the fold, which
+        // for a result set that has already arrived is the same as
+        // hiding it.
+        if (stations.isEmpty && directory.isEmpty)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: SkeletonShapes(shape: SkeletonShape.list),
+          )
+        else
+          const SliverToBoxAdapter(
+            child: SkeletonShapes(shape: SkeletonShape.list, count: 3),
+          ),
+        ...directory,
       ],
     };
   }
@@ -264,19 +298,37 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
       ];
     }
+    // Stations already here come first, and they play rather than being
+    // offered for adding: someone searching for a station they have has
+    // asked to listen to it, and the directory's copy of the same
+    // station is the wrong row to hand them.
+    final local = _localStations();
     final entries = ref.watch(radioDirectoryResultsProvider);
     return switch (entries) {
       AsyncData(:final value) when value == null || value.isEmpty => <Widget>[
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: EmptyState(
-            title: 'No stations for "$query"',
-            message: 'The directory lists nothing under that name.',
-            glyph: WaxIcons.radio,
+        ...local,
+        if (local.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: EmptyState(
+              title: 'No stations for "$query"',
+              message: 'The directory lists nothing under that name.',
+              glyph: WaxIcons.radio,
+            ),
           ),
-        ),
       ],
       AsyncData(:final value) => <Widget>[
+        ...local,
+        if (local.isNotEmpty)
+          SliverPadding(
+            padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s8),
+            sliver: SliverToBoxAdapter(
+              child: SectionHeader(
+                overline: 'Directory',
+                title: 'Stations to add',
+              ),
+            ),
+          ),
         SliverList.builder(
           itemCount: value!.length,
           itemBuilder: (context, index) => WaxOptionRow(
@@ -294,7 +346,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ),
         ),
       ],
-      AsyncError(:final error) => <Widget>[
+      // The stations already here are not the directory's to lose. With
+      // some listed, the failure is a line under them; with none, it is
+      // the whole answer and gets the whole screen. A SliverFillRemaining
+      // under a filled list would be pushed past the fold, which is the
+      // same as not reporting it.
+      //
+      // Matched on hasError rather than on AsyncError, because a retry in
+      // flight is an AsyncLoading still carrying the failure it is
+      // retrying. Matching the settled state alone would replace the
+      // reported problem with a skeleton for as long as the directory
+      // keeps failing, which is exactly when it must not.
+      AsyncValue(hasError: true) when local.isNotEmpty => <Widget>[
+        ...local,
+        SliverPadding(
+          padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s16),
+          sliver: SliverToBoxAdapter(
+            child: WaxBanner(
+              message:
+                  'Could not reach the directory, so only your own stations '
+                  'are listed. Adding a station by its stream URL still works.',
+              tone: WaxBannerTone.caution,
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(radioDirectoryResultsProvider),
+            ),
+          ),
+        ),
+      ],
+      AsyncValue(hasError: true, :final error) => <Widget>[
         SliverFillRemaining(
           hasScrollBody: false,
           child: ErrorState(
@@ -309,13 +388,43 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ),
         ),
       ],
-      _ => const <Widget>[
-        SliverFillRemaining(
+      _ => <Widget>[
+        ...local,
+        const SliverFillRemaining(
           hasScrollBody: false,
           child: SkeletonShapes(shape: SkeletonShape.list),
         ),
       ],
     };
+  }
+
+  /// Stations this library already holds, matched by name.
+  ///
+  /// The bug this closes is that they appeared nowhere in search at all:
+  /// stations are not in the FTS index, so a station somebody added five
+  /// minutes ago was unfindable by the surface built for finding things.
+  List<Widget> _localStations() {
+    final stations = ref.watch(localRadioMatchesProvider);
+    if (stations.isEmpty) return const <Widget>[];
+    return <Widget>[
+      SliverPadding(
+        padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s8),
+        sliver: SliverToBoxAdapter(
+          child: SectionHeader(overline: 'Library', title: 'Your stations'),
+        ),
+      ),
+      SliverList.builder(
+        itemCount: stations.length,
+        itemBuilder: (context, index) => WaxOptionRow(
+          title: stations[index].name,
+          subtitle: stations[index].homepageUrl,
+          glyph: WaxIcons.radio,
+          semanticsId: SemanticsIds.searchHit('station', index),
+          // Playing, not adding: it is already here.
+          onTap: () => unawaited(tuneStation(context, ref, stations[index])),
+        ),
+      ),
+    ];
   }
 
   /// Adds a directory match, reporting a refusal where there is no modal to
@@ -383,8 +492,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     ];
   }
 
-  List<Widget> _groups(SearchResults results, SearchScope scope) {
-    final slivers = <Widget>[];
+  List<Widget> _groups(
+    SearchResults results,
+    SearchScope scope,
+    List<Widget> stations,
+    List<Widget> directory,
+  ) {
+    final slivers = <Widget>[...stations];
     var found = 0;
     for (final kind in SearchHitKind.values) {
       if (!scope.covers(kind)) continue;
@@ -431,7 +545,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
     }
 
-    if (found == 0) {
+    // A query that matched nothing in the library can still have matched
+    // a station already here or a show in the directory, and "nothing for
+    // that" over a list of results is the wrong screen.
+    if (found == 0 && directory.isEmpty && stations.isEmpty) {
       return <Widget>[
         SliverFillRemaining(
           hasScrollBody: false,
@@ -464,6 +581,102 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
       );
     }
+    slivers.addAll(directory);
     return slivers;
+  }
+
+  /// The podcast directory, under the library's own episodes.
+  ///
+  /// Unlike the station directory this is never the whole answer, which
+  /// decides every difference from [_directory]: it draws no full-screen
+  /// empty state (the library above it is the answer), and a directory
+  /// that will not answer is a line beside the results rather than an
+  /// error page over them. Returning an empty list means "nothing to add
+  /// here", which is what lets the caller fall through to its own empty
+  /// state when the library found nothing either.
+  List<Widget> _podcastDirectory(String query) {
+    if (query.length < 2) return const <Widget>[];
+    final entries = ref.watch(podcastDirectoryResultsProvider);
+    final header = SliverPadding(
+      padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s8),
+      sliver: SliverToBoxAdapter(
+        child: SectionHeader(
+          overline: 'Directory',
+          title: 'Shows to subscribe to',
+        ),
+      ),
+    );
+    return switch (entries) {
+      AsyncData(:final value) when value == null || value.isEmpty =>
+        const <Widget>[],
+      AsyncData(:final value) => <Widget>[
+        header,
+        SliverList.builder(
+          itemCount: value!.length,
+          itemBuilder: (context, index) => WaxOptionRow(
+            title: value[index].name,
+            subtitle: describePodcastDirectoryEntry(value[index]),
+            glyph: WaxIcons.podcasts,
+            semanticsId: SemanticsIds.searchHit('podcastDirectory', index),
+            trailing: WaxButton(
+              label: 'Subscribe',
+              kind: WaxButtonKind.tonal,
+              icon: WaxIcons.add,
+              semanticsId: SemanticsIds.podcastSearchSubscribe(index),
+              onPressed: () => unawaited(_subscribeShow(value[index])),
+            ),
+          ),
+        ),
+      ],
+      // hasError rather than AsyncError: a retry in flight is an
+      // AsyncLoading still carrying the failure it is retrying, and a
+      // skeleton in place of the reported problem is the wrong answer
+      // for as long as the directory keeps failing.
+      AsyncValue(hasError: true) => <Widget>[
+        SliverPadding(
+          padding: WaxSizeClass.of(context).gutter.copyWith(top: WaxSpace.s16),
+          sliver: SliverToBoxAdapter(
+            child: WaxBanner(
+              message:
+                  'The podcast directory did not answer, so only your own '
+                  'episodes are listed. Subscribing by feed URL still works.',
+              tone: WaxBannerTone.caution,
+              actionLabel: 'Retry',
+              onAction: () => ref.invalidate(podcastDirectoryResultsProvider),
+            ),
+          ),
+        ),
+      ],
+      _ => <Widget>[
+        header,
+        const SliverToBoxAdapter(
+          child: SkeletonShapes(shape: SkeletonShape.list, count: 2),
+        ),
+      ],
+    };
+  }
+
+  /// Subscribes to a directory match, reporting the outcome where there
+  /// is no modal to put it in.
+  Future<void> _subscribeShow(PodcastDirectoryEntry entry) async {
+    final messenger = ScaffoldMessenger.of(context);
+    String message;
+    try {
+      // A directory match is always an RSS feed, so no source kind is
+      // asked for or sent: the whole reason the endpoint returns
+      // `feedUrl` is that the answer is already known. Through the
+      // controller rather than the repository, so the hub's grid holds
+      // the new show without being told about it separately.
+      await ref
+          .read(subscriptionsProvider.notifier)
+          .subscribe(url: entry.feedUrl);
+      message = 'Subscribed to ${entry.name}.';
+    } on WaxDeckApiException catch (e) {
+      message = e.message;
+    }
+    if (!mounted) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }

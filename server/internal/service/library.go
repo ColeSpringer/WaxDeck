@@ -24,6 +24,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/match"
+	"github.com/colespringer/waxdeck/server/internal/providers"
 	"github.com/colespringer/waxdeck/server/internal/scrobble"
 	"github.com/colespringer/waxdeck/server/internal/similarity"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
@@ -90,6 +91,9 @@ type Config struct {
 	// RadioDirectoryBase is the radio-browser directory API base;
 	// empty selects the public instance.
 	RadioDirectoryBase string
+	// PodcastDirectoryBase is the podcast name-search API base; empty
+	// selects the public iTunes search endpoint.
+	PodcastDirectoryBase string
 	// LastfmAPIKey and LastfmSecret are the server's Last.fm API
 	// credentials; empty leaves the Last.fm connection unavailable.
 	LastfmAPIKey string
@@ -209,6 +213,15 @@ type Library struct {
 	radioHTTPOnce          sync.Once
 	allowPrivateRadioHosts bool
 	radioDirectoryBase     string
+	// podcastDirectory answers show name searches, built on first use
+	// so an install that never searches never allocates its cache.
+	podcastDirectoryBase string
+	podcastDirectory     *providers.PodcastDirectory
+	podcastDirectoryOnce sync.Once
+	// nowPlayingMemos caches the last ICY-title-to-track resolution per
+	// listener and station, so a poll that changes nothing costs no FTS.
+	nowPlayingMemos  map[string]nowPlayingMemo
+	nowPlayingMemoMu sync.Mutex
 	// radioTitles holds each station's last proxy-observed in-stream
 	// title; process-local on purpose (a title only exists while this
 	// process is proxying the stream).
@@ -358,6 +371,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		allowPrivateFeedHosts:  cfg.AllowPrivateFeedHosts,
 		allowPrivateRadioHosts: cfg.AllowPrivateRadioHosts,
 		radioDirectoryBase:     cfg.RadioDirectoryBase,
+		podcastDirectoryBase:   cfg.PodcastDirectoryBase,
 		radioTitles:            map[string]radioTitle{},
 		radioLogos:             map[string]radioLogo{},
 		radioLogoFlights:       map[string]chan struct{}{},

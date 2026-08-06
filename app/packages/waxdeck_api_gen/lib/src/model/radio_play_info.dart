@@ -13,6 +13,7 @@ part 'radio_play_info.g.dart';
 /// Properties:
 /// * [url] - Origin-relative proxied stream URL carrying a short-lived media token. 
 /// * [nowPlaying] - The most recent in-stream ICY title the proxy observed for this station. Present only while a proxied listener has the stream open and the station publishes StreamTitle metadata; it reflects what the station last announced, not a guarantee of what is audible right now. The listener may be any user (stations are a shared library, so the field's presence reveals that someone on this server is streaming the station). The value is best-effort UTF-8 from an untrusted station and should be treated as plain display text; an empty announced title is reported as absent. Clients that show it should re-poll this endpoint on the order of every 15 seconds during playback. Every response carries a freshly tokenized url; while already playing, ignore the new url and keep the open stream (polling opens no new connection to the station). On a first request, before anyone has the stream open, the field is necessarily absent. 
+/// * [nowPlayingItemPid] - A library track this server matched `nowPlaying` to, when it recognised one. Present so a full-screen player can draw the song's own cover art instead of the station logo; absent is the common case and is not a failure, so a client that cannot match must fall back to the station's artwork rather than showing a gap. The match is a best-effort text lookup against the catalog and is never authoritative: it does not mean this server is playing that file, and it is deliberately not used for scrobbling, which reports what the station announced. 
 @BuiltValue()
 abstract class RadioPlayInfo implements Built<RadioPlayInfo, RadioPlayInfoBuilder> {
   /// Origin-relative proxied stream URL carrying a short-lived media token. 
@@ -22,6 +23,10 @@ abstract class RadioPlayInfo implements Built<RadioPlayInfo, RadioPlayInfoBuilde
   /// The most recent in-stream ICY title the proxy observed for this station. Present only while a proxied listener has the stream open and the station publishes StreamTitle metadata; it reflects what the station last announced, not a guarantee of what is audible right now. The listener may be any user (stations are a shared library, so the field's presence reveals that someone on this server is streaming the station). The value is best-effort UTF-8 from an untrusted station and should be treated as plain display text; an empty announced title is reported as absent. Clients that show it should re-poll this endpoint on the order of every 15 seconds during playback. Every response carries a freshly tokenized url; while already playing, ignore the new url and keep the open stream (polling opens no new connection to the station). On a first request, before anyone has the stream open, the field is necessarily absent. 
   @BuiltValueField(wireName: r'nowPlaying')
   String? get nowPlaying;
+
+  /// A library track this server matched `nowPlaying` to, when it recognised one. Present so a full-screen player can draw the song's own cover art instead of the station logo; absent is the common case and is not a failure, so a client that cannot match must fall back to the station's artwork rather than showing a gap. The match is a best-effort text lookup against the catalog and is never authoritative: it does not mean this server is playing that file, and it is deliberately not used for scrobbling, which reports what the station announced. 
+  @BuiltValueField(wireName: r'nowPlayingItemPid')
+  String? get nowPlayingItemPid;
 
   RadioPlayInfo._();
 
@@ -55,6 +60,13 @@ class _$RadioPlayInfoSerializer implements PrimitiveSerializer<RadioPlayInfo> {
       yield r'nowPlaying';
       yield serializers.serialize(
         object.nowPlaying,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.nowPlayingItemPid != null) {
+      yield r'nowPlayingItemPid';
+      yield serializers.serialize(
+        object.nowPlayingItemPid,
         specifiedType: const FullType(String),
       );
     }
@@ -94,6 +106,13 @@ class _$RadioPlayInfoSerializer implements PrimitiveSerializer<RadioPlayInfo> {
             specifiedType: const FullType(String),
           ) as String;
           result.nowPlaying = valueDes;
+          break;
+        case r'nowPlayingItemPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.nowPlayingItemPid = valueDes;
           break;
         default:
           unhandled.add(key);

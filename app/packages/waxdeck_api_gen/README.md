@@ -136,8 +136,20 @@ Conventions:
   URL: the enclosure is read from the episode in the catalog, so a
   token for one episode reaches that episode's audio and nothing
   else, and the relay copies only `Content-Type`, `Content-Length`,
-  `Content-Range`, `Accept-Ranges`, `ETag`, and `Last-Modified` back
-  from the podcast host. `/media/art` exists because a device
+  `Content-Range`, `Accept-Ranges`, `ETag`, `Last-Modified`, and
+  `Content-Encoding` back from the podcast host.
+  The two relays that carry a third party's bytes
+  (`/media/enclosure` and `/media/radio/{pid}`) are bounded, which
+  is the one place token expiry is not the only thing that ends a
+  transfer. An account holding too many relayed streams at once is
+  refused a new one with `429 rate-limited`; retry when one ends.
+  And a relay whose upstream stops sending, or (for an episode,
+  which is a finite file) runs past a size ceiling or below a usable
+  transfer rate, is ended mid-body: there are no trailers and no
+  error document, so a client sees a truncated response and should
+  treat it as it would any interrupted download. Time the server
+  spends blocked writing to a slow client is never counted against
+  these bounds, so a paused player is not a reason to be cut. `/media/art` exists because a device
   endpoint has no session to present: it takes an optional `size` (16
   to 2048, defaulting to 600) and is `no-store`, since the URL
   carries a credential and is minted per listener. First-party
@@ -474,6 +486,7 @@ Class | Method | HTTP request | Description
 [*PodcastsApi*](doc/PodcastsApi.md) | [**putSubscriptionSettings**](doc/PodcastsApi.md#putsubscriptionsettings) | **PUT** /podcasts/{pid}/settings | Replace the caller&#39;s settings for a subscription
 [*PodcastsApi*](doc/PodcastsApi.md) | [**refreshPodcast**](doc/PodcastsApi.md#refreshpodcast) | **POST** /podcasts/{pid}/refresh | Refresh a show&#39;s feed now
 [*PodcastsApi*](doc/PodcastsApi.md) | [**removeEpisodeDownload**](doc/PodcastsApi.md#removeepisodedownload) | **DELETE** /episodes/{pid}/fetch | Remove an episode&#39;s fetched audio from the server
+[*PodcastsApi*](doc/PodcastsApi.md) | [**searchPodcastDirectory**](doc/PodcastsApi.md#searchpodcastdirectory) | **GET** /podcasts/directory | Search the podcast directory
 [*PodcastsApi*](doc/PodcastsApi.md) | [**subscribePodcast**](doc/PodcastsApi.md#subscribepodcast) | **POST** /podcasts | Subscribe to a podcast
 [*PodcastsApi*](doc/PodcastsApi.md) | [**unsubscribePodcast**](doc/PodcastsApi.md#unsubscribepodcast) | **DELETE** /podcasts/{pid} | Unsubscribe from a show
 [*RadioApi*](doc/RadioApi.md) | [**createRadioStation**](doc/RadioApi.md#createradiostation) | **POST** /radio/stations | Add a radio station
@@ -746,6 +759,8 @@ Class | Method | HTTP request | Description
  - [PlaylistPreview](doc/PlaylistPreview.md)
  - [PlaylistUpdate](doc/PlaylistUpdate.md)
  - [PodcastDetail](doc/PodcastDetail.md)
+ - [PodcastDirectoryEntry](doc/PodcastDirectoryEntry.md)
+ - [PodcastDirectoryResults](doc/PodcastDirectoryResults.md)
  - [PodcastFunding](doc/PodcastFunding.md)
  - [PodcastShow](doc/PodcastShow.md)
  - [PortablePlaylist](doc/PortablePlaylist.md)

@@ -131,6 +131,15 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "missing, expired, or wrong media token")
 		return
 	}
+	// The cap is taken before the catalog read, so a caller already at
+	// the ceiling is refused without a database round trip.
+	release, ok := s.relayStreams.acquire(user)
+	if !ok {
+		writeError(w, http.StatusTooManyRequests, "rate-limited",
+			"too many concurrent relayed streams for this account")
+		return
+	}
+	defer release()
 	src, err := s.svc.EnclosureStreamSource(r.Context(), user, pid)
 	if err != nil {
 		switch service.KindOf(err) {
@@ -146,7 +155,12 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, src.URL, nil)
+	// A cancellable child of the request context, so the bounds below
+	// can end a transfer the listener has not abandoned. Cancelling
+	// releases the upstream socket as well as the read.
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, nil)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "service-unreachable", "the podcast host could not be contacted")
 		return
@@ -241,16 +255,6 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A HEAD reaches this handler: Go's ServeMux routes HEAD to a GET
-	// pattern, and this route is registered as one. net/http discards
-	// whatever a handler writes for a HEAD, so relaying the body would
-	// pull the whole episode off the podcast host and throw it away --
-	// and cast renderers, DLNA devices, and Safari all probe with HEAD
-	// before playing, which is exactly the traffic passthrough invites.
-	// The headers above are the entire answer; returning here closes
-	// the upstream body through the deferred Close and abandons the
-	// transfer.
-
 	// Unbuffered, and the read and write halves are kept apart rather
 	// than folded into io.Copy, because only that distinction says who
 	// ended the stream.
@@ -269,11 +273,51 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 	// difference here is that an episode has a definite length, so a
 	// truncated one is a fact about the host rather than the ordinary
 	// end of a live stream.
+	//
+	// An episode is a finite file, so this relay takes the two bounds a
+	// finite transfer can carry that a live stream cannot: an overall
+	// size cap and an average rate floor. Both describe a transfer that
+	// was never going to finish, which is the case an idle deadline
+	// alone misses -- a host dribbling bytes forever is never idle.
+	guard := newRelayGuard(relayLimits{
+		idle:      enclosureIdle,
+		maxBytes:  enclosureMaxBytes,
+		minRate:   enclosureMinRate,
+		rateGrace: enclosureRateGrace,
+	}, cancel)
+	defer guard.stop()
 	buf := make([]byte, 32<<10)
 	for {
 		n, readErr := resp.Body.Read(buf)
+		// Noted before the write, and the write bracketed, so that the
+		// listener's own pace is never charged to the podcast host. A
+		// paused media element stops reading once its buffer fills and
+		// the write below blocks for as long as the pause lasts; judged
+		// from out here that is indistinguishable from a dead host.
+		if !guard.note(n) {
+			// A bound tripped, which is this server ending the transfer
+			// rather than either endpoint doing it. The listener sees a
+			// truncated episode either way, so it is worth a line: the
+			// operator is the only one who can tell whether the host is
+			// broken or the cap is too tight, and the measured bytes and
+			// duration are what let them tell.
+			//
+			// Reached on every trip, including the idle timer's: note is
+			// called before readErr is examined, and trip marks the guard
+			// stopped before it cancels, so the read that returns because
+			// of that cancel still finds a stopped guard here. A cut is
+			// never silent.
+			relayed, elapsed := guard.stats()
+			s.log.Warn("the episode relay was cut short",
+				"pid", pid, "reason", guard.reason(),
+				"bytes", relayed, "elapsed", elapsed.Round(time.Second))
+			return
+		}
 		if n > 0 {
-			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+			done := guard.writing()
+			_, writeErr := w.Write(buf[:n])
+			done()
+			if writeErr != nil {
 				return
 			}
 		}

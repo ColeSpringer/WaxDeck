@@ -11,11 +11,17 @@ class _$RadioPlayInfo extends RadioPlayInfo {
   final String url;
   @override
   final String? nowPlaying;
+  @override
+  final String? nowPlayingItemPid;
 
   factory _$RadioPlayInfo([void Function(RadioPlayInfoBuilder)? updates]) =>
       (RadioPlayInfoBuilder()..update(updates))._build();
 
-  _$RadioPlayInfo._({required this.url, this.nowPlaying}) : super._();
+  _$RadioPlayInfo._({
+    required this.url,
+    this.nowPlaying,
+    this.nowPlayingItemPid,
+  }) : super._();
   @override
   RadioPlayInfo rebuild(void Function(RadioPlayInfoBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -28,7 +34,8 @@ class _$RadioPlayInfo extends RadioPlayInfo {
     if (identical(other, this)) return true;
     return other is RadioPlayInfo &&
         url == other.url &&
-        nowPlaying == other.nowPlaying;
+        nowPlaying == other.nowPlaying &&
+        nowPlayingItemPid == other.nowPlayingItemPid;
   }
 
   @override
@@ -36,6 +43,7 @@ class _$RadioPlayInfo extends RadioPlayInfo {
     var _$hash = 0;
     _$hash = $jc(_$hash, url.hashCode);
     _$hash = $jc(_$hash, nowPlaying.hashCode);
+    _$hash = $jc(_$hash, nowPlayingItemPid.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -44,7 +52,8 @@ class _$RadioPlayInfo extends RadioPlayInfo {
   String toString() {
     return (newBuiltValueToStringHelper(r'RadioPlayInfo')
           ..add('url', url)
-          ..add('nowPlaying', nowPlaying))
+          ..add('nowPlaying', nowPlaying)
+          ..add('nowPlayingItemPid', nowPlayingItemPid))
         .toString();
   }
 }
@@ -61,6 +70,11 @@ class RadioPlayInfoBuilder
   String? get nowPlaying => _$this._nowPlaying;
   set nowPlaying(String? nowPlaying) => _$this._nowPlaying = nowPlaying;
 
+  String? _nowPlayingItemPid;
+  String? get nowPlayingItemPid => _$this._nowPlayingItemPid;
+  set nowPlayingItemPid(String? nowPlayingItemPid) =>
+      _$this._nowPlayingItemPid = nowPlayingItemPid;
+
   RadioPlayInfoBuilder() {
     RadioPlayInfo._defaults(this);
   }
@@ -70,6 +84,7 @@ class RadioPlayInfoBuilder
     if ($v != null) {
       _url = $v.url;
       _nowPlaying = $v.nowPlaying;
+      _nowPlayingItemPid = $v.nowPlayingItemPid;
       _$v = null;
     }
     return this;
@@ -98,6 +113,7 @@ class RadioPlayInfoBuilder
             'url',
           ),
           nowPlaying: nowPlaying,
+          nowPlayingItemPid: nowPlayingItemPid,
         );
     replace(_$result);
     return _$result;

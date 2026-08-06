@@ -22,14 +22,6 @@ List of current bugs or correctness issues.
 
 - [8-6-2026] Unfetching an episode drops it from the hub's count but not from the show's listing, so a three-episode feed reads "2 unplayed" on the podcasts hub while the show screen lists three unplayed episodes. `RemoveEpisodeDownload` removes the file by trashing the item (`podcasts.go` around 919-927: `PlanDeletePIDs(..., model.DeleteTrash)` then `ApplyDelete`), which sets `state=archived`. `countShow` counts through `visibleItems()`, which excludes archived (ADR-0048), while `Episodes` reads the podcast facade directly and does not filter - so the two views of one show disagree. It is also shared: the file is one catalog row, so one subscriber's unfetch changes every subscriber's count. The listing is the surface that looks right (an unfetched episode is still an episode of the feed and still streams by enclosure passthrough, which `podcasts.spec.ts` pins), so the fix is probably for unfetch to drop the file without archiving the item rather than for the listing to grow the filter. Reproduced with three accounts subscribed to the fixture feed: subscribe all three, unfetch one episode, and every account's tile reads `episodeCount: 2` while `/podcasts/{pid}/episodes` returns 3.
 
-- [8-5-2026] We should maybe try to prioritize radio stations that are "closer" (by country not exact location) to the user. Currently the suggested items seem like a random assortment that contain the search term.
-
-- [8-5-2026] Trying to add a radio by url shows multiple input boxes instead of just 1.
-
-- [8-5-2026] Added radio stations don't show when searching.
-
-- [8-5-2026] There is no image for the radio station when playing. We might also consider using the artwork of the currently playing song from the radio (maybe station logo when deck is minimized and song artwork when in full screen)
-
 - [8-1-2026] Casting a fresh session from the device picker while local audio plays stops nothing locally: the picker creates the remote session without ending local playback, and the deck bar's precedence keeps the local face over the remote one (device_picker.dart around 313-356, precedence in deck_bar_host.dart around 80-91). Needs ADR-0008's transfer semantics before deciding what "start there" should do to the local engine.
 
 - [8-1-2026] Casting while radio plays transfers a dead item session: mirrorSessionId never clears when radio takes the engine, so the picker (reachable via the settings screen during radio) offers a transfer of a session whose queue the engine no longer plays (connect_controller.dart around 91-99). Same ADR-0008 dependency.

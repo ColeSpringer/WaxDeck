@@ -54,11 +54,20 @@ class RadioFace extends ConsumerWidget {
           now: NowPlayingData(
             title: station.name,
             subtitle: playback.nowPlaying,
-            artwork: waxStationLogo(
-              ref.watch(artworkStoreProvider),
-              ref.watch(repositoryProvider),
-              station,
-            ),
+            // The song's own cover when the server recognised what is
+            // playing, the station's logo otherwise. Only here: the deck
+            // bar keeps the logo, because a bar whose picture changed
+            // every few minutes would read as the station changing.
+            artwork:
+                waxArtwork(
+                  ref.watch(artworkStoreProvider),
+                  ref.watch(radioNowPlayingArtProvider),
+                ) ??
+                waxStationLogo(
+                  ref.watch(artworkStoreProvider),
+                  ref.watch(repositoryProvider),
+                  station,
+                ),
             domain: WaxDomain.radio,
             shape: ArtworkShape.circle,
             position: Duration.zero,

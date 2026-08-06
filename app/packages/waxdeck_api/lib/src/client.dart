@@ -313,6 +313,13 @@ abstract interface class WaxDeckRepository {
     String? folder,
   });
 
+  /// `GET /podcasts/directory`: searches the public podcast directory by
+  /// show name. Every match carries the feed URL to subscribe with.
+  Future<List<PodcastDirectoryEntry>> searchPodcastDirectory(
+    String query, {
+    int? limit,
+  });
+
   /// `GET /podcasts/{pid}`: show detail with the caller's subscription
   /// state, for any cataloged show.
   Future<PodcastDetail> getPodcast(String pid);
@@ -2038,6 +2045,20 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<List<PodcastDirectoryEntry>> searchPodcastDirectory(
+    String query, {
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getPodcastsApi().searchPodcastDirectory(
+      query: query,
+      limit: limit,
+    );
+    return _require(
+      response.data,
+    ).entries.map(podcastDirectoryEntryFromGen).toList(growable: false);
+  });
+
+  @override
   Future<PodcastDetail> getPodcast(String pid) => _guard(() async {
     final response = await _gen.getPodcastsApi().getPodcast(pid: pid);
     return podcastDetailFromGen(_require(response.data), baseUrl: _baseUrl);
@@ -2578,6 +2599,7 @@ class WaxDeckClient implements WaxDeckRepository {
     return RadioPlayInfo(
       url: resolveMediaUrl(_baseUrl, info.url),
       nowPlaying: info.nowPlaying,
+      nowPlayingItemPid: info.nowPlayingItemPid,
     );
   });
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"golang.org/x/text/language"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -46,6 +47,13 @@ type RadioDirectoryEntry struct {
 	LogoURL     string
 	Tags        string
 	Country     string
+	// CountryCode is the directory's ISO 3166-1 alpha-2 code, used to
+	// rank a listener's own country first. Country is the display name
+	// ("The Netherlands") and cannot do that job: matching it against a
+	// BCP 47 region subtag would need a name table, which is a worse
+	// answer than reading the code the directory already sends. Not on
+	// the wire; ranking happens here.
+	CountryCode string
 	Codec       string
 	BitrateKbps int
 }
@@ -155,8 +163,14 @@ func (l *Library) RadioStreamSource(ctx context.Context, apiStationPID string) (
 	return row.StreamURL, nil
 }
 
-// SearchRadioDirectory queries the public station directory by name.
-func (l *Library) SearchRadioDirectory(ctx context.Context, q string, limit int) ([]RadioDirectoryEntry, error) {
+// SearchRadioDirectory queries the public station directory by name,
+// then ranks the listener's own country first.
+//
+// The ranking is a stable partition rather than a `countrycode` filter
+// on the query, and the difference matters to someone searching for a
+// station they already know: a filter would hide a good foreign match
+// entirely, where a partition only moves it down.
+func (l *Library) SearchRadioDirectory(ctx context.Context, uc *UserCtx, q string, limit int) ([]RadioDirectoryEntry, error) {
 	base := l.radioDirectoryBase
 	if base == "" {
 		base = defaultRadioDirectoryBase
@@ -196,6 +210,7 @@ func (l *Library) SearchRadioDirectory(ctx context.Context, q string, limit int)
 		Favicon     string `json:"favicon"`
 		Tags        string `json:"tags"`
 		Country     string `json:"country"`
+		CountryCode string `json:"countrycode"`
 		Codec       string `json:"codec"`
 		Bitrate     int    `json:"bitrate"`
 	}
@@ -218,11 +233,72 @@ func (l *Library) SearchRadioDirectory(ctx context.Context, q string, limit int)
 			LogoURL:     r.Favicon,
 			Tags:        r.Tags,
 			Country:     r.Country,
+			CountryCode: r.CountryCode,
 			Codec:       r.Codec,
 			BitrateKbps: r.Bitrate,
 		})
 	}
+	rankRadioByRegion(out, l.listenerRegion(ctx, uc))
 	return out, nil
+}
+
+// listenerRegion is the region subtag of the caller's stored locale, or
+// empty when there is not one.
+func (l *Library) listenerRegion(ctx context.Context, uc *UserCtx) string {
+	if uc == nil {
+		return ""
+	}
+	return regionOfLocale(l.PrefsForUser(ctx, uc.ID).Locale)
+}
+
+// regionOfLocale reads the region subtag out of a BCP 47 tag, answering
+// empty when the tag does not carry one.
+//
+// Empty is the common answer and the correct one. A locale is optional,
+// and `en` is as valid a tag as `en-US`, so most installs have nothing
+// here. What is deliberately not done is inferring: x/text will happily
+// resolve `en` to `US` at low confidence, and a listener in Nairobi
+// getting American stations first because they picked English is worse
+// than the unranked list they had. Only a region the listener actually
+// wrote counts, which is what language.Exact means here.
+func regionOfLocale(locale string) string {
+	if locale == "" {
+		return ""
+	}
+	tag, err := language.Parse(locale)
+	if err != nil {
+		return ""
+	}
+	region, conf := tag.Region()
+	if conf != language.Exact {
+		return ""
+	}
+	return region.String()
+}
+
+// rankRadioByRegion moves stations in the listener's own country to the
+// front, in place, keeping the directory's vote order inside each half.
+//
+// Stability is the whole design. Vote order is the directory's ranking
+// and it is a good one; this only says that between two stations the
+// directory likes equally, the local one is likelier to be the one meant.
+// An empty region leaves the slice untouched, which is exactly the
+// behaviour installs had before this existed.
+func rankRadioByRegion(entries []RadioDirectoryEntry, region string) {
+	if region == "" || len(entries) < 2 {
+		return
+	}
+	local := make([]RadioDirectoryEntry, 0, len(entries))
+	rest := make([]RadioDirectoryEntry, 0, len(entries))
+	for _, e := range entries {
+		if strings.EqualFold(e.CountryCode, region) {
+			local = append(local, e)
+			continue
+		}
+		rest = append(rest, e)
+	}
+	copy(entries, local)
+	copy(entries[len(local):], rest)
 }
 
 // Logo cache and fetch bounds.
@@ -344,7 +420,18 @@ func (l *Library) RadioStationLogo(ctx context.Context, apiStationPID string) (R
 	if wait == nil {
 		defer l.endRadioLogoFetch(apiStationPID)
 	}
-	logo, fetchErr := l.fetchRadioLogo(ctx, row.LogoURL)
+	// A station whose row names no logo is not a station with no logo:
+	// every By-URL add and every directory entry whose favicon was
+	// blank, SVG, or dead arrives this way, which is most of them. Go
+	// and look before answering the monogram. The result is cached like
+	// any other, so the search happens once per station per refresh
+	// window rather than per paint.
+	logo, fetchErr := RadioLogo{}, error(nil)
+	if row.LogoURL == "" {
+		logo, fetchErr = l.discoverRadioLogo(ctx, row.HomepageURL, row.StreamURL)
+	} else {
+		logo, fetchErr = l.fetchRadioLogo(ctx, row.LogoURL)
+	}
 	// A failure is remembered, unreachable hosts included: thirty stations
 	// behind one dead host would otherwise cost thirty ten-second waits per
 	// paint. The exception is the caller going away, which says nothing

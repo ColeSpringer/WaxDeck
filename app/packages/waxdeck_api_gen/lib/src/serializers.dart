@@ -208,6 +208,8 @@ import 'package:waxdeck_api_gen/src/model/playlist_page.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_preview.dart';
 import 'package:waxdeck_api_gen/src/model/playlist_update.dart';
 import 'package:waxdeck_api_gen/src/model/podcast_detail.dart';
+import 'package:waxdeck_api_gen/src/model/podcast_directory_entry.dart';
+import 'package:waxdeck_api_gen/src/model/podcast_directory_results.dart';
 import 'package:waxdeck_api_gen/src/model/podcast_funding.dart';
 import 'package:waxdeck_api_gen/src/model/podcast_show.dart';
 import 'package:waxdeck_api_gen/src/model/portable_playlist.dart';
@@ -536,6 +538,8 @@ part 'serializers.g.dart';
   PlaylistPreview,
   PlaylistUpdate,
   PodcastDetail,
+  PodcastDirectoryEntry,
+  PodcastDirectoryResults,
   PodcastFunding,
   PodcastShow,
   PortablePlaylist,

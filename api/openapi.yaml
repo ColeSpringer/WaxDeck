@@ -142,8 +142,20 @@ info:
       URL: the enclosure is read from the episode in the catalog, so a
       token for one episode reaches that episode's audio and nothing
       else, and the relay copies only `Content-Type`, `Content-Length`,
-      `Content-Range`, `Accept-Ranges`, `ETag`, and `Last-Modified` back
-      from the podcast host. `/media/art` exists because a device
+      `Content-Range`, `Accept-Ranges`, `ETag`, `Last-Modified`, and
+      `Content-Encoding` back from the podcast host.
+      The two relays that carry a third party's bytes
+      (`/media/enclosure` and `/media/radio/{pid}`) are bounded, which
+      is the one place token expiry is not the only thing that ends a
+      transfer. An account holding too many relayed streams at once is
+      refused a new one with `429 rate-limited`; retry when one ends.
+      And a relay whose upstream stops sending, or (for an episode,
+      which is a finite file) runs past a size ceiling or below a usable
+      transfer rate, is ended mid-body: there are no trailers and no
+      error document, so a client sees a truncated response and should
+      treat it as it would any interrupted download. Time the server
+      spends blocked writing to a slow client is never counted against
+      these bounds, so a paused player is not a reason to be cut. `/media/art` exists because a device
       endpoint has no session to present: it takes an optional `size` (16
       to 2048, defaulting to 600) and is `no-store`, since the URL
       carries a credential and is minted per listener. First-party
@@ -6380,6 +6392,56 @@ paths:
           $ref: "#/components/responses/FeedUnreachable"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
+
+  /podcasts/directory:
+    get:
+      operationId: searchPodcastDirectory
+      summary: Search the podcast directory
+      description: >
+        Searches a public podcast directory (the iTunes search API) by
+        name, so a show can be subscribed to without finding its feed
+        URL first. Every match carries the `feedUrl` to POST to
+        `/podcasts`, which is why a directory result needs no source
+        kind: it is always an RSS feed. Requires internet; when the
+        directory cannot be reached the endpoint answers
+        `directory-unavailable` and subscribing by URL still works.
+      tags: [podcasts]
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: Show name search terms.
+          schema:
+            type: string
+            minLength: 2
+        - name: limit
+          in: query
+          description: Maximum directory entries to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        "200":
+          description: Directory matches, best first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PodcastDirectoryResults"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "502":
+          description: >
+            The podcast directory could not be reached, or refused this
+            server's request rate (code `directory-unavailable`).
+            Subscribing by feed URL is unaffected.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /episodes/{pid}:
     get:
@@ -15102,6 +15164,49 @@ components:
           items:
             $ref: "#/components/schemas/TranscriptCue"
 
+    PodcastDirectoryEntry:
+      type: object
+      description: One podcast directory match.
+      required: [name, feedUrl]
+      properties:
+        name:
+          type: string
+          description: Show name as the directory lists it.
+        feedUrl:
+          type: string
+          description: >
+            The show's RSS feed URL, ready to POST to `/podcasts`. A
+            match with no usable feed URL is dropped server-side rather
+            than returned as unsubscribable.
+        author:
+          type: string
+          description: Publisher or author name.
+        artworkUrl:
+          type: string
+          description: >
+            Show artwork as the directory lists it, drawn directly by
+            the client. There is no proxy for a directory match: cover
+            art is addressed by show pid and a match has none until it
+            is subscribed to.
+        genre:
+          type: string
+          description: Primary directory genre.
+          example: Music
+        episodeCount:
+          type: integer
+          description: Directory-reported episode count, 0 when unknown.
+
+    PodcastDirectoryResults:
+      type: object
+      description: Podcast directory matches.
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          description: Matches, best first.
+          items:
+            $ref: "#/components/schemas/PodcastDirectoryEntry"
+
     PodcastFunding:
       type: object
       description: >
@@ -15262,6 +15367,20 @@ components:
             before anyone has the stream open, the field is
             necessarily absent.
           example: Charlie Parker - Ornithology
+        nowPlayingItemPid:
+          type: string
+          description: >
+            A library track this server matched `nowPlaying` to, when it
+            recognised one. Present so a full-screen player can draw the
+            song's own cover art instead of the station logo; absent is
+            the common case and is not a failure, so a client that
+            cannot match must fall back to the station's artwork rather
+            than showing a gap. The match is a best-effort text lookup
+            against the catalog and is never authoritative: it does not
+            mean this server is playing that file, and it is
+            deliberately not used for scrobbling, which reports what the
+            station announced.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     RadioDirectoryEntry:
       type: object

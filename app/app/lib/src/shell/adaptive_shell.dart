@@ -655,7 +655,7 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
     final query = value.trim();
     ref.read(searchQueryProvider.notifier).submit(query);
     if (query.isEmpty) return;
-    if (!ref.read(searchScopeProvider).isDirectory) {
+    if (ref.read(searchScopeProvider).source.asksLibrary) {
       ref.read(recentSearchesProvider.notifier).remember(query);
     }
   }

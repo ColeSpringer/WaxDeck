@@ -54,6 +54,13 @@ type core struct {
 
 	cacheMu sync.Mutex
 	cache   map[string]cacheEntry
+	// maxEntries bounds the response cache. Per-core rather than a
+	// package constant because the bound is only meaningful next to what
+	// the keys are: an enrichment client's keys are derived from catalog
+	// entities, so the set is bounded by the library, while a name
+	// search's keys are whatever a caller typed and the set is bounded
+	// by nothing but this.
+	maxEntries int
 }
 
 type cacheEntry struct {
@@ -64,8 +71,17 @@ type cacheEntry struct {
 // newCore builds a core around the injected client (a 15s-timeout default
 // when nil), the required User-Agent, and the per-host minimum interval.
 func newCore(client *http.Client, userAgent string, minInterval time.Duration) *core {
+	return newBoundedCore(client, userAgent, minInterval, maxCacheEntries)
+}
+
+// newBoundedCore is newCore with an explicit cache bound, for a client
+// whose cache keys are free text rather than catalog-derived.
+func newBoundedCore(client *http.Client, userAgent string, minInterval time.Duration, maxEntries int) *core {
 	if client == nil {
 		client = &http.Client{Timeout: defaultTimeout}
+	}
+	if maxEntries <= 0 {
+		maxEntries = maxCacheEntries
 	}
 	return &core{
 		httpClient:  client,
@@ -73,6 +89,7 @@ func newCore(client *http.Client, userAgent string, minInterval time.Duration) *
 		minInterval: minInterval,
 		next:        make(map[string]time.Time),
 		cache:       make(map[string]cacheEntry),
+		maxEntries:  maxEntries,
 	}
 }
 
@@ -177,7 +194,7 @@ func (c *core) cached(key string, ttl time.Duration) ([]byte, bool) {
 func (c *core) store(key string, body []byte) {
 	c.cacheMu.Lock()
 	defer c.cacheMu.Unlock()
-	if _, exists := c.cache[key]; !exists && len(c.cache) >= maxCacheEntries {
+	if _, exists := c.cache[key]; !exists && len(c.cache) >= c.maxEntries {
 		var oldestKey string
 		var oldestAt time.Time
 		for k, e := range c.cache {

@@ -230,6 +230,8 @@ export 'package:waxdeck_api_gen/src/model/playlist_page.dart';
 export 'package:waxdeck_api_gen/src/model/playlist_preview.dart';
 export 'package:waxdeck_api_gen/src/model/playlist_update.dart';
 export 'package:waxdeck_api_gen/src/model/podcast_detail.dart';
+export 'package:waxdeck_api_gen/src/model/podcast_directory_entry.dart';
+export 'package:waxdeck_api_gen/src/model/podcast_directory_results.dart';
 export 'package:waxdeck_api_gen/src/model/podcast_funding.dart';
 export 'package:waxdeck_api_gen/src/model/podcast_show.dart';
 export 'package:waxdeck_api_gen/src/model/portable_playlist.dart';
