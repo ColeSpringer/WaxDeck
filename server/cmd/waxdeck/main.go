@@ -72,6 +72,7 @@ func run() error {
 		flowAPIKey = flag.String("flow-api-key", envOr("WAXDECK_FLOW_API_KEY", ""), "API key WaxDeck presents to the WaxFlow sidecar")
 		flowConfig = flag.String("flow-config", envOr("WAXDECK_FLOW_CONFIG", ""), "the WaxFlow sidecar's JSON config file, as WaxDeck sees it; set it (and point the sidecar at the same file) so a library created at runtime streams without a sidecar restart")
 		scanStart  = flag.Bool("scan-on-start", envOr("WAXDECK_SCAN_ON_START", "true") == "true", "launch a library scan at startup")
+		resetStale = flag.Bool("reset-catalog", envOr("WAXDECK_RESET_CATALOG", "false") == "true", "when the catalog was built from a different schema baseline (which pre-1.0 is edited in place rather than migrated), move it aside and start on a fresh one instead of refusing to start. Discards play positions, ratings, stars, playlists, curation edits, podcast subscriptions and trash; media on disk is untouched and re-indexed by the startup scan. It fires only on that refusal, never on a catalog this build can open -- but it cannot tell a baseline that moved forward from one that moved back, so a rollback across a baseline edit discards rather than refuses")
 		cookieSec  = flag.Bool("cookie-secure", envOr("WAXDECK_COOKIE_SECURE", "false") == "true", "mark session cookies Secure (set whenever the origin is HTTPS)")
 		publicBase = flag.String("public-base", envOr("WAXDECK_PUBLIC_BASE", ""), "externally reachable base URL (needed for OIDC callbacks), e.g. https://wax.example.com")
 
@@ -109,6 +110,9 @@ func run() error {
 		mbBase      = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override (a local mirror, or a stub in tests)")
 		acoustidKey = flag.String("acoustid-key", envOr("WAXDECK_ACOUSTID_KEY", ""), "AcoustID API key; empty disables fingerprint evidence in matching")
 		fanartKey   = flag.String("fanarttv-key", envOr("WAXDECK_FANARTTV_KEY", ""), "fanart.tv API key; empty leaves that artwork provider unconfigured")
+
+		enrichContact = flag.String("enrichment-contact", envOr("WAXDECK_ENRICHMENT_CONTACT", ""), "MusicBrainz contact (an email or a URL) the catalog's whole-library enrichment pass identifies itself with. MusicBrainz requires an identifying agent, so empty leaves that pass disabled and /admin/enrichment/run refuses")
+		enrichMatch   = flag.Bool("enrichment-match-releases", envOr("WAXDECK_ENRICHMENT_MATCH_RELEASES", "true") == "true", "during enrichment, resolve which pressing of a record the library holds from its barcode or catalog number, deciding ties on medium and country. On by default; needs -enrichment-contact to have any effect")
 
 		oidcIssuer  = flag.String("oidc-issuer", envOr("WAXDECK_OIDC_ISSUER", ""), "OIDC issuer URL (empty disables single sign-on)")
 		oidcID      = flag.String("oidc-id", envOr("WAXDECK_OIDC_ID", "sso"), "OIDC provider id shown in start URLs")
@@ -303,6 +307,7 @@ func run() error {
 		WorkerAPIConfigured:       len(workerTokenList) > 0,
 		Roots:                     svcRoots,
 		ScanOnStart:               *scanStart && len(roots) > 0,
+		ResetStaleCatalog:         *resetStale,
 		Sealer:                    sealer,
 		SecretCipher:              catalogCipher,
 		PodcastDir:                *podcastDir,
@@ -318,6 +323,8 @@ func run() error {
 		LastfmAPIKey:              *lastfmKey,
 		LastfmSecret:              *lastfmSecret,
 		EnrichmentProviders:       enrichProviders,
+		EnrichmentContact:         *enrichContact,
+		EnrichmentMatchReleases:   *enrichMatch,
 		Logger:                    log,
 	}
 	if matchSource != nil {

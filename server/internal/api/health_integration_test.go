@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"io"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -358,12 +360,21 @@ func TestEnrichmentStatusAndItemEnrich(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// The whole-library pass needs a MusicBrainz contact the harness
-	// does not configure; upstream refuses as unsupported, which the
-	// generic error path reports as 501.
+	if st.Configured {
+		t.Fatalf("configured = %v, want false without a contact", st.Configured)
+	}
+
+	// 501, and the message must name the WaxDeck knob, not upstream's.
 	resp = h.postJSON(t, "/api/v1/library/enrichment/run", map[string]any{})
 	if resp.StatusCode != 501 {
 		t.Fatalf("enrichment run status = %d, want 501 without a contact", resp.StatusCode)
 	}
+	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
+	if !strings.Contains(string(body), "WAXDECK_ENRICHMENT_CONTACT") {
+		t.Errorf("refusal does not name the WaxDeck flag: %s", body)
+	}
+	if strings.Contains(string(body), "WAXBIN_ENRICH_CONTACT") {
+		t.Errorf("refusal passes upstream's own knob through: %s", body)
+	}
 }

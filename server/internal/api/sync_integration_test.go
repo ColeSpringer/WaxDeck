@@ -860,6 +860,73 @@ func (h *harness) deleteReq(t *testing.T, path string) *http.Response {
 	return resp
 }
 
+// Purging a trashed item flips its tombstone from hidden to removed on
+// the next delta, so a client stops keeping bytes it can no longer get
+// back.
+//
+// This needs no WaxDeck code and that is exactly why it needs a test.
+// The catalog appends an item update on every purge now, and WaxDeck's
+// tombstone reason is re-derived from the trash journal per delta page,
+// so the flip falls out of two things neither of which mentions the
+// other. Nothing in this repo would fail if the catalog stopped
+// appending it; this would.
+func TestSyncCatalogPurgeFlipsTheTombstoneToRemoved(t *testing.T) {
+	h := newHarness(t)
+
+	items, since := h.mirror(t, 50)
+	var doomed string
+	for pid, it := range items {
+		if it.Title == "Alpha Song" {
+			doomed = pid
+		}
+	}
+	if doomed == "" {
+		t.Fatalf("no Alpha Song in the mirror: %v", items)
+	}
+
+	resp := h.postJSON(t, "/api/v1/library/items/delete", map[string]any{
+		"pids": []string{doomed}, "mode": "trash",
+	})
+	wantStatus(t, resp, 200, "delete to trash")
+
+	// Recoverable while the journal row is there.
+	if got := h.deleteReasons(t, since)[doomed]; got != "hidden" {
+		t.Fatalf("trash tombstone reason = %q, want hidden", got)
+	}
+	// Advance past the trash tombstone, so what follows is only what the
+	// purge itself emitted.
+	since = h.applyDelta(t, items, since)
+
+	ulid := doomed[strings.Index(doomed, "-")+1:]
+	entries := decode[TrashList](t, get(t, h.ts, "/api/v1/admin/trash", h.token)).Entries
+	var trashID string
+	for _, e := range entries {
+		if e.ItemPid != nil && strings.HasSuffix(*e.ItemPid, ulid) {
+			trashID = e.Id
+		}
+	}
+	if trashID == "" {
+		t.Fatalf("no trash entry for %s: %+v", doomed, entries)
+	}
+
+	resp = h.deleteReq(t, "/api/v1/admin/trash/"+trashID)
+	wantStatus(t, resp, 200, "purge the trash entry")
+
+	// The purge is a catalog change now, so a second tombstone follows and
+	// says the bytes are gone for good.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		got := h.deleteReasons(t, since)[doomed]
+		if got == "removed" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("tombstone reason after purge = %q, want removed", got)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 // A restricted caller gets the same tombstone reasons an administrator
 // does, which is not free: archiving is what an item does when it loses
 // its last file, so an archived view carries no path at all - and

@@ -269,12 +269,7 @@ func (l *Library) RematchItem(ctx context.Context, uc *UserCtx, apiItemPID strin
 	if err != nil {
 		return "", err
 	}
-	libraryPID := ""
-	if len(it.Path) > 0 {
-		if lp, err := l.libraryForPath(ctx, string(it.Path)); err == nil {
-			libraryPID = lp
-		}
-	}
+	libraryPID := string(it.LibraryPID)
 	entry := wdb.ReviewEntry{
 		Kind:       reviewKindMatch,
 		MediaType:  mediaTypeForKind(it.Kind),

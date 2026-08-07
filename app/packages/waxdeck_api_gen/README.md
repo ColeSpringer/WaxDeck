@@ -626,6 +626,7 @@ Class | Method | HTTP request | Description
  - [EnrichItemRequest](doc/EnrichItemRequest.md)
  - [EnrichItemResult](doc/EnrichItemResult.md)
  - [EnrichmentCoverage](doc/EnrichmentCoverage.md)
+ - [EnrichmentLastRun](doc/EnrichmentLastRun.md)
  - [EnrichmentProvider](doc/EnrichmentProvider.md)
  - [EnrichmentRunRequest](doc/EnrichmentRunRequest.md)
  - [EnrichmentRunResult](doc/EnrichmentRunResult.md)

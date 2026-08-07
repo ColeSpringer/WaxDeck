@@ -886,7 +886,8 @@ components:
           description: >
             The order each browse index opens in, keyed by the dimension
             name `GET /library/browse` spells (`genre`, `artist`,
-            `album-artist`, `album`, `release-group`, `year`, `kind`, or
+            `credit-artist`, `album-artist`, `album`, `release-group`,
+            `year`, `kind`, or
             a `tag.<KEY>` dimension); values are that endpoint's `sort`
             values. Sparse: a dimension with no entry opens in the
             client's own default, so a write must merge rather than

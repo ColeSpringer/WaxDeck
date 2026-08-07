@@ -1,9 +1,9 @@
-github.com/colespringer/waxbin v0.0.0-20260802211316-4bad5c8f19fc h1:mQnJKZouzCYP6WQ/4L9bfFRldbJwjdIYBhbRWcmK7Kg=
-github.com/colespringer/waxbin v0.0.0-20260802211316-4bad5c8f19fc/go.mod h1:+pJNZNUP92YDEFuipwP3PNVcWg1aWsKeJIu6APO5rOk=
-github.com/colespringer/waxflow v0.0.0-20260730025520-35107bc1aae3 h1:mPA8bbswsA8EYPXwTYu5Wq2TBDq6XD6cq6QeH7C9jEE=
-github.com/colespringer/waxflow v0.0.0-20260730025520-35107bc1aae3/go.mod h1:8mAo9F494kAckHAdJRd6xQa3xJsjOYhy+6C096s1ans=
-github.com/colespringer/waxlabel v1.2.0 h1:QJEQ6o6pdcMUv9a7aH13tQii7uY08PntOb1MmlMwXCw=
-github.com/colespringer/waxlabel v1.2.0/go.mod h1:vNfr3pXMymG1dBnoMJc7/1JFdtmHBP+8Jhz5dYlriyA=
+github.com/colespringer/waxbin v0.0.0-20260807053401-227d33fad6f1 h1:UreR3KdxRGSZfnWP0vEWSg6qBTlZr8+Kc39sBJkTvng=
+github.com/colespringer/waxbin v0.0.0-20260807053401-227d33fad6f1/go.mod h1:EzKcymzGb08mmhGlQiMx8yocI22vxsDAshyMK0rH2PQ=
+github.com/colespringer/waxflow v0.0.0-20260806093739-43cd9685ab82 h1:Ec2mdC6hdV9A/c3I4YcsAif5xsDzEUG3qcFCzPvGdjo=
+github.com/colespringer/waxflow v0.0.0-20260806093739-43cd9685ab82/go.mod h1:8mAo9F494kAckHAdJRd6xQa3xJsjOYhy+6C096s1ans=
+github.com/colespringer/waxlabel v1.4.0 h1:YxYBMFRoefml9o+Ha3OBUv2PpE1juPxCNgMzcrVVY8o=
+github.com/colespringer/waxlabel v1.4.0/go.mod h1:vNfr3pXMymG1dBnoMJc7/1JFdtmHBP+8Jhz5dYlriyA=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=

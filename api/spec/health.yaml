@@ -140,8 +140,8 @@ paths:
       operationId: listFileDiagnostics
       summary: Query per-file diagnostics
       description: >
-        Persisted per-file diagnostics (what scan, organize, replaygain, and
-        tag write-back recorded about individual files) across the library
+        Persisted per-file diagnostics (what scan, organize, replaygain,
+        enrichment, and tag write-back recorded about individual files) across the library
         in a stable path order, optionally narrowed by origin, code,
         severity, or library. This is the query surface a diagnostics
         dashboard reads instead of auditing item by item. Administrators
@@ -348,7 +348,7 @@ components:
       description: Restrict to one writer.
       schema:
         type: string
-        enum: [scan, organize, replaygain, edit]
+        enum: [scan, organize, replaygain, edit, enrichment]
     DiagnosticCodeFilter:
       name: code
       in: query
@@ -668,7 +668,7 @@ components:
           type: string
           description: >
             The writer that recorded it (`scan`, `organize`, `replaygain`,
-            or `edit`); new writers may appear.
+            `edit`, or `enrichment`); new writers may appear.
         code:
           type: string
           description: >

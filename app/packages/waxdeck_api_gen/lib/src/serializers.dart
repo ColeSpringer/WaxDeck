@@ -75,6 +75,7 @@ import 'package:waxdeck_api_gen/src/model/embedding_upload.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_result.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_coverage.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_last_run.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_provider.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_run_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_run_result.dart';
@@ -405,6 +406,7 @@ part 'serializers.g.dart';
   EnrichItemRequest,
   EnrichItemResult,
   EnrichmentCoverage,
+  EnrichmentLastRun,
   EnrichmentProvider,
   EnrichmentRunRequest,
   EnrichmentRunResult,

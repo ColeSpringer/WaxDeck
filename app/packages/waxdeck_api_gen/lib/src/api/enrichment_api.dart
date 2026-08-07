@@ -106,7 +106,7 @@ class EnrichmentApi {
   }
 
   /// Run a whole-library enrichment pass
-  /// Starts the catalog&#39;s enrichment pass as a background job (identity resolution first, then providers in priority order, provider-paced). &#x60;force&#x60; re-enriches entities that already enriched once. Locked and unofficial-marked content is respected. Returns the catalog job to follow. Administrators only. 
+  /// Starts the catalog&#39;s enrichment pass as a background job (identity resolution first, then providers in priority order, provider-paced). &#x60;force&#x60; re-enriches entities that already enriched once. Locked and unofficial-marked content is respected. Returns the catalog job to follow. Administrators only.  Refuses with &#x60;source-unavailable&#x60; when the server has no MusicBrainz contact configured, which is what &#x60;enrichmentStatus.configured&#x60; reports: read it first rather than offering a button that errors. 
   ///
   /// Parameters:
   /// * [enrichmentRunRequest] 

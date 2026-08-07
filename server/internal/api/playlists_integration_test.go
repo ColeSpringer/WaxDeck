@@ -545,6 +545,31 @@ func TestPlaylistPreviewAndRuleFields(t *testing.T) {
 	if !ok || title.Kind != "text" || title.UserState {
 		t.Fatalf("title field = %+v, want catalog text", title)
 	}
+
+	// The album release-identity fields: catalog text, never sortable
+	// (they are identifiers, not orderings), and each has to actually
+	// evaluate. A vocabulary row naming an engine field the query
+	// grammar does not know would advertise a rule the editor can build
+	// and the server then refuses.
+	for _, name := range []string{
+		"albumBarcode", "albumLabel", "albumCatalogNumber",
+		"albumMedia", "albumCountry",
+	} {
+		f, ok := byName[name]
+		if !ok {
+			t.Errorf("%s missing from the rule vocabulary", name)
+			continue
+		}
+		if f.Kind != "text" || f.UserState || f.Sortable {
+			t.Errorf("%s = %+v, want unsortable catalog text", name, f)
+		}
+		resp := h.postJSON(t, "/api/v1/playlists/preview", map[string]any{
+			"root": map[string]any{
+				"type": "condition", "field": name, "op": "contains", "value": "zzz-no-match",
+			},
+		})
+		wantStatus(t, resp, 200, "preview on "+name)
+	}
 }
 
 func TestPlaylistM3uRoundTrip(t *testing.T) {

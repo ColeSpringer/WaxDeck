@@ -97,6 +97,7 @@ export 'package:waxdeck_api_gen/src/model/embedding_upload.dart';
 export 'package:waxdeck_api_gen/src/model/enrich_item_request.dart';
 export 'package:waxdeck_api_gen/src/model/enrich_item_result.dart';
 export 'package:waxdeck_api_gen/src/model/enrichment_coverage.dart';
+export 'package:waxdeck_api_gen/src/model/enrichment_last_run.dart';
 export 'package:waxdeck_api_gen/src/model/enrichment_provider.dart';
 export 'package:waxdeck_api_gen/src/model/enrichment_run_request.dart';
 export 'package:waxdeck_api_gen/src/model/enrichment_run_result.dart';

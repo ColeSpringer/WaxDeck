@@ -131,18 +131,11 @@ func (l *Library) allowedByContent(ctx context.Context, uc *UserCtx, it *model.I
 		if uc.Explicit {
 			return true
 		}
-		// The view carries the episode's own flag, so a flagged one is
-		// refused without reading anything. A clean one still costs the
-		// chain: the view projects no podcast handle, and the show's flag
-		// hides its unflagged episodes too.
-		if it.Explicit {
-			return false
-		}
-		ep, err := l.lib.Podcasts().Episode(ctx, it.PID)
-		if err != nil || ep == nil {
-			return false // fail closed for restricted callers
-		}
-		return l.episodeAllowed(ctx, uc, ep.Episode)
+		// The view carries both advisory flags -- the episode's own and its
+		// show's -- so a restricted caller costs no reads at all. Both,
+		// because a feed may mark itself explicit at the channel level and
+		// leave every episode unmarked.
+		return !it.AdvisoryFlagged()
 	}
 	if len(uc.TagAllow) == 0 && len(uc.TagDeny) == 0 {
 		return true
@@ -155,13 +148,16 @@ func (l *Library) allowedByContent(ctx context.Context, uc *UserCtx, it *model.I
 }
 
 // episodeAllowed is the whole of "may this caller open this episode":
-// its own advisory flag, then its show's.
+// its own advisory flag, then its show's. It is the episode-row form of
+// what ItemView.AdvisoryFlagged answers for free, and exists because
+// model.Episode projects no show flag: a caller holding a detail read
+// has to fetch the show to ask the same question. Trading that read for
+// an item-view read would buy nothing, so this stays.
 //
-// Both, because a feed may mark itself explicit at the channel level and
-// leave every episode unmarked, so the episode flag alone would let the
-// unmarked ones through. It lives here, taking the episode row rather
-// than an item view, so every surface holding one applies the same rule
-// as allowedByContent and the counts: the alternative is what this
+// Both flags, because a feed may mark itself explicit at the channel
+// level and leave every episode unmarked, so the episode flag alone
+// would let the unmarked ones through. The rule lives in one place so
+// every surface applies it identically: the alternative is what this
 // replaced, where a detail read answered an episode the stream refused.
 //
 // Fails closed on a missing episode row and on an unreadable show, as

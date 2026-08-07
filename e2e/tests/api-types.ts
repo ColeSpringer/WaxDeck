@@ -1002,6 +1002,8 @@ export interface paths {
         /**
          * Run a whole-library enrichment pass
          * @description Starts the catalog's enrichment pass as a background job (identity resolution first, then providers in priority order, provider-paced). `force` re-enriches entities that already enriched once. Locked and unofficial-marked content is respected. Returns the catalog job to follow. Administrators only.
+         *
+         *     Refuses with `source-unavailable` when the server has no MusicBrainz contact configured, which is what `enrichmentStatus.configured` reports: read it first rather than offering a button that errors.
          */
         post: operations["runEnrichment"];
         delete?: never;
@@ -1099,7 +1101,7 @@ export interface paths {
         };
         /**
          * Query per-file diagnostics
-         * @description Persisted per-file diagnostics (what scan, organize, replaygain, and tag write-back recorded about individual files) across the library in a stable path order, optionally narrowed by origin, code, severity, or library. This is the query surface a diagnostics dashboard reads instead of auditing item by item. Administrators only.
+         * @description Persisted per-file diagnostics (what scan, organize, replaygain, enrichment, and tag write-back recorded about individual files) across the library in a stable path order, optionally narrowed by origin, code, severity, or library. This is the query surface a diagnostics dashboard reads instead of auditing item by item. Administrators only.
          */
         get: operations["listFileDiagnostics"];
         put?: never;
@@ -1262,7 +1264,8 @@ export interface paths {
          * Enumerate a browse dimension
          * @description Keyset-paginated buckets of one browse dimension, each with the number of matching items: the "all genres" and "all artists" lists a browse index is built from. Buckets come biggest first by default, ties broken by label, so the list leads with what is worth opening and paging stays stable; `sort=label` orders them A to Z instead, for an index with an alphabet rail. Drill a bucket by passing its `key` back as `listItems`' `facetKey` together with the same `facet`.
          *     A cursor is only valid for the `sort` it was issued under: the two orders interleave differently, so resuming one from the other's boundary would skip or repeat buckets. Sending a mismatched pair is `invalid-request` rather than a silently wrong page.
-         *     The `genre`, `artist`, `album-artist`, `album`, `release-group`, and `year` dimensions each carry a bucket for the items the dimension is absent from (`[No Genre]`, `[Unknown Artist]`, `[Non-Album]`, `[No Release Group]`, `[Unknown Year]`), with an empty `key` and `unknown` true. `[No Release Group]` is not `[Non-Album]`: a track on an album whose release group is unresolved is in the first and not the second. `kind` has none, because an item's kind is never absent, and a custom tag dimension has none, because only items carrying the key contribute at all; on those two, drilling an empty `facetKey` is `invalid-request` rather than an empty page. Podcast episodes are excluded from the music dimensions, which they have no artist, album, genre, or year for; the `kind` dimension counts them.
+         *     The `genre`, `artist`, `credit-artist`, `album-artist`, `album`, `release-group`, and `year` dimensions each carry a bucket for the items the dimension is absent from (`[No Genre]`, `[Unknown Artist]`, `[Non-Album]`, `[No Release Group]`, `[Unknown Year]`), with an empty `key` and `unknown` true. `[No Release Group]` is not `[Non-Album]`: a track on an album whose release group is unresolved is in the first and not the second.
+         *     `genre` and `credit-artist` are the two many-per-item dimensions: an item contributes a count to every bucket it belongs to, so their bucket counts sum to more than the number of items. Every other dimension buckets an item exactly once. `kind` has none, because an item's kind is never absent, and a custom tag dimension has none, because only items carrying the key contribute at all; on those two, drilling an empty `facetKey` is `invalid-request` rather than an empty page. Podcast episodes are excluded from the music dimensions, which they have no artist, album, genre, or year for; the `kind` dimension counts them.
          *     Counts are scoped to the libraries the caller may see. The per-item rules the drill list also applies (podcast subscriptions, content rules) are per-item decisions no aggregation can express, so a bucket can read higher than the list it opens, the same way any restricted listing can return a short page.
          */
         get: operations["listFacets"];
@@ -4415,6 +4418,12 @@ export interface components {
             readOnly: boolean;
             /** @description Whether the server analyzes its own library for sonic similarity in the background (the embedded analyzer). Applies immediately; turning it off mid-library keeps the embeddings already computed. The boot default comes from `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it once saved. External workers are unaffected (their access is the worker-token configuration). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. */
             sonicAnalysis?: boolean;
+            /**
+             * @description Whether the whole-library enrichment pass writes what it filled back into the files, which is what makes enrichment survive a rescan: the catalog is authoritative either way, but a rescan re-reads the tags and would otherwise clear values only the catalog held.
+             *
+             *     Off by default, because it modifies the listener's own files. Files whose format cannot store a key are counted in `enrichmentStatus.lastRun.tagsUnrepresented` and left byte-identical, which is not a failure. Applies to the next pass; a run already in flight keeps the setting it started under. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses.
+             */
+            enrichmentWriteTags?: boolean;
             /** @description How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. */
             backupKeepCount: number;
             /**
@@ -5053,6 +5062,13 @@ export interface components {
             coverage: components["schemas"]["EnrichmentCoverage"];
             /** @description Whether a whole-library pass is running now. */
             running: boolean;
+            /**
+             * @description Whether the whole-library pass can run at all. It needs a MusicBrainz contact, which is boot configuration (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and not a runtime setting, because MusicBrainz requires an identifying agent before anything is sent.
+             *
+             *     False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key: every provider can be configured and the pass still refuse, because the contact gates the identity spine they hang off.
+             */
+            configured: boolean;
+            lastRun?: components["schemas"]["EnrichmentLastRun"];
         };
         /** @description One enrichment provider. */
         EnrichmentProvider: {
@@ -5067,6 +5083,30 @@ export interface components {
             configured: boolean;
             /** @description True for the catalog's built-ins. */
             builtin: boolean;
+        };
+        /**
+         * @description What the most recent finished whole-library pass did. Absent until one has finished.
+         *
+         *     Coverage answers how much of the library is enriched; this answers whether the last pass accomplished anything, which coverage cannot. A pass that searched two thousand albums and matched none leaves coverage exactly where it was, and so does one whose every tag write failed; both read as "nothing happened" without these counts.
+         */
+        EnrichmentLastRun: {
+            /** @description Albums the release match looked up: which pressing of a record the library holds, resolved from a barcode or a catalog number. */
+            albumsSearched: number;
+            /** @description Albums it pinned to a release. Searched without matched is a library whose albums carry no identifiers, not a broken pass. */
+            albumsMatched: number;
+            /** @description Files the pass wrote enriched values back into. Zero unless tag write-back is on, which is what makes enrichment survive a rescan. */
+            tagsWritten: number;
+            /** @description Files whose write failed. The catalog kept the values either way. */
+            tagsFailed: number;
+            /** @description Files whose format cannot store a key that was filled. Not a failure: the bytes are unchanged and correct. */
+            tagsUnrepresented: number;
+            /** @description Book parts left unwritten because their book's primary part failed. */
+            tagsSkipped: number;
+            /**
+             * Format: date-time
+             * @description When the pass finished.
+             */
+            finishedAt?: string;
         };
         /** @description How much of the catalog has enriched. */
         EnrichmentCoverage: {
@@ -5522,7 +5562,7 @@ export interface components {
         FileDiagnostic: {
             /** @description The file's display path. */
             path: string;
-            /** @description The writer that recorded it (`scan`, `organize`, `replaygain`, or `edit`); new writers may appear. */
+            /** @description The writer that recorded it (`scan`, `organize`, `replaygain`, `edit`, or `enrichment`); new writers may appear. */
             origin: string;
             /** @description What was observed (`unsupported_format`, `legacy_only_tags`, `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`, `tag_write_lost`, `tag_write_unsynced`, or `corrupt_audio`); new codes may appear, so treat an unknown value as a generic finding. */
             code: string;
@@ -5568,7 +5608,7 @@ export interface components {
          */
         DiscoveryList: "newest" | "recently-added" | "most-played" | "recently-played" | "random" | "starred" | "alphabetical" | "never-played" | "rediscover";
         /**
-         * @description A browse dimension: one of `genre`, `artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a custom tag dimension spelled `tag.<KEY>` (for example `tag.MOOD`). `release-group` buckets tracks by their album's release group, which is the work rather than the edition, so the several pressings of one record answer as one bucket. The fixed set is stable; which tag dimensions exist depends on the library's tags. Tag keys are case-insensitive and canonicalize to upper case, so `tag.mood` and `tag.MOOD` are one dimension; responses echo the canonical spelling.
+         * @description A browse dimension: one of `genre`, `artist`, `credit-artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a custom tag dimension spelled `tag.<KEY>` (for example `tag.MOOD`). `release-group` buckets tracks by their album's release group, which is the work rather than the edition, so the several pressings of one record answer as one bucket. `credit-artist` buckets a track under every artist its credit names, where `artist` buckets it once under the primary: a featured artist has a bucket here and none there. It is what an artist's "appears on" reads, and it is many-per-item, so its counts sum above the item count. The fixed set is stable; which tag dimensions exist depends on the library's tags. Tag keys are case-insensitive and canonicalize to upper case, so `tag.mood` and `tag.MOOD` are one dimension; responses echo the canonical spelling.
          * @example genre
          */
         BrowseDimension: string;
@@ -5594,7 +5634,7 @@ export interface components {
             /** @description Items in this bucket, within the caller's libraries. */
             count: number;
             /**
-             * @description The catalog entity behind the bucket, for the dimensions that have one (`artist`, `album-artist`, `album`, `release-group`). Absent for the unknown bucket and for dimensions that are not entities.
+             * @description The catalog entity behind the bucket, for the dimensions that have one (`artist`, `credit-artist`, `album-artist`, `album`, `release-group`). Absent for the unknown bucket and for dimensions that are not entities.
              *     It is this bucket's `key` carried with the entity's API type prefix, so a client holding one has the other: a screen addressed by `al-<ulid>` drills with `facetKey=<ulid>`, and the entity endpoints (`/albums/{pid}/play-state` and friends) take the prefixed form.
              * @example al-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
@@ -8364,7 +8404,7 @@ export interface components {
              *
              *     Unsubscribing from a show sends no tombstone at all. It bumps the caller's grant epoch, which retires their cursors and forces a clean re-mirror, so the rows go with the old mirror rather than one delete at a time.
              *     Both tombstone the mirror row identically. The difference is what a client may reclaim: bytes it already downloaded, and the artwork pinned beside them, are dead weight after `removed`, and worth keeping after `hidden`, where undoing the transition would otherwise cost the whole transfer again.
-             *     One case answers `hidden` and later becomes unrecoverable: an item trashed and purged afterwards was tombstoned when it was trashed, and emptying the trash is not itself a catalog change, so no second entry follows it. A client keeps those bytes.
+             *     An item trashed and purged afterwards is tombstoned twice: `hidden` when it went to the trash, then `removed` when the purge made it unrecoverable. Purging is a catalog change, so the second tombstone rides the next delta and a client that kept the bytes on the first one learns to release them. Both carry the same pid, so the later reason simply supersedes the earlier.
              *     Open, like `op`, and deliberately not an enum: a closed one generates a Dart `EnumClass` whose serializer throws on an unrecognized wire value, so adding a third reason later would fail the whole page's deserialization and stop sync rather than degrade. A client that does not recognize a value must treat it as `hidden`, which is the conservative half.
              * @example removed
              */
@@ -8850,7 +8890,7 @@ export interface components {
             /** @description Whether a browse index draws the bucket for the items a dimension is absent from (`[No Genre]`, `[Non-Album]`). Absent means shown. A presentation preference, not a server filter: the bucket stays enumerated and drillable whatever this says. */
             browseShowUnknown?: boolean;
             /**
-             * @description The order each browse index opens in, keyed by the dimension name `GET /library/browse` spells (`genre`, `artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a `tag.<KEY>` dimension); values are that endpoint's `sort` values. Sparse: a dimension with no entry opens in the client's own default, so a write must merge rather than replace. Capped at 32 entries.
+             * @description The order each browse index opens in, keyed by the dimension name `GET /library/browse` spells (`genre`, `artist`, `credit-artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a `tag.<KEY>` dimension); values are that endpoint's `sort` values. Sparse: a dimension with no entry opens in the client's own default, so a write must merge rather than replace. Capped at 32 entries.
              * @example {
              *       "genre": "label",
              *       "year": "count"
@@ -9065,7 +9105,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The request needs an acquisition source integration that this server is not running (code `source-unavailable`), for example a YouTube subscription on a server without the YouTube bridge. */
+        /** @description The request needs an integration this server is not running (code `source-unavailable`): an acquisition source, such as a YouTube subscription on a server without the YouTube bridge, or the catalog's enrichment pass on a server with no MusicBrainz contact configured. The request itself is well formed, so retrying it unchanged will not help; the server has to be configured and restarted. */
         SourceUnavailable: {
             headers: {
                 [name: string]: unknown;
@@ -9168,7 +9208,7 @@ export interface components {
         /** @description Session PID (e.g. `se-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         SessionId: string;
         /** @description Restrict to one writer. */
-        DiagnosticOriginFilter: "scan" | "organize" | "replaygain" | "edit";
+        DiagnosticOriginFilter: "scan" | "organize" | "replaygain" | "edit" | "enrichment";
         /** @description Restrict to one diagnostic code. */
         DiagnosticCodeFilter: "unsupported_format" | "legacy_only_tags" | "lyrics_partial" | "sidecar_skipped" | "cue_track_dropped" | "tag_write_lost" | "tag_write_unsynced" | "corrupt_audio";
         /** @description Restrict to one severity. */
@@ -10760,6 +10800,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            501: components["responses"]["SourceUnavailable"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };

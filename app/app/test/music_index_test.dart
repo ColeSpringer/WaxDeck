@@ -191,8 +191,12 @@ void main() {
     // location either way, because a bucket's key is its entity pid
     // without the type prefix, which is what lets one address name the
     // entity and still drill the listing behind it.
+    //
+    // `contains` rather than `.last`: the screen also drills
+    // `credit-artist` for its "appears on" shelf, and which of the two
+    // settles second is not what this is about.
     expect(find.byType(ArtistScreen), findsOneWidget);
-    expect(repository.facetDrills.last, ('artist', '01JZXNightjar'));
+    expect(repository.facetDrills, contains(('artist', '01JZXNightjar')));
   });
 
   testWidgets('shuffling a bucket draws a page rather than what scrolled by', (

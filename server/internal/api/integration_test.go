@@ -33,8 +33,12 @@ type harness struct {
 	ts      *httptest.Server
 	token   string
 	library string
-	svc     *service.Library
-	store   *db.DB
+	// podcastDir is the episode download root, set only by
+	// newPodcastHarness. Tests that need to interfere with a downloaded
+	// file on disk reach it here.
+	podcastDir string
+	svc        *service.Library
+	store      *db.DB
 	// media mints the query-string tokens the raw /media/* routes take,
 	// for tests that drive one of those endpoints as a chosen user
 	// rather than through a mint the API performed.

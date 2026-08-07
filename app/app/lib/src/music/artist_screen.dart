@@ -178,6 +178,89 @@ class _Header extends ConsumerWidget {
   }
 }
 
+/// The "Appears on" shelf: releases this artist is credited on without
+/// heading them.
+///
+/// Silent about its own absence in every direction. A library whose
+/// tracks name one artist each has nothing here, which is the common
+/// case and is not worth a heading over an empty row; and a lookup that
+/// fails leaves the shelf out rather than putting an error under the
+/// artist's own releases, because a credit shelf is an extra and the
+/// screen is complete without it.
+class _AppearsOn extends ConsumerWidget {
+  const _AppearsOn({required this.pid, required this.own});
+
+  final String pid;
+
+  /// The releases already drawn above, so this one can exclude them.
+  final List<ArtistAlbum> own;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final credited = ref
+        .watch(
+          appearsOnProvider((
+            pid: pid,
+            ownAlbumKey: (<String>[
+              for (final album in own)
+                if (album.pid != null) album.pid!,
+            ]..sort()).join(','),
+          )),
+        )
+        .value;
+    if (credited == null) return const SizedBox.shrink();
+    final albums = appearsOnAlbums(credited, own);
+    if (albums.isEmpty) return const SizedBox.shrink();
+
+    final store = ref.watch(artworkStoreProvider);
+    final repository = ref.watch(repositoryProvider);
+    final tiles = <MediaTileData>[
+      for (final album in albums)
+        MediaTileData(
+          title: album.title,
+          subtitle: album.tracks.length == 1
+              ? album.tracks.first.title
+              : '${album.tracks.length} tracks',
+          artwork: album.pid == null
+              ? null
+              : store.source(repository.artUrlFor(album.pid!)),
+          semanticsId: album.pid == null
+              ? null
+              : SemanticsIds.entityAlbum(album.pid!),
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const SizedBox(height: WaxSpace.s16),
+        ShelfRow(
+          title: 'Appears on',
+          items: tiles,
+          onTapItem: (tile) {
+            // Positional, for the reason the Releases shelf above is:
+            // two releases can share a title and tiles carry no value
+            // equality, so matching on the text would open the first of
+            // them twice.
+            final at = tiles.indexOf(tile);
+            if (at < 0) return;
+            final target = albums[at].pid;
+            if (target != null) {
+              // Pushed, not gone to: an album is declared under the
+              // albums index, so `go` would rebuild that ancestry and
+              // throw this artist away (ADR-0022).
+              context.push(
+                WaxRoute.musicBucket(MusicDimension.albums, target),
+                extra: albums[at].title,
+              );
+            }
+          },
+        ),
+      ],
+    );
+  }
+}
+
 class _Body extends ConsumerWidget {
   const _Body({
     required this.pid,
@@ -248,6 +331,7 @@ class _Body extends ConsumerWidget {
             },
           ),
         ],
+        _AppearsOn(pid: pid, own: albums),
         const SizedBox(height: WaxSpace.s16),
         Padding(
           padding: EdgeInsets.symmetric(
@@ -358,5 +442,89 @@ List<ArtistAlbum> albumsOf(List<ItemSummary> tracks) {
         pid: pids[entry.key],
         tracks: entry.value,
       ),
+  ];
+}
+
+/// The releases an artist is credited on but does not head.
+///
+/// The artist screen above reads the `artist` dimension, which buckets a
+/// track once under its primary artist, so a feature is invisible there.
+/// `credit-artist` buckets it under every artist the credit names, which
+/// is the same track counted a second way rather than a second listing:
+/// the two overlap by construction, and the overlap is what the section
+/// has to remove before it draws anything.
+///
+/// Auto-disposed and per-artist, like the bucket listing it sits beside.
+///
+/// Paged rather than one shot, because the dimension buckets an artist's
+/// own tracks too: a prolific artist's first page can be entirely
+/// self-releases, which the caller then filters to nothing and draws as
+/// no shelf at all. So it keeps pulling until a page carries an album
+/// the artist does not head, bounded so a big library cannot turn one
+/// screen into a walk of the catalog.
+const _appearsOnMaxPages = 4;
+
+/// Keyed on a string, not a record carrying a list: Dart compares record
+/// fields with ==, and a List's == is identity, so a list key would mint
+/// a fresh provider on every rebuild and never settle.
+final appearsOnProvider = FutureProvider.autoDispose
+    .family<List<ItemSummary>, ({String pid, String ownAlbumKey})>((
+      ref,
+      key,
+    ) async {
+      final repository = ref.watch(repositoryProvider);
+      final own = key.ownAlbumKey.split(',').where((s) => s.isNotEmpty).toSet();
+      final collected = <ItemSummary>[];
+      String? cursor;
+      for (var page = 0; page < _appearsOnMaxPages; page++) {
+        final got = await repository.listItems(
+          facet: 'credit-artist',
+          facetKey: musicFacetKey(MusicDimension.artists, key.pid),
+          cursor: cursor,
+          limit: MusicItemsController.pageSize,
+        );
+        collected.addAll(got.items);
+        cursor = got.nextCursor;
+        final foreign = collected.any(
+          (it) => it.albumPid == null || !own.contains(it.albumPid),
+        );
+        if (foreign || cursor == null) break;
+      }
+      return collected;
+    });
+
+/// The albums an artist appears on, minus the ones that are already
+/// their own.
+///
+/// Two collapses, in this order and both necessary. The query answers
+/// items, and the section shows albums, so six credited tracks off one
+/// compilation are one card and not six. And a release the artist heads
+/// is already drawn above under Releases, so leaving it here would make
+/// the screen repeat itself - a self-titled record appearing twice reads
+/// as a duplicate in the library rather than as two ways of counting.
+///
+/// Excluding by album pid rather than by title: two releases can share a
+/// title, and dropping both because one matched is the same mistake the
+/// Releases shelf avoids by opening tiles positionally.
+List<ArtistAlbum> appearsOnAlbums(
+  List<ItemSummary> credited,
+  List<ArtistAlbum> own,
+) {
+  final ownPids = <String>{
+    for (final album in own)
+      if (album.pid != null) album.pid!,
+  };
+  // Pid-less only: two records called "Greatest Hits" are two records,
+  // and matching every own title would drop the loose one.
+  final ownTitles = <String>{
+    for (final album in own)
+      if (album.pid == null) album.title,
+  };
+  return <ArtistAlbum>[
+    for (final album in albumsOf(credited))
+      if (!(album.pid != null
+          ? ownPids.contains(album.pid)
+          : ownTitles.contains(album.title)))
+        album,
   ];
 }

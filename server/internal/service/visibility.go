@@ -174,40 +174,37 @@ func matchDir(dirs []libraryDir, path string) string {
 
 // itemVisible reports whether the item is inside the user's visible
 // libraries. Full-visibility users skip attribution entirely. An item
-// whose file cannot be located (a missing or stream-only item)
-// fails closed for restricted users.
+// with no file (undownloaded, missing, stream-only) is attributed to no
+// library and so fails closed for restricted users.
+//
+// The located record carries the library handle, so this reads it
+// rather than re-deriving it from the path. That is also the more
+// durable of the two: a relocate rewrites every root's paths and leaves
+// the library pids alone.
 func (l *Library) itemVisible(ctx context.Context, uc *UserCtx, pid model.PID) bool {
 	if uc.AllLibraries {
 		return true
 	}
 	loc, err := l.paths.Locate(ctx, pid)
-	if err != nil {
+	if err != nil || loc.LibraryPID == "" {
 		return false
 	}
-	libPID, err := l.libraryForPath(ctx, loc.Path)
-	if err != nil || libPID == "" {
-		return false
-	}
-	return uc.Libraries[libPID]
+	return uc.Libraries[string(loc.LibraryPID)]
 }
 
 // viewVisible is itemVisible for callers already holding a fresh item
-// view: it attributes the view's own primary path, bypassing the
-// located-path cache. The sync paths need this because the cache
-// invalidates on a poll, and a delta racing that poll would decide a
-// tombstone from a stale path.
+// view: it reads the view's own library handle, bypassing the located
+// -path cache. The sync paths need this because the cache invalidates
+// on a poll, and a delta racing that poll would decide a tombstone from
+// a stale attribution.
 func (l *Library) viewVisible(ctx context.Context, uc *UserCtx, it *model.ItemView) bool {
 	if uc.AllLibraries {
 		return true
 	}
-	if len(it.Path) == 0 {
+	if it.LibraryPID == "" {
 		return false
 	}
-	libPID, err := l.libraryForPath(ctx, string(it.Path))
-	if err != nil || libPID == "" {
-		return false
-	}
-	return uc.Libraries[libPID]
+	return uc.Libraries[string(it.LibraryPID)]
 }
 
 // podcastsVisible reports whether the caller can see the podcast
@@ -278,9 +275,8 @@ func (l *Library) Libraries(ctx context.Context) ([]LibraryInfo, error) {
 	return l.libraries(ctx, false)
 }
 
-// LibrariesWithCounts is Libraries plus how much each root holds. One
-// path-prefix count per library - see libraryItemCount for why that is
-// what it costs.
+// LibrariesWithCounts is Libraries plus how much each root holds: one
+// indexed count per library.
 func (l *Library) LibrariesWithCounts(ctx context.Context) ([]LibraryInfo, error) {
 	return l.libraries(ctx, true)
 }
@@ -308,35 +304,30 @@ func (l *Library) libraries(ctx context.Context, counts bool) ([]LibraryInfo, er
 			Path:  lib.DisplayRoot,
 		}
 		if counts {
-			info.ItemCount = l.libraryItemCount(ctx, lib.DisplayRoot)
+			info.ItemCount = l.libraryItemCount(ctx, lib.PID)
 		}
 		out = append(out, info)
 	}
 	return out, nil
 }
 
-// libraryItemCount counts the playable items under a root by path
-// prefix, which is the same attribution every other library-scoped
-// answer uses: the catalog's query language has no library dimension,
-// and a file's path is what says which root it came from.
+// libraryItemCount counts the playable items a root holds, keyed on the
+// catalog's own library dimension: an indexed integer comparison, not
+// the path-prefix scan this used to be. The old form compiled
+// `startsWith` to `LIKE ? ESCAPE '\'`, and SQLite turns its LIKE
+// optimization off whenever an ESCAPE clause is present.
 //
-// It is not cheap. `startsWith` compiles to `LIKE ? ESCAPE '\'`, and
-// SQLite turns its LIKE optimization off whenever an ESCAPE clause is
-// present, so this scans rather than seeks. That is why counting is
-// opt-in on the listing rather than part of it, and why the upstream
-// ask for a library dimension exists. A count that cannot be taken
-// reports zero rather than failing the listing - the number is a
-// caption on an administrative table, and losing the table over it
-// would be the worse answer.
-func (l *Library) libraryItemCount(ctx context.Context, root string) int64 {
-	if root == "" {
+// A count that cannot be taken reports zero rather than failing the
+// listing - the number is a caption on an administrative table, and
+// losing the table over it would be the worse answer.
+func (l *Library) libraryItemCount(ctx context.Context, libraryPID model.PID) int64 {
+	if libraryPID == "" {
 		return 0
 	}
-	prefix := strings.TrimSuffix(root, string(filepath.Separator)) + string(filepath.Separator)
-	q := query.New(query.EntityItems).Where("path", query.OpStartsWith, prefix).Build()
+	q := query.New(query.EntityItems).Where("library", query.OpIs, string(libraryPID)).Build()
 	n, err := l.lib.Count(ctx, q, "")
 	if err != nil {
-		l.log.Warn("counting a library's items", "root", root, "err", err)
+		l.log.Warn("counting a library's items", "library", libraryPID, "err", err)
 		return 0
 	}
 	return int64(n)

@@ -194,13 +194,19 @@ paths:
         mismatched pair is `invalid-request` rather than a silently
         wrong page.
 
-        The `genre`, `artist`, `album-artist`, `album`, `release-group`,
-        and `year` dimensions each carry a bucket for the items the
-        dimension is absent from (`[No Genre]`, `[Unknown Artist]`,
-        `[Non-Album]`, `[No Release Group]`, `[Unknown Year]`), with an
-        empty `key` and `unknown` true. `[No Release Group]` is not
-        `[Non-Album]`: a track on an album whose release group is
-        unresolved is in the first and not the second.
+        The `genre`, `artist`, `credit-artist`, `album-artist`, `album`,
+        `release-group`, and `year` dimensions each carry a bucket for
+        the items the dimension is absent from (`[No Genre]`,
+        `[Unknown Artist]`, `[Non-Album]`, `[No Release Group]`,
+        `[Unknown Year]`), with an empty `key` and `unknown` true.
+        `[No Release Group]` is not `[Non-Album]`: a track on an album
+        whose release group is unresolved is in the first and not the
+        second.
+
+        `genre` and `credit-artist` are the two many-per-item
+        dimensions: an item contributes a count to every bucket it
+        belongs to, so their bucket counts sum to more than the number
+        of items. Every other dimension buckets an item exactly once.
         `kind` has none, because an item's kind is never absent, and a
         custom tag dimension has none, because only items carrying the
         key contribute at all; on those two, drilling an empty
@@ -592,12 +598,18 @@ components:
     BrowseDimension:
       type: string
       description: >
-        A browse dimension: one of `genre`, `artist`, `album-artist`,
-        `album`, `release-group`, `year`, `kind`, or a custom tag
-        dimension spelled `tag.<KEY>` (for example `tag.MOOD`).
+        A browse dimension: one of `genre`, `artist`, `credit-artist`,
+        `album-artist`, `album`, `release-group`, `year`, `kind`, or a
+        custom tag dimension spelled `tag.<KEY>` (for example
+        `tag.MOOD`).
         `release-group` buckets tracks by their album's release group,
         which is the work rather than the edition, so the several
-        pressings of one record answer as one bucket. The fixed set is stable;
+        pressings of one record answer as one bucket.
+        `credit-artist` buckets a track under every artist its credit
+        names, where `artist` buckets it once under the primary: a
+        featured artist has a bucket here and none there. It is what an
+        artist's "appears on" reads, and it is many-per-item, so its
+        counts sum above the item count. The fixed set is stable;
         which tag dimensions exist depends on the library's tags. Tag
         keys are case-insensitive and canonicalize to upper case, so
         `tag.mood` and `tag.MOOD` are one dimension; responses echo the
@@ -641,9 +653,9 @@ components:
           type: string
           description: >
             The catalog entity behind the bucket, for the dimensions that
-            have one (`artist`, `album-artist`, `album`,
-            `release-group`). Absent for the unknown bucket and for
-            dimensions that are not entities.
+            have one (`artist`, `credit-artist`, `album-artist`,
+            `album`, `release-group`). Absent for the unknown bucket and
+            for dimensions that are not entities.
 
             It is this bucket's `key` carried with the entity's API type
             prefix, so a client holding one has the other: a screen

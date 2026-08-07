@@ -209,13 +209,12 @@ func TestTrashRetentionAndPurge(t *testing.T) {
 
 // A trashed item must not cost a search result its place.
 //
-// ADR-0048's filter runs after the catalog has capped each group, so
-// archived hits consume slots. The three filters that already behaved
-// this way only ever bit a restricted caller; this one bites everyone,
-// which on a single-administrator install is every search there is. The
-// bad case is not one stray hit either: an album deleted in one go
-// matches its own name best, so its archived rows take the top of the
-// ranking and can empty a group outright.
+// ADR-0048's state rule rides the query now, as SearchOptions.States, so
+// archived rows never enter the ranking and never consume a slot. This
+// is the case that proves it, and it is the one the deleted widening
+// pass existed for: an album deleted in one go matches its own name
+// best, so its archived rows would otherwise take the top of the ranking
+// and empty a group outright. One pass has to fill the page.
 func TestSearchFillsItsGroupsAroundTrashedHits(t *testing.T) {
 	h := newHarness(t)
 
@@ -276,8 +275,7 @@ func TestSearchFillsItsGroupsAroundTrashedHits(t *testing.T) {
 		}
 		// Three survivors are left over after the five that went, so a
 		// page of three is what the caller asked for and can have. Never
-		// more than three either: widening fetches wider and truncates,
-		// and the contract caps a group at the limit.
+		// more than three either: the contract caps a group at the limit.
 		if live && len(hits) == 3 {
 			return
 		}

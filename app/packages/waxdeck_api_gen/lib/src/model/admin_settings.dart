@@ -14,6 +14,7 @@ part 'admin_settings.g.dart';
 /// * [signupEnabled] - Whether open self-serve signup is accepted (registrations land pending). Invite links work regardless. 
 /// * [readOnly] - Server-wide read-only mode: every library behaves read-only (uploads, organizing, write-back, deletion, and the file tools are refused with code `read-only`). 
 /// * [sonicAnalysis] - Whether the server analyzes its own library for sonic similarity in the background (the embedded analyzer). Applies immediately; turning it off mid-library keeps the embeddings already computed. The boot default comes from `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it once saved. External workers are unaffected (their access is the worker-token configuration). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
+/// * [enrichmentWriteTags] - Whether the whole-library enrichment pass writes what it filled back into the files, which is what makes enrichment survive a rescan: the catalog is authoritative either way, but a rescan re-reads the tags and would otherwise clear values only the catalog held.  Off by default, because it modifies the listener's own files. Files whose format cannot store a key are counted in `enrichmentStatus.lastRun.tagsUnrepresented` and left byte-identical, which is not a failure. Applies to the next pass; a run already in flight keeps the setting it started under. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
 /// * [backupKeepCount] - How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. 
 /// * [backupKeepBytes] - Total archive bytes to keep, oldest deleted first when exceeded. 0 is unlimited. Imported archives are exempt. 
 /// * [trashRetentionDays] - Automatically purge trashed files older than this many days on a periodic sweep; 0 disables retention (the trash keeps entries until an administrator empties it). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
@@ -31,6 +32,10 @@ abstract class AdminSettings implements Built<AdminSettings, AdminSettingsBuilde
   /// Whether the server analyzes its own library for sonic similarity in the background (the embedded analyzer). Applies immediately; turning it off mid-library keeps the embeddings already computed. The boot default comes from `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it once saved. External workers are unaffected (their access is the worker-token configuration). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
   @BuiltValueField(wireName: r'sonicAnalysis')
   bool? get sonicAnalysis;
+
+  /// Whether the whole-library enrichment pass writes what it filled back into the files, which is what makes enrichment survive a rescan: the catalog is authoritative either way, but a rescan re-reads the tags and would otherwise clear values only the catalog held.  Off by default, because it modifies the listener's own files. Files whose format cannot store a key are counted in `enrichmentStatus.lastRun.tagsUnrepresented` and left byte-identical, which is not a failure. Applies to the next pass; a run already in flight keeps the setting it started under. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
+  @BuiltValueField(wireName: r'enrichmentWriteTags')
+  bool? get enrichmentWriteTags;
 
   /// How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. 
   @BuiltValueField(wireName: r'backupKeepCount')
@@ -85,6 +90,13 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
       yield r'sonicAnalysis';
       yield serializers.serialize(
         object.sonicAnalysis,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.enrichmentWriteTags != null) {
+      yield r'enrichmentWriteTags';
+      yield serializers.serialize(
+        object.enrichmentWriteTags,
         specifiedType: const FullType(bool),
       );
     }
@@ -155,6 +167,13 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.sonicAnalysis = valueDes;
+          break;
+        case r'enrichmentWriteTags':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.enrichmentWriteTags = valueDes;
           break;
         case r'backupKeepCount':
           final valueDes = serializers.deserialize(

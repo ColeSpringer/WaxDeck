@@ -96,9 +96,9 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 		// effect nobody asked for. From here on what arrives is covered;
 		// what is already there is what rematch and the health screen
 		// are for.
-		tail, err := l.changeTail(ctx)
+		tail, err := l.lib.LatestChangeSeq(ctx)
 		if err != nil {
-			return report, err
+			return report, classify(err)
 		}
 		if err := l.db.SyncStateSet(ctx, discoveryCursorKey, strconv.FormatInt(tail, 10)); err != nil {
 			return report, &Error{Kind: KindInternal, Err: err}
@@ -124,11 +124,10 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 		if len(rows) == 0 {
 			break
 		}
-		// The same guard changeTail carries, and for the same reason:
-		// the pages come back strictly after the seq asked for, so this
-		// advances on every turn, and if that ever stopped being true
-		// the loop would spin forever inside a supervised worker, which
-		// recovers panics and cannot see a wedge.
+		// The pages come back strictly after the seq asked for, so this
+		// advances every turn; if that ever stopped being true the loop
+		// would spin forever inside a supervised worker, which recovers
+		// panics and cannot see a wedge.
 		if rows[len(rows)-1].Seq <= since {
 			break
 		}
@@ -231,12 +230,7 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 		if uploaded[string(it.PID)] {
 			continue
 		}
-		libraryPID := ""
-		if len(it.Path) > 0 {
-			if lp, err := l.libraryForPath(ctx, string(it.Path)); err == nil {
-				libraryPID = lp
-			}
-		}
+		libraryPID := string(it.LibraryPID)
 		mode, ok := modes[libraryPID]
 		if !ok {
 			mode = l.LibraryMatchingMode(ctx, libraryPID)
@@ -340,38 +334,6 @@ func (l *Library) catalogJobRunning(ctx context.Context) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-// changeTail is the newest seq the change log holds, or 0 when it holds
-// nothing.
-//
-// A walk, because the facade exposes the log as pages after a seq and
-// not as a maximum (the store has LatestChangeSeq; Library does not
-// project it). It is paid once per deployment, on the first pass, by a
-// background worker: after that the cursor is stored and every pass
-// reads the tail alone.
-//
-// The guard is against a contract change rather than against today's
-// behaviour. The pages come back strictly after the seq asked for
-// (`WHERE seq > ?`), so the tail advances on every turn; if that ever
-// became inclusive this loop would spin forever inside a supervised
-// worker, which recovers panics and cannot see a wedge.
-func (l *Library) changeTail(ctx context.Context) (int64, error) {
-	tail := int64(0)
-	for {
-		rows, err := l.lib.Changes(ctx, tail)
-		if err != nil {
-			return 0, classify(err)
-		}
-		if len(rows) == 0 {
-			return tail, nil
-		}
-		next := rows[len(rows)-1].Seq
-		if next <= tail {
-			return tail, nil
-		}
-		tail = next
-	}
 }
 
 // uploadedItems asks which of these items an upload session produced.

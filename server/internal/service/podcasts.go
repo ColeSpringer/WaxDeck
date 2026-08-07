@@ -967,19 +967,33 @@ func (f *subscriptionFilter) allowsItem(ctx context.Context, l *Library, it *mod
 	if it.Kind != model.KindEpisode {
 		return true
 	}
-	return f.allowsEpisode(ctx, l, it.PID)
+	return f.allowsEpisode(ctx, l, it)
 }
 
-func (f *subscriptionFilter) allowsEpisode(ctx context.Context, l *Library, episodePID model.PID) bool {
+// allowsEpisode reports whether the caller subscribes to the episode's
+// show. The view projects the show handle, so this costs no reads.
+func (f *subscriptionFilter) allowsEpisode(ctx context.Context, l *Library, it *model.ItemView) bool {
 	f.ensure(ctx, l)
 	if f.failed || len(f.set) == 0 {
 		return false
 	}
-	det, err := l.lib.Podcasts().Episode(ctx, episodePID)
+	return f.set[string(it.PodcastPID)]
+}
+
+// allowsEpisodePID is allowsEpisode for callers holding only a pid
+// (search hits), which pay one item read for the show handle. It stays a
+// separate name rather than an overload so the cheap path is the one
+// that reads cheap at the call site.
+func (f *subscriptionFilter) allowsEpisodePID(ctx context.Context, l *Library, episodePID model.PID) bool {
+	f.ensure(ctx, l)
+	if f.failed || len(f.set) == 0 {
+		return false
+	}
+	it, err := l.lib.Get(ctx, episodePID)
 	if err != nil {
 		return false
 	}
-	return f.set[string(det.Episode.PodcastPID)]
+	return f.allowsEpisode(ctx, l, it)
 }
 
 // allowsShow reports whether the caller subscribes to the show itself.
@@ -1154,20 +1168,16 @@ func (f SubscribedEpisodeFilter) Valid() bool {
 // subscribedEpisodeScope is the item query for "episodes of the shows
 // this caller follows, that this caller may see".
 //
-// The show set arrives as a disjunction because item queries have no
-// set-membership operator (filed upstream). One OR arm per subscription
-// is fine at the design center of tens of shows and holds up into the
-// low hundreds; a library-scale importer with thousands of feeds would
-// need the operator. showPIDs is sorted so one caller's scope compiles
-// to a stable string, which keeps a cursor issued under it meaningful.
+// The show set rides one `in` predicate, which seeks the same index `is`
+// does at every arity including one, so a thousand-feed importer costs
+// what ten do. An empty set compiles to `1=0` - the right answer for a
+// caller with no subscriptions, and the reason this needs no guard above
+// it. showPIDs is sorted so one caller's scope compiles to a stable
+// string, which keeps a cursor issued under it meaningful.
 func subscribedEpisodeScope(uc *UserCtx, showPIDs []string) *query.Builder {
-	arms := make([]query.Node, 0, len(showPIDs))
-	for _, pid := range showPIDs {
-		arms = append(arms, query.Cond{Field: "podcast_pid", Op: query.OpIs, Value: pid})
-	}
 	q := visibleItems().
 		Where("kind", query.OpIs, string(model.KindEpisode)).
-		WhereNode(query.Or{Nodes: arms})
+		WhereValues("podcast_pid", query.OpIn, query.Values(showPIDs)...)
 	if !uc.Explicit {
 		q = q.Where("explicit", query.OpIs, 0).
 			Where("podcast_explicit", query.OpIs, 0)
@@ -1180,11 +1190,11 @@ func subscribedEpisodeScope(uc *UserCtx, showPIDs []string) *query.Builder {
 //
 // Ordering follows the filter, because the two questions want different
 // orders: what is new is newest-published first, and what to pick up
-// again is most-recently-played first. The first is a keyset browse of
-// the catalog; the second cannot be, because a checkpoint never stamps
-// last_played_at, so no discovery list can define either its membership
-// or its order (filed upstream). Its ranking stays in Go over the
-// started-and-unfinished rows.
+// again is most-recently-progressed first. Both are keyset browses of
+// the catalog over the same subscription scope. The second used to rank
+// in Go, because no list could define its order - a checkpoint stamps no
+// last_played_at - and the catalog now stamps last_progress_at on every
+// progress write, which is what `in-progress` browses.
 func (l *Library) SubscribedEpisodes(
 	ctx context.Context,
 	uc *UserCtx,
@@ -1218,8 +1228,9 @@ func (l *Library) SubscribedEpisodes(
 		return nil, "", &Error{Kind: KindInternal, Err: err}
 	}
 	if len(rows) == 0 {
-		// An empty disjunction matches nothing, but saying so here keeps
-		// a follower of no shows from compiling a query at all.
+		// An empty `in` set compiles to 1=0, which is already the right
+		// answer; saying so here keeps a follower of no shows from
+		// compiling a query at all.
 		return []EpisodeSummary{}, "", nil
 	}
 	showPIDs := make([]string, 0, len(rows))
@@ -1229,13 +1240,17 @@ func (l *Library) SubscribedEpisodes(
 	sort.Strings(showPIDs)
 	scope := subscribedEpisodeScope(uc, showPIDs)
 
-	if filter == EpisodesInProgress {
-		return l.inProgressEpisodes(ctx, uc, scope, payload, limit)
-	}
-	if filter == EpisodesUnplayed {
+	// The list carries the ordering and, for in-progress, the membership
+	// too (a resume position on an unfinished item); the scope carries
+	// who may see what.
+	list := read.ListRecentEpisodes
+	switch filter {
+	case EpisodesInProgress:
+		list = read.ListInProgress
+	case EpisodesUnplayed:
 		scope = scope.Where("played", query.OpIs, 0)
 	}
-	page, err := l.lib.Browse(ctx, read.ListRecentEpisodes, read.BrowseOptions{
+	page, err := l.lib.Browse(ctx, list, read.BrowseOptions{
 		UserPID: model.PID(uc.CatalogPID),
 		Cursor:  read.Cursor(payload),
 		Limit:   limit,
@@ -1254,128 +1269,6 @@ func (l *Library) SubscribedEpisodes(
 	}
 	return out, next, nil
 }
-
-// inProgressEpisodes answers the "where was I" strip: every followed
-// episode someone started and did not finish, most recently played
-// first.
-//
-// The membership is one query, but the ranking is not, so the whole
-// population is collected before the page is cut. That is deliberate and
-// not a cap waiting to be added: the query returns rows in sort_key
-// order, so any cap would drop an arbitrary subset before the recency
-// ranking ran - wrong results rather than degraded ones. The population
-// is human-bounded (a row exists only for an episode somebody started),
-// and it is strictly smaller than what the walk this replaced held,
-// which was every episode of every followed show.
-//
-// The membership comes from flushed play_state rows rather than the
-// playback service's view. The two agree because WaxDeck's only progress
-// write is Checkpoint, which is write-through; a tick-buffered writer
-// would need this revisited.
-func (l *Library) inProgressEpisodes(
-	ctx context.Context,
-	uc *UserCtx,
-	scope *query.Builder,
-	payload string,
-	limit int,
-) ([]EpisodeSummary, string, error) {
-	q := scope.
-		Where("position_ms", query.OpGt, 0).
-		Where("finished", query.OpIs, 0).
-		Build()
-	userPID := model.PID(uc.CatalogPID)
-
-	var items []*model.ItemView
-	var cur read.Cursor
-	for {
-		page, err := l.lib.QueryPage(ctx, q, cur, inProgressScanPage, false, userPID)
-		if err != nil {
-			return nil, "", classify(err)
-		}
-		items = append(items, page.Items...)
-		if !page.HasMore {
-			break
-		}
-		cur = page.Next
-	}
-	if len(items) == 0 {
-		return []EpisodeSummary{}, "", nil
-	}
-
-	pids := make([]model.PID, 0, len(items))
-	for _, it := range items {
-		pids = append(pids, it.PID)
-	}
-	batch, err := l.lib.PlayStatesForItems(ctx, pids)
-	if err != nil {
-		return nil, "", classify(err)
-	}
-
-	type ranked struct {
-		item *model.ItemView
-		pid  string
-		// key is when it was last played, not when its play state last
-		// changed: starring a half-heard episode from two years ago must
-		// not push it to the top of "where was I".
-		key int64
-	}
-	out := make([]ranked, 0, len(items))
-	for _, it := range items {
-		st := userPlayState(batch[it.PID], userPID)
-		if st == nil {
-			continue
-		}
-		key := st.LastPlayedAt
-		if key == 0 {
-			key = st.UpdatedAt
-		}
-		out = append(out, ranked{item: it, pid: apiPID(PrefixEpisode, it.PID), key: key})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].key != out[j].key {
-			return out[i].key > out[j].key
-		}
-		return out[i].pid > out[j].pid
-	})
-
-	start := 0
-	if payload != "" {
-		key, pid, ok := decodeInProgressPayload(payload)
-		if !ok {
-			return nil, "", errInvalid("malformed cursor")
-		}
-		start = sort.Search(len(out), func(i int) bool {
-			if out[i].key != key {
-				return out[i].key < key
-			}
-			return out[i].pid < pid
-		})
-	}
-	end := min(start+limit, len(out))
-	views := make([]*model.ItemView, 0, end-start)
-	for _, r := range out[start:end] {
-		views = append(views, r.item)
-	}
-	page, err := l.episodeRows(ctx, views)
-	if err != nil {
-		return nil, "", err
-	}
-	next := ""
-	// Keyed on the ranking, not on the rows that survived hydration: a
-	// window whose every episode vanished is still a window, and
-	// withholding the cursor there would strand the client on an empty
-	// page with more behind it.
-	if end < len(out) {
-		last := out[end-1]
-		next = encodeFilteredCursor(EpisodesInProgress,
-			strconv.FormatInt(last.key, 10)+"|"+last.pid)
-	}
-	return page, next, nil
-}
-
-// inProgressScanPage is how many membership rows one QueryPage call
-// pulls while collecting the started-and-unfinished population.
-const inProgressScanPage = 500
 
 // episodeRows turns a cut page of item views into episode summaries.
 //
@@ -1427,12 +1320,13 @@ func episodePublishedNS(ep *model.Episode) int64 {
 // and a keyset search under the wrong one lands somewhere plausible and
 // wrong.
 //
-// The payload is opaque and filter-specific: the catalog's own keyset
-// cursor for latest and unplayed, `key|pid` for the Go-ranked
-// in-progress strip. The tag is this family's alone; reads.go's scoped
-// envelope owns s1.
+// The payload is the catalog's own keyset cursor for all three filters
+// now, which is why the tag carries the version: pe1 meant a hand-rolled
+// `key|pid` ranking for in-progress, and feeding one to Browse would
+// land somewhere plausible and wrong. The tag is this family's alone;
+// reads.go's scoped envelope owns s1.
 func encodeFilteredCursor(filter SubscribedEpisodeFilter, payload string) string {
-	return encodeOpaqueCursor(fmt.Sprintf("pe1|%s|%s", filter, payload))
+	return encodeOpaqueCursor(fmt.Sprintf("pe2|%s|%s", filter, payload))
 }
 
 func decodeFilteredCursor(s string) (filter SubscribedEpisodeFilter, payload string, ok bool) {
@@ -1441,29 +1335,13 @@ func decodeFilteredCursor(s string) (filter SubscribedEpisodeFilter, payload str
 		return "", "", false
 	}
 	parts := strings.SplitN(raw, "|", 3)
-	if len(parts) != 3 || parts[0] != "pe1" {
+	// pe2: the in-progress payload was a hand-rolled key|pid ranking and is
+	// the catalog's browse keyset now, so a pe1 cursor mid-scroll across a
+	// deploy has to 400 rather than be fed to Browse as a keyset.
+	if len(parts) != 3 || parts[0] != "pe2" {
 		return "", "", false
 	}
 	return SubscribedEpisodeFilter(parts[1]), parts[2], true
-}
-
-// decodeInProgressPayload splits the in-progress payload back into the
-// recency key and the api pid it was cut at.
-func decodeInProgressPayload(payload string) (key int64, pid string, ok bool) {
-	before, after, found := strings.Cut(payload, "|")
-	if !found {
-		return 0, "", false
-	}
-	// ParseInt rather than Sscanf, and the reason is strictness rather
-	// than speed: `Sscanf` with %d stops at the first non-digit and
-	// reports success, so "123abc" decodes as 123. A cursor arrives in
-	// the query string, so it is input, and input that is nearly a
-	// number is not one.
-	key, err := strconv.ParseInt(before, 10, 64)
-	if err != nil {
-		return 0, "", false
-	}
-	return key, after, true
 }
 
 // episodeSummary builds the episode list row from the catalog episode.

@@ -215,6 +215,22 @@ var ruleFieldSpecs = []ruleFieldSpec{
 	{api: "season", engine: "season", kind: ruleKindNumber, sortable: true, desc: "season number (episodes)"},
 	{api: "publishedAt", engine: "published", kind: ruleKindDate, sortable: true, desc: "episode publication time"},
 	{api: "durationMs", engine: "duration_ms", kind: ruleKindNumber, sortable: true, desc: "duration in milliseconds"},
+	// The album's release identity. Scan stores the tag verbatim and an
+	// entity edit normalizes, so the two spellings coexist in one library
+	// - `albumCountry is "US"` misses albums scanned "USA", and media has
+	// no normalizer at all, so "CD", "2xCD", and "CD, Album, Reissue" are
+	// three values. `contains` is the operator that behaves on all five
+	// unless the library is uniformly tagged.
+	//
+	// Not sortable, like the album MBID they sit beside: they are
+	// identifiers, and ordering a playlist by barcode is not a question
+	// anyone asks. Filtering by them is ("everything on this label",
+	// "the Japanese pressings"), which is what they are here for.
+	{api: "albumBarcode", engine: "album_barcode", kind: ruleKindText, sortable: false, desc: "album barcode (UPC/EAN)"},
+	{api: "albumLabel", engine: "album_label", kind: ruleKindText, sortable: false, desc: "record label"},
+	{api: "albumCatalogNumber", engine: "album_catalog_number", kind: ruleKindText, sortable: false, desc: "label catalog number"},
+	{api: "albumMedia", engine: "album_media", kind: ruleKindText, sortable: false, desc: "release medium (CD, vinyl, digital)"},
+	{api: "albumCountry", engine: "album_country", kind: ruleKindText, sortable: false, desc: "release country"},
 	{api: "source", engine: "source", kind: ruleKindText, sortable: true, desc: "origin: local, rss, youtube, manual"},
 	{api: "codec", engine: "codec", kind: ruleKindText, sortable: true, desc: "audio codec"},
 	{api: "container", engine: "container", kind: ruleKindText, sortable: true, desc: "file container"},

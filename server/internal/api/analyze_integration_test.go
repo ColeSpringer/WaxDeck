@@ -439,3 +439,62 @@ func TestAnalyzeScheduleIsListedAndOffByDefault(t *testing.T) {
 		t.Fatal("an enabled schedule reports its next firing")
 	}
 }
+
+// A multi-file book whose one part is deleted behind the server's back
+// answers unavailable for that part.
+//
+// The item-level MarkMissing cannot record this: it stats every backing
+// file and vetoes on any survivor, so the book stays `present` and the
+// state read the skip map otherwise relies on never fires. Without the
+// named-part resolve, every GET re-enqueues doomed work and re-answers
+// pending forever.
+func TestSkipMapUnavailableForADeletedBookPart(t *testing.T) {
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook").Items
+	if len(books) != 1 {
+		t.Fatalf("audiobooks = %d, want the one fixture book", len(books))
+	}
+	book := books[0]
+
+	skip := func(part int) SkipMap {
+		t.Helper()
+		return decode[SkipMap](t, get(t,
+			h.ts, fmt.Sprintf("/api/v1/items/%s/skip-map?partIndex=%d", book.Pid, part), h.token))
+	}
+	if got := skip(1).State; got != "pending" {
+		t.Fatalf("part 1 before the deletion = %q, want pending", got)
+	}
+
+	// Delete one part's bytes only; its siblings stay, which is what
+	// makes the item-level verb refuse.
+	det := decode[BookDetail](t, get(t, h.ts, "/api/v1/books/"+book.Pid, h.token))
+	if len(det.Parts) < 2 {
+		t.Fatalf("book has %d parts, want a multi-file fixture", len(det.Parts))
+	}
+	var removed int
+	err := filepath.Walk(h.library, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || removed > 0 {
+			return err
+		}
+		if strings.Contains(filepath.Base(path), "02") {
+			if err := os.Remove(path); err != nil {
+				return err
+			}
+			removed++
+		}
+		return nil
+	})
+	if err != nil || removed == 0 {
+		t.Fatalf("removing one book part: err=%v removed=%d", err, removed)
+	}
+
+	// The surviving parts still answer; the deleted one says so rather
+	// than pending forever.
+	if got := skip(1).State; got != "unavailable" {
+		t.Errorf("deleted part = %q, want unavailable", got)
+	}
+}

@@ -1314,6 +1314,24 @@ components:
             settings writers predating this field never change it:
             absent keeps the current value. Always present in
             responses.
+        enrichmentWriteTags:
+          type: boolean
+          description: >
+            Whether the whole-library enrichment pass writes what it
+            filled back into the files, which is what makes enrichment
+            survive a rescan: the catalog is authoritative either way,
+            but a rescan re-reads the tags and would otherwise clear
+            values only the catalog held.
+
+
+            Off by default, because it modifies the listener's own
+            files. Files whose format cannot store a key are counted
+            in `enrichmentStatus.lastRun.tagsUnrepresented` and left
+            byte-identical, which is not a failure. Applies to the next
+            pass; a run already in flight keeps the setting it started
+            under. Optional on PUT so settings writers predating this
+            field never change it: absent keeps the current value.
+            Always present in responses.
         backupKeepCount:
           type: integer
           minimum: 0

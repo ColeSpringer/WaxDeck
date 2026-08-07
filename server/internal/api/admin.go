@@ -112,14 +112,19 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 	if req.Body.TaskRetentionDays != nil {
 		taskDays = *req.Body.TaskRetentionDays
 	}
+	writeTags := s.svc.EnrichmentWriteTagsEnabled()
+	if req.Body.EnrichmentWriteTags != nil {
+		writeTags = *req.Body.EnrichmentWriteTags
+	}
 	st, err := s.svc.AdminSettingsPut(ctx, uc, service.AdminSettings{
-		SignupEnabled:      req.Body.SignupEnabled,
-		ReadOnly:           req.Body.ReadOnly,
-		SonicAnalysis:      sonic,
-		BackupKeepCount:    req.Body.BackupKeepCount,
-		BackupKeepBytes:    req.Body.BackupKeepBytes,
-		TrashRetentionDays: retentionDays,
-		TaskRetentionDays:  taskDays,
+		SignupEnabled:       req.Body.SignupEnabled,
+		ReadOnly:            req.Body.ReadOnly,
+		SonicAnalysis:       sonic,
+		BackupKeepCount:     req.Body.BackupKeepCount,
+		BackupKeepBytes:     req.Body.BackupKeepBytes,
+		TrashRetentionDays:  retentionDays,
+		TaskRetentionDays:   taskDays,
+		EnrichmentWriteTags: writeTags,
 	})
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {
@@ -132,13 +137,14 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 
 func adminSettingsJSON(st service.AdminSettings) AdminSettings {
 	return AdminSettings{
-		SignupEnabled:      st.SignupEnabled,
-		ReadOnly:           st.ReadOnly,
-		SonicAnalysis:      ptr(st.SonicAnalysis),
-		BackupKeepCount:    st.BackupKeepCount,
-		BackupKeepBytes:    st.BackupKeepBytes,
-		TrashRetentionDays: ptr(st.TrashRetentionDays),
-		TaskRetentionDays:  ptr(st.TaskRetentionDays),
+		SignupEnabled:       st.SignupEnabled,
+		ReadOnly:            st.ReadOnly,
+		SonicAnalysis:       ptr(st.SonicAnalysis),
+		BackupKeepCount:     st.BackupKeepCount,
+		BackupKeepBytes:     st.BackupKeepBytes,
+		TrashRetentionDays:  ptr(st.TrashRetentionDays),
+		TaskRetentionDays:   ptr(st.TaskRetentionDays),
+		EnrichmentWriteTags: ptr(st.EnrichmentWriteTags),
 	}
 }
 

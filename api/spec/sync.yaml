@@ -196,11 +196,13 @@ components:
             `removed`, and worth keeping after `hidden`, where undoing
             the transition would otherwise cost the whole transfer again.
 
-            One case answers `hidden` and later becomes unrecoverable: an
-            item trashed and purged afterwards was tombstoned when it was
-            trashed, and emptying the trash is not itself a catalog
-            change, so no second entry follows it. A client keeps those
-            bytes.
+            An item trashed and purged afterwards is tombstoned twice:
+            `hidden` when it went to the trash, then `removed` when the
+            purge made it unrecoverable. Purging is a catalog change, so
+            the second tombstone rides the next delta and a client that
+            kept the bytes on the first one learns to release them. Both
+            carry the same pid, so the later reason simply supersedes the
+            earlier.
 
             Open, like `op`, and deliberately not an enum: a closed one
             generates a Dart `EnumClass` whose serializer throws on an

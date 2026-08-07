@@ -78,6 +78,7 @@ Serializers _$serializers =
           ..add(EnrichItemRequestWantEnum.serializer)
           ..add(EnrichItemResult.serializer)
           ..add(EnrichmentCoverage.serializer)
+          ..add(EnrichmentLastRun.serializer)
           ..add(EnrichmentProvider.serializer)
           ..add(EnrichmentRunRequest.serializer)
           ..add(EnrichmentRunResult.serializer)

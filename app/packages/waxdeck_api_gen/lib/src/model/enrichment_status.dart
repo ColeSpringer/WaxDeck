@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_last_run.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_provider.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_coverage.dart';
 import 'package:built_value/built_value.dart';
@@ -17,6 +18,8 @@ part 'enrichment_status.g.dart';
 /// * [providers] - Registered providers in priority order (this server's own first, then the catalog's key-free built-ins). 
 /// * [coverage] 
 /// * [running] - Whether a whole-library pass is running now.
+/// * [configured] - Whether the whole-library pass can run at all. It needs a MusicBrainz contact, which is boot configuration (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and not a runtime setting, because MusicBrainz requires an identifying agent before anything is sent.  False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key: every provider can be configured and the pass still refuse, because the contact gates the identity spine they hang off. 
+/// * [lastRun] 
 @BuiltValue()
 abstract class EnrichmentStatus implements Built<EnrichmentStatus, EnrichmentStatusBuilder> {
   /// Registered providers in priority order (this server's own first, then the catalog's key-free built-ins). 
@@ -29,6 +32,13 @@ abstract class EnrichmentStatus implements Built<EnrichmentStatus, EnrichmentSta
   /// Whether a whole-library pass is running now.
   @BuiltValueField(wireName: r'running')
   bool get running;
+
+  /// Whether the whole-library pass can run at all. It needs a MusicBrainz contact, which is boot configuration (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and not a runtime setting, because MusicBrainz requires an identifying agent before anything is sent.  False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key: every provider can be configured and the pass still refuse, because the contact gates the identity spine they hang off. 
+  @BuiltValueField(wireName: r'configured')
+  bool get configured;
+
+  @BuiltValueField(wireName: r'lastRun')
+  EnrichmentLastRun? get lastRun;
 
   EnrichmentStatus._();
 
@@ -68,6 +78,18 @@ class _$EnrichmentStatusSerializer implements PrimitiveSerializer<EnrichmentStat
       object.running,
       specifiedType: const FullType(bool),
     );
+    yield r'configured';
+    yield serializers.serialize(
+      object.configured,
+      specifiedType: const FullType(bool),
+    );
+    if (object.lastRun != null) {
+      yield r'lastRun';
+      yield serializers.serialize(
+        object.lastRun,
+        specifiedType: const FullType(EnrichmentLastRun),
+      );
+    }
   }
 
   @override
@@ -111,6 +133,20 @@ class _$EnrichmentStatusSerializer implements PrimitiveSerializer<EnrichmentStat
             specifiedType: const FullType(bool),
           ) as bool;
           result.running = valueDes;
+          break;
+        case r'configured':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.configured = valueDes;
+          break;
+        case r'lastRun':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(EnrichmentLastRun),
+          ) as EnrichmentLastRun;
+          result.lastRun.replace(valueDes);
           break;
         default:
           unhandled.add(key);

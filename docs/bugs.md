@@ -2,6 +2,10 @@
 
 List of current bugs or correctness issues.
 
+- [8-6-2026] Radio doesn't show images in full screen. I think its because we only looking for if the song has a current file to show. We should just be querying musicbrainz or something to see if there is a match. Maybe having a default image that shows when the song cant be found or maybe if the song information is not available.
+
+- [8-6-2026] The default images that show when radio doesn't have a favicon need to be improved.
+
 - [8-6-2026] A smart playlist's own limit is applied before the archived filter, so a list delivers fewer members than its rule asks for and the editor disagrees with the saved result. `PlaylistItems` fetches through `Playlists().Items(ctx, pl.PID, pl.OwnerPID)`, which evaluates the stored rule - `Limit` and `LimitMode` included - in SQL, and then drops archived rows in Go (the comment at playlists.go around 1026 records exactly this: "the state predicate cannot ride the query in"). A `limit: 25` list whose top 25 hold five trashed rows returns 20 while 100+ live matches exist; with `limitMode: minutes` a "60 minutes of jazz" list comes back at about 45. `PreviewRule` does the opposite - it evaluates `evaluableRule(q)`, predicate inside the query - so the editor shows a full 25 and the saved playlist comes back short, which is the inversion `PreviewRule`'s own comment says it exists to prevent. The share page has the same shape one layer up (`playlistMemberViews` in shares.go). Evaluating `evaluableRule(rule)` through `QueryPage` in `PlaylistItems` fixes both.
 
 - [8-6-2026] Trashing a track deletes its sonic embedding, so every trash/restore cycle costs a full re-analysis. `SimilaritySweep` builds its `live` set from `visibleItems()`, which excludes archived, and the prune then removes any embedding whose essence is not in `live`. The comment justifying the prune says "a truly deleted recording's vector is dead weight" - but ADR-0048 made trashed items archived and restorable, with the file still on disk, so the premise no longer holds for them. Key the prune off audio that is genuinely gone rather than off the listing predicate.

@@ -5,13 +5,9 @@ package service
 // duplicate and upgrade maintenance surfaces built on the catalog
 // audit.
 //
-// Rule coverage notes. The spec names missing-mbid in the rule set; it
-// is not implemented because the recording MBID is not reachable from
-// here at sweep cost: model.ItemView carries no MBID, the store's query
-// grammar (store/sqlite/fields.go) whitelists no mbid field, and the
-// facade has no per-item identifier read. small-art rides along with
-// missing-art for free: resolving art for that rule already loads the
-// source blob, whose decoded dimensions come with it.
+// Rule coverage notes. small-art rides along with missing-art for
+// free: resolving art for that rule already loads the source blob,
+// whose decoded dimensions come with it.
 
 import (
 	"context"
@@ -67,6 +63,7 @@ const (
 const (
 	ruleMissingArt      = "missing-art"
 	ruleSmallArt        = "small-art"
+	ruleMissingMBID     = "missing-mbid"
 	ruleMissingYear     = "missing-year"
 	ruleMissingGenre    = "missing-genre"
 	ruleGenreWhitelist  = "genre-whitelist"
@@ -83,13 +80,15 @@ const (
 // ties.
 var healthRules = []string{
 	ruleCorruptAudio, ruleMissingArt, ruleSmallArt, ruleMissingGenre,
-	ruleGenreWhitelist, ruleMissingYear, ruleMissingLyrics, ruleMissingNarrator,
-	ruleMissingASIN, rulePathMismatch, ruleWriteUnsynced, ruleLegacyTags,
+	ruleGenreWhitelist, ruleMissingYear, ruleMissingMBID, ruleMissingLyrics,
+	ruleMissingNarrator, ruleMissingASIN, rulePathMismatch, ruleWriteUnsynced,
+	ruleLegacyTags,
 }
 
 var healthRuleLabels = map[string]string{
 	ruleMissingArt:      "Missing cover art",
 	ruleSmallArt:        "Low-resolution cover art",
+	ruleMissingMBID:     "Missing MusicBrainz identifier",
 	ruleMissingYear:     "Missing release year",
 	ruleMissingGenre:    "Missing genre",
 	ruleGenreWhitelist:  "Genre outside the canonical tree",
@@ -103,8 +102,9 @@ var healthRuleLabels = map[string]string{
 }
 
 // healthFixable names the rules the bulk-fix endpoint automates.
-// missing-year is computable but has no per-item fix path (identity
-// fields ride the whole-library enrichment pass), small-art would need
+// missing-year and missing-mbid are computable but have no per-item fix
+// path (identity fields ride the whole-library enrichment pass and the
+// matching queue), small-art would need
 // the force-overwrite the fill-when-empty enrichment path refuses, and
 // corrupt-audio plus legacy-tags have no automated fix at all.
 // genre-whitelist is deliberately absent: the normalization sweeper
@@ -356,6 +356,13 @@ func (l *Library) itemHealthRules(ctx context.Context, it *model.ItemView, exemp
 	// and the same browse dimension a track's does.
 	if len(offTreeGenres(norm, it.Genre)) > 0 {
 		rules = append(rules, ruleGenreWhitelist)
+	}
+
+	// The item's own identifier: a recording id for a track, a release
+	// id for a book. Both kinds carry one, so this sits outside the kind
+	// switch, and the view projects it, so the rule costs no read.
+	if it.MBID == "" {
+		rules = append(rules, ruleMissingMBID)
 	}
 
 	switch it.Kind {

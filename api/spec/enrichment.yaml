@@ -35,6 +35,12 @@ paths:
         already enriched once. Locked and unofficial-marked content
         is respected. Returns the catalog job to follow.
         Administrators only.
+
+
+        Refuses with `source-unavailable` when the server has no
+        MusicBrainz contact configured, which is what
+        `enrichmentStatus.configured` reports: read it first rather
+        than offering a button that errors.
       tags: [enrichment]
       requestBody:
         required: false
@@ -55,6 +61,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
+        "501":
+          $ref: "#/components/responses/SourceUnavailable"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -63,7 +71,7 @@ components:
     EnrichmentStatus:
       type: object
       description: Enrichment providers and coverage.
-      required: [providers, coverage, running]
+      required: [providers, coverage, running, configured]
       properties:
         providers:
           type: array
@@ -77,6 +85,24 @@ components:
         running:
           type: boolean
           description: Whether a whole-library pass is running now.
+        configured:
+          type: boolean
+          description: >
+            Whether the whole-library pass can run at all. It needs a
+            MusicBrainz contact, which is boot configuration
+            (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and
+            not a runtime setting, because MusicBrainz requires an
+            identifying agent before anything is sent.
+
+
+            False means every run refuses with `source-unavailable`, so
+            a console should say so rather than offer a button that
+            errors. Distinct from a provider's own `configured`, which
+            is about that provider's key: every provider can be
+            configured and the pass still refuse, because the contact
+            gates the identity spine they hang off.
+        lastRun:
+          $ref: "#/components/schemas/EnrichmentLastRun"
 
     EnrichmentProvider:
       type: object
@@ -102,6 +128,65 @@ components:
         builtin:
           type: boolean
           description: True for the catalog's built-ins.
+
+    EnrichmentLastRun:
+      type: object
+      description: >
+        What the most recent finished whole-library pass did. Absent
+        until one has finished.
+
+
+        Coverage answers how much of the library is enriched; this
+        answers whether the last pass accomplished anything, which
+        coverage cannot. A pass that searched two thousand albums and
+        matched none leaves coverage exactly where it was, and so does
+        one whose every tag write failed; both read as "nothing
+        happened" without these counts.
+      required:
+        [
+          albumsSearched,
+          albumsMatched,
+          tagsWritten,
+          tagsFailed,
+          tagsUnrepresented,
+          tagsSkipped,
+        ]
+      properties:
+        albumsSearched:
+          type: integer
+          description: >
+            Albums the release match looked up: which pressing of a
+            record the library holds, resolved from a barcode or a
+            catalog number.
+        albumsMatched:
+          type: integer
+          description: >
+            Albums it pinned to a release. Searched without matched is
+            a library whose albums carry no identifiers, not a broken
+            pass.
+        tagsWritten:
+          type: integer
+          description: >
+            Files the pass wrote enriched values back into. Zero unless
+            tag write-back is on, which is what makes enrichment
+            survive a rescan.
+        tagsFailed:
+          type: integer
+          description: Files whose write failed. The catalog kept the values either way.
+        tagsUnrepresented:
+          type: integer
+          description: >
+            Files whose format cannot store a key that was filled. Not
+            a failure: the bytes are unchanged and correct.
+        tagsSkipped:
+          type: integer
+          description: >
+            Book parts left unwritten because their book's primary part
+            failed.
+        finishedAt:
+          type: string
+          format: date-time
+          description: When the pass finished.
 
     EnrichmentCoverage:
       type: object

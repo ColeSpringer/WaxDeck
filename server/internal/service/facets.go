@@ -49,9 +49,16 @@ import (
 // catalog's faceting groups. A custom-tag dimension ("tag.<KEY>") is not
 // enumerated here: tag keys are open-ended, so it is validated by the
 // catalog's own tag-key rules instead.
+//
+// credit-artist is the second many-per-item dimension after genre: a
+// track lands in a bucket for every artist its credit names, so the
+// bucket counts sum to more than the item count. That is what makes it
+// the dimension an artist's "Appears on" reads, where `artist` buckets
+// the same track once under its primary and never mentions the feature.
 var browseDimensions = map[string]read.GroupBy{
 	"genre":         read.GroupGenre,
 	"artist":        read.GroupArtist,
+	"credit-artist": read.GroupCreditArtist,
 	"album-artist":  read.GroupAlbumArtist,
 	"album":         read.GroupAlbum,
 	"release-group": read.GroupReleaseGroup,
@@ -66,6 +73,7 @@ var browseDimensions = map[string]read.GroupBy{
 var facetFilterField = map[string]string{
 	"genre":         "genre_pid",
 	"artist":        "artist_pid",
+	"credit-artist": "credit_artist_pid",
 	"album-artist":  "album_artist_pid",
 	"album":         "album_pid",
 	"release-group": "release_group_pid",
@@ -121,8 +129,8 @@ func ParseFacetSort(s string) (FacetSort, error) {
 // unknown bucket). The drill filter mirrors it so the item set matches
 // the bucket count.
 var facetNoEpisodes = map[string]bool{
-	"genre": true, "artist": true, "album-artist": true, "album": true,
-	"release-group": true, "year": true,
+	"genre": true, "artist": true, "credit-artist": true, "album-artist": true,
+	"album": true, "release-group": true, "year": true,
 }
 
 // facetHasUnknownBucket names the dimensions that enumerate a bucket for
@@ -133,8 +141,8 @@ var facetNoEpisodes = map[string]bool{
 // match facetNoEpisodes today; they answer different questions, so they
 // stay separate lists.
 var facetHasUnknownBucket = map[string]bool{
-	"genre": true, "artist": true, "album-artist": true, "album": true,
-	"release-group": true, "year": true,
+	"genre": true, "artist": true, "credit-artist": true, "album-artist": true,
+	"album": true, "release-group": true, "year": true,
 }
 
 // FacetBucket is one bucket of a browse dimension.
@@ -578,11 +586,11 @@ func (l *Library) facetScopeQuery(uc *UserCtx) query.Query {
 	}
 	// Sorted so the compiled SQL is stable across map iteration orders.
 	sort.Strings(libs)
-	nodes := make([]query.Node, 0, len(libs))
-	for _, lib := range libs {
-		nodes = append(nodes, query.Cond{Field: "library", Op: query.OpIs, Value: lib})
-	}
-	return b.WhereNode(query.Or{Nodes: nodes}).Build()
+	// An allow-list, so `in`: it seeks the index and an empty grant
+	// compiles to `1=0`. Deliberately not `notIn` over the complement -
+	// that is an anti-join scanning the catalog, and it keeps fileless
+	// items, which ADR-0051 attributes to no library.
+	return b.WhereValues("library", query.OpIn, query.Values(libs)...).Build()
 }
 
 // facetGroupFor validates a dimension name and returns its catalog
@@ -615,7 +623,7 @@ func facetGroupFor(dimension string) (read.GroupBy, string, error) {
 // and year, kind, and tag buckets are not entities at all.
 func facetEntityPrefix(dimension string) string {
 	switch dimension {
-	case "artist", "album-artist":
+	case "artist", "credit-artist", "album-artist":
 		return PrefixArtist
 	case "album":
 		return PrefixAlbum

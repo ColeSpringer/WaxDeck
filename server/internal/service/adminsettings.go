@@ -22,6 +22,11 @@ type AdminSettings struct {
 	// days on the scheduled prune; 0 keeps them, unset answers
 	// defaultTaskRetentionDays.
 	TaskRetentionDays int
+	// EnrichmentWriteTags makes the whole-library enrichment pass write
+	// what it filled back into the files, which is what makes enrichment
+	// survive a rescan. Off by default: the catalog is authoritative and
+	// this touches the listener's own files.
+	EnrichmentWriteTags bool
 }
 
 // TranscodingLimits cap transcode sessions at the media proxy; zero
@@ -39,6 +44,7 @@ const (
 	settingBackupKeepBytes = "backup:keep-bytes"
 	settingTranscodeLimits = "transcode:limits"
 	settingTrashRetention  = "trash:retention-days"
+	settingEnrichWriteTags = "enrichment:write-tags"
 	settingTaskRetention   = "tasks:retention-days"
 	readOnlyLibPrefix      = "read-only:"
 
@@ -62,6 +68,11 @@ type runtimeToggles struct {
 	// sonicAnalysis is nil until an administrator has saved the
 	// setting; the boot default (WAXDECK_SONIC_ANALYSIS) applies then.
 	sonicAnalysis *bool
+	// enrichWriteTags rides the enrichment pass as EnrichOptions.WriteTags
+	// rather than as catalog config, which is what lets it be a runtime
+	// toggle at all: the library-level option is fixed at open, and the
+	// catalog ORs the two.
+	enrichWriteTags bool
 }
 
 // loadRuntimeToggles primes the settings cache; called at Open and
@@ -74,6 +85,9 @@ func (l *Library) loadRuntimeToggles(ctx context.Context) {
 	if v, err := l.db.SettingGet(ctx, settingSonicAnalysis); err == nil {
 		on := v == "true"
 		t.sonicAnalysis = &on
+	}
+	if v, err := l.db.SettingGet(ctx, settingEnrichWriteTags); err == nil {
+		t.enrichWriteTags = v == "true"
 	}
 	if raw, err := l.db.SettingGet(ctx, settingTranscodeLimits); err == nil {
 		var lim TranscodingLimits
@@ -103,9 +117,10 @@ func (l *Library) currentToggles() *runtimeToggles {
 // AdminSettingsGet reads the runtime settings.
 func (l *Library) AdminSettingsGet(ctx context.Context) (AdminSettings, error) {
 	out := AdminSettings{
-		SignupEnabled: l.SignupEnabled(ctx),
-		ReadOnly:      l.currentToggles().readOnly,
-		SonicAnalysis: l.SonicAnalysisEnabled(),
+		SignupEnabled:       l.SignupEnabled(ctx),
+		ReadOnly:            l.currentToggles().readOnly,
+		SonicAnalysis:       l.SonicAnalysisEnabled(),
+		EnrichmentWriteTags: l.currentToggles().enrichWriteTags,
 	}
 	if v, err := l.db.SettingGet(ctx, settingBackupKeep); err == nil {
 		out.BackupKeepCount, _ = strconv.Atoi(v)
@@ -179,6 +194,7 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 		settingBackupKeepBytes: strconv.FormatInt(s.BackupKeepBytes, 10),
 		settingTrashRetention:  strconv.Itoa(s.TrashRetentionDays),
 		settingTaskRetention:   strconv.Itoa(s.TaskRetentionDays),
+		settingEnrichWriteTags: strconv.FormatBool(s.EnrichmentWriteTags),
 	}
 	for k, v := range writes {
 		if err := l.db.SettingSet(ctx, k, v, now); err != nil {
@@ -190,9 +206,17 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 		map[string]any{"signupEnabled": s.SignupEnabled, "readOnly": s.ReadOnly,
 			"sonicAnalysis":   s.SonicAnalysis,
 			"backupKeepCount": s.BackupKeepCount, "backupKeepBytes": s.BackupKeepBytes,
-			"trashRetentionDays": s.TrashRetentionDays,
-			"taskRetentionDays":  s.TaskRetentionDays})
+			"trashRetentionDays":  s.TrashRetentionDays,
+			"taskRetentionDays":   s.TaskRetentionDays,
+			"enrichmentWriteTags": s.EnrichmentWriteTags})
 	return l.AdminSettingsGet(ctx)
+}
+
+// EnrichmentWriteTagsEnabled reports whether an enrichment pass should
+// write what it filled back into the files. Cached, so the settings PUT
+// reads it without a round trip.
+func (l *Library) EnrichmentWriteTagsEnabled() bool {
+	return l.currentToggles().enrichWriteTags
 }
 
 // SonicAnalysisEnabled reports whether the embedded analyzer should

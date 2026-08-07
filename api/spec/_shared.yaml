@@ -61,9 +61,13 @@ components:
 
     SourceUnavailable:
       description: >
-        The request needs an acquisition source integration that this
-        server is not running (code `source-unavailable`), for example a
-        YouTube subscription on a server without the YouTube bridge.
+        The request needs an integration this server is not running
+        (code `source-unavailable`): an acquisition source, such as a
+        YouTube subscription on a server without the YouTube bridge, or
+        the catalog's enrichment pass on a server with no MusicBrainz
+        contact configured. The request itself is well formed, so
+        retrying it unchanged will not help; the server has to be
+        configured and restarted.
       content:
         application/json:
           schema:

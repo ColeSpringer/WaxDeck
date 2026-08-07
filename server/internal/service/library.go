@@ -20,6 +20,7 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/pidpath"
 	"github.com/colespringer/waxbin/source"
+	"github.com/colespringer/waxbin/waxerr"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -50,6 +51,10 @@ type Config struct {
 	Roots []Root
 	// ScanOnStart launches a scan as soon as the service is up.
 	ScanOnStart bool
+	// ResetStaleCatalog moves a catalog built on a different schema
+	// baseline aside at startup instead of refusing to start. See
+	// staleBaseline for what it does and does not distinguish.
+	ResetStaleCatalog bool
 	// Sealer encrypts recoverable secrets (app passwords) at rest.
 	Sealer *auth.Sealer
 	// SecretCipher seals catalog-held secrets (private-feed passwords)
@@ -114,6 +119,14 @@ type Config struct {
 	// MatchConfig tunes the engine; the zero value uses the calibrated
 	// defaults.
 	MatchConfig match.Config
+	// EnrichmentContact is the MusicBrainz contact the enrichment pass
+	// identifies itself with. Empty leaves that pass disabled: MusicBrainz
+	// requires an identifying agent before anything is sent.
+	EnrichmentContact string
+	// EnrichmentMatchReleases resolves which pressing the library holds
+	// from a barcode or catalog number. On by default; open-time, because
+	// the catalog reads it when it opens.
+	EnrichmentMatchReleases bool
 	// EnrichmentProviders are the server's own providers, registered
 	// ahead of the catalog's built-ins and reused for per-item
 	// enrichment.
@@ -302,6 +315,10 @@ type Library struct {
 	workerLocalPaths bool
 	// isrcResolver mirrors Config.ISRCResolver.
 	isrcResolver ISRCResolver
+	// enrichmentConfigured mirrors whether Config.EnrichmentContact was
+	// set, which is what decides whether the catalog's whole-library
+	// enrichment pass can run at all.
+	enrichmentConfigured bool
 	// sonicAnalysisDefault and workerAPIConfigured mirror their Config
 	// fields.
 	sonicAnalysisDefault bool
@@ -347,9 +364,61 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 			BlockPrivateIPs: !cfg.AllowPrivateFeedHosts,
 		}
 	}
+	if cfg.EnrichmentContact != "" {
+		// Only with a contact: the rest of the block without one would look
+		// configured while still refusing every run.
+		matchReleases := cfg.EnrichmentMatchReleases
+		opts.Enrichment = config.EnrichConfig{
+			Contact:         cfg.EnrichmentContact,
+			MatchReleases:   &matchReleases,
+			BlockPrivateIPs: !cfg.AllowPrivateFeedHosts,
+		}
+	}
+	// Set when the open below had to discard a stale-baseline catalog, so
+	// the service can say so once it has a logger on it.
+	var reset *CatalogResetReport
 	lib, err := waxbin.Open(ctx, opts)
 	if err != nil {
-		return nil, fmt.Errorf("service: opening catalog: %w", err)
+		// A stale-baseline refusal is the one open failure with a recovery
+		// WaxDeck can perform, so it is the one that gets translated: the
+		// catalog's own message names `waxbin db reset`, a CLI a WaxDeck
+		// operator does not have.
+		//
+		// Both halves are required. The fingerprint says the catalog is
+		// one this build will not open; the refusal's own code says that
+		// is why the open failed. Without the second, a catalog held by
+		// another process on the same data dir -- an overlapping compose
+		// restart -- would fail on the write lock and then be renamed out
+		// from under the live owner's handles.
+		if !waxerr.Is(err, waxerr.CodeUnsupported) || !staleBaseline(ctx, opts.DBPath) {
+			return nil, fmt.Errorf("service: opening catalog: %w", err)
+		}
+		if !cfg.ResetStaleCatalog {
+			return nil, fmt.Errorf("service: opening catalog: the catalog was built from a "+
+				"different schema baseline and this build will not open it. Pre-1.0 the catalog "+
+				"schema is edited in place rather than migrated, so there is no upgrade to run: "+
+				"restart with -reset-catalog (WAXDECK_RESET_CATALOG=true) to move %s aside and "+
+				"start fresh. That discards every play position, rating, star, playlist, curation "+
+				"edit, podcast subscription and trash entry -- the media on disk is untouched and "+
+				"is re-indexed by the startup scan. The previous catalog is renamed, not deleted: %w",
+				opts.DBPath, err)
+		}
+		rep, rerr := resetStaleCatalog(ctx, opts.DBPath, cfg.Roots)
+		if rerr != nil {
+			return nil, fmt.Errorf("service: resetting stale catalog: %w", rerr)
+		}
+		reset = rep
+		if lib, err = waxbin.Open(ctx, opts); err != nil {
+			// The catalog is already aside, so this failure has to name it:
+			// without the path, the backup that makes a mis-fire recoverable
+			// is the one thing nobody knows to look for.
+			if reset.SavedTo != "" {
+				return nil, fmt.Errorf("service: opening catalog: the previous catalog was saved "+
+					"to %s but the replacement could not be created; fix the cause and rename it "+
+					"back: %w", reset.SavedTo, err)
+			}
+			return nil, fmt.Errorf("service: opening catalog: %w", err)
+		}
 	}
 
 	paths, err := pidpath.New(ctx, lib, pidpath.Options{Logger: log})
@@ -381,6 +450,9 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		isrcResolver:           cfg.ISRCResolver,
 		sonicAnalysisDefault:   cfg.SonicAnalysisDefault,
 		workerAPIConfigured:    cfg.WorkerAPIConfigured,
+	}
+	if reset != nil {
+		l.logCatalogReset(reset)
 	}
 	// The ListenBrainz API base is caller-supplied, so its deliveries
 	// ride a dial-guarded client like every other user-pointed fetch;
@@ -415,6 +487,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		}
 	}
 	l.enrichProviders = cfg.EnrichmentProviders
+	l.enrichmentConfigured = cfg.EnrichmentContact != ""
 	l.sourceProviders = cfg.SourceProviders
 	if err := l.initSync(ctx); err != nil {
 		paths.Close()

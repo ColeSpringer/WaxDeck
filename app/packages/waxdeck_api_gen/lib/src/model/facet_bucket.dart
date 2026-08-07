@@ -14,7 +14,7 @@ part 'facet_bucket.g.dart';
 /// * [key] - The bucket's stable handle: pass it back as `listItems`' `facetKey` to drill it. Empty for the unknown bucket. 
 /// * [label] - Display label. Genre labels are the canonical spelling from the server's genre tree, not whichever variant was scanned first. 
 /// * [count] - Items in this bucket, within the caller's libraries.
-/// * [entityPid] - The catalog entity behind the bucket, for the dimensions that have one (`artist`, `album-artist`, `album`, `release-group`). Absent for the unknown bucket and for dimensions that are not entities. It is this bucket's `key` carried with the entity's API type prefix, so a client holding one has the other: a screen addressed by `al-<ulid>` drills with `facetKey=<ulid>`, and the entity endpoints (`/albums/{pid}/play-state` and friends) take the prefixed form. 
+/// * [entityPid] - The catalog entity behind the bucket, for the dimensions that have one (`artist`, `credit-artist`, `album-artist`, `album`, `release-group`). Absent for the unknown bucket and for dimensions that are not entities. It is this bucket's `key` carried with the entity's API type prefix, so a client holding one has the other: a screen addressed by `al-<ulid>` drills with `facetKey=<ulid>`, and the entity endpoints (`/albums/{pid}/play-state` and friends) take the prefixed form. 
 /// * [unknown] - True for the bucket holding items the dimension is absent from. Its `label` is the canonical sentinel and its `key` is empty. 
 @BuiltValue()
 abstract class FacetBucket implements Built<FacetBucket, FacetBucketBuilder> {
@@ -30,7 +30,7 @@ abstract class FacetBucket implements Built<FacetBucket, FacetBucketBuilder> {
   @BuiltValueField(wireName: r'count')
   int get count;
 
-  /// The catalog entity behind the bucket, for the dimensions that have one (`artist`, `album-artist`, `album`, `release-group`). Absent for the unknown bucket and for dimensions that are not entities. It is this bucket's `key` carried with the entity's API type prefix, so a client holding one has the other: a screen addressed by `al-<ulid>` drills with `facetKey=<ulid>`, and the entity endpoints (`/albums/{pid}/play-state` and friends) take the prefixed form. 
+  /// The catalog entity behind the bucket, for the dimensions that have one (`artist`, `credit-artist`, `album-artist`, `album`, `release-group`). Absent for the unknown bucket and for dimensions that are not entities. It is this bucket's `key` carried with the entity's API type prefix, so a client holding one has the other: a screen addressed by `al-<ulid>` drills with `facetKey=<ulid>`, and the entity endpoints (`/albums/{pid}/play-state` and friends) take the prefixed form. 
   @BuiltValueField(wireName: r'entityPid')
   String? get entityPid;
 

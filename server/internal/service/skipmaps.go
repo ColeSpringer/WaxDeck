@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
 
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
@@ -65,9 +66,11 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 	if it.Kind != model.KindEpisode && it.Kind != model.KindBook {
 		return SkipMapResult{State: skipStateUnavailable}, nil
 	}
-	if it.Kind == model.KindEpisode && it.State != model.StatePresent {
-		// Remote episodes have no bytes to analyze; the state may flip
-		// after a fetch.
+	// Nothing to analyze, and both states flip back: a remote episode when
+	// it is fetched, a missing item when a scan finds the file again. An
+	// episode has no state but `present` worth reading.
+	if it.State == model.StateMissing ||
+		(it.Kind == model.KindEpisode && it.State != model.StatePresent) {
 		return SkipMapResult{State: skipStateUnavailable}, nil
 	}
 
@@ -100,23 +103,17 @@ func (l *Library) SkipMapFor(ctx context.Context, uc *UserCtx, apiItemPID string
 			// false without one, so only a true miss reaches here.
 			return SkipMapResult{State: skipStateUnavailable}, nil
 		}
-		// The catalog can say present while the bytes are gone (deleted
-		// behind the server's back), and it exposes no state mutator for
-		// WaxDeck to correct that with. Left alone, this queues work the
-		// worker drops as moot and answers pending forever, so the same
-		// resolution the worker does happens here first and the miss is
-		// reported honestly. Resolving the path is also what tells a stale
-		// located-path entry from real absence, since analysisSource
-		// relocates before writing anything off.
-		if _, err := l.analysisSource(ctx, string(it.PID), filePID); err != nil {
-			if errors.Is(err, errAnalysisMoot) {
+		// A named part is the one case the item's state cannot express:
+		// MarkMissing vetoes on any surviving sibling, so a book whose
+		// second part is gone stays `present` forever. Resolve that part
+		// here; every other shape reads the state above, which is what
+		// keeps an unmounted network root off the request path.
+		if filePID != "" {
+			if _, err := l.analysisSource(ctx, string(it.PID), filePID); errors.Is(err, errAnalysisMoot) {
 				return SkipMapResult{State: skipStateUnavailable}, nil
 			}
-			// A root that is not mounted is storage that has not arrived
-			// rather than audio that is gone: queue and answer pending, so
-			// the map appears once it is back.
-			l.log.Warn("resolving audio for skip map", "item", string(it.PID), "err", err)
 		}
+
 		key := string(it.PID)
 		if filePID != "" {
 			key = key + "|" + filePID
@@ -256,6 +253,11 @@ func (l *Library) DrainAnalysisQueue(ctx context.Context) bool {
 		if errors.Is(err, errAnalysisMoot) {
 			// Not a failure: no attempt can bring the bytes back, and a
 			// re-fetch or a rescan of the same essence queues fresh work.
+			// Tell the catalog first, though - dropping the entry silently
+			// is what left the item `present` with nothing behind it, so
+			// the next request queued the same doomed work and the skip
+			// map answered pending forever.
+			l.markAudioMissing(ctx, row.ItemPID)
 			if dbErr := l.db.CompleteAnalysis(ctx, row.Key); dbErr != nil {
 				l.log.Warn("dropping analysis with no audio", "key", row.Key, "err", dbErr)
 			}
@@ -272,6 +274,38 @@ func (l *Library) DrainAnalysisQueue(ctx context.Context) bool {
 		l.log.Warn("completing analysis", "key", row.Key, "err", err)
 	}
 	return true
+}
+
+// markAudioMissing records a worker's discovery that an item's bytes are gone.
+//
+// Force stays off so the catalog's own guards decide: it stats every backing
+// file and refuses on an absent library root, which is the dropped-mount
+// distinction usableSource draws by hand. Never fails the drain -- the analysis
+// entry is moot either way.
+func (l *Library) markAudioMissing(ctx context.Context, queueKey string) {
+	itemPID, _, _ := strings.Cut(queueKey, "|")
+	if itemPID == "" {
+		return
+	}
+	outcome, err := l.lib.MarkMissing(ctx, model.PID(itemPID), waxbin.MarkMissingOptions{Force: false})
+	if err != nil {
+		// The dropped-mount refusal lands here; the catalog's text names
+		// the root and the remedy.
+		l.log.Warn("could not record that an item's audio is gone",
+			"item", itemPID, "err", err)
+		return
+	}
+	switch outcome {
+	case model.OutcomeMarked:
+		l.log.Info("marked an item missing: analysis found no audio", "item", itemPID)
+	case model.OutcomeFilesPresent:
+		// Either the bytes came back, or a sibling part survives: MarkMissing
+		// is item-level and vetoes on any present file.
+		l.log.Info("item keeps at least one present file; not marked missing", "item", itemPID)
+	default:
+		l.log.Debug("item was already out of the present state",
+			"item", itemPID, "outcome", string(outcome))
+	}
 }
 
 // analysisSource resolves the file a queued entry names, errAnalysisMoot

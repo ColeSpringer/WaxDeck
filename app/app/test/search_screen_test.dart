@@ -400,7 +400,9 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Back'));
     await tester.pumpAndSettle();
     expect(find.byType(SearchScreen), findsOneWidget);
-    expect(repository.facetDrills.last, ('artist', '01JZXNIGHTJAR'));
+    // `contains` rather than `.last`: the artist screen also drills
+    // `credit-artist` for its "appears on" shelf.
+    expect(repository.facetDrills, contains(('artist', '01JZXNIGHTJAR')));
   });
 
   testWidgets('a capped answer says so rather than looking complete', (

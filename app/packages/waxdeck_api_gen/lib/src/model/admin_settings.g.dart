@@ -14,6 +14,8 @@ class _$AdminSettings extends AdminSettings {
   @override
   final bool? sonicAnalysis;
   @override
+  final bool? enrichmentWriteTags;
+  @override
   final int backupKeepCount;
   @override
   final int backupKeepBytes;
@@ -29,6 +31,7 @@ class _$AdminSettings extends AdminSettings {
     required this.signupEnabled,
     required this.readOnly,
     this.sonicAnalysis,
+    this.enrichmentWriteTags,
     required this.backupKeepCount,
     required this.backupKeepBytes,
     this.trashRetentionDays,
@@ -48,6 +51,7 @@ class _$AdminSettings extends AdminSettings {
         signupEnabled == other.signupEnabled &&
         readOnly == other.readOnly &&
         sonicAnalysis == other.sonicAnalysis &&
+        enrichmentWriteTags == other.enrichmentWriteTags &&
         backupKeepCount == other.backupKeepCount &&
         backupKeepBytes == other.backupKeepBytes &&
         trashRetentionDays == other.trashRetentionDays &&
@@ -60,6 +64,7 @@ class _$AdminSettings extends AdminSettings {
     _$hash = $jc(_$hash, signupEnabled.hashCode);
     _$hash = $jc(_$hash, readOnly.hashCode);
     _$hash = $jc(_$hash, sonicAnalysis.hashCode);
+    _$hash = $jc(_$hash, enrichmentWriteTags.hashCode);
     _$hash = $jc(_$hash, backupKeepCount.hashCode);
     _$hash = $jc(_$hash, backupKeepBytes.hashCode);
     _$hash = $jc(_$hash, trashRetentionDays.hashCode);
@@ -74,6 +79,7 @@ class _$AdminSettings extends AdminSettings {
           ..add('signupEnabled', signupEnabled)
           ..add('readOnly', readOnly)
           ..add('sonicAnalysis', sonicAnalysis)
+          ..add('enrichmentWriteTags', enrichmentWriteTags)
           ..add('backupKeepCount', backupKeepCount)
           ..add('backupKeepBytes', backupKeepBytes)
           ..add('trashRetentionDays', trashRetentionDays)
@@ -99,6 +105,11 @@ class AdminSettingsBuilder
   bool? get sonicAnalysis => _$this._sonicAnalysis;
   set sonicAnalysis(bool? sonicAnalysis) =>
       _$this._sonicAnalysis = sonicAnalysis;
+
+  bool? _enrichmentWriteTags;
+  bool? get enrichmentWriteTags => _$this._enrichmentWriteTags;
+  set enrichmentWriteTags(bool? enrichmentWriteTags) =>
+      _$this._enrichmentWriteTags = enrichmentWriteTags;
 
   int? _backupKeepCount;
   int? get backupKeepCount => _$this._backupKeepCount;
@@ -130,6 +141,7 @@ class AdminSettingsBuilder
       _signupEnabled = $v.signupEnabled;
       _readOnly = $v.readOnly;
       _sonicAnalysis = $v.sonicAnalysis;
+      _enrichmentWriteTags = $v.enrichmentWriteTags;
       _backupKeepCount = $v.backupKeepCount;
       _backupKeepBytes = $v.backupKeepBytes;
       _trashRetentionDays = $v.trashRetentionDays;
@@ -167,6 +179,7 @@ class AdminSettingsBuilder
             'readOnly',
           ),
           sonicAnalysis: sonicAnalysis,
+          enrichmentWriteTags: enrichmentWriteTags,
           backupKeepCount: BuiltValueNullFieldError.checkNotNull(
             backupKeepCount,
             r'AdminSettings',

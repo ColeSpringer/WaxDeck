@@ -192,8 +192,10 @@ func (b *Bridge) CreateMergeJob(ctx context.Context, srcs []string, titles []str
 // sidecar requires an explicit output format for every audio-writing
 // job, so callers pass the source codec's format to keep a lossless
 // split lossless. The mp4-family formats additionally pin the flat
-// progressive container: only merges default to it server-side, and a
-// fragmented .m4b piece is a file most players refuse to open.
+// progressive container, which is belt: the sidecar now flattens every
+// file output that does not ask for a container. Kept because a
+// fragmented .m4b piece is a file most players refuse to open, and this
+// says so at the call site rather than relying on a sidecar default.
 func (b *Bridge) CreateSplitJob(ctx context.Context, src string, cuts []int64, cue string, format string) (string, error) {
 	if !b.JobsSupported() {
 		return "", fmt.Errorf("flow: sidecar runs no jobs surface")

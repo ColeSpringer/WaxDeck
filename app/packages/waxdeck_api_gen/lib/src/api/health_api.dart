@@ -406,7 +406,7 @@ class HealthApi {
   }
 
   /// Query per-file diagnostics
-  /// Persisted per-file diagnostics (what scan, organize, replaygain, and tag write-back recorded about individual files) across the library in a stable path order, optionally narrowed by origin, code, severity, or library. This is the query surface a diagnostics dashboard reads instead of auditing item by item. Administrators only. 
+  /// Persisted per-file diagnostics (what scan, organize, replaygain, enrichment, and tag write-back recorded about individual files) across the library in a stable path order, optionally narrowed by origin, code, severity, or library. This is the query surface a diagnostics dashboard reads instead of auditing item by item. Administrators only. 
   ///
   /// Parameters:
   /// * [origin] - Restrict to one writer.

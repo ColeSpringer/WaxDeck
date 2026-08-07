@@ -297,8 +297,40 @@ func TestSubsonicClientSymfonium(t *testing.T) {
 		fmt.Sprintf("&id=%s&time=%d&submission=true", songID, time.Now().Add(-time.Minute).UnixMilli()))
 }
 
+// TestSubsonicStreamIgnoresClientBitrateHints pins the habit several
+// clients have of asking for lossless with an explicit zero or an empty
+// maxBitRate. The sidecar now refuses both spellings on its own
+// parameters, so what matters is that neither ever reaches it: the
+// adapter builds WaxFlow's query itself and forwards none of the
+// client's. A regression here would surface as a client that plays
+// everywhere except when it asks for the best quality.
+func TestSubsonicStreamIgnoresClientBitrateHints(t *testing.T) {
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	const c = "test"
+
+	env := mustOK(t, h, secret, c, "getRandomSongs.view", "&size=1")
+	songID, _ := jmap(jlist(jmap(env["randomSongs"])["song"])[0])["id"].(string)
+	if !strings.HasPrefix(songID, "tr-") {
+		t.Fatalf("songID = %q", songID)
+	}
+
+	for _, hint := range []string{
+		"&maxBitRate=0", // "no cap": DSub, Symfonium
+		"&maxBitRate=",  // the same intent, empty
+		"&format=raw",   // "give me the file"
+		"&maxBitRate=0&bitRate=0",
+	} {
+		t.Run(strings.TrimPrefix(hint, "&"), func(t *testing.T) {
+			streamAndAssertBytes(t, h, "/rest/stream.view?apiKey="+secret+"&id="+songID+hint)
+		})
+	}
+}
+
 // streamAndAssertBytes follows the stream redirect into the tokenized
-// proxy and asserts audio bytes arrive.
+// proxy and asserts audio bytes arrive. It also pins that the location
+// it redirects to carries none of the caller's query: the adapter
+// assembles the sidecar's parameters server-side.
 func streamAndAssertBytes(t *testing.T, h *harness, path string) {
 	t.Helper()
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -310,7 +342,13 @@ func streamAndAssertBytes(t *testing.T, h *harness, path string) {
 	if resp.StatusCode != 302 {
 		t.Fatalf("stream status = %d, want 302", resp.StatusCode)
 	}
-	resp, err = http.Get(h.ts.URL + resp.Header.Get("Location"))
+	loc := resp.Header.Get("Location")
+	for _, forwarded := range []string{"maxBitRate", "bitRate", "format=raw"} {
+		if strings.Contains(loc, forwarded) {
+			t.Fatalf("stream redirect forwarded the client's %s: %s", forwarded, loc)
+		}
+	}
+	resp, err = http.Get(h.ts.URL + loc)
 	if err != nil {
 		t.Fatal(err)
 	}

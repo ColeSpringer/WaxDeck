@@ -214,7 +214,7 @@ func (fs *feedServer) feedURL() string { return fs.ts.URL + "/feed.xml" }
 // download dir outside the library roots and loopback feeds allowed.
 func newPodcastHarness(t *testing.T) *harness {
 	podcastDir := t.TempDir()
-	return newHarnessWith(t, func(cfg *service.Config) {
+	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.PodcastDir = podcastDir
 		cfg.PodcastRootName = "podcasts"
 		cfg.AllowPrivateFeedHosts = true
@@ -222,6 +222,8 @@ func newPodcastHarness(t *testing.T) *harness {
 		// deferral would read every touched episode as live playback.
 		cfg.RetentionInUseWindow = -1
 	})
+	h.podcastDir = podcastDir
+	return h
 }
 
 // reqAs is the token-parameterized request helper the two-user tests
@@ -2077,9 +2079,175 @@ func TestSubscribedEpisodesHideExplicitFromRestricted(t *testing.T) {
 	}
 }
 
-// The in-progress strip ranks on when an episode was last played, and
-// falls back to when its play state last changed for a checkpoint that
-// never stamped one.
+// The listing gate and the per-item gate are separate code paths: a
+// listing filters in the query, while play-info decides one item through
+// allowedByContent. Both flags have to hold on the second path too, or a
+// restricted listener who cannot see an episode in any list can still
+// mint a stream URL for it by pid.
+func TestPlayInfoRefusesExplicitEpisodesForRestricted(t *testing.T) {
+	h := newPodcastHarness(t)
+	flagged := newCountsFeed(t, []countsEpisode{
+		{title: "Clean"},
+		{title: "Explicit", explicit: true},
+	})
+	explicitShow := newCountsFeedAs(t, countsChannel{explicit: true}, []countsEpisode{
+		{title: "Unflagged Of A Flagged Show"},
+	})
+
+	id, listener := listenerAccount(t, h, "playinfo-shielded", true)
+	for _, f := range []*countsFeed{flagged, explicitShow} {
+		resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": f.feedURL()})
+		wantStatus(t, resp, 201, "admin subscribe")
+		resp = reqAs(t, h, "POST", "/api/v1/podcasts", listener, map[string]any{"url": f.feedURL()})
+		wantStatus(t, resp, 201, "listener subscribe while allowed")
+	}
+
+	// Collected while still permitted, so the pids are the ones the
+	// listener legitimately held before the permission was revoked.
+	resp := reqAs(t, h, "GET", "/api/v1/podcasts/episodes?filter=latest", listener, nil)
+	byTitle := map[string]string{}
+	for _, ep := range decode[EpisodePage](t, resp).Items {
+		byTitle[ep.Title] = ep.Pid
+	}
+	if len(byTitle) != 3 {
+		t.Fatalf("episodes before revocation = %v, want all 3", byTitle)
+	}
+
+	resp = h.patchJSON(t, "/api/v1/users/"+id, map[string]any{
+		"permissions": map[string]any{
+			"download": true, "delete": false, "explicitContent": false,
+			"sharedOutputs": true, "managePodcasts": true,
+		},
+	})
+	wantStatus(t, resp, 200, "revoke explicit content")
+
+	for _, tc := range []struct {
+		title string
+		want  int
+	}{
+		{"Clean", 200},
+		{"Explicit", 404},                    // the episode's own flag
+		{"Unflagged Of A Flagged Show", 404}, // the show's flag
+	} {
+		t.Run(tc.title, func(t *testing.T) {
+			resp := reqAs(t, h, "GET", "/api/v1/items/"+byTitle[tc.title]+"/play-info", listener, nil)
+			wantStatus(t, resp, tc.want, "restricted play-info for "+tc.title)
+		})
+	}
+}
+
+// Audio deleted behind the server's back is discovered by the analysis
+// worker and recorded, so the skip map stops answering pending forever.
+//
+// The GET used to resolve the path itself to avoid that - a stat and
+// possibly a relocate inside the request, which blocked on an unmounted
+// network root. The catalog takes the correction now: first GET queues,
+// the worker finds nothing and marks the item missing, second GET reads
+// the state. That is what pending has always promised.
+func TestSkipMapReportsAudioDeletedBehindTheServersBack(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 1)
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+
+	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+	eps := decode[EpisodePage](t, resp).Items
+	if len(eps) == 0 {
+		t.Fatal("feed produced no episodes")
+	}
+	ep := eps[0]
+	resp = h.postJSON(t, "/api/v1/episodes/"+ep.Pid+"/fetch", nil)
+	wantStatus(t, resp, 202, "queue the fetch")
+	drainFetches(t, h)
+
+	// The file is really there, so the first ask genuinely queues work.
+	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/skip-map", h.token)
+	if sm := decode[SkipMap](t, resp); sm.State != "pending" {
+		t.Fatalf("skip map before the deletion = %q, want pending", sm.State)
+	}
+
+	// Delete the audio without telling the catalog, which is the whole
+	// scenario: a rescan has not run and the item still reads present.
+	var removed int
+	err := filepath.Walk(h.podcastDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+		removed++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("removing the downloaded audio: %v", err)
+	}
+	if removed == 0 {
+		t.Fatalf("no downloaded file under %s to remove", h.podcastDir)
+	}
+
+	// The worker resolves the path off the request, finds nothing, and
+	// tells the catalog rather than dropping the entry silently.
+	for h.svc.DrainAnalysisQueue(context.Background()) {
+	}
+
+	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/skip-map", h.token)
+	if sm := decode[SkipMap](t, resp); sm.State != "unavailable" {
+		t.Fatalf("skip map after the worker ran = %q, want unavailable", sm.State)
+	}
+
+	// And the correction is in the catalog, not just in this endpoint's
+	// answer: that is the difference between recording the discovery and
+	// papering over it per request.
+	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+	after := decode[EpisodePage](t, resp).Items
+	if len(after) == 0 {
+		t.Fatal("episode listing came back empty")
+	}
+	if after[0].Downloaded {
+		t.Errorf("episode still reports downloaded after its file was deleted: %+v", after[0])
+	}
+}
+
+// A follower of no shows gets an empty strip, not the whole catalog.
+// The scope is an `in` over the subscribed set, and an empty `in`
+// compiles to 1=0 - the opposite mistake (an empty set read as "no
+// filter") would hand every listener every episode on the server.
+func TestSubscribedEpisodesEmptyForAFollowerOfNothing(t *testing.T) {
+	h := newPodcastHarness(t)
+	feed := newCountsFeed(t, []countsEpisode{{title: "First"}, {title: "Second"}})
+
+	// The admin subscribes and starts one, so the catalog genuinely holds
+	// episodes and in-progress state that the listener must not see.
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+	eps := decode[EpisodePage](t, resp).Items
+	if len(eps) != 2 {
+		t.Fatalf("admin episodes = %d, want 2", len(eps))
+	}
+	putPlayState(t, h, eps[0].Pid, 1_000)
+
+	_, listener := listenerAccount(t, h, "follows-nothing", true)
+	for _, filter := range []string{"latest", "unplayed", "in-progress"} {
+		t.Run(filter, func(t *testing.T) {
+			resp := reqAs(t, h, "GET", "/api/v1/podcasts/episodes?filter="+filter, listener, nil)
+			page := decode[EpisodePage](t, resp)
+			if len(page.Items) != 0 {
+				t.Errorf("%s = %d rows for a follower of no shows, want 0", filter, len(page.Items))
+			}
+			if page.NextCursor != nil {
+				t.Errorf("%s handed back a cursor: %v", filter, page.NextCursor)
+			}
+		})
+	}
+}
+
+// The in-progress strip ranks on the last progress write, so a
+// checkpoint counts. It is a keyset browse of the catalog now rather
+// than a ranking in Go, and this pins that the order did not move with
+// the mechanism.
 func TestSubscribedEpisodesInProgressRecency(t *testing.T) {
 	h := newPodcastHarness(t)
 	feed := newCountsFeed(t, []countsEpisode{

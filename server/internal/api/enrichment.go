@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -22,14 +23,29 @@ func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusR
 		return nil, err
 	}
 	out := EnrichmentStatus{
-		Running:   st.Running,
-		Providers: make([]EnrichmentProvider, 0, len(st.Providers)),
+		Running:    st.Running,
+		Configured: st.Configured,
+		Providers:  make([]EnrichmentProvider, 0, len(st.Providers)),
 		Coverage: EnrichmentCoverage{
 			Artists:       CoverageCount{Enriched: st.Coverage.Artists.Enriched, Total: st.Coverage.Artists.Total},
 			ReleaseGroups: CoverageCount{Enriched: st.Coverage.ReleaseGroups.Enriched, Total: st.Coverage.ReleaseGroups.Total},
 			Books:         CoverageCount{Enriched: st.Coverage.Books.Enriched, Total: st.Coverage.Books.Total},
 			Lyrics:        CoverageCount{Enriched: st.Coverage.Lyrics.Enriched, Total: st.Coverage.Lyrics.Total},
 		},
+	}
+	if r := st.LastRun; r != nil {
+		last := EnrichmentLastRun{
+			AlbumsSearched:    r.AlbumsSearched,
+			AlbumsMatched:     r.AlbumsMatched,
+			TagsWritten:       r.TagsWritten,
+			TagsFailed:        r.TagsFailed,
+			TagsUnrepresented: r.TagsUnrepresented,
+			TagsSkipped:       r.TagsSkipped,
+		}
+		if r.FinishedAtNS > 0 {
+			last.FinishedAt = ptr(time.Unix(0, r.FinishedAtNS).UTC())
+		}
+		out.LastRun = &last
 	}
 	for _, p := range st.Providers {
 		caps := p.Capabilities
@@ -59,6 +75,8 @@ func (s *Server) RunEnrichment(ctx context.Context, req RunEnrichmentRequestObje
 			return RunEnrichment403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindConflict:
 			return RunEnrichment409JSONResponse{ConflictJSONResponse(errObj("conflict", "a conflicting catalog job is already running"))}, nil
+		case service.KindUnsupported:
+			return RunEnrichment501JSONResponse{SourceUnavailableJSONResponse(errObj("source-unavailable", err.Error()))}, nil
 		}
 		return nil, err
 	}

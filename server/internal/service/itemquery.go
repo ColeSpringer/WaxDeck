@@ -50,3 +50,18 @@ func unarchived(b *query.Builder) *query.Builder {
 func archived(it *model.ItemView) bool {
 	return it != nil && it.State == model.StateArchived
 }
+
+// listableStates is ADR-0048's rule as an allow-list, for the one
+// surface that takes states rather than a predicate:
+// read.SearchOptions.States. The fourth encoding named in `unarchived`
+// above, and the one that needs watching, because it inverts the others.
+//
+// The other three say "not archived", so a fifth state would be listable
+// by default; this one says "these three", so a fifth would be hidden by
+// default. Upstream chose that deliberately - an empty States means no
+// narrowing, so a call site forgotten at the next addition reverts to
+// today's behavior rather than failing - which is exactly why the set is
+// named once here instead of spelled at the call site.
+var listableStates = []model.ItemState{
+	model.StatePresent, model.StateRemote, model.StateMissing,
+}

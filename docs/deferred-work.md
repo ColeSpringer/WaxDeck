@@ -40,13 +40,39 @@ here waits on upstream.
   into the panel. Both are additions to `queueSlivers`, which is the one
   body the panel and the `/queue` screen share, so either lands in both
   at once. See ADR-0029.
-- `[in-repo]` **An artist screen has no "Appears on" and no biography.**
-  The screen shows the artist's own releases and tracks. Albums they are
-  credited on without being the album artist would need a credits-shaped
-  query the catalog does not expose as a facet, and the biography needs
-  an enrichment field nothing writes yet - the same provider gap that
-  keeps artist artwork from existing. Both are additive sections on a
-  screen that is otherwise complete.
+- `[in-repo]` **"Appears on" reads items where it wants album buckets.**
+  The shelf draws album cards but the only scoped read available is
+  `listItems(facet: credit-artist)`, so it downloads item rows and
+  collapses them client-side. The dimension buckets an artist's own
+  tracks too, so a prolific artist's first page can be entirely
+  self-releases; the shelf pages past that, bounded at four, which fixes
+  the empty shelf and makes the worst case a larger download. The real
+  fix is a scope on `GET /library/facets` -- album buckets where
+  `credit_artist_pid` is this artist -- which is bounded by construction
+  and returns albums directly. Server-side that is `facetScopeQuery` plus
+  `applyFacetFilter` on a dimension other than the one enumerated; the
+  spec change is one optional facet/facetKey pair.
+- `[in-repo]` **An artist screen has no biography.** "Appears on" landed
+  on the `credit-artist` browse dimension. The biography still needs an
+  enrichment field nothing writes yet - the same provider gap that keeps
+  artist artwork from existing - so it stays sequenced behind that
+  rather than behind a query.
+- `[in-repo]` **The album screen and the metadata editor cannot show a
+  release's identity.** The catalog carries barcode, label, catalog
+  number, media, and country on the album entity, and WaxDeck reaches
+  them two ways already: smart rules filter on `albumBarcode` and its
+  four siblings, and an entity edit writes barcode, label, and catalog
+  number. What is missing is a *read* surface. Upstream keeps these off
+  `model.ItemView` on purpose - rows.go budgets its columns and these
+  are entity-scoped - so they are served by `entity info album`, and
+  WaxDeck exposes no album-entity endpoint at all: `AlbumFacts.of`
+  derives the whole header from the tracks, with the comment "there is
+  no album endpoint to ask". Surfacing them means adding one
+  (`GET /albums/{pid}`, over `Library.EntityByPIDs`), which is a new
+  route and DTO rather than a field on an existing one, and the editor's
+  album panel then reads it. Media and country would join the entity
+  edit's vocabulary in the same change: the catalog accepts them and the
+  spec's `editEntity` prose still lists only the first three.
 - `[in-repo]` **Nothing can be pinned to home.** Section 6.1's second
   shelf is user-curated - long-press any entity, "Pin to Home" - and is
   marked optional there, which is why the shelf home shipped without it
@@ -276,20 +302,6 @@ here waits on upstream.
 
 - `[in-repo]` **PodPing update notifications.** Polling is the only feed refresh
   trigger.
-- `[upstream]` **Emptying the trash does not reclaim an offline client's
-  download.** ADR-0048 tells the two delete tombstones apart by the trash
-  journal, so deleting audio outright reclaims the bytes on every
-  mirrored device and trashing it keeps them, which is what makes a
-  restore free. Purging that trash entry afterwards is where it stops:
-  the item was already tombstoned as `hidden` when it was trashed, and a
-  purge writes no catalog change (it removes a file and a journal row,
-  and the item was archived already), so no second entry tells the client
-  the bytes are now unrecoverable. They survive until the account signs
-  out or the download is removed by hand. The ask is a change-log entry
-  when a purge makes an archived item unrecoverable; without one the
-  alternatives are a client that re-checks every tombstoned pid it holds
-  bytes for, or WaxDeck keeping a parallel record of purged items to fold
-  into the delta, and both are more machinery than the gap is worth.
 
 ## Compatibility
 
@@ -701,14 +713,6 @@ here waits on upstream.
   the transcoding limits are set without the current-session context
   that would say what they are actually bounding. Each is a section
   registration and one screen against endpoints that already answer.
-- `[upstream]` **The libraries screen counts items by path prefix.** The
-  catalog's query language has no library dimension, so a per-library
-  count is `path startsWith root`, which is the same attribution every
-  other library-scoped answer uses and is one `LIKE`-shaped query per
-  library per read of the screen. It is honest and it is not free. The
-  ask is filed as "a library dimension on item queries" in
-  upstream-requests.md; the prefix count is the shipped workaround and
-  stays correct whether or not it lands.
 - `[in-repo]` **The first-run guided flow is the console, not a wizard.**
   6.14 describes a three-step card flow after the create-admin form (add
   a library, start a scan, "while it warms up"). What shipped is the
@@ -813,14 +817,6 @@ here waits on upstream.
   also hand-rolls once-only memoization with a `bool` flag where
   `sync.OnceValue` - already used in service/sanitize.go - is one line
   and goroutine-safe.)
-
-- `[in-repo]` **The skip-map GET resolves a file path synchronously.**
-  `SkipMapFor` calls `analysisSource`, which relocates on a cache miss - a
-  stat, potentially a directory walk - inside the request. The
-  correctness intent is right and documented (it is what tells a stale
-  located-path entry from real absence), but on a slow or unmounted
-  network root the request blocks rather than answering pending. The
-  resolution belongs off the request path or behind a short cache.
 
 - `[in-repo]` **Every browse now compiles a query and takes the user
   join.** waxbin's `browseFilter` short-circuits only when the query has

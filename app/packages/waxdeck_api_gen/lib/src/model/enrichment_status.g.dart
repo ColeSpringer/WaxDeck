@@ -13,6 +13,10 @@ class _$EnrichmentStatus extends EnrichmentStatus {
   final EnrichmentCoverage coverage;
   @override
   final bool running;
+  @override
+  final bool configured;
+  @override
+  final EnrichmentLastRun? lastRun;
 
   factory _$EnrichmentStatus([
     void Function(EnrichmentStatusBuilder)? updates,
@@ -22,6 +26,8 @@ class _$EnrichmentStatus extends EnrichmentStatus {
     required this.providers,
     required this.coverage,
     required this.running,
+    required this.configured,
+    this.lastRun,
   }) : super._();
   @override
   EnrichmentStatus rebuild(void Function(EnrichmentStatusBuilder) updates) =>
@@ -37,7 +43,9 @@ class _$EnrichmentStatus extends EnrichmentStatus {
     return other is EnrichmentStatus &&
         providers == other.providers &&
         coverage == other.coverage &&
-        running == other.running;
+        running == other.running &&
+        configured == other.configured &&
+        lastRun == other.lastRun;
   }
 
   @override
@@ -46,6 +54,8 @@ class _$EnrichmentStatus extends EnrichmentStatus {
     _$hash = $jc(_$hash, providers.hashCode);
     _$hash = $jc(_$hash, coverage.hashCode);
     _$hash = $jc(_$hash, running.hashCode);
+    _$hash = $jc(_$hash, configured.hashCode);
+    _$hash = $jc(_$hash, lastRun.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -55,7 +65,9 @@ class _$EnrichmentStatus extends EnrichmentStatus {
     return (newBuiltValueToStringHelper(r'EnrichmentStatus')
           ..add('providers', providers)
           ..add('coverage', coverage)
-          ..add('running', running))
+          ..add('running', running)
+          ..add('configured', configured)
+          ..add('lastRun', lastRun))
         .toString();
   }
 }
@@ -80,6 +92,15 @@ class EnrichmentStatusBuilder
   bool? get running => _$this._running;
   set running(bool? running) => _$this._running = running;
 
+  bool? _configured;
+  bool? get configured => _$this._configured;
+  set configured(bool? configured) => _$this._configured = configured;
+
+  EnrichmentLastRunBuilder? _lastRun;
+  EnrichmentLastRunBuilder get lastRun =>
+      _$this._lastRun ??= EnrichmentLastRunBuilder();
+  set lastRun(EnrichmentLastRunBuilder? lastRun) => _$this._lastRun = lastRun;
+
   EnrichmentStatusBuilder() {
     EnrichmentStatus._defaults(this);
   }
@@ -90,6 +111,8 @@ class EnrichmentStatusBuilder
       _providers = $v.providers.toBuilder();
       _coverage = $v.coverage.toBuilder();
       _running = $v.running;
+      _configured = $v.configured;
+      _lastRun = $v.lastRun?.toBuilder();
       _$v = null;
     }
     return this;
@@ -121,6 +144,12 @@ class EnrichmentStatusBuilder
               r'EnrichmentStatus',
               'running',
             ),
+            configured: BuiltValueNullFieldError.checkNotNull(
+              configured,
+              r'EnrichmentStatus',
+              'configured',
+            ),
+            lastRun: _lastRun?.build(),
           );
     } catch (_) {
       late String _$failedField;
@@ -129,6 +158,9 @@ class EnrichmentStatusBuilder
         providers.build();
         _$failedField = 'coverage';
         coverage.build();
+
+        _$failedField = 'lastRun';
+        _lastRun?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'EnrichmentStatus',

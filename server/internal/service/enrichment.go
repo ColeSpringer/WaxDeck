@@ -6,6 +6,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/colespringer/waxbin"
@@ -30,6 +31,12 @@ const (
 // into the genre scalar.
 const enrichGenreCap = 3
 
+// enrichJobWindow is how far back the status surface looks for the newest
+// finished enrichment pass. The job list is every kind, newest first, so
+// scans and analyzes share the window; deep enough that ordinary traffic
+// does not push the last pass out, and still one query.
+const enrichJobWindow = 200
+
 // EnrichmentProviderDTO is one registered provider.
 type EnrichmentProviderDTO struct {
 	Name         string
@@ -52,11 +59,39 @@ type EnrichmentCoverageDTO struct {
 	Lyrics        CoverageCountDTO
 }
 
+// EnrichmentLastRunDTO is what the most recent finished pass did.
+//
+// Coverage says how much of the library is enriched; this says whether the
+// last pass accomplished anything, which coverage cannot: a pass that matched
+// nothing, and one whose every tag write failed, both leave coverage put.
+type EnrichmentLastRunDTO struct {
+	// The release match: which pressing the library holds, from a barcode
+	// or catalog number. Searched without matched is a library whose
+	// albums carry no identifiers, not a broken pass.
+	AlbumsSearched int
+	AlbumsMatched  int
+	// Zero unless the run wrote tags. Unrepresented is not a failure: the
+	// format cannot store the key and the bytes are unchanged.
+	TagsWritten       int
+	TagsFailed        int
+	TagsUnrepresented int
+	TagsSkipped       int
+	// 0 means no pass has finished, so the zeros above mean "not yet".
+	FinishedAtNS int64
+}
+
 // EnrichmentStatusDTO is the status surface aggregate.
 type EnrichmentStatusDTO struct {
 	Providers []EnrichmentProviderDTO
 	Coverage  EnrichmentCoverageDTO
 	Running   bool
+	// Configured reports whether the whole-library pass can run at all: it
+	// needs a MusicBrainz contact, which is boot config. Not a provider's
+	// own Configured -- every provider can have its key and the pass still
+	// refuse.
+	Configured bool
+	// LastRun is absent until a pass has finished on this catalog.
+	LastRun *EnrichmentLastRunDTO
 }
 
 // capabilityStrings renders a provider capability bitset as the API's
@@ -87,7 +122,10 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	if !uc.Admin {
 		return EnrichmentStatusDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	out := EnrichmentStatusDTO{Providers: []EnrichmentProviderDTO{}}
+	out := EnrichmentStatusDTO{
+		Providers:  []EnrichmentProviderDTO{},
+		Configured: l.enrichmentConfigured,
+	}
 	// This server's own providers first (priority order). They are
 	// configured by construction: an injected provider is only wired
 	// when its key is set.
@@ -139,12 +177,33 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 		out.Coverage.Lyrics.Total = n
 	}
 
-	// Running: an enrich-kind catalog job still in flight.
-	if jobs, jerr := l.lib.Jobs(ctx, 50); jerr == nil {
+	// One job read answers both: whether a pass is in flight, and what the
+	// newest finished one did. The job row's JSON summary is the only place
+	// those counters survive the process that produced them.
+	if jobs, jerr := l.lib.Jobs(ctx, enrichJobWindow); jerr == nil {
 		for _, j := range jobs {
-			if j.Kind == "enrich" && j.State == model.JobRunning {
+			if j.Kind != "enrich" {
+				continue
+			}
+			if j.State == model.JobRunning {
 				out.Running = true
-				break
+				continue
+			}
+			// Newest first, so the first that parses wins; a run with no
+			// summary is skipped rather than read as a pass that did nothing.
+			if out.LastRun == nil && j.Result != "" {
+				var r enrich.Result
+				if json.Unmarshal([]byte(j.Result), &r) == nil {
+					out.LastRun = &EnrichmentLastRunDTO{
+						AlbumsSearched:    r.AlbumsSearched,
+						AlbumsMatched:     r.AlbumsMatched,
+						TagsWritten:       r.TagsWritten,
+						TagsFailed:        r.TagsFailed,
+						TagsUnrepresented: r.TagsUnrepresented,
+						TagsSkipped:       r.TagsSkipped,
+						FinishedAtNS:      j.FinishedAt,
+					}
+				}
 			}
 		}
 	}
@@ -159,8 +218,26 @@ func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool) (s
 	if !uc.Admin {
 		return "", &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{Force: force})
+	// WriteTags rather than the catalog's WriteEnrichmentTags option: that
+	// one is fixed at open and the catalog ORs the two, so per-run is what
+	// lets the admin toggle work without a restart.
+	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{
+		Force:     force,
+		WriteTags: l.currentToggles().enrichWriteTags,
+	})
 	if err != nil {
+		// The catalog's refusal names WAXBIN_ENRICH_CONTACT, a knob a
+		// WaxDeck operator does not have.
+		if KindOf(classify(err)) == KindUnsupported {
+			return "", &Error{
+				Kind: KindUnsupported,
+				Msg: "the catalog's enrichment pass is not configured on this server. " +
+					"MusicBrainz requires an identifying contact before anything is sent, " +
+					"so set -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) to an email " +
+					"or a URL and restart",
+				Err: err,
+			}
+		}
 		return "", classify(err)
 	}
 	return apiPID(PrefixJob, pid), nil
