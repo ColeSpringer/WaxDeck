@@ -116,6 +116,10 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 	if req.Body.EnrichmentWriteTags != nil {
 		writeTags = *req.Body.EnrichmentWriteTags
 	}
+	radioArt := s.svc.RadioExternalArtEnabled()
+	if req.Body.RadioExternalArt != nil {
+		radioArt = *req.Body.RadioExternalArt
+	}
 	st, err := s.svc.AdminSettingsPut(ctx, uc, service.AdminSettings{
 		SignupEnabled:       req.Body.SignupEnabled,
 		ReadOnly:            req.Body.ReadOnly,
@@ -125,6 +129,7 @@ func (s *Server) PutAdminSettings(ctx context.Context, req PutAdminSettingsReque
 		TrashRetentionDays:  retentionDays,
 		TaskRetentionDays:   taskDays,
 		EnrichmentWriteTags: writeTags,
+		RadioExternalArt:    radioArt,
 	})
 	if err != nil {
 		if service.KindOf(err) == service.KindInvalid {
@@ -145,6 +150,7 @@ func adminSettingsJSON(st service.AdminSettings) AdminSettings {
 		TrashRetentionDays:  ptr(st.TrashRetentionDays),
 		TaskRetentionDays:   ptr(st.TaskRetentionDays),
 		EnrichmentWriteTags: ptr(st.EnrichmentWriteTags),
+		RadioExternalArt:    ptr(st.RadioExternalArt),
 	}
 }
 

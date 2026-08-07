@@ -1332,6 +1332,30 @@ components:
             under. Optional on PUT so settings writers predating this
             field never change it: absent keeps the current value.
             Always present in responses.
+        radioExternalArt:
+          type: boolean
+          description: >
+            Whether radio may look a station's announced title up against
+            MusicBrainz and the Cover Art Archive when nothing in this
+            library matches it, so the full-screen player can draw the
+            song's cover instead of the station's mark.
+
+
+            Off by default, and the only setting here that governs
+            whether this server talks to a third party at all: it sends a
+            string a station chose - an artist and a track title - off
+            this machine. That is a self-hoster's decision to make rather
+            than one to inherit. With it off, radio still draws a
+            library match when it finds one, then the station logo, then
+            the station mark, and makes no outbound request.
+
+
+            The lookup is paced at the etiquette MusicBrainz asks for
+            (one request per second, an identifying agent) and its
+            answers are cached server-side, so it costs no per-device
+            traffic. Optional on PUT so settings writers predating this
+            field never change it: absent keeps the current value. Always
+            present in responses.
         backupKeepCount:
           type: integer
           minimum: 0

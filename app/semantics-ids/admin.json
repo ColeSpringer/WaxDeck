@@ -3,6 +3,7 @@
   "ids": {
     "adminAction": "admin-action-{name}",
     "adminAudit": "admin-audit",
+    "adminNotifications": "admin-notifications",
     "adminBackups": "admin-backups",
     "adminConsole": "admin-console",
     "adminDashboard": "admin-dashboard",
@@ -72,6 +73,7 @@
     "scheduleSave": "schedule-save-{kind}",
     "settingReadOnly": "setting-read-only",
     "settingSignupEnabled": "setting-signup-enabled",
+    "settingRadioExternalArt": "setting-radio-external-art",
     "settingSonicAnalysis": "setting-sonic-analysis",
     "signupRequests": "signup-requests",
     "tagRule": "{list}-rule-{index}",

@@ -374,6 +374,12 @@ class _Slot extends StatelessWidget {
                   size: logo,
                   artwork: station.artwork,
                   monogram: station.name,
+                  // A dial tile carries the station name under it, but
+                  // the tile is what a listener aims at, and most
+                  // stations arrive with no logo at all: two initials
+                  // over a flat swatch is what the whole dial looks like
+                  // otherwise.
+                  placeholder: ArtworkPlaceholder.wordmark,
                   shape: ArtworkShape.circle,
                   domain: WaxDomain.radio,
                 ),

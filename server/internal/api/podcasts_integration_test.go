@@ -479,7 +479,7 @@ func TestPodcastLifecycle(t *testing.T) {
 		t.Fatalf("play count after finishing = %d, want 1 (the double-mark bug)", st.PlayCount)
 	}
 
-	// The fetch's inverse: removing the download trashes the audio,
+	// The fetch's inverse: removing the download deletes the local audio,
 	// keeps every user's state, and leaves the episode fetchable.
 	resp = reqAs(t, h, "DELETE", "/api/v1/episodes/"+ep.Pid+"/fetch", h.token, nil)
 	if resp.StatusCode != 204 {
@@ -502,7 +502,7 @@ func TestPodcastLifecycle(t *testing.T) {
 	}
 	resp = get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-state", h.token)
 	if st := decode[PlayState](t, resp); !st.Played || st.PlayCount != 1 {
-		t.Fatalf("removal must archive, not delete: state = %+v", st)
+		t.Fatalf("removal must take the bytes, not the state: state = %+v", st)
 	}
 	// Removing again is a no-op success, and the episode fetches back.
 	resp = reqAs(t, h, "DELETE", "/api/v1/episodes/"+ep.Pid+"/fetch", h.token, nil)

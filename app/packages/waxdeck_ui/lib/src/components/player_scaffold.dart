@@ -606,6 +606,12 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
         size: size,
         artwork: widget.now.artwork,
         monogram: widget.now.title,
+        // The face is the one surface where the artwork *is* the
+        // identification: a station with no logo and no matched track
+        // gets its name, set, rather than two letters on a swatch.
+        placeholder: widget.now.domain == WaxDomain.radio
+            ? ArtworkPlaceholder.wordmark
+            : ArtworkPlaceholder.initials,
         shape: widget.now.shape,
         domain: widget.now.domain,
       ),

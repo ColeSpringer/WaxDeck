@@ -106,10 +106,12 @@ func run() error {
 
 		managedRoots = flag.String("managed-roots", envOr("WAXDECK_MANAGED_ROOTS", ""), "library root names (comma separated) the catalog may place files into: uploads import there and the organizer may move files there; unlisted roots stay strictly in place")
 
-		matchingOn  = flag.Bool("matching", envOr("WAXDECK_MATCHING", "true") == "true", "identify new and uploaded music against MusicBrainz (paced background lookups)")
-		mbBase      = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override (a local mirror, or a stub in tests)")
-		acoustidKey = flag.String("acoustid-key", envOr("WAXDECK_ACOUSTID_KEY", ""), "AcoustID API key; empty disables fingerprint evidence in matching")
-		fanartKey   = flag.String("fanarttv-key", envOr("WAXDECK_FANARTTV_KEY", ""), "fanart.tv API key; empty leaves that artwork provider unconfigured")
+		matchingOn   = flag.Bool("matching", envOr("WAXDECK_MATCHING", "true") == "true", "identify new and uploaded music against MusicBrainz (paced background lookups)")
+		mbBase       = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override (a local mirror, or a stub in tests)")
+		coverArtBase = flag.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override (a mirror, or a stub in tests)")
+		trustedProxy = flag.String("trusted-proxies", envOr("WAXDECK_TRUSTED_PROXIES", ""), "comma-separated CIDRs or addresses of reverse proxies whose X-Forwarded-For may be believed; empty counts the socket address")
+		acoustidKey  = flag.String("acoustid-key", envOr("WAXDECK_ACOUSTID_KEY", ""), "AcoustID API key; empty disables fingerprint evidence in matching")
+		fanartKey    = flag.String("fanarttv-key", envOr("WAXDECK_FANARTTV_KEY", ""), "fanart.tv API key; empty leaves that artwork provider unconfigured")
 
 		enrichContact = flag.String("enrichment-contact", envOr("WAXDECK_ENRICHMENT_CONTACT", ""), "MusicBrainz contact (an email or a URL) the catalog's whole-library enrichment pass identifies itself with. MusicBrainz requires an identifying agent, so empty leaves that pass disabled and /admin/enrichment/run refuses")
 		enrichMatch   = flag.Bool("enrichment-match-releases", envOr("WAXDECK_ENRICHMENT_MATCH_RELEASES", "true") == "true", "during enrichment, resolve which pressing of a record the library holds from its barcode or catalog number, deciding ties on medium and country. On by default; needs -enrichment-contact to have any effect")
@@ -332,6 +334,17 @@ func run() error {
 		// The playlist importer's ISRC upgrade rides the same paced,
 		// cached MusicBrainz client as matching.
 		svcCfg.ISRCResolver = matchSource.MB
+		// So does radio's external artwork rung, for the same reason and
+		// more urgently: a second MusicBrainz client would be an
+		// unthrottled second caller against a service that rate-limits at
+		// one request a second. Wired whenever matching is on; whether it
+		// ever reaches out is the admin toggle's call, and that is off by
+		// default.
+		svcCfg.RadioArtResolver = waxproviders.RecordingCover{
+			MB:      matchSource.MB,
+			CAA:     waxproviders.NewCoverArt(waxproviders.CoverArtConfig{BaseURL: *coverArtBase}),
+			NoCover: service.ErrNoRadioArt,
+		}
 	}
 	svc, err := service.Open(ctx, svcCfg, store, group)
 	if err != nil {
@@ -989,22 +1002,34 @@ func run() error {
 		}
 	}
 
+	// Refused rather than defaulted: a typo that silently trusted nothing
+	// would look exactly like a working configuration until the day
+	// somebody was locked out by it.
+	trusted, err := api.ParseTrustedProxies(*trustedProxy)
+	if err != nil {
+		return fmt.Errorf("trusted proxies: %w", err)
+	}
+	if *trustedProxy != "" {
+		log.Info("trusting forwarded client addresses", "proxies", *trustedProxy)
+	}
+
 	srv := api.NewServer(version, api.Options{
-		Service:      svc,
-		Bridge:       bridge,
-		Sessions:     sessions,
-		OIDC:         oidc,
-		Media:        media,
-		Connect:      connectSvc,
-		Group:        group,
-		Bases:        bases,
-		Logger:       log,
-		CookieSecure: *cookieSec,
-		PublicBase:   *publicBase,
-		Backups:      backups,
-		BackupWake:   backupWake,
-		Shares:       shareTokens,
-		WorkerTokens: workerTokenList,
+		Service:        svc,
+		Bridge:         bridge,
+		Sessions:       sessions,
+		OIDC:           oidc,
+		Media:          media,
+		Connect:        connectSvc,
+		Group:          group,
+		Bases:          bases,
+		Logger:         log,
+		CookieSecure:   *cookieSec,
+		PublicBase:     *publicBase,
+		Backups:        backups,
+		BackupWake:     backupWake,
+		Shares:         shareTokens,
+		WorkerTokens:   workerTokenList,
+		TrustedProxies: trusted,
 	})
 	apiHandler := api.HandlerWithOptions(
 		api.NewStrictHandlerWithOptions(srv, nil, api.StrictHTTPServerOptions{

@@ -143,6 +143,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // without four call sites remembering to.
     ref.listen<String>(searchQueryProvider, (previous, next) {
       _publish(next);
+      // The field follows the query whoever set it, which is what keeps
+      // this screen's field and the shell header's from drifting apart.
+      // Only one of the two is on screen at a time, so the one that was
+      // hidden while the other was typed in has to catch up before it is
+      // shown - and `didUpdateWidget` cannot do it: the location this
+      // screen writes on every keystroke returns early there on purpose,
+      // so the filter chip is not reset per character. The guard is the
+      // same one the header uses: assigning text the field already holds
+      // would move the caret to the end mid-word.
+      if (_field.text.trim() != next) _field.text = next;
       // "Show all" belongs to the group it was pressed on, in the answer
       // it was pressed in; carrying it into the next query expands a
       // group nobody asked to see all of.

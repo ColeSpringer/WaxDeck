@@ -297,6 +297,136 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /radio/stations/{pid}/now-playing-art:
+    get:
+      operationId: getRadioNowPlayingArt
+      summary: Get cover art for a station's announced track
+      description: >
+        The cover this server holds for whatever the station last
+        announced, for the case the announced track is not in this
+        library. Draw it on the full-screen player face; the deck bar
+        keeps the station logo on purpose, because a bar whose picture
+        changed every few minutes would read as the station changing.
+
+
+        Two rungs sit behind radio artwork and this is the second. The
+        first is `nowPlayingItemPid` above: a match against this library,
+        which costs no network and is the common answer for a listener
+        playing a station whose music they own. Only on its miss does the
+        server look the announced artist and title up against MusicBrainz
+        and resolve a Cover Art Archive image. That rung is **off by
+        default** (`radioExternalArt` in the server settings): it sends a
+        string a station chose from a self-hosted server to a third
+        party, which is the operator's call to make. With it off this
+        endpoint answers 404 forever and the client draws the station
+        mark, which is a designed state rather than a gap.
+
+
+        Never blocking, and a client should expect that. The lookup is
+        started by the play-info poll and runs against a service paced at
+        roughly one request per second, so the first poll after a title
+        changes answers 404 here and a later one answers the image - on
+        the same fifteen-second cadence the play-info contract already
+        asks for. A miss is remembered for a day rather than forever,
+        because a track released this week can have no archive entry
+        today and one tomorrow, and a service that could not be reached
+        is remembered for minutes only.
+
+
+        The bytes go through the same raster-only check the station logo
+        does, decided by inspecting them rather than by trusting the
+        upstream `Content-Type`, and carry the same hardening headers.
+      tags: [radio]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+        - name: v
+          in: query
+          required: true
+          description: >
+            The `nowPlayingArtKey` from this station's play-info. The
+            endpoint answers the cover held under that token and nothing
+            else, so a title that rolls over between the poll and this
+            request cannot turn a held cover into a 404.
+          schema:
+            type: string
+        - name: size
+          in: query
+          description: Accepted and ignored, like the logo endpoint's.
+          schema:
+            type: integer
+            minimum: 16
+            maximum: 2048
+        - name: If-None-Match
+          in: header
+          description: Previously returned `ETag`; a match answers 304 with no body.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The cover image, always one of the raster types below.
+          headers:
+            ETag:
+              description: Content-addressed validator for the returned bytes.
+              schema:
+                type: string
+            Cache-Control:
+              description: >
+                `private, max-age=86400, stale-while-revalidate=604800`,
+                as for the logo, and true here rather than approximately
+                true: the URL carries the token naming these exact bytes,
+                so a new announced title is a new URL rather than the same
+                one with different content behind it.
+              schema:
+                type: string
+            X-Content-Type-Options:
+              description: "`nosniff`, as for the logo."
+              schema:
+                type: string
+            Content-Security-Policy:
+              description: The logo endpoint's policy, for the same reason.
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: The cached copy is still current.
+          headers:
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: >
+            There is nothing to draw (code `not-found`): the station
+            token is missing, unknown, or has aged out of the server's
+            cache, the external rung is off, or there was never a cover
+            under it. A client can act on none of those differences - it
+            falls back to the local match, then to the station logo, then
+            to the station mark.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /radio/directory:
     get:
       operationId: searchRadioDirectory
@@ -458,6 +588,30 @@ components:
             deliberately not used for scrobbling, which reports what the
             station announced.
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        nowPlayingArtKey:
+          type: string
+          description: >
+            An opaque token naming the cover this server holds for the
+            announced title, present only when it holds one. The second
+            artwork rung, and the token does two jobs: it says there is an
+            image to ask for, and it is what makes the image URL change
+            when the station changes what it is playing.
+
+
+            Pass it as `v` on
+            `GET /radio/stations/{pid}/now-playing-art`. A client that
+            omits it gets a 404 - the endpoint is addressed by token, not
+            by whatever is announced at the moment the image request
+            lands, so the bytes behind one URL never change and the long
+            `Cache-Control` they carry is true.
+
+
+            The lookup behind it is asynchronous, so the field appears on
+            a later poll rather than on the one that started it. Absent
+            means draw the local match if there is one, then the station
+            logo, then the station mark. Always absent while the external
+            rung is switched off.
+          example: 6f1a3c9d2e4b5a70
 
     RadioDirectoryEntry:
       type: object

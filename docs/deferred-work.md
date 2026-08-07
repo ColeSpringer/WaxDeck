@@ -253,6 +253,131 @@ here waits on upstream.
   and "how far ahead" are numbers worth setting against the perf run's
   measurements rather than before them - so take it with the entry above.
 
+- `[in-repo]` **The radio relay drops the artwork URLs some stations
+  announce.** Now-playing art comes from the three-rung ladder - the
+  library match, the opt-in MusicBrainz/Cover Art Archive lookup, the
+  station mark - and the relay extracts `StreamTitle` alone from the
+  ICY blocks it already parses (`server/internal/api/icy.go`). A live
+  survey of 63 stations (2026-08-07: the top-clicked public dial plus
+  Ogg/FLAC/HLS samples) found a real minority announcing art in-band,
+  always as a URL and never as image bytes: Radio Paradise sends the
+  current song's own cover in `StreamUrl` (an `image/jpeg` that changes
+  with every track - a known ad-hoc convention that Icecast-KH forwards
+  and foobar2000, AIMP, and Squeezebox honor), SomaFM sends its channel
+  logo there, fourteen streams across four operators send a logo URL in
+  a nonstandard `icy-logo` response header, and one sent a dedicated
+  `StreamArtwork` key (empty when sampled). Nothing embeds bytes: no
+  `METADATA_BLOCK_PICTURE` in any of seventeen Ogg/FLAC streams, no
+  `APIC` in any HLS segment, and Shoutcast v2's album-art frames and
+  `/playingart` endpoint are dead in the wild. The wanted rung sits
+  between the library match and the external lookup: capture
+  `StreamUrl` and `StreamArtwork` where the relay already stores the
+  announced title, plus `icy-logo` at connect, and when the value is an
+  http(s) URL whose fetched bytes sniff as an image, serve it as the
+  now-playing art - per-song covers for the Radio Paradise class, a
+  better default mark for the SomaFM class, station-chosen art for what
+  the station is playing with no third party asked. Guardrails are not
+  optional: fetch server-side with the size caps and content sniffing
+  the station-logo fetch already does (the value is a station-chosen
+  URL, same trust posture), ignore blocks carrying ad-insertion keys
+  (`adw_ad`, `insertionType` - observed on iHeart/Triton streams, where
+  `StreamUrl` is ad tracking), and expect junk (one surveyed station
+  sends a bare number there). Cache like the external-art entries. This
+  complements the ladder rather than replacing any rung - roughly one
+  surveyed stream in twenty carries per-song art - and the RTL-style
+  HLS channel (per-song artwork URLs in ID3 `WXXX` frames inside
+  segments, beside `TIT2`/`TPE1`) only matters if HLS stations are ever
+  played natively rather than relayed.
+
+- `[in-repo]` **A song heard on the radio cannot be kept.** The radio
+  face names what the station is playing and can even search the
+  library for it, but a listener who likes it has nowhere to put it:
+  leave the player, remember the line, hope. Wanted, two halves of one
+  feature. A heart on the playing surfaces - the full radio face and
+  the radio deck bar - that saves the announced song to a per-user
+  list, drawn filled when the current announcement is already on it.
+  And the list itself, reachable from the radio hub: the songs a
+  listener caught on air and means to hunt down, a playlist in shape
+  but deliberately not in kind - nothing on it is in the library, so
+  nothing on it plays, and the rows exist to be acquired and crossed
+  off. (Naming is open. "Radio wishlist" was the working title;
+  "Saved from the radio" is the discoverable plain name; "Airchecks"
+  is the radio-native word - a recording made off the air - and fits
+  the dial-and-platter vocabulary if a glossary term is acceptable.)
+
+  What an entry can honestly carry: the announced line as the station
+  sent it (`nowPlaying`, best-effort text from an untrusted host), the
+  parsed artist and title where `parseRadioTitle` recognises the shape
+  (radioscrobble.go - the strict parse scrobbling already trusts), the
+  station, and when it was heard. **Album is not in the stream**: ICY
+  metadata is one line, so an album reaches an entry only two ways,
+  both best-effort - the announced track matched this library
+  (`nowPlayingItemPid`, the case a wishlist needs least), or the
+  external-art lookup is widened to report the release it picked
+  beside the cover (`radioArtResolver.FrontCover` returns bytes and
+  mime today; the lookup already resolves a MusicBrainz release to
+  reach the archive and returns only the picture). Absent-by-default
+  album is the design, not a gap.
+
+  Artwork is a snapshot problem. Whatever cover exists at save time
+  lives in the ladder's caches: the matched item's own art, or the
+  in-memory `radioArtCache` bytes keyed by normalized artist+title -
+  bounded, evicted oldest-first, gone on restart - or nothing. So the
+  save copies what it has when the heart is tapped (a blob beside the
+  row, or a sidecar under the file-write rule), or the list accepts
+  monograms; "resolve it again later" quietly turns the list into a
+  pile of lookups against a rung most operators keep off
+  (`radioExternalArt` defaults off, so most entries will have no art,
+  and the monogram row is a designed state).
+
+  Where it lives: a per-user table in `server/internal/db` beside
+  `radio_stations`, a new pid prefix, keyset pagination per the
+  convention, and a bounded size with a `conflict` refusal like the
+  station library's 500 cap. Not a `Prefs` field - favourites are a
+  bounded pid list and this is unbounded rows with fields. Endpoints
+  join `api/spec/radio.yaml`. **No upstream work**: waxbin holds
+  library items and these deliberately are not items; the parse, the
+  art ladder, the store, and every surface are WaxDeck-owned. Do not
+  file an ask.
+
+  The heart's filled state rides the poll that already exists: a
+  `nowPlayingSaved` flag on `RadioPlayInfo` beside `nowPlayingArt`,
+  computed per caller per poll - membership is one indexed lookup on
+  the normalized artist+title identity (the `radioArtKey` shape).
+  Play-info is polled every fifteen seconds during playback, so the
+  heart stays honest across devices for free: a save made on the
+  phone fills the desktop's heart on its next poll. Saving is
+  idempotent on that same identity (the raw line where nothing
+  parsed), so a filled heart's tap removes and a double tap never
+  duplicates; an announcement that does not parse still saves as its
+  raw line rather than refusing the tap.
+
+  Client seams, all present. The full face's title block already
+  holds `_FindInLibrary` (radio_face.dart) and the heart sits beside
+  it; the bar's half is `_RadioDeckBar` (deck_bar_host.dart), where
+  room is the constraint and the heart may reasonably appear only
+  where a wide layout gives it space. The hub (radio_screen.dart)
+  takes the list's entry point, and the list screen is a declared
+  route in the table (`go`: a stranger opening the location gets
+  their own list, as with `/queue`); ids join `app/semantics-ids/`
+  and the e2e driver's Radio surface. `WaxIcons.heart` is already in
+  the vendored set, so no icon regeneration. One wording trap: the
+  face already carries a star meaning "pin the station to the dial",
+  so the heart's label must say song, not favourite, or the two
+  affordances blur.
+
+  Decisions recorded so they are not re-litigated. Saving a song the
+  server matched to the library is allowed: the match is a
+  best-effort text lookup and never authoritative, and refusing the
+  tap on its say-so would lose real saves. The list resolves its rows
+  against the library at read time and marks the ones that now match
+  ("in your library now", the lookup `RadioNowPlayingItem` already
+  runs), because the list exists to be worked through and a row that
+  crosses itself off is the feature working. Per-row actions start at
+  find-in-library (the search shortcut the face already has) and
+  remove; handing a row to Add-from-URL or the identify search is a
+  later nicety over surfaces that already exist.
+
 ## Connect and casting
 
 - `[in-repo]` **Web gapless over hls.js stayed a gated attempt and did not ship.**
@@ -704,15 +829,15 @@ here waits on upstream.
 
 ## Admin and ops
 
-- `[in-repo]` **Three admin console sections are declared and unbuilt.**
-  The console holds fourteen sections; the layout blueprint's 6.15 names
-  three more that have no server-scope surface at all yet. Notification
-  targets exist per account and not per server (the same target editor
-  plus the server event catalog would do it); share links are listed for
-  their owner and the `all=true` oversight listing has no screen; and
-  the transcoding limits are set without the current-session context
-  that would say what they are actually bounding. Each is a section
-  registration and one screen against endpoints that already answer.
+- `[in-repo]` **Two admin console sections are declared and unbuilt.**
+  The layout blueprint's 6.15 names three; notification targets landed
+  (ADR-0052 - a re-parent, since the editor and its endpoints already
+  existed under the listener's Integrations screen). Share links are
+  still listed only for their owner and the `all=true` oversight listing
+  has no screen; and the transcoding limits are set without the
+  current-session context that would say what they are actually
+  bounding. Each is a section registration and one screen against
+  endpoints that already answer.
 - `[in-repo]` **The first-run guided flow is the console, not a wizard.**
   6.14 describes a three-step card flow after the create-admin form (add
   a library, start a scan, "while it warms up"). What shipped is the
@@ -780,93 +905,74 @@ here waits on upstream.
   on the native menu closing, or decide the prototype's go/no-go record
   no longer needs this probe and delete it.
 
-- `[in-repo]` **The auth limiter keys on `RemoteAddr`, so behind a
-  reverse proxy every visitor shares one budget.** `remoteIP` reads the
-  socket address and nothing else, deliberately - `handlers.go` around
-  1091 records why: an unauthenticated `X-Forwarded-For` would let anyone
-  dodge the limiter, and trusted-proxy support is "a config surface for
-  later". The consequence was never written down, and it has teeth for
-  the deployment this project documents. `Login` checks
-  `Allowed(login-ip:…) || Allowed(login-acct:…)` - a locked IP key
-  refuses everyone - so five failed logins from any one person behind the
-  proxy lock out the whole household for 30s, and each further failure
-  doubles the wait (a minute, two, four, eight) until the window lapses
-  and the count restarts. The ladder is pinned in `ratelimit_test.go`.
-  Self-healing in the ordinary case: a successful login calls
-  `Success(ipKey)`, which deletes the key, so one person typing their
-  password right clears it for everybody. What it does not survive is
-  someone hammering deliberately, which keeps the shared key locked and
-  denies the service to the household for as long as they care to. Signup
-  has no such release - it never calls `Success` - so it caps signups
-  server-wide at five attempts (successes included) per fifteen minutes.
-  The fix is the
-  config surface the comment names: a trusted-proxy setting that makes
-  the forwarded header authoritative only when it comes from a
-  configured hop. Until then a deployment behind a proxy should know
-  that the limiter counts the proxy, not the caller.
-
-- `[in-repo]` **Sync tombstones read the whole trash journal to answer
-  one boolean.** `restorableItems` calls `l.lib.Trash(ctx, false, 0)`,
-  and waxbin documents limit 0 as "returns all". ADR-0048 makes every
-  trashed item a delete entry, so the thunk fires on the first delta page
-  after any trash operation - and a bulk delete-to-trash produces
-  tombstone-bearing pages on every device at once. A 100k-row journal
-  means a full scan and a 100k-entry map per page, per device, per poll.
-  Laziness bounds how often it runs, not how much it reads. A
-  restorable-by-pid lookup, or a bounded query, is what this wants. (It
-  also hand-rolls once-only memoization with a `bool` flag where
-  `sync.OnceValue` - already used in service/sanitize.go - is one line
-  and goroutine-safe.)
-
-- `[in-repo]` **Every browse now compiles a query and takes the user
-  join.** waxbin's `browseFilter` short-circuits only when the query has
-  neither an entity nor a where clause, and since ADR-0048 a built query
-  never is - so `/music/tracks`, `/music/albums`, `/music/artists` and
-  every alphabetical browse resolve `UserPID` through `userIDByPID` even
-  where `NeedsUser` is false. Cost rather than breakage (CreateAccount
-  does create the row), but it is a new hard dependency on that
-  invariant, and waxbin warns the other half: it makes
-  `Browse(alphabetical, {UserPID: "bogus"})` start erroring where the
-  field is ignored today.
-
-- `[in-repo]` **The public share page fetches the playlist twice.**
-  `playlistMemberViews` re-issues `Playlists().Get` that
-  `playlistNameAndOwner` already did three lines earlier, purely to read
-  `pl.Rule`, unconditionally. ADR-0048 says the share and the owner's
-  listing "have to honour it identically", and they are now two
-  independent copies of `keepArchived := ruleNamesState(...)` plus two
-  copies of the skip - which is the shape that drifts.
-
-- `[in-repo]` **The e2e driver has grown duplicated shapes worth
-  folding.** `text()` is written nine times and has already drifted -
-  seven copies return `.first()`, two (discovery, settings) take an
-  `exact` flag and return the unfiltered locator, so the same call means
-  "first match" on seven surfaces and a strict-mode violation on two;
-  settings.spec.ts already writes `.first()` at a call site to paper over
-  it. `constructor(private readonly ctx: Ctx) {}` appears twenty times
-  and belongs on an abstract `Surface` in driver/context.ts. The
-  hand-rolled retry unit appears three times with the same `2_000`
-  literal, and `async function subsonic(...)` is defined twice
-  (sync.spec.ts and playlists.spec.ts). Roughly thirty exported surface
-  methods have no callers at all (Sharing.row/revoke/copy, Review.approve
-  /skip/filter, Admin.console/section, Queue.screen/entry,
-  Player.ready/control/choose, Playlists.open/overflow, Music.sort
-  /anyItem, Auth.error/signOut, Shell.ready, Settings.ready, Books.hub,
-  Radio.hub, Home.card, Stats.listenLog) - each an unexercised locator
-  contract that a semantics-id rename rots silently, and `strict: true`
-  without `noUnusedLocals` cannot see them.
-
 - `[in-repo]` **`mutators-admin` runs seven tests single-file to protect
-  two.** The project sets `fullyParallel: false` so the pair that
-  read-modify-writes `/admin/settings` cannot interleave; the other five
-  share nothing, and the project is itself a dependency barrier, so three
-  of four workers idle for the length of it. Wrapping the settings pair
-  in `test.describe.serial` would give the rest back - weighed against
-  ADR-0050's preference for scheduling facts living in the config rather
-  than in the file, which is why it was written this way.
+  one global switch.** The project sets `fullyParallel: false` and is
+  itself a dependency barrier, so three of four workers idle for its
+  length and that idling compounds into the back half of the run.
+  Wrapping the two `/admin/settings` read-modify-writers in a
+  `describe.serial` and dropping the flag looks like the fix and is not:
+  one of that pair turns server-wide read-only on for the length of its
+  body, and read-only refuses every write on the stack with a 409 - the
+  trash round trip, the uploads, the runtime library. It is the same
+  global switch the project chaining already exists to keep off the
+  uploads project, seen from inside the file. What would actually free
+  the workers is making the read-only test stop being global: its own
+  project after this one, or a per-library read-only flag it can set on
+  a library nothing else in the file touches. Weighed against ADR-0050's
+  preference for scheduling facts living in the config, which is why the
+  flag is written there.
+
+- `[in-repo]` **A residual of ADR-0049's driver layer: duplicated
+  shapes worth folding.** The driver itself landed; what is left is the
+  drift inside it, measured rather than estimated. `text()` is defined
+  nine times and has already diverged - seven copies return `.first()`,
+  two (discovery, settings) take an `exact` flag and return the
+  unfiltered locator, so the same call means "first match" on seven
+  surfaces and a strict-mode violation on two, and two call sites paper
+  over it by writing `.first()` themselves (`settings.spec.ts:77`,
+  `discovery.spec.ts:42`). `constructor(private readonly ctx: Ctx) {}`
+  appears twenty times across nineteen files and belongs on an abstract
+  `Surface` in `driver/context.ts`. The hand-rolled retry unit appears
+  five times with the same `2_000` literal, and `async function
+  subsonic(...)` is defined twice (sync.spec.ts and playlists.spec.ts).
+  Roughly thirty exported surface methods have no callers at all
+  (Sharing.row/revoke/copy, Review.approve/skip/filter, Admin.console
+  /section, Queue.screen/entry, Player.ready/control/choose,
+  Playlists.open/overflow, Music.sort/anyItem, Auth.error/signOut,
+  Shell.ready, Settings.ready, Books.hub, Radio.hub, Home.card,
+  Stats.listenLog) - each an unexercised locator contract that a
+  semantics-id rename rots silently, and `strict: true` without
+  `noUnusedLocals` cannot see them.
 
 
 ## Decided, not deferred
+
+Every browse validates the caller's pid, and that is a behaviour
+change WaxDeck accepted rather than work it postponed. waxbin's
+`browseFilter` short-circuits only when a query has neither an entity
+nor a where clause, and since ADR-0048 a built query never is, so
+`/music/tracks`, `/music/albums`, `/music/artists` and every
+alphabetical browse now resolve `UserPID`. The cost was overstated when
+this was first written down as a deferral: `userStateJoin` returns
+early with no join clause when the query needs no user state, so it is
+one indexed `userIDByPID` lookup per browse, not a join. What actually
+changed is that `Browse(alphabetical, {UserPID: "bogus"})` errors where
+the field used to be ignored, which waxbin warns about and WaxDeck
+takes on purpose - validation beats a silent fallback to
+default-scoped results. There is nothing to build and no upstream ask
+behind it; do not file one.
+
+Signup spends its rate-limit budget on success as well as failure, and
+that is the anti-abuse decision rather than a missing `Success` call.
+`signup.go` says so where it happens: "account creation is the expensive
+outcome. A NAT'd household admitting a handful of members stays under
+the threshold; a script farming accounts does not." What made it read as
+a bug was the shared key - behind a reverse proxy every signup counted
+against the proxy's address, so the cap was server-wide - and
+`WAXDECK_TRUSTED_PROXIES` (ADR-0052) is the whole of that fix. With
+correct client addresses the budget is per caller, which is what it was
+always meant to be. Do not add a `Success` call on the success path; it
+would undo the decision, not complete it.
 
 The snapshot path's tombstone guard is deliberate belt, not dead code:
 `sync.go`'s snapshot builds its page from `visibleItems()`, so

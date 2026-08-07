@@ -202,6 +202,62 @@ void main() {
       await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
       expect(repo.putPlayStateCalls.last.positionMs, 600000);
+
+      // And the flags with it. Writing the position back alone left the
+      // book finished forever - the completion rules only ever mark -
+      // so the mis-tap put it in the Finished shelf with the hub's
+      // unfinished filter hiding it. The play count the mark added goes
+      // too, rather than being left standing.
+      expect(repo.setPlayedCalls.last.played, isFalse);
+      expect(repo.setPlayedCalls.last.finished, isFalse);
+      expect(repo.setPlayedCalls.last.playCount, 0);
+      expect(repo.finishedPids, isNot(contains(bookPid)));
+    });
+
+    testWidgets('a refused flag write still puts the position back', (
+      tester,
+    ) async {
+      // Two writes in one try meant any failure of the first skipped the
+      // second and landed in an empty catch: the toast dismissed and
+      // nothing moved at all, where before this verb existed the
+      // position at least went back.
+      final repo = _repo()..playPositions[bookPid] = 600000;
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.bookMarkFinished);
+      repo.playStateError = const WaxDeckApiException(
+        statusCode: 503,
+        code: 'unavailable',
+        message: 'the catalog is busy',
+      );
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(repo.putPlayStateCalls.last.positionMs, 600000);
+    });
+
+    testWidgets('undoing a book that was already played keeps its count', (
+      tester,
+    ) async {
+      // The catalog refuses a played row with a zero count, so an undo
+      // over a book somebody had finished before must not send one.
+      final repo = _repo()
+        ..playPositions[bookPid] = 600000
+        ..finishedPids.add(bookPid);
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await _tap(tester, SemanticsIds.bookMarkFinished);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(repo.setPlayedCalls.last.played, isTrue);
+      expect(repo.setPlayedCalls.last.finished, isTrue);
+      expect(repo.setPlayedCalls.last.playCount, isNot(0));
     });
 
     testWidgets('the undo outlives the screen that offered it', (tester) async {

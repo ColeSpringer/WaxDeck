@@ -900,6 +900,90 @@ void main() {
       );
     });
 
+    testWidgets('hands its text to the screen field when the sidebar goes', (
+      tester,
+    ) async {
+      // Two fields, one query. Only one of them is on screen at a time,
+      // so whichever was hidden while the other was typed in has to
+      // catch up before it is shown: the screen used to seed from the
+      // location it arrived with and never look again - `didUpdateWidget`
+      // returns early on the location this screen itself writes - so
+      // collapsing the sidebar mounted an empty field over unchanged
+      // results.
+      //
+      // Collapsed first, deliberately. The screen's controller is `late`,
+      // so it is built on the frame its field is first drawn: reaching
+      // the screen with the header showing would build it fresh from the
+      // location that had already caught up, and the drift this is about
+      // would never appear.
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+      container.read(sidebarCollapsedProvider.notifier).toggle();
+      container.read(routerProvider).go(WaxRoute.search);
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsIdentifier(SemanticsIds.searchField), findsOne);
+
+      container.read(sidebarCollapsedProvider.notifier).toggle();
+      await tester.pumpAndSettle();
+      final header = find.bySemanticsIdentifier(SemanticsIds.searchField);
+      await tester.enterText(header, 'nightjar');
+      await tester.pump(SearchQuery.debounce);
+      await tester.pumpAndSettle();
+
+      container.read(sidebarCollapsedProvider.notifier).toggle();
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsIdentifier(SemanticsIds.searchField), findsOne);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'nightjar',
+      );
+      expect(container.read(searchQueryProvider), 'nightjar');
+    });
+
+    testWidgets('takes the screen field text back when the sidebar returns', (
+      tester,
+    ) async {
+      // The reverse, which failed for its own reason: the header's
+      // listener only fires on a change, so a header field built over a
+      // query that was already set drew empty.
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+      container.read(sidebarCollapsedProvider.notifier).toggle();
+      container.read(routerProvider).go(WaxRoute.search);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.searchField),
+        'nightjar',
+      );
+      await tester.pump(SearchQuery.debounce);
+      await tester.pumpAndSettle();
+
+      container.read(sidebarCollapsedProvider.notifier).toggle();
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsIdentifier(SemanticsIds.searchField), findsOne);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'nightjar',
+      );
+    });
+
+    testWidgets('does not drag a leaving visitor back to search', (
+      tester,
+    ) async {
+      // Arriving at search asks for the caret two frames later, which is
+      // long enough to tap a rail destination. The continuation used to
+      // re-check `mounted` and the header's presence but not the
+      // location, so `requestFocus` fired `_onSearchFocus` with its own
+      // guard now false and navigated straight back.
+      final container = await _pumpShell(tester, size: const Size(1000, 900));
+      container.read(routerProvider).go(WaxRoute.search);
+      await tester.pump();
+      await _tapNav(tester, WaxNavTarget.music.name);
+
+      expect(_location(container), isNot(startsWith(WaxRoute.search)));
+    });
+
     testWidgets('is absent below sidebar width, where the screen owns one', (
       tester,
     ) async {

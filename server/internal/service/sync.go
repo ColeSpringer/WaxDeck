@@ -71,41 +71,44 @@ const (
 	syncReasonHidden = "hidden"
 )
 
-// restorableItems answers the item pids the trash journal can still put
-// back, which is what makes an archive undoable.
+// restorableItems answers which of this page's archived items the trash
+// journal can still put back, which is what makes an archive undoable.
 //
-// Returned as a thunk that reads at most once, and only when something
-// actually asks: the journal query carries no LIMIT (upstream adds one
-// only for a positive limit), and the overwhelmingly common delta page
-// is all upserts with no tombstone on it at all. Reading eagerly would
-// put a full unbounded scan on every poll of every mirrored device to
-// answer a question most pages never ask.
+// Keyed to the page rather than the journal. It used to read the whole
+// journal with no limit and build a map of it, which ADR-0048 made
+// expensive in exactly the case that matters: every trashed item is a
+// delete entry, so a bulk delete-to-trash produces tombstone-bearing
+// pages on every mirrored device at once, and a hundred-thousand-row
+// journal meant a full scan and a hundred-thousand-entry map per page,
+// per device, per poll. RestorableTrash is batched and index-served, and
+// absence from its map is the answer for "nothing restorable" - a
+// bounded listing was never a safe substitute, because an item it missed
+// would read as permanently removed and a client would reclaim bytes it
+// could have restored.
 //
-// A read failure answers nil, and nil reads as recoverable rather than
-// as unrecoverable: see tombstoneReason.
-func (l *Library) restorableItems(ctx context.Context) func() map[string]bool {
-	var (
-		once bool
-		out  map[string]bool
-	)
-	return func() map[string]bool {
-		if once {
-			return out
-		}
-		once = true
-		entries, err := l.lib.Trash(ctx, false, 0)
+// Still a thunk that reads at most once, and only when something asks:
+// the overwhelmingly common delta page carries no tombstone at all. A
+// nil return means there is nothing to ask about; a read failure answers
+// a nil map, which reads as recoverable rather than as unrecoverable
+// (see tombstoneReason).
+func (l *Library) restorableItems(ctx context.Context, pids []model.PID) func() map[string]bool {
+	if len(pids) == 0 {
+		return nil
+	}
+	return sync.OnceValue(func() map[string]bool {
+		entries, err := l.lib.RestorableTrash(ctx, pids)
 		if err != nil {
 			l.log.Warn("reading the trash journal for sync tombstones", "err", err)
 			return nil
 		}
-		out = make(map[string]bool, len(entries))
-		for _, e := range entries {
-			if e.RestoredAt == 0 && string(e.ItemPID) != "" {
-				out[string(e.ItemPID)] = true
+		out := make(map[string]bool, len(entries))
+		for pid, rows := range entries {
+			if len(rows) > 0 {
+				out[string(pid)] = true
 			}
 		}
 		return out
-	}
+	})
 }
 
 // tombstoneReason says what a client may reclaim for an archived item.
@@ -784,7 +787,15 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 	subs := l.newSubscriptionFilter(uc)
 	// Once for the page, not once per archived row: it decides only
 	// whether a tombstone lets the client reclaim what it downloaded.
-	restorable := l.restorableItems(ctx)
+	// Scoped to the archived rows this page actually holds, which on the
+	// ordinary page is none at all and costs no read.
+	var archivedPIDs []model.PID
+	for _, v := range byPID {
+		if archived(v) {
+			archivedPIDs = append(archivedPIDs, v.PID)
+		}
+	}
+	restorable := l.restorableItems(ctx, archivedPIDs)
 	for _, key := range order {
 		if key.kind == "podcast" {
 			if !showsVisible {

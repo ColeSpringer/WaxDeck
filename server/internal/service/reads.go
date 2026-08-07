@@ -217,14 +217,13 @@ func cursorScope(parts ...string) string {
 // cursorVersion stamps every scoped cursor this build mints.
 //
 // oldCursorVersions lists the versions a previous build minted whose
-// scope hash this build no longer computes the same way. It is empty
-// because nothing has changed yet, and it exists now because the moment
-// it is needed is the moment it is too late: a stored queue carries its
-// source cursor, and a change to what a scope hashes over turns every
-// one of them into a scope mismatch at once. A mismatch is a 400, the
-// pager treats a 400 as no cursor, and no cursor means a placement walk
-// of up to forty pages per queue - all of them, on the first play after
-// an upgrade.
+// scope hash this build no longer computes the same way. It exists
+// because the moment it is needed is the moment it is too late: a stored
+// queue carries its source cursor, and a change to what a scope hashes
+// over turns every one of them into a scope mismatch at once. A mismatch
+// is a 400, the pager treats a 400 as no cursor, and no cursor means a
+// placement walk of up to forty pages per queue - all of them, on the
+// first play after an upgrade.
 //
 // With the version byte, a token from a retired version is recognizable
 // as stale rather than as wrong-scope, so it can be handed to the
@@ -232,7 +231,16 @@ func cursorScope(parts ...string) string {
 // walk. Retiring a version is one line here, in the change that alters
 // the scope, and the next page a client asks for re-mints at the current
 // version, so stored queues upgrade themselves.
-const cursorVersion = "s1"
+//
+// s1 retired at ADR-0051 and is deliberately not listed. ADR-0048 moved
+// Items onto visibleItems() and made Browse pass a Query unconditionally,
+// so the result set behind an s1 cursor changed while the scope covers
+// only the list, the seed, and the ItemFilter - not the state predicate.
+// A retired version's token is handed straight to the catalog, which
+// would accept it and answer a coherent-looking wrong window; refusing
+// s1 outright costs one placement walk per stored queue, once, and is
+// the only answer that cannot lie.
+const cursorVersion = "s2"
 
 var oldCursorVersions = map[string]bool{}
 

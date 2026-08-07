@@ -208,6 +208,12 @@ abstract final class WaxRoute {
   /// listener's: one is what this instance does, the other is what this
   /// account prefers, and only administrators see the first.
   static const adminSettings = '$admin/settings';
+
+  /// The server's notification destinations, distinct from the
+  /// listener's own on the Integrations screen: one is where this
+  /// instance reports operations events, the other is where an account
+  /// asks to be told about its own.
+  static const adminNotifications = '$admin/notifications';
   static const schedules = '$admin/schedules';
   static const backups = '$admin/backups';
   static const trash = '$admin/trash';

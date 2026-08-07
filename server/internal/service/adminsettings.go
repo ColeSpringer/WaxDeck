@@ -27,6 +27,14 @@ type AdminSettings struct {
 	// survive a rescan. Off by default: the catalog is authoritative and
 	// this touches the listener's own files.
 	EnrichmentWriteTags bool
+	// RadioExternalArt lets radio look a station's announced title up
+	// against MusicBrainz and the Cover Art Archive when nothing in this
+	// library matches it. Off by default, and the only setting here that
+	// governs whether WaxDeck talks to a third party at all: it sends a
+	// string a station chose off this server. With it off the station
+	// mark is what a listener sees, which is a designed answer rather
+	// than a gap.
+	RadioExternalArt bool
 }
 
 // TranscodingLimits cap transcode sessions at the media proxy; zero
@@ -38,15 +46,16 @@ type TranscodingLimits struct {
 }
 
 const (
-	settingReadOnly        = "server:read-only"
-	settingSonicAnalysis   = "similarity:analysis"
-	settingBackupKeep      = "backup:keep-count"
-	settingBackupKeepBytes = "backup:keep-bytes"
-	settingTranscodeLimits = "transcode:limits"
-	settingTrashRetention  = "trash:retention-days"
-	settingEnrichWriteTags = "enrichment:write-tags"
-	settingTaskRetention   = "tasks:retention-days"
-	readOnlyLibPrefix      = "read-only:"
+	settingReadOnly         = "server:read-only"
+	settingSonicAnalysis    = "similarity:analysis"
+	settingBackupKeep       = "backup:keep-count"
+	settingBackupKeepBytes  = "backup:keep-bytes"
+	settingTranscodeLimits  = "transcode:limits"
+	settingTrashRetention   = "trash:retention-days"
+	settingEnrichWriteTags  = "enrichment:write-tags"
+	settingRadioExternalArt = "radio:external-art"
+	settingTaskRetention    = "tasks:retention-days"
+	readOnlyLibPrefix       = "read-only:"
 
 	// maxRetentionDays bounds both retention windows at 100 years, far
 	// under the ~106752 days where days*24h overflows time.Duration.
@@ -73,6 +82,8 @@ type runtimeToggles struct {
 	// toggle at all: the library-level option is fixed at open, and the
 	// catalog ORs the two.
 	enrichWriteTags bool
+	// radioExternalArt gates the outbound half of radio artwork.
+	radioExternalArt bool
 }
 
 // loadRuntimeToggles primes the settings cache; called at Open and
@@ -88,6 +99,9 @@ func (l *Library) loadRuntimeToggles(ctx context.Context) {
 	}
 	if v, err := l.db.SettingGet(ctx, settingEnrichWriteTags); err == nil {
 		t.enrichWriteTags = v == "true"
+	}
+	if v, err := l.db.SettingGet(ctx, settingRadioExternalArt); err == nil {
+		t.radioExternalArt = v == "true"
 	}
 	if raw, err := l.db.SettingGet(ctx, settingTranscodeLimits); err == nil {
 		var lim TranscodingLimits
@@ -121,6 +135,7 @@ func (l *Library) AdminSettingsGet(ctx context.Context) (AdminSettings, error) {
 		ReadOnly:            l.currentToggles().readOnly,
 		SonicAnalysis:       l.SonicAnalysisEnabled(),
 		EnrichmentWriteTags: l.currentToggles().enrichWriteTags,
+		RadioExternalArt:    l.RadioExternalArtEnabled(),
 	}
 	if v, err := l.db.SettingGet(ctx, settingBackupKeep); err == nil {
 		out.BackupKeepCount, _ = strconv.Atoi(v)
@@ -187,29 +202,47 @@ func (l *Library) AdminSettingsPut(ctx context.Context, actor *UserCtx, s AdminS
 	}
 	now := time.Now().UnixNano()
 	writes := map[string]string{
-		settingSignupEnabled:   strconv.FormatBool(s.SignupEnabled),
-		settingReadOnly:        strconv.FormatBool(s.ReadOnly),
-		settingSonicAnalysis:   strconv.FormatBool(s.SonicAnalysis),
-		settingBackupKeep:      strconv.Itoa(s.BackupKeepCount),
-		settingBackupKeepBytes: strconv.FormatInt(s.BackupKeepBytes, 10),
-		settingTrashRetention:  strconv.Itoa(s.TrashRetentionDays),
-		settingTaskRetention:   strconv.Itoa(s.TaskRetentionDays),
-		settingEnrichWriteTags: strconv.FormatBool(s.EnrichmentWriteTags),
+		settingSignupEnabled:    strconv.FormatBool(s.SignupEnabled),
+		settingReadOnly:         strconv.FormatBool(s.ReadOnly),
+		settingSonicAnalysis:    strconv.FormatBool(s.SonicAnalysis),
+		settingBackupKeep:       strconv.Itoa(s.BackupKeepCount),
+		settingBackupKeepBytes:  strconv.FormatInt(s.BackupKeepBytes, 10),
+		settingTrashRetention:   strconv.Itoa(s.TrashRetentionDays),
+		settingTaskRetention:    strconv.Itoa(s.TaskRetentionDays),
+		settingEnrichWriteTags:  strconv.FormatBool(s.EnrichmentWriteTags),
+		settingRadioExternalArt: strconv.FormatBool(s.RadioExternalArt),
 	}
+	wasRadioArt := l.RadioExternalArtEnabled()
 	for k, v := range writes {
 		if err := l.db.SettingSet(ctx, k, v, now); err != nil {
 			return AdminSettings{}, &Error{Kind: KindInternal, Err: err}
 		}
 	}
 	l.loadRuntimeToggles(ctx)
+	if wasRadioArt && !s.RadioExternalArt {
+		// Switching the rung off drops what it fetched. The read path
+		// refuses while it is off regardless, so this is about not
+		// holding a third party's bytes after the decision to stop
+		// asking for them rather than about correctness.
+		l.forgetRadioArt()
+	}
 	l.Audit(ctx, actor, "settings.update", AuditTarget{Kind: "settings"},
 		map[string]any{"signupEnabled": s.SignupEnabled, "readOnly": s.ReadOnly,
 			"sonicAnalysis":   s.SonicAnalysis,
 			"backupKeepCount": s.BackupKeepCount, "backupKeepBytes": s.BackupKeepBytes,
 			"trashRetentionDays":  s.TrashRetentionDays,
 			"taskRetentionDays":   s.TaskRetentionDays,
-			"enrichmentWriteTags": s.EnrichmentWriteTags})
+			"enrichmentWriteTags": s.EnrichmentWriteTags,
+			"radioExternalArt":    s.RadioExternalArt})
 	return l.AdminSettingsGet(ctx)
+}
+
+// RadioExternalArtEnabled reports whether radio may look an announced
+// title up against MusicBrainz and the Cover Art Archive. Cached, like
+// every other runtime toggle, so the play-info poll reads it without a
+// round trip.
+func (l *Library) RadioExternalArtEnabled() bool {
+	return l.currentToggles().radioExternalArt
 }
 
 // EnrichmentWriteTagsEnabled reports whether an enrichment pass should

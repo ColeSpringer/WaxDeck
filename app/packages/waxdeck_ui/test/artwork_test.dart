@@ -47,6 +47,77 @@ void main() {
       );
       expect(find.byType(WaxIcon), findsNothing);
     });
+
+    testWidgets('a wordmark sets the whole name', (tester) async {
+      // The surfaces where the artwork *is* the identification - a
+      // full-screen radio face, a dial tile - and most stations arrive
+      // with no logo at all, so two letters on a swatch names nothing.
+      await tester.pumpWidget(
+        _host(
+          const ArtworkImage(
+            size: 200,
+            monogram: 'Radio Nightjar',
+            placeholder: ArtworkPlaceholder.wordmark,
+            domain: WaxDomain.radio,
+          ),
+        ),
+      );
+      expect(find.text('Radio Nightjar'), findsOneWidget);
+      expect(find.text('RN'), findsNothing);
+    });
+
+    testWidgets('a wordmark below the legibility floor draws initials', (
+      tester,
+    ) async {
+      // The call sites declare intent and the component decides what
+      // fits: two lines of legible type do not go in a deck bar's
+      // thumbnail, so the same declaration draws initials there.
+      await tester.pumpWidget(
+        _host(
+          const ArtworkImage(
+            size: 48,
+            monogram: 'Radio Nightjar',
+            placeholder: ArtworkPlaceholder.wordmark,
+            domain: WaxDomain.radio,
+          ),
+        ),
+      );
+      expect(find.text('RN'), findsOneWidget);
+      expect(find.text('Radio Nightjar'), findsNothing);
+    });
+
+    testWidgets('only a wordmark is textured', (tester) async {
+      // The grain belongs to the station mark. An initials tile is what
+      // every coverless album, queue row, and search hit draws, and
+      // texturing those is a tiled decoration plus a saveLayer on the
+      // surfaces that draw the most placeholders.
+      await tester.pumpWidget(
+        _host(
+          const ArtworkImage(
+            size: 200,
+            monogram: 'Salt Harbour',
+            domain: WaxDomain.music,
+          ),
+        ),
+      );
+      expect(find.byType(Opacity), findsNothing);
+    });
+
+    testWidgets('a wordmark with no usable name falls to the domain glyph', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const ArtworkImage(
+            size: 200,
+            monogram: '...',
+            placeholder: ArtworkPlaceholder.wordmark,
+            domain: WaxDomain.radio,
+          ),
+        ),
+      );
+      expect(find.byType(WaxIcon), findsOneWidget);
+    });
   });
 
   group('artwork sizing', () {

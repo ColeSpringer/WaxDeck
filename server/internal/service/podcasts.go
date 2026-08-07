@@ -870,12 +870,21 @@ func (l *Library) QueueEpisodeFetch(ctx context.Context, uc *UserCtx, apiEpisode
 	return nil
 }
 
-// RemoveEpisodeDownload is the fetch's inverse: the episode's audio
-// moves into the library trash (archive, never delete: playback state
-// survives, the file is restorable until purged, the episode is
-// fetchable again). Subscribers only, like the fetch; an episode that
-// reads as actively played refuses with conflict rather than killing
-// the listener's stream.
+// RemoveEpisodeDownload is the fetch's inverse: the episode's audio is
+// deleted and the episode returns to remote, keeping the subscription,
+// the episode row, and every subscriber's play state, so it streams by
+// enclosure passthrough and is fetchable again. Subscribers only, like
+// the fetch; an episode that reads as actively played refuses with
+// conflict rather than killing the listener's stream.
+//
+// It used to trash the item instead, and that archived it - every delete
+// mode archives an item on losing its last file - so `countShow`, which
+// counts through visibleItems(), stopped seeing an episode that
+// `Episodes` still listed, and a three-episode feed read "2 unplayed" on
+// the hub beside three unplayed episodes on the show. Shared, too: one
+// catalog row, so one subscriber's unfetch moved everybody's count.
+// The listing was the surface that was right, which is why the fix is
+// the podcast facade's own Unfetch rather than a filter on the listing.
 func (l *Library) RemoveEpisodeDownload(ctx context.Context, uc *UserCtx, apiEpisodePID string) error {
 	if err := requirePodcastManagement(uc); err != nil {
 		return err
@@ -916,14 +925,20 @@ func (l *Library) RemoveEpisodeDownload(ctx context.Context, uc *UserCtx, apiEpi
 		}
 	}
 
-	plan, err := l.lib.PlanDeletePIDs(ctx, []model.PID{ep.PID}, model.DeleteTrash)
+	// classify, not classifyMutation: Unfetch takes no job handle and no
+	// file-mutation lease, so nothing here can answer the catalog-busy
+	// conflict that translation exists for. That is also the one thing
+	// this verb gives up against the delete it replaced, which ran under
+	// the "delete" job in the fs-mutate scope and so serialized against
+	// scan and organize - filed upstream, since the lease is not
+	// reachable from here.
+	res, err := l.lib.Podcasts().Unfetch(ctx, ep.PID)
 	if err != nil {
 		return classify(err)
 	}
-	// The in-use refusal above needs a listener to stop; this one only
-	// needs another job to finish, so it carries the code that says so.
-	if _, err := l.lib.ApplyDelete(ctx, plan); err != nil {
-		return classifyMutation(err)
+	if res != nil && res.Unfetched {
+		l.log.Info("unfetched episode",
+			"episode", apiEpisodePID, "reclaimedBytes", res.ReclaimedBytes)
 	}
 	return nil
 }

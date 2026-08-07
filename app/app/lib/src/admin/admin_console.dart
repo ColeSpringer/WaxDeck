@@ -94,6 +94,13 @@ enum AdminSection {
     WaxRoute.adminSettings,
     AdminGroup.server,
   ),
+  notifications(
+    'Notifications',
+    'Where this server reports operations events',
+    WaxIcons.bell,
+    WaxRoute.adminNotifications,
+    AdminGroup.server,
+  ),
   schedules(
     'Schedules',
     'When scans, backups, and pruning run',

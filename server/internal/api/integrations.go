@@ -106,6 +106,14 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 		// answer and the client falls back to the station's logo.
 		if pid := s.svc.RadioNowPlayingItem(ctx, uc, req.Pid, station.Name, title); pid != "" {
 			out.NowPlayingItemPid = ptr(pid)
+		} else if key := s.svc.EnsureRadioNowPlayingArt(station.Name, title); key != "" {
+			// Only on the local miss, which is the rung order: a library
+			// match costs no network and is the common answer. Ensure
+			// starts the lookup and answers the key for what is cached
+			// now, so the poll that first sees a new title answers
+			// nothing and a later one answers a key - it never waits on
+			// a paced third party.
+			out.NowPlayingArtKey = ptr(key)
 		}
 	}
 	return GetRadioPlayInfo200JSONResponse(out), nil
@@ -194,6 +202,50 @@ func (s *Server) GetRadioStationLogo(ctx context.Context, req GetRadioStationLog
 		return GetRadioStationLogo200ImagegifResponse{Body: body, ContentLength: length, Headers: headers}, nil
 	default:
 		return GetRadioStationLogo200ImagejpegResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	}
+}
+
+func (s *Server) GetRadioNowPlayingArt(ctx context.Context, req GetRadioNowPlayingArtRequestObject) (GetRadioNowPlayingArtResponseObject, error) {
+	if _, _, err := s.requireUserCtx(ctx); err != nil {
+		return nil, err
+	}
+	art, err := s.svc.RadioNowPlayingArt(req.Params.V)
+	if err != nil {
+		// Same collapse as the logo: nothing announced, nothing parsed,
+		// the rung off, the lookup not landed, upstream empty - the
+		// client falls back the same way for all of them.
+		if service.KindOf(err) == service.KindNotFound {
+			return GetRadioNowPlayingArt404JSONResponse(errObj("not-found", "no now-playing artwork for station "+req.Pid)), nil
+		}
+		return nil, err
+	}
+	cacheControl := radioLogoCacheControl
+	if req.Params.IfNoneMatch != nil && httpcache.ETagMatches(*req.Params.IfNoneMatch, art.ETag) {
+		return GetRadioNowPlayingArt304Response{Headers: GetRadioNowPlayingArt304ResponseHeaders{
+			ETag:         &art.ETag,
+			CacheControl: &cacheControl,
+		}}, nil
+	}
+	noSniff, csp := radioLogoNoSniff, radioLogoCSP
+	headers := GetRadioNowPlayingArt200ResponseHeaders{
+		ETag:                  &art.ETag,
+		CacheControl:          &cacheControl,
+		XContentTypeOptions:   &noSniff,
+		ContentSecurityPolicy: &csp,
+	}
+	body := bytes.NewReader(art.Bytes)
+	length := int64(len(art.Bytes))
+	// Raster only, decided by sniffing the bytes upstream of here, so
+	// there is no branch for a type that can carry script.
+	switch art.MimeType {
+	case "image/png":
+		return GetRadioNowPlayingArt200ImagepngResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	case "image/webp":
+		return GetRadioNowPlayingArt200ImagewebpResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	case "image/gif":
+		return GetRadioNowPlayingArt200ImagegifResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	default:
+		return GetRadioNowPlayingArt200ImagejpegResponse{Body: body, ContentLength: length, Headers: headers}, nil
 	}
 }
 

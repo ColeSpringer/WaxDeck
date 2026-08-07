@@ -32,6 +32,16 @@ const (
 	spokenFinishedFraction = 0.99
 )
 
+// How far the resume shelf will walk the stamp table to fill its page.
+// The cap is the honest half of the trade: a listener whose recent
+// stamps are all music, all trashed, or all outside their libraries
+// gets a short shelf rather than a scan, and 2000 rows is several
+// months of ordinary listening ahead of a shelf that asks for ten.
+const (
+	resumeStampPage    = 200
+	resumeStampScanCap = 2000
+)
+
 // RecentlyPositionedItems lists the caller's spoken-word items with a
 // saved resume position, most recently checkpointed first. Backed by
 // the per-user position stamps, so an item counts from its first
@@ -39,34 +49,61 @@ const (
 // never played to completion, which is exactly the state a resume
 // surface exists for.
 func (l *Library) RecentlyPositionedItems(ctx context.Context, uc *UserCtx, limit int) ([]ItemSummary, error) {
-	pids, err := l.db.RecentPositionStamps(ctx, uc.ID, limit)
-	if err != nil {
-		return nil, &Error{Kind: KindInternal, Err: err}
+	if limit <= 0 {
+		return []ItemSummary{}, nil
 	}
 	subs := l.newSubscriptionFilter(uc)
-	out := make([]ItemSummary, 0, len(pids))
-	for _, pid := range pids {
-		it, err := l.lib.Get(ctx, model.PID(pid))
+	out := make([]ItemSummary, 0, limit)
+	seen := make(map[string]bool, limit)
+	// Four filters run below - kind, trashed, library visibility,
+	// subscription - and the last three can drop arbitrarily many rows,
+	// so one bare page of stamps comes back short for exactly the
+	// partial-visibility listener who needs the shelf most. Read in
+	// pages until the shelf is full, bounded so a user whose whole
+	// stamp table is music (kind drops every row) cannot walk it.
+	for scanned := 0; len(out) < limit && scanned < resumeStampScanCap; scanned += resumeStampPage {
+		pids, err := l.db.RecentPositionStamps(ctx, uc.ID, resumeStampPage, scanned)
 		if err != nil {
-			// Stamps are dangling-tolerant: the item may be gone.
-			continue
+			return nil, &Error{Kind: KindInternal, Err: err}
 		}
-		if it.Kind != model.KindEpisode && it.Kind != model.KindBook {
-			continue
+		if len(pids) == 0 {
+			break
 		}
-		// Hydrated by pid rather than by query, so the state predicate
-		// cannot reach it (ADR-0048). Subsonic's resume surface reads this
-		// list, so a trashed book would come back there alone.
-		if archived(it) {
-			continue
+		for _, pid := range pids {
+			if len(out) == limit {
+				break
+			}
+			// A checkpoint landing mid-walk can shift a row across a page
+			// boundary; the offset does not follow it, so drop the repeat.
+			if seen[pid] {
+				continue
+			}
+			seen[pid] = true
+			it, err := l.lib.Get(ctx, model.PID(pid))
+			if err != nil {
+				// Stamps are dangling-tolerant: the item may be gone.
+				continue
+			}
+			if it.Kind != model.KindEpisode && it.Kind != model.KindBook {
+				continue
+			}
+			// Hydrated by pid rather than by query, so the state predicate
+			// cannot reach it (ADR-0048). Subsonic's resume surface reads this
+			// list, so a trashed book would come back there alone.
+			if archived(it) {
+				continue
+			}
+			if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
+				continue
+			}
+			if !subs.allowsItem(ctx, l, it) {
+				continue
+			}
+			out = append(out, summary(it))
 		}
-		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
-			continue
+		if len(pids) < resumeStampPage {
+			break
 		}
-		if !subs.allowsItem(ctx, l, it) {
-			continue
-		}
-		out = append(out, summary(it))
 	}
 	return out, nil
 }
@@ -341,6 +378,35 @@ func (l *Library) SetRating(ctx context.Context, uc *UserCtx, apiItemPID string,
 		return PlayState{}, err
 	}
 	changed, err := l.lib.Playback().SetRating(ctx, model.PID(uc.CatalogPID), it.PID, rating, asOfNS(recordedAt))
+	if err != nil {
+		return PlayState{}, classify(err)
+	}
+	if changed {
+		l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
+	}
+	return l.playStateFor(ctx, uc, apiItemPID, it.PID)
+}
+
+// SetPlayed sets the acting user's played and finished flags directly
+// and returns the resulting state. This is the direction the completion
+// rules cannot go: markSpokenWordProgress refuses to re-mark a played
+// item on purpose, and MarkPlayed is monotonic by construction, so
+// undoing a mis-tapped "mark finished" needs its own verb rather than
+// another position write.
+//
+// playCount is three-way and the caller means the difference: nil keeps
+// the stored count, a zero clears it so an undo takes the play the
+// mis-tap added with it, and a positive value sets it exactly. The
+// catalog refuses a negative count, a finished-but-unplayed row, and a
+// played row with an explicit zero count; those come back as
+// invalid-request rather than as internal errors.
+func (l *Library) SetPlayed(ctx context.Context, uc *UserCtx, apiItemPID string, played, finished bool, playCount *int, recordedAt *time.Time) (PlayState, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	if err != nil {
+		return PlayState{}, err
+	}
+	changed, err := l.lib.Playback().SetPlayed(ctx, model.PID(uc.CatalogPID), it.PID,
+		played, finished, playCount, asOfNS(recordedAt))
 	if err != nil {
 		return PlayState{}, classify(err)
 	}

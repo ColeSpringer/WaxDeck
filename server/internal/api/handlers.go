@@ -70,6 +70,10 @@ type Server struct {
 	// no one caller can pin goroutines and upstream sockets against
 	// remote files this server does not control.
 	relayStreams relayGate
+	// trusted is the reverse-proxy hop list the client-IP walk begins
+	// from. Empty is today's behaviour exactly: the socket address, and
+	// no header believed.
+	trusted trustedProxies
 }
 
 // logger is the slice of slog the API layer uses (a seam tests can
@@ -97,6 +101,9 @@ type Options struct {
 	BackupWake   chan string
 	Shares       *auth.ShareTokens
 	WorkerTokens []string
+	// TrustedProxies is the parsed WAXDECK_TRUSTED_PROXIES list. Empty
+	// keeps the socket address authoritative.
+	TrustedProxies trustedProxies
 }
 
 // NewServer builds the API server. Bridge may be nil when streaming is
@@ -131,6 +138,7 @@ func NewServer(version string, opts Options) *Server {
 		backupWake:   opts.BackupWake,
 		shares:       opts.Shares,
 		workerTokens: opts.WorkerTokens,
+		trusted:      opts.TrustedProxies,
 	}
 }
 
@@ -1010,7 +1018,7 @@ var publicPaths = map[string]bool{
 // context for the login and device paths.
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), ctxRemoteIP, remoteIP(r))
+		ctx := context.WithValue(r.Context(), ctxRemoteIP, s.trusted.clientIP(r))
 		ctx = context.WithValue(ctx, ctxClient, clientHint(r))
 
 		// Worker endpoints take the worker token and nothing else: they
@@ -1091,9 +1099,10 @@ func authCandidates(r *http.Request) []credential {
 	return out
 }
 
-// remoteIP is the connection's source address. Deliberately not
-// X-Forwarded-For: an unauthenticated header would let anyone dodge the
-// login limiter; trusted-proxy support is a config surface for later.
+// remoteIP is the connection's source address, and nothing else. What
+// the limiter actually counts goes through trustedProxies.clientIP,
+// which starts here and only believes a forwarded header when this
+// address is a hop the operator configured.
 func remoteIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

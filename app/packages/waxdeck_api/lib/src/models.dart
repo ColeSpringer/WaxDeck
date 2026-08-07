@@ -1768,6 +1768,7 @@ class RadioPlayInfo {
     required this.url,
     this.nowPlaying,
     this.nowPlayingItemPid,
+    this.nowPlayingArtKey,
   });
 
   final String url;
@@ -1783,6 +1784,14 @@ class RadioPlayInfo {
   /// cover. Absent is the common case and not a failure: fall back to
   /// the station's artwork rather than showing a gap.
   final String? nowPlayingItemPid;
+
+  /// The token naming the external cover the server holds for
+  /// [nowPlaying], null when it holds none. The second artwork rung; it
+  /// both says there is an image and makes its URL change with the
+  /// announced title. Null until the asynchronous lookup behind it lands
+  /// - so it appears on a later poll rather than on the one that started
+  /// it - and null forever while the operator has the rung switched off.
+  final String? nowPlayingArtKey;
 }
 
 /// One outbound scrobbling connection slot.
@@ -3417,6 +3426,7 @@ class AdminSettings {
     required this.backupKeepBytes,
     required this.trashRetentionDays,
     required this.taskRetentionDays,
+    required this.radioExternalArt,
   });
 
   final bool signupEnabled;
@@ -3444,6 +3454,12 @@ class AdminSettings {
   /// ("keep them") rather than the default, which is 30.
   final int taskRetentionDays;
 
+  /// Whether radio may look a station's announced title up against
+  /// MusicBrainz and the Cover Art Archive when nothing in this library
+  /// matches it. Off by default, and the only setting here that decides
+  /// whether the server talks to a third party at all.
+  final bool radioExternalArt;
+
   AdminSettings copyWith({
     bool? signupEnabled,
     bool? readOnly,
@@ -3452,6 +3468,7 @@ class AdminSettings {
     int? backupKeepBytes,
     int? trashRetentionDays,
     int? taskRetentionDays,
+    bool? radioExternalArt,
   }) => AdminSettings(
     signupEnabled: signupEnabled ?? this.signupEnabled,
     readOnly: readOnly ?? this.readOnly,
@@ -3460,6 +3477,7 @@ class AdminSettings {
     backupKeepBytes: backupKeepBytes ?? this.backupKeepBytes,
     trashRetentionDays: trashRetentionDays ?? this.trashRetentionDays,
     taskRetentionDays: taskRetentionDays ?? this.taskRetentionDays,
+    radioExternalArt: radioExternalArt ?? this.radioExternalArt,
   );
 }
 

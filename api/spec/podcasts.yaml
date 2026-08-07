@@ -577,19 +577,22 @@ paths:
       operationId: removeEpisodeDownload
       summary: Remove an episode's fetched audio from the server
       description: >
-        The inverse of the fetch: moves the episode's audio into the
-        library trash and returns the episode to its not-fetched state,
-        which reaches clients as a catalog invalidation. Archive, never
-        delete: every user's playback state survives, the audio is
-        recoverable from the trash until it is purged, and the episode
-        can be fetched again at any time. The caller must be subscribed
-        to the show (the file is shared; any subscriber may reclaim the
+        The inverse of the fetch: deletes the episode's downloaded audio
+        and returns the episode to its not-fetched state, which reaches
+        clients as a catalog invalidation. The episode itself is
+        untouched - it stays in the show's listing, stays counted, keeps
+        every user's playback state, streams by enclosure passthrough,
+        and can be fetched again at any time. Only the local bytes go,
+        and they are not recoverable from the trash: an unfetched
+        episode's audio is re-fetchable from its source, which is what
+        makes deleting it the right answer rather than archiving it (an
+        archived episode disappeared from the hub's count while the
+        show's listing still held it). The caller must be subscribed to
+        the show (the file is shared; any subscriber may reclaim the
         space). Removing an episode that is not fetched is a no-op
-        success that also cancels a queued fetch; an episode someone is
-        listening to right now answers `conflict` (retry when playback
-        stops), and one whose delete cannot start because another
-        catalog job holds the file-mutation scope answers `catalog-busy`
-        (retry shortly).
+        success that also cancels a queued fetch, and an episode someone
+        is listening to right now answers `conflict` (retry when playback
+        stops).
       tags: [podcasts]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -610,13 +613,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The removal was refused, for one of two reasons the code
-            distinguishes. `conflict`: the episode is being listened to
-            right now and removing the file would kill the stream, which
-            clears only when playback stops. `catalog-busy`: a
-            conflicting catalog job (a scan, an import, another delete)
-            holds the file-mutation scope, which clears on its own, so an
-            unattended retry is worth something.
+            The episode is being listened to right now (code `conflict`)
+            and removing the file would kill the stream; it clears only
+            when playback stops.
           content:
             application/json:
               schema:

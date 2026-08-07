@@ -9,6 +9,7 @@ import 'package:waxdeck/src/admin/schedules_screen.dart';
 import 'package:waxdeck/src/admin/server_settings_screen.dart';
 import 'package:waxdeck/src/admin/backups_screen.dart';
 import 'package:waxdeck/src/admin/migrate_screen.dart';
+import 'package:waxdeck/src/admin/notifications_screen.dart';
 import 'package:waxdeck/src/admin/trash_screen.dart';
 import 'package:waxdeck/src/admin/users_screen.dart';
 import 'package:waxdeck/src/app.dart';
@@ -154,6 +155,7 @@ final _locations = <String, Type>{
   WaxRoute.organize: OrganizeScreen,
   WaxRoute.users: UsersScreen,
   WaxRoute.adminSettings: ServerSettingsScreen,
+  WaxRoute.adminNotifications: AdminNotificationsScreen,
   WaxRoute.schedules: SchedulesScreen,
   WaxRoute.audit: AuditScreen,
   WaxRoute.backups: BackupsScreen,

@@ -208,11 +208,11 @@ func (l *Library) shareTitleLoose(ctx context.Context, r wdb.Share) (string, err
 		return "", nil
 	}
 	if r.TargetKind == "playlist" {
-		name, _, err := l.playlistNameAndOwner(ctx, pid)
+		pl, err := l.sharedPlaylist(ctx, pid)
 		if err != nil {
 			return "", nil
 		}
-		return name, nil
+		return pl.Name, nil
 	}
 	it, err := l.lib.Get(ctx, pid)
 	if err != nil {
@@ -305,13 +305,13 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 	}
 	switch row.TargetKind {
 	case "playlist":
-		name, ownerCatalogPID, err := l.playlistNameAndOwner(ctx, pid)
+		pl, err := l.sharedPlaylist(ctx, pid)
 		if err != nil {
 			return nil, errNotFound("no such share")
 		}
-		pub.Title = name
+		pub.Title = pl.Name
 		pub.Subtitle = "Playlist"
-		items, err := l.playlistMemberViews(ctx, pid, ownerCatalogPID, 500)
+		items, err := l.playlistMemberViews(ctx, pl, 500)
 		if err != nil {
 			return nil, err
 		}
@@ -425,14 +425,16 @@ func shareInfo(r wdb.Share) ShareInfo {
 	}
 }
 
-// playlistNameAndOwner answers a playlist's display name and owner
-// catalog pid without a caller context (share resolution).
-func (l *Library) playlistNameAndOwner(ctx context.Context, pid model.PID) (string, model.PID, error) {
+// sharedPlaylist answers the playlist a share targets, without a caller
+// context (share resolution). It hands back the whole row rather than
+// the two fields the title needs, so the member read below does not
+// re-issue the same Get to reach the rule.
+func (l *Library) sharedPlaylist(ctx context.Context, pid model.PID) (*model.Playlist, error) {
 	pl, err := l.lib.Playlists().Get(ctx, pid)
 	if err != nil {
-		return "", "", classify(err)
+		return nil, classify(err)
 	}
-	return pl.Name, pl.OwnerPID, nil
+	return pl, nil
 }
 
 // playlistMemberViews answers a playlist's members in play order,
@@ -441,19 +443,22 @@ func (l *Library) playlistNameAndOwner(ctx context.Context, pid model.PID) (stri
 // Trashed members are dropped before the cap, so a share that would
 // otherwise be the most visible copy of a deleted track does not carry
 // one (ADR-0048).
-func (l *Library) playlistMemberViews(ctx context.Context, pid, ownerPID model.PID, cap int) ([]*model.ItemView, error) {
-	members, err := l.lib.Playlists().Items(ctx, pid, ownerPID)
+//
+// The membership comes from the same helper the owner's own listing
+// uses, so a smart list's rule is evaluated with the state predicate
+// inside the query here too - the share and the listing "have to honour
+// it identically", and two independent copies of the filter is the
+// shape that drifts.
+func (l *Library) playlistMemberViews(ctx context.Context, pl *model.Playlist, cap int) ([]*model.ItemView, error) {
+	members, err := l.playlistMembers(ctx, pl)
 	if err != nil {
-		return nil, classify(err)
+		return nil, err
 	}
 	// The same exemption PlaylistItems makes, because a share publishes
 	// the owner's list rather than a second interpretation of it: a rule
 	// that names `state` is honoured as written, and a share of one that
 	// asks for archived rows would otherwise resolve to nothing.
-	keepArchived := false
-	if pl, err := l.lib.Playlists().Get(ctx, pid); err == nil && pl.Rule != nil {
-		keepArchived = ruleNamesState(pl.Rule.Where)
-	}
+	keepArchived := pl.Rule != nil && ruleNamesState(pl.Rule.Where)
 	items := make([]*model.ItemView, 0, min(len(members), cap))
 	for _, it := range members {
 		if archived(it) && !keepArchived {

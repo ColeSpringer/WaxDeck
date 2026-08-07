@@ -447,6 +447,7 @@ Class | Method | HTTP request | Description
 [*PlaybackApi*](doc/PlaybackApi.md) | [**setAlbumStar**](doc/PlaybackApi.md#setalbumstar) | **PUT** /albums/{pid}/star | Star or unstar an album
 [*PlaybackApi*](doc/PlaybackApi.md) | [**setArtistRating**](doc/PlaybackApi.md#setartistrating) | **PUT** /artists/{pid}/rating | Rate an artist
 [*PlaybackApi*](doc/PlaybackApi.md) | [**setArtistStar**](doc/PlaybackApi.md#setartiststar) | **PUT** /artists/{pid}/star | Star or unstar an artist
+[*PlaybackApi*](doc/PlaybackApi.md) | [**setPlayed**](doc/PlaybackApi.md#setplayed) | **PUT** /items/{pid}/played | Set or clear an item&#39;s played and finished flags
 [*PlaybackApi*](doc/PlaybackApi.md) | [**setRating**](doc/PlaybackApi.md#setrating) | **PUT** /items/{pid}/rating | Rate an item
 [*PlaybackApi*](doc/PlaybackApi.md) | [**setStar**](doc/PlaybackApi.md#setstar) | **PUT** /items/{pid}/star | Star or unstar an item
 [*PlayerApi*](doc/PlayerApi.md) | [**createPlaybackSession**](doc/PlayerApi.md#createplaybacksession) | **POST** /player/sessions | Start playback on an endpoint
@@ -491,6 +492,7 @@ Class | Method | HTTP request | Description
 [*PodcastsApi*](doc/PodcastsApi.md) | [**unsubscribePodcast**](doc/PodcastsApi.md#unsubscribepodcast) | **DELETE** /podcasts/{pid} | Unsubscribe from a show
 [*RadioApi*](doc/RadioApi.md) | [**createRadioStation**](doc/RadioApi.md#createradiostation) | **POST** /radio/stations | Add a radio station
 [*RadioApi*](doc/RadioApi.md) | [**deleteRadioStation**](doc/RadioApi.md#deleteradiostation) | **DELETE** /radio/stations/{pid} | Delete a radio station
+[*RadioApi*](doc/RadioApi.md) | [**getRadioNowPlayingArt**](doc/RadioApi.md#getradionowplayingart) | **GET** /radio/stations/{pid}/now-playing-art | Get cover art for a station&#39;s announced track
 [*RadioApi*](doc/RadioApi.md) | [**getRadioPlayInfo**](doc/RadioApi.md#getradioplayinfo) | **GET** /radio/stations/{pid}/play-info | Resolve a playable station stream
 [*RadioApi*](doc/RadioApi.md) | [**getRadioStation**](doc/RadioApi.md#getradiostation) | **GET** /radio/stations/{pid} | Get one radio station
 [*RadioApi*](doc/RadioApi.md) | [**getRadioStationLogo**](doc/RadioApi.md#getradiostationlogo) | **GET** /radio/stations/{pid}/logo | Get a station logo
@@ -746,6 +748,7 @@ Class | Method | HTTP request | Description
  - [PlaybackSessionHistoryList](doc/PlaybackSessionHistoryList.md)
  - [PlaybackSessionList](doc/PlaybackSessionList.md)
  - [PlaybackSessionTransfer](doc/PlaybackSessionTransfer.md)
+ - [PlayedUpdate](doc/PlayedUpdate.md)
  - [PlayerEndpoint](doc/PlayerEndpoint.md)
  - [PlayerEndpointList](doc/PlayerEndpointList.md)
  - [Playlist](doc/Playlist.md)

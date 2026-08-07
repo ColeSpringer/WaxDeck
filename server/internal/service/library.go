@@ -143,6 +143,11 @@ type Config struct {
 	// ISRCResolver upgrades playlist-import ISRCs to recording MBIDs;
 	// nil disables the upgrade (imports still match descriptively).
 	ISRCResolver ISRCResolver
+	// RadioArtResolver looks a station's announced title up against
+	// MusicBrainz and the Cover Art Archive. Nil leaves the external
+	// rung unavailable whatever the admin toggle says, so a build with
+	// no providers wired cannot reach out by accident.
+	RadioArtResolver RadioArtResolver
 	// SonicAnalysisDefault is the embedded analyzer's boot default
 	// (WAXDECK_SONIC_ANALYSIS); the runtime admin setting overrides it
 	// once saved.
@@ -323,6 +328,19 @@ type Library struct {
 	// fields.
 	sonicAnalysisDefault bool
 	workerAPIConfigured  bool
+	// workers is the supervised group Open was handed, kept so work a
+	// request starts but does not wait on (radio's external artwork
+	// lookup) still runs under the recover boundary every WaxDeck
+	// goroutine goes through. Nothing here may spawn a bare one.
+	workers *supervise.Group
+	// radioArtResolver mirrors Config.RadioArtResolver, and
+	// radioArtCache holds what it has answered.
+	radioArtResolver RadioArtResolver
+	radioArtCache    radioArt
+	// counts memoizes playlist member counts for listing rows, which the
+	// user-stream fan-out re-runs far more often than they change.
+	countsMu sync.Mutex
+	counts   map[playlistCountKey]playlistCount
 }
 
 // SocketFileName is the IPC socket beside the catalog DB. It is a local
@@ -450,6 +468,8 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		isrcResolver:           cfg.ISRCResolver,
 		sonicAnalysisDefault:   cfg.SonicAnalysisDefault,
 		workerAPIConfigured:    cfg.WorkerAPIConfigured,
+		workers:                group,
+		radioArtResolver:       cfg.RadioArtResolver,
 	}
 	if reset != nil {
 		l.logCatalogReset(reset)

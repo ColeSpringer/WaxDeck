@@ -16,6 +16,8 @@ class _$AdminSettings extends AdminSettings {
   @override
   final bool? enrichmentWriteTags;
   @override
+  final bool? radioExternalArt;
+  @override
   final int backupKeepCount;
   @override
   final int backupKeepBytes;
@@ -32,6 +34,7 @@ class _$AdminSettings extends AdminSettings {
     required this.readOnly,
     this.sonicAnalysis,
     this.enrichmentWriteTags,
+    this.radioExternalArt,
     required this.backupKeepCount,
     required this.backupKeepBytes,
     this.trashRetentionDays,
@@ -52,6 +55,7 @@ class _$AdminSettings extends AdminSettings {
         readOnly == other.readOnly &&
         sonicAnalysis == other.sonicAnalysis &&
         enrichmentWriteTags == other.enrichmentWriteTags &&
+        radioExternalArt == other.radioExternalArt &&
         backupKeepCount == other.backupKeepCount &&
         backupKeepBytes == other.backupKeepBytes &&
         trashRetentionDays == other.trashRetentionDays &&
@@ -65,6 +69,7 @@ class _$AdminSettings extends AdminSettings {
     _$hash = $jc(_$hash, readOnly.hashCode);
     _$hash = $jc(_$hash, sonicAnalysis.hashCode);
     _$hash = $jc(_$hash, enrichmentWriteTags.hashCode);
+    _$hash = $jc(_$hash, radioExternalArt.hashCode);
     _$hash = $jc(_$hash, backupKeepCount.hashCode);
     _$hash = $jc(_$hash, backupKeepBytes.hashCode);
     _$hash = $jc(_$hash, trashRetentionDays.hashCode);
@@ -80,6 +85,7 @@ class _$AdminSettings extends AdminSettings {
           ..add('readOnly', readOnly)
           ..add('sonicAnalysis', sonicAnalysis)
           ..add('enrichmentWriteTags', enrichmentWriteTags)
+          ..add('radioExternalArt', radioExternalArt)
           ..add('backupKeepCount', backupKeepCount)
           ..add('backupKeepBytes', backupKeepBytes)
           ..add('trashRetentionDays', trashRetentionDays)
@@ -110,6 +116,11 @@ class AdminSettingsBuilder
   bool? get enrichmentWriteTags => _$this._enrichmentWriteTags;
   set enrichmentWriteTags(bool? enrichmentWriteTags) =>
       _$this._enrichmentWriteTags = enrichmentWriteTags;
+
+  bool? _radioExternalArt;
+  bool? get radioExternalArt => _$this._radioExternalArt;
+  set radioExternalArt(bool? radioExternalArt) =>
+      _$this._radioExternalArt = radioExternalArt;
 
   int? _backupKeepCount;
   int? get backupKeepCount => _$this._backupKeepCount;
@@ -142,6 +153,7 @@ class AdminSettingsBuilder
       _readOnly = $v.readOnly;
       _sonicAnalysis = $v.sonicAnalysis;
       _enrichmentWriteTags = $v.enrichmentWriteTags;
+      _radioExternalArt = $v.radioExternalArt;
       _backupKeepCount = $v.backupKeepCount;
       _backupKeepBytes = $v.backupKeepBytes;
       _trashRetentionDays = $v.trashRetentionDays;
@@ -180,6 +192,7 @@ class AdminSettingsBuilder
           ),
           sonicAnalysis: sonicAnalysis,
           enrichmentWriteTags: enrichmentWriteTags,
+          radioExternalArt: radioExternalArt,
           backupKeepCount: BuiltValueNullFieldError.checkNotNull(
             backupKeepCount,
             r'AdminSettings',

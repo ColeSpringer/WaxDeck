@@ -189,6 +189,103 @@ class RadioApi {
     return _response;
   }
 
+  /// Get cover art for a station&#39;s announced track
+  /// The cover this server holds for whatever the station last announced, for the case the announced track is not in this library. Draw it on the full-screen player face; the deck bar keeps the station logo on purpose, because a bar whose picture changed every few minutes would read as the station changing.  Two rungs sit behind radio artwork and this is the second. The first is &#x60;nowPlayingItemPid&#x60; above: a match against this library, which costs no network and is the common answer for a listener playing a station whose music they own. Only on its miss does the server look the announced artist and title up against MusicBrainz and resolve a Cover Art Archive image. That rung is **off by default** (&#x60;radioExternalArt&#x60; in the server settings): it sends a string a station chose from a self-hosted server to a third party, which is the operator&#39;s call to make. With it off this endpoint answers 404 forever and the client draws the station mark, which is a designed state rather than a gap.  Never blocking, and a client should expect that. The lookup is started by the play-info poll and runs against a service paced at roughly one request per second, so the first poll after a title changes answers 404 here and a later one answers the image - on the same fifteen-second cadence the play-info contract already asks for. A miss is remembered for a day rather than forever, because a track released this week can have no archive entry today and one tomorrow, and a service that could not be reached is remembered for minutes only.  The bytes go through the same raster-only check the station logo does, decided by inspecting them rather than by trusting the upstream &#x60;Content-Type&#x60;, and carry the same hardening headers. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [v] - The `nowPlayingArtKey` from this station's play-info. The endpoint answers the cover held under that token and nothing else, so a title that rolls over between the poll and this request cannot turn a held cover into a 404. 
+  /// * [size] - Accepted and ignored, like the logo endpoint's.
+  /// * [ifNoneMatch] - Previously returned `ETag`; a match answers 304 with no body.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [Uint8List] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<Uint8List>> getRadioNowPlayingArt({ 
+    required String pid,
+    required String v,
+    int? size,
+    String? ifNoneMatch,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/radio/stations/{pid}/now-playing-art'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      responseType: ResponseType.bytes,
+      headers: <String, dynamic>{
+        if (ifNoneMatch != null) r'If-None-Match': ifNoneMatch,
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _queryParameters = <String, dynamic>{
+      r'v': encodeQueryParameter(_serializers, v, const FullType(String)),
+      if (size != null) r'size': encodeQueryParameter(_serializers, size, const FullType(int)),
+    };
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      queryParameters: _queryParameters,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    Uint8List? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : rawResponse as Uint8List;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<Uint8List>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Resolve a playable station stream
   /// Mints a short-lived tokenized URL for the station&#39;s stream, proxied through this server&#39;s origin (so web clients are never blocked by the station&#39;s missing CORS headers and mixed content never arises). The proxy passes ICY station metadata headers through (never icy-metaint: the in-stream metadata it announces is consumed by the proxy, so clients receive clean audio and read the current title from nowPlaying here instead) and serves the stream as a live, unseekable body. Re-request when playback is restarted; the token has a bounded lifetime but an already-open stream is never cut by token expiry. 
   ///

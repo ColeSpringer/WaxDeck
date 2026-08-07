@@ -1831,6 +1831,9 @@ AdminSettings adminSettingsFromGen(gen.AdminSettings settings) {
     trashRetentionDays: settings.trashRetentionDays ?? 0,
     // Absent is a server predating the field, whose prune ran on 30 days.
     taskRetentionDays: settings.taskRetentionDays ?? 30,
+    // Absent is a server predating the field, which made no outbound
+    // lookups at all - so off is what it was doing.
+    radioExternalArt: settings.radioExternalArt ?? false,
   );
 }
 
@@ -1843,7 +1846,8 @@ gen.AdminSettings adminSettingsToGen(AdminSettings settings) {
       ..backupKeepCount = settings.backupKeepCount
       ..backupKeepBytes = settings.backupKeepBytes
       ..trashRetentionDays = settings.trashRetentionDays
-      ..taskRetentionDays = settings.taskRetentionDays,
+      ..taskRetentionDays = settings.taskRetentionDays
+      ..radioExternalArt = settings.radioExternalArt,
   );
 }
 

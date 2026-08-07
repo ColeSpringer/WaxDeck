@@ -586,8 +586,7 @@ class _BookOverflow extends ConsumerWidget {
             content: Text(message),
             action: SnackBarAction(
               label: 'Undo',
-              onPressed: () =>
-                  unawaited(_undo(container, repository, before.positionMs)),
+              onPressed: () => unawaited(_undo(container, repository, before)),
             ),
           ),
         );
@@ -598,18 +597,55 @@ class _BookOverflow extends ConsumerWidget {
     }
   }
 
+  /// Puts back everything the verb moved, not only the position.
+  ///
+  /// Writing the old position back is not enough on its own: marking
+  /// finished writes a position at the book's end, which sets `played`
+  /// and `finished`, and the completion rules are monotonic - they mark
+  /// and never un-mark - so a mis-tap used to leave the book in the
+  /// Finished shelf forever with the hub's unfinished filter hiding it.
+  /// The flags go back through their own verb, with the play count the
+  /// mark added cleared rather than left standing.
+  ///
+  /// Position first, flags second: a checkpoint re-derives completion
+  /// from the position it writes, so the flag write has to be the one
+  /// nothing runs after. Doing it the other way round leaves the write
+  /// that can re-mark as the last word.
+  ///
+  /// Attempted independently, which is the half that matters more. One
+  /// `try` around both meant any failure of the first - a 503, a network
+  /// blip, or the catalog's own refusal of a played row with a zero
+  /// count - skipped the second and landed in an empty catch: the toast
+  /// dismissed and nothing moved at all, where before this verb existed
+  /// the position at least went back.
   Future<void> _undo(
     ProviderContainer container,
     WaxDeckRepository repository,
-    int positionMs,
+    PlayState before,
   ) async {
+    var moved = false;
     try {
-      await repository.putPlayState(book.pid, positionMs);
-      _refresh(container);
+      await repository.putPlayState(book.pid, before.positionMs);
+      moved = true;
     } on WaxDeckApiException {
-      // The position stands where the verb put it; nothing else to say
-      // from a dismissed toast.
+      // Nothing to say from a dismissed toast; the flag write still runs.
     }
+    try {
+      await repository.setPlayed(
+        book.pid,
+        played: before.played,
+        finished: before.finished,
+        // Zero rather than null when the book was not played before:
+        // null keeps the stored count, which would leave the play the
+        // mark added counted. The catalog refuses a played row with a
+        // zero count, so a book that was already played keeps its own.
+        playCount: before.played ? before.playCount : 0,
+      );
+      moved = true;
+    } on WaxDeckApiException {
+      // Same: the position above may well have landed.
+    }
+    if (moved) _refresh(container);
   }
 
   /// Everything that reads this book's position, after one is written.

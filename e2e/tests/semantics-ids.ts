@@ -10,6 +10,7 @@ export const SemanticsIds = {
   // admin: The admin console: its shell and dashboard, libraries, genres, users, settings, schedules, backups, trash, audit, migration.
   adminAction: (name: string | number) => `admin-action-${name}`,
   adminAudit: 'admin-audit',
+  adminNotifications: 'admin-notifications',
   adminBackups: 'admin-backups',
   adminConsole: 'admin-console',
   adminDashboard: 'admin-dashboard',
@@ -79,6 +80,7 @@ export const SemanticsIds = {
   scheduleSave: (kind: string | number) => `schedule-save-${kind}`,
   settingReadOnly: 'setting-read-only',
   settingSignupEnabled: 'setting-signup-enabled',
+  settingRadioExternalArt: 'setting-radio-external-art',
   settingSonicAnalysis: 'setting-sonic-analysis',
   signupRequests: 'signup-requests',
   tagRule: (list: string | number, index: string | number) => `${list}-rule-${index}`,

@@ -74,7 +74,12 @@ void main() {
     final engine = FakeEngine();
     final container = await _pumpTuned(tester, repo: repo, engine: engine);
 
-    expect(find.text('Coastal FM'), findsOneWidget);
+    // Twice: the title row, and the station mark standing in for a logo
+    // this station does not have. Real station logos are their name set
+    // in type, so a mark that reads as one is the point rather than a
+    // duplication - and the artwork is `ExcludeSemantics`, so a screen
+    // reader still hears the name once.
+    expect(find.text('Coastal FM'), findsNWidgets(2));
     // Live, so there is no seek bar to lie with and no next to press.
     expect(find.text('LIVE'), findsOneWidget);
     expect(find.bySemanticsIdentifier(SemanticsIds.playerSeek), findsNothing);

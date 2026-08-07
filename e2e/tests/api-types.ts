@@ -2077,6 +2077,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{pid}/played": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set or clear an item's played and finished flags
+         * @description Sets the calling user's played and finished flags for the item directly and returns the resulting playback state. This is the other direction from the completion rules, which are monotonic by construction: a position checkpoint can mark an item played and finished but never un-mark it, so undoing a mis-tapped "mark finished" needs its own verb.
+         *     Position is untouched, so a client undoing a mark writes the old position through `PUT /items/{pid}/play-state` and clears the flags here. Three combinations are refused with `invalid-request`: a negative play count, `finished` without `played` (every UI renders that row as finished while `played is false` still matches it), and `played` with an explicit `playCount` of 0 (zeroing the count is what un-marking means).
+         */
+        put: operations["setPlayed"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{pid}/star": {
         parameters: {
             query?: never;
@@ -2948,7 +2969,7 @@ export interface paths {
         post: operations["fetchEpisode"];
         /**
          * Remove an episode's fetched audio from the server
-         * @description The inverse of the fetch: moves the episode's audio into the library trash and returns the episode to its not-fetched state, which reaches clients as a catalog invalidation. Archive, never delete: every user's playback state survives, the audio is recoverable from the trash until it is purged, and the episode can be fetched again at any time. The caller must be subscribed to the show (the file is shared; any subscriber may reclaim the space). Removing an episode that is not fetched is a no-op success that also cancels a queued fetch; an episode someone is listening to right now answers `conflict` (retry when playback stops), and one whose delete cannot start because another catalog job holds the file-mutation scope answers `catalog-busy` (retry shortly).
+         * @description The inverse of the fetch: deletes the episode's downloaded audio and returns the episode to its not-fetched state, which reaches clients as a catalog invalidation. The episode itself is untouched - it stays in the show's listing, stays counted, keeps every user's playback state, streams by enclosure passthrough, and can be fetched again at any time. Only the local bytes go, and they are not recoverable from the trash: an unfetched episode's audio is re-fetchable from its source, which is what makes deleting it the right answer rather than archiving it (an archived episode disappeared from the hub's count while the show's listing still held it). The caller must be subscribed to the show (the file is shared; any subscriber may reclaim the space). Removing an episode that is not fetched is a no-op success that also cancels a queued fetch, and an episode someone is listening to right now answers `conflict` (retry when playback stops).
          */
         delete: operations["removeEpisodeDownload"];
         options?: never;
@@ -3046,6 +3067,32 @@ export interface paths {
          *     404 covers every way there is no picture to draw - no logo configured, the host unreachable, a refused or non-image answer - because a client can act on none of the differences: it draws a monogram disc. Answers carry a content-addressed `ETag`; revalidate with `If-None-Match`.
          */
         get: operations["getRadioStationLogo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radio/stations/{pid}/now-playing-art": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get cover art for a station's announced track
+         * @description The cover this server holds for whatever the station last announced, for the case the announced track is not in this library. Draw it on the full-screen player face; the deck bar keeps the station logo on purpose, because a bar whose picture changed every few minutes would read as the station changing.
+         *
+         *     Two rungs sit behind radio artwork and this is the second. The first is `nowPlayingItemPid` above: a match against this library, which costs no network and is the common answer for a listener playing a station whose music they own. Only on its miss does the server look the announced artist and title up against MusicBrainz and resolve a Cover Art Archive image. That rung is **off by default** (`radioExternalArt` in the server settings): it sends a string a station chose from a self-hosted server to a third party, which is the operator's call to make. With it off this endpoint answers 404 forever and the client draws the station mark, which is a designed state rather than a gap.
+         *
+         *     Never blocking, and a client should expect that. The lookup is started by the play-info poll and runs against a service paced at roughly one request per second, so the first poll after a title changes answers 404 here and a later one answers the image - on the same fifteen-second cadence the play-info contract already asks for. A miss is remembered for a day rather than forever, because a track released this week can have no archive entry today and one tomorrow, and a service that could not be reached is remembered for minutes only.
+         *
+         *     The bytes go through the same raster-only check the station logo does, decided by inspecting them rather than by trusting the upstream `Content-Type`, and carry the same hardening headers.
+         */
+        get: operations["getRadioNowPlayingArt"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4424,6 +4471,14 @@ export interface components {
              *     Off by default, because it modifies the listener's own files. Files whose format cannot store a key are counted in `enrichmentStatus.lastRun.tagsUnrepresented` and left byte-identical, which is not a failure. Applies to the next pass; a run already in flight keeps the setting it started under. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses.
              */
             enrichmentWriteTags?: boolean;
+            /**
+             * @description Whether radio may look a station's announced title up against MusicBrainz and the Cover Art Archive when nothing in this library matches it, so the full-screen player can draw the song's cover instead of the station's mark.
+             *
+             *     Off by default, and the only setting here that governs whether this server talks to a third party at all: it sends a string a station chose - an artist and a track title - off this machine. That is a self-hoster's decision to make rather than one to inherit. With it off, radio still draws a library match when it finds one, then the station logo, then the station mark, and makes no outbound request.
+             *
+             *     The lookup is paced at the etiquette MusicBrainz asks for (one request per second, an identifying agent) and its answers are cached server-side, so it costs no per-device traffic. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses.
+             */
+            radioExternalArt?: boolean;
             /** @description How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. */
             backupKeepCount: number;
             /**
@@ -6339,6 +6394,20 @@ export interface components {
             /** @description Why it did not move. */
             reason: string;
         };
+        /** @description A direct change to an item's played and finished flags. */
+        PlayedUpdate: {
+            /** @description Whether the item counts as played at least once. */
+            played: boolean;
+            /** @description Whether the listener reached the end. Never true while `played` is false. */
+            finished: boolean;
+            /** @description The play count to store. Omitted or null keeps the stored count, which is what a client that only means to flip the flags should send; 0 resets it, so an undo of a mis-tapped mark clears the play it added rather than leaving it counted. Setting `played` true without naming a count stores the smallest count consistent with it, so a played item never sorts as never-played. */
+            playCount?: number | null;
+            /**
+             * Format: date-time
+             * @description When the change was made on the client, sent only when replaying an offline queue. The server skips the write when the item's flags changed more recently than this. Live mutations omit it and always apply, which is what an interactive un-mark wants: a client clock trailing the server would otherwise drop it as stale.
+             */
+            recordedAt?: string;
+        };
         /** @description A star or unstar. */
         StarUpdate: {
             /** @description The new star state. */
@@ -7632,6 +7701,15 @@ export interface components {
              * @example tr-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             nowPlayingItemPid?: string;
+            /**
+             * @description An opaque token naming the cover this server holds for the announced title, present only when it holds one. The second artwork rung, and the token does two jobs: it says there is an image to ask for, and it is what makes the image URL change when the station changes what it is playing.
+             *
+             *     Pass it as `v` on `GET /radio/stations/{pid}/now-playing-art`. A client that omits it gets a 404 - the endpoint is addressed by token, not by whatever is announced at the moment the image request lands, so the bytes behind one URL never change and the long `Cache-Control` they carry is true.
+             *
+             *     The lookup behind it is asynchronous, so the field appears on a later poll rather than on the one that started it. Absent means draw the local match if there is one, then the station logo, then the station mark. Always absent while the external rung is switched off.
+             * @example 6f1a3c9d2e4b5a70
+             */
+            nowPlayingArtKey?: string;
         };
         /** @description One station directory match. */
         RadioDirectoryEntry: {
@@ -12606,6 +12684,37 @@ export interface operations {
             503: components["responses"]["CatalogMaintenance"];
         };
     };
+    setPlayed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayedUpdate"];
+            };
+        };
+        responses: {
+            /** @description The caller's updated state for the item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayState"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
     setStar: {
         parameters: {
             query?: never;
@@ -14135,7 +14244,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            /** @description The removal was refused, for one of two reasons the code distinguishes. `conflict`: the episode is being listened to right now and removing the file would kill the stream, which clears only when playback stops. `catalog-busy`: a conflicting catalog job (a scan, an import, another delete) holds the file-mutation scope, which clears on its own, so an unattended retry is worth something. */
+            /** @description The episode is being listened to right now (code `conflict`) and removing the file would kill the stream; it clears only when playback stops. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -14348,6 +14457,67 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             /** @description There is no logo to draw for this station (code `not-found`). Render a monogram disc. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getRadioNowPlayingArt: {
+        parameters: {
+            query: {
+                /** @description The `nowPlayingArtKey` from this station's play-info. The endpoint answers the cover held under that token and nothing else, so a title that rolls over between the poll and this request cannot turn a held cover into a 404. */
+                v: string;
+                /** @description Accepted and ignored, like the logo endpoint's. */
+                size?: number;
+            };
+            header?: {
+                /** @description Previously returned `ETag`; a match answers 304 with no body. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cover image, always one of the raster types below. */
+            200: {
+                headers: {
+                    /** @description Content-addressed validator for the returned bytes. */
+                    ETag?: string;
+                    /** @description `private, max-age=86400, stale-while-revalidate=604800`, as for the logo, and true here rather than approximately true: the URL carries the token naming these exact bytes, so a new announced title is a new URL rather than the same one with different content behind it. */
+                    "Cache-Control"?: string;
+                    /** @description `nosniff`, as for the logo. */
+                    "X-Content-Type-Options"?: string;
+                    /** @description The logo endpoint's policy, for the same reason. */
+                    "Content-Security-Policy"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                    "image/gif": string;
+                };
+            };
+            /** @description The cached copy is still current. */
+            304: {
+                headers: {
+                    ETag?: string;
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description There is nothing to draw (code `not-found`): the station token is missing, unknown, or has aged out of the server's cache, the external rung is off, or there was never a cover under it. A client can act on none of those differences - it falls back to the local match, then to the station logo, then to the station mark. */
             404: {
                 headers: {
                     [name: string]: unknown;

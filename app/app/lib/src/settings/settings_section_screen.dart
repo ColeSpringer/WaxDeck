@@ -640,10 +640,6 @@ class _IntegrationsBody extends ConsumerWidget {
           identifier: SemanticsIds.setting('notifications'),
           child: const PersonalNotificationTargetsSection(),
         ),
-        if (ref.watch(isAdminProvider)) ...<Widget>[
-          const SizedBox(height: WaxSpace.s24),
-          const ServerNotificationTargetsSection(),
-        ],
       ],
     );
   }

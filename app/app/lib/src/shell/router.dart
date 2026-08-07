@@ -10,6 +10,7 @@ import '../admin/dashboard_screen.dart';
 import '../admin/genres_screen.dart';
 import '../admin/libraries_screen.dart';
 import '../admin/migrate_screen.dart';
+import '../admin/notifications_screen.dart';
 import '../admin/schedules_screen.dart';
 import '../admin/server_settings_screen.dart';
 import '../admin/trash_screen.dart';
@@ -645,6 +646,10 @@ List<RouteBase> shellRoutes() => <RouteBase>[
               GoRoute(
                 path: WaxRoute.adminSettings,
                 builder: (context, state) => const ServerSettingsScreen(),
+              ),
+              GoRoute(
+                path: WaxRoute.adminNotifications,
+                builder: (context, state) => const AdminNotificationsScreen(),
               ),
               GoRoute(
                 path: WaxRoute.schedules,

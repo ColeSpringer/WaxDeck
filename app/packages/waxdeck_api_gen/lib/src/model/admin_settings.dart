@@ -15,6 +15,7 @@ part 'admin_settings.g.dart';
 /// * [readOnly] - Server-wide read-only mode: every library behaves read-only (uploads, organizing, write-back, deletion, and the file tools are refused with code `read-only`). 
 /// * [sonicAnalysis] - Whether the server analyzes its own library for sonic similarity in the background (the embedded analyzer). Applies immediately; turning it off mid-library keeps the embeddings already computed. The boot default comes from `WAXDECK_SONIC_ANALYSIS`, and this setting overrides it once saved. External workers are unaffected (their access is the worker-token configuration). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
 /// * [enrichmentWriteTags] - Whether the whole-library enrichment pass writes what it filled back into the files, which is what makes enrichment survive a rescan: the catalog is authoritative either way, but a rescan re-reads the tags and would otherwise clear values only the catalog held.  Off by default, because it modifies the listener's own files. Files whose format cannot store a key are counted in `enrichmentStatus.lastRun.tagsUnrepresented` and left byte-identical, which is not a failure. Applies to the next pass; a run already in flight keeps the setting it started under. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
+/// * [radioExternalArt] - Whether radio may look a station's announced title up against MusicBrainz and the Cover Art Archive when nothing in this library matches it, so the full-screen player can draw the song's cover instead of the station's mark.  Off by default, and the only setting here that governs whether this server talks to a third party at all: it sends a string a station chose - an artist and a track title - off this machine. That is a self-hoster's decision to make rather than one to inherit. With it off, radio still draws a library match when it finds one, then the station logo, then the station mark, and makes no outbound request.  The lookup is paced at the etiquette MusicBrainz asks for (one request per second, an identifying agent) and its answers are cached server-side, so it costs no per-device traffic. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
 /// * [backupKeepCount] - How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. 
 /// * [backupKeepBytes] - Total archive bytes to keep, oldest deleted first when exceeded. 0 is unlimited. Imported archives are exempt. 
 /// * [trashRetentionDays] - Automatically purge trashed files older than this many days on a periodic sweep; 0 disables retention (the trash keeps entries until an administrator empties it). Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
@@ -36,6 +37,10 @@ abstract class AdminSettings implements Built<AdminSettings, AdminSettingsBuilde
   /// Whether the whole-library enrichment pass writes what it filled back into the files, which is what makes enrichment survive a rescan: the catalog is authoritative either way, but a rescan re-reads the tags and would otherwise clear values only the catalog held.  Off by default, because it modifies the listener's own files. Files whose format cannot store a key are counted in `enrichmentStatus.lastRun.tagsUnrepresented` and left byte-identical, which is not a failure. Applies to the next pass; a run already in flight keeps the setting it started under. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
   @BuiltValueField(wireName: r'enrichmentWriteTags')
   bool? get enrichmentWriteTags;
+
+  /// Whether radio may look a station's announced title up against MusicBrainz and the Cover Art Archive when nothing in this library matches it, so the full-screen player can draw the song's cover instead of the station's mark.  Off by default, and the only setting here that governs whether this server talks to a third party at all: it sends a string a station chose - an artist and a track title - off this machine. That is a self-hoster's decision to make rather than one to inherit. With it off, radio still draws a library match when it finds one, then the station logo, then the station mark, and makes no outbound request.  The lookup is paced at the etiquette MusicBrainz asks for (one request per second, an identifying agent) and its answers are cached server-side, so it costs no per-device traffic. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses. 
+  @BuiltValueField(wireName: r'radioExternalArt')
+  bool? get radioExternalArt;
 
   /// How many backup archives to keep; older ones are deleted after each successful backup. 0 keeps every archive. 
   @BuiltValueField(wireName: r'backupKeepCount')
@@ -97,6 +102,13 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
       yield r'enrichmentWriteTags';
       yield serializers.serialize(
         object.enrichmentWriteTags,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.radioExternalArt != null) {
+      yield r'radioExternalArt';
+      yield serializers.serialize(
+        object.radioExternalArt,
         specifiedType: const FullType(bool),
       );
     }
@@ -174,6 +186,13 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.enrichmentWriteTags = valueDes;
+          break;
+        case r'radioExternalArt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.radioExternalArt = valueDes;
           break;
         case r'backupKeepCount':
           final valueDes = serializers.deserialize(

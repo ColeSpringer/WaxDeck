@@ -13,6 +13,8 @@ class _$RadioPlayInfo extends RadioPlayInfo {
   final String? nowPlaying;
   @override
   final String? nowPlayingItemPid;
+  @override
+  final String? nowPlayingArtKey;
 
   factory _$RadioPlayInfo([void Function(RadioPlayInfoBuilder)? updates]) =>
       (RadioPlayInfoBuilder()..update(updates))._build();
@@ -21,6 +23,7 @@ class _$RadioPlayInfo extends RadioPlayInfo {
     required this.url,
     this.nowPlaying,
     this.nowPlayingItemPid,
+    this.nowPlayingArtKey,
   }) : super._();
   @override
   RadioPlayInfo rebuild(void Function(RadioPlayInfoBuilder) updates) =>
@@ -35,7 +38,8 @@ class _$RadioPlayInfo extends RadioPlayInfo {
     return other is RadioPlayInfo &&
         url == other.url &&
         nowPlaying == other.nowPlaying &&
-        nowPlayingItemPid == other.nowPlayingItemPid;
+        nowPlayingItemPid == other.nowPlayingItemPid &&
+        nowPlayingArtKey == other.nowPlayingArtKey;
   }
 
   @override
@@ -44,6 +48,7 @@ class _$RadioPlayInfo extends RadioPlayInfo {
     _$hash = $jc(_$hash, url.hashCode);
     _$hash = $jc(_$hash, nowPlaying.hashCode);
     _$hash = $jc(_$hash, nowPlayingItemPid.hashCode);
+    _$hash = $jc(_$hash, nowPlayingArtKey.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -53,7 +58,8 @@ class _$RadioPlayInfo extends RadioPlayInfo {
     return (newBuiltValueToStringHelper(r'RadioPlayInfo')
           ..add('url', url)
           ..add('nowPlaying', nowPlaying)
-          ..add('nowPlayingItemPid', nowPlayingItemPid))
+          ..add('nowPlayingItemPid', nowPlayingItemPid)
+          ..add('nowPlayingArtKey', nowPlayingArtKey))
         .toString();
   }
 }
@@ -75,6 +81,11 @@ class RadioPlayInfoBuilder
   set nowPlayingItemPid(String? nowPlayingItemPid) =>
       _$this._nowPlayingItemPid = nowPlayingItemPid;
 
+  String? _nowPlayingArtKey;
+  String? get nowPlayingArtKey => _$this._nowPlayingArtKey;
+  set nowPlayingArtKey(String? nowPlayingArtKey) =>
+      _$this._nowPlayingArtKey = nowPlayingArtKey;
+
   RadioPlayInfoBuilder() {
     RadioPlayInfo._defaults(this);
   }
@@ -85,6 +96,7 @@ class RadioPlayInfoBuilder
       _url = $v.url;
       _nowPlaying = $v.nowPlaying;
       _nowPlayingItemPid = $v.nowPlayingItemPid;
+      _nowPlayingArtKey = $v.nowPlayingArtKey;
       _$v = null;
     }
     return this;
@@ -114,6 +126,7 @@ class RadioPlayInfoBuilder
           ),
           nowPlaying: nowPlaying,
           nowPlayingItemPid: nowPlayingItemPid,
+          nowPlayingArtKey: nowPlayingArtKey,
         );
     replace(_$result);
     return _$result;

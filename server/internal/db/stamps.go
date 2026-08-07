@@ -64,14 +64,23 @@ func (d *DB) PruneStamps(ctx context.Context, olderThanNS int64) (int64, error) 
 }
 
 // RecentPositionStamps lists item pids the user holds position stamps
-// for, most recently stamped first. This is the in-progress surface:
-// the catalog's recently-played list requires a completed play, while
-// a resume position exists from the first checkpoint.
-func (d *DB) RecentPositionStamps(ctx context.Context, userID string, limit int) ([]string, error) {
+// for, most recently stamped first, skipping the first offset rows.
+// This is the in-progress surface: the catalog's recently-played list
+// requires a completed play, while a resume position exists from the
+// first checkpoint.
+//
+// The offset exists because the caller filters what it reads - kind,
+// trashed, library visibility, subscription - and a bare limit spends
+// the whole budget on rows that may all drop, so a ten-slot shelf came
+// back with eight. The tiebreaker makes the order total, so paging over
+// stamps written in the same nanosecond cannot skip a row; the caller
+// still de-duplicates, because a concurrent checkpoint can move a row
+// between pages.
+func (d *DB) RecentPositionStamps(ctx context.Context, userID string, limit, offset int) ([]string, error) {
 	rows, err := d.r.QueryContext(ctx, `
 		SELECT item_pid FROM play_state_stamps
 		WHERE user_id = ? AND position_ns > 0
-		ORDER BY position_ns DESC LIMIT ?`, userID, limit)
+		ORDER BY position_ns DESC, item_pid DESC LIMIT ? OFFSET ?`, userID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("db: listing position stamps: %w", err)
 	}

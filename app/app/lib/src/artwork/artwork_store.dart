@@ -98,14 +98,17 @@ String sizedArtUrl(String artUrl, int? rung, {int? bust}) {
 
 /// Whether [artUrl] answers one rendition however it is asked.
 ///
-/// A station logo has no stored original to scale from, so the contract
-/// says `size` there is accepted and ignored. Asking for a rung anyway
-/// splits one identical body across a URL per rung: the dial and the grid
-/// draw at different sizes, so that is two fetches of the same bytes.
+/// Neither radio endpoint has a stored original to scale from, so the
+/// contract says `size` on both is accepted and ignored. Asking for a
+/// rung anyway splits one identical body across a URL per rung: the dial
+/// and the grid draw at different sizes, so that is two fetches of the
+/// same bytes, and two decoded copies of them.
 bool isUnsizedArtUrl(String artUrl) =>
     _unsizedArt.hasMatch(Uri.parse(artUrl).path);
 
-final RegExp _unsizedArt = RegExp(r'/radio/stations/[^/]+/logo$');
+final RegExp _unsizedArt = RegExp(
+  r'/radio/stations/[^/]+/(logo|now-playing-art)$',
+);
 
 /// The PID an art URL belongs to, or null for a URL that names none.
 ///

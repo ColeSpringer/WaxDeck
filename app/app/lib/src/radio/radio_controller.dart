@@ -199,6 +199,7 @@ class RadioPlayback {
     this.starting = false,
     this.nowPlaying,
     this.nowPlayingItemPid,
+    this.nowPlayingArtKey,
   });
 
   /// The station currently loaded through the engine, if any.
@@ -215,6 +216,15 @@ class RadioPlayback {
   /// bar keeps the station's logo, because a bar that changed its
   /// picture every few minutes would read as the station changing.
   final String? nowPlayingItemPid;
+
+  /// The token naming the external cover the server holds for
+  /// [nowPlaying], the rung below the library match. Null until the
+  /// server's own asynchronous lookup lands, and null forever where the
+  /// operator has the rung switched off - so the face falls through to
+  /// the station's logo and then to its mark, which is a designed state
+  /// either way. It changes with the announced title, which is what
+  /// makes the image URL built from it change too.
+  final String? nowPlayingArtKey;
 }
 
 /// Drives live radio through the shared audio engine. Radio has no
@@ -293,6 +303,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         station: station,
         nowPlaying: info.nowPlaying,
         nowPlayingItemPid: info.nowPlayingItemPid,
+        nowPlayingArtKey: info.nowPlayingArtKey,
       );
       _startTitlePoll(station.pid);
     } on Object {
@@ -415,6 +426,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         station: station,
         nowPlaying: held.nowPlaying,
         nowPlayingItemPid: held.nowPlayingItemPid,
+        nowPlayingArtKey: held.nowPlayingArtKey,
       );
       _startTitlePoll(station.pid);
       rethrow;
@@ -456,13 +468,15 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
       // equality, so an identical assignment rebuilds the dial band, every
       // visible tile, and the deck bar for the same words.
       if (info.nowPlaying == state.nowPlaying &&
-          info.nowPlayingItemPid == state.nowPlayingItemPid) {
+          info.nowPlayingItemPid == state.nowPlayingItemPid &&
+          info.nowPlayingArtKey == state.nowPlayingArtKey) {
         return;
       }
       state = RadioPlayback(
         station: state.station,
         nowPlaying: info.nowPlaying,
         nowPlayingItemPid: info.nowPlayingItemPid,
+        nowPlayingArtKey: info.nowPlayingArtKey,
       );
     } on WaxDeckApiException {
       // Metadata is decoration; playback carries on without it.
@@ -488,12 +502,29 @@ final radioPlaybackProvider =
 /// none anywhere falls to the monogram, like any other coverless track
 /// in the app.
 ///
-/// Selected down to the pid alone, so the title moving without the match
-/// moving does not rebuild this.
+/// Selected down to what decides the answer, so the title moving without
+/// the match moving does not rebuild this.
+///
+/// Two rungs, in this order. A library match costs the server no network
+/// and is the common answer for somebody listening to a station playing
+/// music they own; only on its miss does the second rung apply, and only
+/// when the server says it has something - the endpoint 404s otherwise,
+/// and asking anyway would be a request per poll on every station whose
+/// titles never resolve. What is behind the second rung is a MusicBrainz
+/// and Cover Art Archive lookup the operator has to have switched on.
 final radioNowPlayingArtProvider = Provider<String?>((ref) {
-  final pid = ref.watch(
+  final match = ref.watch(
     radioPlaybackProvider.select((p) => p.nowPlayingItemPid),
   );
-  if (pid == null) return null;
-  return ref.watch(repositoryProvider).artUrlFor(pid);
+  final repository = ref.watch(repositoryProvider);
+  if (match != null) return repository.artUrlFor(match);
+  final external = ref.watch(
+    radioPlaybackProvider.select(
+      (p) => p.nowPlayingArtKey == null
+          ? null
+          : (pid: p.station?.pid, key: p.nowPlayingArtKey!),
+    ),
+  );
+  if (external?.pid == null) return null;
+  return repository.radioNowPlayingArtUrlFor(external!.pid!, external.key);
 });

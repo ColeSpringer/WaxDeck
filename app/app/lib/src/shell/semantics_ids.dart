@@ -10,6 +10,7 @@ abstract final class SemanticsIds {
   // admin: The admin console: its shell and dashboard, libraries, genres, users, settings, schedules, backups, trash, audit, migration.
   static String adminAction(Object name) => 'admin-action-$name';
   static const String adminAudit = 'admin-audit';
+  static const String adminNotifications = 'admin-notifications';
   static const String adminBackups = 'admin-backups';
   static const String adminConsole = 'admin-console';
   static const String adminDashboard = 'admin-dashboard';
@@ -79,6 +80,7 @@ abstract final class SemanticsIds {
   static String scheduleSave(Object kind) => 'schedule-save-$kind';
   static const String settingReadOnly = 'setting-read-only';
   static const String settingSignupEnabled = 'setting-signup-enabled';
+  static const String settingRadioExternalArt = 'setting-radio-external-art';
   static const String settingSonicAnalysis = 'setting-sonic-analysis';
   static const String signupRequests = 'signup-requests';
   static String tagRule(Object list, Object index) => '$list-rule-$index';

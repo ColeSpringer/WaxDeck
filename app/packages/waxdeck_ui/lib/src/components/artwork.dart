@@ -27,6 +27,7 @@ class ArtworkImage extends StatelessWidget {
     required this.size,
     this.artwork,
     this.monogram,
+    this.placeholder = ArtworkPlaceholder.initials,
     this.shape = ArtworkShape.square,
     this.domain = WaxDomain.music,
     this.progress,
@@ -41,10 +42,13 @@ class ArtworkImage extends StatelessWidget {
 
   final WaxArtwork? artwork;
 
-  /// Drawn when there is no artwork: the first letters of the title, over
-  /// a domain-tinted tile. A missing cover is a real state, not a loading
-  /// one, so it gets a designed answer rather than a spinner.
+  /// Drawn when there is no artwork: the title the placeholder is built
+  /// from. A missing cover is a real state, not a loading one, so it gets
+  /// a designed answer rather than a spinner.
   final String? monogram;
+
+  /// How that answer is drawn. See [ArtworkPlaceholder].
+  final ArtworkPlaceholder placeholder;
 
   final ArtworkShape shape;
   final WaxDomain domain;
@@ -73,14 +77,17 @@ class ArtworkImage extends StatelessWidget {
     final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
     final image = artwork?.call((size * ratio).ceil());
 
+    Widget fallback() => _Placeholder(
+      monogram: monogram,
+      kind: placeholder,
+      domain: domain,
+      size: size,
+      colors: colors,
+    );
+
     Widget content;
     if (image == null) {
-      content = _Monogram(
-        monogram: monogram,
-        domain: domain,
-        size: size,
-        colors: colors,
-      );
+      content = fallback();
     } else {
       content = Image(
         image: image,
@@ -103,12 +110,7 @@ class ArtworkImage extends StatelessWidget {
             child: child,
           );
         },
-        errorBuilder: (context, _, _) => _Monogram(
-          monogram: monogram,
-          domain: domain,
-          size: size,
-          colors: colors,
-        ),
+        errorBuilder: (context, _, _) => fallback(),
       );
     }
 
@@ -172,38 +174,94 @@ class ArtworkImage extends StatelessWidget {
   }
 }
 
-class _Monogram extends StatelessWidget {
-  const _Monogram({
+/// How [ArtworkImage] draws the state where there is no picture.
+enum ArtworkPlaceholder {
+  /// Up to two initials over the domain hue. The default, and right
+  /// wherever the title is already written beside the artwork: a card
+  /// caption, a row's own label, a header under the cover.
+  initials,
+
+  /// The whole name, set over the domain hue with the grain the player
+  /// backdrop uses. For the surfaces where the artwork *is* the
+  /// identification and nothing beside it says what is playing - a
+  /// full-screen radio face, a dial tile - two initials name nothing,
+  /// and a station with no logo is the common case rather than a corner
+  /// of one.
+  wordmark,
+}
+
+class _Placeholder extends StatelessWidget {
+  const _Placeholder({
     required this.monogram,
+    required this.kind,
     required this.domain,
     required this.size,
     required this.colors,
   });
 
   final String? monogram;
+  final ArtworkPlaceholder kind;
   final WaxDomain domain;
   final double size;
   final WaxColors colors;
 
+  /// Below this a wordmark has no room to be one, whatever the caller
+  /// asked for: two lines of legible type do not fit in a list row's
+  /// thumbnail, so it falls back to initials there.
+  static const double _wordmarkFloor = 96;
+
   @override
   Widget build(BuildContext context) {
     final hue = colors.domain(domain);
-    final letters = (monogram ?? '')
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((word) => word.isNotEmpty)
-        .take(2)
-        .map((word) => word.characters.first.toUpperCase())
-        .join();
+    final name = (monogram ?? '').trim();
+    final hasName = RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(name);
 
-    // A title of "..." or "100%" yields punctuation or nothing at all, so
-    // initials are used only when they are actually letters or digits;
-    // otherwise the domain's own glyph stands in, which is at least true.
-    final usable = RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(letters);
+    // Decided once: everything below keys off it, including the grain,
+    // which belongs to the station mark alone. An initials tile is the
+    // placeholder every coverless album, queue row, and search hit
+    // draws, and texturing those was never the intent - it is a tiled
+    // decoration plus an Opacity-induced saveLayer on the surfaces that
+    // draw the most placeholders.
+    final wordmark =
+        kind == ArtworkPlaceholder.wordmark &&
+        size >= _wordmarkFloor &&
+        hasName;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(color: hue.container),
-      child: Center(
+    Widget mark;
+    if (wordmark) {
+      mark = Padding(
+        padding: EdgeInsets.all(size * 0.12),
+        child: Center(
+          child: Text(
+            name,
+            textAlign: TextAlign.center,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: WaxType.titleEntity.copyWith(
+              color: hue.onContainer,
+              // Scaled off the box rather than fixed, and clamped at both
+              // ends: this is drawn at everything from a dial tile to a
+              // full-screen face, and one size would be unreadable at one
+              // end and a billboard at the other.
+              fontSize: math.min(34, math.max(13, size * 0.13)),
+              height: 1.15,
+            ),
+          ),
+        ),
+      );
+    } else {
+      final letters = name
+          .split(RegExp(r'\s+'))
+          .where((word) => word.isNotEmpty)
+          .take(2)
+          .map((word) => word.characters.first.toUpperCase())
+          .join();
+      // A title of "..." or "100%" yields punctuation or nothing at all,
+      // so initials are used only when they are actually letters or
+      // digits; otherwise the domain's own glyph stands in, which is at
+      // least true.
+      final usable = RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(letters);
+      mark = Center(
         child: usable
             ? Text(
                 letters,
@@ -222,6 +280,41 @@ class _Monogram extends StatelessWidget {
                 size: math.max(12, size * 0.32),
                 color: hue.onContainer,
               ),
+      );
+    }
+
+    // The grain is the station mark's, not every placeholder's: it is
+    // what makes a wordmark read as WaxDeck's own surface rather than as
+    // a flat swatch, and an initials tile wants to stay the plain tile
+    // it has always been. Skipped in light too, where the token is zero
+    // and the layer would be a repaint for nothing.
+    if (!wordmark || colors.grainOpacity <= 0) {
+      return DecoratedBox(
+        decoration: BoxDecoration(color: hue.container),
+        child: mark,
+      );
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(color: hue.container),
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          Opacity(
+            opacity: colors.grainOpacity,
+            child: const DecoratedBox(
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage(
+                    'assets/brand/grain.png',
+                    package: 'waxdeck_ui',
+                  ),
+                  repeat: ImageRepeat.repeat,
+                ),
+              ),
+            ),
+          ),
+          mark,
+        ],
       ),
     );
   }

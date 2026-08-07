@@ -191,6 +191,21 @@ abstract interface class WaxDeckRepository {
   /// it per medium instead of applying it blindly.
   Future<void> putPlayState(String pid, int positionMs, {DateTime? recordedAt});
 
+  /// `PUT /items/{pid}/played`: sets an item's played and finished flags
+  /// directly, returning the updated play state. The completion rules
+  /// only ever mark, so this is how a mis-tapped "mark finished" is
+  /// undone. [playCount] is three-way: null keeps the stored count, 0
+  /// clears it, and a positive value sets it exactly. [recordedAt] marks
+  /// an offline-queue replay; an interactive un-mark leaves it null so a
+  /// client clock trailing the server cannot drop the write as stale.
+  Future<PlayState> setPlayed(
+    String pid, {
+    required bool played,
+    required bool finished,
+    int? playCount,
+    DateTime? recordedAt,
+  });
+
   /// `PUT /items/{pid}/star`: stars or unstars one item, returning the
   /// updated play state. [recordedAt] marks an offline-queue replay.
   Future<PlayState> setStar(String pid, bool starred, {DateTime? recordedAt});
@@ -623,6 +638,16 @@ abstract interface class WaxDeckRepository {
   /// serves it from this origin. `logoUrl` being present is the signal
   /// there is anything to ask for.
   String radioLogoUrlFor(String pid);
+
+  /// The origin-relative URL for the cover held under [key], the second
+  /// artwork rung. [key] is [RadioPlayInfo.nowPlayingArtKey], and it is
+  /// what makes this URL change when the station changes what it is
+  /// playing - one URL per station would draw the first matched track's
+  /// cover for the rest of the session, out of the image cache, however
+  /// many songs went by. Ask only when the key is present: the endpoint
+  /// 404s otherwise, and that keeps a face from asking on every poll of
+  /// a station whose titles never resolve.
+  String radioNowPlayingArtUrlFor(String pid, String key);
 
   /// `GET /radio/directory`: searches the public station directory.
   Future<List<RadioDirectoryEntry>> searchRadioDirectory(
@@ -1767,6 +1792,27 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<PlayState> setPlayed(
+    String pid, {
+    required bool played,
+    required bool finished,
+    int? playCount,
+    DateTime? recordedAt,
+  }) => _guard(() async {
+    final response = await _gen.getPlaybackApi().setPlayed(
+      pid: pid,
+      playedUpdate: gen.PlayedUpdate(
+        (b) => b
+          ..played = played
+          ..finished = finished
+          ..playCount = playCount
+          ..recordedAt = recordedAt?.toUtc(),
+      ),
+    );
+    return playStateFromGen(_require(response.data));
+  });
+
+  @override
   Future<PlayState> setStar(String pid, bool starred, {DateTime? recordedAt}) =>
       _guard(() async {
         final response = await _gen.getPlaybackApi().setStar(
@@ -2600,6 +2646,7 @@ class WaxDeckClient implements WaxDeckRepository {
       url: resolveMediaUrl(_baseUrl, info.url),
       nowPlaying: info.nowPlaying,
       nowPlayingItemPid: info.nowPlayingItemPid,
+      nowPlayingArtKey: info.nowPlayingArtKey,
     );
   });
 
@@ -2607,6 +2654,13 @@ class WaxDeckClient implements WaxDeckRepository {
   String radioLogoUrlFor(String pid) => resolveMediaUrl(
     _baseUrl,
     '/api/v1/radio/stations/${Uri.encodeComponent(pid)}/logo',
+  );
+
+  @override
+  String radioNowPlayingArtUrlFor(String pid, String key) => resolveMediaUrl(
+    _baseUrl,
+    '/api/v1/radio/stations/${Uri.encodeComponent(pid)}'
+    '/now-playing-art?v=${Uri.encodeQueryComponent(key)}',
   );
 
   @override

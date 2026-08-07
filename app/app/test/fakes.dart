@@ -688,6 +688,39 @@ class FakeRepository implements WaxDeckRepository {
   /// against it (a provider invalidation, another mutation).
   Future<void>? mutationGate;
 
+  /// Every played/finished write, in call order, so a test can see what
+  /// an undo actually asked for rather than only where it landed.
+  final List<({String pid, bool played, bool finished, int? playCount})>
+  setPlayedCalls = [];
+
+  @override
+  Future<PlayState> setPlayed(
+    String pid, {
+    required bool played,
+    required bool finished,
+    int? playCount,
+    DateTime? recordedAt,
+  }) async {
+    await (mutationGate ?? Future<void>.value());
+    final error = playStateError;
+    if (error != null) return _failLikeANetwork(error);
+    setPlayedCalls.add((
+      pid: pid,
+      played: played,
+      finished: finished,
+      playCount: playCount,
+    ));
+    // The fake keeps one finished set behind both flags, which is what
+    // every reader of it asks about; the server's three-way play count
+    // is recorded above rather than modelled.
+    if (finished) {
+      finishedPids.add(pid);
+    } else {
+      finishedPids.remove(pid);
+    }
+    return getPlayState(pid);
+  }
+
   @override
   Future<PlayState> setStar(
     String pid,
@@ -1824,6 +1857,10 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   String radioLogoUrlFor(String pid) => '/api/v1/radio/stations/$pid/logo';
+
+  @override
+  String radioNowPlayingArtUrlFor(String pid, String key) =>
+      '/api/v1/radio/stations/$pid/now-playing-art?v=$key';
 
   /// Every directory query, in call order, so a test can see which surface
   /// a keystroke actually reached.
@@ -3758,6 +3795,7 @@ class FakeRepository implements WaxDeckRepository {
     backupKeepBytes: 0,
     trashRetentionDays: 0,
     taskRetentionDays: 30,
+    radioExternalArt: false,
   );
 
   /// Thrown by the admin mutation endpoints when set.

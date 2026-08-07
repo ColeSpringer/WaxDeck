@@ -159,12 +159,25 @@ export default defineConfig({
       dependencies: ['wave'],
       ...motion('reduce'),
     },
-    // Not parallel with itself. Two tests here read the whole settings
+    // Not parallel with itself, for two reasons, and the second is the
+    // one that decides it. Two tests here read the whole settings
     // object, change one field and put it back, and the endpoint stores
     // each field as its own row - so concurrent replaces interleave and
-    // drop each other's change. One file with `fullyParallel: false` is
-    // one worker running it in order, which is what the `describe.serial`
-    // wrapper in that file used to buy.
+    // drop each other's change. A `describe.serial` around that pair
+    // would answer that much.
+    //
+    // It would not answer the rest. One of the pair turns SERVER-WIDE
+    // read-only on for the length of its body, and read-only refuses
+    // every write on the stack with a 409 - the trash round trip's
+    // `/library/items/delete`, the uploads, the runtime library. That is
+    // the same global switch the chaining above exists to keep off the
+    // uploads project, seen from inside the file. Serializing two tests
+    // against each other does nothing about a switch one of them holds
+    // while the other five run.
+    //
+    // So this is one worker in order. Giving the idle workers back means
+    // making the read-only test stop being global - its own project, or
+    // a per-library flag - not rescheduling around it.
     {
       name: 'mutators-admin',
       testMatch: /admin-ops\.spec\.ts/,

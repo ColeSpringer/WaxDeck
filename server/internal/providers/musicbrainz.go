@@ -332,6 +332,56 @@ func (m *MusicBrainz) SearchRecordings(ctx context.Context, artist, title string
 	return out, nil
 }
 
+// ReleaseMBIDForRecording answers the best release id for an announced
+// artist and title, or empty when nothing matched.
+//
+// A search rather than SearchRecordings, deliberately: that one hydrates
+// up to five releases to build full candidates, which is five more paced
+// round trips than a cover needs. All this wants is the first release id
+// the top recording sits on.
+func (m *MusicBrainz) ReleaseMBIDForRecording(ctx context.Context, artist, title string) (string, error) {
+	if strings.TrimSpace(title) == "" {
+		return "", nil
+	}
+	query := "recording:" + luceneQuote(title)
+	if artist != "" {
+		query += " AND artist:" + luceneQuote(artist)
+	}
+	q := url.Values{}
+	q.Set("query", query)
+	q.Set("fmt", "json")
+	q.Set("limit", "3")
+	body, status, err := m.core.get(ctx, m.base+"/recording?"+q.Encode(), m.ttl)
+	if err != nil {
+		return "", err
+	}
+	switch status {
+	case http.StatusOK:
+	case http.StatusBadRequest, http.StatusNotFound:
+		return "", nil
+	default:
+		return "", fmt.Errorf("providers: musicbrainz recording search: status %d", status)
+	}
+	var parsed struct {
+		Recordings []struct {
+			Releases []struct {
+				ID string `json:"id"`
+			} `json:"releases"`
+		} `json:"recordings"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", fmt.Errorf("providers: decode musicbrainz recording search: %w", err)
+	}
+	for _, rec := range parsed.Recordings {
+		for _, rel := range rec.Releases {
+			if rel.ID != "" {
+				return rel.ID, nil
+			}
+		}
+	}
+	return "", nil
+}
+
 // LookupFingerprint is not a MusicBrainz capability; the composite Source
 // routes fingerprints to AcoustID. Returning an error here keeps a bare
 // MusicBrainz from silently claiming the whole CandidateSource port.

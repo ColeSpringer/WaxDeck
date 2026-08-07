@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"slices"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
@@ -435,13 +436,42 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 	// deleted recording's vector is dead weight, and if the audio ever
 	// returns one re-analysis is the honest price.
 	var stale []string
+	owner := map[string]model.PID{}
 	_, _, err = l.db.Embeddings(ctx, func(e wdb.Embedding) {
 		if !live[e.Essence] {
 			stale = append(stale, e.Essence)
+			owner[e.Essence] = model.PID(e.ItemPID)
 		}
 	})
 	if err != nil {
 		return worked, &Error{Kind: KindInternal, Err: err}
+	}
+	// A trashed item is archived and has lost its file row, exactly like a
+	// permanently deleted one, so absence from the live set cannot tell
+	// the two apart on its own. The trash journal can, and it is the
+	// distinction that matters: ADR-0048 made trashing restorable and
+	// leaves the bytes on disk, so pruning here charged a full
+	// re-analysis for every trash and restore of a file that never moved.
+	// RestorableTrash is batched and index-served, and absence from its
+	// map is the answer for "nothing restorable".
+	//
+	// It keys on the item the vector was recorded against. Two items
+	// sharing one essence are already collapsed by that recording, so the
+	// residual case - the recorded item purged while a second item with
+	// the same audio is only trashed - prunes and costs one re-analysis
+	// on restore, which is the pre-existing price rather than a new one.
+	if len(stale) > 0 {
+		pids := make([]model.PID, 0, len(stale))
+		for _, essence := range stale {
+			pids = append(pids, owner[essence])
+		}
+		restorable, err := l.lib.RestorableTrash(ctx, pids)
+		if err != nil {
+			return worked, classify(err)
+		}
+		stale = slices.DeleteFunc(stale, func(essence string) bool {
+			return len(restorable[owner[essence]]) > 0
+		})
 	}
 	for _, essence := range stale {
 		affected, err := l.db.RemoveEmbedding(ctx, essence)

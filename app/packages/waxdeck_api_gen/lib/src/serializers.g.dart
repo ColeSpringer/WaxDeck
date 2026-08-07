@@ -203,6 +203,7 @@ Serializers _$serializers =
           ..add(PlaybackSessionHistoryList.serializer)
           ..add(PlaybackSessionList.serializer)
           ..add(PlaybackSessionTransfer.serializer)
+          ..add(PlayedUpdate.serializer)
           ..add(PlayerEndpoint.serializer)
           ..add(PlayerEndpointList.serializer)
           ..add(Playlist.serializer)

@@ -25,7 +25,32 @@ After the proxy is up, set these on the server:
 ```sh
 WAXDECK_PUBLIC_BASE=https://wax.example.com   # OIDC callbacks, share page previews
 WAXDECK_COOKIE_SECURE=true                    # cookies are HTTPS-only
+WAXDECK_TRUSTED_PROXIES=10.0.0.0/8            # whose X-Forwarded-For to believe
 ```
+
+`WAXDECK_TRUSTED_PROXIES` is the one that is easy to skip and worth
+not skipping. The login limiter counts attempts per caller address,
+and behind a proxy every caller arrives from the proxy's - so five
+failed logins from one person lock the whole household out for 30
+seconds, then a minute, then two, then four, until the window lapses.
+It is self-healing in the ordinary case (one correct password clears
+the key for everybody) and not self-healing against somebody hammering
+on purpose. Signup counts the same way, and its budget is spent by
+successes as well as failures - deliberately, since account creation is
+the outcome worth capping - so on a shared address that also caps how
+many members can join in a window. Correct client addresses make both
+budgets per person, which is what they were always meant to be.
+
+Set it to the CIDRs or addresses your proxies actually come from
+(comma-separated; a bare address is taken as itself). The server then
+walks `X-Forwarded-For` right to left and stops at the first hop that
+is not on the list, which is the caller. **It begins only when the
+socket address is itself on the list** - that is what makes it safe. A
+request that did not arrive through a configured proxy gets no say in
+its own address, so nobody can mint a fresh rate-limit budget by
+sending a header. An unset or empty value keeps today's behaviour
+exactly: the socket address, no header believed. A value that does not
+parse refuses to start, rather than quietly trusting nothing.
 
 Do not add CORS headers at the proxy. The API is same-origin by
 design; a permissive CORS layer breaks the CSRF model.

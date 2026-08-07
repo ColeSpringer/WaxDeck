@@ -196,6 +196,51 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /items/{pid}/played:
+    put:
+      operationId: setPlayed
+      summary: Set or clear an item's played and finished flags
+      description: >
+        Sets the calling user's played and finished flags for the item
+        directly and returns the resulting playback state. This is the
+        other direction from the completion rules, which are monotonic by
+        construction: a position checkpoint can mark an item played and
+        finished but never un-mark it, so undoing a mis-tapped "mark
+        finished" needs its own verb.
+
+        Position is untouched, so a client undoing a mark writes the old
+        position through `PUT /items/{pid}/play-state` and clears the
+        flags here. Three combinations are refused with
+        `invalid-request`: a negative play count, `finished` without
+        `played` (every UI renders that row as finished while
+        `played is false` still matches it), and `played` with an
+        explicit `playCount` of 0 (zeroing the count is what un-marking
+        means).
+      tags: [playback]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayedUpdate"
+      responses:
+        "200":
+          description: The caller's updated state for the item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayState"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /items/{pid}/star:
     put:
       operationId: setStar
@@ -709,6 +754,42 @@ paths:
 
 components:
   schemas:
+    PlayedUpdate:
+      type: object
+      description: A direct change to an item's played and finished flags.
+      required: [played, finished]
+      properties:
+        played:
+          type: boolean
+          description: Whether the item counts as played at least once.
+        finished:
+          type: boolean
+          description: >
+            Whether the listener reached the end. Never true while
+            `played` is false.
+        playCount:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: >
+            The play count to store. Omitted or null keeps the stored
+            count, which is what a client that only means to flip the
+            flags should send; 0 resets it, so an undo of a mis-tapped
+            mark clears the play it added rather than leaving it
+            counted. Setting `played` true without naming a count stores
+            the smallest count consistent with it, so a played item
+            never sorts as never-played.
+        recordedAt:
+          type: string
+          format: date-time
+          description: >
+            When the change was made on the client, sent only when
+            replaying an offline queue. The server skips the write when
+            the item's flags changed more recently than this. Live
+            mutations omit it and always apply, which is what an
+            interactive un-mark wants: a client clock trailing the
+            server would otherwise drop it as stale.
+
     StarUpdate:
       type: object
       description: A star or unstar.

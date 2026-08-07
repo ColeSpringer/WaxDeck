@@ -538,6 +538,11 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   void initState() {
     super.initState();
     _searchFocus.addListener(_onSearchFocus);
+    // Seeded, not left empty: `_listenForQuery` below only fires on a
+    // change, so a shell built over a query that was already set - a deep
+    // link the router resolved before this State existed - would draw an
+    // empty header field over somebody's results.
+    _searchField.text = ref.read(searchQueryProvider);
   }
 
   @override
@@ -594,10 +599,17 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   /// after this shell rebuilds, and a scope that finds nothing focused
   /// inside itself claims the focus. Asking any earlier is asking and
   /// then losing it a frame later.
+  /// The location is re-checked with the other two, and it is the one
+  /// that matters most: two frames is long enough to tap a nav-rail
+  /// destination, and focusing the field after leaving search calls
+  /// `_onSearchFocus` with its own guard now false, which navigates
+  /// straight back to the screen the visitor just left.
   Future<void> _focusHeaderField() async {
     await WidgetsBinding.instance.endOfFrame;
     await WidgetsBinding.instance.endOfFrame;
-    if (mounted && _headerFieldShowing) _searchFocus.requestFocus();
+    if (!mounted || !_headerFieldShowing) return;
+    if (!widget.location.startsWith(WaxRoute.search)) return;
+    _searchFocus.requestFocus();
   }
 
   /// Whether the sidebar header (and so the live field) is on screen.

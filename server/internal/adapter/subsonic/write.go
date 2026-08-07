@@ -251,22 +251,48 @@ func (h *Handler) updatePlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 			return
 		}
 	}
-	// Removals go index-descending so earlier removals never shift the
-	// positions later ones refer to.
 	if removes := r.Form["songIndexToRemove"]; len(removes) > 0 {
-		positions := make([]int, 0, len(removes))
+		// songIndexToRemove is an offset into the listing this server
+		// rendered, and that listing is filtered: renderPlaylist iterates
+		// the caller's own membership and carries no position field, so
+		// the array index is the client's only handle. The stored
+		// position is a different number whenever anything is hidden -
+		// a trashed member, a library the caller cannot see, an
+		// unsubscribed show - and passing the index through as a
+		// position removes some other track. Map it back through the
+		// entry that was rendered.
+		entries, err := h.playlistEntries(r.Context(), uc, id)
+		if err != nil {
+			h.failFromService(w, r, err, "no such playlist")
+			return
+		}
+		idxs := make([]int, 0, len(removes))
 		for _, raw := range removes {
 			n, err := strconv.Atoi(raw)
-			if err != nil || n < 0 {
+			if err != nil || n < 0 || n >= len(entries) {
 				h.fail(w, r, 10, "malformed songIndexToRemove")
 				return
 			}
-			positions = append(positions, n)
+			idxs = append(idxs, n)
 		}
-		sort.Sort(sort.Reverse(sort.IntSlice(positions)))
 		// A duplicated index names the same row twice; removing it
-		// twice would take a second, shifted item with it.
-		positions = slices.Compact(positions)
+		// twice would take a second, shifted item with it. Compact
+		// wants them adjacent, so sort before mapping.
+		sort.Ints(idxs)
+		idxs = slices.Compact(idxs)
+		positions := make([]int, 0, len(idxs))
+		for _, i := range idxs {
+			if entries[i].Position == nil {
+				// Only a static list carries positions, and only a static
+				// list can be removed from. Refuse rather than guess.
+				h.fail(w, r, 0, "this playlist's members cannot be removed by index")
+				return
+			}
+			positions = append(positions, *entries[i].Position)
+		}
+		// Removals go position-descending so earlier removals never shift
+		// the positions later ones refer to.
+		sort.Sort(sort.Reverse(sort.IntSlice(positions)))
 		for _, pos := range positions {
 			if err := h.svc.RemovePlaylistItemAt(r.Context(), uc, id, pos); err != nil {
 				h.failFromService(w, r, err, "no such playlist")

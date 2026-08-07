@@ -51,6 +51,10 @@ services:
       # The externally reachable base URL, e.g. https://wax.example.com.
       # Required for single sign-on (the OIDC callback derives from it).
       WAXDECK_PUBLIC_BASE: ${WAXDECK_PUBLIC_BASE:-}
+      # The reverse proxies whose X-Forwarded-For may be believed, so the
+      # login limiter counts the caller rather than the proxy. Empty keeps
+      # the socket address.
+      WAXDECK_TRUSTED_PROXIES: ${WAXDECK_TRUSTED_PROXIES:-}
       # Optional OIDC single sign-on; leave the issuer empty to disable.
       # Local accounts always keep working.
       WAXDECK_OIDC_ISSUER: ${WAXDECK_OIDC_ISSUER:-}

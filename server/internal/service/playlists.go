@@ -15,9 +15,11 @@ import (
 	"github.com/colespringer/waxbin/query"
 )
 
-// Playlist is the API-facing playlist shape. ItemCount is nil when the
-// count is omitted (smart playlists on list pages, where computing it
-// would evaluate every rule); Rule is nil for static playlists.
+// Playlist is the API-facing playlist shape. ItemCount is the members
+// this caller is offered, which is what the item listing hands back;
+// it is nil when the count is omitted (smart playlists on list pages,
+// where computing it would evaluate every rule). Rule is nil for static
+// playlists.
 type Playlist struct {
 	PID        string
 	Name       string
@@ -716,21 +718,197 @@ func (l *Library) playlistDTO(ctx context.Context, uc *UserCtx, pl *model.Playli
 			out.OwnerName = u.Username
 		}
 	}
-	if pl.Kind == model.PlaylistStatic {
-		n := pl.ItemCount
-		out.ItemCount = &n
-	} else if pl.Rule != nil {
+	if pl.Rule != nil {
 		r := queryToRule(*pl.Rule)
 		out.Rule = &r
-		if withCount {
-			// evaluableRule, so the count matches the members the listing
-			// will actually hand back.
-			if n, err := l.lib.Count(ctx, evaluableRule(*pl.Rule), pl.OwnerPID); err == nil {
-				out.ItemCount = &n
-			}
+	}
+	// Counted off the same membership the listing hands back, for both
+	// kinds. The static branch used to report pl.ItemCount, the catalog's
+	// stored member count, so a list with one trashed member answered 10
+	// here and 9 from /items indefinitely; the smart branch counted the
+	// rule but not the caller's own visibility.
+	//
+	// withCount still gates the smart kind alone, and for the reason it
+	// always did: evaluating every stored rule to draw a grid of tiles is
+	// the work the flag exists to skip.
+	//
+	// The two paths take the count differently, and the difference is
+	// the point. A caller that asked for the count (a playlist opened)
+	// gets it live, so it cannot disagree with the member listing beside
+	// it - which is the whole bug. A listing row takes it from the cache,
+	// because that path is far hotter than it looks: the client's
+	// playlists provider rides the user-stream fan-out, so every star,
+	// rating, and play-state checkpoint from any device re-runs the whole
+	// page - and none of those can change a static list's membership.
+	switch {
+	case withCount:
+		if n, err := l.visibleMemberCount(ctx, uc, pl); err == nil {
+			out.ItemCount = &n
+		} else {
+			l.log.Warn("counting playlist members", "playlist", pl.PID, "err", err)
+		}
+	case pl.Kind == model.PlaylistStatic:
+		if n, err := l.cachedMemberCount(ctx, uc, pl); err == nil {
+			out.ItemCount = &n
+		} else {
+			l.log.Warn("counting playlist members", "playlist", pl.PID, "err", err)
 		}
 	}
 	return out
+}
+
+// How long a listing row's member count is reused, and how many are
+// held. The same pair Subsonic's playlistTotals settled on, for the same
+// computation.
+const (
+	playlistCountTTL = time.Minute
+	playlistCountCap = 4096
+)
+
+// playlistCountKey scopes a cached count to one reader: visibility and
+// subscriptions differ per account, so one household's answer is not
+// another's to reuse.
+type playlistCountKey struct{ userID, pid string }
+
+type playlistCount struct {
+	count       int
+	updatedAtNS int64
+	at          time.Time
+}
+
+// cachedMemberCount is visibleMemberCount for a listing row.
+//
+// Keyed on the playlist's own UpdatedAt, which moves on every membership
+// edit, plus a short TTL for what that timestamp cannot see: an item
+// trashed or restored, a library grant changed, a subscription changed.
+// So a tile can trail its playlist by up to the TTL after a trash, and
+// then agrees again. Deliberately not keyed on the catalog's data
+// version, which looks like the precise answer and is not: it is a
+// PRAGMA that moves on *any* catalog write, play-state checkpoints
+// included, so it would invalidate constantly in exactly the case this
+// exists for while telling us nothing about the membership.
+//
+// The detail read stays live (see playlistDTO), so the count a reader
+// sees beside a member listing is always that listing's own.
+//
+// All of this is a workaround for one missing query field. Playlist
+// membership is the only item relation the engine cannot express, so
+// the count has to hydrate every member rather than being a single
+// indexed Count; `playlist_pid` is filed in docs/upstream-requests.md,
+// and when it lands this function and its TTL go away.
+func (l *Library) cachedMemberCount(ctx context.Context, uc *UserCtx, pl *model.Playlist) (int, error) {
+	key := playlistCountKey{userID: uc.ID, pid: string(pl.PID)}
+	l.countsMu.Lock()
+	held, ok := l.counts[key]
+	l.countsMu.Unlock()
+	if ok && held.updatedAtNS == pl.UpdatedAt && time.Since(held.at) < playlistCountTTL {
+		return held.count, nil
+	}
+	n, err := l.visibleMemberCount(ctx, uc, pl)
+	if err != nil {
+		return 0, err
+	}
+	l.countsMu.Lock()
+	defer l.countsMu.Unlock()
+	if l.counts == nil {
+		l.counts = map[playlistCountKey]playlistCount{}
+	} else if len(l.counts) >= playlistCountCap {
+		// Emptied, not replaced: a fresh map would regrow from nothing.
+		clear(l.counts)
+	}
+	l.counts[key] = playlistCount{count: n, updatedAtNS: pl.UpdatedAt, at: time.Now()}
+	return n, nil
+}
+
+// playlistMembers answers a playlist's members as its owner evaluates
+// them, before the caller's own filtering.
+//
+// A smart list goes through the unpaged evaluator rather than
+// Playlists().Items, because Items evaluates the stored rule in SQL and
+// leaves the state predicate to be applied in Go afterwards - so the
+// rule's own Limit and LimitMode were spent on rows that the archived
+// filter then dropped, and a `limit: 25` list holding five trashed rows
+// came back with 20 (ADR-0051). evaluableRule conjoins the predicate
+// into the query, so the limit is applied to what survives it.
+//
+// The user pid is the owner's, not the caller's: a shared smart list
+// evaluates against its owner's user state, which is the contract
+// PlaylistItems documents. PreviewRule passes the caller's pid because
+// a preview is stateless and belongs to whoever is typing; copying that
+// argument here would silently evaluate a shared `played = false` rule
+// against each reader.
+func (l *Library) playlistMembers(ctx context.Context, pl *model.Playlist) ([]*model.ItemView, error) {
+	if pl.Kind != model.PlaylistStatic && pl.Rule != nil {
+		items, err := l.lib.Query(ctx, evaluableRule(*pl.Rule), pl.OwnerPID)
+		if err != nil {
+			return nil, classify(err)
+		}
+		return items, nil
+	}
+	items, err := l.lib.Playlists().Items(ctx, pl.PID, pl.OwnerPID)
+	if err != nil {
+		return nil, classify(err)
+	}
+	return items, nil
+}
+
+// memberFilter is the caller's own view of a playlist's membership:
+// what the owner's evaluation holds, narrowed to what this reader is
+// offered. One spelling, because the owner's listing, the share page,
+// and the count all have to agree.
+type memberFilter struct {
+	uc   *UserCtx
+	subs *subscriptionFilter
+	// keepArchived honours a rule that names `state` for itself rather
+	// than guessing which arm it meant. A smart list's query already
+	// applied the predicate, so this only matters for the exempt case;
+	// a static list has no rule and always filters.
+	keepArchived bool
+}
+
+func (l *Library) newMemberFilter(uc *UserCtx, pl *model.Playlist) memberFilter {
+	return memberFilter{
+		uc:           uc,
+		subs:         l.newSubscriptionFilter(uc),
+		keepArchived: pl.Rule != nil && ruleNamesState(pl.Rule.Where),
+	}
+}
+
+// memberVisible reports whether one stored member is offered to this
+// caller.
+//
+// viewVisible, not itemVisible: the members are fresh item views, so the
+// library handle is a field already in hand. itemVisible takes a pid and
+// resolves it through the located-path cache, which on a listing page
+// meant one cache lookup per member per playlist - a page of fifty
+// three-hundred-member lists is fifteen thousand of them, for an answer
+// sitting in the row. It is also the more correct of the two for the
+// same reason the sync paths prefer it.
+func (l *Library) memberVisible(ctx context.Context, f memberFilter, it *model.ItemView) bool {
+	if archived(it) && !f.keepArchived {
+		return false
+	}
+	if !l.viewVisible(ctx, f.uc, it) {
+		return false
+	}
+	return f.subs.allowsItem(ctx, l, it)
+}
+
+// visibleMemberCount counts a playlist's members as this caller sees
+// them.
+func (l *Library) visibleMemberCount(ctx context.Context, uc *UserCtx, pl *model.Playlist) (int, error) {
+	members, err := l.playlistMembers(ctx, pl)
+	if err != nil {
+		return 0, err
+	}
+	f := l.newMemberFilter(uc, pl)
+	n := 0
+	for _, it := range members {
+		if l.memberVisible(ctx, f, it) {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // resolvePlaylist fetches a playlist the caller may read: their own, or
@@ -1022,9 +1200,9 @@ func (l *Library) PlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylistPID
 	if err != nil {
 		return PlaylistItemsPage{}, err
 	}
-	items, err := l.lib.Playlists().Items(ctx, pl.PID, pl.OwnerPID)
+	items, err := l.playlistMembers(ctx, pl)
 	if err != nil {
-		return PlaylistItemsPage{}, classify(err)
+		return PlaylistItemsPage{}, err
 	}
 	off, err := decodeOffsetCursor(cursor)
 	if err != nil {
@@ -1037,15 +1215,17 @@ func (l *Library) PlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylistPID
 	// a malformed cursor answers 400 without doing the work. The full
 	// member list is used, not the caller's filtered view -- the cover
 	// belongs to the playlist, like its name, not to whoever is reading it.
+	// For a smart list "full" now means the rule's own evaluation with
+	// the state predicate inside it, so a trashed member stops
+	// contributing cover art; that is a deliberate consequence of moving
+	// the predicate into the query rather than a second policy.
 	l.syncPlaylistCover(ctx, pl, items)
 	static := pl.Kind == model.PlaylistStatic
-	// The catalog evaluates a smart rule inside Items, so the state
-	// predicate cannot ride the query in (ADR-0048); members are filtered
-	// here instead, honouring a rule that names `state` for itself.
-	// Positions still count off the full member list, exactly as they do
-	// for members the caller cannot see, so a restore lands where it was.
-	keepArchived := pl.Rule != nil && ruleNamesState(pl.Rule.Where)
-	subs := l.newSubscriptionFilter(uc)
+	// A static list's members are stored rows and are filtered here; a
+	// smart list's already left the query filtered. Positions still count
+	// off the full stored list, exactly as they do for members the caller
+	// cannot see, so a restore lands where it was.
+	f := l.newMemberFilter(uc, pl)
 	out := PlaylistItemsPage{Entries: []PlaylistEntry{}}
 	for i := off; i < len(items); i++ {
 		if len(out.Entries) == limit {
@@ -1053,13 +1233,7 @@ func (l *Library) PlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylistPID
 			break
 		}
 		it := items[i]
-		if archived(it) && !keepArchived {
-			continue
-		}
-		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
-			continue
-		}
-		if !subs.allowsItem(ctx, l, it) {
+		if !l.memberVisible(ctx, f, it) {
 			continue
 		}
 		entry := PlaylistEntry{Item: summary(it)}
@@ -1095,15 +1269,21 @@ func (l *Library) ReplacePlaylistItems(ctx context.Context, uc *UserCtx, apiPlay
 	}
 	// A replace built by an owner who cannot currently see every stored
 	// member would silently drop the hidden ones; refuse instead. The
-	// member list hides on two dimensions (library visibility and
-	// unsubscribed shows' episodes), so the guard covers both, and the
-	// subscription dimension applies to full-visibility users too.
+	// member list hides on three dimensions - library visibility,
+	// unsubscribed shows' episodes, and trashed members (ADR-0048) - so
+	// the guard covers all three, and the last two apply to
+	// full-visibility users too. This path is static-only (refused
+	// above), so pl.Rule is nil and no state-naming rule exempts the
+	// archived arm.
 	stored, err := l.lib.Playlists().Items(ctx, pl.PID, pl.OwnerPID)
 	if err != nil {
 		return classify(err)
 	}
 	subs := l.newSubscriptionFilter(uc)
 	for _, it := range stored {
+		if archived(it) {
+			return &Error{Kind: KindConflict, Msg: "the playlist holds members that are in the trash; a replace would drop them permanently"}
+		}
 		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
 			return &Error{Kind: KindConflict, Msg: "the playlist holds members outside your current library visibility; a replace would drop them"}
 		}
@@ -1313,8 +1493,26 @@ func (l *Library) emitPlaylistEvent(ctx context.Context, uc *UserCtx, shared boo
 // playlist's members, the playlist listing itself). The offset is
 // opaque on the wire; positions inside one evaluation are what the
 // contract promises.
+//
+// The prefix carries a version, retired the same way the scoped
+// cursors' one is: bump it in the change that alters what the offset
+// indexes into, and the old spelling stops parsing, so a cursor from
+// before the change answers 400 instead of walking a shifted window.
+// ADR-0052 bumped it to o1 - a smart playlist's offset used to index
+// into the unfiltered member list and now indexes into the rule's own
+// filtered evaluation, so the same number names a different row.
+//
+// Two surfaces mint these, and only one of them changed: the member
+// listing above and the playlist listing itself. They share the prefix
+// deliberately, because a second version constant is a second thing to
+// remember to bump - but it means a bump for either 400s an in-flight
+// scroll of both. The blast radius is one scroll, which is why that is
+// the cheaper trade; whoever bumps it next should know they are
+// retiring both.
+const offsetCursorVersion = "o1:"
+
 func encodeOffsetCursor(off int) string {
-	return base64.RawURLEncoding.EncodeToString([]byte("o:" + strconv.Itoa(off)))
+	return base64.RawURLEncoding.EncodeToString([]byte(offsetCursorVersion + strconv.Itoa(off)))
 }
 
 func decodeOffsetCursor(c string) (int, error) {
@@ -1322,10 +1520,10 @@ func decodeOffsetCursor(c string) (int, error) {
 		return 0, nil
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(c)
-	if err != nil || !strings.HasPrefix(string(raw), "o:") {
+	if err != nil || !strings.HasPrefix(string(raw), offsetCursorVersion) {
 		return 0, errInvalid("malformed cursor")
 	}
-	off, err := strconv.Atoi(strings.TrimPrefix(string(raw), "o:"))
+	off, err := strconv.Atoi(strings.TrimPrefix(string(raw), offsetCursorVersion))
 	if err != nil || off < 0 {
 		return 0, errInvalid("malformed cursor")
 	}

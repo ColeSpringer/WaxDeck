@@ -548,6 +548,15 @@ class DeckBar extends StatelessWidget {
             size: size,
             artwork: now.artwork,
             monogram: now.title,
+            // Declared the same way the face and the dial declare it, so
+            // one rule about radio's terminal state lives in one place.
+            // The bar's thumbnail is below the wordmark's legibility
+            // floor, so what this actually draws here is the initials -
+            // which is the right answer at 48 logical pixels and is the
+            // component's call to make rather than this call site's.
+            placeholder: now.domain == WaxDomain.radio
+                ? ArtworkPlaceholder.wordmark
+                : ArtworkPlaceholder.initials,
             shape: now.shape,
             domain: now.domain,
           ),
@@ -842,6 +851,9 @@ class DeckBarOffer extends StatelessWidget {
                     size: 48,
                     artwork: artwork,
                     monogram: title,
+                    placeholder: domain == WaxDomain.radio
+                        ? ArtworkPlaceholder.wordmark
+                        : ArtworkPlaceholder.initials,
                     shape: shape,
                     domain: domain,
                   ),

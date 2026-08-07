@@ -114,6 +114,24 @@ class _Switches extends ConsumerWidget {
                 _save(ref, settings.copyWith(sonicAnalysis: value)),
           ),
         ),
+        const SizedBox(height: WaxSpace.s16),
+        const SectionHeader(title: 'Radio'),
+        WaxSettingRow(
+          title: 'Look up cover art online',
+          help:
+              'When a station announces a track this library does not '
+              'hold, ask MusicBrainz and the Cover Art Archive for its '
+              'cover. This sends the artist and title the station '
+              'announced off this server. Off by default; with it off '
+              'the player draws the station mark.',
+          control: WaxSwitch(
+            label: 'Look up cover art online',
+            value: settings.radioExternalArt,
+            semanticsId: SemanticsIds.settingRadioExternalArt,
+            onChanged: (value) =>
+                _save(ref, settings.copyWith(radioExternalArt: value)),
+          ),
+        ),
       ],
     );
   }

@@ -621,6 +621,28 @@ func (s *Server) SetStar(ctx context.Context, req SetStarRequestObject) (SetStar
 	return SetStar200JSONResponse(playStateJSON(st)), nil
 }
 
+func (s *Server) SetPlayed(ctx context.Context, req SetPlayedRequestObject) (SetPlayedResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return SetPlayed400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	st, err := s.svc.SetPlayed(ctx, uc, req.Pid,
+		req.Body.Played, req.Body.Finished, req.Body.PlayCount, req.Body.RecordedAt)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
+			return SetPlayed404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		case service.KindInvalid:
+			return SetPlayed400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return SetPlayed200JSONResponse(playStateJSON(st)), nil
+}
+
 func (s *Server) SetRating(ctx context.Context, req SetRatingRequestObject) (SetRatingResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
