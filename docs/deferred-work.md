@@ -325,7 +325,13 @@ here waits on upstream.
   falls back to the deprecated `<experimental/coroutine>` there and
   current MSVC refuses to compile it, so that one target is raised to
   C++20 privately in `app/app/windows/CMakeLists.txt` rather than the
-  shared function being moved. Raising the floor for everything is the
+  shared function being moved - along with
+  `_HAS_STREAM_INSERTION_OPERATORS_DELETED_IN_CXX20=0`, the STL escape
+  hatch for the stream-insertion deletion C++20 brought with it (the
+  plugin streams `hstring::c_str()` into `std::cerr`, and P1423R3
+  deletes that overload). Whoever raises the shared floor inherits that
+  trap for every target that logs wide strings. Raising the floor for
+  everything is the
   tidier end state, but under `/WX` a standard bump turns any fresh
   C++20 deprecation - implicit `this` capture in `[=]`, `u8""` becoming
   `char8_t`, deprecated `volatile` compound assignment - into a build

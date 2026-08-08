@@ -63,6 +63,12 @@ include(flutter/generated_plugins.cmake)
 # apply_standard_settings, which every other plugin inherits, and PRIVATE so
 # it stops at this plugin's own sources rather than reaching the runner.
 target_compile_features(audio_service_win_plugin PRIVATE cxx_std_20)
+# C++20 in turn deletes streaming a wide string into a narrow ostream
+# (P1423R3), which the plugin's thumbnail error logging does
+# (hstring::c_str() into std::cerr). The STL's escape hatch restores the
+# C++17 overload for this target only.
+target_compile_definitions(audio_service_win_plugin PRIVATE
+  "_HAS_STREAM_INSERTION_OPERATORS_DELETED_IN_CXX20=0")
 
 
 # === Installation ===
