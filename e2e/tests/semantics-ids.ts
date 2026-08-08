@@ -589,6 +589,11 @@ export const SemanticsIds = {
   reviewBulkSkip: 'review-bulk-skip',
   reviewDiscard: 'review-discard',
   reviewFilter: (name: string | number) => `review-filter-${name}`,
+  reviewIdentifyField: (name: string | number) => `review-identify-${name}`,
+  reviewIdentifyGroup: 'review-identify-group',
+  reviewIdentifySkipped: 'review-identify-skipped',
+  reviewIdentifySubmit: 'review-identify-submit',
+  reviewIdentifyToggle: 'review-identify-toggle',
   reviewPane: 'review-pane',
   reviewPaneClose: 'review-pane-close',
   reviewRevert: 'review-revert',
@@ -686,6 +691,7 @@ export const SemanticsIds = {
 
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
   acquireFormat: 'acquire-format',
+  acquireIdentify: 'acquire-identify',
   acquireSubmit: 'acquire-submit',
   acquireTasks: 'acquire-tasks',
   acquireUrl: 'acquire-url',
@@ -699,6 +705,7 @@ export const SemanticsIds = {
   uploadFromUrl: 'upload-from-url',
   uploadGrouping: 'upload-grouping',
   uploadGroupingOption: (wireName: string | number) => `upload-grouping-${wireName}`,
+  uploadIdentify: 'upload-identify',
   uploadMediaConfirm: 'upload-media-confirm',
   uploadMediaType: 'upload-media-type',
   uploadPick: 'upload-pick',
@@ -905,6 +912,7 @@ export const SemanticsIdPrefixes = {
   editMetadata: 'edit-metadata-',
   matchingOption: 'matching-',
   reviewFilter: 'review-filter-',
+  reviewIdentifyField: 'review-identify-',
   reviewRow: 'review-row-',
   trackMenu: 'track-menu-',
 

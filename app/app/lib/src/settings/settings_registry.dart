@@ -322,6 +322,19 @@ const settingsRegistry = <SettingEntry>[
     keywords: <String>['sort', 'order', 'alphabetical', 'browse', 'index'],
   ),
   SettingEntry(
+    id: 'identify-uploads',
+    title: 'Identify uploads',
+    section: SettingsSection.library,
+    keywords: <String>[
+      'musicbrainz',
+      'match',
+      'identify',
+      'upload',
+      'tags',
+      'acquire',
+    ],
+  ),
+  SettingEntry(
     id: 'library-access',
     title: 'What I can see',
     section: SettingsSection.library,

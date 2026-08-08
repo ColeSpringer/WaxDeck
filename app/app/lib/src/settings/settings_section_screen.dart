@@ -393,6 +393,25 @@ class _LibraryBody extends ConsumerWidget {
               ),
           ],
         ),
+        _Group(
+          title: 'Adding to the library',
+          children: <Widget>[
+            WaxSettingRow(
+              title: 'Identify uploads',
+              help:
+                  'Matches what you add against MusicBrainz. Off adds it '
+                  'with the tags it has, without review',
+              control: WaxSwitch(
+                value: !(prefs?.identifyOptOut ?? false),
+                label: 'Identify uploads',
+                semanticsId: SemanticsIds.setting('identify-uploads'),
+                onChanged: prefs == null
+                    ? null
+                    : (on) => prefsController.setIdentifyOptOut(!on),
+              ),
+            ),
+          ],
+        ),
         const _Group(title: 'Access', children: <Widget>[_LibraryAccessRow()]),
       ],
     );

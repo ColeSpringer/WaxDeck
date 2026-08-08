@@ -156,6 +156,8 @@ class _$Prefs extends Prefs {
   final bool? autoplay;
   @override
   final bool? radioScrobbleOptOut;
+  @override
+  final bool? identifyOptOut;
 
   factory _$Prefs([void Function(PrefsBuilder)? updates]) =>
       (PrefsBuilder()..update(updates))._build();
@@ -173,6 +175,7 @@ class _$Prefs extends Prefs {
     this.browseSorts,
     this.autoplay,
     this.radioScrobbleOptOut,
+    this.identifyOptOut,
   }) : super._();
   @override
   Prefs rebuild(void Function(PrefsBuilder) updates) =>
@@ -196,7 +199,8 @@ class _$Prefs extends Prefs {
         browseShowUnknown == other.browseShowUnknown &&
         browseSorts == other.browseSorts &&
         autoplay == other.autoplay &&
-        radioScrobbleOptOut == other.radioScrobbleOptOut;
+        radioScrobbleOptOut == other.radioScrobbleOptOut &&
+        identifyOptOut == other.identifyOptOut;
   }
 
   @override
@@ -214,6 +218,7 @@ class _$Prefs extends Prefs {
     _$hash = $jc(_$hash, browseSorts.hashCode);
     _$hash = $jc(_$hash, autoplay.hashCode);
     _$hash = $jc(_$hash, radioScrobbleOptOut.hashCode);
+    _$hash = $jc(_$hash, identifyOptOut.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -232,7 +237,8 @@ class _$Prefs extends Prefs {
           ..add('browseShowUnknown', browseShowUnknown)
           ..add('browseSorts', browseSorts)
           ..add('autoplay', autoplay)
-          ..add('radioScrobbleOptOut', radioScrobbleOptOut))
+          ..add('radioScrobbleOptOut', radioScrobbleOptOut)
+          ..add('identifyOptOut', identifyOptOut))
         .toString();
   }
 }
@@ -296,6 +302,11 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
   set radioScrobbleOptOut(bool? radioScrobbleOptOut) =>
       _$this._radioScrobbleOptOut = radioScrobbleOptOut;
 
+  bool? _identifyOptOut;
+  bool? get identifyOptOut => _$this._identifyOptOut;
+  set identifyOptOut(bool? identifyOptOut) =>
+      _$this._identifyOptOut = identifyOptOut;
+
   PrefsBuilder() {
     Prefs._defaults(this);
   }
@@ -315,6 +326,7 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       _browseSorts = $v.browseSorts?.toBuilder();
       _autoplay = $v.autoplay;
       _radioScrobbleOptOut = $v.radioScrobbleOptOut;
+      _identifyOptOut = $v.identifyOptOut;
       _$v = null;
     }
     return this;
@@ -351,6 +363,7 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
             browseSorts: _browseSorts?.build(),
             autoplay: autoplay,
             radioScrobbleOptOut: radioScrobbleOptOut,
+            identifyOptOut: identifyOptOut,
           );
     } catch (_) {
       late String _$failedField;

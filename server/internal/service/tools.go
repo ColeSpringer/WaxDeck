@@ -94,6 +94,10 @@ type toolTaskParams struct {
 	URL        string `json:"url,omitempty"`
 	MediaType  string `json:"mediaType,omitempty"`
 	LibraryPID string `json:"libraryPid,omitempty"`
+	// IdentifyDeclined carries the submission's identification choice to
+	// the review entries the download opens. Stored as the decline so a
+	// task queued before the field existed decodes as "identify".
+	IdentifyDeclined bool `json:"identifyDeclined,omitempty"`
 }
 
 // StartBookMerge queues a merge of a multi-file audiobook into one

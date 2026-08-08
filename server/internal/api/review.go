@@ -104,6 +104,11 @@ func reviewDetailJSON(d service.ReviewDetailDTO) ReviewEntryDetail {
 		Tracks:     make([]ReviewTrack, 0, len(d.Tracks)),
 		Candidates: make([]ReviewCandidate, 0, len(d.Candidates)),
 	}
+	if d.IdentifyDeclined {
+		out.IdentifyDeclined = ptr(true)
+	}
+	out.IdentifyOverride = identifyRequestJSON(d.Override)
+	out.Suggested = identifyRequestJSON(d.Suggested)
 	for _, t := range d.Tracks {
 		rt := ReviewTrack{Path: t.Path, Title: t.Title, DurationMs: t.DurationMS}
 		if t.PID != "" {
@@ -187,6 +192,24 @@ func reviewDetailJSON(d service.ReviewDetailDTO) ReviewEntryDetail {
 	return out
 }
 
+// identifyRequestJSON maps one set of search values, dropping empties.
+func identifyRequestJSON(o *service.ReviewOverrideDTO) *ReviewIdentifyRequest {
+	if o == nil {
+		return nil
+	}
+	out := &ReviewIdentifyRequest{}
+	if o.Artist != "" {
+		out.Artist = ptr(o.Artist)
+	}
+	if o.Album != "" {
+		out.Album = ptr(o.Album)
+	}
+	if o.Title != "" {
+		out.Title = ptr(o.Title)
+	}
+	return out
+}
+
 func (s *Server) DecideReviewEntry(ctx context.Context, req DecideReviewEntryRequestObject) (DecideReviewEntryResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
@@ -235,6 +258,38 @@ func (s *Server) RevertReviewEntry(ctx context.Context, req RevertReviewEntryReq
 		return nil, err
 	}
 	return RevertReviewEntry200JSONResponse(reviewEntryJSON(entry)), nil
+}
+
+func (s *Server) ReidentifyReviewEntry(ctx context.Context, req ReidentifyReviewEntryRequestObject) (ReidentifyReviewEntryResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// The body is optional: sending none is how a reviewer clears an
+	// override and runs the plain derivation again.
+	var override service.ReviewOverrideDTO
+	if req.Body != nil {
+		override = service.ReviewOverrideDTO{
+			Artist: deref(req.Body.Artist),
+			Album:  deref(req.Body.Album),
+			Title:  deref(req.Body.Title),
+		}
+	}
+	entry, err := s.svc.ReidentifyEntry(ctx, uc, string(req.EntryId), override)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return ReidentifyReviewEntry400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return ReidentifyReviewEntry403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindNotFound:
+			return ReidentifyReviewEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such review entry"))}, nil
+		case service.KindConflict:
+			return ReidentifyReviewEntry409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return ReidentifyReviewEntry200JSONResponse(reviewEntryJSON(entry)), nil
 }
 
 func (s *Server) DecideReviewBulk(ctx context.Context, req DecideReviewBulkRequestObject) (DecideReviewBulkResponseObject, error) {

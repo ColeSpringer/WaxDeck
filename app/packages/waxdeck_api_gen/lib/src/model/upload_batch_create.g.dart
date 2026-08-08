@@ -13,6 +13,8 @@ class _$UploadBatchCreate extends UploadBatchCreate {
   final MediaType mediaType;
   @override
   final String? libraryPid;
+  @override
+  final bool? identify;
 
   factory _$UploadBatchCreate([
     void Function(UploadBatchCreateBuilder)? updates,
@@ -22,6 +24,7 @@ class _$UploadBatchCreate extends UploadBatchCreate {
     required this.grouping,
     required this.mediaType,
     this.libraryPid,
+    this.identify,
   }) : super._();
   @override
   UploadBatchCreate rebuild(void Function(UploadBatchCreateBuilder) updates) =>
@@ -37,7 +40,8 @@ class _$UploadBatchCreate extends UploadBatchCreate {
     return other is UploadBatchCreate &&
         grouping == other.grouping &&
         mediaType == other.mediaType &&
-        libraryPid == other.libraryPid;
+        libraryPid == other.libraryPid &&
+        identify == other.identify;
   }
 
   @override
@@ -46,6 +50,7 @@ class _$UploadBatchCreate extends UploadBatchCreate {
     _$hash = $jc(_$hash, grouping.hashCode);
     _$hash = $jc(_$hash, mediaType.hashCode);
     _$hash = $jc(_$hash, libraryPid.hashCode);
+    _$hash = $jc(_$hash, identify.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -55,7 +60,8 @@ class _$UploadBatchCreate extends UploadBatchCreate {
     return (newBuiltValueToStringHelper(r'UploadBatchCreate')
           ..add('grouping', grouping)
           ..add('mediaType', mediaType)
-          ..add('libraryPid', libraryPid))
+          ..add('libraryPid', libraryPid)
+          ..add('identify', identify))
         .toString();
   }
 }
@@ -76,6 +82,10 @@ class UploadBatchCreateBuilder
   String? get libraryPid => _$this._libraryPid;
   set libraryPid(String? libraryPid) => _$this._libraryPid = libraryPid;
 
+  bool? _identify;
+  bool? get identify => _$this._identify;
+  set identify(bool? identify) => _$this._identify = identify;
+
   UploadBatchCreateBuilder() {
     UploadBatchCreate._defaults(this);
   }
@@ -86,6 +96,7 @@ class UploadBatchCreateBuilder
       _grouping = $v.grouping;
       _mediaType = $v.mediaType;
       _libraryPid = $v.libraryPid;
+      _identify = $v.identify;
       _$v = null;
     }
     return this;
@@ -119,6 +130,7 @@ class UploadBatchCreateBuilder
             'mediaType',
           ),
           libraryPid: libraryPid,
+          identify: identify,
         );
     replace(_$result);
     return _$result;

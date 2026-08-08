@@ -58,6 +58,7 @@ void main() {
         crossfadeSeconds: 4.5,
         replayGain: true,
         radioScrobbleOptOut: true,
+        identifyOptOut: true,
         browseShowUnknown: false,
         browseSorts: <String, String>{'artist': 'label'},
         autoplay: false,
@@ -79,6 +80,7 @@ void main() {
     expect(stored.crossfadeSeconds, 4.5);
     expect(stored.replayGain, isTrue);
     expect(stored.radioScrobbleOptOut, isTrue);
+    expect(stored.identifyOptOut, isTrue);
     expect(stored.browseShowUnknown, isFalse);
     expect(stored.browseSorts, <String, String>{'artist': 'label'});
     expect(stored.autoplay, isFalse);

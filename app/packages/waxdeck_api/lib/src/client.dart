@@ -823,6 +823,19 @@ abstract interface class WaxDeckRepository {
   /// applied metadata and returns it to pending.
   Future<ReviewEntry> revertReviewEntry(String entryId);
 
+  /// `POST /review/queue/{entryId}/identify`: searches again, for the
+  /// given values in place of the ones the entry's files claim.
+  ///
+  /// Replace, not merge: what is passed becomes the whole override, and
+  /// passing nothing (or only blanks) clears it and re-runs the plain
+  /// derivation.
+  Future<ReviewEntry> reidentifyReviewEntry(
+    String entryId, {
+    String? artist,
+    String? album,
+    String? title,
+  });
+
   /// `POST /review/decide`: applies one [action] to many entries,
   /// reporting per-entry outcomes instead of failing the batch.
   Future<List<ReviewBulkOutcome>> decideReviewBulk(
@@ -883,7 +896,10 @@ abstract interface class WaxDeckRepository {
   /// the server flag byte-identical duplicates before any transfer.
   /// [batchId] joins the session to an open batch; [batchPath] is the
   /// file's directory relative to the picked folder, the `auto`
-  /// grouping's clustering hint.
+  /// grouping's clustering hint. [identify] decides whether the review
+  /// entry is matched against MusicBrainz; absent means the account's
+  /// own default, and a batch member's value is ignored for the
+  /// batch's.
   Future<UploadSession> createUpload({
     required String fileName,
     required int sizeBytes,
@@ -892,14 +908,18 @@ abstract interface class WaxDeckRepository {
     String? sha256,
     String? batchId,
     String? batchPath,
+    bool? identify,
   });
 
   /// `POST /uploads/batches`: opens a batch grouping several sessions
-  /// into review units by the declared intent.
+  /// into review units by the declared intent. [identify] decides
+  /// identification for every entry the batch opens; absent means the
+  /// account's own default.
   Future<UploadBatch> createUploadBatch({
     required UploadGrouping grouping,
     required String mediaType,
     String? libraryPid,
+    bool? identify,
   });
 
   /// `POST /uploads/batches/{batchId}/complete`: finalizes a batch -
@@ -930,12 +950,14 @@ abstract interface class WaxDeckRepository {
   /// `POST /acquisitions`: downloads audio from a source URL (a
   /// single video, or a playlist or channel) through the acquisition
   /// bridge as a background task; the files stage like uploads and
-  /// flow through the review pipeline.
+  /// flow through the review pipeline. [identify] decides whether the
+  /// entries it opens are matched; absent means the account's default.
   Future<ToolTask> createAcquisition({
     required String url,
     required MediaType mediaType,
     String? libraryPid,
     String? format,
+    bool? identify,
   });
 
   /// `GET /metadata/fields`: the metadata editor vocabulary.
@@ -3043,6 +3065,25 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<ReviewEntry> reidentifyReviewEntry(
+    String entryId, {
+    String? artist,
+    String? album,
+    String? title,
+  }) => _guard(() async {
+    final response = await _gen.getReviewApi().reidentifyReviewEntry(
+      entryId: entryId,
+      reviewIdentifyRequest: gen.ReviewIdentifyRequest(
+        (b) => b
+          ..artist = artist
+          ..album = album
+          ..title = title,
+      ),
+    );
+    return reviewEntryFromGen(_require(response.data));
+  });
+
+  @override
   Future<List<ReviewBulkOutcome>> decideReviewBulk(
     List<String> entryIds, {
     required String action,
@@ -3163,6 +3204,7 @@ class WaxDeckClient implements WaxDeckRepository {
     String? sha256,
     String? batchId,
     String? batchPath,
+    bool? identify,
   }) => _guard(() async {
     final response = await _gen.getUploadsApi().createUpload(
       uploadCreate: gen.UploadCreate(
@@ -3173,7 +3215,8 @@ class WaxDeckClient implements WaxDeckRepository {
           ..libraryPid = libraryPid
           ..sha256 = sha256
           ..batchId = batchId
-          ..batchPath = batchPath,
+          ..batchPath = batchPath
+          ..identify = identify,
       ),
     );
     return uploadSessionFromGen(_require(response.data));
@@ -3184,13 +3227,15 @@ class WaxDeckClient implements WaxDeckRepository {
     required UploadGrouping grouping,
     required String mediaType,
     String? libraryPid,
+    bool? identify,
   }) => _guard(() async {
     final response = await _gen.getUploadsApi().createUploadBatch(
       uploadBatchCreate: gen.UploadBatchCreate(
         (b) => b
           ..grouping = uploadGroupingToGen(grouping)
           ..mediaType = gen.MediaType.valueOf(mediaType)
-          ..libraryPid = libraryPid,
+          ..libraryPid = libraryPid
+          ..identify = identify,
       ),
     );
     return uploadBatchFromGen(_require(response.data));
@@ -3243,6 +3288,7 @@ class WaxDeckClient implements WaxDeckRepository {
     required MediaType mediaType,
     String? libraryPid,
     String? format,
+    bool? identify,
   }) => _guard(() async {
     final response = await _gen.getUploadsApi().createAcquisition(
       acquisitionRequest: gen.AcquisitionRequest(
@@ -3250,6 +3296,7 @@ class WaxDeckClient implements WaxDeckRepository {
           ..url = url
           ..mediaType = mediaTypeToGen(mediaType)
           ..libraryPid = libraryPid
+          ..identify = identify
           // "best" is the server default, so it rides as an absent field.
           ..format = switch (format) {
             null || '' || 'best' => null,

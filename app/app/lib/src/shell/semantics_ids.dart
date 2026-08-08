@@ -598,6 +598,11 @@ abstract final class SemanticsIds {
   static const String reviewBulkSkip = 'review-bulk-skip';
   static const String reviewDiscard = 'review-discard';
   static String reviewFilter(Object name) => 'review-filter-$name';
+  static String reviewIdentifyField(Object name) => 'review-identify-$name';
+  static const String reviewIdentifyGroup = 'review-identify-group';
+  static const String reviewIdentifySkipped = 'review-identify-skipped';
+  static const String reviewIdentifySubmit = 'review-identify-submit';
+  static const String reviewIdentifyToggle = 'review-identify-toggle';
   static const String reviewPane = 'review-pane';
   static const String reviewPaneClose = 'review-pane-close';
   static const String reviewRevert = 'review-revert';
@@ -700,6 +705,7 @@ abstract final class SemanticsIds {
 
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
   static const String acquireFormat = 'acquire-format';
+  static const String acquireIdentify = 'acquire-identify';
   static const String acquireSubmit = 'acquire-submit';
   static const String acquireTasks = 'acquire-tasks';
   static const String acquireUrl = 'acquire-url';
@@ -714,6 +720,7 @@ abstract final class SemanticsIds {
   static const String uploadGrouping = 'upload-grouping';
   static String uploadGroupingOption(Object wireName) =>
       'upload-grouping-$wireName';
+  static const String uploadIdentify = 'upload-identify';
   static const String uploadMediaConfirm = 'upload-media-confirm';
   static const String uploadMediaType = 'upload-media-type';
   static const String uploadPick = 'upload-pick';

@@ -30,6 +30,19 @@ export class Uploads {
     return this.ctx.page.locator(sem(SemanticsIds.uploadMediaConfirm));
   }
 
+  /// The per-submission identification switch on that same dialog.
+  identify(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.uploadIdentify));
+  }
+
+  /// Confirm one picked file with identification turned off, so the
+  /// entry it opens is never searched.
+  async confirmWithoutIdentifying(): Promise<void> {
+    await this.identify().waitFor({ timeout: T.nav });
+    await this.identify().click({ force: true });
+    await this.mediaConfirm().click({ force: true });
+  }
+
   /// Pick files through the real chooser.
   ///
   /// The chooser event is armed before the click that opens it: a native

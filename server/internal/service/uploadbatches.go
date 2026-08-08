@@ -53,6 +53,9 @@ type UploadBatchCreateParams struct {
 	Grouping   string
 	MediaType  string
 	LibraryPID string
+	// Identify is the batch's identification choice for every entry it
+	// opens; nil means the account default.
+	Identify *bool
 }
 
 func uploadBatchDTO(b wdb.UploadBatch) UploadBatchDTO {
@@ -103,6 +106,7 @@ func (l *Library) CreateUploadBatch(ctx context.Context, uc *UserCtx, p UploadBa
 		LibraryPID:     p.LibraryPID,
 		State:          batchOpen,
 		ReviewEntryIDs: "[]",
+		Identify:       l.resolveIdentify(ctx, uc.ID, p.Identify),
 		CreatedAtNS:    time.Now().UnixNano(),
 		ExpiresAtNS:    time.Now().Add(uploadBatchTTL).UnixNano(),
 	}
@@ -172,6 +176,11 @@ func (l *Library) batchForMember(ctx context.Context, uc *UserCtx, p *UploadCrea
 	if p.LibraryPID != b.LibraryPID {
 		return errInvalid("the session's library must match the batch's")
 	}
+	// The batch decided identification for everything in it, so a
+	// member's own value is replaced rather than validated against it.
+	// This also covers the fall-through below, where a batch that closed
+	// mid-transfer leaves the member to open its own entry.
+	p.Identify = &b.Identify
 	cleaned, err := cleanBatchPath(p.BatchPath)
 	if err != nil {
 		return err
@@ -200,24 +209,37 @@ func (l *Library) CompleteUploadBatch(ctx context.Context, uc *UserCtx, id strin
 	// click, a timed-out client trying again) must see the first
 	// call's links, not gather the same unlinked members and open
 	// duplicate entries.
-	l.batchFinalizeMu.Lock()
-	defer l.batchFinalizeMu.Unlock()
-	b, members, flipped, err := l.db.FinalizeUploadBatch(ctx, id, batchFinalized)
-	if errors.Is(err, wdb.ErrNotFound) {
-		return UploadBatchDTO{}, errNotFound("no such upload batch")
-	}
-	if err != nil {
-		return UploadBatchDTO{}, &Error{Kind: KindInternal, Err: err}
-	}
-	if !flipped && b.State == batchExpired {
-		return UploadBatchDTO{}, &Error{Kind: KindConflict,
-			Msg: "the batch expired; the files that arrived were already sent to review"}
-	}
-	b, err = l.openBatchEntries(ctx, b, members)
+	b, declined, err := func() (wdb.UploadBatch, []string, error) {
+		l.batchFinalizeMu.Lock()
+		defer l.batchFinalizeMu.Unlock()
+		b, members, flipped, err := l.db.FinalizeUploadBatch(ctx, id, batchFinalized)
+		if errors.Is(err, wdb.ErrNotFound) {
+			return b, nil, errNotFound("no such upload batch")
+		}
+		if err != nil {
+			return b, nil, &Error{Kind: KindInternal, Err: err}
+		}
+		if !flipped && b.State == batchExpired {
+			return b, nil, &Error{Kind: KindConflict,
+				Msg: "the batch expired; the files that arrived were already sent to review"}
+		}
+		return l.openBatchEntries(ctx, b, members)
+	}()
 	if err != nil {
 		return UploadBatchDTO{}, err
 	}
+	l.importDeclinedEntries(declined)
 	return uploadBatchDTO(b), nil
+}
+
+// importDeclinedEntries lands what a finalize opened for a submission
+// that declined identification. Outside the finalize lock: importing
+// needs none of it, and two hundred files would otherwise hold every
+// other account's finalize. On procCtx, as the entry opening is.
+func (l *Library) importDeclinedEntries(entryIDs []string) {
+	for _, id := range entryIDs {
+		l.importDeclinedEntry(l.procCtx, id)
+	}
 }
 
 // DrainExpiredUploadBatches processes one round of batches the
@@ -246,20 +268,28 @@ func (l *Library) DrainExpiredUploadBatches(ctx context.Context) bool {
 	return progress
 }
 
-// expireBatch finalizes one overdue or half-repaired batch under the
-// finalize lock.
+// expireBatch finalizes one overdue or half-repaired batch. Only the
+// entry opening takes the finalize lock.
 func (l *Library) expireBatch(ctx context.Context, id string) bool {
-	l.batchFinalizeMu.Lock()
-	defer l.batchFinalizeMu.Unlock()
-	fb, members, _, err := l.db.FinalizeUploadBatch(ctx, id, batchExpired)
-	if err != nil {
-		l.log.Warn("expiring upload batch", "batch", id, "err", err)
+	declined, ok := func() ([]string, bool) {
+		l.batchFinalizeMu.Lock()
+		defer l.batchFinalizeMu.Unlock()
+		fb, members, _, err := l.db.FinalizeUploadBatch(ctx, id, batchExpired)
+		if err != nil {
+			l.log.Warn("expiring upload batch", "batch", id, "err", err)
+			return nil, false
+		}
+		_, declined, err := l.openBatchEntries(ctx, fb, members)
+		if err != nil {
+			l.log.Warn("opening entries for expired batch", "batch", id, "err", err)
+			return nil, false
+		}
+		return declined, true
+	}()
+	if !ok {
 		return false
 	}
-	if _, err := l.openBatchEntries(ctx, fb, members); err != nil {
-		l.log.Warn("opening entries for expired batch", "batch", id, "err", err)
-		return false
-	}
+	l.importDeclinedEntries(declined)
 	return true
 }
 
@@ -271,9 +301,9 @@ func (l *Library) expireBatch(ctx context.Context, id string) bool {
 // are attempted to completion but reported, never swallowed: a
 // success answer with an unlinked member would let retention reap
 // its staged file while the entry still references it.
-func (l *Library) openBatchEntries(ctx context.Context, b wdb.UploadBatch, members []wdb.Upload) (wdb.UploadBatch, error) {
+func (l *Library) openBatchEntries(ctx context.Context, b wdb.UploadBatch, members []wdb.Upload) (wdb.UploadBatch, []string, error) {
 	if len(members) == 0 {
-		return b, nil
+		return b, nil, nil
 	}
 	// The batch flip is already committed; what remains is server-side
 	// completion of that decision, so it rides the process context -
@@ -297,13 +327,16 @@ func (l *Library) openBatchEntries(ctx context.Context, b wdb.UploadBatch, membe
 		docs = append(docs, memberDoc{row: m, doc: doc})
 	}
 	if len(docs) == 0 {
-		return b, nil
+		return b, nil, nil
 	}
 
 	var ids []string
 	if err := json.Unmarshal([]byte(b.ReviewEntryIDs), &ids); err != nil {
 		ids = nil
 	}
+	// Entries this call opened for a submission that declined
+	// identification, for the caller to import off the lock.
+	var declined []string
 	persist := func() error {
 		b.ReviewEntryIDs = marshalJSON(ids)
 		if err := l.db.SetUploadBatchEntries(ctx, b.ID, b.ReviewEntryIDs); err != nil {
@@ -361,9 +394,9 @@ func (l *Library) openBatchEntries(ctx context.Context, b wdb.UploadBatch, membe
 	}
 	if len(docs) == 0 {
 		if firstErr != nil {
-			return b, &Error{Kind: KindInternal, Err: firstErr}
+			return b, nil, &Error{Kind: KindInternal, Err: firstErr}
 		}
-		return b, nil
+		return b, nil, nil
 	}
 
 	// Units per the grouping intent, each a deterministic doc order.
@@ -429,9 +462,9 @@ func (l *Library) openBatchEntries(ctx context.Context, b wdb.UploadBatch, membe
 			Title:      firstNonEmpty(first.Tags["ALBUM"], first.Title),
 			Artist:     firstNonEmpty(first.Tags["ALBUMARTIST"], first.Artist),
 		}
-		entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unitDocs})
+		entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unitDocs}, b.Identify)
 		if err != nil {
-			return b, err
+			return b, declined, err
 		}
 		// Recorded before the links land: the id list is what the
 		// repair pass reads, so a crash right here leaves a batch the
@@ -453,9 +486,14 @@ func (l *Library) openBatchEntries(ctx context.Context, b wdb.UploadBatch, membe
 			}
 			l.emitUserEvent(ctx, d.row.UserID, eventUpload, d.row.ID)
 		}
+		if !b.Identify {
+			// Handed back, not imported here: the caller runs these off
+			// the finalize lock.
+			declined = append(declined, entryID)
+		}
 	}
 	if firstErr != nil {
-		return b, &Error{Kind: KindInternal, Err: firstErr}
+		return b, declined, &Error{Kind: KindInternal, Err: firstErr}
 	}
-	return b, nil
+	return b, declined, nil
 }

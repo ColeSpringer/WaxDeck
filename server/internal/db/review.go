@@ -82,6 +82,24 @@ func (d *DB) ReviewEntryByID(ctx context.Context, id string) (ReviewEntry, error
 	return e, nil
 }
 
+// UpdateIdentifyResult writes one identify run's result, compare-and-set
+// on the payload it was handed: the row is editable while the engine
+// works, and a full-row write would revert a decision taken meanwhile.
+// ok is false when the row moved; nothing was written.
+func (d *DB) UpdateIdentifyResult(ctx context.Context, e ReviewEntry, wasPayload string) (bool, error) {
+	res, err := d.w.ExecContext(ctx, `
+		UPDATE review_entries SET identifying = ?, best_mbid = ?, best_title = ?,
+			best_artist = ?, best_year = ?, best_similarity = ?, payload = ?
+		WHERE id = ? AND status = ? AND payload = ?`,
+		e.Identifying, e.BestMBID, e.BestTitle, e.BestArtist, e.BestYear,
+		e.BestSimilarity, e.Payload, e.ID, e.Status, wasPayload)
+	if err != nil {
+		return false, fmt.Errorf("db: writing identify result: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 // UpdateReviewEntry rewrites a stored entry (same id).
 func (d *DB) UpdateReviewEntry(ctx context.Context, e ReviewEntry) error {
 	res, err := d.w.ExecContext(ctx, `
@@ -229,9 +247,12 @@ func (d *DB) PendingReviewUnits(ctx context.Context) ([]PendingReviewUnit, error
 // EnqueueMatch queues an entry for the identify worker. Re-queueing an
 // already queued entry is a no-op.
 func (d *DB) EnqueueMatch(ctx context.Context, entryID string) error {
+	// A queued entry has its backoff cleared: both callers are fresh
+	// intent. The lease is left alone, so a running job is never stolen.
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO match_queue (entry_id) VALUES (?)
-		ON CONFLICT (entry_id) DO NOTHING`, entryID)
+		ON CONFLICT (entry_id) DO UPDATE SET
+			attempts = 0, next_at_ns = 0, last_error = ''`, entryID)
 	if err != nil {
 		return fmt.Errorf("db: queuing match: %w", err)
 	}
@@ -276,12 +297,31 @@ func (d *DB) CompleteMatch(ctx context.Context, id int64) error {
 }
 
 // FailMatch records a failed attempt and holds the row until retryAtNS.
+// The lease is released rather than stamped with the retry deadline:
+// lease_until_ns means "somebody holds this", next_at_ns means "not
+// before", and conflating them made a re-queue unable to clear one
+// without stealing the other.
 func (d *DB) FailMatch(ctx context.Context, id int64, msg string, retryAtNS int64) error {
 	_, err := d.w.ExecContext(ctx, `
-		UPDATE match_queue SET attempts = attempts + 1, lease_until_ns = ?, next_at_ns = ?, last_error = ?
-		WHERE id = ?`, retryAtNS, retryAtNS, msg, id)
+		UPDATE match_queue SET attempts = attempts + 1, lease_until_ns = 0,
+			next_at_ns = ?, last_error = ?
+		WHERE id = ?`, retryAtNS, msg, id)
 	if err != nil {
 		return fmt.Errorf("db: failing match: %w", err)
+	}
+	return nil
+}
+
+// RearmMatch puts a leased job straight back in the queue: same row, no
+// attempt charged, immediately re-leasable. One statement, because an
+// absent job leaves the entry identifying with nothing to clear it.
+func (d *DB) RearmMatch(ctx context.Context, id int64) error {
+	_, err := d.w.ExecContext(ctx, `
+		UPDATE match_queue SET attempts = 0, lease_until_ns = 0,
+			next_at_ns = 0, last_error = ''
+		WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("db: rearming match: %w", err)
 	}
 	return nil
 }

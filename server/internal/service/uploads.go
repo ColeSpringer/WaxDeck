@@ -96,6 +96,10 @@ type UploadCreateParams struct {
 	SHA256     string
 	BatchID    string
 	BatchPath  string
+	// Identify is the submission's identification choice; nil means the
+	// account default. Joining a batch overwrites it with the batch's,
+	// so every file in a batch is treated alike.
+	Identify *bool
 }
 
 func uploadDTO(u wdb.Upload) UploadDTO {
@@ -202,6 +206,7 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 		BatchPath:   p.BatchPath,
 		SHA256:      strings.ToLower(p.SHA256),
 		State:       uploadReceiving,
+		Identify:    l.resolveIdentify(ctx, uc.ID, p.Identify),
 		CreatedAtNS: time.Now().UnixNano(),
 		ExpiresAtNS: time.Now().Add(l.uploadRetention).UnixNano(),
 	}
@@ -496,13 +501,24 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 		Title:      firstNonEmpty(tags["ALBUM"], track.Title),
 		Artist:     firstNonEmpty(tags["ALBUMARTIST"], tags["ARTIST"]),
 	}
-	entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: []reviewTrackDoc{track}})
+	entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: []reviewTrackDoc{track}}, u.Identify)
 	if err != nil {
 		return UploadDTO{}, err
 	}
 	u.ReviewEntryID = entryID
 	if err := l.db.UpdateUpload(ctx, u); err != nil {
 		return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
+	if !u.Identify {
+		// The session is linked, so settling can find it. This rewrites
+		// the row (staged -> imported), which is why the answer is read
+		// back rather than built from the copy above.
+		// On procCtx, as batch finalize is: a client hanging up mid-copy
+		// must not leave half an import behind.
+		l.importDeclinedEntry(l.procCtx, entryID)
+		if fresh, ferr := l.db.UploadByID(ctx, u.ID); ferr == nil {
+			u = fresh
+		}
 	}
 	l.emitUserEvent(ctx, uc.ID, eventUpload, u.ID)
 	return l.hydrateUploadDuplicate(ctx, u), nil
@@ -547,14 +563,20 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 	// them or it would re-import files that are no longer staged.
 	imported := map[string]string{}
 	fail := func(err error) ([]string, error) {
-		// Persist against the freshest row: identification may have
-		// completed mid-decide, and a stale full-row write would revert
-		// its candidates and flag on an entry that stays pending.
+		// Persist against the freshest row: everything the identify side
+		// owns, since a stale full-row write would revert candidates on
+		// an entry that stays pending and lose a typed search silently.
+		// Only Tracks are this function's to write.
 		row := *entry
 		if fresh, ferr := l.db.ReviewEntryByID(ctx, entry.ID); ferr == nil {
 			var fp reviewPayload
-			if json.Unmarshal([]byte(fresh.Payload), &fp) == nil && len(fp.Candidates) > 0 {
-				payload.Candidates = fp.Candidates
+			if json.Unmarshal([]byte(fresh.Payload), &fp) == nil {
+				if len(fp.Candidates) > 0 {
+					payload.Candidates = fp.Candidates
+				}
+				payload.Override = fp.Override
+				payload.Suggested = fp.Suggested
+				payload.IdentifyDeclined = fp.IdentifyDeclined
 			}
 			row = fresh
 		}

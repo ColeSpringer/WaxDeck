@@ -511,6 +511,7 @@ Class | Method | HTTP request | Description
 [*ReviewApi*](doc/ReviewApi.md) | [**getReviewEntry**](doc/ReviewApi.md#getreviewentry) | **GET** /review/queue/{entryId} | Inspect one review entry
 [*ReviewApi*](doc/ReviewApi.md) | [**getReviewStats**](doc/ReviewApi.md#getreviewstats) | **GET** /review/stats | Review and calibration statistics
 [*ReviewApi*](doc/ReviewApi.md) | [**listReviewQueue**](doc/ReviewApi.md#listreviewqueue) | **GET** /review/queue | List review queue entries
+[*ReviewApi*](doc/ReviewApi.md) | [**reidentifyReviewEntry**](doc/ReviewApi.md#reidentifyreviewentry) | **POST** /review/queue/{entryId}/identify | Search again for a review entry
 [*ReviewApi*](doc/ReviewApi.md) | [**revertReviewEntry**](doc/ReviewApi.md#revertreviewentry) | **POST** /review/queue/{entryId}/revert | Revert an applied match
 [*ReviewApi*](doc/ReviewApi.md) | [**setLibraryMatching**](doc/ReviewApi.md#setlibrarymatching) | **PUT** /libraries/{pid}/matching | Set a library&#39;s matching mode
 [*ScrobblingApi*](doc/ScrobblingApi.md) | [**connectListenBrainz**](doc/ScrobblingApi.md#connectlistenbrainz) | **PUT** /users/me/scrobblers/listenbrainz | Connect ListenBrainz
@@ -809,6 +810,7 @@ Class | Method | HTTP request | Description
  - [ReviewEntry](doc/ReviewEntry.md)
  - [ReviewEntryDetail](doc/ReviewEntryDetail.md)
  - [ReviewEntryPage](doc/ReviewEntryPage.md)
+ - [ReviewIdentifyRequest](doc/ReviewIdentifyRequest.md)
  - [ReviewStats](doc/ReviewStats.md)
  - [ReviewTrack](doc/ReviewTrack.md)
  - [Role](doc/Role.md)

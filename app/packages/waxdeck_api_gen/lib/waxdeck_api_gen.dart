@@ -272,6 +272,7 @@ export 'package:waxdeck_api_gen/src/model/review_decision.dart';
 export 'package:waxdeck_api_gen/src/model/review_entry.dart';
 export 'package:waxdeck_api_gen/src/model/review_entry_detail.dart';
 export 'package:waxdeck_api_gen/src/model/review_entry_page.dart';
+export 'package:waxdeck_api_gen/src/model/review_identify_request.dart';
 export 'package:waxdeck_api_gen/src/model/review_stats.dart';
 export 'package:waxdeck_api_gen/src/model/review_track.dart';
 export 'package:waxdeck_api_gen/src/model/role.dart';

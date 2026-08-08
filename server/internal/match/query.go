@@ -2,12 +2,42 @@ package match
 
 import "strings"
 
-// recordingQuery derives a MusicBrainz recording search (artist, title) from a
-// track's tags. It targets the shape acquired and mislabeled files take: the
-// descriptive title carries "Artist - Track", and the artist tag is often a
-// channel or uploader rather than the performer. It returns ok=false when no
-// usable title survives.
+// SuggestedQuery exposes the tag derivation, so a surface showing what
+// the matcher read out of a source title does not reimplement it. The
+// derivation only: a typed query has no business changing a suggestion.
+func SuggestedQuery(t Track) (artist, title string, ok bool) {
+	artist, title = derivedQuery(t)
+	if title == "" {
+		return "", "", false
+	}
+	return artist, title, true
+}
+
+// recordingQuery builds a MusicBrainz recording search (artist, title) for a
+// track: what somebody typed for it where they typed something, and what its
+// tags imply everywhere else. It returns ok=false when no usable title
+// survives.
 func recordingQuery(t Track) (artist, title string, ok bool) {
+	artist, title = derivedQuery(t)
+	if q := t.Query; q != nil {
+		if v := strings.TrimSpace(q.Artist); v != "" {
+			artist = v
+		}
+		if v := strings.TrimSpace(q.Title); v != "" {
+			title = v
+		}
+	}
+	if title == "" {
+		return "", "", false
+	}
+	return artist, title, true
+}
+
+// derivedQuery reads a search out of a track's tags. It targets the shape
+// acquired and mislabeled files take: the descriptive title carries
+// "Artist - Track", and the artist tag is often a channel or uploader rather
+// than the performer.
+func derivedQuery(t Track) (artist, title string) {
 	title = strings.TrimSpace(t.Tags["TITLE"])
 	artist = strings.TrimSpace(t.Tags["ARTIST"])
 	if artist == "" {
@@ -22,10 +52,7 @@ func recordingQuery(t Track) (artist, title string, ok bool) {
 	title = cleanDescriptiveTitle(title)
 	artist = stripTopicSuffix(artist)
 	artist = stripTrailingParenthetical(artist)
-	if title == "" {
-		return "", "", false
-	}
-	return artist, title, true
+	return artist, title
 }
 
 // stripTopicSuffix removes YouTube's auto-generated " - Topic" channel suffix

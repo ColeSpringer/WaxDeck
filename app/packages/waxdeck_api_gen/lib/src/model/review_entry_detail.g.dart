@@ -10,6 +10,12 @@ class _$ReviewEntryDetail extends ReviewEntryDetail {
   @override
   final BuiltList<ReviewCandidate> candidates;
   @override
+  final ReviewIdentifyRequest? suggested;
+  @override
+  final ReviewIdentifyRequest? identifyOverride;
+  @override
+  final bool? identifyDeclined;
+  @override
   final BuiltList<ReviewTrack> tracks;
   @override
   final String id;
@@ -50,6 +56,9 @@ class _$ReviewEntryDetail extends ReviewEntryDetail {
 
   _$ReviewEntryDetail._({
     required this.candidates,
+    this.suggested,
+    this.identifyOverride,
+    this.identifyDeclined,
     required this.tracks,
     required this.id,
     required this.kind,
@@ -81,6 +90,9 @@ class _$ReviewEntryDetail extends ReviewEntryDetail {
     if (identical(other, this)) return true;
     return other is ReviewEntryDetail &&
         candidates == other.candidates &&
+        suggested == other.suggested &&
+        identifyOverride == other.identifyOverride &&
+        identifyDeclined == other.identifyDeclined &&
         tracks == other.tracks &&
         id == other.id &&
         kind == other.kind &&
@@ -104,6 +116,9 @@ class _$ReviewEntryDetail extends ReviewEntryDetail {
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, candidates.hashCode);
+    _$hash = $jc(_$hash, suggested.hashCode);
+    _$hash = $jc(_$hash, identifyOverride.hashCode);
+    _$hash = $jc(_$hash, identifyDeclined.hashCode);
     _$hash = $jc(_$hash, tracks.hashCode);
     _$hash = $jc(_$hash, id.hashCode);
     _$hash = $jc(_$hash, kind.hashCode);
@@ -129,6 +144,9 @@ class _$ReviewEntryDetail extends ReviewEntryDetail {
   String toString() {
     return (newBuiltValueToStringHelper(r'ReviewEntryDetail')
           ..add('candidates', candidates)
+          ..add('suggested', suggested)
+          ..add('identifyOverride', identifyOverride)
+          ..add('identifyDeclined', identifyDeclined)
           ..add('tracks', tracks)
           ..add('id', id)
           ..add('kind', kind)
@@ -161,6 +179,24 @@ class ReviewEntryDetailBuilder
       _$this._candidates ??= ListBuilder<ReviewCandidate>();
   set candidates(covariant ListBuilder<ReviewCandidate>? candidates) =>
       _$this._candidates = candidates;
+
+  ReviewIdentifyRequestBuilder? _suggested;
+  ReviewIdentifyRequestBuilder get suggested =>
+      _$this._suggested ??= ReviewIdentifyRequestBuilder();
+  set suggested(covariant ReviewIdentifyRequestBuilder? suggested) =>
+      _$this._suggested = suggested;
+
+  ReviewIdentifyRequestBuilder? _identifyOverride;
+  ReviewIdentifyRequestBuilder get identifyOverride =>
+      _$this._identifyOverride ??= ReviewIdentifyRequestBuilder();
+  set identifyOverride(
+    covariant ReviewIdentifyRequestBuilder? identifyOverride,
+  ) => _$this._identifyOverride = identifyOverride;
+
+  bool? _identifyDeclined;
+  bool? get identifyDeclined => _$this._identifyDeclined;
+  set identifyDeclined(covariant bool? identifyDeclined) =>
+      _$this._identifyDeclined = identifyDeclined;
 
   ListBuilder<ReviewTrack>? _tracks;
   ListBuilder<ReviewTrack> get tracks =>
@@ -246,6 +282,9 @@ class ReviewEntryDetailBuilder
     final $v = _$v;
     if ($v != null) {
       _candidates = $v.candidates.toBuilder();
+      _suggested = $v.suggested?.toBuilder();
+      _identifyOverride = $v.identifyOverride?.toBuilder();
+      _identifyDeclined = $v.identifyDeclined;
       _tracks = $v.tracks.toBuilder();
       _id = $v.id;
       _kind = $v.kind;
@@ -288,6 +327,9 @@ class ReviewEntryDetailBuilder
           _$v ??
           _$ReviewEntryDetail._(
             candidates: candidates.build(),
+            suggested: _suggested?.build(),
+            identifyOverride: _identifyOverride?.build(),
+            identifyDeclined: identifyDeclined,
             tracks: tracks.build(),
             id: BuiltValueNullFieldError.checkNotNull(
               id,
@@ -343,6 +385,11 @@ class ReviewEntryDetailBuilder
       try {
         _$failedField = 'candidates';
         candidates.build();
+        _$failedField = 'suggested';
+        _suggested?.build();
+        _$failedField = 'identifyOverride';
+        _identifyOverride?.build();
+
         _$failedField = 'tracks';
         tracks.build();
 

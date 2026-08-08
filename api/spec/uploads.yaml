@@ -416,6 +416,32 @@ components:
             are rejected, as is passing it without `batchId`.
             `fileName` stays a bare name regardless.
           example: The Wall/CD1
+        identify:
+          type: boolean
+          description: >
+            Whether the file is identified against MusicBrainz.
+            Absent means the account's own default (`identifyOptOut` in
+            preferences), which is why there is no schema default here:
+            a generated client that filled one in would erase the
+            account setting on every upload.
+
+
+            Declining means the file enters the library as delivered,
+            with no stop: completing the session imports it and files
+            its review entry `as-is` in one step, so nothing waits for
+            a decision that was already made at submission. The entry
+            is still written, decided rather than pending, so the
+            import leaves the same record as a hand-decided `as-is`
+            one; like any `as-is` it does not revert, so undoing it
+            means deleting the item from the library. If the import
+            cannot proceed - a read-only destination, a name
+            collision, a file the server already flagged as a
+            duplicate - the entry is left pending for a person
+            instead, carrying `identifyDeclined`.
+
+
+            Ignored on a batch member: the batch's own value decides
+            for every file in it.
 
     Upload:
       type: object
@@ -528,6 +554,15 @@ components:
             Members re-declare it at session creation and must
             match (a differing member value answers
             `invalid-request`).
+        identify:
+          type: boolean
+          description: >
+            Whether the batch's files are identified against
+            MusicBrainz. Absent means the account's own default
+            (`identifyOptOut` in preferences); see `UploadCreate` for
+            why there is no schema default, and for what declining
+            does. Decided once here and applied to every entry the
+            batch opens, so a member's own value is ignored.
 
     UploadBatch:
       type: object
@@ -648,3 +683,13 @@ components:
             media type are visible to the caller.
         format:
           $ref: "#/components/schemas/AcquisitionFormat"
+        identify:
+          type: boolean
+          description: >
+            Whether what this acquisition downloads is identified
+            against MusicBrainz. Absent means the account's own default
+            (`identifyOptOut` in preferences); see `UploadCreate` for
+            why there is no schema default, and for what declining
+            does. Decided when the acquisition is accepted and carried
+            by the task, so a preference changed while it downloads
+            does not move it.

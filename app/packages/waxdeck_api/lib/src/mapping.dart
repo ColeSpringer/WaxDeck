@@ -131,6 +131,7 @@ Prefs prefsFromGen(gen.Prefs prefs) {
     crossfadeSeconds: prefs.crossfadeSeconds,
     replayGain: prefs.replayGain,
     radioScrobbleOptOut: prefs.radioScrobbleOptOut,
+    identifyOptOut: prefs.identifyOptOut,
     browseShowUnknown: prefs.browseShowUnknown,
     // Carried in wire form, unrecognized values included: see
     // Prefs.browseSorts.
@@ -165,6 +166,7 @@ gen.Prefs prefsToGen(Prefs prefs) {
       ..crossfadeSeconds = prefs.crossfadeSeconds
       ..replayGain = prefs.replayGain
       ..radioScrobbleOptOut = prefs.radioScrobbleOptOut
+      ..identifyOptOut = prefs.identifyOptOut
       ..browseShowUnknown = prefs.browseShowUnknown
       ..browseSorts = sorts == null
           ? null
@@ -1227,7 +1229,15 @@ ReviewEntryDetail reviewEntryDetailFromGen(gen.ReviewEntryDetail detail) {
     decidedBy: detail.decidedBy,
     candidates: detail.candidates.map(reviewCandidateFromGen).toList(),
     tracks: detail.tracks.map(reviewTrackFromGen).toList(),
+    identifyDeclined: detail.identifyDeclined ?? false,
+    identifyOverride: reviewOverrideFromGen(detail.identifyOverride),
+    suggested: reviewOverrideFromGen(detail.suggested),
   );
+}
+
+ReviewOverride? reviewOverrideFromGen(gen.ReviewIdentifyRequest? o) {
+  if (o == null) return null;
+  return ReviewOverride(artist: o.artist, album: o.album, title: o.title);
 }
 
 ReviewEntryPage reviewEntryPageFromGen(gen.ReviewEntryPage page) {

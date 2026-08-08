@@ -71,6 +71,13 @@ func uploadBatchMember(t *testing.T, h *harness, token, path, mediaType, batchID
 // createBatchMember opens a member session without sending bytes.
 func createBatchMember(t *testing.T, h *harness, token, path, mediaType, batchID, batchPath string) Upload {
 	t.Helper()
+	return createBatchMemberWith(t, h, token, path, mediaType, batchID, batchPath, nil)
+}
+
+// createBatchMemberWith opens a member session carrying extra create
+// fields, for the cases where what a member declares is the subject.
+func createBatchMemberWith(t *testing.T, h *harness, token, path, mediaType, batchID, batchPath string, extra map[string]any) Upload {
+	t.Helper()
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +90,9 @@ func createBatchMember(t *testing.T, h *harness, token, path, mediaType, batchID
 	}
 	if batchPath != "" {
 		body["batchPath"] = batchPath
+	}
+	for k, v := range extra {
+		body[k] = v
 	}
 	resp := postJSONAs(t, h, token, "/api/v1/uploads", body)
 	if resp.StatusCode != 201 {

@@ -955,6 +955,21 @@ components:
             and wrong for a talk station whose titles happen to parse.
             Opting out silences radio only; library listening is
             unaffected.
+        identifyOptOut:
+          type: boolean
+          description: >
+            Stop identifying this account's own submissions by
+            default, and let them into the library as delivered.
+            Uploads and acquisitions are matched against MusicBrainz
+            unless the submission says otherwise, which is right for a
+            rip with whatever tags the ripper wrote and wrong for a
+            library somebody has already curated. Opting out flips the
+            default the upload and Add-from-URL sheets open with;
+            either sheet can still say so per submission, and a
+            submission that says so wins. See `UploadCreate.identify`
+            for what declining does. Administrator matching modes are
+            a separate, wider switch: a library set to `off`
+            identifies nothing regardless.
 
     AppPassword:
       type: object

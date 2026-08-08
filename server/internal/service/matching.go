@@ -121,10 +121,38 @@ type reviewCandidateDoc struct {
 	ExtraIndexes     []int                `json:"extraIndexes,omitempty"`
 }
 
+// reviewOverride is what a reviewer typed to search for in place of
+// what the files claim. Data on the entry rather than a parameter of
+// one run: identification rebuilds its query from the payload every
+// time, so storing it here is what makes a retry after a provider
+// failure search for the same thing.
+type reviewOverride struct {
+	Artist string `json:"artist,omitempty"`
+	Album  string `json:"album,omitempty"`
+	Title  string `json:"title,omitempty"`
+}
+
+// empty reports whether nothing was typed, which is how a cleared
+// override is stored: as no override at all.
+func (o reviewOverride) empty() bool {
+	return o.Artist == "" && o.Album == "" && o.Title == ""
+}
+
 // reviewPayload is the entry's stored evidence.
 type reviewPayload struct {
 	Tracks     []reviewTrackDoc     `json:"tracks"`
 	Candidates []reviewCandidateDoc `json:"candidates"`
+	// IdentifyDeclined records that the submission asked not to be
+	// identified, so a reader can tell an empty candidate list that was
+	// never searched from one that was searched and found nothing.
+	IdentifyDeclined bool `json:"identifyDeclined,omitempty"`
+	// Override is what the last re-identify asked to search for.
+	Override *reviewOverride `json:"override,omitempty"`
+	// Suggested is what the matching parse read out of a loose
+	// acquisition's source title, offered to the reviewer as a starting
+	// point. A suggestion and nothing else: nothing here is written to
+	// the files, and a stored Override supersedes it.
+	Suggested *reviewOverride `json:"suggested,omitempty"`
 }
 
 // reviewSnapshot preserves pre-apply values for revert: per catalog
@@ -167,15 +195,7 @@ func (l *Library) notifyIdentified(ctx context.Context, entryID string) {
 	if entry.Origin != reviewOriginUpload && entry.Origin != reviewOriginAcquire {
 		return
 	}
-	recipients := []string{}
-	if admins, err := l.db.EnabledAdminIDs(ctx); err == nil {
-		recipients = append(recipients, admins...)
-	} else {
-		l.log.Warn("listing admins for identification notification", "err", err)
-	}
-	if entry.UploadedBy != "" {
-		recipients = append(recipients, entry.UploadedBy)
-	}
+	recipients := l.reviewRecipients(ctx, entry.UploadedBy)
 	if entry.Status == reviewPending {
 		l.EmitNotification(ctx, "review-ready", "Ready for review",
 			entryWhat(entry.Artist, entry.Title, entry.TrackCount)+
@@ -208,28 +228,34 @@ func entryWhat(artist, title string, tracks int) string {
 	return title
 }
 
-// openReviewEntry stores a pending entry and queues it for the
-// identify worker.
-func (l *Library) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payload reviewPayload) (string, error) {
+// openReviewEntry stores a pending entry and, unless the submission
+// declined identification, queues it for the identify worker. A
+// declined entry opens with no candidates and identification never
+// started: the queue stays the audit trail and one decision imports
+// the files with the tags they arrived with.
+func (l *Library) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payload reviewPayload, identify bool) (string, error) {
 	if e.ID == "" {
 		e.ID = newReviewID()
 	}
+	payload.IdentifyDeclined = !identify
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", &Error{Kind: KindInternal, Err: err}
 	}
 	e.Status = reviewPending
-	e.Identifying = true
+	e.Identifying = identify
 	e.Payload = string(raw)
 	e.TrackCount = len(payload.Tracks)
 	e.CreatedAtNS = time.Now().UnixNano()
 	if err := l.db.InsertReviewEntry(ctx, e); err != nil {
 		return "", &Error{Kind: KindInternal, Err: err}
 	}
-	if err := l.db.EnqueueMatch(ctx, e.ID); err != nil {
-		return "", &Error{Kind: KindInternal, Err: err}
+	if identify {
+		if err := l.db.EnqueueMatch(ctx, e.ID); err != nil {
+			return "", &Error{Kind: KindInternal, Err: err}
+		}
+		l.matchWakeup()
 	}
-	l.matchWakeup()
 	// The marker is an invalidation hint - it is what makes the review
 	// screen refetch - so it is not suppressed, it is batched. A scan
 	// that discovers a library opens thousands of entries, and one
@@ -240,6 +266,142 @@ func (l *Library) openReviewEntry(ctx context.Context, e wdb.ReviewEntry, payloa
 		l.notifyReview(ctx, e.ID, e.UploadedBy)
 	}
 	return e.ID, nil
+}
+
+// resolveIdentify picks a submission's identification choice: what it
+// asked for, or the account's own default when it asked for nothing.
+// Resolved once, when the submission is accepted, so a preference
+// changed while bytes are still moving does not move what is moving.
+func (l *Library) resolveIdentify(ctx context.Context, userID string, asked *bool) bool {
+	if asked != nil {
+		return *asked
+	}
+	return !l.PrefsForUser(ctx, userID).IdentifyOptOut
+}
+
+// importDeclinedEntry files a declined submission as-is, as the button
+// would; an import that refuses leaves it pending for a person. Called
+// after the caller links its upload rows, which settling keys on.
+func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
+	entry, err := l.db.ReviewEntryByID(ctx, entryID)
+	if err != nil {
+		l.log.Warn("reading a declined entry to import", "entry", entryID, "err", err)
+		return
+	}
+	if entry.Status != reviewPending || entry.Kind != reviewKindImport {
+		return
+	}
+	var payload reviewPayload
+	if err := json.Unmarshal([]byte(entry.Payload), &payload); err != nil {
+		l.log.Warn("decoding a declined entry", "entry", entryID, "err", err)
+		return
+	}
+	if !payload.IdentifyDeclined {
+		return
+	}
+
+	// Declining is a statement about metadata, not consent to a second
+	// copy - and importing is one-way, so the duplicate warning would
+	// stop being actionable.
+	if l.entryHasFlaggedDuplicate(ctx, entryID) {
+		l.log.Info("a declined submission waits for review: it duplicates something", "entry", entryID)
+		l.notifyReviewReady(ctx, &entry)
+		return
+	}
+
+	// The same gate the decision surface applies: a library nothing may
+	// be written to leaves the entry pending rather than half-importing.
+	bareLib := ""
+	if prefix, pid, ok := parseAPIPID(entry.LibraryPID); ok && prefix == PrefixLibrary {
+		bareLib = string(pid)
+	}
+	if err := l.CheckWritable(ctx, bareLib); err != nil {
+		l.log.Info("a declined submission waits for review", "entry", entryID, "err", err)
+		l.notifyReviewReady(ctx, &entry)
+		return
+	}
+
+	warnings, err := l.importEntryFiles(ctx, &entry, &payload)
+	for _, w := range warnings {
+		l.log.Info("importing a declined submission", "entry", entryID, "warning", w)
+	}
+	if err != nil {
+		l.log.Warn("a declined submission could not import; it waits for review",
+			"entry", entryID, "err", err)
+		l.notifyReviewReady(ctx, &entry)
+		return
+	}
+	entry.Payload = marshalJSON(payload)
+	entry.Status = reviewAsIs
+	entry.DecidedAtNS = time.Now().UnixNano()
+	// The uploader decided it, at submission time. Naming them rather
+	// than leaving it blank keeps "who did this" answerable, and blank
+	// is what an auto-apply uses.
+	entry.DecidedBy = entry.UploadedBy
+	if err := l.db.UpdateReviewEntry(ctx, entry); err != nil {
+		l.log.Warn("marking a declined submission imported", "entry", entryID, "err", err)
+		return
+	}
+	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
+	l.notifyImported(ctx, &entry)
+}
+
+// entryHasFlaggedDuplicate reports whether any session behind an entry
+// arrived carrying a duplicate warning.
+func (l *Library) entryHasFlaggedDuplicate(ctx context.Context, entryID string) bool {
+	rows, err := l.db.ListUploadsByReviewEntry(ctx, entryID)
+	if err != nil {
+		// Unreadable is treated as flagged: stopping for a person is
+		// the recoverable outcome, importing twice is not.
+		l.log.Warn("checking a declined entry for duplicates", "entry", entryID, "err", err)
+		return true
+	}
+	for _, r := range rows {
+		if r.DuplicatePID != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// notifyReviewReady tells the administrators and the uploader that an
+// entry is waiting for a decision.
+func (l *Library) notifyReviewReady(ctx context.Context, entry *wdb.ReviewEntry) {
+	l.EmitNotification(ctx, "review-ready", "Ready for review",
+		entryWhat(entry.Artist, entry.Title, entry.TrackCount)+
+			" could not be imported on its own and waits for a decision.",
+		l.reviewRecipients(ctx, entry.UploadedBy))
+}
+
+// notifyImported announces files that reached the library with no
+// decision asked for.
+func (l *Library) notifyImported(ctx context.Context, entry *wdb.ReviewEntry) {
+	recipients := l.reviewRecipients(ctx, entry.UploadedBy)
+	l.EmitNotification(ctx, "import-completed", "Import finished",
+		entryWhat(entry.Artist, entry.Title, entry.TrackCount)+
+			" was added to the library with the tags it arrived with.", recipients)
+	seen := map[string]bool{}
+	for _, uid := range recipients {
+		if uid == "" || seen[uid] {
+			continue
+		}
+		seen[uid] = true
+		l.emitUserEvent(ctx, uid, eventImportCompleted, entry.ID)
+	}
+}
+
+// reviewRecipients is every administrator plus the entry's uploader.
+func (l *Library) reviewRecipients(ctx context.Context, uploadedBy string) []string {
+	recipients := []string{}
+	if admins, err := l.db.EnabledAdminIDs(ctx); err == nil {
+		recipients = append(recipients, admins...)
+	} else {
+		l.log.Warn("listing admins for a review notification", "err", err)
+	}
+	if uploadedBy != "" {
+		recipients = append(recipients, uploadedBy)
+	}
+	return recipients
 }
 
 // matchWake is the identify worker's lossy wakeup hint; the ticker is
@@ -278,7 +440,8 @@ func (l *Library) RematchItem(ctx context.Context, uc *UserCtx, apiItemPID strin
 		Title:      firstNonEmpty(it.Album, it.Title),
 		Artist:     firstNonEmpty(it.AlbumArtist, it.Artist),
 	}
-	return l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unit})
+	// A rematch is a request to identify; there is nothing else it does.
+	return l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unit}, true)
 }
 
 // albumUnit gathers an item's album siblings as review track docs. It
@@ -498,6 +661,15 @@ func (l *Library) DrainMatchQueue(ctx context.Context) bool {
 		return true
 	}
 	if err := l.identifyEntry(ctx, &entry); err != nil {
+		if errors.Is(err, errIdentifyStale) {
+			// One statement, so the job is never briefly absent: an
+			// entry marked identifying with nothing queued never
+			// recovers.
+			if rerr := l.db.RearmMatch(ctx, row.ID); rerr != nil {
+				l.log.Warn("rearming a stale match", "entry", entry.ID, "err", rerr)
+			}
+			return true
+		}
 		retry := time.Now().Add(backoffFor(row.Attempts)).UnixNano()
 		if ferr := l.db.FailMatch(ctx, row.ID, err.Error(), retry); ferr != nil {
 			l.log.Warn("recording match failure", "entry", entry.ID, "err", ferr)
@@ -560,6 +732,11 @@ func (l *Library) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) err
 	for i := range tracks {
 		payload.Tracks[i].Fingerprint = tracks[i].Fingerprint
 	}
+	// The row as it was leased. The write at the end is conditional on
+	// it, so a decision or a re-identify landing mid-run is not
+	// overwritten by this one.
+	wasPayload := entry.Payload
+	applyQueryOverride(tracks, payload.Override)
 	units := match.Cluster(tracks)
 	unit := match.Unit{Tracks: tracks}
 	if len(units) == 1 {
@@ -581,6 +758,10 @@ func (l *Library) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) err
 		payload.Candidates = append(payload.Candidates, candidateDoc(&proposal.Candidates[i], unit, indexOf))
 	}
 	entry.Identifying = false
+	// Cleared first: a re-run that finds nothing must not leave the
+	// previous best advertised, which Approve would then reach for.
+	entry.BestMBID, entry.BestTitle, entry.BestArtist = "", "", ""
+	entry.BestYear, entry.BestSimilarity = 0, 0
 	if best := proposal.Best(); best != nil {
 		entry.BestMBID = best.Release.MBID
 		entry.BestTitle = best.Release.Title
@@ -592,12 +773,25 @@ func (l *Library) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) err
 	if err != nil {
 		return err
 	}
+	// Conditional on the row this run was handed: the entry stays
+	// editable while the engine works, so a full-row write would undo a
+	// decision or drop a typed search. A miss re-arms instead.
 	entry.Payload = string(raw)
-	if err := l.db.UpdateReviewEntry(ctx, *entry); err != nil {
+	wrote, err := l.db.UpdateIdentifyResult(ctx, *entry, wasPayload)
+	if err != nil {
 		return err
 	}
+	if !wrote {
+		return errIdentifyStale
+	}
 
-	if proposal.Decision == match.DecisionAutoApply && mode == matchingAuto {
+	// Never on the reviewer's own guess: an override is what the scorer
+	// measures, so the distance collapses and a locked auto-apply would
+	// write the guess into the catalog unseen.
+	if payload.Override != nil && proposal.Decision == match.DecisionAutoApply {
+		l.log.Info("auto-apply withheld: the query was typed by a reviewer", "entry", entry.ID)
+	}
+	if payload.Override == nil && proposal.Decision == match.DecisionAutoApply && mode == matchingAuto {
 		if _, err := l.applyEntry(ctx, entry, &payload, entry.BestMBID, "", true); err != nil {
 			// A failed apply leaves the entry pending for a person; the
 			// evidence is stored either way.
@@ -607,6 +801,53 @@ func (l *Library) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) err
 	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
 	l.notifyIdentified(ctx, entry.ID)
 	return nil
+}
+
+// errIdentifyStale says the entry was decided or re-queried while the
+// engine worked, so the drain re-arms rather than failing the job.
+var errIdentifyStale = errors.New("the entry changed while it was being identified")
+
+// applyQueryOverride carries typed values two ways: a complete Query
+// for the recording search (half-filled, it re-derives and splits a
+// typed title into an artist), and unit-level tags for the album search
+// and scoring. Per-track ARTIST and TITLE are left alone - scoring
+// pairs on both - and the maps are copied, since the payload is
+// re-marshalled after the run.
+func applyQueryOverride(tracks []match.Track, o *reviewOverride) {
+	if o == nil || o.empty() {
+		return
+	}
+	single := len(tracks) == 1
+	for i := range tracks {
+		derivedArtist, derivedTitle, _ := match.SuggestedQuery(tracks[i])
+		tags := make(map[string]string, len(tracks[i].Tags)+2)
+		for k, v := range tracks[i].Tags {
+			tags[k] = v
+		}
+		if o.Artist != "" {
+			tags["ALBUMARTIST"] = o.Artist
+		}
+		if o.Album != "" {
+			tags["ALBUM"] = o.Album
+		}
+		if o.Title != "" && single {
+			tags["TITLE"] = o.Title
+		}
+		tracks[i].Tags = tags
+		tracks[i].Query = &match.TrackQuery{
+			Artist: firstNonEmpty(o.Artist, derivedArtist),
+			Title:  firstNonEmpty(titleFor(o.Title, single), derivedTitle),
+		}
+	}
+}
+
+// titleFor drops a typed track title on a unit of several files, where
+// it names none of them in particular.
+func titleFor(typed string, single bool) string {
+	if !single {
+		return ""
+	}
+	return typed
 }
 
 // candidateDoc flattens a scored match for storage, remapping track

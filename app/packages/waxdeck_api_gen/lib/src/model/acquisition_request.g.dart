@@ -15,6 +15,8 @@ class _$AcquisitionRequest extends AcquisitionRequest {
   final String? libraryPid;
   @override
   final AcquisitionFormat? format;
+  @override
+  final bool? identify;
 
   factory _$AcquisitionRequest([
     void Function(AcquisitionRequestBuilder)? updates,
@@ -25,6 +27,7 @@ class _$AcquisitionRequest extends AcquisitionRequest {
     required this.mediaType,
     this.libraryPid,
     this.format,
+    this.identify,
   }) : super._();
   @override
   AcquisitionRequest rebuild(
@@ -42,7 +45,8 @@ class _$AcquisitionRequest extends AcquisitionRequest {
         url == other.url &&
         mediaType == other.mediaType &&
         libraryPid == other.libraryPid &&
-        format == other.format;
+        format == other.format &&
+        identify == other.identify;
   }
 
   @override
@@ -52,6 +56,7 @@ class _$AcquisitionRequest extends AcquisitionRequest {
     _$hash = $jc(_$hash, mediaType.hashCode);
     _$hash = $jc(_$hash, libraryPid.hashCode);
     _$hash = $jc(_$hash, format.hashCode);
+    _$hash = $jc(_$hash, identify.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -62,7 +67,8 @@ class _$AcquisitionRequest extends AcquisitionRequest {
           ..add('url', url)
           ..add('mediaType', mediaType)
           ..add('libraryPid', libraryPid)
-          ..add('format', format))
+          ..add('format', format)
+          ..add('identify', identify))
         .toString();
   }
 }
@@ -87,6 +93,10 @@ class AcquisitionRequestBuilder
   AcquisitionFormat? get format => _$this._format;
   set format(AcquisitionFormat? format) => _$this._format = format;
 
+  bool? _identify;
+  bool? get identify => _$this._identify;
+  set identify(bool? identify) => _$this._identify = identify;
+
   AcquisitionRequestBuilder() {
     AcquisitionRequest._defaults(this);
   }
@@ -98,6 +108,7 @@ class AcquisitionRequestBuilder
       _mediaType = $v.mediaType;
       _libraryPid = $v.libraryPid;
       _format = $v.format;
+      _identify = $v.identify;
       _$v = null;
     }
     return this;
@@ -132,6 +143,7 @@ class AcquisitionRequestBuilder
           ),
           libraryPid: libraryPid,
           format: format,
+          identify: identify,
         );
     replace(_$result);
     return _$result;

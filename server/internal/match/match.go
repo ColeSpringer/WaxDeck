@@ -30,6 +30,18 @@ type Track struct {
 	// Fingerprint is a compressed Chromaprint fingerprint, empty when
 	// unavailable (no fpcalc, or the source exports none).
 	Fingerprint string
+	// Query, when set, is a recording search somebody supplied outright
+	// for this track. Nil for everything the engine derives on its own.
+	Query *TrackQuery
+}
+
+// TrackQuery is a recording search a person typed, taken verbatim per
+// field: the derivation rescues titles machines wrote, and running it
+// over a hand-typed one only damages it. An empty field falls back to
+// the derivation for that half.
+type TrackQuery struct {
+	Artist string
+	Title  string
 }
 
 // Unit is an album sized group of tracks that matches as one decision:

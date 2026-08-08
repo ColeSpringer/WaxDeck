@@ -3317,6 +3317,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/review/queue/{entryId}/identify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Review entry PID (e.g. `rv-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                entryId: components["parameters"]["ReviewEntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search again for a review entry
+         * @description Requeues a pending entry for identification, optionally searching for values the reviewer typed rather than the ones the files claim. The body **replaces** whatever override the entry already carried, so an empty body (or one with every field blank) clears it and runs the plain derivation again.
+         *
+         *     The typed values stand in for the unit's own for the search only: `artist` for both the artist and the album artist, `album` for the album title, `title` for the track title. Nothing is written to the files or to the catalog, and the entry's stored evidence keeps the tags the files actually carry - what changes is only what is looked up. The override persists on the entry, so a retry after a provider failure searches for the same thing.
+         *
+         *     Typed values are searched for verbatim. The cleanup that reads "Artist - Track" out of a video title, peels "(Official Video)", and drops a " - Topic" channel suffix exists to rescue titles a machine wrote, and it does not run over these: a title that genuinely contains " - " is searched for whole, and a typed artist is not replaced by one a descriptive title happens to name. A field left blank is not an instruction, so it falls back to what the files imply.
+         *
+         *     Pending entries only; a decided one answers `conflict`. The permission is the deciding permission: administrators may re-identify anything, other callers only entries from their own uploads.
+         */
+        post: operations["reidentifyReviewEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/review/queue/{entryId}/revert": {
         parameters: {
             query?: never;
@@ -8212,6 +8241,29 @@ export interface components {
             tracks: components["schemas"]["ReviewTrack"][];
             /** @description Scored candidates, best first. */
             candidates: components["schemas"]["ReviewCandidate"][];
+            /**
+             * @description The submission asked not to be identified, so the entry never entered the match queue. Absent means it did. What it tells a reader is why `candidates` is empty: nothing was searched, rather than searched and found nothing.
+             *
+             *     Such an entry is normally already `as-is` - declining imports the files without stopping. Finding one still `pending` means the automatic import could not proceed and it is waiting for a person.
+             */
+            identifyDeclined?: boolean;
+            /**
+             * @description What the last re-identify searched for in place of the files' own tags. Absent when nothing was typed. The `tracks` below always report the tags the files carry, never this.
+             *
+             *     Not named `override`: the Dart generator emits a property name verbatim, and `override` there collides with the language's own annotation.
+             */
+            identifyOverride?: components["schemas"]["ReviewIdentifyRequest"];
+            /** @description What the matching parse read out of the source's own title, offered as a starting point for a search rather than as a claim about the files. Present only on acquisitions of a single loose file, where the title is a video title and the artist tag is a channel; an album-shaped unit carries real tags and needs no guess. Never an album, since a loose track has none. A stored `identifyOverride` supersedes it. */
+            suggested?: components["schemas"]["ReviewIdentifyRequest"];
+        };
+        /** @description Values to search for in place of what an entry's files claim. Every field is optional and blank fields are dropped; a body with nothing in it clears a stored override. */
+        ReviewIdentifyRequest: {
+            /** @description Stands in for both the artist and the album artist while searching. */
+            artist?: string;
+            /** @description The album title to search for. */
+            album?: string;
+            /** @description The track title to search for. Ignored on a unit of several files: a track title belongs to one track, and naming them all the same thing would wreck the pairing that scores a release. Correct a multi-file unit with `artist` and `album`, which are properties of the unit. */
+            title?: string;
         };
         /** @description A decision for one review entry. */
         ReviewDecision: {
@@ -8944,6 +8996,14 @@ export interface components {
              * @example The Wall/CD1
              */
             batchPath?: string;
+            /**
+             * @description Whether the file is identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences), which is why there is no schema default here: a generated client that filled one in would erase the account setting on every upload.
+             *
+             *     Declining means the file enters the library as delivered, with no stop: completing the session imports it and files its review entry `as-is` in one step, so nothing waits for a decision that was already made at submission. The entry is still written, decided rather than pending, so the import leaves the same record as a hand-decided `as-is` one; like any `as-is` it does not revert, so undoing it means deleting the item from the library. If the import cannot proceed - a read-only destination, a name collision, a file the server already flagged as a duplicate - the entry is left pending for a person instead, carrying `identifyDeclined`.
+             *
+             *     Ignored on a batch member: the batch's own value decides for every file in it.
+             */
+            identify?: boolean;
         };
         /** @description One upload session. */
         Upload: {
@@ -9015,6 +9075,8 @@ export interface components {
             mediaType: components["schemas"]["MediaType"];
             /** @description Target library for every member; required when several libraries of the media type are visible to the caller. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). */
             libraryPid?: string;
+            /** @description Whether the batch's files are identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided once here and applied to every entry the batch opens, so a member's own value is ignored. */
+            identify?: boolean;
         };
         /** @description One upload batch. */
         UploadBatch: {
@@ -9080,6 +9142,8 @@ export interface components {
             /** @description Target library; required when several libraries of the media type are visible to the caller. */
             libraryPid?: string;
             format?: components["schemas"]["AcquisitionFormat"];
+            /** @description Whether what this acquisition downloads is identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided when the acquisition is accepted and carried by the task, so a preference changed while it downloads does not move it. */
+            identify?: boolean;
         };
         /** @description A WaxDeck account as visible to its owner. */
         User: {
@@ -9287,6 +9351,8 @@ export interface components {
             autoplay?: boolean;
             /** @description Stop scrobbling radio. Listeners with a scrobble connection have their radio segments reported by default, which is right for a music station whose stream titles are honest and wrong for a talk station whose titles happen to parse. Opting out silences radio only; library listening is unaffected. */
             radioScrobbleOptOut?: boolean;
+            /** @description Stop identifying this account's own submissions by default, and let them into the library as delivered. Uploads and acquisitions are matched against MusicBrainz unless the submission says otherwise, which is right for a rip with whatever tags the ripper wrote and wrong for a library somebody has already curated. Opting out flips the default the upload and Add-from-URL sheets open with; either sheet can still say so per submission, and a submission that says so wins. See `UploadCreate.identify` for what declining does. Administrator matching modes are a separate, wider switch: a library set to `off` identifies nothing regardless. */
+            identifyOptOut?: boolean;
         };
         /** @description One app password, without its secret. */
         AppPassword: {
@@ -15171,6 +15237,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReviewDecideResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    reidentifyReviewEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Review entry PID (e.g. `rv-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                entryId: components["parameters"]["ReviewEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReviewIdentifyRequest"];
+            };
+        };
+        responses: {
+            /** @description The entry, identifying again. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewEntry"];
                 };
             };
             400: components["responses"]["InvalidRequest"];

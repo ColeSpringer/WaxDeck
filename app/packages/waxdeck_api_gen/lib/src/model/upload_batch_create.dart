@@ -16,6 +16,7 @@ part 'upload_batch_create.g.dart';
 /// * [grouping] 
 /// * [mediaType] 
 /// * [libraryPid] - Target library for every member; required when several libraries of the media type are visible to the caller. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). 
+/// * [identify] - Whether the batch's files are identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided once here and applied to every entry the batch opens, so a member's own value is ignored. 
 @BuiltValue()
 abstract class UploadBatchCreate implements Built<UploadBatchCreate, UploadBatchCreateBuilder> {
   @BuiltValueField(wireName: r'grouping')
@@ -29,6 +30,10 @@ abstract class UploadBatchCreate implements Built<UploadBatchCreate, UploadBatch
   /// Target library for every member; required when several libraries of the media type are visible to the caller. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). 
   @BuiltValueField(wireName: r'libraryPid')
   String? get libraryPid;
+
+  /// Whether the batch's files are identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided once here and applied to every entry the batch opens, so a member's own value is ignored. 
+  @BuiltValueField(wireName: r'identify')
+  bool? get identify;
 
   UploadBatchCreate._();
 
@@ -68,6 +73,13 @@ class _$UploadBatchCreateSerializer implements PrimitiveSerializer<UploadBatchCr
       yield serializers.serialize(
         object.libraryPid,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.identify != null) {
+      yield r'identify';
+      yield serializers.serialize(
+        object.identify,
+        specifiedType: const FullType(bool),
       );
     }
   }
@@ -113,6 +125,13 @@ class _$UploadBatchCreateSerializer implements PrimitiveSerializer<UploadBatchCr
             specifiedType: const FullType(String),
           ) as String;
           result.libraryPid = valueDes;
+          break;
+        case r'identify':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.identify = valueDes;
           break;
         default:
           unhandled.add(key);

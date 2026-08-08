@@ -132,16 +132,55 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
             ],
           ),
         ],
+        // Ungated on poor results: a right-looking guess can still be
+        // the wrong release. Music only, because the identify worker
+        // returns immediately for anything else.
+        if (detail.status == 'pending' &&
+            detail.mediaType == MediaType.music) ...<Widget>[
+          const SizedBox(height: WaxSpace.s16),
+          _IdentifySearch(
+            key: ValueKey<String>(widget.entryId),
+            entryId: widget.entryId,
+            stored: detail.identifyOverride,
+            suggested: detail.suggested,
+            busy: detail.identifying,
+            // A track title names one track, so the server ignores it
+            // on a unit of several. Not drawn where it would do
+            // nothing.
+            oneTrack: detail.trackCount == 1,
+          ),
+        ],
         const SizedBox(height: WaxSpace.s20),
         const SectionHeader(title: 'Candidates'),
+        // Two different empty lists: one searched and found nothing, one
+        // never searched at all. Saying so is the difference between a
+        // dead end and an answer.
         if (detail.candidates.isEmpty)
-          const EmptyState(
-            glyph: WaxIcons.search,
-            title: 'No candidates found',
-            message:
-                'Nothing in the sources matched what these files claim. '
-                'Keep them as they are, or skip and try again later.',
-          )
+          if (detail.identifyDeclined)
+            Semantics(
+              identifier: SemanticsIds.reviewIdentifySkipped,
+              container: true,
+              // The usual one is already filed; a pending one is an
+              // import that refused, and needs telling what to do.
+              child: EmptyState(
+                glyph: WaxIcons.search,
+                title: 'Identification was skipped',
+                message: detail.status == 'pending'
+                    ? 'This submission asked to be taken as delivered, so '
+                          'nothing was searched. It could not be added on '
+                          'its own - keep the files as they are, or skip.'
+                    : 'This submission asked to be taken as delivered, so '
+                          'nothing was searched.',
+              ),
+            )
+          else
+            const EmptyState(
+              glyph: WaxIcons.search,
+              title: 'No candidates found',
+              message:
+                  'Nothing in the sources matched what these files claim. '
+                  'Keep them as they are, or skip and try again later.',
+            )
         else
           for (final c in detail.candidates)
             _CandidateTile(
@@ -250,6 +289,175 @@ class _ActionBar extends StatelessWidget {
                     ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+/// Type what to search for when the files' tags are not what the
+/// release is called. Open from the start when something is stored,
+/// which is the only way to see and undo it.
+class _IdentifySearch extends ConsumerStatefulWidget {
+  const _IdentifySearch({
+    super.key,
+    required this.entryId,
+    required this.stored,
+    required this.suggested,
+    required this.busy,
+    required this.oneTrack,
+  });
+
+  final String entryId;
+
+  /// What the last re-identify searched for; the fields open on it.
+  final ReviewOverride? stored;
+
+  /// What the matching parse read out of the source title. Fills the
+  /// fields [stored] leaves empty, and says so above them: a guess
+  /// offered as a starting point, not something anybody asserted.
+  final ReviewOverride? suggested;
+
+  /// Identification is running, so a second Search again would queue
+  /// behind the first for no benefit.
+  final bool busy;
+
+  /// The unit is a single file, so a track title is worth asking for.
+  final bool oneTrack;
+
+  @override
+  ConsumerState<_IdentifySearch> createState() => _IdentifySearchState();
+}
+
+class _IdentifySearchState extends ConsumerState<_IdentifySearch> {
+  late final _artist = TextEditingController(text: _seedOf(widget, _artistOf));
+  late final _album = TextEditingController(text: _seedOf(widget, _albumOf));
+  late final _title = TextEditingController(text: _seedOf(widget, _titleOf));
+  late bool _open = widget.stored != null || widget.suggested != null;
+
+  static String? _artistOf(ReviewOverride? o) => o?.artist;
+  static String? _albumOf(ReviewOverride? o) => o?.album;
+  static String? _titleOf(ReviewOverride? o) => o?.title;
+
+  /// What one field opens on: the stored override wherever it has a
+  /// value, the suggestion where it does not.
+  static String _seedOf(
+    _IdentifySearch w,
+    String? Function(ReviewOverride?) of,
+  ) {
+    final stored = of(w.stored);
+    if (stored != null && stored.isNotEmpty) return stored;
+    return of(w.suggested) ?? '';
+  }
+
+  @override
+  void didUpdateWidget(covariant _IdentifySearch oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _adopt(_artist, oldWidget, _artistOf);
+    _adopt(_album, oldWidget, _albumOf);
+    _adopt(_title, oldWidget, _titleOf);
+  }
+
+  /// Takes a value the server changed, into a field nobody has
+  /// touched - read strictly as "still reads what it was last handed",
+  /// because a refetch must never delete what somebody is typing.
+  void _adopt(
+    TextEditingController c,
+    _IdentifySearch old,
+    String? Function(ReviewOverride?) of,
+  ) {
+    final was = _seedOf(old, of);
+    final now = _seedOf(widget, of);
+    if (was == now || c.text != was) return;
+    c.text = now;
+  }
+
+  @override
+  void dispose() {
+    _artist.dispose();
+    _album.dispose();
+    _title.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() async {
+    // The same gate the button carries: Enter is the keyboard's version
+    // of pressing it, not a way around it.
+    if (widget.busy) return;
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    try {
+      await ref
+          .read(reviewEntryProvider(widget.entryId).notifier)
+          .reidentify(
+            artist: _artist.text,
+            album: _album.text,
+            title: widget.oneTrack ? _title.text : '',
+          );
+    } on WaxDeckApiException catch (e) {
+      messenger.show(e.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Semantics(
+      identifier: SemanticsIds.reviewIdentifyGroup,
+      container: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          WaxButton(
+            label: 'Search for something else',
+            kind: WaxButtonKind.text,
+            icon: _open ? WaxIcons.collapse : WaxIcons.expand,
+            semanticsId: SemanticsIds.reviewIdentifyToggle,
+            onPressed: () => setState(() => _open = !_open),
+          ),
+          if (_open) ...<Widget>[
+            const SizedBox(height: WaxSpace.s8),
+            Text(
+              widget.stored == null && widget.suggested != null
+                  ? 'Suggested from the source title. Looked up instead of '
+                        'what the files claim; nothing here is written to '
+                        'the files.'
+                  : 'Looked up instead of what the files claim. Nothing here '
+                        'is written to the files.',
+              style: WaxType.caption.copyWith(color: colors.textTertiary),
+            ),
+            const SizedBox(height: WaxSpace.s12),
+            WaxTextField(
+              label: 'Artist',
+              controller: _artist,
+              semanticsId: SemanticsIds.reviewIdentifyField('artist'),
+              onSubmitted: (_) => _search(),
+            ),
+            const SizedBox(height: WaxSpace.s8),
+            WaxTextField(
+              label: 'Album',
+              controller: _album,
+              semanticsId: SemanticsIds.reviewIdentifyField('album'),
+              onSubmitted: (_) => _search(),
+            ),
+            if (widget.oneTrack) ...<Widget>[
+              const SizedBox(height: WaxSpace.s8),
+              WaxTextField(
+                label: 'Track title',
+                controller: _title,
+                semanticsId: SemanticsIds.reviewIdentifyField('title'),
+                onSubmitted: (_) => _search(),
+              ),
+            ],
+            const SizedBox(height: WaxSpace.s12),
+            WaxButton(
+              label: 'Search again',
+              kind: WaxButtonKind.tonal,
+              semanticsId: SemanticsIds.reviewIdentifySubmit,
+              // Empty fields are a Search again too: that is how a
+              // stored override is cleared and the plain derivation run.
+              onPressed: widget.busy ? null : _search,
+            ),
+          ],
+        ],
       ),
     );
   }

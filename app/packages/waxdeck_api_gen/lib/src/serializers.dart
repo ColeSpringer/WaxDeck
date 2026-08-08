@@ -250,6 +250,7 @@ import 'package:waxdeck_api_gen/src/model/review_decision.dart';
 import 'package:waxdeck_api_gen/src/model/review_entry.dart';
 import 'package:waxdeck_api_gen/src/model/review_entry_detail.dart';
 import 'package:waxdeck_api_gen/src/model/review_entry_page.dart';
+import 'package:waxdeck_api_gen/src/model/review_identify_request.dart';
 import 'package:waxdeck_api_gen/src/model/review_stats.dart';
 import 'package:waxdeck_api_gen/src/model/review_track.dart';
 import 'package:waxdeck_api_gen/src/model/role.dart';
@@ -589,6 +590,7 @@ part 'serializers.g.dart';
   ReviewEntry,$ReviewEntry,
   ReviewEntryDetail,
   ReviewEntryPage,
+  ReviewIdentifyRequest,
   ReviewStats,
   ReviewTrack,
   Role,

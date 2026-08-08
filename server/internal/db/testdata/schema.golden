@@ -507,6 +507,7 @@ table upload_batches
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   column expires_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   column grouping|TEXT|notnull=1|default=<none>|pk=0
+  column identify|INTEGER|notnull=1|default=1|pk=0
   column id|TEXT|notnull=0|default=<none>|pk=1
   column library_pid|TEXT|notnull=1|default=''|pk=0
   column media_type|TEXT|notnull=1|default=<none>|pk=0
@@ -524,6 +525,7 @@ table uploads
   column duplicate_pid|TEXT|notnull=1|default=''|pk=0
   column expires_at_ns|INTEGER|notnull=1|default=0|pk=0
   column file_name|TEXT|notnull=1|default=<none>|pk=0
+  column identify|INTEGER|notnull=1|default=1|pk=0
   column id|TEXT|notnull=0|default=<none>|pk=1
   column item_pid|TEXT|notnull=1|default=''|pk=0
   column library_pid|TEXT|notnull=1|default=''|pk=0

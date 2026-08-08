@@ -120,11 +120,14 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   /// Uploads one picked file, dispatching on how its bytes are
   /// reachable: path-backed sources stream from disk, reader-backed
   /// ones window through their lazy accessor. [batchId] and
-  /// [batchPath] join the session to a batch.
+  /// [batchPath] join the session to a batch; [identify] is the
+  /// submission's identification choice, which a batch overrides with
+  /// its own.
   Future<void> uploadPicked(
     PickedAudioFile file, {
     required String mediaType,
     String? batchId,
+    bool? identify,
   }) async {
     final path = file.path;
     if (path != null) {
@@ -135,6 +138,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
         batchId: batchId,
         batchPath: file.relativeDir,
         sizeBytes: file.size,
+        identify: identify,
       );
       return;
     }
@@ -149,6 +153,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       mediaType: mediaType,
       batchId: batchId,
       batchPath: file.relativeDir,
+      identify: identify,
     );
   }
 
@@ -165,6 +170,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     String? batchId,
     String? batchPath,
     int? sizeBytes,
+    bool? identify,
   }) async {
     final size = sizeBytes ?? await localFileLength(path);
     final session = await ref
@@ -175,6 +181,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
           mediaType: mediaType,
           batchId: batchId,
           batchPath: _cleanBatchPath(batchId, batchPath),
+          identify: identify,
         );
     _upsert(session);
     ref.read(_retryPathsProvider)[session.id] = path;
@@ -193,6 +200,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     required String mediaType,
     String? batchId,
     String? batchPath,
+    bool? identify,
   }) async {
     final session = await ref
         .read(repositoryProvider)
@@ -202,6 +210,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
           mediaType: mediaType,
           batchId: batchId,
           batchPath: _cleanBatchPath(batchId, batchPath),
+          identify: identify,
         );
     _upsert(session);
     ref.read(_retryReadersProvider)[session.id] = openRead;

@@ -326,10 +326,13 @@ here waits on upstream.
   current MSVC refuses to compile it, so that one target is raised to
   C++20 privately in `app/app/windows/CMakeLists.txt` rather than the
   shared function being moved - along with
-  `_HAS_STREAM_INSERTION_OPERATORS_DELETED_IN_CXX20=0`, the STL escape
+  `_HAS_STREAM_INSERTION_OPERATORS_DELETED_IN_CXX20=1`, the STL escape
   hatch for the stream-insertion deletion C++20 brought with it (the
   plugin streams `hstring::c_str()` into `std::cerr`, and P1423R3
-  deletes that overload). Whoever raises the shared floor inherits that
+  deletes that overload; per the STL's `_HAS_*` convention the macro
+  must be 1 to keep the old overloads - 0 is the C++20 default, so
+  defining it 0 changes nothing, a mistake this repo has already made
+  once). Whoever raises the shared floor inherits that
   trap for every target that logs wide strings. Raising the floor for
   everything is the
   tidier end state, but under `/WX` a standard bump turns any fresh
@@ -494,36 +497,6 @@ here waits on upstream.
   `FilePickerPort` deliberately does not speak; the "Upload a folder"
   tile hides there (`canPickFolders`). Multi-select plus auto
   grouping covers the album case on Android meanwhile.
-- `[in-repo]` **Acquired-track metadata is cleaned for matching, not for
-  display.** For a loose track the matching engine reads an "Artist -
-  Track" title and a channel-style artist tag into a clean recording
-  query (dash split, trailing alias/producer and production-note
-  stripping) and surfaces the real release for review. The staged file's
-  own tags are left as the source delivered them (channel as artist, full
-  video title), so the review queue shows the raw title until the release
-  is approved or the user hand-edits; the same parse could pre-fill the
-  review entry's title/artist as an editable suggestion. Deferred as a
-  display nicety, not a correctness gap: manual editing and the surfaced
-  candidate both cover it, and rewriting embedded tags from a guess is the
-  riskier half.
-- `[in-repo]` **The identify search takes no hand-typed query.** An entry's
-  candidates come only from what the files claim - tags, fingerprints, and
-  the cleaned "Artist - Track" parse - and nothing lets the reviewer say
-  "search for this instead": review offers approve, as-is, unofficial, skip,
-  and discard, and an item's rematch reruns the same derivation over the
-  same tags. When the derivation misses, the person watching can see exactly
-  why and still cannot help: a Topic-channel single titled "How Ya Livin'
-  feat. Nas" recording-searches as that whole quoted phrase, MusicBrainz
-  titles the recording without the suffix, and the entry closes with zero
-  candidates. Wanted: editable artist, album title, and track title on the
-  review entry and the rematch surface, offered always rather than gated on
-  poor first results (a right-looking guess can still be the wrong release),
-  feeding a re-identify that uses the typed values in place of the derived
-  ones. The seam is narrow: identification already rebuilds its query from
-  the entry payload on every run, so a stored per-entry override consulted
-  by `recordingQuery` and the album search, plus a re-identify action that
-  requeues a pending entry, reaches the whole pipeline without touching the
-  engine.
 - `[in-repo]` **A single-track unit is scored like a mostly-missing album.**
   The distance model charges every release track no staged file matched
   (the `missing` component, weight 0.9 per track), which is right for an
@@ -545,22 +518,6 @@ here waits on upstream.
   singles, which today the missing penalty forecloses by construction;
   whether a lone track should ever auto-pick among near-tied releases is a
   wrong-release-risk decision to make explicitly, not inherit.
-- `[in-repo]` **Identification cannot be declined at submission.** Every
-  upload and acquisition that opens a review entry is queued for
-  identification unconditionally; the only off switch is the per-library
-  matching mode, an administrator's setting over everyone's content.
-  Wanted: a per-submission choice ("identify this", on by default) on the
-  upload sheet and the Add-from-URL sheet, plus a per-user default in
-  Settings, for the uploader who already curated their tags and wants the
-  files taken as delivered. The wire is small - a flag on the upload
-  session and acquisition create calls, a `Prefs` field for the default -
-  and the pipeline half is one branch: an entry opened with identification
-  declined skips the match queue and sits ready for its decision. The open
-  question to settle when building it: whether declining still stops at
-  review for a one-tap as-is confirm (safer, and the queue stays the audit
-  trail) or imports straight through as-is with no stop (closer to what
-  "leave my tags alone" means); confirm-first matches how upload review
-  works today.
 - `[in-repo]` **OpenSubsonic `explicitStatus` is not emitted for music.**
   Podcast episodes carry it now, mapped from the feed's own advisory
   flag. Music does not, and it is not the one-line addition it looks
@@ -904,6 +861,19 @@ so ("The query above already drops them; this is the belt for the pids
 the delta path tombstones"), and the same goes for the nil argument and
 `tombstoneReason`'s nil branch. Removing them would make the delta path's
 correctness depend on the snapshot query never changing.
+
+Declining identification imports with no stop, and the review queue is
+not the record that makes that safe - the entry is. The open question
+this list used to carry, whether a submission that says "leave my tags
+alone" should still confirm once in review, is settled against
+confirming: somebody who turned identification off has already said
+what to do with the files, and asking again once per album is asking
+twice. What lands is a review entry written `as-is` rather than
+`pending`, so the import keeps the same record, the same undo, and the
+same uploads-screen link a decided-by-hand one has. The stop survives
+where it earns its keep: an import that refuses - a name collision, a
+destination nothing may be written to - leaves the entry pending with
+`identifyDeclined` on it, which is the only way one is ever seen.
 
 Recorded so they are not re-read as gaps: gpodder episode delete
 actions stay echo-only (a per-device client delete must not reclaim a

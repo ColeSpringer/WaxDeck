@@ -131,6 +131,71 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /review/queue/{entryId}/identify:
+    parameters:
+      - $ref: "#/components/parameters/ReviewEntryId"
+    post:
+      operationId: reidentifyReviewEntry
+      summary: Search again for a review entry
+      description: >
+        Requeues a pending entry for identification, optionally
+        searching for values the reviewer typed rather than the ones
+        the files claim. The body **replaces** whatever override the
+        entry already carried, so an empty body (or one with every
+        field blank) clears it and runs the plain derivation again.
+
+
+        The typed values stand in for the unit's own for the search
+        only: `artist` for both the artist and the album artist,
+        `album` for the album title, `title` for the track title.
+        Nothing is written to the files or to the catalog, and the
+        entry's stored evidence keeps the tags the files actually
+        carry - what changes is only what is looked up. The override
+        persists on the entry, so a retry after a provider failure
+        searches for the same thing.
+
+
+        Typed values are searched for verbatim. The cleanup that reads
+        "Artist - Track" out of a video title, peels "(Official
+        Video)", and drops a " - Topic" channel suffix exists to
+        rescue titles a machine wrote, and it does not run over these:
+        a title that genuinely contains " - " is searched for whole,
+        and a typed artist is not replaced by one a descriptive title
+        happens to name. A field left blank is not an instruction, so
+        it falls back to what the files imply.
+
+
+        Pending entries only; a decided one answers `conflict`. The
+        permission is the deciding permission: administrators may
+        re-identify anything, other callers only entries from their
+        own uploads.
+      tags: [review]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewIdentifyRequest"
+      responses:
+        "200":
+          description: The entry, identifying again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewEntry"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /review/queue/{entryId}/revert:
     parameters:
       - $ref: "#/components/parameters/ReviewEntryId"
@@ -573,7 +638,73 @@ components:
               description: Scored candidates, best first.
               items:
                 $ref: "#/components/schemas/ReviewCandidate"
+            identifyDeclined:
+              type: boolean
+              description: >
+                The submission asked not to be identified, so the
+                entry never entered the match queue. Absent means it
+                did. What it tells a reader is why `candidates` is
+                empty: nothing was searched, rather than searched and
+                found nothing.
+
+
+                Such an entry is normally already `as-is` - declining
+                imports the files without stopping. Finding one still
+                `pending` means the automatic import could not proceed
+                and it is waiting for a person.
+            identifyOverride:
+              allOf:
+                - $ref: "#/components/schemas/ReviewIdentifyRequest"
+              description: >
+                What the last re-identify searched for in place of the
+                files' own tags. Absent when nothing was typed. The
+                `tracks` below always report the tags the files carry,
+                never this.
+
+
+                Not named `override`: the Dart generator emits a
+                property name verbatim, and `override` there collides
+                with the language's own annotation.
+            suggested:
+              allOf:
+                - $ref: "#/components/schemas/ReviewIdentifyRequest"
+              description: >
+                What the matching parse read out of the source's own
+                title, offered as a starting point for a search rather
+                than as a claim about the files. Present only on
+                acquisitions of a single loose file, where the title is
+                a video title and the artist tag is a channel; an
+                album-shaped unit carries real tags and needs no guess.
+                Never an album, since a loose track has none. A stored
+                `identifyOverride` supersedes it.
       description: One review entry with its full evidence.
+
+    ReviewIdentifyRequest:
+      type: object
+      description: >
+        Values to search for in place of what an entry's files claim.
+        Every field is optional and blank fields are dropped; a body
+        with nothing in it clears a stored override.
+      properties:
+        artist:
+          type: string
+          maxLength: 300
+          description: >
+            Stands in for both the artist and the album artist while
+            searching.
+        album:
+          type: string
+          maxLength: 300
+          description: The album title to search for.
+        title:
+          type: string
+          maxLength: 300
+          description: >
+            The track title to search for. Ignored on a unit of
+            several files: a track title belongs to one track, and
+            naming them all the same thing would wreck the pairing
+            that scores a release. Correct a multi-file unit with
+            `artist` and `album`, which are properties of the unit.
 
     ReviewDecision:
       type: object

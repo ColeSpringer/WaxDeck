@@ -17,6 +17,7 @@ part 'acquisition_request.g.dart';
 /// * [mediaType] 
 /// * [libraryPid] - Target library; required when several libraries of the media type are visible to the caller. 
 /// * [format] 
+/// * [identify] - Whether what this acquisition downloads is identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided when the acquisition is accepted and carried by the task, so a preference changed while it downloads does not move it. 
 @BuiltValue()
 abstract class AcquisitionRequest implements Built<AcquisitionRequest, AcquisitionRequestBuilder> {
   /// The source URL: a single video, a playlist, or a channel the acquisition bridge understands. 
@@ -34,6 +35,10 @@ abstract class AcquisitionRequest implements Built<AcquisitionRequest, Acquisiti
   @BuiltValueField(wireName: r'format')
   AcquisitionFormat? get format;
   // enum formatEnum {  best,  opus,  mp3,  m4a,  flac,  };
+
+  /// Whether what this acquisition downloads is identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided when the acquisition is accepted and carried by the task, so a preference changed while it downloads does not move it. 
+  @BuiltValueField(wireName: r'identify')
+  bool? get identify;
 
   AcquisitionRequest._();
 
@@ -80,6 +85,13 @@ class _$AcquisitionRequestSerializer implements PrimitiveSerializer<AcquisitionR
       yield serializers.serialize(
         object.format,
         specifiedType: const FullType(AcquisitionFormat),
+      );
+    }
+    if (object.identify != null) {
+      yield r'identify';
+      yield serializers.serialize(
+        object.identify,
+        specifiedType: const FullType(bool),
       );
     }
   }
@@ -132,6 +144,13 @@ class _$AcquisitionRequestSerializer implements PrimitiveSerializer<AcquisitionR
             specifiedType: const FullType(AcquisitionFormat),
           ) as AcquisitionFormat;
           result.format = valueDes;
+          break;
+        case r'identify':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.identify = valueDes;
           break;
         default:
           unhandled.add(key);

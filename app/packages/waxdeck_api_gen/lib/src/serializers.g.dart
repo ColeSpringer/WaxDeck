@@ -264,6 +264,7 @@ Serializers _$serializers =
           ..add(ReviewDecisionActionEnum.serializer)
           ..add(ReviewEntryDetail.serializer)
           ..add(ReviewEntryPage.serializer)
+          ..add(ReviewIdentifyRequest.serializer)
           ..add(ReviewStats.serializer)
           ..add(ReviewTrack.serializer)
           ..add(Role.serializer)

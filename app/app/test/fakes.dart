@@ -2531,6 +2531,72 @@ class FakeRepository implements WaxDeckRepository {
     return updated;
   }
 
+  /// What each re-identify asked to search for, in call order.
+  final List<({String entryId, String? artist, String? album, String? title})>
+  reidentifyCalls = [];
+
+  /// Stored by a re-identify instead of what it was sent, for the cases
+  /// where the point is the server answering with something else.
+  ReviewOverride? reidentifyStoresInstead;
+
+  @override
+  Future<ReviewEntry> reidentifyReviewEntry(
+    String entryId, {
+    String? artist,
+    String? album,
+    String? title,
+  }) async {
+    final error = reviewError;
+    if (error != null) throw error;
+    reidentifyCalls.add((
+      entryId: entryId,
+      artist: artist,
+      album: album,
+      title: title,
+    ));
+    // Stored, as the server does: recording the call alone let the
+    // whole mapping be stubbed out with every test still green.
+    // `identifying` is left alone - nothing here lowers it again, and a
+    // permanent spinner is an animation pumpAndSettle never survives.
+    final detail = reviewEntryDetails[entryId];
+    String? kept(String? v) =>
+        (v == null || v.trim().isEmpty) ? null : v.trim();
+    final sent =
+        (kept(artist) == null && kept(album) == null && kept(title) == null)
+        ? null
+        : ReviewOverride(
+            artist: kept(artist),
+            album: kept(album),
+            title: kept(title),
+          );
+    final override = reidentifyStoresInstead ?? sent;
+    if (detail != null) {
+      reviewEntryDetails[entryId] = ReviewEntryDetail(
+        id: detail.id,
+        kind: detail.kind,
+        status: detail.status,
+        mediaType: detail.mediaType,
+        origin: detail.origin,
+        title: detail.title,
+        artist: detail.artist,
+        trackCount: detail.trackCount,
+        libraryPid: detail.libraryPid,
+        uploadedBy: detail.uploadedBy,
+        identifying: detail.identifying,
+        best: detail.best,
+        appliedMbid: detail.appliedMbid,
+        createdAt: detail.createdAt,
+        decidedAt: detail.decidedAt,
+        decidedBy: detail.decidedBy,
+        candidates: detail.candidates,
+        tracks: detail.tracks,
+        suggested: detail.suggested,
+        identifyOverride: override,
+      );
+    }
+    return _reviewEntryById(entryId);
+  }
+
   @override
   Future<List<ReviewBulkOutcome>> decideReviewBulk(
     List<String> entryIds, {
@@ -2717,14 +2783,21 @@ class FakeRepository implements WaxDeckRepository {
   final List<String> completedBatchIds = [];
   int _batchSeq = 0;
 
+  /// The identification choice each create carried, in call order; null
+  /// is a submission that said nothing and left the account default.
+  final List<bool?> batchIdentifyCalls = [];
+  final List<bool?> uploadIdentifyCalls = [];
+
   @override
   Future<UploadBatch> createUploadBatch({
     required UploadGrouping grouping,
     required String mediaType,
     String? libraryPid,
+    bool? identify,
   }) async {
     final error = uploadError;
     if (error != null) throw error;
+    batchIdentifyCalls.add(identify);
     final batch = UploadBatch(
       id: 'ub-FAKE${_batchSeq++}',
       grouping: grouping,
@@ -2780,10 +2853,12 @@ class FakeRepository implements WaxDeckRepository {
     String? sha256,
     String? batchId,
     String? batchPath,
+    bool? identify,
   }) async {
     onCreateUpload?.call(fileName);
     final error = uploadError;
     if (error != null) throw error;
+    uploadIdentifyCalls.add(identify);
     final upload = UploadSession(
       id: 'up-FAKE${_uploadSeq++}',
       fileName: fileName,
@@ -2840,7 +2915,9 @@ class FakeRepository implements WaxDeckRepository {
     return updated;
   }
 
-  final List<({String url, MediaType mediaType, String? format})>
+  final List<
+    ({String url, MediaType mediaType, String? format, bool? identify})
+  >
   acquisitionCalls = [];
 
   @override
@@ -2849,10 +2926,16 @@ class FakeRepository implements WaxDeckRepository {
     required MediaType mediaType,
     String? libraryPid,
     String? format,
+    bool? identify,
   }) async {
     final error = uploadError;
     if (error != null) throw error;
-    acquisitionCalls.add((url: url, mediaType: mediaType, format: format));
+    acquisitionCalls.add((
+      url: url,
+      mediaType: mediaType,
+      format: format,
+      identify: identify,
+    ));
     final task = ToolTask(
       id: 'tt-FAKE${_toolTaskSeq++}',
       type: 'acquire',

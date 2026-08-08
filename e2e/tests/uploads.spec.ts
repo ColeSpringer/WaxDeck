@@ -143,3 +143,57 @@ test('accounts without upload rights see no upload affordances', async ({
   await expect(viewer.shell.navGroup('curation')).toHaveCount(0);
   await expect(viewer.shell.destination('uploads')).toHaveCount(0);
 });
+
+test('an upload that declines identification goes straight in', async ({ app }) => {
+  test.setTimeout(J.long);
+
+  // Counted as a delta: the stack is shared and outlives the run.
+  const soloRows = async () =>
+    ((await app.api.get('/uploads', { query: { limit: 100 } })).uploads ?? []).filter(
+      (r) => r.fileName === 'lantern-two.mp3' && !r.batchId,
+    );
+  const before = new Set((await soloRows()).map((r) => r.id));
+
+  await app.nav.enter('home');
+  // lantern-two, which nothing here imports: a second copy of an
+  // imported track collides on destination by design.
+  await app.uploads.pickFiles([uploadSrc('lantern-two.mp3')]);
+  await app.uploads.confirmWithoutIdentifying();
+
+  let entryId = '';
+  let uploadId = '';
+  await expect(async () => {
+    const fresh = (await soloRows()).filter((r) => !before.has(r.id));
+    expect(fresh, 'the picked file should stage as a session of its own').toHaveLength(1);
+    expect(fresh[0].reviewEntryId, 'completing the session opened an entry').toBeTruthy();
+    entryId = fresh[0].reviewEntryId!;
+    uploadId = fresh[0].id;
+  }).toPass({ timeout: T.fetch });
+
+  // Nothing searched and nothing asked: the entry is written filed.
+  // Polled: the entry id is committed before the import runs.
+  await expect
+    .poll(
+      async () =>
+        (await app.api.get('/review/queue/{entryId}', { path: { entryId } })).status,
+      { timeout: T.fetch, message: 'declining imports rather than queueing' },
+    )
+    .toBe('as-is');
+  const entry = await app.api.get('/review/queue/{entryId}', { path: { entryId } });
+  expect(entry.identifying, 'a declined entry never enters the match queue').toBe(false);
+  expect(entry.identifyDeclined).toBe(true);
+  expect(entry.candidates).toHaveLength(0);
+
+  // And the session settles, so its bytes stop counting against the
+  // pending-upload quota.
+  await expect
+    .poll(async () => (await soloRows()).find((r) => r.id === uploadId)?.state, {
+      timeout: T.fetch,
+      message: 'the session should settle imported',
+    })
+    .toBe('imported');
+
+  // It is out of the working queue, which is the whole point.
+  await app.nav.to('review');
+  await expect(app.review.row(entryId)).toHaveCount(0);
+});

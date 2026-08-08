@@ -38,6 +38,11 @@ type Prefs struct {
 	ReplayGain       bool    `json:"replayGain,omitempty"`
 	// RadioScrobbleOptOut silences radio scrobbling for this listener.
 	RadioScrobbleOptOut bool `json:"radioScrobbleOptOut,omitempty"`
+	// IdentifyOptOut flips the default this account's uploads and
+	// acquisitions open with. A plain bool rather than a pointer: the
+	// zero value is the default, which is what "absent means identify"
+	// already means.
+	IdentifyOptOut bool `json:"identifyOptOut,omitempty"`
 	// BrowseShowUnknown draws the bucket for items a dimension is absent
 	// from. A presentation choice, not a server filter. Pointer here and
 	// on Autoplay because absent means on and false is a choice.

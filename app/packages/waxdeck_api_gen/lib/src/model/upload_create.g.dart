@@ -21,6 +21,8 @@ class _$UploadCreate extends UploadCreate {
   final String? batchId;
   @override
   final String? batchPath;
+  @override
+  final bool? identify;
 
   factory _$UploadCreate([void Function(UploadCreateBuilder)? updates]) =>
       (UploadCreateBuilder()..update(updates))._build();
@@ -33,6 +35,7 @@ class _$UploadCreate extends UploadCreate {
     this.sha256,
     this.batchId,
     this.batchPath,
+    this.identify,
   }) : super._();
   @override
   UploadCreate rebuild(void Function(UploadCreateBuilder) updates) =>
@@ -51,7 +54,8 @@ class _$UploadCreate extends UploadCreate {
         libraryPid == other.libraryPid &&
         sha256 == other.sha256 &&
         batchId == other.batchId &&
-        batchPath == other.batchPath;
+        batchPath == other.batchPath &&
+        identify == other.identify;
   }
 
   @override
@@ -64,6 +68,7 @@ class _$UploadCreate extends UploadCreate {
     _$hash = $jc(_$hash, sha256.hashCode);
     _$hash = $jc(_$hash, batchId.hashCode);
     _$hash = $jc(_$hash, batchPath.hashCode);
+    _$hash = $jc(_$hash, identify.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -77,7 +82,8 @@ class _$UploadCreate extends UploadCreate {
           ..add('libraryPid', libraryPid)
           ..add('sha256', sha256)
           ..add('batchId', batchId)
-          ..add('batchPath', batchPath))
+          ..add('batchPath', batchPath)
+          ..add('identify', identify))
         .toString();
   }
 }
@@ -114,6 +120,10 @@ class UploadCreateBuilder
   String? get batchPath => _$this._batchPath;
   set batchPath(String? batchPath) => _$this._batchPath = batchPath;
 
+  bool? _identify;
+  bool? get identify => _$this._identify;
+  set identify(bool? identify) => _$this._identify = identify;
+
   UploadCreateBuilder() {
     UploadCreate._defaults(this);
   }
@@ -128,6 +138,7 @@ class UploadCreateBuilder
       _sha256 = $v.sha256;
       _batchId = $v.batchId;
       _batchPath = $v.batchPath;
+      _identify = $v.identify;
       _$v = null;
     }
     return this;
@@ -169,6 +180,7 @@ class UploadCreateBuilder
           sha256: sha256,
           batchId: batchId,
           batchPath: batchPath,
+          identify: identify,
         );
     replace(_$result);
     return _$result;

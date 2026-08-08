@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
@@ -56,6 +58,17 @@ type ReviewDetailDTO struct {
 	ReviewEntryDTO
 	Tracks     []reviewTrackDoc
 	Candidates []reviewCandidateDoc
+	// IdentifyDeclined says the submission asked not to be identified,
+	// which is what tells an empty candidate list apart from a search
+	// that came back empty.
+	IdentifyDeclined bool
+	// Override is what the last re-identify searched for; nil when
+	// nothing was typed.
+	Override *ReviewOverrideDTO
+	// Suggested is what the matching parse read out of a loose
+	// acquisition's source title. A suggestion, never a claim about the
+	// files; Override supersedes it.
+	Suggested *ReviewOverrideDTO
 }
 
 // ReviewStatsDTO mirrors the calibration surface.
@@ -142,7 +155,22 @@ func (l *Library) GetReviewEntry(ctx context.Context, uc *UserCtx, id string) (R
 	if err := json.Unmarshal([]byte(e.Payload), &payload); err != nil {
 		return ReviewDetailDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	detail := ReviewDetailDTO{ReviewEntryDTO: reviewDTO(e), Tracks: payload.Tracks, Candidates: payload.Candidates}
+	detail := ReviewDetailDTO{
+		ReviewEntryDTO:   reviewDTO(e),
+		Tracks:           payload.Tracks,
+		Candidates:       payload.Candidates,
+		IdentifyDeclined: payload.IdentifyDeclined,
+	}
+	if o := payload.Override; o != nil {
+		detail.Override = &ReviewOverrideDTO{
+			Artist: o.Artist, Album: o.Album, Title: o.Title,
+		}
+	}
+	if s := payload.Suggested; s != nil {
+		detail.Suggested = &ReviewOverrideDTO{
+			Artist: s.Artist, Album: s.Album, Title: s.Title,
+		}
+	}
 	// Staged paths are private server layout; show the base name.
 	for i := range detail.Tracks {
 		if detail.Tracks[i].PID == "" {
@@ -311,6 +339,76 @@ func (l *Library) RevertReviewEntry(ctx context.Context, uc *UserCtx, id string)
 	if err := l.revertEntry(ctx, &e, uc.ID); err != nil {
 		return ReviewEntryDTO{}, err
 	}
+	return reviewDTO(e), nil
+}
+
+// ReviewOverrideDTO is what a re-identify searches for in place of the
+// files' own tags. Empty fields mean "use what the files claim".
+type ReviewOverrideDTO struct {
+	Artist string
+	Album  string
+	Title  string
+}
+
+// maxOverrideField bounds one typed search value, matching the
+// contract's own maxLength.
+const maxOverrideField = 300
+
+// ReidentifyEntry stores a search override on a pending entry and
+// requeues it for the identify worker.
+//
+// The sibling of openReviewEntry's update path: the same fields move,
+// minus the insert. The override replaces whatever was there, so an
+// empty request is how a reviewer goes back to the plain derivation.
+func (l *Library) ReidentifyEntry(ctx context.Context, uc *UserCtx, id string, o ReviewOverrideDTO) (ReviewEntryDTO, error) {
+	e, err := l.reviewEntryForCaller(ctx, uc, id)
+	if err != nil {
+		return ReviewEntryDTO{}, err
+	}
+	if e.Status != reviewPending {
+		return ReviewEntryDTO{}, &Error{Kind: KindConflict, Msg: "the entry is already decided"}
+	}
+	override := reviewOverride{
+		Artist: strings.TrimSpace(o.Artist),
+		Album:  strings.TrimSpace(o.Album),
+		Title:  strings.TrimSpace(o.Title),
+	}
+	for _, v := range []string{override.Artist, override.Album, override.Title} {
+		// Runes, because the contract's maxLength counts characters:
+		// a byte check would refuse a 300-character CJK query at 100.
+		if utf8.RuneCountInString(v) > maxOverrideField {
+			return ReviewEntryDTO{}, errInvalid(fmt.Sprintf("a search value may be at most %d characters", maxOverrideField))
+		}
+	}
+	var payload reviewPayload
+	if err := json.Unmarshal([]byte(e.Payload), &payload); err != nil {
+		return ReviewEntryDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
+	if override.empty() {
+		payload.Override = nil
+	} else {
+		payload.Override = &override
+	}
+	// Searching again is asking to be identified, whatever the
+	// submission originally said - so the declined mark goes with it,
+	// and the empty state stops claiming nothing was searched.
+	payload.IdentifyDeclined = false
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return ReviewEntryDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
+	// Queued before the flag is raised: every path that clears
+	// `identifying` needs a queue row, so the other order strands a
+	// spinner for good if the enqueue never lands.
+	if err := l.db.EnqueueMatch(ctx, e.ID); err != nil {
+		return ReviewEntryDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
+	e.Payload = string(raw)
+	e.Identifying = true
+	if err := l.db.UpdateReviewEntry(ctx, e); err != nil {
+		return ReviewEntryDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
+	l.matchWakeup()
 	return reviewDTO(e), nil
 }
 

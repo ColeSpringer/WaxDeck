@@ -219,6 +219,25 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
     _refresh();
   }
 
+  /// Searches again, for the given values in place of the ones the
+  /// entry's files claim. Passing nothing clears a stored override and
+  /// re-runs the plain derivation.
+  Future<void> reidentify({
+    String? artist,
+    String? album,
+    String? title,
+  }) async {
+    await ref
+        .read(repositoryProvider)
+        .reidentifyReviewEntry(
+          entryId,
+          artist: artist,
+          album: album,
+          title: title,
+        );
+    _refresh();
+  }
+
   void _refresh() {
     if (!ref.mounted) return;
     ref.invalidate(reviewQueueProvider);

@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../providers.dart';
+import '../settings/prefs_controller.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -102,10 +103,18 @@ Future<void> acquireFromUrl(
 }) async {
   final messenger = ref.read(shellMessengerProvider.notifier);
   final router = GoRouter.of(context);
+  final identifyDefault = await _identifyDefault(ref);
+  if (!context.mounted) return;
   final request =
-      await showDialog<({String url, MediaType mediaType, String format})>(
+      await showDialog<
+        ({String url, MediaType mediaType, String format, bool identify})
+      >(
         context: context,
-        builder: (_) => AcquireDialog(initial: initial, initialUrl: initialUrl),
+        builder: (_) => AcquireDialog(
+          initial: initial,
+          initialUrl: initialUrl,
+          initialIdentify: identifyDefault,
+        ),
       );
   if (request == null) return;
   try {
@@ -115,6 +124,7 @@ Future<void> acquireFromUrl(
           url: request.url,
           mediaType: request.mediaType,
           format: request.format,
+          identify: request.identify,
         );
     ref
       ..invalidate(uploadsProvider)
@@ -168,12 +178,17 @@ Future<void> uploadPickedFiles(
   MediaType? initial,
 }) async {
   final messenger = ref.read(shellMessengerProvider.notifier);
+  final identifyDefault = await _identifyDefault(ref);
+  if (!context.mounted) return;
   final choice =
-      await showDialog<({MediaType mediaType, UploadGrouping grouping})>(
+      await showDialog<
+        ({MediaType mediaType, UploadGrouping grouping, bool identify})
+      >(
         context: context,
         builder: (_) => MediaTypeDialog(
           initial: initial ?? MediaType.music,
           fileCount: files.length,
+          initialIdentify: identifyDefault,
         ),
       );
   if (choice == null) return;
@@ -184,6 +199,7 @@ Future<void> uploadPickedFiles(
       final batch = await repository.createUploadBatch(
         grouping: choice.grouping,
         mediaType: choice.mediaType.wireName,
+        identify: choice.identify,
       );
       batchId = batch.id;
     } on WaxDeckApiException catch (e) {
@@ -199,6 +215,7 @@ Future<void> uploadPickedFiles(
             file,
             mediaType: choice.mediaType.wireName,
             batchId: batchId,
+            identify: choice.identify,
           );
     } on WaxDeckApiException catch (e) {
       messenger.show('${file.name}: ${e.message}');
@@ -216,18 +233,49 @@ Future<void> uploadPickedFiles(
   }
 }
 
-/// The URL entry dialog, returning the URL and media type or null.
+/// What the identification switch opens on. Awaited, not sampled: the
+/// provider is lazy, so a synchronous read answers the default for
+/// anybody who has not opened Settings. Null where it cannot be read,
+/// which is sent absent rather than overriding an opt-out with a guess.
+///
+/// Bounded, because the app's Dio carries no timeouts: a server that
+/// takes the socket and never answers would otherwise hold the sheet
+/// shut for good, dropping picked files and eating a shared URL the
+/// gate has already dequeued.
+Future<bool?> _identifyDefault(WidgetRef ref) async {
+  final loaded = ref.read(prefsControllerProvider);
+  if (loaded.hasValue) return !(loaded.value?.identifyOptOut ?? false);
+  return ref
+      .read(prefsControllerProvider.future)
+      .then<bool?>(
+        (prefs) => !(prefs.identifyOptOut ?? false),
+        onError: (Object _, StackTrace _) => null,
+      )
+      .timeout(_prefsSeedWait, onTimeout: () => null);
+}
+
+/// How long a sheet waits on the account preference before opening
+/// without it.
+const _prefsSeedWait = Duration(seconds: 5);
+
+/// The URL entry dialog, returning the URL, media type, format, and
+/// identification choice, or null.
 class AcquireDialog extends StatefulWidget {
   const AcquireDialog({
     super.key,
     this.initial = MediaType.music,
     this.initialUrl,
+    required this.initialIdentify,
   });
 
   final MediaType initial;
 
   /// Prefills the URL field (a share-sheet handoff).
   final String? initialUrl;
+
+  /// What the switch opens on; null is sent absent. Required, not
+  /// defaulted: a caller that forgot it would ignore the preference.
+  final bool? initialIdentify;
 
   @override
   State<AcquireDialog> createState() => _AcquireDialogState();
@@ -238,6 +286,8 @@ class _AcquireDialogState extends State<AcquireDialog> {
     text: widget.initialUrl ?? '',
   );
   late var _mediaType = widget.initial;
+  // Null is "nobody has said": drawn as on, sent absent.
+  late bool? _identify = widget.initialIdentify;
   var _format = 'best';
 
   @override
@@ -285,6 +335,15 @@ class _AcquireDialogState extends State<AcquireDialog> {
                 onChanged: (value) => setState(() => _format = value),
               ),
             ],
+            // Outside that block: a podcast has no format to pick, but
+            // it does open a review entry.
+            const SizedBox(height: WaxSpace.s12),
+            IdentifySwitch(
+              value: _identify,
+              mediaType: _mediaType,
+              semanticsId: SemanticsIds.acquireIdentify,
+              onChanged: (value) => setState(() => _identify = value),
+            ),
           ],
         ),
       ),
@@ -303,6 +362,7 @@ class _AcquireDialogState extends State<AcquireDialog> {
                   url: url,
                   mediaType: _mediaType,
                   format: _mediaType == MediaType.podcast ? 'best' : _format,
+                  identify: _identify,
                 )),
         ),
       ],
@@ -318,6 +378,7 @@ class MediaTypeDialog extends StatefulWidget {
     super.key,
     this.initial = MediaType.music,
     this.fileCount = 1,
+    required this.initialIdentify,
   });
 
   final MediaType initial;
@@ -326,12 +387,17 @@ class MediaTypeDialog extends StatefulWidget {
   /// question appears.
   final int fileCount;
 
+  /// What the identification switch opens on; see
+  /// [AcquireDialog.initialIdentify].
+  final bool? initialIdentify;
+
   @override
   State<MediaTypeDialog> createState() => _MediaTypeDialogState();
 }
 
 class _MediaTypeDialogState extends State<MediaTypeDialog> {
   late var _mediaType = widget.initial;
+  late bool? _identify = widget.initialIdentify;
   var _grouping = UploadGrouping.auto;
 
   @override
@@ -364,6 +430,13 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
                 onChanged: (value) => setState(() => _grouping = value),
               ),
             ],
+            const SizedBox(height: WaxSpace.s16),
+            IdentifySwitch(
+              value: _identify,
+              mediaType: _mediaType,
+              semanticsId: SemanticsIds.uploadIdentify,
+              onChanged: (value) => setState(() => _identify = value),
+            ),
           ],
         ),
       ),
@@ -376,9 +449,11 @@ class _MediaTypeDialogState extends State<MediaTypeDialog> {
         WaxButton(
           label: 'Upload',
           semanticsId: SemanticsIds.uploadMediaConfirm,
-          onPressed: () => Navigator.of(
-            context,
-          ).pop((mediaType: _mediaType, grouping: _grouping)),
+          onPressed: () => Navigator.of(context).pop((
+            mediaType: _mediaType,
+            grouping: _grouping,
+            identify: _identify,
+          )),
         ),
       ],
     );
@@ -465,6 +540,49 @@ class MediaTypeSelector extends StatelessWidget {
       onChanged: onChanged,
     );
   }
+}
+
+/// Does this stop for you, or go straight in as delivered? Named for
+/// whichever truth applies: matching is a music question, so elsewhere
+/// this only decides whether the submission waits.
+class IdentifySwitch extends StatelessWidget {
+  const IdentifySwitch({
+    super.key,
+    required this.value,
+    required this.mediaType,
+    required this.semanticsId,
+    required this.onChanged,
+  });
+
+  /// Null is "nobody has said", drawn as on.
+  final bool? value;
+
+  /// What is being added, which decides what this control is called.
+  final MediaType mediaType;
+
+  final String semanticsId;
+  final ValueChanged<bool> onChanged;
+
+  String get _title => mediaType == MediaType.music
+      ? 'Identify against MusicBrainz'
+      : 'Review before adding';
+
+  String get _help => mediaType == MediaType.music
+      ? 'Matches it, then waits for your decision. Off adds it with the '
+            'tags it has'
+      : 'Waits for your decision. Off adds it with the tags it has';
+
+  @override
+  Widget build(BuildContext context) => WaxSettingRow(
+    title: _title,
+    help: _help,
+    control: WaxSwitch(
+      value: value ?? true,
+      label: _title,
+      semanticsId: semanticsId,
+      onChanged: onChanged,
+    ),
+  );
 }
 
 /// The optional download-format selector for a URL acquisition. "Best"

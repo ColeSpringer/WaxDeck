@@ -7,6 +7,7 @@ import 'package:waxdeck_api_gen/src/model/review_track.dart';
 import 'package:built_collection/built_collection.dart';
 import 'package:waxdeck_api_gen/src/model/review_entry.dart';
 import 'package:waxdeck_api_gen/src/model/review_candidate.dart';
+import 'package:waxdeck_api_gen/src/model/review_identify_request.dart';
 import 'package:waxdeck_api_gen/src/model/candidate_summary.dart';
 import 'package:waxdeck_api_gen/src/model/media_type.dart';
 import 'package:built_value/built_value.dart';
@@ -35,11 +36,26 @@ part 'review_entry_detail.g.dart';
 /// * [decidedBy] - The deciding user's pid; absent on `auto-applied` entries. 
 /// * [tracks] - The unit's files in disc and track order.
 /// * [candidates] - Scored candidates, best first.
+/// * [identifyDeclined] - The submission asked not to be identified, so the entry never entered the match queue. Absent means it did. What it tells a reader is why `candidates` is empty: nothing was searched, rather than searched and found nothing.  Such an entry is normally already `as-is` - declining imports the files without stopping. Finding one still `pending` means the automatic import could not proceed and it is waiting for a person. 
+/// * [identifyOverride] - What the last re-identify searched for in place of the files' own tags. Absent when nothing was typed. The `tracks` below always report the tags the files carry, never this.  Not named `override`: the Dart generator emits a property name verbatim, and `override` there collides with the language's own annotation. 
+/// * [suggested] - What the matching parse read out of the source's own title, offered as a starting point for a search rather than as a claim about the files. Present only on acquisitions of a single loose file, where the title is a video title and the artist tag is a channel; an album-shaped unit carries real tags and needs no guess. Never an album, since a loose track has none. A stored `identifyOverride` supersedes it. 
 @BuiltValue()
 abstract class ReviewEntryDetail implements ReviewEntry, Built<ReviewEntryDetail, ReviewEntryDetailBuilder> {
   /// Scored candidates, best first.
   @BuiltValueField(wireName: r'candidates')
   BuiltList<ReviewCandidate> get candidates;
+
+  /// What the matching parse read out of the source's own title, offered as a starting point for a search rather than as a claim about the files. Present only on acquisitions of a single loose file, where the title is a video title and the artist tag is a channel; an album-shaped unit carries real tags and needs no guess. Never an album, since a loose track has none. A stored `identifyOverride` supersedes it. 
+  @BuiltValueField(wireName: r'suggested')
+  ReviewIdentifyRequest? get suggested;
+
+  /// What the last re-identify searched for in place of the files' own tags. Absent when nothing was typed. The `tracks` below always report the tags the files carry, never this.  Not named `override`: the Dart generator emits a property name verbatim, and `override` there collides with the language's own annotation. 
+  @BuiltValueField(wireName: r'identifyOverride')
+  ReviewIdentifyRequest? get identifyOverride;
+
+  /// The submission asked not to be identified, so the entry never entered the match queue. Absent means it did. What it tells a reader is why `candidates` is empty: nothing was searched, rather than searched and found nothing.  Such an entry is normally already `as-is` - declining imports the files without stopping. Finding one still `pending` means the automatic import could not proceed and it is waiting for a person. 
+  @BuiltValueField(wireName: r'identifyDeclined')
+  bool? get identifyDeclined;
 
   /// The unit's files in disc and track order.
   @BuiltValueField(wireName: r'tracks')
@@ -90,6 +106,13 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
       object.origin,
       specifiedType: const FullType(String),
     );
+    if (object.identifyOverride != null) {
+      yield r'identifyOverride';
+      yield serializers.serialize(
+        object.identifyOverride,
+        specifiedType: const FullType(ReviewIdentifyRequest),
+      );
+    }
     yield r'mediaType';
     yield serializers.serialize(
       object.mediaType,
@@ -123,6 +146,13 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
         specifiedType: const FullType(String),
       );
     }
+    if (object.identifyDeclined != null) {
+      yield r'identifyDeclined';
+      yield serializers.serialize(
+        object.identifyDeclined,
+        specifiedType: const FullType(bool),
+      );
+    }
     yield r'tracks';
     yield serializers.serialize(
       object.tracks,
@@ -138,6 +168,13 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
       object.createdAt,
       specifiedType: const FullType(DateTime),
     );
+    if (object.suggested != null) {
+      yield r'suggested';
+      yield serializers.serialize(
+        object.suggested,
+        specifiedType: const FullType(ReviewIdentifyRequest),
+      );
+    }
     yield r'trackCount';
     yield serializers.serialize(
       object.trackCount,
@@ -225,6 +262,13 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
           ) as String;
           result.origin = valueDes;
           break;
+        case r'identifyOverride':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(ReviewIdentifyRequest),
+          ) as ReviewIdentifyRequest;
+          result.identifyOverride.replace(valueDes);
+          break;
         case r'mediaType':
           final valueDes = serializers.deserialize(
             value,
@@ -260,6 +304,13 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
           ) as String;
           result.title = valueDes;
           break;
+        case r'identifyDeclined':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.identifyDeclined = valueDes;
+          break;
         case r'tracks':
           final valueDes = serializers.deserialize(
             value,
@@ -280,6 +331,13 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
             specifiedType: const FullType(DateTime),
           ) as DateTime;
           result.createdAt = valueDes;
+          break;
+        case r'suggested':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(ReviewIdentifyRequest),
+          ) as ReviewIdentifyRequest;
+          result.suggested.replace(valueDes);
           break;
         case r'trackCount':
           final valueDes = serializers.deserialize(

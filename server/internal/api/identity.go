@@ -512,6 +512,7 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 		CrossfadeSeconds:    derefFloat(req.Body.CrossfadeSeconds),
 		ReplayGain:          derefBool(req.Body.ReplayGain),
 		RadioScrobbleOptOut: derefBool(req.Body.RadioScrobbleOptOut),
+		IdentifyOptOut:      derefBool(req.Body.IdentifyOptOut),
 		// Pointers, not flattened: absent and false differ, and the
 		// document is replaced whole.
 		BrowseShowUnknown: req.Body.BrowseShowUnknown,
@@ -571,6 +572,9 @@ func prefsJSON(p service.Prefs) Prefs {
 	}
 	if p.RadioScrobbleOptOut {
 		out.RadioScrobbleOptOut = ptr(true)
+	}
+	if p.IdentifyOptOut {
+		out.IdentifyOptOut = ptr(true)
 	}
 	out.BrowseShowUnknown = p.BrowseShowUnknown
 	out.Autoplay = p.Autoplay

@@ -18,6 +18,7 @@ import 'package:waxdeck_api_gen/src/model/review_decision.dart';
 import 'package:waxdeck_api_gen/src/model/review_entry.dart';
 import 'package:waxdeck_api_gen/src/model/review_entry_detail.dart';
 import 'package:waxdeck_api_gen/src/model/review_entry_page.dart';
+import 'package:waxdeck_api_gen/src/model/review_identify_request.dart';
 import 'package:waxdeck_api_gen/src/model/review_stats.dart';
 
 class ReviewApi {
@@ -584,6 +585,114 @@ class ReviewApi {
     }
 
     return Response<ReviewEntryPage>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Search again for a review entry
+  /// Requeues a pending entry for identification, optionally searching for values the reviewer typed rather than the ones the files claim. The body **replaces** whatever override the entry already carried, so an empty body (or one with every field blank) clears it and runs the plain derivation again.  The typed values stand in for the unit&#39;s own for the search only: &#x60;artist&#x60; for both the artist and the album artist, &#x60;album&#x60; for the album title, &#x60;title&#x60; for the track title. Nothing is written to the files or to the catalog, and the entry&#39;s stored evidence keeps the tags the files actually carry - what changes is only what is looked up. The override persists on the entry, so a retry after a provider failure searches for the same thing.  Typed values are searched for verbatim. The cleanup that reads \&quot;Artist - Track\&quot; out of a video title, peels \&quot;(Official Video)\&quot;, and drops a \&quot; - Topic\&quot; channel suffix exists to rescue titles a machine wrote, and it does not run over these: a title that genuinely contains \&quot; - \&quot; is searched for whole, and a typed artist is not replaced by one a descriptive title happens to name. A field left blank is not an instruction, so it falls back to what the files imply.  Pending entries only; a decided one answers &#x60;conflict&#x60;. The permission is the deciding permission: administrators may re-identify anything, other callers only entries from their own uploads. 
+  ///
+  /// Parameters:
+  /// * [entryId] - Review entry PID (e.g. `rv-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [reviewIdentifyRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ReviewEntry] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ReviewEntry>> reidentifyReviewEntry({ 
+    required String entryId,
+    ReviewIdentifyRequest? reviewIdentifyRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/review/queue/{entryId}/identify'.replaceAll('{' r'entryId' '}', encodeQueryParameter(_serializers, entryId, const FullType(String)).toString());
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(ReviewIdentifyRequest);
+      _bodyData = reviewIdentifyRequest == null ? null : _serializers.serialize(reviewIdentifyRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ReviewEntry? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ReviewEntry),
+      ) as ReviewEntry;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ReviewEntry>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

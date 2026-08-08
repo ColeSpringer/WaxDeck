@@ -2,6 +2,7 @@
   "doc": "Uploads: batches, rows, duplicates, and the add-to-library flow.",
   "ids": {
     "acquireFormat": "acquire-format",
+    "acquireIdentify": "acquire-identify",
     "acquireSubmit": "acquire-submit",
     "acquireTasks": "acquire-tasks",
     "acquireUrl": "acquire-url",
@@ -15,6 +16,7 @@
     "uploadFromUrl": "upload-from-url",
     "uploadGrouping": "upload-grouping",
     "uploadGroupingOption": "upload-grouping-{wireName}",
+    "uploadIdentify": "upload-identify",
     "uploadMediaConfirm": "upload-media-confirm",
     "uploadMediaType": "upload-media-type",
     "uploadPick": "upload-pick",

@@ -19,6 +19,7 @@ part 'upload_create.g.dart';
 /// * [sha256] - Lowercase hex SHA-256 of the file, for the up-front exact duplicate warning and the completion integrity check. 
 /// * [batchId] - Joins the session to an open upload batch owned by the caller; its grouping intent then decides how this file reaches the review queue. The session must declare the batch's media type and library. Referencing a batch that is not open, or not the caller's, or mismatching either field, answers `invalid-request`. 
 /// * [batchPath] - The file's directory relative to the picked or dropped folder, forward-slash separated (empty or absent for a file at the top). The `auto` grouping clusters by it, so disc subfolders (`CD1`, `Disc 2`) fold into one album. Must stay relative - absolute paths and `..` segments are rejected, as is passing it without `batchId`. `fileName` stays a bare name regardless. 
+/// * [identify] - Whether the file is identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences), which is why there is no schema default here: a generated client that filled one in would erase the account setting on every upload.  Declining means the file enters the library as delivered, with no stop: completing the session imports it and files its review entry `as-is` in one step, so nothing waits for a decision that was already made at submission. The entry is still written, decided rather than pending, so the import leaves the same record as a hand-decided `as-is` one; like any `as-is` it does not revert, so undoing it means deleting the item from the library. If the import cannot proceed - a read-only destination, a name collision, a file the server already flagged as a duplicate - the entry is left pending for a person instead, carrying `identifyDeclined`.  Ignored on a batch member: the batch's own value decides for every file in it. 
 @BuiltValue()
 abstract class UploadCreate implements Built<UploadCreate, UploadCreateBuilder> {
   /// The file's name (base name only; any path is rejected). The extension picks the accepted-format check. 
@@ -48,6 +49,10 @@ abstract class UploadCreate implements Built<UploadCreate, UploadCreateBuilder> 
   /// The file's directory relative to the picked or dropped folder, forward-slash separated (empty or absent for a file at the top). The `auto` grouping clusters by it, so disc subfolders (`CD1`, `Disc 2`) fold into one album. Must stay relative - absolute paths and `..` segments are rejected, as is passing it without `batchId`. `fileName` stays a bare name regardless. 
   @BuiltValueField(wireName: r'batchPath')
   String? get batchPath;
+
+  /// Whether the file is identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences), which is why there is no schema default here: a generated client that filled one in would erase the account setting on every upload.  Declining means the file enters the library as delivered, with no stop: completing the session imports it and files its review entry `as-is` in one step, so nothing waits for a decision that was already made at submission. The entry is still written, decided rather than pending, so the import leaves the same record as a hand-decided `as-is` one; like any `as-is` it does not revert, so undoing it means deleting the item from the library. If the import cannot proceed - a read-only destination, a name collision, a file the server already flagged as a duplicate - the entry is left pending for a person instead, carrying `identifyDeclined`.  Ignored on a batch member: the batch's own value decides for every file in it. 
+  @BuiltValueField(wireName: r'identify')
+  bool? get identify;
 
   UploadCreate._();
 
@@ -113,6 +118,13 @@ class _$UploadCreateSerializer implements PrimitiveSerializer<UploadCreate> {
       yield serializers.serialize(
         object.batchPath,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.identify != null) {
+      yield r'identify';
+      yield serializers.serialize(
+        object.identify,
+        specifiedType: const FullType(bool),
       );
     }
   }
@@ -186,6 +198,13 @@ class _$UploadCreateSerializer implements PrimitiveSerializer<UploadCreate> {
             specifiedType: const FullType(String),
           ) as String;
           result.batchPath = valueDes;
+          break;
+        case r'identify':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.identify = valueDes;
           break;
         default:
           unhandled.add(key);

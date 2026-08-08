@@ -241,6 +241,7 @@ class Prefs {
     this.crossfadeSeconds,
     this.replayGain,
     this.radioScrobbleOptOut,
+    this.identifyOptOut,
     this.browseShowUnknown,
     this.browseSorts,
     this.autoplay,
@@ -296,6 +297,11 @@ class Prefs {
   /// means enrolled, the default.
   final bool? radioScrobbleOptOut;
 
+  /// Stop identifying this account's own submissions by default. Absent
+  /// means uploads and acquisitions are matched, the default; either
+  /// sheet can still say so per submission.
+  final bool? identifyOptOut;
+
   /// Whether a browse index draws the bucket for the items a dimension is
   /// absent from. Absent means shown. A presentation choice, not a server
   /// filter: the bucket still drills either way.
@@ -334,6 +340,7 @@ class Prefs {
     double? crossfadeSeconds,
     bool? replayGain,
     bool? radioScrobbleOptOut,
+    bool? identifyOptOut,
     bool? browseShowUnknown,
     Map<String, String>? browseSorts,
     bool? autoplay,
@@ -348,6 +355,7 @@ class Prefs {
       crossfadeSeconds: crossfadeSeconds ?? this.crossfadeSeconds,
       replayGain: replayGain ?? this.replayGain,
       radioScrobbleOptOut: radioScrobbleOptOut ?? this.radioScrobbleOptOut,
+      identifyOptOut: identifyOptOut ?? this.identifyOptOut,
       browseShowUnknown: browseShowUnknown ?? this.browseShowUnknown,
       browseSorts: browseSorts ?? this.browseSorts,
       autoplay: autoplay ?? this.autoplay,
@@ -2371,10 +2379,42 @@ class ReviewEntryDetail extends ReviewEntry {
     super.decidedBy,
     this.candidates = const [],
     this.tracks = const [],
+    this.identifyDeclined = false,
+    this.identifyOverride,
+    this.suggested,
   });
 
   final List<ReviewCandidate> candidates;
   final List<ReviewTrack> tracks;
+
+  /// The submission asked not to be identified, so the entry never
+  /// entered the match queue. What it tells a reader is why
+  /// [candidates] is empty: nothing was searched.
+  final bool identifyDeclined;
+
+  /// What the last re-identify searched for in place of the files' own
+  /// tags. Null when nothing was typed. [tracks] always reports the
+  /// tags the files carry, never this.
+  ///
+  /// Not named `override`: the word shadows Dart's own annotation for
+  /// any member declared after it, which is the same reason the wire
+  /// field is spelled this way.
+  final ReviewOverride? identifyOverride;
+
+  /// What the matching parse read out of a loose acquisition's source
+  /// title, offered as a starting point for a search rather than as a
+  /// claim about the files. Null on anything else.
+  /// [identifyOverride] supersedes it.
+  final ReviewOverride? suggested;
+}
+
+/// Values searched for in place of what an entry's files claim.
+class ReviewOverride {
+  const ReviewOverride({this.artist, this.album, this.title});
+
+  final String? artist;
+  final String? album;
+  final String? title;
 }
 
 /// One keyset-paginated page of review entries.

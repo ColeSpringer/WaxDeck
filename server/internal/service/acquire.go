@@ -54,7 +54,9 @@ type acquireItem struct {
 // the acquired bytes will count against the caller's upload quota. format
 // is the caller's preferred output format ("" or "best" copies the
 // source's highest-quality audio; "opus"/"mp3"/"m4a"/"flac" transcode).
-func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, mediaType, libraryPID, format string) (ToolTaskDTO, error) {
+// identify is the submission's identification choice, nil for the
+// account default.
+func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, mediaType, libraryPID, format string, identify *bool) (ToolTaskDTO, error) {
 	if err := l.CheckWritable(ctx, ""); err != nil {
 		return ToolTaskDTO{}, err
 	}
@@ -109,6 +111,10 @@ func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, med
 		MediaType:  mediaType,
 		LibraryPID: libraryPID,
 		Format:     acquireFormat,
+		// Stored as the decline rather than the choice, so a task queued
+		// before this field existed reads as "identify" instead of
+		// silently opting itself out.
+		IdentifyDeclined: !l.resolveIdentify(ctx, uc.ID, identify),
 	})
 }
 
@@ -400,8 +406,11 @@ func (l *Library) fetchAcquireItem(ctx context.Context, provider source.Provider
 		LibraryPID:    p.LibraryPID,
 		State:         uploadStaged,
 		StagingPath:   final,
-		CreatedAtNS:   time.Now().UnixNano(),
-		ExpiresAtNS:   time.Now().Add(l.uploadRetention).UnixNano(),
+		// Carried even though this path opens its own entries: an unset
+		// field writes 0, so the row would read "declined" later.
+		Identify:    !p.IdentifyDeclined,
+		CreatedAtNS: time.Now().UnixNano(),
+		ExpiresAtNS: time.Now().Add(l.uploadRetention).UnixNano(),
 	}
 	if err := l.db.InsertUpload(ctx, row); err != nil {
 		_ = os.RemoveAll(dir)
@@ -409,6 +418,32 @@ func (l *Library) fetchAcquireItem(ctx context.Context, provider source.Provider
 	}
 	l.emitUserEvent(ctx, t.UserID, eventUpload, uploadID)
 	return doc, uploadID, nil
+}
+
+// suggestedQueryFor reads what the matcher would search for out of a
+// loose acquisition's source title, so the review surface can offer it
+// as a starting point rather than making somebody retype a video title
+// they can see.
+//
+// Single-file units only. An album-shaped unit arrived with real ALBUM
+// and ARTIST tags, so a guess derived from one member's title would be
+// worse than what is already there - and the derivation is built for
+// exactly the shape a lone video has.
+func suggestedQueryFor(mediaType string, unit match.Unit) *reviewOverride {
+	// Music only: identification never runs for anything else, so an
+	// episode title would be split into a performer nobody can search.
+	if mediaType != "music" || len(unit.Tracks) != 1 {
+		return nil
+	}
+	artist, title, ok := match.SuggestedQuery(unit.Tracks[0])
+	if !ok {
+		return nil
+	}
+	s := reviewOverride{Artist: artist, Title: title}
+	if s.empty() {
+		return nil
+	}
+	return &s
 }
 
 // openAcquireEntries groups the staged files into album units and
@@ -442,7 +477,9 @@ func (l *Library) openAcquireEntries(ctx context.Context, t *wdb.ToolTask, p too
 			Title:      firstNonEmpty(first.Tags["ALBUM"], first.Title),
 			Artist:     firstNonEmpty(first.Tags["ALBUMARTIST"], first.Artist),
 		}
-		id, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unitDocs})
+		id, err := l.openReviewEntry(ctx, entry, reviewPayload{
+			Tracks: unitDocs, Suggested: suggestedQueryFor(p.MediaType, unit),
+		}, !p.IdentifyDeclined)
 		if err != nil {
 			return entryIDs, err
 		}
@@ -458,6 +495,10 @@ func (l *Library) openAcquireEntries(ctx context.Context, t *wdb.ToolTask, p too
 					l.log.Warn("linking acquired upload", "upload", uploadID, "err", err)
 				}
 			}
+		}
+		if p.IdentifyDeclined {
+			// After the links, so settling can find the sessions.
+			l.importDeclinedEntry(ctx, id)
 		}
 	}
 	return entryIDs, nil

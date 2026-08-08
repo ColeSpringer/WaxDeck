@@ -92,6 +92,7 @@ func (s *Server) CreateUpload(ctx context.Context, req CreateUploadRequestObject
 		SHA256:     deref(req.Body.Sha256),
 		BatchID:    deref(req.Body.BatchId),
 		BatchPath:  deref(req.Body.BatchPath),
+		Identify:   req.Body.Identify,
 	})
 	if err != nil {
 		switch service.KindOf(err) {
@@ -214,6 +215,7 @@ func (s *Server) CreateUploadBatch(ctx context.Context, req CreateUploadBatchReq
 		Grouping:   string(req.Body.Grouping),
 		MediaType:  string(req.Body.MediaType),
 		LibraryPID: deref(req.Body.LibraryPid),
+		Identify:   req.Body.Identify,
 	})
 	if err != nil {
 		switch service.KindOf(err) {
@@ -257,7 +259,7 @@ func (s *Server) CreateAcquisition(ctx context.Context, req CreateAcquisitionReq
 	if req.Body.Format != nil {
 		format = string(*req.Body.Format)
 	}
-	task, err := s.svc.StartAcquisition(ctx, uc, req.Body.Url, string(req.Body.MediaType), deref(req.Body.LibraryPid), format)
+	task, err := s.svc.StartAcquisition(ctx, uc, req.Body.Url, string(req.Body.MediaType), deref(req.Body.LibraryPid), format, req.Body.Identify)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid, service.KindNotFound:

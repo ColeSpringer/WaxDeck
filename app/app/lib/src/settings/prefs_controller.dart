@@ -81,6 +81,7 @@ class PrefsController extends AsyncNotifier<Prefs> {
       crossfadeSeconds: current.crossfadeSeconds,
       replayGain: current.replayGain,
       radioScrobbleOptOut: current.radioScrobbleOptOut,
+      identifyOptOut: current.identifyOptOut,
       browseShowUnknown: current.browseShowUnknown,
       browseSorts: current.browseSorts,
       autoplay: current.autoplay,
@@ -102,6 +103,12 @@ class PrefsController extends AsyncNotifier<Prefs> {
   /// Stores whether radio stays off this account's scrobblers.
   Future<void> setRadioScrobbleOptOut(bool optOut) =>
       _write((current) => current.copyWith(radioScrobbleOptOut: optOut));
+
+  /// Stores whether this account's submissions skip identification by
+  /// default. The sheets seed their switch from it and send the answer
+  /// explicitly, so a preference changed mid-upload never moves one.
+  Future<void> setIdentifyOptOut(bool optOut) =>
+      _write((current) => current.copyWith(identifyOptOut: optOut));
 
   /// Stores the pinned radio stations, in dial order.
   ///

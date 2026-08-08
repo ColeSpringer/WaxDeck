@@ -24,6 +24,7 @@ part 'prefs.g.dart';
 /// * [browseSorts] - The order each browse index opens in, keyed by the dimension name `GET /library/browse` spells (`genre`, `artist`, `credit-artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a `tag.<KEY>` dimension); values are that endpoint's `sort` values. Sparse: a dimension with no entry opens in the client's own default, so a write must merge rather than replace. Capped at 32 entries. 
 /// * [autoplay] - Whether playback may start with no gesture behind it - a queue another device hands over through Connect. Absent means allowed. Off means the client loads what it was asked for and waits to be tapped, which is what a browser enforces on the web build anyway. It does not gate a gesture made somewhere other than the screen: a browse-tree tap on a head unit still plays. 
 /// * [radioScrobbleOptOut] - Stop scrobbling radio. Listeners with a scrobble connection have their radio segments reported by default, which is right for a music station whose stream titles are honest and wrong for a talk station whose titles happen to parse. Opting out silences radio only; library listening is unaffected. 
+/// * [identifyOptOut] - Stop identifying this account's own submissions by default, and let them into the library as delivered. Uploads and acquisitions are matched against MusicBrainz unless the submission says otherwise, which is right for a rip with whatever tags the ripper wrote and wrong for a library somebody has already curated. Opting out flips the default the upload and Add-from-URL sheets open with; either sheet can still say so per submission, and a submission that says so wins. See `UploadCreate.identify` for what declining does. Administrator matching modes are a separate, wider switch: a library set to `off` identifies nothing regardless. 
 @BuiltValue()
 abstract class Prefs implements Built<Prefs, PrefsBuilder> {
   /// IANA timezone name (for example `Europe/Amsterdam`). Drives streaks, heatmaps, and other calendar-bucketed statistics. 
@@ -75,6 +76,10 @@ abstract class Prefs implements Built<Prefs, PrefsBuilder> {
   /// Stop scrobbling radio. Listeners with a scrobble connection have their radio segments reported by default, which is right for a music station whose stream titles are honest and wrong for a talk station whose titles happen to parse. Opting out silences radio only; library listening is unaffected. 
   @BuiltValueField(wireName: r'radioScrobbleOptOut')
   bool? get radioScrobbleOptOut;
+
+  /// Stop identifying this account's own submissions by default, and let them into the library as delivered. Uploads and acquisitions are matched against MusicBrainz unless the submission says otherwise, which is right for a rip with whatever tags the ripper wrote and wrong for a library somebody has already curated. Opting out flips the default the upload and Add-from-URL sheets open with; either sheet can still say so per submission, and a submission that says so wins. See `UploadCreate.identify` for what declining does. Administrator matching modes are a separate, wider switch: a library set to `off` identifies nothing regardless. 
+  @BuiltValueField(wireName: r'identifyOptOut')
+  bool? get identifyOptOut;
 
   Prefs._();
 
@@ -180,6 +185,13 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
       yield r'radioScrobbleOptOut';
       yield serializers.serialize(
         object.radioScrobbleOptOut,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.identifyOptOut != null) {
+      yield r'identifyOptOut';
+      yield serializers.serialize(
+        object.identifyOptOut,
         specifiedType: const FullType(bool),
       );
     }
@@ -289,6 +301,13 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.radioScrobbleOptOut = valueDes;
+          break;
+        case r'identifyOptOut':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.identifyOptOut = valueDes;
           break;
         default:
           unhandled.add(key);

@@ -79,3 +79,57 @@ test('review a queued match with the keyboard', async ({ app }) => {
     )
     .toBe('as-is');
 });
+
+test('a reviewer types what to search for and the entry keeps it', async ({ app }) => {
+  test.setTimeout(J.long);
+
+  // Covers the wire and the surface, not what a provider would answer:
+  // the Go suite drives that against a recording fake.
+  const music = await app.api.get('/library/items', {
+    query: { mediaType: 'music', limit: 1 },
+  });
+  const pid = (music.items ?? [])[0]?.pid;
+  expect(pid, 'the fixture library should hold a music item to rematch').toBeTruthy();
+  const entryId = (await app.api.post('/items/{pid}/rematch', { path: { pid: pid! } }))
+    .reviewEntryId;
+
+  await expect
+    .poll(
+      async () => {
+        const entry = await app.api.tryGet('/review/queue/{entryId}', {
+          path: { entryId },
+        });
+        if (entry === undefined) return 'missing';
+        return entry.identifying ? 'identifying' : entry.status;
+      },
+      { timeout: T.fetch, message: 'the entry should settle to pending' },
+    )
+    .toBe('pending');
+
+  await app.nav.to('review');
+  await expect(async () => {
+    await app.review.open(entryId);
+    expect(app.nav.location(), 'this row is what opened').toContain(entryId);
+  }).toPass({ timeout: T.fetch });
+
+  await app.review.identifyAs({ artist: 'Nas', album: 'Stillmatic' });
+
+  // The override survives the run: it is data on the entry.
+  await expect
+    .poll(
+      async () => {
+        const entry = await app.api.tryGet('/review/queue/{entryId}', {
+          path: { entryId },
+        });
+        if (entry === undefined || entry.identifying) return undefined;
+        return entry.identifyOverride;
+      },
+      { timeout: T.fetch, message: 'the typed values should stick to the entry' },
+    )
+    .toEqual({ artist: 'Nas', album: 'Stillmatic' });
+
+  // The files are untouched: an override changes only what is sought.
+  const after = await app.api.get('/review/queue/{entryId}', { path: { entryId } });
+  expect(after.tracks.length).toBeGreaterThan(0);
+  expect(after.tracks[0].title).not.toBe('Stillmatic');
+});

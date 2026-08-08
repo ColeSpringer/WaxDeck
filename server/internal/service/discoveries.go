@@ -264,7 +264,11 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 			Title:      title,
 			Artist:     artist,
 		}
-		entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unit})
+		// A scan discovery exists to be identified; the per-submission
+		// opt-out is about what somebody hands the server, and nobody
+		// handed this over. The library's own matching mode is the
+		// switch that covers a scan.
+		entryID, err := l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unit}, true)
 		if err != nil {
 			l.log.Warn("discovery: opening a review entry", "item", it.PID, "err", err)
 			continue

@@ -33,21 +33,25 @@ type Upload struct {
 	DuplicateKind string
 	// ItemPID links an imported session to the catalog item it became,
 	// which is what grants the uploader item-scoped editing rights.
-	ItemPID     string
+	ItemPID string
+	// Identify carries the submission's identification choice from
+	// session creation to the review entry this session opens.
+	Identify    bool
 	CreatedAtNS int64
 	ExpiresAtNS int64
 }
 
 const uploadCols = `id, user_id, file_name, size_bytes, received_bytes, media_type,
 	library_pid, batch_id, batch_path, sha256, state, staging_path, review_entry_id,
-	track_doc, duplicate_pid, duplicate_kind, item_pid, created_at_ns, expires_at_ns`
+	track_doc, duplicate_pid, duplicate_kind, item_pid, identify, created_at_ns,
+	expires_at_ns`
 
 func scanUpload(row interface{ Scan(...any) error }) (Upload, error) {
 	var u Upload
 	err := row.Scan(&u.ID, &u.UserID, &u.FileName, &u.SizeBytes, &u.ReceivedBytes,
 		&u.MediaType, &u.LibraryPID, &u.BatchID, &u.BatchPath, &u.SHA256, &u.State,
 		&u.StagingPath, &u.ReviewEntryID, &u.TrackDoc, &u.DuplicatePID,
-		&u.DuplicateKind, &u.ItemPID, &u.CreatedAtNS, &u.ExpiresAtNS)
+		&u.DuplicateKind, &u.ItemPID, &u.Identify, &u.CreatedAtNS, &u.ExpiresAtNS)
 	return u, err
 }
 
@@ -55,11 +59,11 @@ func scanUpload(row interface{ Scan(...any) error }) (Upload, error) {
 func (d *DB) InsertUpload(ctx context.Context, u Upload) error {
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO uploads (`+uploadCols+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, u.UserID, u.FileName, u.SizeBytes, u.ReceivedBytes, u.MediaType,
 		u.LibraryPID, u.BatchID, u.BatchPath, u.SHA256, u.State, u.StagingPath,
 		u.ReviewEntryID, u.TrackDoc, u.DuplicatePID, u.DuplicateKind, u.ItemPID,
-		u.CreatedAtNS, u.ExpiresAtNS)
+		u.Identify, u.CreatedAtNS, u.ExpiresAtNS)
 	if err != nil {
 		return fmt.Errorf("db: inserting upload: %w", err)
 	}

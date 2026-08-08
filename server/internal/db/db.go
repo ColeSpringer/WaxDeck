@@ -546,6 +546,13 @@ const baselineSchema = `
 		duplicate_pid  TEXT    NOT NULL DEFAULT '',
 		duplicate_kind TEXT    NOT NULL DEFAULT '',
 		item_pid       TEXT    NOT NULL DEFAULT '',
+		-- Whether the review entry this session opens is queued for
+		-- identification. Resolved from the submission and the account
+		-- default when the session is created, and held here because
+		-- the entry opens later: a preference changed mid-transfer must
+		-- not move a file already on the wire. Default 1 is the
+		-- unchanged behaviour.
+		identify       INTEGER NOT NULL DEFAULT 1,
 		created_at_ns  INTEGER NOT NULL,
 		expires_at_ns  INTEGER NOT NULL DEFAULT 0
 	);
@@ -577,6 +584,9 @@ const baselineSchema = `
 		library_pid      TEXT    NOT NULL DEFAULT '',
 		state            TEXT    NOT NULL DEFAULT 'open',
 		review_entry_ids TEXT    NOT NULL DEFAULT '[]',
+		-- Decided once for the whole batch, for uploads.identify's
+		-- reason; a member's own value is ignored.
+		identify         INTEGER NOT NULL DEFAULT 1,
 		created_at_ns    INTEGER NOT NULL,
 		expires_at_ns    INTEGER NOT NULL
 	);

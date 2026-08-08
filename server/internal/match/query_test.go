@@ -147,3 +147,84 @@ func TestStripTrailingParenthetical(t *testing.T) {
 		}
 	}
 }
+
+// A typed query is taken verbatim: the derivation is there to rescue
+// titles a machine wrote, and a hand-typed one needs no rescuing. Every
+// case here is the derivation doing exactly its job and being wrong for
+// it.
+func TestRecordingQueryTakesATypedQueryVerbatim(t *testing.T) {
+	cases := []struct {
+		name       string
+		tags       map[string]string
+		query      *TrackQuery
+		wantArtist string
+		wantTitle  string
+		wantOK     bool
+	}{
+		{
+			name:       "a typed title containing the separator is not re-split",
+			tags:       map[string]string{"ARTIST": "Some Channel", "TITLE": "whatever"},
+			query:      &TrackQuery{Artist: "Benny Goodman", Title: "Sing - Sing - Sing"},
+			wantArtist: "Benny Goodman",
+			wantTitle:  "Sing - Sing - Sing",
+			wantOK:     true,
+		},
+		{
+			name:       "a typed parenthetical is not peeled",
+			tags:       map[string]string{"TITLE": "whatever"},
+			query:      &TrackQuery{Artist: "Portishead", Title: "Roads (Official Video)"},
+			wantArtist: "Portishead",
+			wantTitle:  "Roads (Official Video)",
+			wantOK:     true,
+		},
+		{
+			name:       "a typed artist survives a descriptive title that would replace it",
+			tags:       map[string]string{"ARTIST": "Chan", "TITLE": "Daft Punk - Get Lucky"},
+			query:      &TrackQuery{Artist: "Pharrell Williams"},
+			wantArtist: "Pharrell Williams",
+			wantTitle:  "Get Lucky",
+			wantOK:     true,
+		},
+		{
+			name:       "an empty field falls back to the derivation",
+			tags:       map[string]string{"ARTIST": "Some Channel", "TITLE": "Daft Punk - Get Lucky (Official Video)"},
+			query:      &TrackQuery{Title: "Get Lucky (Radio Edit)"},
+			wantArtist: "Daft Punk",
+			wantTitle:  "Get Lucky (Radio Edit)",
+			wantOK:     true,
+		},
+		{
+			name:   "an all-blank query changes nothing and an untitled track is still unsearchable",
+			tags:   map[string]string{"ARTIST": "Some Channel"},
+			query:  &TrackQuery{},
+			wantOK: false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			artist, title, ok := recordingQuery(Track{Tags: c.tags, Query: c.query})
+			if ok != c.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, c.wantOK)
+			}
+			if !ok {
+				return
+			}
+			if artist != c.wantArtist || title != c.wantTitle {
+				t.Fatalf("got (%q, %q), want (%q, %q)", artist, title, c.wantArtist, c.wantTitle)
+			}
+		})
+	}
+}
+
+// SuggestedQuery is the derivation, and stays it: a suggestion is what
+// the matcher read out of a source title, so a query somebody typed has
+// no business changing what is suggested.
+func TestSuggestedQueryIgnoresATypedQuery(t *testing.T) {
+	artist, title, ok := SuggestedQuery(Track{
+		Tags:  map[string]string{"ARTIST": "Some Channel", "TITLE": "Daft Punk - Get Lucky (Official Video)"},
+		Query: &TrackQuery{Artist: "Nobody", Title: "Nothing"},
+	})
+	if !ok || artist != "Daft Punk" || title != "Get Lucky" {
+		t.Fatalf("got (%q, %q, %v), want the derivation", artist, title, ok)
+	}
+}
