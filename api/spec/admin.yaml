@@ -1341,12 +1341,15 @@ components:
             song's cover instead of the station's mark.
 
 
-            Off by default, and the only setting here that governs
+            On by default, and the only setting here that governs
             whether this server talks to a third party at all: it sends a
             string a station chose - an artist and a track title - off
-            this machine. That is a self-hoster's decision to make rather
-            than one to inherit. With it off, radio still draws a
-            library match when it finds one, then the station logo, then
+            this machine. Only about one station in twenty announces a
+            picture of its own, so a server with this off draws the
+            station mark for the rest and nothing says why; the opt-out
+            is here for the households that want it. Turned off, radio
+            still draws a library match when it finds one, then the
+            picture the station announced, then the station logo, then
             the station mark, and makes no outbound request.
 
 

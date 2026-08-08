@@ -3086,7 +3086,11 @@ export interface paths {
          * Get cover art for a station's announced track
          * @description The cover this server holds for whatever the station last announced, for the case the announced track is not in this library. Draw it on the full-screen player face; the deck bar keeps the station logo on purpose, because a bar whose picture changed every few minutes would read as the station changing.
          *
-         *     Two rungs sit behind radio artwork and this is the second. The first is `nowPlayingItemPid` above: a match against this library, which costs no network and is the common answer for a listener playing a station whose music they own. Only on its miss does the server look the announced artist and title up against MusicBrainz and resolve a Cover Art Archive image. That rung is **off by default** (`radioExternalArt` in the server settings): it sends a string a station chose from a self-hosted server to a third party, which is the operator's call to make. With it off this endpoint answers 404 forever and the client draws the station mark, which is a designed state rather than a gap.
+         *     Three rungs sit behind radio artwork and this endpoint serves the middle two. The first is `nowPlayingItemPid` above: a match against this library, which costs no network and is the common answer for a listener playing a station whose music they own.
+         *
+         *     On its miss comes the picture the **station itself announced**, where it announced one: many carry a per-track cover (or a channel logo) in the `StreamArtwork` or `StreamUrl` field of the same in-stream metadata the title arrives in. That is not a third-party lookup - the URL came down the stream this listener is already receiving - so `radioExternalArt` does not gate it, and neither does switching that setting off drop what has already been fetched. The bytes are fetched through the SSRF-guarded client the station logo uses, capped, and typed by sniffing them.
+         *
+         *     Last comes MusicBrainz and the Cover Art Archive, resolved from the announced artist and title. That rung is **off by default** (`radioExternalArt` in the server settings): it sends a string a station chose from a self-hosted server to a third party, which is the operator's call to make. With it off, a station that announces no picture of its own leaves this endpoint answering 404 and the client draws the station mark, which is a designed state rather than a gap.
          *
          *     Never blocking, and a client should expect that. The lookup is started by the play-info poll and runs against a service paced at roughly one request per second, so the first poll after a title changes answers 404 here and a later one answers the image - on the same fifteen-second cadence the play-info contract already asks for. A miss is remembered for a day rather than forever, because a track released this week can have no archive entry today and one tomorrow, and a service that could not be reached is remembered for minutes only.
          *
@@ -3110,7 +3114,7 @@ export interface paths {
         };
         /**
          * Search the station directory
-         * @description Searches a public radio station directory (radio-browser.info) by name so stations can be added without pasting stream URLs. Requires internet; when the directory cannot be reached the endpoint answers `directory-unavailable` and manual entry still works.
+         * @description Searches a public radio station directory (radio-browser.info) by name so stations can be added without pasting stream URLs. The directory is a pool of volunteer mirrors, so one search may try several before giving up. Requires internet; when no mirror answers the endpoint returns `directory-unavailable` and manual entry still works.
          */
         get: operations["searchRadioDirectory"];
         put?: never;
@@ -4474,7 +4478,7 @@ export interface components {
             /**
              * @description Whether radio may look a station's announced title up against MusicBrainz and the Cover Art Archive when nothing in this library matches it, so the full-screen player can draw the song's cover instead of the station's mark.
              *
-             *     Off by default, and the only setting here that governs whether this server talks to a third party at all: it sends a string a station chose - an artist and a track title - off this machine. That is a self-hoster's decision to make rather than one to inherit. With it off, radio still draws a library match when it finds one, then the station logo, then the station mark, and makes no outbound request.
+             *     On by default, and the only setting here that governs whether this server talks to a third party at all: it sends a string a station chose - an artist and a track title - off this machine. Only about one station in twenty announces a picture of its own, so a server with this off draws the station mark for the rest and nothing says why; the opt-out is here for the households that want it. Turned off, radio still draws a library match when it finds one, then the picture the station announced, then the station logo, then the station mark, and makes no outbound request.
              *
              *     The lookup is paced at the etiquette MusicBrainz asks for (one request per second, an identifying agent) and its answers are cached server-side, so it costs no per-device traffic. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses.
              */
@@ -7702,12 +7706,12 @@ export interface components {
              */
             nowPlayingItemPid?: string;
             /**
-             * @description An opaque token naming the cover this server holds for the announced title, present only when it holds one. The second artwork rung, and the token does two jobs: it says there is an image to ask for, and it is what makes the image URL change when the station changes what it is playing.
+             * @description An opaque token naming the cover this server holds for what the station last announced, present only when it holds one. It covers both of the artwork rungs below the library match - the picture the station announced in its own stream, and the MusicBrainz lookup under that - and does two jobs: it says there is an image to ask for, and it is what makes the image URL change when the station changes what it is playing.
              *
              *     Pass it as `v` on `GET /radio/stations/{pid}/now-playing-art`. A client that omits it gets a 404 - the endpoint is addressed by token, not by whatever is announced at the moment the image request lands, so the bytes behind one URL never change and the long `Cache-Control` they carry is true.
              *
-             *     The lookup behind it is asynchronous, so the field appears on a later poll rather than on the one that started it. Absent means draw the local match if there is one, then the station logo, then the station mark. Always absent while the external rung is switched off.
-             * @example 6f1a3c9d2e4b5a70
+             *     The fetch behind it is asynchronous, so the field appears on a later poll rather than on the one that started it. Absent means draw the local match if there is one, then the station logo, then the station mark. A station that announces no picture of its own leaves this absent for good while the external rung is switched off.
+             * @example f822426bccd53e012a220bbf972752dc
              */
             nowPlayingArtKey?: string;
         };
@@ -14470,7 +14474,11 @@ export interface operations {
     getRadioNowPlayingArt: {
         parameters: {
             query: {
-                /** @description The `nowPlayingArtKey` from this station's play-info. The endpoint answers the cover held under that token and nothing else, so a title that rolls over between the poll and this request cannot turn a held cover into a 404. */
+                /**
+                 * @description The `nowPlayingArtKey` from this station's play-info. The endpoint answers the cover held under that token and nothing else, so a title that rolls over between the poll and this request cannot turn a held cover into a 404.
+                 *
+                 *     Opaque: the shape is pinned so a client can tell a token apart from a stray query value, but nothing outside this server may derive one. Anything that is not a held token answers 404 rather than an error, because "no cover under that name" is the same answer either way.
+                 */
                 v: string;
                 /** @description Accepted and ignored, like the logo endpoint's. */
                 size?: number;
@@ -14553,7 +14561,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
-            /** @description The station directory could not be reached (code `directory-unavailable`). */
+            /** @description No station directory mirror answered: unreachable, or every mirror tried reported itself busy. Both carry the code `directory-unavailable`; the message says which happened, because a busy directory is worth retrying and a broken one is not. */
             502: {
                 headers: {
                     [name: string]: unknown;

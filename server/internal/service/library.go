@@ -94,8 +94,15 @@ type Config struct {
 	// Apprise), for households running them on the LAN.
 	AllowPrivateNotifyHosts bool
 	// RadioDirectoryBase is the radio-browser directory API base;
-	// empty selects the public instance.
+	// empty selects the public instance. Set, it is the only host the
+	// directory search talks to.
 	RadioDirectoryBase string
+	// RadioDirectoryMirrors overrides radio-browser mirror discovery
+	// with a fixed list to rotate through. Empty (the normal case)
+	// discovers mirrors over SRV. It exists so rotation can be driven
+	// against local servers in tests; a deployment that wants one
+	// instance sets RadioDirectoryBase instead.
+	RadioDirectoryMirrors []string
 	// PodcastDirectoryBase is the podcast name-search API base; empty
 	// selects the public iTunes search endpoint.
 	PodcastDirectoryBase string
@@ -231,6 +238,16 @@ type Library struct {
 	radioHTTPOnce          sync.Once
 	allowPrivateRadioHosts bool
 	radioDirectoryBase     string
+	// radioDirectoryMirrorList overrides mirror discovery, and
+	// radioMirrors caches what discovery found. radioMirrorCold holds
+	// the mirrors that just failed, which sort last for a few minutes
+	// rather than being dropped: on an afternoon where the whole
+	// directory is unwell, dropping them would leave nothing to ask.
+	radioDirectoryMirrorList []string
+	radioMirrors             []string
+	radioMirrorsAt           time.Time
+	radioMirrorCold          map[string]time.Time
+	radioMirrorsMu           sync.Mutex
 	// podcastDirectory answers show name searches, built on first use
 	// so an install that never searches never allocates its cache.
 	podcastDirectoryBase string
@@ -255,10 +272,14 @@ type Library struct {
 	// request to the station host rather than two. A dial and a grid draw
 	// the same station on one paint and two devices paint at once, and
 	// against a dead host each of those is a ten-second wait.
+	// radioLogoHints are the logo URLs stations named in their own
+	// connect headers while somebody was listening, tried ahead of
+	// discovery. Under the same lock as the cache they feed.
 	radioLogos       map[string]radioLogo
 	radioLogosOrder  []string
 	radioLogosBytes  int
 	radioLogoFlights map[string]chan struct{}
+	radioLogoHints   map[string]string
 	radioLogosMu     sync.Mutex
 	// batchFinalizeMu serializes upload-batch finalization (the flip,
 	// entry opening, and member linking as one unit): two concurrent
@@ -447,29 +468,30 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 
 	l := &Library{
 		lib: lib, paths: paths, db: store, roots: cfg.Roots, log: log, procCtx: ctx,
-		catalogWake:            make(chan struct{}, 1),
-		userWake:               make(chan string, 64),
-		matchWake:              make(chan struct{}, 1),
-		sealer:                 cfg.Sealer,
-		podcastDir:             cfg.PodcastDir,
-		podcastRootName:        cfg.PodcastRootName,
-		defaultRetentionKeep:   cfg.DefaultRetentionKeep,
-		retentionInUseWindow:   cfg.RetentionInUseWindow,
-		allowPrivateFeedHosts:  cfg.AllowPrivateFeedHosts,
-		allowPrivateRadioHosts: cfg.AllowPrivateRadioHosts,
-		radioDirectoryBase:     cfg.RadioDirectoryBase,
-		podcastDirectoryBase:   cfg.PodcastDirectoryBase,
-		radioTitles:            map[string]radioTitle{},
-		radioLogos:             map[string]radioLogo{},
-		radioLogoFlights:       map[string]chan struct{}{},
-		listenbrainz:           scrobble.NewListenBrainz(),
-		sim:                    similarity.New(),
-		workerLocalPaths:       cfg.WorkerLocalPaths,
-		isrcResolver:           cfg.ISRCResolver,
-		sonicAnalysisDefault:   cfg.SonicAnalysisDefault,
-		workerAPIConfigured:    cfg.WorkerAPIConfigured,
-		workers:                group,
-		radioArtResolver:       cfg.RadioArtResolver,
+		catalogWake:              make(chan struct{}, 1),
+		userWake:                 make(chan string, 64),
+		matchWake:                make(chan struct{}, 1),
+		sealer:                   cfg.Sealer,
+		podcastDir:               cfg.PodcastDir,
+		podcastRootName:          cfg.PodcastRootName,
+		defaultRetentionKeep:     cfg.DefaultRetentionKeep,
+		retentionInUseWindow:     cfg.RetentionInUseWindow,
+		allowPrivateFeedHosts:    cfg.AllowPrivateFeedHosts,
+		allowPrivateRadioHosts:   cfg.AllowPrivateRadioHosts,
+		radioDirectoryBase:       cfg.RadioDirectoryBase,
+		radioDirectoryMirrorList: cfg.RadioDirectoryMirrors,
+		podcastDirectoryBase:     cfg.PodcastDirectoryBase,
+		radioTitles:              map[string]radioTitle{},
+		radioLogos:               map[string]radioLogo{},
+		radioLogoFlights:         map[string]chan struct{}{},
+		listenbrainz:             scrobble.NewListenBrainz(),
+		sim:                      similarity.New(),
+		workerLocalPaths:         cfg.WorkerLocalPaths,
+		isrcResolver:             cfg.ISRCResolver,
+		sonicAnalysisDefault:     cfg.SonicAnalysisDefault,
+		workerAPIConfigured:      cfg.WorkerAPIConfigured,
+		workers:                  group,
+		radioArtResolver:         cfg.RadioArtResolver,
 	}
 	if reset != nil {
 		l.logCatalogReset(reset)

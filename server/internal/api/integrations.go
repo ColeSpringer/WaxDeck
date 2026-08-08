@@ -96,24 +96,31 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 	out := RadioPlayInfo{
 		Url: "/media/radio/" + url.PathEscape(req.Pid) + "?mt=" + url.QueryEscape(token),
 	}
-	// Read once and passed along, so the two fields describe the same
-	// song: the relay rewrites the title whenever the station announces
-	// one, and a second read could land on the next track.
-	if title := s.svc.RadioNowPlaying(req.Pid); title != "" {
+	// Read once and passed along, so the fields describe the same song:
+	// the relay rewrites the title whenever the station announces one,
+	// and a second read could land on the next track.
+	if title, artURL := s.svc.RadioNowPlayingMeta(req.Pid); title != "" {
 		out.NowPlaying = ptr(title)
 		// Resolved against this caller's own visibility, since the pid
 		// is going to be used to fetch cover art. Absent is the ordinary
-		// answer and the client falls back to the station's logo.
+		// answer and the client falls back to the rungs below.
 		if pid := s.svc.RadioNowPlayingItem(ctx, uc, req.Pid, station.Name, title); pid != "" {
 			out.NowPlayingItemPid = ptr(pid)
-		} else if key := s.svc.EnsureRadioNowPlayingArt(station.Name, title); key != "" {
-			// Only on the local miss, which is the rung order: a library
-			// match costs no network and is the common answer. Ensure
-			// starts the lookup and answers the key for what is cached
-			// now, so the poll that first sees a new title answers
-			// nothing and a later one answers a key - it never waits on
-			// a paced third party.
+		} else if key, tryExternal := s.svc.EnsureRadioAnnouncedArt(artURL, title); key != "" {
+			// The station's own answer, and the better one: it names the
+			// picture for this exact broadcast, where an external lookup
+			// guesses a release from a parsed title.
 			out.NowPlayingArtKey = ptr(key)
+		} else if tryExternal {
+			// Only once the two rungs above have missed. Ensure starts
+			// the lookup and answers the key for what is cached now, so
+			// the poll that first sees a new title answers nothing and a
+			// later one answers a key - it never waits on a paced third
+			// party. tryExternal is false only while an announced fetch
+			// is in flight, which is worth one poll's wait.
+			if key := s.svc.EnsureRadioNowPlayingArt(station.Name, title); key != "" {
+				out.NowPlayingArtKey = ptr(key)
+			}
 		}
 	}
 	return GetRadioPlayInfo200JSONResponse(out), nil
@@ -345,6 +352,10 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	metaint, _ := strconv.Atoi(resp.Header.Get("Icy-Metaint"))
+	// Some operators name their logo in the connect headers, which is a
+	// better answer than the discovery walk and free to keep: this is
+	// the one moment the station itself is talking to this server.
+	s.svc.NoteRadioLogoHint(pid, strings.TrimSpace(resp.Header.Get("Icy-Logo")))
 	// The station's own type, minus the ones that would make this origin
 	// run a stranger's markup. The proxy serves an attacker-nameable host's
 	// bytes from WaxDeck's origin, exactly as the logo endpoint does, and a
@@ -390,21 +401,34 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 	// heard: a segment scrobbles only when its ENDING transition is
 	// observed, so a never-changing pseudo-title scrobbles nothing and
 	// the unfinished tail at disconnect stays off the record.
-	var segTitle string
-	var segSince time.Time
+	seg := &radioSegment{
+		now: time.Now,
+		report: func(title string, since time.Time) {
+			s.svc.ScrobbleRadioPlay(r.Context(), user, pid, title, since)
+		},
+	}
 	onBlock := func(block []byte) {
-		title, ok := icyStreamTitle(block)
-		if !ok {
+		meta := icyMetaOf(block)
+		// A spot is not a song, so its title and its banner are kept off
+		// the face: an advertiser must not become what is playing, on
+		// the lock screen or anywhere else. The break still ends the
+		// song before it - see radioSegment for why that matters.
+		if meta.ad {
+			seg.close()
 			return
 		}
-		s.svc.NoteRadioTitle(pid, title)
-		if title == segTitle {
+		// A block carrying only a URL is not an announcement. Stations
+		// send these between songs, and treating one as a title change
+		// would clear the song that is still playing.
+		if !meta.titleOK {
 			return
 		}
-		if segTitle != "" && time.Since(segSince) >= service.RadioScrobbleMinListen {
-			s.svc.ScrobbleRadioPlay(r.Context(), user, pid, segTitle, segSince)
+		s.svc.NoteRadioMeta(pid, meta.title, meta.artURL)
+		if meta.title == seg.title {
+			return
 		}
-		segTitle, segSince = title, time.Now()
+		seg.close()
+		seg.start(meta.title)
 	}
 	// A station is not finite, so neither a size cap nor a rate floor
 	// belongs here: both would eventually cut a healthy listen, which is

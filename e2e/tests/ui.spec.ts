@@ -82,3 +82,28 @@ test('login, browse the grid, and play a track', async ({ app, page }) => {
     )
     .toBeTruthy();
 });
+
+// Pull-down and a 40 px chevron were the only ways down, which is a
+// touch answer handed to a mouse. Both ways added here are pointer
+// gestures with no semantics node of their own - deliberately, since a
+// tappable node the size of the window would sit over every named
+// control on the player - so the driver reaches them by key and by
+// coordinate, and the identifier registry gains nothing.
+test.describe('leaving the full-screen player', () => {
+  test.use({ session: 'planted' });
+
+  test('a pointer gets out without the pull-down', async ({ app }) => {
+    const { pid } = await app.seed.item('Escape Hatch');
+    await app.nav.to('tracks');
+
+    await app.music.play(pid);
+    await app.player.ready();
+    await app.player.dismissWithEscape(app.music.item(pid));
+
+    // And back up, to click off the content this time.
+    await app.music.play(pid);
+    await app.player.ready();
+    const dismissed = await app.player.dismissByBackdrop(app.music.item(pid));
+    test.skip(!dismissed, 'the backdrop gutter needs a window wider than the content');
+  });
+});

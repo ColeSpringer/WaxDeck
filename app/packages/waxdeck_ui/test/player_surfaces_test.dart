@@ -481,6 +481,190 @@ void main() {
       await tester.pump();
       expect(tester.getTopLeft(find.text('Nightjar')), before);
     });
+
+    // A pointer has no pull-down. On a wide window the content is a
+    // 520 px column in the middle and the rest is backdrop, which is
+    // where a mouse expects a modal surface to close from.
+    testWidgets('a click off the content collapses the player', (tester) async {
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 900,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(900, 880),
+      );
+
+      // Well outside the centred content box: (900 - 520) / 2 = 190 px
+      // of gutter either side.
+      await tester.tapAt(const Offset(40, 440));
+      await tester.pump();
+      expect(collapsed, 1);
+    });
+
+    testWidgets('a click on the content is not a dismissal', (tester) async {
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 900,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(900, 880),
+      );
+
+      // The artwork, the title, and the slack between the clusters: all
+      // content, none of it a way out. The last is the one that matters
+      // -- a thumb that misses a control by a few pixels has not asked
+      // to leave.
+      await tester.tap(find.byType(ArtworkImage).first);
+      await tester.tap(find.text('Nightjar'));
+      await tester.tapAt(
+        tester.getBottomLeft(find.text('Nightjar')) + const Offset(20, 4),
+      );
+      await tester.pump();
+      expect(collapsed, 0);
+    });
+
+    testWidgets('a near-miss on a header control is not a dismissal', (
+      tester,
+    ) async {
+      // A Row does not hit-test the slack around its children, so
+      // without islanding the controls a thumb a few pixels off the
+      // overflow menu falls through to the surface and shuts the player.
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 900,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+            trailingHeaderActions: <Widget>[
+              WaxIconButton(
+                glyph: WaxIcons.more,
+                label: 'More',
+                onPressed: () {},
+              ),
+            ],
+          ),
+        ),
+        size: const Size(900, 880),
+      );
+
+      // Just off each control, inside the gutter its island keeps. Not
+      // on the controls themselves: the chevron collapsing when pressed
+      // is the chevron working.
+      final more = find.bySemanticsLabel('More');
+      await tester.tapAt(tester.getTopLeft(more) - const Offset(2, 0));
+      final collapse = find.bySemanticsLabel('Collapse player');
+      await tester.tapAt(tester.getTopRight(collapse) + const Offset(2, 20));
+      await tester.pump();
+      expect(collapsed, 0);
+
+      // The stretch between them is still the way out, which is what a
+      // phone depends on: there the content box is the full width and
+      // this is the only region left to tap.
+      await tester.tapAt(const Offset(450, 20));
+      await tester.pump();
+      expect(collapsed, 1);
+    });
+
+    testWidgets('the header stretch is a way out too', (tester) async {
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 900,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(900, 880),
+      );
+
+      // The empty run between the collapse button and the trailing
+      // actions, which is backdrop wearing a Row.
+      await tester.tapAt(const Offset(450, 20));
+      await tester.pump();
+      expect(collapsed, 1);
+    });
+
+    testWidgets('a player with nowhere to collapse to takes no click', (
+      tester,
+    ) async {
+      // One policy for both gestures: a null onCollapse turns off the
+      // pull-down and the click together, so a scaffold with no way out
+      // cannot be half-dismissed.
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 900,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(900, 880),
+      );
+      await tester.tapAt(const Offset(40, 440));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the dismissing surface publishes no tap of its own', (
+      tester,
+    ) async {
+      // On web a tappable node is drawn as a rect with pointer-events
+      // over its whole area: published, this one would be an unnamed
+      // control the size of the window sitting over every control that
+      // does have a name. The way out for a screen reader is the
+      // collapse button, exactly as it was for the drag.
+      final handle = tester.ensureSemantics();
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 900,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () {},
+            ids: const PlayerIds(surface: 'player-surface'),
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(900, 880),
+      );
+
+      final data = tester
+          .getSemantics(find.bySemanticsIdentifier('player-surface'))
+          .getSemanticsData();
+      expect(data.actions & SemanticsAction.tap.index, 0);
+      handle.dispose();
+    });
   });
 
   group('deck bar title block', () {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net/url"
 	"slices"
 	"sync"
 	"time"
@@ -18,13 +19,15 @@ import (
 // first and answers most of the time somebody is listening to a station
 // playing music they own. This one runs only on its miss.
 //
-// Off by default, and that is the whole reason the toggle exists rather
-// than a constant: it sends strings a third party chose - a station's
-// announced title - from a self-hosted server to musicbrainz.org and
-// coverartarchive.org. That is a decision a self-hoster is entitled to
-// make, and a much easier argument to have before shipping than after.
-// With it off nothing outbound happens and the station mark is what a
-// listener sees, which is why the mark landed first.
+// Behind a toggle rather than a constant, because it sends strings a
+// third party chose - a station's announced title - from a self-hosted
+// server to musicbrainz.org and coverartarchive.org, and that is a
+// decision a self-hoster is entitled to make. On by default: only about
+// one station in twenty announces a picture of its own, so leaving this
+// off meant the full-screen player drew a monogram for the rest with
+// nothing to explain it. Turned off, nothing outbound happens and the
+// station mark is what a listener sees, which is a designed answer
+// rather than a gap.
 
 // RadioArtResolver answers a front cover for an announced artist and
 // title. The composite of the MusicBrainz and Cover Art Archive
@@ -44,6 +47,14 @@ type RadioArtResolver interface {
 // and holds no cover for this recording. Cached for a day; every other
 // failure is cached for minutes.
 var ErrNoRadioArt = errors.New("service: no external artwork for this title")
+
+// errRadioArtNotImage marks a fetched body that was never going to be a
+// picture: a declared type outside the set, bytes that sniff as
+// something else, an empty body, one over the cap. Distinct from a
+// timeout or a 5xx because the two deserve different memories - HTML
+// today is HTML tomorrow, and a station that put its homepage in
+// StreamUrl should cost one fetch a day rather than one a poll.
+var errRadioArtNotImage = errors.New("service: the fetched body is not usable artwork")
 
 const (
 	// radioArtFreshFor is how long a fetched cover is reused. A release's
@@ -67,10 +78,28 @@ const (
 	// a stranger's input gets to grow unbounded. A front-500 cover runs
 	// tens of kilobytes, so this holds a long dial-sitting.
 	radioArtCacheBytes = 32 << 20
-	// radioArtLookupBudget bounds one lookup. Two paced calls at roughly
-	// a second each, plus slack: past this the answer is "not this poll",
-	// and the next one re-asks.
-	radioArtLookupBudget = 20 * time.Second
+	// radioArtCacheEntries bounds the cache by count as well as by
+	// bytes, because the byte ceiling cannot see the entries that matter
+	// most here: a miss and a failure are stored with no bytes at all,
+	// so a cache full of them weighs nothing and never evicts. The
+	// announced rung makes that reachable rather than theoretical - it
+	// is keyed by a URL the station chooses, is not behind the toggle,
+	// and a station that cache-busts its cover (`.../art?t=1699...`)
+	// mints a fresh key on every poll. Counting keeps the promise the
+	// byte bound was making on its own: nothing that grows on a
+	// stranger's input grows without a ceiling.
+	radioArtCacheEntries = 4096
+	// radioArtLookupBudget bounds one lookup. A search plus up to four
+	// archive fetches now, not the two this first sized for: covers live
+	// on whichever of a recording's releases somebody uploaded one to, so
+	// the composer walks them. Every call sits behind a per-host pacer at
+	// roughly a second, the archive redirects to storage, and the pacer
+	// is shared, so lookups for different stations queue behind each
+	// other. Too tight and the context dies mid-walk and the title is
+	// filed as a five-minute failure - losing the cover the walk was
+	// added to find. Past this the answer is "not this poll", and the
+	// next one re-asks.
+	radioArtLookupBudget = 45 * time.Second
 )
 
 // radioArtEntry is one cached lookup. Empty Bytes means there is nothing
@@ -80,6 +109,12 @@ type radioArtEntry struct {
 	art     RadioLogo
 	fetched time.Time
 	fresh   time.Duration
+	// announced marks a picture the station named in its own stream
+	// rather than one this server went and asked a third party for. The
+	// toggle does not govern these, and neither does the forget that
+	// comes with switching it off: nothing was sent anywhere to get
+	// them.
+	announced bool
 }
 
 func (e radioArtEntry) stale() bool { return time.Since(e.fetched) >= e.fresh }
@@ -134,13 +169,6 @@ func radioLogoFromBytes(data []byte, mime string) RadioLogo {
 // request would hold an image response open for two paced round trips,
 // and every client on the station would start its own.
 func (l *Library) RadioNowPlayingArt(key string) (RadioLogo, error) {
-	// The toggle governs the read as well as the fetch. Otherwise an
-	// operator who switched the rung off would keep serving third-party
-	// covers from their own origin for as long as the cache held them,
-	// which is not what turning it off means.
-	if !l.RadioExternalArtEnabled() {
-		return RadioLogo{}, errNotFound("no artwork for this station")
-	}
 	if key == "" {
 		return RadioLogo{}, errNotFound("no artwork for this station")
 	}
@@ -148,7 +176,114 @@ func (l *Library) RadioNowPlayingArt(key string) (RadioLogo, error) {
 	if !ok || len(entry.art.Bytes) == 0 {
 		return RadioLogo{}, errNotFound("no artwork for this station")
 	}
+	// The toggle governs the read as well as the fetch. Otherwise an
+	// operator who switched the rung off would keep serving third-party
+	// covers from their own origin for as long as the cache held them,
+	// which is not what turning it off means.
+	//
+	// An announced picture is not one of those. The station named it in
+	// the stream this listener is already receiving, which is the same
+	// trust footing its logo has always been fetched on, and nothing
+	// about this library was sent anywhere to learn of it. What the
+	// toggle exists to decide - whether a title a station chose leaves
+	// this server for musicbrainz.org - is not in question here.
+	if !entry.announced && !l.RadioExternalArtEnabled() {
+		return RadioLogo{}, errNotFound("no artwork for this station")
+	}
 	return entry.art, nil
+}
+
+// announcedArtKey names a picture by the URL it came from and the song
+// it was announced with.
+//
+// The URL alone was the first answer, on the reasoning that it changes
+// exactly when the picture does. It does not: serving mutable bytes from
+// one stable path (`.../nowplaying.jpg`) is a common automation, and
+// under a URL-only key the token never changed, so the image URL the
+// client draws never changed either - and behind a long Cache-Control
+// one song's cover stayed on the face for the rest of the week.
+//
+// The announced title rides the hash for that reason, raw rather than
+// parsed so a station whose line does not split into an artist and a
+// song still gets a key that moves with the music. The prefix keeps this
+// key space disjoint from radioArtKey's.
+func announcedArtKey(artURL, announced string) string {
+	sum := sha256.Sum256([]byte("announced\x00" + artURL + "\x00" + announced))
+	return hex.EncodeToString(sum[:16])
+}
+
+// EnsureRadioAnnouncedArt starts a fetch for a picture the station
+// announced, and answers the key it will be held under plus whether the
+// caller should fall through to the external rung.
+//
+// The two returns are the whole design. A fetch that is *in flight* is
+// worth waiting a poll for, so it holds the rung below off: the
+// announced picture is the better answer and it is seconds away. A
+// fetch that already *failed* does not hold anything, and answers so
+// immediately - plenty of stations put their homepage in `StreamUrl` on
+// every single track, and a station whose announced URL will never be a
+// picture must not lose its external cover for it.
+//
+// Fetched through fetchRadioLogo, so the announced URL gets exactly the
+// guarantees a station's logo URL gets: the SSRF-guarded client, the
+// 512 KB cap read as one-past-and-refuse, the declared-type gate, and
+// the served type decided by sniffing the bytes rather than by what the
+// host called them.
+func (l *Library) EnsureRadioAnnouncedArt(artURL, announced string) (string, bool) {
+	if artURL == "" {
+		return "", true
+	}
+	// Stations put all sorts of things in these keys. Something that is
+	// not an http(s) URL is not worth a fetch and not worth holding the
+	// rung below for - no request is made and no failure is cached,
+	// because there is nothing here that could change tomorrow.
+	u, err := url.Parse(artURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return "", true
+	}
+	key := announcedArtKey(artURL, announced)
+	if entry, cached := l.cachedRadioArt(key); cached {
+		if len(entry.art.Bytes) == 0 {
+			return "", true
+		}
+		return key, false
+	}
+	if !l.claimRadioArtLookup(key) {
+		return "", false
+	}
+	// procCtx for the same reason the external lookup uses it: the poll
+	// that started this is answered long before the fetch lands, and a
+	// station nobody polls twice would otherwise never resolve.
+	l.workers.GoOnce(l.procCtx, "radio-announced-art", func(ctx context.Context) error {
+		defer l.releaseRadioArtLookup(key)
+		logo, fetchErr := l.fetchRadioLogo(ctx, artURL)
+		switch {
+		case fetchErr == nil && len(logo.Bytes) > 0:
+			l.storeRadioArt(key, radioArtEntry{
+				art:       logo,
+				fetched:   time.Now(),
+				fresh:     radioArtFreshFor,
+				announced: true,
+			})
+		// A body that is not a picture will not be one tomorrow either:
+		// a station that set its homepage here answers HTML every time.
+		// Remembered for a day, so that costs one fetch a day rather
+		// than one every fifteen seconds for as long as anybody listens.
+		case errors.Is(fetchErr, errRadioArtNotImage):
+			l.storeRadioArt(key, radioArtEntry{
+				fetched: time.Now(), fresh: radioArtMissFreshFor, announced: true,
+			})
+		default:
+			// A timeout, a refused connection, a 5xx: this one may well
+			// answer next time, so it is remembered for minutes.
+			l.log.Debug("announced radio artwork fetch failed", "err", fetchErr)
+			l.storeRadioArt(key, radioArtEntry{
+				fetched: time.Now(), fresh: radioArtFailureFreshFor, announced: true,
+			})
+		}
+		return nil
+	})
+	return "", false
 }
 
 // EnsureRadioNowPlayingArt starts an external lookup for an announced
@@ -188,7 +323,7 @@ func (l *Library) EnsureRadioNowPlayingArt(stationName, announced string) string
 	// could cache a day-long miss against a key the clean spelling would
 	// have resolved. The local-match rung already normalizes before it
 	// searches; this is the same rule one rung down.
-	artist, title := normalizeRadioField(rawArtist), normalizeRadioField(rawTitle)
+	artist, title := radioSearchField(rawArtist), radioSearchField(rawTitle)
 	if artist == "" || title == "" {
 		return ""
 	}
@@ -273,7 +408,9 @@ func (l *Library) storeRadioArt(key string, entry radioArtEntry) {
 	// counts bytes too. An LRU over something this small costs more to
 	// keep than the lookups it would save. One entry always survives, so
 	// a cover larger than the whole budget is still served once.
-	for l.radioArtCache.bytes > radioArtCacheBytes && len(l.radioArtCache.order) > 1 {
+	for len(l.radioArtCache.order) > 1 &&
+		(l.radioArtCache.bytes > radioArtCacheBytes ||
+			len(l.radioArtCache.order) > radioArtCacheEntries) {
 		l.dropRadioArt(l.radioArtCache.order[0])
 	}
 }
@@ -298,9 +435,32 @@ func (l *Library) dropRadioArt(key string) {
 func (l *Library) forgetRadioArt() {
 	l.radioArtCache.mu.Lock()
 	defer l.radioArtCache.mu.Unlock()
-	l.radioArtCache.entries = nil
-	l.radioArtCache.order = nil
-	l.radioArtCache.bytes = 0
+	// Announced covers stay. They were never fetched on the strength of
+	// the toggle and are not served on it either: switching the external
+	// rung off is a decision about talking to musicbrainz.org, and
+	// dropping the pictures stations announce in their own streams would
+	// be answering a question nobody asked.
+	//
+	// Rebuilt in one pass rather than dropped key by key. dropRadioArt
+	// walks the whole order slice to remove one element, so calling it
+	// per key is quadratic in the size of the cache - and this runs
+	// under the mutex every play-info poll contends for, with a settings
+	// toggle as its trigger.
+	entries := make(map[string]radioArtEntry, len(l.radioArtCache.entries))
+	order := make([]string, 0, len(l.radioArtCache.order))
+	total := 0
+	for _, key := range l.radioArtCache.order {
+		entry, ok := l.radioArtCache.entries[key]
+		if !ok || !entry.announced {
+			continue
+		}
+		entries[key] = entry
+		order = append(order, key)
+		total += len(entry.art.Bytes)
+	}
+	l.radioArtCache.entries = entries
+	l.radioArtCache.order = order
+	l.radioArtCache.bytes = total
 }
 
 // claimRadioArtLookup reports whether this caller owns the lookup for a

@@ -153,12 +153,32 @@ class _Absent extends ConsumerWidget {
 /// other sheet in the app pops before it pushes.
 void _openEditor(BuildContext context, String pid) {
   final router = GoRouter.of(context);
+  // Which navigator this surface sits in decides the verb, and it has to
+  // be read before anything is popped.
+  //
+  // On the root navigator the thing underneath is the player, an overlay
+  // there, while `/metadata/:pid` lives inside the shell: pushing one
+  // over the other builds a second shell beside the mounted one and
+  // trips the navigator's key reservation, losing the navigation and the
+  // surface that asked for it. `go` is the way out of that, and the
+  // routing rule already wanted it for a location a stranger can open.
+  //
+  // On the shell's own navigator - the side panel, or a sheet raised
+  // over a compact page - `push` both works and is the better answer:
+  // it leaves the album underneath for the way back, where `go` would
+  // reset the branch and hand the editor's own exit nothing to pop.
+  final overRoot =
+      Navigator.of(context) == Navigator.of(context, rootNavigator: true);
   // Only when this surface *is* the overlay. The same empty state is
   // drawn in the shell's panel, where the enclosing route is the page
   // underneath and popping it would take a screen the listener is still
   // on. A sheet is a `PopupRoute`; a page is not.
   if (ModalRoute.of(context) is PopupRoute) Navigator.of(context).pop();
-  router.push(WaxRoute.metadata(pid));
+  if (overRoot) {
+    router.go(WaxRoute.metadata(pid));
+  } else {
+    router.push(WaxRoute.metadata(pid));
+  }
 }
 
 /// The lyrics in the shell's right panel.

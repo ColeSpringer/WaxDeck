@@ -48,7 +48,7 @@ func (f *fakeRadioArt) queries() [][2]string {
 // entry and the query that produced it cannot be filed apart.
 func waitForRadioArt(t *testing.T, svc *Library, artist, title string) radioArtEntry {
 	t.Helper()
-	key := radioArtKey(normalizeRadioField(artist), normalizeRadioField(title))
+	key := radioArtKey(radioSearchField(artist), radioSearchField(title))
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if entry, ok := svc.cachedRadioArt(key); ok {
@@ -99,7 +99,7 @@ func TestRadioArtIsAskedOncePerTitle(t *testing.T) {
 	}
 	// A different announced title is a different key, which is the whole
 	// point of returning one.
-	other := radioArtKey(normalizeRadioField("Miles Davis"), normalizeRadioField("So What"))
+	other := radioArtKey(radioSearchField("Miles Davis"), radioSearchField("So What"))
 	if other == key {
 		t.Error("two different titles share one key")
 	}
@@ -142,9 +142,10 @@ func TestRadioArtCachesItsTwoFailuresDifferently(t *testing.T) {
 // property the whole rung ships behind: with it off nothing about a
 // station's announced title leaves this server.
 func TestRadioArtMakesNoRequestWhileOff(t *testing.T) {
-	_, svc, _ := newCatalogFixture(t)
+	ctx, svc, _ := newCatalogFixture(t)
 	resolver := &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png"}
 	svc.radioArtResolver = resolver
+	disableRadioExternalArt(t, ctx, svc)
 
 	for range 5 {
 		if svc.EnsureRadioNowPlayingArt("Test FM", "Charlie Parker - Ornithology") != "" {
@@ -220,6 +221,19 @@ func TestRadioArtLookupEndsWithTheProcess(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Group.Wait did not return after the shutdown")
+	}
+}
+
+// disableRadioExternalArt switches the rung off, which since the
+// default flipped is a thing a test has to say rather than inherit.
+func disableRadioExternalArt(t *testing.T, ctx context.Context, svc *Library) {
+	t.Helper()
+	if err := svc.db.SettingSet(ctx, settingRadioExternalArt, "false", time.Now().UnixNano()); err != nil {
+		t.Fatalf("disabling the external rung: %v", err)
+	}
+	svc.loadRuntimeToggles(ctx)
+	if svc.RadioExternalArtEnabled() {
+		t.Fatal("the external rung did not go off")
 	}
 }
 

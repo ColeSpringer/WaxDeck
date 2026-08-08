@@ -221,8 +221,30 @@ func containsTokenRun(have, want []string) bool {
 // normalizeRadioField lowercases, strips bracketed asides and the noise
 // stations append, and collapses whitespace and punctuation, so
 // "Charlie Parker  [Official Stream]" and "charlie parker" meet.
-func normalizeRadioField(s string) string {
+func normalizeRadioField(s string) string { return normalizeRadioText(s, false) }
+
+// radioSearchField is the same treatment for a field about to be sent to
+// a metadata service rather than compared with this catalog: the
+// apostrophe survives it.
+//
+// MusicBrainz indexes "that's" as a single token, so both of the
+// spellings the plain normalization can produce - "that s", and "thats"
+// if the mark were dropped instead - match nothing at all, and every
+// announced title carrying an apostrophe drew no cover. Verified against
+// the live service, which is also where the asymmetry showed up: "sweet
+// child o mine" resolves either way, "thats what tequila does" only with
+// the mark. Both the cache key and the query are built from this, so an
+// entry and the search that filled it still cannot disagree.
+func radioSearchField(s string) string { return normalizeRadioText(s, true) }
+
+func normalizeRadioText(s string, keepApostrophe bool) string {
 	s = strings.ToLower(strings.TrimSpace(s))
+	// Folded before anything looks at it, so the two spellings of one
+	// mark cannot take different paths through the rest: the typographic
+	// apostrophe is above ASCII and used to survive as itself while the
+	// straight one collapsed to a space, which left "Don't" and "Don't"
+	// unable to match each other.
+	s = strings.NewReplacer("’", "'", "ʼ", "'").Replace(s)
 	s = stripBracketed(s)
 	for _, noise := range radioTitleNoise {
 		// Only as a trailing fragment, so a song called "Explicit" is
@@ -233,6 +255,14 @@ func normalizeRadioField(s string) string {
 	space := false
 	for _, r := range s {
 		switch {
+		case keepApostrophe && r == '\'':
+			// Carried like a letter: it belongs to the word rather than
+			// separating two.
+			if space && b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			space = false
+			b.WriteRune(r)
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
 			if space && b.Len() > 0 {
 				b.WriteByte(' ')

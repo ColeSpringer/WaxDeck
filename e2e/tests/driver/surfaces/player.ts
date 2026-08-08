@@ -1,6 +1,6 @@
 // The player, and the deck bar it expands from.
 
-import { Locator } from '@playwright/test';
+import { Locator, expect } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Ctx } from '../context';
 import { T } from '../budgets';
@@ -122,6 +122,52 @@ export class Player {
   /// the wrong screen.
   async collapse(settledOn: Locator): Promise<void> {
     await clickThrough(this.ctx.page.locator(sem(SemanticsIds.playerBack)), settledOn);
+  }
+
+  /// The keyboard's way out, which the player registers as a scoped
+  /// command for as long as it is the current route.
+  async dismissWithEscape(settledOn: Locator): Promise<void> {
+    await expect(async () => {
+      if (!(await settledOn.isVisible())) {
+        await this.ctx.page.keyboard.press('Escape');
+      }
+      await settledOn.waitFor({ timeout: T.step });
+    }).toPass({ timeout: T.nav });
+  }
+
+  /// A click on the backdrop beside the content, which is how a pointer
+  /// dismisses a modal surface and the only way down a mouse has that
+  /// does not involve aiming at a 40 px chevron.
+  ///
+  /// By coordinate, and the one gesture here that has to be: the
+  /// dismissing region publishes no semantics node on purpose. A
+  /// tappable node the size of the window would sit over every named
+  /// control on the player and a screen reader would meet it first, so
+  /// there is deliberately nothing to address by identifier.
+  ///
+  /// Answers false where the region does not exist, rather than clicking
+  /// somewhere useless and timing out with nothing to say. Two ways it
+  /// can be absent: the content column is 520 px, so a narrow window is
+  /// all content; and the scaffold switches to a side-by-side
+  /// arrangement on a short landscape window, where the content runs
+  /// edge to edge behind a 24 px gutter and a fixed click at x=24 lands
+  /// on the island's own left edge (Rect.contains includes it).
+  async dismissByBackdrop(settledOn: Locator): Promise<boolean> {
+    const page = this.ctx.page;
+    const viewport = page.viewportSize();
+    if (viewport === null) return false;
+    const gutter = (viewport.width - 520) / 2;
+    if (gutter < 90 || viewport.height < 480) return false;
+    // A quarter into the gutter: clear of the content box on one side
+    // and of the window edge on the other, at any width that got here.
+    const x = Math.round(gutter / 2);
+    await expect(async () => {
+      if (!(await settledOn.isVisible())) {
+        await page.mouse.click(x, Math.round(viewport.height / 2));
+      }
+      await settledOn.waitFor({ timeout: T.step });
+    }).toPass({ timeout: T.nav });
+    return true;
   }
 
   /// A control on the player, by identifier, for the surfaces that have

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -589,6 +590,81 @@ func TestRadioDirectorySearch(t *testing.T) {
 	}
 	if e := decode[Error](t, resp); e.Code != "directory-unavailable" {
 		t.Fatalf("unreachable directory code = %q, want directory-unavailable", e.Code)
+	}
+}
+
+// sickRadioMirror answers every search the way the volunteer pool does
+// on a bad afternoon, counting what it was asked.
+func sickRadioMirror(t *testing.T, hits *atomic.Int64) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		http.Error(w, "busy", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// One sick mirror used to be the whole feature failing: the pooled
+// connection pinned it and the retry landed back on it. A search now
+// moves on, and the healthy mirror answers whichever position the
+// shuffle put it in.
+func TestRadioDirectoryMirrorRotation(t *testing.T) {
+	var hits atomic.Int64
+	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[{"name":"Jazz24","url":"http://jazz.example/stream"}]`)
+	}))
+	t.Cleanup(healthy.Close)
+
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.AllowPrivateRadioHosts = true
+		cfg.RadioDirectoryMirrors = []string{
+			sickRadioMirror(t, &hits), sickRadioMirror(t, &hits), healthy.URL,
+		}
+	})
+
+	resp := get(t, h.ts, "/api/v1/radio/directory?query=jazz", h.token)
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("directory status = %d (%s), want the healthy mirror's answer", resp.StatusCode, body)
+	}
+	res := decode[RadioDirectoryResults](t, resp)
+	if len(res.Entries) != 1 || res.Entries[0].Name != "Jazz24" {
+		t.Fatalf("entries = %+v, want the healthy mirror's one station", res.Entries)
+	}
+}
+
+// When every mirror says it is busy, that is a different thing from the
+// directory being broken, and the listener is told the difference. The
+// hop count is the rotation bound: four mirrors, three attempts.
+func TestRadioDirectoryAllMirrorsBusy(t *testing.T) {
+	var hits atomic.Int64
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.AllowPrivateRadioHosts = true
+		cfg.RadioDirectoryMirrors = []string{
+			sickRadioMirror(t, &hits), sickRadioMirror(t, &hits),
+			sickRadioMirror(t, &hits), sickRadioMirror(t, &hits),
+		}
+	})
+
+	resp := get(t, h.ts, "/api/v1/radio/directory?query=jazz", h.token)
+	if resp.StatusCode != 502 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("all-busy status = %d (%s), want 502", resp.StatusCode, body)
+	}
+	e := decode[Error](t, resp)
+	if e.Code != "directory-unavailable" {
+		t.Fatalf("all-busy code = %q, want directory-unavailable", e.Code)
+	}
+	if !strings.Contains(e.Message, "busy") {
+		t.Fatalf("all-busy message = %q, want the busy wording rather than a raw status", e.Message)
+	}
+	if got := hits.Load(); got != 3 {
+		t.Fatalf("mirror requests = %d, want 3 (rotate, but bounded)", got)
 	}
 }
 

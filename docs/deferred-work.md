@@ -253,42 +253,6 @@ here waits on upstream.
   and "how far ahead" are numbers worth setting against the perf run's
   measurements rather than before them - so take it with the entry above.
 
-- `[in-repo]` **The radio relay drops the artwork URLs some stations
-  announce.** Now-playing art comes from the three-rung ladder - the
-  library match, the opt-in MusicBrainz/Cover Art Archive lookup, the
-  station mark - and the relay extracts `StreamTitle` alone from the
-  ICY blocks it already parses (`server/internal/api/icy.go`). A live
-  survey of 63 stations (2026-08-07: the top-clicked public dial plus
-  Ogg/FLAC/HLS samples) found a real minority announcing art in-band,
-  always as a URL and never as image bytes: Radio Paradise sends the
-  current song's own cover in `StreamUrl` (an `image/jpeg` that changes
-  with every track - a known ad-hoc convention that Icecast-KH forwards
-  and foobar2000, AIMP, and Squeezebox honor), SomaFM sends its channel
-  logo there, fourteen streams across four operators send a logo URL in
-  a nonstandard `icy-logo` response header, and one sent a dedicated
-  `StreamArtwork` key (empty when sampled). Nothing embeds bytes: no
-  `METADATA_BLOCK_PICTURE` in any of seventeen Ogg/FLAC streams, no
-  `APIC` in any HLS segment, and Shoutcast v2's album-art frames and
-  `/playingart` endpoint are dead in the wild. The wanted rung sits
-  between the library match and the external lookup: capture
-  `StreamUrl` and `StreamArtwork` where the relay already stores the
-  announced title, plus `icy-logo` at connect, and when the value is an
-  http(s) URL whose fetched bytes sniff as an image, serve it as the
-  now-playing art - per-song covers for the Radio Paradise class, a
-  better default mark for the SomaFM class, station-chosen art for what
-  the station is playing with no third party asked. Guardrails are not
-  optional: fetch server-side with the size caps and content sniffing
-  the station-logo fetch already does (the value is a station-chosen
-  URL, same trust posture), ignore blocks carrying ad-insertion keys
-  (`adw_ad`, `insertionType` - observed on iHeart/Triton streams, where
-  `StreamUrl` is ad tracking), and expect junk (one surveyed station
-  sends a bare number there). Cache like the external-art entries. This
-  complements the ladder rather than replacing any rung - roughly one
-  surveyed stream in twenty carries per-song art - and the RTL-style
-  HLS channel (per-song artwork URLs in ID3 `WXXX` frames inside
-  segments, beside `TIT2`/`TPE1`) only matters if HLS stations are ever
-  played natively rather than relayed.
-
 - `[in-repo]` **A song heard on the radio cannot be kept.** The radio
   face names what the station is playing and can even search the
   library for it, but a listener who likes it has nowhere to put it:

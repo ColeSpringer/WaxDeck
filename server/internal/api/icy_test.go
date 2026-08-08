@@ -95,3 +95,161 @@ func TestICYStreamTitle(t *testing.T) {
 		t.Errorf("truncation: got (%q..., %v), want %d clean euros", title[:12], ok, 99)
 	}
 }
+
+func TestICYMeta(t *testing.T) {
+	cases := []struct {
+		name  string
+		block string
+		want  icyMeta
+	}{
+		{
+			"a song with a cover",
+			"StreamTitle='Artist - Song';StreamUrl='https://art.example/c.jpg';",
+			icyMeta{title: "Artist - Song", titleOK: true, artURL: "https://art.example/c.jpg"},
+		},
+		{
+			// The explicit key wins: StreamUrl predates anybody using it
+			// for pictures and is as often a homepage as a cover.
+			"artwork beats the older key",
+			"StreamTitle='Artist - Song';StreamUrl='https://station.example/';StreamArtwork='https://art.example/c.jpg';",
+			icyMeta{title: "Artist - Song", titleOK: true, artURL: "https://art.example/c.jpg"},
+		},
+		{
+			"an empty artwork key falls back",
+			"StreamTitle='Artist - Song';StreamArtwork='';StreamUrl='https://art.example/c.jpg';",
+			icyMeta{title: "Artist - Song", titleOK: true, artURL: "https://art.example/c.jpg"},
+		},
+		{
+			"a title announced with no picture",
+			"StreamTitle='Artist - Song';StreamUrl='';",
+			icyMeta{title: "Artist - Song", titleOK: true},
+		},
+		{
+			// A block with a URL and no title is not an announcement.
+			"a url on its own",
+			"StreamUrl='https://art.example/c.jpg';",
+			icyMeta{artURL: "https://art.example/c.jpg"},
+		},
+		{
+			"an advertisement",
+			"StreamTitle='Buy A Sofa';StreamUrl='https://sofa.example/banner.png';adw_ad='true';durationMilliseconds='30000';insertionType='preroll';",
+			icyMeta{title: "Buy A Sofa", titleOK: true, artURL: "https://sofa.example/banner.png", ad: true},
+		},
+		{
+			// The key rides along on songs too, so it is read rather
+			// than merely looked for.
+			"a song on a station that marks its ads",
+			"StreamTitle='Artist - Song';adw_ad='false';",
+			icyMeta{title: "Artist - Song", titleOK: true},
+		},
+		{"empty block", "", icyMeta{}},
+	}
+	for _, tc := range cases {
+		got := icyMetaOf([]byte(tc.block))
+		if got != tc.want {
+			t.Errorf("%s: got %+v, want %+v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A block is a station's own text, and stations invent keys. A key that
+// merely ends with a standard name is not that key, and reading it as
+// one is a misread the station controls: the artwork URL this server
+// goes and fetches, whether a song counts as an advertisement, and what
+// the title says are all decided here.
+func TestICYValueMatchesWholeFieldsOnly(t *testing.T) {
+	cases := []struct {
+		name  string
+		block string
+		want  icyMeta
+	}{
+		{
+			// Would otherwise hand the artwork fetcher a beacon URL.
+			"a vendor key ending in StreamUrl",
+			"StreamTitle='Real Song';MyStreamUrl='http://tracker.example/beacon';",
+			icyMeta{title: "Real Song", titleOK: true},
+		},
+		{
+			"a vendor key ending in StreamArtwork",
+			"StreamTitle='Real Song';TheirStreamArtwork='http://tracker.example/b.png';",
+			icyMeta{title: "Real Song", titleOK: true},
+		},
+		{
+			// Would otherwise drop an ordinary song off the face.
+			"a vendor key ending in insertionType",
+			"StreamTitle='Real Song';XinsertionType='none';",
+			icyMeta{title: "Real Song", titleOK: true},
+		},
+		{
+			"a vendor key ending in adw_ad",
+			"StreamTitle='Real Song';no_adw_ad='true';",
+			icyMeta{title: "Real Song", titleOK: true},
+		},
+		{
+			// The decoy comes first, so a first-match parser reads it.
+			"a decoy ahead of the real title",
+			"NotAStreamTitle='decoy';StreamTitle='Real Song';",
+			icyMeta{title: "Real Song", titleOK: true},
+		},
+		{
+			"a decoy ahead of the real artwork",
+			"StreamTitle='Real Song';MyStreamUrl='http://decoy.example/x';StreamUrl='http://art.example/c.jpg';",
+			icyMeta{title: "Real Song", titleOK: true, artURL: "http://art.example/c.jpg"},
+		},
+		{
+			// Stations pad between fields; a space is still a boundary.
+			"space-separated fields still parse",
+			"StreamTitle='Real Song'; StreamUrl='http://art.example/c.jpg';",
+			icyMeta{title: "Real Song", titleOK: true, artURL: "http://art.example/c.jpg"},
+		},
+	}
+	for _, tc := range cases {
+		if got := icyMetaOf([]byte(tc.block)); got != tc.want {
+			t.Errorf("%s: got %+v, want %+v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The insertion key rides ordinary programming on some platforms, so it
+// is read for what it says rather than for being there at all. Getting
+// this backwards is silent and total: a station sending the key on its
+// songs would lose its titles, its announced artwork, and every scrobble
+// for as long as it kept sending it.
+func TestICYAdMarkersAreReadNotCounted(t *testing.T) {
+	cases := []struct {
+		name  string
+		block string
+		ad    bool
+	}{
+		{"a named ad break", "StreamTitle='Buy A Sofa';insertionType='preroll';", true},
+		{"a midroll", "StreamTitle='Buy A Sofa';insertionType='midroll';", true},
+		{"case and padding do not matter", "StreamTitle='Buy A Sofa';insertionType=' PostRoll ';", true},
+		{"the boolean key on its own", "StreamTitle='Buy A Sofa';adw_ad='true';", true},
+		// The important direction: an unrecognised value is a song.
+		{"live insertion is programming", "StreamTitle='Real Song';insertionType='live';", false},
+		{"a house value is programming", "StreamTitle='Real Song';insertionType='station_id';", false},
+		{"an empty value is programming", "StreamTitle='Real Song';insertionType='';", false},
+		{"the boolean saying no", "StreamTitle='Real Song';adw_ad='false';", false},
+	}
+	for _, tc := range cases {
+		if got := icyMetaOf([]byte(tc.block)); got.ad != tc.ad {
+			t.Errorf("%s: ad = %v, want %v", tc.name, got.ad, tc.ad)
+		}
+	}
+}
+
+// Stations wrap their blocks. A key after a line break is still a key,
+// and missing that drops the announced cover and lets ad blocks through.
+func TestICYValueAcceptsWrappedBlocks(t *testing.T) {
+	block := "StreamTitle='Real Song';\r\nStreamUrl='https://art.example/c.jpg';\r\ninsertionType='midroll';"
+	got := icyMetaOf([]byte(block))
+	want := icyMeta{
+		title:   "Real Song",
+		titleOK: true,
+		artURL:  "https://art.example/c.jpg",
+		ad:      true,
+	}
+	if got != want {
+		t.Fatalf("wrapped block = %+v, want %+v", got, want)
+	}
+}

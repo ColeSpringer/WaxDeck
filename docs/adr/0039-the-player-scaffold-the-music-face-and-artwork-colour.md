@@ -149,6 +149,42 @@ Reduced motion does not turn the gesture off. What that setting turns off
 is decoration, not the ability to put something back where it came from -
 so the drag still tracks, and the release snaps instead of springing.
 
+### Amendment (2026-08-07): a pointer also gets a click and Escape
+
+The pull-down and a 40 px chevron were a touch answer handed to a mouse,
+and on the web they were the whole answer. Two more ways down, neither of
+them new policy:
+
+**A click off the content dismisses**, on every platform rather than on
+the pointer ones. It is the modal-sheet convention, and gating it by
+platform would mean a touchscreen laptop behaving differently depending on
+which input last moved. The click rides the same whole-surface detector
+that already owns the drag and reuses the same `onCollapse`, so there is
+one answer to "where does the surface end" and a scaffold with nowhere to
+go takes neither gesture.
+
+What must not dismiss is wrapped in a content island: the portrait content
+box, the landscape row, and the bottom region. An island claims **the tap
+only** - a no-op `onTap` on an opaque detector, never an `AbsorbPointer` -
+because absorbing would take the surface's drag with it, and a pull started
+on the artwork or the title is the original gesture. Its box is opaque so
+the slack between clusters counts as content: a thumb that misses the
+transport by a few pixels has not asked to leave. The header's empty
+stretch is not an island, and is the dismissing region on a phone, where
+the content box is the whole width.
+
+**Escape collapses**, as a screen-scoped command rather than a local
+shortcut, so it prints in the palette and the shortcut sheet for free and
+`ModalRoute.isCurrent` already decides who owns the key when a sheet
+covers the player.
+
+The semantics reasoning above extends verbatim and is why neither is
+addressable: a published tap action on that node would be an unnamed
+control the size of the window, drawn on the web as a rect with
+pointer-events over every named control beneath it. The tap is excluded
+from semantics exactly as the drag is, and `playerBack` remains the way
+out that says what it does.
+
 ### One overflow, and the two things that stay outside it
 
 The header is the collapse control, the provenance line, and - per 5.3 -

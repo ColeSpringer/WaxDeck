@@ -3795,7 +3795,7 @@ class FakeRepository implements WaxDeckRepository {
     backupKeepBytes: 0,
     trashRetentionDays: 0,
     taskRetentionDays: 30,
-    radioExternalArt: false,
+    radioExternalArt: true,
   );
 
   /// Thrown by the admin mutation endpoints when set.

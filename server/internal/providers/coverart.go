@@ -142,7 +142,7 @@ var coverArtMimes = map[string]string{
 // RecordingReleaseLookup is the MusicBrainz half of a recording cover
 // lookup. *MusicBrainz implements it.
 type RecordingReleaseLookup interface {
-	ReleaseMBIDForRecording(ctx context.Context, artist, title string) (string, error)
+	ReleaseMBIDsForRecording(ctx context.Context, artist, title string) ([]string, error)
 }
 
 // RecordingCover composes the two calls a cover for an announced track
@@ -174,22 +174,39 @@ func (r RecordingCover) FrontCover(ctx context.Context, artist, title string) ([
 	if r.MB == nil || r.CAA == nil {
 		return nil, "", missing
 	}
-	mbid, err := r.MB.ReleaseMBIDForRecording(ctx, artist, title)
+	mbids, err := r.MB.ReleaseMBIDsForRecording(ctx, artist, title)
 	if err != nil {
 		return nil, "", err
 	}
-	if mbid == "" {
+	if len(mbids) == 0 {
 		// Asked and answered: MusicBrainz knows no recording by this
 		// name, which will still be true tomorrow far more often than
 		// not. That is the long-cached outcome, not the short one.
 		return nil, "", missing
 	}
-	data, mime, err := r.CAA.FrontCover(ctx, mbid)
-	if errors.Is(err, ErrNoCover) {
-		return nil, "", missing
+	// Down the releases in the order the search ranked them. Having a
+	// release is not having a picture of it: a current single is
+	// routinely entered twice, once for a digital release nobody
+	// uploaded a sleeve for and once for the album that has one, and
+	// asking only the first is why a track playing on the radio drew
+	// nothing while its cover sat in the archive one release along.
+	var reachErr error
+	for _, mbid := range mbids {
+		data, mime, err := r.CAA.FrontCover(ctx, mbid)
+		switch {
+		case err == nil:
+			return data, mime, nil
+		case errors.Is(err, ErrNoCover):
+			continue
+		default:
+			// Held rather than returned: a release the archive could not
+			// be asked about says nothing about the next one, and the
+			// error only matters if none of them answers.
+			reachErr = err
+		}
 	}
-	if err != nil {
-		return nil, "", err
+	if reachErr != nil {
+		return nil, "", reachErr
 	}
-	return data, mime, nil
+	return nil, "", missing
 }

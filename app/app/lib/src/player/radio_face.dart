@@ -245,7 +245,15 @@ class _FindInLibrary extends StatelessWidget {
       label: 'Find "$track" in the library',
       size: 18,
       semanticsId: SemanticsIds.playerFindInLibrary,
-      onPressed: () => context.push(WaxRoute.searchFor(track)),
+      // `go`, not `push`. A search is a location a stranger can open, so
+      // the routing rule already says which verb it takes - and pushing
+      // it from here was not merely untidy but broken: the player is an
+      // overlay on the root navigator and `/search` lives inside the
+      // shell, so pushing built a second shell whose navigator key was
+      // already reserved. The assertion that fired took the navigation
+      // and the face's own rebuild with it, which is why the button
+      // looked dead and the station's title went blank beside it.
+      onPressed: () => context.go(WaxRoute.searchFor(track)),
     );
   }
 }

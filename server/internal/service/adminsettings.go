@@ -29,11 +29,7 @@ type AdminSettings struct {
 	EnrichmentWriteTags bool
 	// RadioExternalArt lets radio look a station's announced title up
 	// against MusicBrainz and the Cover Art Archive when nothing in this
-	// library matches it. Off by default, and the only setting here that
-	// governs whether WaxDeck talks to a third party at all: it sends a
-	// string a station chose off this server. With it off the station
-	// mark is what a listener sees, which is a designed answer rather
-	// than a gap.
+	// library matches it. On by default.
 	RadioExternalArt bool
 }
 
@@ -100,6 +96,8 @@ func (l *Library) loadRuntimeToggles(ctx context.Context) {
 	if v, err := l.db.SettingGet(ctx, settingEnrichWriteTags); err == nil {
 		t.enrichWriteTags = v == "true"
 	}
+	// On unless an operator has said otherwise.
+	t.radioExternalArt = true
 	if v, err := l.db.SettingGet(ctx, settingRadioExternalArt); err == nil {
 		t.radioExternalArt = v == "true"
 	}

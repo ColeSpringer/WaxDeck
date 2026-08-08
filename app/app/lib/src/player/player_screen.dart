@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -24,6 +25,7 @@ import '../queue/queue_view.dart';
 import '../radio/radio_controller.dart';
 import '../settings/client_prefs.dart';
 import '../sharing/share_dialog.dart';
+import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'deck_bar_host.dart';
@@ -82,17 +84,43 @@ class PlayerScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // A Scaffold with nothing in it but the body, for the thing a
-    // Scaffold does that no other widget does: it is what
-    // `ScaffoldMessenger` presents into. The player is a route of its
-    // own over the shell, so the chrome's Scaffold is not an ancestor,
-    // and every refusal raised from here - a star that would not stick,
-    // a routed command an endpoint declined, a delete the server
-    // refused - asserts without one. The backdrop underneath paints the
-    // canvas, hence transparent.
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: _body(context, ref),
+    return CommandScope(
+      // The keyboard's way out, and the third one overall beside the
+      // collapse button and the pull-down. Scoped rather than global so
+      // Escape belongs to whoever is on top: `CommandScope` withdraws
+      // itself when its route stops being current, so a sheet or the
+      // palette over the player answers Escape first and hands it back
+      // on the way out.
+      commands: <WaxCommand>[
+        WaxCommand(
+          id: 'player-collapse',
+          label: 'Collapse the player',
+          section: WaxCommandSection.view,
+          glyph: WaxIcons.collapse,
+          // Not on repeats. The binding map fires on every key event the
+          // activator accepts, and a held Escape repeats about every
+          // 33 ms while the scope withdraws itself only on a post-frame
+          // callback - so the second firing runs `leavePlayer` with the
+          // player already gone and pops whatever was underneath it, or
+          // at the root sends the listener home.
+          activators: const <ShortcutActivator>[
+            SingleActivator(LogicalKeyboardKey.escape, includeRepeats: false),
+          ],
+          run: (context, ref) => leavePlayer(context),
+        ),
+      ],
+      // A Scaffold with nothing in it but the body, for the thing a
+      // Scaffold does that no other widget does: it is what
+      // `ScaffoldMessenger` presents into. The player is a route of its
+      // own over the shell, so the chrome's Scaffold is not an ancestor,
+      // and every refusal raised from here - a star that would not
+      // stick, a routed command an endpoint declined, a delete the
+      // server refused - asserts without one. The backdrop underneath
+      // paints the canvas, hence transparent.
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: _body(context, ref),
+      ),
     );
   }
 
@@ -185,23 +213,42 @@ class _PlayerShell extends ConsumerWidget {
       domain: domain,
       child: WaxBackdrop(
         domain: domain,
-        child: SafeArea(
-          child: Column(
-            children: <Widget>[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
-                  child: WaxIconButton(
-                    glyph: WaxIcons.collapse,
-                    label: 'Collapse player',
-                    onPressed: () => leavePlayer(context),
-                    semanticsId: SemanticsIds.playerBack,
+        // The scaffold's dismissal, on the surfaces that have no
+        // scaffold. Unlike the player proper this has no content card to
+        // hold a tap back from: these states are a glyph, two lines, and
+        // at most one button, and the button is the deeper hit target so
+        // it still gets its own taps. Everything else here is backdrop,
+        // and a tap on backdrop leaves.
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            // Same reason as the scaffold's: a published tap action here
+            // would be an unnamed control the size of the window, and
+            // the collapse button beside it already says what it does.
+            excludeFromSemantics: true,
+            onTap: () => leavePlayer(context),
+            child: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: WaxSpace.s8,
+                      ),
+                      child: WaxIconButton(
+                        glyph: WaxIcons.collapse,
+                        label: 'Collapse player',
+                        onPressed: () => leavePlayer(context),
+                        semanticsId: SemanticsIds.playerBack,
+                      ),
+                    ),
                   ),
-                ),
+                  Expanded(child: child),
+                ],
               ),
-              Expanded(child: child),
-            ],
+            ),
           ),
         ),
       ),
@@ -562,7 +609,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             ref: ref,
           ).markPlayed(context, _episode!, playPidsKey(<String>[_item.pid])),
           _PlayerMenuAction.goToShow => Future<void>.sync(
-            () => context.push(WaxRoute.show(_episode!.showPid)),
+            () => context.go(WaxRoute.show(_episode!.showPid)),
           ),
           // Pushed over the player rather than replacing it: both are
           // views of the same playback, and leaving either lands back on

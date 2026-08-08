@@ -332,16 +332,20 @@ func (m *MusicBrainz) SearchRecordings(ctx context.Context, artist, title string
 	return out, nil
 }
 
-// ReleaseMBIDForRecording answers the best release id for an announced
-// artist and title, or empty when nothing matched.
+// ReleaseMBIDsForRecording answers the releases an announced artist and
+// title sit on, best first, or nothing when the search matched nothing.
 //
 // A search rather than SearchRecordings, deliberately: that one hydrates
 // up to five releases to build full candidates, which is five more paced
-// round trips than a cover needs. All this wants is the first release id
-// the top recording sits on.
-func (m *MusicBrainz) ReleaseMBIDForRecording(ctx context.Context, artist, title string) (string, error) {
+// round trips than a cover needs. This reads the release ids the search
+// already returned and costs one request.
+//
+// Several rather than one, because having a release is not having a
+// picture of it: the caller asks the archive in this order and stops at
+// the first that answers.
+func (m *MusicBrainz) ReleaseMBIDsForRecording(ctx context.Context, artist, title string) ([]string, error) {
 	if strings.TrimSpace(title) == "" {
-		return "", nil
+		return nil, nil
 	}
 	query := "recording:" + luceneQuote(title)
 	if artist != "" {
@@ -353,14 +357,14 @@ func (m *MusicBrainz) ReleaseMBIDForRecording(ctx context.Context, artist, title
 	q.Set("limit", "3")
 	body, status, err := m.core.get(ctx, m.base+"/recording?"+q.Encode(), m.ttl)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	switch status {
 	case http.StatusOK:
 	case http.StatusBadRequest, http.StatusNotFound:
-		return "", nil
+		return nil, nil
 	default:
-		return "", fmt.Errorf("providers: musicbrainz recording search: status %d", status)
+		return nil, fmt.Errorf("providers: musicbrainz recording search: status %d", status)
 	}
 	var parsed struct {
 		Recordings []struct {
@@ -370,17 +374,35 @@ func (m *MusicBrainz) ReleaseMBIDForRecording(ctx context.Context, artist, title
 		} `json:"recordings"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return "", fmt.Errorf("providers: decode musicbrainz recording search: %w", err)
+		return nil, fmt.Errorf("providers: decode musicbrainz recording search: %w", err)
 	}
+	seen := map[string]bool{}
+	out := make([]string, 0, maxCoverReleases)
 	for _, rec := range parsed.Recordings {
 		for _, rel := range rec.Releases {
-			if rel.ID != "" {
-				return rel.ID, nil
+			if rel.ID == "" || seen[rel.ID] {
+				continue
+			}
+			seen[rel.ID] = true
+			out = append(out, rel.ID)
+			if len(out) == maxCoverReleases {
+				return out, nil
 			}
 		}
 	}
-	return "", nil
+	return out, nil
 }
+
+// maxCoverReleases bounds how many of a recording's releases are worth
+// asking the archive about.
+//
+// More than one because a recording is on many releases and only some
+// carry art: a single is routinely entered twice, once for the digital
+// release nobody uploaded a sleeve for and once for the album that has
+// one. Taking the first and stopping is why a current chart track drew
+// nothing while its cover sat in the archive one release along. Bounded
+// because the tail is long and each miss is another request.
+const maxCoverReleases = 4
 
 // LookupFingerprint is not a MusicBrainz capability; the composite Source
 // routes fingerprints to AcoustID. Returning an error here keeps a bare

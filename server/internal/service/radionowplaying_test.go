@@ -125,3 +125,28 @@ func TestParseRadioTitleStaysStrict(t *testing.T) {
 		t.Errorf("parse = (%q, %q, %v)", artist, title, ok)
 	}
 }
+
+// The apostrophe is the difference between a cover and a blank face.
+// MusicBrainz indexes "that's" as one token, so the collapsed spellings
+// find nothing; the search form keeps the mark while the matching form
+// still folds it away, and both spellings of the mark take one path.
+func TestRadioSearchFieldKeepsApostrophes(t *testing.T) {
+	cases := []struct{ raw, search, match string }{
+		{"That's What Tequila Does", "that's what tequila does", "that s what tequila does"},
+		// The typographic mark folds to the straight one first, so the
+		// two spellings cannot take different paths.
+		{"That’s What Tequila Does", "that's what tequila does", "that s what tequila does"},
+		{"Sweet Child O' Mine", "sweet child o' mine", "sweet child o mine"},
+		// Everything else is treated exactly as before.
+		{"Charlie Parker  [Official Stream]", "charlie parker", "charlie parker"},
+		{"Brunette", "brunette", "brunette"},
+	}
+	for _, tc := range cases {
+		if got := radioSearchField(tc.raw); got != tc.search {
+			t.Errorf("radioSearchField(%q) = %q, want %q", tc.raw, got, tc.search)
+		}
+		if got := normalizeRadioField(tc.raw); got != tc.match {
+			t.Errorf("normalizeRadioField(%q) = %q, want %q", tc.raw, got, tc.match)
+		}
+	}
+}

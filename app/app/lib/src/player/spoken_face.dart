@@ -142,10 +142,10 @@ class ShowOverline extends ConsumerWidget {
       semanticsId: SemanticsIds.playerShow,
       label: 'Go to $name',
       borderRadius: WaxRadius.chip,
-      onPressed: () => context.push(WaxRoute.show(episode.showPid)),
+      onPressed: () => context.go(WaxRoute.show(episode.showPid)),
       child: InkWell(
         borderRadius: WaxRadius.chip,
-        onTap: () => context.push(WaxRoute.show(episode.showPid)),
+        onTap: () => context.go(WaxRoute.show(episode.showPid)),
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: WaxSpace.s8,

@@ -1,12 +1,18 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
 import 'player_host.dart';
+import 'routed_host.dart';
 
 const _first = 'tr-01JZX5N8QW3F4V9T2B7KDMUSIC1';
 const _second = 'tr-01JZX5N8QW3F4V9T2B7KDMUSIC2';
@@ -14,6 +20,37 @@ const _bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 
 ItemSummary _track(String pid, String title) =>
     testItem(pid, title: title, artist: 'Nightjar');
+
+/// The player over a router arranged the way the app arranges it, which
+/// the plain [routedHost] cannot be: the key map has to sit *inside* the
+/// router, or a command that navigates finds no `GoRouter` from the
+/// context it is run with, and *above* the navigator the player is
+/// pushed onto, or the key never reaches the map from the focused route.
+/// A shell route is where the app satisfies both, so it is where this
+/// does too.
+Widget _keyboardHost(Widget player) {
+  final router = GoRouter(
+    initialLocation: '/under-test/player',
+    routes: <RouteBase>[
+      ShellRoute(
+        builder: (context, state, child) => CommandShortcuts(child: child),
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/under-test',
+            // Something to go back to, so popping is what the app does
+            // rather than the fallback to home.
+            builder: (context, state) => const Scaffold(),
+            routes: <RouteBase>[
+              GoRoute(path: 'player', builder: (context, state) => player),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+  addTearDown(router.dispose);
+  return MaterialApp.router(routerConfig: router);
+}
 
 void main() {
   group('the music face', () {
@@ -267,6 +304,71 @@ void main() {
         findsOneWidget,
       );
       await harness.endPlayback(tester);
+    });
+  });
+
+  // Three ways down, for three ways of arriving: the collapse button,
+  // the pull-down, and -- since a mouse has neither a thumb nor a
+  // reliable aim for a 40 px button -- Escape and a click off the
+  // content.
+  group('leaving the player', () {
+    testWidgets('offers the keyboard a way down', (tester) async {
+      final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(),
+        item: _track(_first, 'Salt Harbour'),
+      );
+
+      // Scoped to the screen, so it is in the registry while the player
+      // is up and gone with it -- which is also what puts it in the
+      // palette and the shortcut sheet for free.
+      harness.container.listen(commandRegistryProvider, (_, _) {});
+      await tester.pumpAndSettle();
+      expect(
+        harness.container.read(commandRegistryProvider).map((c) => c.id),
+        contains('player-collapse'),
+      );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('Escape takes it back down', (tester) async {
+      final repo = FakeRepository(items: [_track(_first, 'Salt Harbour')]);
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(),
+        item: _track(_first, 'Salt Harbour'),
+        host: _keyboardHost,
+      );
+      expect(find.byType(PlayerScreen), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayerScreen), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a click leaves the states that have no scaffold', (
+      tester,
+    ) async {
+      // The idle, error, and loading shells are not the scaffold and do
+      // not get its islands: they are a glyph and two lines over
+      // backdrop, so anything that is not their one button is a way out.
+      final harness = PlayerHarness(
+        playbackContainer(repo: FakeRepository(), engine: FakeEngine()),
+      );
+      await pumpPlayerInto(
+        tester,
+        harness,
+        host: (player) => routedHost(player, pushed: true),
+      );
+      expect(find.byKey(const Key('player-idle')), findsOneWidget);
+
+      await tester.tapAt(const Offset(24, 420));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('player-idle')), findsNothing);
     });
   });
 }

@@ -409,7 +409,8 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
                 ? _landscape(context, colors)
                 : _portrait(context, colors),
           ),
-          ?widget.bottomRegion,
+          if (widget.bottomRegion != null)
+            _ContentIsland(child: widget.bottomRegion!),
         ],
       ),
     );
@@ -451,139 +452,190 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
           // reduced motion: what that setting turns off is decoration,
           // not the ability to put something back where it came from.
           // The release is where it takes effect.
-          child: GestureDetector(
-            // Opaque, so the gesture is the whole surface's and not only
-            // its widgets': the space around the artwork is most of a
-            // player, and a dismissal that only worked where something
-            // was drawn would read as broken. Children are hit-tested
-            // first, so the controls keep their taps, and the seek bar's
-            // horizontal drag and this vertical one are told apart by
-            // direction rather than by who got there first.
-            behavior: HitTestBehavior.opaque,
-            // A pointer gesture and nothing else. Left in the semantics
-            // tree, a vertical drag publishes scrollUp and scrollDown on
-            // this node, and a screen-reader scroll then synthesises a
-            // drag long enough to cross the dismiss threshold: swiping
-            // to read the player would close it. The way out for a
-            // screen reader is the collapse button, which says what it
-            // does.
-            excludeFromSemantics: true,
-            onVerticalDragStart: widget.onCollapse == null ? null : _dragStart,
-            onVerticalDragUpdate: widget.onCollapse == null
-                ? null
-                : _dragUpdate,
-            onVerticalDragEnd: widget.onCollapse == null ? null : _dragEnd,
-            child: surface,
+          child: MouseRegion(
+            // The one hover affordance: over the space that dismisses,
+            // the pointer says so. The content islands below put it back
+            // to an arrow, because over them nothing happens.
+            cursor: widget.onCollapse == null
+                ? MouseCursor.defer
+                : SystemMouseCursors.click,
+            child: GestureDetector(
+              // Opaque, so the gesture is the whole surface's and not only
+              // its widgets': the space around the artwork is most of a
+              // player, and a dismissal that only worked where something
+              // was drawn would read as broken. Children are hit-tested
+              // first, so the controls keep their taps, and the seek bar's
+              // horizontal drag and this vertical one are told apart by
+              // direction rather than by who got there first.
+              behavior: HitTestBehavior.opaque,
+              // A pointer gesture and nothing else. Left in the semantics
+              // tree, a vertical drag publishes scrollUp and scrollDown on
+              // this node, and a screen-reader scroll then synthesises a
+              // drag long enough to cross the dismiss threshold: swiping
+              // to read the player would close it. The same exclusion is
+              // what keeps the tap below from publishing an action, which
+              // matters more on web: a tappable node is drawn as a rect
+              // with pointer-events over the whole surface, and a screen
+              // reader would find a nameless control the size of the
+              // window. The way out for a screen reader is the collapse
+              // button, which says what it does.
+              excludeFromSemantics: true,
+              // Pointers have no pull-down. Tapping off the content is
+              // how a modal surface is dismissed with a mouse, and the
+              // gesture rides the detector that already owns the drag so
+              // the two cannot disagree about where the surface ends:
+              // one policy, and a null onCollapse turns off both.
+              onTap: widget.onCollapse,
+              onVerticalDragStart: widget.onCollapse == null
+                  ? null
+                  : _dragStart,
+              onVerticalDragUpdate: widget.onCollapse == null
+                  ? null
+                  : _dragUpdate,
+              onVerticalDragEnd: widget.onCollapse == null ? null : _dragEnd,
+              child: surface,
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _header(BuildContext context, WaxColors colors) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8),
-    child: Row(
-      children: <Widget>[
-        WaxIconButton(
-          glyph: WaxIcons.collapse,
-          label: 'Collapse player',
-          onPressed: widget.onCollapse,
-          semanticsId: widget.ids.collapse,
-        ),
-        Expanded(
-          child: Center(
-            child: widget.now.provenance == null
-                ? const SizedBox.shrink()
-                : Text(
-                    widget.now.provenance!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: WaxType.caption.copyWith(
-                      color: colors.textSecondary,
-                    ),
-                  ),
+  /// The gutter each header control keeps around itself.
+  ///
+  /// Taken out of the header's own padding rather than added to it, so
+  /// the controls sit exactly where they always did and the pixels
+  /// beside them change hands instead: they belong to the control's
+  /// island now, not to the dismissing surface. Without a buffer a thumb
+  /// a few pixels off the overflow menu lands on the centre stretch and
+  /// shuts the player, and islanding the buttons alone cannot fix that -
+  /// an island wraps its child exactly, so it adds no room to miss into.
+  static const EdgeInsets _headerControlGutter = EdgeInsets.symmetric(
+    horizontal: WaxSpace.s8,
+  );
+
+  Widget _header(BuildContext context, WaxColors colors) => Row(
+    children: <Widget>[
+      // The controls are islands, the stretch between them is not. The
+      // centre stays dismissing on purpose: on a phone the content box
+      // is the full width, and this stretch is the only region a tap
+      // can land in.
+      _ContentIsland(
+        child: Padding(
+          padding: _headerControlGutter,
+          child: WaxIconButton(
+            glyph: WaxIcons.collapse,
+            label: 'Collapse player',
+            onPressed: widget.onCollapse,
+            semanticsId: widget.ids.collapse,
           ),
         ),
-        ...?widget.trailingHeaderActions,
-      ],
-    ),
+      ),
+      Expanded(
+        child: Center(
+          child: widget.now.provenance == null
+              ? const SizedBox.shrink()
+              : Text(
+                  widget.now.provenance!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: WaxType.caption.copyWith(color: colors.textSecondary),
+                ),
+        ),
+      ),
+      if (widget.trailingHeaderActions != null)
+        _ContentIsland(
+          child: Padding(
+            padding: _headerControlGutter,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: widget.trailingHeaderActions!,
+            ),
+          ),
+        ),
+    ],
   );
 
   Widget _portrait(BuildContext context, WaxColors colors) {
     return Center(
-      child: ConstrainedBox(
-        // Desktop centres the same face rather than stretching it: a
-        // player is a fixed-width object on a wide window, and queue and
-        // lyrics prefer the side panel to an overlay there.
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s24),
-          child: LayoutBuilder(
-            builder: (context, outer) => Column(
-              children: <Widget>[
-                // The hero takes what the clusters below do not want,
-                // rather than a fraction of the window. Both readings
-                // were in this file at once - a width clamp and a height
-                // fraction, added the second time this overflowed - and
-                // neither can be right while what sits under the artwork
-                // varies by face: the music face carries a volume row
-                // and an action row that the first sketch of this did
-                // not.
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      // The gutter above and below the artwork is taken
-                      // out of the extent rather than wrapped around it:
-                      // a Padding inside this Expanded demands its 32 px
-                      // even after the flex has been squeezed to
-                      // nothing, which is an overflow of exactly that
-                      // padding on a window with no room left.
-                      final extent = math.min(
-                        constraints.maxWidth,
-                        constraints.maxHeight - WaxSpace.s32,
-                      );
-                      // Nothing left to draw art in: a very short window
-                      // gives its height to the controls, which are what
-                      // the surface is for.
-                      if (extent < 96) return const SizedBox.shrink();
-                      return Center(child: _hero(extent.clamp(96.0, 420.0)));
-                    },
-                  ),
-                ),
-                // Bounded to the whole slot and scrollable inside it,
-                // which is what keeps the flex above honest. As a
-                // free-height child the clusters simply took what they
-                // wanted, and a face whose action row wrapped to a
-                // second line - or a large text scale, or a short
-                // window - overflowed by whatever it wanted past the
-                // end. Under the cap they take their natural height
-                // while there is room, and the hero yields first;
-                // past it they scroll and the hero is gone.
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: outer.maxHeight),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        _titleBlock(colors),
-                        const SizedBox(height: WaxSpace.s20),
-                        widget.seek,
-                        const SizedBox(height: WaxSpace.s16),
-                        widget.transport,
-                        if (widget.volume != null) ...<Widget>[
-                          const SizedBox(height: WaxSpace.s8),
-                          widget.volume!,
-                        ],
-                        if (widget.actionRow != null) ...<Widget>[
-                          const SizedBox(height: WaxSpace.s16),
-                          widget.actionRow!,
-                        ],
-                        const SizedBox(height: WaxSpace.s16),
-                      ],
+      child: _ContentIsland(
+        child: ConstrainedBox(
+          // Desktop centres the same face rather than stretching it: a
+          // player is a fixed-width object on a wide window, and queue
+          // and lyrics prefer the side panel to an overlay there. On a
+          // wide window the gutters either side of this box are what a
+          // pointer clicks to leave; on a phone the box is the width and
+          // the header's stretch is the whole of that region.
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s24),
+            child: LayoutBuilder(
+              builder: (context, outer) => Column(
+                children: <Widget>[
+                  // The hero takes what the clusters below do not want,
+                  // rather than a fraction of the window. Both readings
+                  // were in this file at once - a width clamp and a height
+                  // fraction, added the second time this overflowed - and
+                  // neither can be right while what sits under the artwork
+                  // varies by face: the music face carries a volume row
+                  // and an action row that the first sketch of this did
+                  // not.
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        // The gutter above and below the artwork is taken
+                        // out of the extent rather than wrapped around it:
+                        // a Padding inside this Expanded demands its 32 px
+                        // even after the flex has been squeezed to
+                        // nothing, which is an overflow of exactly that
+                        // padding on a window with no room left.
+                        final extent = math.min(
+                          constraints.maxWidth,
+                          constraints.maxHeight - WaxSpace.s32,
+                        );
+                        // Nothing left to draw art in: a very short window
+                        // gives its height to the controls, which are what
+                        // the surface is for.
+                        if (extent < 96) return const SizedBox.shrink();
+                        return Center(child: _hero(extent.clamp(96.0, 420.0)));
+                      },
                     ),
                   ),
-                ),
-              ],
+                  // Bounded to the whole slot and scrollable inside it,
+                  // which is what keeps the flex above honest. As a
+                  // free-height child the clusters simply took what they
+                  // wanted, and a face whose action row wrapped to a
+                  // second line - or a large text scale, or a short
+                  // window - overflowed by whatever it wanted past the
+                  // end. Under the cap they take their natural height
+                  // while there is room, and the hero yields first;
+                  // past it they scroll and the hero is gone.
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: outer.maxHeight),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          _titleBlock(colors),
+                          const SizedBox(height: WaxSpace.s20),
+                          widget.seek,
+                          const SizedBox(height: WaxSpace.s16),
+                          widget.transport,
+                          if (widget.volume != null) ...<Widget>[
+                            const SizedBox(height: WaxSpace.s8),
+                            widget.volume!,
+                          ],
+                          if (widget.actionRow != null) ...<Widget>[
+                            const SizedBox(height: WaxSpace.s16),
+                            widget.actionRow!,
+                          ],
+                          const SizedBox(height: WaxSpace.s16),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -674,43 +726,49 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
         width - WaxSpace.s24 * 2 - WaxSpace.s24 - _landscapeControlsMin;
     final extent = math.min(height - WaxSpace.s64, room);
     return Padding(
+      // Inside the padding rather than around it, so the gutters this
+      // leaves are still surface: landscape puts the content edge to
+      // edge, and these two strips plus the header are the whole of what
+      // a pointer has to click on.
       padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s24),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: <Widget>[
-          if (extent >= 96) ...<Widget>[
-            _hero(extent.clamp(96.0, 260.0)),
-            const SizedBox(width: WaxSpace.s24),
-          ],
-          Expanded(
-            // The controls need what they need, and a short window or a
-            // large text scale can leave them more than the height
-            // there is. Scrolling is what gives; a drag started in here
-            // belongs to the scroll rather than to the dismissal, which
-            // is why the artwork side stays the drag handle.
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  _titleBlock(colors, alignStart: true),
-                  const SizedBox(height: WaxSpace.s16),
-                  widget.seek,
-                  const SizedBox(height: WaxSpace.s12),
-                  widget.transport,
-                  if (widget.volume != null) ...<Widget>[
-                    const SizedBox(height: WaxSpace.s8),
-                    widget.volume!,
-                  ],
-                  if (widget.actionRow != null) ...<Widget>[
+      child: _ContentIsland(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            if (extent >= 96) ...<Widget>[
+              _hero(extent.clamp(96.0, 260.0)),
+              const SizedBox(width: WaxSpace.s24),
+            ],
+            Expanded(
+              // The controls need what they need, and a short window or
+              // a large text scale can leave them more than the height
+              // there is. Scrolling is what gives; a drag started in
+              // here belongs to the scroll rather than to the dismissal,
+              // which is why the artwork side stays the drag handle.
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    _titleBlock(colors, alignStart: true),
+                    const SizedBox(height: WaxSpace.s16),
+                    widget.seek,
                     const SizedBox(height: WaxSpace.s12),
-                    widget.actionRow!,
+                    widget.transport,
+                    if (widget.volume != null) ...<Widget>[
+                      const SizedBox(height: WaxSpace.s8),
+                      widget.volume!,
+                    ],
+                    if (widget.actionRow != null) ...<Widget>[
+                      const SizedBox(height: WaxSpace.s12),
+                      widget.actionRow!,
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -760,5 +818,41 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
           ),
         ),
     ],
+  );
+}
+
+/// A region of the player a tap must not dismiss.
+///
+/// A no-op tap rather than an [AbsorbPointer]: absorbing would take the
+/// surface's vertical drag with it, and a pull started on the artwork or
+/// the title is how the player has come down since before there was a
+/// tap to compete with. Claiming only the tap leaves the drag arena
+/// exactly as it was - this detector enters no drag recognizer, so the
+/// surface's still wins one - while a tap that lands here is spent here.
+///
+/// It publishes nothing: the island is a hit-test fact, and a semantics
+/// node for it would be a control with no name wrapped around the
+/// controls that do have names.
+class _ContentIsland extends StatelessWidget {
+  const _ContentIsland({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    // Undoes the surface's click cursor. The buttons inside set their
+    // own and sit deeper still, so this only ever paints the gaps
+    // between them.
+    cursor: SystemMouseCursors.basic,
+    child: GestureDetector(
+      // The whole box, not only where something is drawn: the slack
+      // between the transport and the action row is content the same way
+      // the buttons are, and a thumb that lands a few pixels off a
+      // control has not asked to leave.
+      behavior: HitTestBehavior.opaque,
+      onTap: () {},
+      excludeFromSemantics: true,
+      child: child,
+    ),
   );
 }

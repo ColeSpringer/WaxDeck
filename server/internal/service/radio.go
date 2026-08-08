@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -170,52 +172,79 @@ func (l *Library) RadioStreamSource(ctx context.Context, apiStationPID string) (
 // on the query, and the difference matters to someone searching for a
 // station they already know: a filter would hide a good foreign match
 // entirely, where a partition only moves it down.
+// The directory is a volunteer pool of mirrors behind one round-robin
+// name, so a single sick mirror used to be the whole feature failing:
+// the pooled connection pinned it and every retry landed back on it.
+// One search may therefore try a few mirrors before giving up, and a
+// mirror that just failed sorts last for a few minutes afterwards.
 func (l *Library) SearchRadioDirectory(ctx context.Context, uc *UserCtx, q string, limit int) ([]RadioDirectoryEntry, error) {
-	base := l.radioDirectoryBase
-	if base == "" {
-		base = defaultRadioDirectoryBase
-	}
-	u := strings.TrimRight(base, "/") + "/json/stations/search?" + url.Values{
-		"name":       {q},
-		"limit":      {fmt.Sprint(limit)},
-		"hidebroken": {"true"},
-		"order":      {"votes"},
-		"reverse":    {"true"},
-	}.Encode()
 	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(callCtx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, &Error{Kind: KindInternal, Err: err}
+
+	var (
+		raw       []radioDirectoryRow
+		answered  bool
+		attempts  int
+		throttles int
+		lastErr   error
+		lastCode  int
+	)
+	for _, base := range l.radioDirectoryMirrors(callCtx) {
+		if attempts >= radioMirrorAttempts {
+			break
+		}
+		attempts++
+		body, code, err := l.fetchRadioDirectory(callCtx, base, q, limit)
+		if err == nil && code == http.StatusOK {
+			rows, decodeErr := decodeRadioDirectory(body)
+			if decodeErr == nil {
+				raw, answered = rows, true
+				break
+			}
+			// A 200 that is not a list of stations is a sick mirror
+			// answering rather than an answer: an empty body, an error
+			// page, or the JSON literal `null` - which unmarshals
+			// cleanly into nothing and would otherwise be reported as
+			// "no stations match" while healthy mirrors went unasked.
+			err = decodeErr
+		}
+		// The caller went away. A directory search is typeahead-shaped,
+		// so every keystroke cancels the one before it, and the fetch
+		// returns instantly with a context error. That says nothing
+		// about the mirror it was talking to, and cooling it here would
+		// put five healthy hosts at the back of the queue for five
+		// minutes because somebody typed five letters.
+		if callCtx.Err() != nil {
+			break
+		}
+		// A 4xx that is not a throttle is this request's own fault, and
+		// every other mirror would repeat it. Asking them anyway would
+		// spend the budget to hear the same no three times.
+		if code >= 400 && code < 500 && code != http.StatusTooManyRequests {
+			return nil, &Error{Kind: KindDirectory, Msg: fmt.Sprintf("the station directory answered status %d", code)}
+		}
+		lastErr, lastCode = err, code
+		if code == http.StatusTooManyRequests || code == http.StatusServiceUnavailable {
+			throttles++
+		}
+		l.coolRadioMirror(base)
 	}
-	// The directory asks clients to identify themselves.
-	req.Header.Set("User-Agent", "WaxDeck")
-	resp, err := l.radioClient().Do(req)
-	if err != nil {
-		return nil, &Error{Kind: KindDirectory, Msg: "the station directory could not be reached", Err: err}
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, &Error{Kind: KindDirectory, Msg: fmt.Sprintf("the station directory answered status %d", resp.StatusCode)}
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, &Error{Kind: KindDirectory, Msg: "the station directory could not be read", Err: err}
-	}
-	var raw []struct {
-		Name        string `json:"name"`
-		URL         string `json:"url"`
-		URLResolved string `json:"url_resolved"`
-		Homepage    string `json:"homepage"`
-		Favicon     string `json:"favicon"`
-		Tags        string `json:"tags"`
-		Country     string `json:"country"`
-		CountryCode string `json:"countrycode"`
-		Codec       string `json:"codec"`
-		Bitrate     int    `json:"bitrate"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, &Error{Kind: KindDirectory, Msg: "the station directory answered something unexpected", Err: err}
+	if !answered {
+		switch {
+		// Every mirror asked said it was too busy, which is a different
+		// thing from being broken and reads as one to a listener: the
+		// wording matches the podcast directory's for the same state.
+		case attempts > 0 && throttles == attempts:
+			return nil, &Error{Kind: KindDirectory, Msg: "the station directory is busy; try again shortly", Err: lastErr}
+		// Only a status worth printing. A mirror that answered 200 with
+		// something that is not a list of stations lands here too, and
+		// "the station directory answered status 200" tells a listener
+		// nothing at all.
+		case lastCode >= 400:
+			return nil, &Error{Kind: KindDirectory, Msg: fmt.Sprintf("the station directory answered status %d", lastCode), Err: lastErr}
+		default:
+			return nil, &Error{Kind: KindDirectory, Msg: "the station directory could not be reached", Err: lastErr}
+		}
 	}
 	out := make([]RadioDirectoryEntry, 0, len(raw))
 	for _, r := range raw {
@@ -240,6 +269,223 @@ func (l *Library) SearchRadioDirectory(ctx context.Context, uc *UserCtx, q strin
 	}
 	rankRadioByRegion(out, l.listenerRegion(ctx, uc))
 	return out, nil
+}
+
+// radioDirectoryRow is one station as the directory sends it.
+type radioDirectoryRow struct {
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	URLResolved string `json:"url_resolved"`
+	Homepage    string `json:"homepage"`
+	Favicon     string `json:"favicon"`
+	Tags        string `json:"tags"`
+	Country     string `json:"country"`
+	CountryCode string `json:"countrycode"`
+	Codec       string `json:"codec"`
+	Bitrate     int    `json:"bitrate"`
+}
+
+// decodeRadioDirectory parses a mirror's answer, refusing anything that
+// is not a list. A nil result is the refusal that matters: `null` decodes
+// without error into no rows at all, and reporting that as an empty
+// search would turn one sick mirror into "there are no jazz stations".
+func decodeRadioDirectory(body []byte) ([]radioDirectoryRow, error) {
+	var rows []radioDirectoryRow
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		return nil, errors.New("the directory answered no list of stations")
+	}
+	return rows, nil
+}
+
+const (
+	// radioMirrorAttempts bounds one search's mirror hops.
+	radioMirrorAttempts = 3
+	// radioMirrorTimeout is one mirror's slice of the search budget, and
+	// the two multiply to fit inside it: three hops at three seconds sit
+	// under the ten-second budget, where the five seconds this first had
+	// meant two hanging mirrors spent the whole thing and the third
+	// attempt returned instantly on a dead context. A healthy mirror
+	// answers a name search in well under a second.
+	radioMirrorTimeout = 3 * time.Second
+	// radioMirrorLookupTimeout bounds SRV discovery, which happens at
+	// most hourly and must not eat a search's budget when DNS is slow.
+	radioMirrorLookupTimeout = 2 * time.Second
+	// radioMirrorTTL is how long discovered mirrors are reused.
+	radioMirrorTTL = time.Hour
+	// radioMirrorFailTTL is how long a resolver that could not answer is
+	// remembered. Some networks drop SRV entirely, and without a
+	// negative memory every search on such a host would spend the whole
+	// lookup budget before falling back to the round-robin name -- a
+	// permanent tax on the feature this change exists to speed up.
+	// Shorter than the positive TTL, since DNS coming back is ordinary.
+	radioMirrorFailTTL = 5 * time.Minute
+	// radioMirrorCooldown is how long a failed mirror sorts last.
+	radioMirrorCooldown = 5 * time.Minute
+	// radioDirectorySRVName is the directory's mirror-discovery record.
+	// Its targets are the per-mirror hostnames, which is what makes
+	// rotation possible at all: they carry their own valid certificates,
+	// where the round-robin name in defaultRadioDirectoryBase resolves
+	// to a set this process cannot steer within.
+	radioDirectorySRVName = "radio-browser.info"
+)
+
+// fetchRadioDirectory asks one mirror. It answers the body, the status
+// it answered with (zero when it answered nothing), and the error that
+// says which of those happened.
+func (l *Library) fetchRadioDirectory(ctx context.Context, base, q string, limit int) ([]byte, int, error) {
+	u := base + "/json/stations/search?" + url.Values{
+		"name":       {q},
+		"limit":      {fmt.Sprint(limit)},
+		"hidebroken": {"true"},
+		"order":      {"votes"},
+		"reverse":    {"true"},
+	}.Encode()
+	callCtx, cancel := context.WithTimeout(ctx, radioMirrorTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(callCtx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	// The directory asks clients to identify themselves.
+	req.Header.Set("User-Agent", "WaxDeck")
+	resp, err := l.radioClient().Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, resp.StatusCode, fmt.Errorf("the station directory answered status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return body, resp.StatusCode, nil
+}
+
+// radioDirectoryMirrors answers the bases one search may try, best
+// first. A configured base answers alone; otherwise the mirrors are
+// shuffled so a household spreads its load, and the ones that recently
+// failed sort last.
+func (l *Library) radioDirectoryMirrors(ctx context.Context) []string {
+	if base := strings.TrimRight(l.radioDirectoryBase, "/"); base != "" {
+		return []string{base}
+	}
+	bases := l.radioDirectoryMirrorList
+	if len(bases) == 0 {
+		bases = l.discoverRadioMirrors(ctx)
+	}
+	if len(bases) == 0 {
+		// DNS said nothing useful, so the round-robin name is still
+		// there: no mirrors discovered leaves the old behaviour exactly
+		// as it was rather than leaving the feature with no host.
+		return []string{defaultRadioDirectoryBase}
+	}
+	out := make([]string, 0, len(bases))
+	for _, base := range bases {
+		if base = strings.TrimRight(base, "/"); base != "" {
+			out = append(out, base)
+		}
+	}
+	rand.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
+	cold := l.coldRadioMirrors()
+	sort.SliceStable(out, func(i, j int) bool { return !cold[out[i]] && cold[out[j]] })
+	return out
+}
+
+// discoverRadioMirrors resolves the directory's mirror hostnames, reusing
+// the last answer for an hour so a dial full of searches costs one lookup.
+func (l *Library) discoverRadioMirrors(ctx context.Context) []string {
+	l.radioMirrorsMu.Lock()
+	// Both answers are cached, and the empty one for less time: the
+	// question is "have we asked lately", not "did we like the reply".
+	ttl := radioMirrorTTL
+	if len(l.radioMirrors) == 0 {
+		ttl = radioMirrorFailTTL
+	}
+	if !l.radioMirrorsAt.IsZero() && time.Since(l.radioMirrorsAt) < ttl {
+		cached := append([]string(nil), l.radioMirrors...)
+		l.radioMirrorsMu.Unlock()
+		return cached
+	}
+	l.radioMirrorsMu.Unlock()
+
+	lookupCtx, cancel := context.WithTimeout(ctx, radioMirrorLookupTimeout)
+	defer cancel()
+	var bases []string
+	if _, addrs, err := net.DefaultResolver.LookupSRV(lookupCtx, "api", "tcp", radioDirectorySRVName); err == nil {
+		bases = radioMirrorBases(addrs)
+	}
+	// A search is typeahead-shaped, so the caller going away cancels the
+	// lookup instantly and says nothing whatever about DNS. Caching that
+	// as "there are no mirrors" would pin the round-robin name for the
+	// next five minutes - the pinned-sick-mirror failure this whole path
+	// exists to end. The attempt loop already refuses to cool a mirror
+	// for the same reason.
+	if ctx.Err() != nil {
+		l.radioMirrorsMu.Lock()
+		cached := append([]string(nil), l.radioMirrors...)
+		l.radioMirrorsMu.Unlock()
+		return cached
+	}
+	l.radioMirrorsMu.Lock()
+	// A resolver that stopped answering does not un-discover the mirrors
+	// it named an hour ago: those are stable hostnames, and holding them
+	// beats falling back to the one name they exist to replace. Only a
+	// cache with nothing in it records the empty answer.
+	if len(bases) > 0 || len(l.radioMirrors) == 0 {
+		l.radioMirrors = bases
+	}
+	l.radioMirrorsAt = time.Now()
+	cached := append([]string(nil), l.radioMirrors...)
+	l.radioMirrorsMu.Unlock()
+	return cached
+}
+
+// radioMirrorBases turns SRV targets into directory bases. The port the
+// record carries is deliberately ignored: the mirrors serve HTTPS on the
+// default port, and a record advertising anything else would only get a
+// certificate mismatch.
+func radioMirrorBases(addrs []*net.SRV) []string {
+	out := make([]string, 0, len(addrs))
+	for _, a := range addrs {
+		host := strings.TrimSuffix(a.Target, ".")
+		if host == "" {
+			continue
+		}
+		out = append(out, "https://"+host)
+	}
+	return out
+}
+
+// coolRadioMirror sorts a mirror last for the next few minutes.
+func (l *Library) coolRadioMirror(base string) {
+	l.radioMirrorsMu.Lock()
+	defer l.radioMirrorsMu.Unlock()
+	if l.radioMirrorCold == nil {
+		l.radioMirrorCold = map[string]time.Time{}
+	}
+	l.radioMirrorCold[base] = time.Now().Add(radioMirrorCooldown)
+}
+
+// coldRadioMirrors is the set still in cooldown, forgetting the ones that
+// have served theirs so the map cannot grow with every mirror ever seen.
+func (l *Library) coldRadioMirrors() map[string]bool {
+	l.radioMirrorsMu.Lock()
+	defer l.radioMirrorsMu.Unlock()
+	now := time.Now()
+	cold := make(map[string]bool, len(l.radioMirrorCold))
+	for base, until := range l.radioMirrorCold {
+		if until.After(now) {
+			cold[base] = true
+			continue
+		}
+		delete(l.radioMirrorCold, base)
+	}
+	return cold
 }
 
 // listenerRegion is the region subtag of the caller's stored locale, or
@@ -426,11 +672,26 @@ func (l *Library) RadioStationLogo(ctx context.Context, apiStationPID string) (R
 	// and look before answering the monogram. The result is cached like
 	// any other, so the search happens once per station per refresh
 	// window rather than per paint.
+	// Read once, before the branch. Tested and then read again, a
+	// listener opening the stream between the two would have the branch
+	// taken on one URL and the fetch run against another.
+	hint := l.radioLogoHint(apiStationPID)
 	logo, fetchErr := RadioLogo{}, error(nil)
-	if row.LogoURL == "" {
-		logo, fetchErr = l.discoverRadioLogo(ctx, row.HomepageURL, row.StreamURL)
-	} else {
+	switch {
+	case row.LogoURL != "":
 		logo, fetchErr = l.fetchRadioLogo(ctx, row.LogoURL)
+	// What the station said about itself while somebody was listening to
+	// it, which beats going looking: the operator named this URL in the
+	// stream's own headers. Only tried before discovery, never instead
+	// of it - a hint that does not answer falls through to the search
+	// rather than costing the station its picture.
+	case hint != "":
+		logo, fetchErr = l.fetchRadioLogo(ctx, hint)
+		if fetchErr != nil {
+			logo, fetchErr = l.discoverRadioLogo(ctx, row.HomepageURL, row.StreamURL)
+		}
+	default:
+		logo, fetchErr = l.discoverRadioLogo(ctx, row.HomepageURL, row.StreamURL)
 	}
 	// A failure is remembered, unreachable hosts included: thirty stations
 	// behind one dead host would otherwise cost thirty ten-second waits per
@@ -475,12 +736,21 @@ func (l *Library) fetchRadioLogo(ctx context.Context, logoURL string) (RadioLogo
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		// A 4xx is this URL's own answer and will be the same tomorrow -
+		// a station whose StreamUrl 404s must cost one fetch a day, not
+		// one every five minutes for as long as somebody listens. The
+		// two throttle-shaped codes are the exception: those do change.
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 &&
+			resp.StatusCode != http.StatusRequestTimeout &&
+			resp.StatusCode != http.StatusTooManyRequests {
+			return RadioLogo{}, fmt.Errorf("the logo host answered status %d: %w", resp.StatusCode, errRadioArtNotImage)
+		}
 		return RadioLogo{}, fmt.Errorf("the logo host answered status %d", resp.StatusCode)
 	}
 	declared, _, _ := strings.Cut(resp.Header.Get("Content-Type"), ";")
 	mime, allowed := radioLogoMimes[strings.ToLower(strings.TrimSpace(declared))]
 	if !allowed {
-		return RadioLogo{}, fmt.Errorf("the logo host answered %q", declared)
+		return RadioLogo{}, fmt.Errorf("the logo host answered %q: %w", declared, errRadioArtNotImage)
 	}
 	// One byte past the cap, so a body at exactly the limit is served and
 	// one over it is refused rather than silently truncated into a
@@ -490,10 +760,10 @@ func (l *Library) fetchRadioLogo(ctx context.Context, logoURL string) (RadioLogo
 		return RadioLogo{}, err
 	}
 	if len(body) == 0 {
-		return RadioLogo{}, errors.New("the logo host answered an empty body")
+		return RadioLogo{}, fmt.Errorf("the logo host answered an empty body: %w", errRadioArtNotImage)
 	}
 	if len(body) > radioLogoMaxBytes {
-		return RadioLogo{}, fmt.Errorf("the logo is larger than %d bytes", radioLogoMaxBytes)
+		return RadioLogo{}, fmt.Errorf("the logo is larger than %d bytes: %w", radioLogoMaxBytes, errRadioArtNotImage)
 	}
 	// The bytes decide, and they decide alone. What the host called the
 	// body only got it this far; the served type is what the body
@@ -504,7 +774,7 @@ func (l *Library) fetchRadioLogo(ctx context.Context, logoURL string) (RadioLogo
 	sniffed := http.DetectContentType(body)
 	served, ok := radioLogoMimes[sniffed]
 	if !ok || served == "" {
-		return RadioLogo{}, fmt.Errorf("the logo bytes are %q", sniffed)
+		return RadioLogo{}, fmt.Errorf("the logo bytes are %q: %w", sniffed, errRadioArtNotImage)
 	}
 	mime = served
 	sum := sha256.Sum256(body)
@@ -610,6 +880,17 @@ func (l *Library) storeRadioLogo(apiStationPID string, logo RadioLogo) {
 func (l *Library) forgetRadioLogo(apiStationPID string) {
 	l.radioLogosMu.Lock()
 	defer l.radioLogosMu.Unlock()
+	l.dropRadioLogoLocked(apiStationPID)
+	// The hint goes with it. On a delete it would otherwise outlive the
+	// station for the life of the process, so the map would grow with
+	// every station ever streamed; on an edit that cleared the logo URL
+	// it would keep answering for a decision the operator has just
+	// reversed.
+	delete(l.radioLogoHints, apiStationPID)
+}
+
+// dropRadioLogoLocked forgets one cached logo. Callers hold the lock.
+func (l *Library) dropRadioLogoLocked(apiStationPID string) {
 	entry, ok := l.radioLogos[apiStationPID]
 	if !ok {
 		return
@@ -639,31 +920,115 @@ const radioTitleFreshFor = 2 * time.Minute
 // NoteRadioTitle records the in-stream ICY title the proxy just
 // observed for a station; an empty title is the station clearing it.
 func (l *Library) NoteRadioTitle(apiStationPID, title string) {
+	l.NoteRadioMeta(apiStationPID, title, "")
+}
+
+// NoteRadioMeta records a title and the picture the station announced
+// with it.
+//
+// The art belongs to the announcement, not to the station, so every
+// announcement replaces it - including with nothing. A bumper or an
+// un-annotated track announced with no picture clears the last one and
+// the ladder falls to the rungs below, which is the honest answer; the
+// alternative is a cover that sticks to whatever plays next.
+func (l *Library) NoteRadioMeta(apiStationPID, title, artURL string) {
 	l.radioTitlesMu.Lock()
-	defer l.radioTitlesMu.Unlock()
 	if title == "" {
 		delete(l.radioTitles, apiStationPID)
+		l.radioTitlesMu.Unlock()
 		return
 	}
-	l.radioTitles[apiStationPID] = radioTitle{title: title, seenNS: time.Now().UnixNano()}
+	prev, had := l.radioTitles[apiStationPID]
+	// The same picture announced against a different song is the
+	// station's own mark, not that song's cover. Stations do this - a
+	// channel logo in StreamUrl on every track is a whole class of them -
+	// and taking it for cover art would park one image on the
+	// full-screen face forever, outranking the lookup that would have
+	// found the actual sleeve. A picture that changes with the title is
+	// what a per-track cover looks like.
+	fixed := prev.artFixed
+	if had && artURL != "" && prev.title != title && prev.artURL != "" {
+		fixed = prev.artURL == artURL
+	}
+	l.radioTitles[apiStationPID] = radioTitle{
+		title:    title,
+		artURL:   artURL,
+		artFixed: fixed,
+		seenNS:   time.Now().UnixNano(),
+	}
+	l.radioTitlesMu.Unlock()
+	// Demoted rather than discarded: a station mark is exactly what the
+	// logo rung wants, and this one came from the station itself.
+	if fixed && artURL != "" {
+		l.NoteRadioLogoHint(apiStationPID, artURL)
+	}
 }
 
 // RadioNowPlaying reports a station's last observed in-stream title
 // while it is fresh; empty otherwise.
 func (l *Library) RadioNowPlaying(apiStationPID string) string {
+	title, _ := l.RadioNowPlayingMeta(apiStationPID)
+	return title
+}
+
+// RadioNowPlayingMeta reports the last observed title and the picture
+// announced with it, both read under one lock so the two describe the
+// same song: a second read could land the other side of a rollover.
+func (l *Library) RadioNowPlayingMeta(apiStationPID string) (string, string) {
 	l.radioTitlesMu.Lock()
 	defer l.radioTitlesMu.Unlock()
 	t, ok := l.radioTitles[apiStationPID]
 	if !ok || time.Now().UnixNano()-t.seenNS > int64(radioTitleFreshFor) {
-		return ""
+		return "", ""
 	}
-	return t.title
+	// A mark the station repeats on every song is not this song's cover,
+	// so it is not offered as one: it has already gone to the logo rung,
+	// which is where the ladder draws it from.
+	if t.artFixed {
+		return t.title, ""
+	}
+	return t.title, t.artURL
 }
 
-// radioTitle is one station's last observed in-stream title.
+// NoteRadioLogoHint records the logo a station named in its connect
+// headers (`icy-logo`), which is a better answer than going looking for
+// one and costs nothing to keep.
+func (l *Library) NoteRadioLogoHint(apiStationPID, logoURL string) {
+	if logoURL == "" {
+		return
+	}
+	l.radioLogosMu.Lock()
+	defer l.radioLogosMu.Unlock()
+	if l.radioLogoHints == nil {
+		l.radioLogoHints = map[string]string{}
+	}
+	if l.radioLogoHints[apiStationPID] == logoURL {
+		return
+	}
+	l.radioLogoHints[apiStationPID] = logoURL
+	// The station this arrives for is precisely the one that has "no
+	// logo we can draw" cached: the dial painted, discovery came up
+	// empty, and the answer was remembered for an hour. Only now, the
+	// moment somebody played it, has the station said where its mark
+	// is. Without dropping that entry the hint would sit unread until
+	// the miss went stale, which is the whole hour it exists to save.
+	l.dropRadioLogoLocked(apiStationPID)
+}
+
+func (l *Library) radioLogoHint(apiStationPID string) string {
+	l.radioLogosMu.Lock()
+	defer l.radioLogosMu.Unlock()
+	return l.radioLogoHints[apiStationPID]
+}
+
+// radioTitle is one station's last observed in-stream announcement.
 type radioTitle struct {
 	title  string
-	seenNS int64
+	artURL string
+	// artFixed marks a picture the station announces whatever is
+	// playing, which makes it the station's mark rather than a cover.
+	artFixed bool
+	seenNS   int64
 }
 
 // RadioHTTP is the guarded client the stream proxy uses: private
