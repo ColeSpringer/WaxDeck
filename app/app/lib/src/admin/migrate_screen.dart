@@ -108,7 +108,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
       child: Scaffold(
         appBar: AppBar(title: const Text('Import from another server')),
         body: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(WaxSpace.s16),
           children: [
             Semantics(
               identifier: SemanticsIds.migrateSource,
@@ -125,7 +125,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: WaxSpace.s8),
             Semantics(
               identifier: SemanticsIds.migrateServerUrl,
               child: TextField(
@@ -138,7 +138,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: WaxSpace.s8),
             if (_source.usesToken)
               Semantics(
                 identifier: SemanticsIds.migrateToken,
@@ -158,7 +158,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                   decoration: const InputDecoration(labelText: 'Username'),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: WaxSpace.s8),
               Semantics(
                 identifier: SemanticsIds.migratePassword,
                 child: TextField(
@@ -169,39 +169,58 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 8),
-            SwitchListTile(
+            const SizedBox(height: WaxSpace.s8),
+            WaxSettingRow(
               key: const Key('migrate-stars'),
-              title: const Text('Stars'),
-              value: _stars,
-              onChanged: (value) => setState(() => _stars = value),
+              title: 'Stars',
+              help: 'Which tracks and albums the other server had starred',
+              control: WaxSwitch(
+                value: _stars,
+                label: 'Stars',
+                onChanged: (value) => setState(() => _stars = value),
+              ),
             ),
-            SwitchListTile(
+            WaxSettingRow(
               key: const Key('migrate-ratings'),
-              title: const Text('Ratings'),
-              value: _ratings,
-              onChanged: (value) => setState(() => _ratings = value),
+              title: 'Ratings',
+              help: 'The star ratings given there',
+              control: WaxSwitch(
+                value: _ratings,
+                label: 'Ratings',
+                onChanged: (value) => setState(() => _ratings = value),
+              ),
             ),
-            SwitchListTile(
+            WaxSettingRow(
               key: const Key('migrate-history'),
-              title: const Text('Listen history'),
-              value: _history,
-              onChanged: (value) => setState(() => _history = value),
+              title: 'Listen history',
+              help: 'What was played there, and when',
+              control: WaxSwitch(
+                value: _history,
+                label: 'Listen history',
+                onChanged: (value) => setState(() => _history = value),
+              ),
             ),
-            SwitchListTile(
+            WaxSettingRow(
               key: const Key('migrate-progress'),
-              title: const Text('Playback progress'),
-              value: _progress,
-              onChanged: (value) => setState(() => _progress = value),
+              title: 'Playback progress',
+              help: 'How far into each episode and book the listener was',
+              control: WaxSwitch(
+                value: _progress,
+                label: 'Playback progress',
+                onChanged: (value) => setState(() => _progress = value),
+              ),
             ),
-            CheckboxListTile(
+            WaxSettingRow(
               key: const Key('migrate-dry-run'),
-              title: const Text('Dry run'),
-              subtitle: const Text('Report what would match; change nothing'),
-              value: _dryRun,
-              onChanged: (value) => setState(() => _dryRun = value ?? false),
+              title: 'Dry run',
+              help: 'Report what would match; change nothing',
+              control: WaxSwitch(
+                value: _dryRun,
+                label: 'Dry run',
+                onChanged: (value) => setState(() => _dryRun = value),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: WaxSpace.s16),
             Semantics(
               identifier: SemanticsIds.migrateSubmit,
               child: FilledButton(

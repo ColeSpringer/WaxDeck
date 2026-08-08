@@ -135,7 +135,6 @@ class _PersonalRecap extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recap = ref.watch(yearInReviewProvider(year));
-    final textTheme = Theme.of(context).textTheme;
     return switch (recap) {
       AsyncData(:final value) =>
         value.totalMs == 0 && value.sessions == 0
@@ -179,16 +178,15 @@ class _PersonalRecap extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  Text('Month by month', style: textTheme.titleMedium),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: WaxSpace.s24),
+                  const SectionHeader(title: 'Month by month'),
                   ListeningBarChart(
                     key: const Key('yir-month-chart'),
                     values: [for (final m in value.byMonth) m.ms],
                     labels: monthLabels,
                     summary: _monthSummary(value.byMonth),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: WaxSpace.s16),
                   _TopFive(
                     title: 'Top artists',
                     kind: 'artists',
@@ -218,7 +216,7 @@ class _PersonalRecap extends ConsumerWidget {
       ),
       _ => const Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: EdgeInsets.all(WaxSpace.s24),
           child: CircularProgressIndicator(),
         ),
       ),
@@ -262,7 +260,7 @@ class _ServerRecap extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: WaxSpace.s16),
                   _TopFive(
                     title: 'Top artists',
                     kind: 'artists',
@@ -287,7 +285,7 @@ class _ServerRecap extends ConsumerWidget {
       ),
       _ => const Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: EdgeInsets.all(WaxSpace.s24),
           child: CircularProgressIndicator(),
         ),
       ),
@@ -311,13 +309,12 @@ class _TopFive extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (entries.isEmpty) return const SizedBox.shrink();
-    final textTheme = Theme.of(context).textTheme;
     final top = entries.take(5).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 8),
-        Text(title, style: textTheme.titleMedium),
+        const SizedBox(height: WaxSpace.s8),
+        SectionHeader(title: title),
         for (var i = 0; i < top.length; i++)
           TopEntryRow(index: i, entry: top[i], kind: kind),
       ],
@@ -353,7 +350,7 @@ class _NothingPlayed extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 48),
+      padding: EdgeInsets.symmetric(vertical: WaxSpace.s48),
       child: Center(
         child: Text('Nothing played this year', key: Key('yir-nothing-played')),
       ),
@@ -373,12 +370,12 @@ class _RecapError extends StatelessWidget {
         ? (error as WaxDeckApiException).message
         : 'Could not load the recap';
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(WaxSpace.s16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
+          const SizedBox(height: WaxSpace.s12),
           OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),

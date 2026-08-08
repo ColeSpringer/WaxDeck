@@ -374,7 +374,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('podcast-settings-trim')));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('podcast-settings-trim')),
+        matching: find.byType(WaxSwitch),
+      ),
+    );
     await tester.pump();
     await tester.enterText(
       find.byKey(const Key('podcast-settings-retention')),

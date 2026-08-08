@@ -284,6 +284,7 @@ abstract final class SemanticsIds {
   static String item(Object pid) => 'item-$pid';
   static const String itemDelete = 'item-delete';
   static const String itemDeleteConfirm = 'item-delete-confirm';
+  static String itemDeleteMode(Object mode) => 'item-delete-mode-$mode';
   static const String offlineBanner = 'offline-banner';
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.

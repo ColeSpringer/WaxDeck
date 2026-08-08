@@ -75,13 +75,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = WaxColors.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Request an account')),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(WaxSpace.s24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360),
             child: _pending
@@ -91,20 +90,22 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       key: const Key(SemanticsIds.signupResult),
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.hourglass_top, size: 48),
-                        const SizedBox(height: 16),
+                        const WaxIcon(WaxIcons.hourglass, size: 48),
+                        const SizedBox(height: WaxSpace.s16),
                         Text(
                           'Request received',
-                          style: textTheme.titleLarge,
+                          style: WaxType.titleEntity.copyWith(
+                            color: colors.textPrimary,
+                          ),
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: WaxSpace.s8),
                         const Text(
                           'An administrator has to approve your account '
                           'before you can sign in.',
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: WaxSpace.s24),
                         OutlinedButton(
                           onPressed: () =>
                               context.leave(fallback: WaxRoute.login),
@@ -135,7 +136,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                                 : null,
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: WaxSpace.s16),
                         Semantics(
                           identifier: SemanticsIds.signupPassword,
                           child: TextFormField(
@@ -153,7 +154,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                                 : null,
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: WaxSpace.s16),
                         TextFormField(
                           key: const Key('signup-display-name'),
                           controller: _displayName,
@@ -162,7 +163,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             border: OutlineInputBorder(),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: WaxSpace.s16),
                         Semantics(
                           identifier: SemanticsIds.signupInviteToken,
                           child: TextFormField(
@@ -178,20 +179,18 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             onFieldSubmitted: (_) => _submit(),
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: WaxSpace.s24),
                         if (_error != null) ...[
                           Semantics(
                             identifier: SemanticsIds.signupError,
                             child: Text(
                               _error!,
                               key: const Key(SemanticsIds.signupError),
-                              style: textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.error,
-                              ),
+                              style: WaxType.body.copyWith(color: colors.error),
                               textAlign: TextAlign.center,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: WaxSpace.s16),
                         ],
                         Semantics(
                           identifier: SemanticsIds.signupSubmit,

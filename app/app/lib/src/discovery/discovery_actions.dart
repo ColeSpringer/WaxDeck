@@ -116,23 +116,23 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
+    final colors = WaxColors.of(context);
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(WaxSpace.s16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Instant mix', style: textTheme.titleMedium),
-            const SizedBox(height: 4),
+            // No gap of its own: SectionHeader owns its bottom s12.
+            const SectionHeader(title: 'Instant mix'),
             Text(
               'From "${widget.seed.title}"',
-              style: textTheme.bodySmall,
+              style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: WaxSpace.s8),
             Row(
               children: [
                 const Text('Familiar'),
@@ -150,7 +150,7 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
                 const Text('Adventurous'),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: WaxSpace.s8),
             Semantics(
               identifier: SemanticsIds.instantMixRun,
               label: 'Mix',

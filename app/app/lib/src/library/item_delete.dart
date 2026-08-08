@@ -140,27 +140,24 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
             '${formatBytes(plan.totalBytes)}.',
             key: const Key('item-delete-preview'),
           ),
-          const SizedBox(height: 8),
-          RadioGroup<String>(
-            groupValue: _mode,
-            onChanged: (value) => setState(() => _mode = value ?? 'trash'),
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                RadioListTile<String>(
-                  key: Key('item-delete-mode-trash'),
-                  title: Text('Move to trash'),
-                  subtitle: Text('Restorable from the trash screen'),
-                  value: 'trash',
-                ),
-                RadioListTile<String>(
-                  key: Key('item-delete-mode-permanent'),
-                  title: Text('Delete permanently'),
-                  subtitle: Text('Gone for good'),
-                  value: 'permanent',
-                ),
-              ],
-            ),
+          const SizedBox(height: WaxSpace.s8),
+          WaxRadioGroup<String>(
+            value: _mode,
+            onChanged: (value) => setState(() => _mode = value),
+            options: <WaxRadioOption<String>>[
+              WaxRadioOption<String>(
+                value: 'trash',
+                label: 'Move to trash',
+                help: 'Restorable from the trash screen',
+                semanticsId: SemanticsIds.itemDeleteMode('trash'),
+              ),
+              WaxRadioOption<String>(
+                value: 'permanent',
+                label: 'Delete permanently',
+                help: 'Gone for good',
+                semanticsId: SemanticsIds.itemDeleteMode('permanent'),
+              ),
+            ],
           ),
         ],
       ),

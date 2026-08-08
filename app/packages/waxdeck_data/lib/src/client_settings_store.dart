@@ -108,6 +108,17 @@ abstract final class ClientSettingKeys {
   static const density = 'waxdeck.appearance.density';
   static const gridSize = 'waxdeck.appearance.gridSize';
 
+  /// Whether player and header backdrops carry the artwork glow. Per
+  /// device because it is about the panel: the same wash that reads as
+  /// warmth on a good screen reads as a smear on a cheap one, and the
+  /// listener with both is not choosing once for the pair.
+  static const artworkGlow = 'waxdeck.appearance.artworkGlow';
+
+  /// Whether a card's caption lines are always drawn or wait for a
+  /// hover. Per device because hovering is: the choice means nothing on
+  /// the phone signed in to the same account.
+  static const cardCaptions = 'waxdeck.appearance.cardCaptions';
+
   /// An in-app override for the platform's reduce-motion setting. Only
   /// ever additive: it can turn animation off where the platform has it
   /// on, and never the other way, because the platform's answer is an

@@ -21,24 +21,21 @@ class ListeningSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final textTheme = Theme.of(context).textTheme;
     final prefs = ref.watch(prefsControllerProvider).value;
     final optedOut = prefs?.sharedStatsOptOut ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Listening', style: textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Semantics(
-          identifier: SemanticsIds.sharedStatsSwitch,
-          child: SwitchListTile(
-            key: const Key(SemanticsIds.sharedStatsSwitch),
-            secondary: const Icon(Icons.groups_outlined),
-            title: const Text('Include me in server-wide stats'),
-            subtitle: const Text(
-              'Counts your listening into the shared year in review',
-            ),
+        const SectionHeader(title: 'Listening'),
+        WaxSettingRow(
+          key: const Key(SemanticsIds.sharedStatsSwitch),
+          title: 'Include me in server-wide stats',
+          help: 'Counts your listening into the shared year in review',
+          glyph: WaxIcons.stats,
+          control: WaxSwitch(
             value: !optedOut,
+            label: 'Include me in server-wide stats',
+            semanticsId: SemanticsIds.sharedStatsSwitch,
             onChanged: prefs == null
                 ? null
                 : (include) => ref
@@ -46,36 +43,28 @@ class ListeningSection extends ConsumerWidget {
                       .setSharedStatsOptOut(!include),
           ),
         ),
-        Semantics(
-          identifier: SemanticsIds.timezoneEdit,
-          label: 'Timezone',
-          button: true,
-          child: ListTile(
-            key: const Key(SemanticsIds.timezoneEdit),
-            leading: const Icon(Icons.schedule),
-            title: const Text('Timezone'),
-            subtitle: Text(prefs?.timezone ?? 'Server default'),
-            trailing: const Icon(Icons.edit_outlined),
-            onTap: prefs == null
-                ? null
-                : () => _editTimezone(context, prefs.timezone),
-          ),
+        WaxOptionRow(
+          key: const Key(SemanticsIds.timezoneEdit),
+          title: 'Timezone',
+          subtitle: prefs?.timezone ?? 'Server default',
+          glyph: WaxIcons.clock,
+          semanticsId: SemanticsIds.timezoneEdit,
+          trailing: const WaxIcon(WaxIcons.edit, size: 16),
+          onTap: prefs == null
+              ? null
+              : () => _editTimezone(context, prefs.timezone),
         ),
-        Semantics(
-          identifier: SemanticsIds.openShareLinks,
-          label: 'Share links',
-          button: true,
-          child: ListTile(
-            key: const Key(SemanticsIds.openShareLinks),
-            leading: const Icon(Icons.link),
-            title: const Text('Share links'),
-            subtitle: const Text('Public links you have handed out'),
-            trailing: const Icon(Icons.chevron_right),
-            // Gone to, not pushed: the location is declared beneath
-            // settings now, so `go` builds this row's own screen under
-            // it and the address bar follows the hop (8.3).
-            onTap: () => context.go(WaxRoute.shares),
-          ),
+        WaxOptionRow(
+          key: const Key(SemanticsIds.openShareLinks),
+          title: 'Share links',
+          subtitle: 'Public links you have handed out',
+          glyph: WaxIcons.share,
+          semanticsId: SemanticsIds.openShareLinks,
+          trailing: const WaxIcon(WaxIcons.forward, size: 16),
+          // Gone to, not pushed: the location is declared beneath
+          // settings now, so `go` builds this row's own screen under
+          // it and the address bar follows the hop (8.3).
+          onTap: () => context.go(WaxRoute.shares),
         ),
       ],
     );
@@ -180,39 +169,31 @@ class SimilarityStatusSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final textTheme = Theme.of(context).textTheme;
     final status = ref.watch(similarityStatusProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Sonic similarity', style: textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const SectionHeader(title: 'Sonic similarity'),
         switch (status) {
-          AsyncData(:final value) => ListTile(
+          AsyncData(:final value) => WaxOptionRow(
             key: const Key('similarity-status'),
-            leading: Icon(
-              value.enabled ? Icons.graphic_eq : Icons.power_off_outlined,
-            ),
-            title: Text(
-              value.enabled
-                  ? 'Coverage ${value.coveragePct.toStringAsFixed(0)}%'
-                  : 'No analysis worker configured',
-            ),
-            subtitle: Text(
-              value.enabled
-                  ? '${value.embeddedTracks} of ${value.totalTracks} tracks '
-                        'analyzed, ${value.queueDepth} queued'
-                  : 'Similar tracks and mixes fall back to metadata',
-            ),
+            glyph: value.enabled ? WaxIcons.waveform : WaxIcons.power,
+            title: value.enabled
+                ? 'Coverage ${value.coveragePct.toStringAsFixed(0)}%'
+                : 'No analysis worker configured',
+            subtitle: value.enabled
+                ? '${value.embeddedTracks} of ${value.totalTracks} tracks '
+                      'analyzed, ${value.queueDepth} queued'
+                : 'Similar tracks and mixes fall back to metadata',
           ),
-          AsyncError() => ListTile(
-            key: const Key('similarity-status'),
-            leading: const Icon(Icons.error_outline),
-            title: const Text('Could not load similarity status'),
+          AsyncError() => const WaxOptionRow(
+            key: Key('similarity-status'),
+            glyph: WaxIcons.errorCircle,
+            title: 'Could not load similarity status',
           ),
           _ => const Center(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.all(WaxSpace.s16),
               child: CircularProgressIndicator(),
             ),
           ),

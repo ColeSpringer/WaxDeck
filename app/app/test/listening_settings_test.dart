@@ -6,6 +6,7 @@ import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_section_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxSwitch;
 
 import 'fakes.dart';
 import 'routed_host.dart';
@@ -49,21 +50,19 @@ void main() {
     await tester.pumpAndSettle();
 
     await _show(tester, const Key('shared-stats-switch'));
-    // Nothing stored yet reads as included.
-    var tile = tester.widget<SwitchListTile>(
-      find.byKey(const Key('shared-stats-switch')),
+    final switchFinder = find.descendant(
+      of: find.byKey(const Key('shared-stats-switch')),
+      matching: find.byType(WaxSwitch),
     );
-    expect(tile.value, isTrue);
+    // Nothing stored yet reads as included.
+    expect(tester.widget<WaxSwitch>(switchFinder).value, isTrue);
 
-    await tester.tap(find.byKey(const Key('shared-stats-switch')));
+    await tester.tap(switchFinder);
     await tester.pumpAndSettle();
     expect(repo.prefs.sharedStatsOptOut, isTrue);
-    tile = tester.widget<SwitchListTile>(
-      find.byKey(const Key('shared-stats-switch')),
-    );
-    expect(tile.value, isFalse);
+    expect(tester.widget<WaxSwitch>(switchFinder).value, isFalse);
 
-    await tester.tap(find.byKey(const Key('shared-stats-switch')));
+    await tester.tap(switchFinder);
     await tester.pumpAndSettle();
     expect(repo.prefs.sharedStatsOptOut, isFalse);
   });

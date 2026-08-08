@@ -668,9 +668,19 @@ class _AppearanceBody extends ConsumerWidget {
     WaxGridSize.large => 'Large',
   };
 
+  static String _captionLabel(WaxCaptionMode mode) => switch (mode) {
+    WaxCaptionMode.always => 'Always',
+    WaxCaptionMode.onHover => 'On hover',
+  };
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefs = ref.watch(prefsControllerProvider).value;
+    // The hardware question, not the this-second one: a touchscreen
+    // laptop is in touch highlight mode for as long as the last input
+    // was a finger, and greying the row there would be the app telling
+    // a machine with a mouse on it that it has no pointer.
+    final hasPointer = ref.watch(mouseConnectedProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -720,6 +730,38 @@ class _AppearanceBody extends ConsumerWidget {
                 label: 'Artwork size',
                 semanticsId: SemanticsIds.setting('grid-size'),
                 onChanged: ref.read(gridSizeProvider.notifier).set,
+              ),
+            ),
+            WaxSettingRow(
+              title: 'Artwork glow',
+              help: 'The colour a cover casts behind the player',
+              control: WaxSwitch(
+                value: ref.watch(artworkGlowProvider),
+                label: 'Artwork glow',
+                semanticsId: SemanticsIds.setting('artwork-glow'),
+                onChanged: ref.read(artworkGlowProvider.notifier).set,
+              ),
+            ),
+            WaxSettingRow(
+              title: 'Card captions',
+              // Hover is the only way back to a hidden caption, so on a
+              // machine with no pointer the choice is refused rather
+              // than taken and quietly ignored - the control's own rule
+              // about live-looking controls that drop what they are
+              // given - and the line says why it is refused.
+              help: hasPointer
+                  ? 'The lines under a cover in a grid'
+                  : 'Always shown: hiding them needs a pointer to bring '
+                        'them back',
+              control: WaxChoice<WaxCaptionMode>(
+                value: ref.watch(cardCaptionsProvider),
+                options: WaxCaptionMode.values,
+                labelFor: _captionLabel,
+                label: 'Card captions',
+                semanticsId: SemanticsIds.setting('card-captions'),
+                onChanged: hasPointer
+                    ? ref.read(cardCaptionsProvider.notifier).set
+                    : null,
               ),
             ),
           ],

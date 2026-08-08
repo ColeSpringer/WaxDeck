@@ -925,22 +925,19 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
             ],
           ),
           if (_limitMode.isNotEmpty)
-            // Its own Material: a ListTile paints its ink on the
-            // nearest one, which the card's background would hide.
-            Material(
-              type: MaterialType.transparency,
-              child: CheckboxListTile(
-                key: const Key(SemanticsIds.ruleLimitSeed),
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
+            WaxSettingRow(
+              key: const Key(SemanticsIds.ruleLimitSeed),
+              title: 'Keep the same selection each time',
+              help:
+                  'Pins which tracks the budget picks, so the list is '
+                  'the same on the next rebuild',
+              control: WaxSwitch(
                 value: _limitSeed != 0,
-                title: Text(
-                  'Keep the same selection each time',
-                  style: WaxType.body.copyWith(color: colors.textPrimary),
-                ),
+                label: 'Keep the same selection each time',
+                semanticsId: SemanticsIds.ruleLimitSeed,
                 onChanged: (pinned) {
                   setState(() {
-                    _limitSeed = (pinned ?? false) ? 1 : 0;
+                    _limitSeed = pinned ? 1 : 0;
                     // Pinning a budget's order drops its sort keys.
                     if (_sortsBlocked) _sorts.clear();
                   });

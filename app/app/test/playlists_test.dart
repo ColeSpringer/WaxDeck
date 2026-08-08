@@ -700,7 +700,12 @@ void main() {
     // Pinning the selection makes the seed supply the order, so the sort
     // card collapses and the staged sort is dropped: the saved rule can
     // never carry the seed and sort pair the server rejects.
-    await tester.tap(find.byKey(const Key(SemanticsIds.ruleLimitSeed)));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key(SemanticsIds.ruleLimitSeed)),
+        matching: find.byType(WaxSwitch),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('A pinned budget draws its own order.'), findsOneWidget);
     expect(find.bySemanticsIdentifier(SemanticsIds.ruleAddSort), findsNothing);

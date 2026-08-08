@@ -23,6 +23,7 @@ class SectionHeader extends StatelessWidget {
     required this.title,
     this.overline,
     this.actionLabel,
+    this.spokenActionLabel,
     this.onAction,
     this.semanticsId,
     super.key,
@@ -36,6 +37,13 @@ class SectionHeader extends StatelessWidget {
   final String? overline;
 
   final String? actionLabel;
+
+  /// What a screen reader hears instead of [actionLabel]. The header's
+  /// title is a sibling node that never merges into the button, so an
+  /// action drawn as "New" beside "App passwords" announces as "New"
+  /// alone unless it says here what it is new of.
+  final String? spokenActionLabel;
+
   final VoidCallback? onAction;
   final String? semanticsId;
 
@@ -73,6 +81,7 @@ class SectionHeader extends StatelessWidget {
           if (actionLabel != null)
             WaxButton(
               label: actionLabel!,
+              spokenLabel: spokenActionLabel,
               kind: WaxButtonKind.text,
               onPressed: onAction,
               semanticsId: semanticsId,
@@ -96,6 +105,7 @@ class MediaCard extends StatefulWidget {
     this.onPlay,
     this.onMore,
     this.width,
+    this.captions,
     this.playing = false,
     super.key,
   });
@@ -107,6 +117,11 @@ class MediaCard extends StatefulWidget {
 
   /// Defaults to the size class's grid extent.
   final double? width;
+
+  /// Defaults to the theme's, which is where the listener's setting
+  /// arrives. Passed only by the catalogue and by tests, so that a
+  /// screen full of cards never has to thread it.
+  final WaxCaptionMode? captions;
 
   final bool playing;
 
@@ -160,6 +175,12 @@ class _MediaCardState extends State<MediaCard> {
     final motion = WaxMotion.of(context);
     final data = widget.data;
     final width = widget.width ?? WaxSizeClass.of(context).gridExtent;
+    final captionsFade =
+        (widget.captions ?? WaxLayout.of(context).captions) ==
+        WaxCaptionMode.onHover;
+    // Focus counts as well as hover, or a card reached by keyboard is a
+    // cover with no name on it and no way to ask for one.
+    final captionsVisible = !captionsFade || _hovered || _focused;
 
     final art = Stack(
       children: <Widget>[
@@ -320,30 +341,52 @@ class _MediaCardState extends State<MediaCard> {
                           : colors.textPrimary,
                     ),
                   ),
-                  if (data.subtitle != null)
-                    Text(
-                      data.subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: WaxType.caption.copyWith(
-                        color: colors.textSecondary,
-                      ),
+                  // Faded rather than removed. The captions still lay
+                  // out at every opacity, so [heightFor]'s reservation
+                  // holds and a shelf does not resize under the pointer;
+                  // and the label above is built from the data, so what
+                  // a screen reader hears never changes either.
+                  //
+                  // The fade is built only where it can run. An
+                  // AnimatedOpacity carries a controller and a ticker
+                  // apiece, and a full grid is a hundred cards: in the
+                  // mode that never hides a caption they would all be
+                  // allocated to animate a constant.
+                  _Captions(
+                    fading: captionsFade,
+                    visible: captionsVisible,
+                    duration: motion.quick,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        if (data.subtitle != null)
+                          Text(
+                            data.subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: WaxType.caption.copyWith(
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        if (data.trailingText != null)
+                          Text(
+                            data.trailingText!,
+                            // Clamped like every other line in the card,
+                            // and for a load-bearing reason: [heightFor]
+                            // reserves one caption line for this, so a
+                            // readout that wrapped would overflow the
+                            // cell by exactly one line - which is what a
+                            // book's "1 hr 20 min left" did.
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: WaxType.caption.copyWith(
+                              color: colors.textTertiary,
+                            ),
+                          ),
+                      ],
                     ),
-                  if (data.trailingText != null)
-                    Text(
-                      data.trailingText!,
-                      // Clamped like every other line in the card, and
-                      // for a load-bearing reason: [heightFor] reserves
-                      // one caption line for this, so a readout that
-                      // wrapped would overflow the cell by exactly one
-                      // line - which is what a book's "1 hr 20 min left"
-                      // did.
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: WaxType.caption.copyWith(
-                        color: colors.textTertiary,
-                      ),
-                    ),
+                  ),
                 ],
               ),
             ),
@@ -352,6 +395,33 @@ class _MediaCardState extends State<MediaCard> {
       ),
     );
   }
+}
+
+/// A card's caption block, faded only in the mode that hides it.
+///
+/// The two branches lay out identically - opacity is paint, not layout -
+/// which is what keeps `MediaCard.heightFor` true of both.
+class _Captions extends StatelessWidget {
+  const _Captions({
+    required this.fading,
+    required this.visible,
+    required this.duration,
+    required this.child,
+  });
+
+  final bool fading;
+  final bool visible;
+  final Duration duration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => fading
+      ? AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: duration,
+          child: child,
+        )
+      : child;
 }
 
 /// A list row: artwork, title, caption, trailing readout, and the slot
@@ -674,6 +744,7 @@ class WaxOptionRow extends StatelessWidget {
   const WaxOptionRow({
     required this.title,
     this.subtitle,
+    this.subtitleMaxLines = 2,
     this.glyph,
     this.leading,
     this.trailing,
@@ -692,6 +763,15 @@ class WaxOptionRow extends StatelessWidget {
   /// The line under the name: what a device is, why it cannot be used,
   /// what is playing on it.
   final String? subtitle;
+
+  /// How far [subtitle] may run before it is cut. Two lines keeps a list
+  /// of rows scannable, which is the right default for a line that
+  /// describes a row - and the wrong one for a line that carries a
+  /// message from somewhere else. A server's delivery error is a
+  /// sentence somebody has to read to the end to act on, so the rows
+  /// that put one here raise this rather than ellipsing the part that
+  /// says what went wrong.
+  final int subtitleMaxLines;
 
   /// The leading glyph. [leading] wins where a caller has a whole widget
   /// to put there (a logo, a spinner).
@@ -765,7 +845,7 @@ class WaxOptionRow extends StatelessWidget {
               if (subtitle != null)
                 Text(
                   subtitle!,
-                  maxLines: 2,
+                  maxLines: subtitleMaxLines,
                   overflow: TextOverflow.ellipsis,
                   style: WaxType.caption.copyWith(
                     color: enabled ? colors.textSecondary : colors.textDisabled,

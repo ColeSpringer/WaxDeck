@@ -3,6 +3,16 @@ import 'package:flutter/material.dart';
 import '../tokens/density.dart';
 import '../tokens/spacing.dart';
 
+/// When a card draws the lines under its title.
+///
+/// A grid of covers reads as a grid of covers; the captions under them
+/// are what somebody wants when they are looking for a name and noise
+/// when they are browsing. [onHover] is for the second case, and it is
+/// pointer-shaped by nature: a screen with no pointer has no way to ask
+/// for the caption back, so choosing it on one is the app's business
+/// rather than this component's.
+enum WaxCaptionMode { always, onHover }
+
 /// Measurements that depend on the user's density setting, reachable as
 /// `WaxLayout.of(context)`.
 ///
@@ -13,6 +23,7 @@ import '../tokens/spacing.dart';
 class WaxLayout extends ThemeExtension<WaxLayout> {
   const WaxLayout({
     required this.density,
+    required this.captions,
     required this.rowHeight,
     required this.rowHeightDense,
     required this.listPadding,
@@ -24,28 +35,42 @@ class WaxLayout extends ThemeExtension<WaxLayout> {
     required this.hairlineWidth,
   });
 
-  /// One instance per density, so two themes built from the same setting
-  /// compare equal by identity as well as by value.
-  factory WaxLayout.forDensity(WaxDensity density) =>
-      _byDensity[density] ??= WaxLayout._forDensity(density);
-
-  static final Map<WaxDensity, WaxLayout> _byDensity =
-      <WaxDensity, WaxLayout>{};
-
-  factory WaxLayout._forDensity(WaxDensity density) => WaxLayout(
-    density: density,
-    rowHeight: density.vertical(64),
-    rowHeightDense: density.vertical(52),
-    listPadding: EdgeInsets.symmetric(vertical: density.vertical(WaxSpace.s8)),
-    sectionGap: density.vertical(WaxSpace.s32),
-    cardPadding: EdgeInsets.all(WaxSpace.s12),
-    focusRingWidth: 2,
-    focusRingInnerWidth: 1,
-    focusRingOffset: 2,
-    hairlineWidth: 1,
+  /// One instance per settings pair, so two themes built from the same
+  /// settings compare equal by identity as well as by value.
+  factory WaxLayout.forDensity(
+    WaxDensity density, {
+    WaxCaptionMode captions = WaxCaptionMode.always,
+  }) => _byDensity[(density, captions)] ??= WaxLayout._forDensity(
+    density,
+    captions,
   );
 
+  static final Map<(WaxDensity, WaxCaptionMode), WaxLayout> _byDensity =
+      <(WaxDensity, WaxCaptionMode), WaxLayout>{};
+
+  factory WaxLayout._forDensity(WaxDensity density, WaxCaptionMode captions) =>
+      WaxLayout(
+        density: density,
+        captions: captions,
+        rowHeight: density.vertical(64),
+        rowHeightDense: density.vertical(52),
+        listPadding: EdgeInsets.symmetric(
+          vertical: density.vertical(WaxSpace.s8),
+        ),
+        sectionGap: density.vertical(WaxSpace.s32),
+        cardPadding: EdgeInsets.all(WaxSpace.s12),
+        focusRingWidth: 2,
+        focusRingInnerWidth: 1,
+        focusRingOffset: 2,
+        hairlineWidth: 1,
+      );
+
   final WaxDensity density;
+
+  /// When cards draw their caption lines. Nothing about the metrics
+  /// above changes with it: a hidden caption still lays out and still
+  /// takes its room, so a shelf that measured its height keeps it.
+  final WaxCaptionMode captions;
 
   /// A media list row with artwork.
   final double rowHeight;
@@ -78,6 +103,7 @@ class WaxLayout extends ThemeExtension<WaxLayout> {
       identical(this, other) ||
       other is WaxLayout &&
           other.density == density &&
+          other.captions == captions &&
           other.rowHeight == rowHeight &&
           other.rowHeightDense == rowHeightDense &&
           other.listPadding == listPadding &&
@@ -91,6 +117,7 @@ class WaxLayout extends ThemeExtension<WaxLayout> {
   @override
   int get hashCode => Object.hash(
     density,
+    captions,
     rowHeight,
     rowHeightDense,
     listPadding,
@@ -103,14 +130,20 @@ class WaxLayout extends ThemeExtension<WaxLayout> {
   );
 
   @override
-  WaxLayout copyWith({WaxDensity? density}) =>
-      WaxLayout.forDensity(density ?? this.density);
+  WaxLayout copyWith({WaxDensity? density, WaxCaptionMode? captions}) =>
+      WaxLayout.forDensity(
+        density ?? this.density,
+        captions: captions ?? this.captions,
+      );
 
   @override
   WaxLayout lerp(covariant WaxLayout? other, double t) {
     if (other == null) return this;
     return WaxLayout(
       density: t < 0.5 ? density : other.density,
+      // Neither end is a measurement, so both switch at the midpoint
+      // rather than crossfading through a state that is neither.
+      captions: t < 0.5 ? captions : other.captions,
       rowHeight: lerpDouble(rowHeight, other.rowHeight, t),
       rowHeightDense: lerpDouble(rowHeightDense, other.rowHeightDense, t),
       listPadding: EdgeInsets.lerp(listPadding, other.listPadding, t)!,

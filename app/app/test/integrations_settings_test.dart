@@ -4,9 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/settings/integrations_sections.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxSwitch;
 
 import 'fakes.dart';
+
+/// The switch inside one event row. The key names the row; the control
+/// is what a tap has to land on.
+Finder _eventSwitch(String event) => find.descendant(
+  of: find.byKey(ValueKey('notify-event-$event')),
+  matching: find.byType(WaxSwitch),
+);
 
 const _admin = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -87,7 +96,7 @@ void main() {
     await tester.pumpWidget(_host(repo, const AppPasswordsSection()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('app-password-add')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.appPasswordAdd));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('app-password-label-field')),
@@ -113,7 +122,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No notification targets yet'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('notify-target-add')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
 
     // The kind dropdown swaps the config field group: Pushover's
@@ -142,9 +151,7 @@ void main() {
       find.byKey(const ValueKey('notify-config-token')),
       'app-token',
     );
-    await tester.tap(
-      find.byKey(const ValueKey('notify-event-episode-downloaded')),
-    );
+    await tester.tap(_eventSwitch('episode-downloaded'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('notify-target-save')));
     await tester.pumpAndSettle();
@@ -167,7 +174,7 @@ void main() {
       _host(repo, const PersonalNotificationTargetsSection()),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('notify-target-add')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('notify-target-save')));
@@ -188,7 +195,7 @@ void main() {
       _host(repo, const PersonalNotificationTargetsSection()),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('notify-target-add')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('notify-config-token')),
@@ -216,7 +223,7 @@ void main() {
       _host(repo, const PersonalNotificationTargetsSection()),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('notify-target-add')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('notify-event-episode-downloaded')),
@@ -234,7 +241,7 @@ void main() {
       _host(adminRepo, const PersonalNotificationTargetsSection()),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('notify-target-add')));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('notify-event-signup-requested')),
@@ -252,7 +259,9 @@ void main() {
       _host(repo, const ServerNotificationTargetsSection()),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('notify-server-target-add')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.notifyServerTargetAdd),
+    );
     await tester.pumpAndSettle();
 
     // Server-scope editors list server events only, flat.
@@ -274,9 +283,7 @@ void main() {
       find.byKey(const ValueKey('notify-config-url')),
       'https://hooks.example.net/ops',
     );
-    await tester.tap(
-      find.byKey(const ValueKey('notify-event-signup-requested')),
-    );
+    await tester.tap(_eventSwitch('signup-requested'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('notify-target-save')));
     await tester.pumpAndSettle();

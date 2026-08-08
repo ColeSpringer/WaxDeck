@@ -199,16 +199,14 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
                         'order you put it.',
               style: WaxType.caption.copyWith(color: colors.textTertiary),
             ),
-            Semantics(
-              identifier: SemanticsIds.playlistCreateShared,
-              child: SwitchListTile(
-                key: const Key(SemanticsIds.playlistCreateShared),
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  'Shared with everyone',
-                  style: WaxType.body.copyWith(color: colors.textPrimary),
-                ),
+            WaxSettingRow(
+              key: const Key(SemanticsIds.playlistCreateShared),
+              title: 'Shared with everyone',
+              help: 'Anyone on this server can see and play it',
+              control: WaxSwitch(
                 value: _shared,
+                label: 'Shared with everyone',
+                semanticsId: SemanticsIds.playlistCreateShared,
                 onChanged: (v) => setState(() => _shared = v),
               ),
             ),

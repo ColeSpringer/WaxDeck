@@ -233,6 +233,26 @@ void main() {
                                   onChanged: null,
                                 ),
                               ),
+                              // The other kind of choice: every option
+                              // and its consequence on screen, because
+                              // this one is asked in a dialog somebody
+                              // cannot take back.
+                              WaxRadioGroup<String>(
+                                value: 'trash',
+                                onChanged: (_) {},
+                                options: const <WaxRadioOption<String>>[
+                                  WaxRadioOption<String>(
+                                    value: 'trash',
+                                    label: 'Move to trash',
+                                    help: 'Restorable from the trash screen',
+                                  ),
+                                  WaxRadioOption<String>(
+                                    value: 'permanent',
+                                    label: 'Delete permanently',
+                                    help: 'Gone for good',
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
@@ -554,6 +574,58 @@ void main() {
                   ),
                 ),
               ),
+            ],
+          ),
+        );
+
+        // Here rather than beside the other card goldens for the
+        // file-level reason: `cards` carries a readable Linux baseline
+        // as well, and a scenario added to it needs a Linux host to
+        // rebaseline. What this locks is a measurement, which the
+        // tolerant CI comparison gates on every host anyway.
+        goldenTest(
+          'a card hiding its captions keeps the cell it had',
+          fileName: 'card_captions',
+          builder: () => GoldenTestGroup(
+            columns: 2,
+            children: <Widget>[
+              for (final captions in WaxCaptionMode.values)
+                GoldenTestScenario(
+                  name: captions.name,
+                  child: _themed(
+                    WaxThemeVariant.dark,
+                    SizedBox(
+                      width: 280,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          MediaCard(
+                            width: 120,
+                            captions: captions,
+                            data: const MediaTileData(
+                              title: 'Salt Harbour',
+                              subtitle: 'Nightjar',
+                              trailingText: '4:05',
+                            ),
+                          ),
+                          const SizedBox(width: WaxSpace.s12),
+                          MediaCard(
+                            width: 120,
+                            captions: captions,
+                            data: const MediaTileData(
+                              title: 'A Bright Shore',
+                              subtitle: 'Read by Ines Okonjo',
+                              domain: WaxDomain.audiobooks,
+                              shape: ArtworkShape.portrait,
+                              progress: 0.4,
+                              trailingText: '3 hr left',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         );

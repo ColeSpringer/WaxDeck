@@ -131,7 +131,12 @@ void main() {
     await tester.pumpAndSettle();
 
     await _tap(tester, SemanticsIds.bookSettingsOpen);
-    await tester.tap(find.byKey(const Key('book-settings-trim')));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('book-settings-trim')),
+        matching: find.byType(WaxSwitch),
+      ),
+    );
     await tester.pump();
     await _tap(tester, SemanticsIds.bookSettingsSave);
 

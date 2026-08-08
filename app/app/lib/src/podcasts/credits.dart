@@ -17,12 +17,11 @@ class PodcastCredits extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (persons.isEmpty) return const SizedBox.shrink();
-    final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Credits', style: textTheme.titleMedium),
+        const SectionHeader(title: 'Credits'),
         for (final person in persons)
           Builder(
             builder: (context) {
@@ -30,16 +29,14 @@ class PodcastCredits extends StatelessWidget {
               // Treat an empty href like an absent one (the server already
               // omits empties; this keeps the widget robust to any source).
               final hasLink = href != null && href.isNotEmpty;
-              return ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
+              return WaxOptionRow(
                 leading: _Avatar(person: person, colorScheme: colorScheme),
-                title: Text(person.name),
+                title: person.name,
                 subtitle: person.role == null || person.role!.isEmpty
                     ? null
-                    : Text(_titleCase(person.role!)),
+                    : _titleCase(person.role!),
                 trailing: hasLink
-                    ? const Icon(Icons.open_in_new, size: 16)
+                    ? const WaxIcon(WaxIcons.openExternal, size: 16)
                     : null,
                 onTap: hasLink ? () => onOpenLink(href) : null,
               );

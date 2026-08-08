@@ -1,4 +1,4 @@
-import 'dart:ui' show Tristate;
+import 'dart:ui' show CheckedState, Tristate;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -216,6 +216,130 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('30 seconds'), findsNothing);
+      handle.dispose();
+    });
+  });
+
+  group('WaxRadioGroup', () {
+    const options = <WaxRadioOption<String>>[
+      WaxRadioOption<String>(
+        value: 'trash',
+        label: 'Move to trash',
+        help: 'Restorable from the trash screen',
+        semanticsId: 'delete-mode-trash',
+      ),
+      WaxRadioOption<String>(
+        value: 'permanent',
+        label: 'Delete permanently',
+        help: 'Gone for good',
+        semanticsId: 'delete-mode-permanent',
+      ),
+    ];
+
+    testWidgets('every option and its consequence is on screen', (
+      tester,
+    ) async {
+      // The whole reason this exists beside WaxChoice: in a destructive
+      // dialog the second answer cannot be behind a tap.
+      await tester.pumpWidget(
+        _host(
+          WaxRadioGroup<String>(
+            value: 'trash',
+            options: options,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+      expect(find.text('Move to trash'), findsOneWidget);
+      expect(find.text('Delete permanently'), findsOneWidget);
+      expect(find.text('Gone for good'), findsOneWidget);
+    });
+
+    testWidgets('announces as a group, and which one is checked', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _host(
+          WaxRadioGroup<String>(
+            value: 'trash',
+            options: options,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSemantics(find.bySemanticsIdentifier('delete-mode-trash')),
+        matchesSemantics(
+          label: 'Move to trash, Restorable from the trash screen',
+          identifier: 'delete-mode-trash',
+          isInMutuallyExclusiveGroup: true,
+          hasCheckedState: true,
+          isChecked: true,
+          hasEnabledState: true,
+          isEnabled: true,
+          isFocusable: true,
+          hasTapAction: true,
+          hasFocusAction: true,
+        ),
+      );
+      // The other one is in the same group and not checked, which is
+      // the half that says choosing this un-chooses that.
+      expect(
+        tester
+            .getSemantics(find.bySemanticsIdentifier('delete-mode-permanent'))
+            .getSemanticsData()
+            .flagsCollection
+            .isChecked,
+        CheckedState.isFalse,
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a tap anywhere on the row reports its value', (tester) async {
+      final chosen = <String>[];
+      await tester.pumpWidget(
+        _host(
+          WaxRadioGroup<String>(
+            value: 'trash',
+            options: options,
+            onChanged: chosen.add,
+          ),
+        ),
+      );
+
+      // The label, not the mark: a 20-pixel circle is not the target.
+      await tester.tap(find.text('Delete permanently'));
+      expect(chosen, <String>['permanent']);
+    });
+
+    testWidgets('a null callback disables every option, and reports it', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _host(
+          const WaxRadioGroup<String>(
+            value: 'trash',
+            options: options,
+            onChanged: null,
+          ),
+        ),
+      );
+
+      // Reported disabled as well as drawn so, and with no tap to
+      // offer: a control that looks dead and answers anyway is the
+      // worse half of the pair. Asserted flag by flag rather than
+      // against a whole node, because the disabled shape here is
+      // WaxSwitch's disabled shape and this is not the place to pin
+      // every one of its flags.
+      final data = tester
+          .getSemantics(find.bySemanticsIdentifier('delete-mode-permanent'))
+          .getSemanticsData();
+      expect(data.hasAction(SemanticsAction.tap), isFalse);
+      expect(data.hasAction(SemanticsAction.focus), isFalse);
+      expect(data.flagsCollection.isEnabled, Tristate.isFalse);
       handle.dispose();
     });
   });

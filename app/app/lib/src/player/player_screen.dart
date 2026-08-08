@@ -999,64 +999,52 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
             // below are long enough to push a row at the bottom out of
             // a half-height sheet.
             if (timer.active) ...[
-              Semantics(
-                identifier: SemanticsIds.sleepTimerExtend,
-                button: true,
-                child: ListTile(
-                  key: const Key(SemanticsIds.sleepTimerExtend),
-                  leading: const WaxIcon(WaxIcons.add),
-                  title: const Text('Extend 10 minutes'),
-                  subtitle: Text('${timer.label} left'),
-                  onTap: () {
-                    ref.read(sleepTimerProvider.notifier).extend();
-                    Navigator.of(context).pop();
-                  },
-                ),
+              WaxOptionRow(
+                key: const Key(SemanticsIds.sleepTimerExtend),
+                semanticsId: SemanticsIds.sleepTimerExtend,
+                glyph: WaxIcons.add,
+                title: 'Extend 10 minutes',
+                subtitle: '${timer.label} left',
+                onTap: () {
+                  ref.read(sleepTimerProvider.notifier).extend();
+                  Navigator.of(context).pop();
+                },
               ),
-              Semantics(
-                identifier: SemanticsIds.sleepTimerCancel,
-                button: true,
-                child: ListTile(
-                  key: const Key(SemanticsIds.sleepTimerCancel),
-                  leading: const WaxIcon(WaxIcons.close),
-                  title: const Text('Cancel timer'),
-                  onTap: () {
-                    ref.read(sleepTimerProvider.notifier).cancel();
-                    Navigator.of(context).pop();
-                  },
-                ),
+              WaxOptionRow(
+                key: const Key(SemanticsIds.sleepTimerCancel),
+                semanticsId: SemanticsIds.sleepTimerCancel,
+                glyph: WaxIcons.close,
+                title: 'Cancel timer',
+                onTap: () {
+                  ref.read(sleepTimerProvider.notifier).cancel();
+                  Navigator.of(context).pop();
+                },
               ),
               const Divider(height: WaxSpace.s16),
             ],
             for (final minutes in const [5, 15, 30, 60])
-              Semantics(
-                identifier: SemanticsIds.sleepTimer(minutes),
-                button: true,
-                child: ListTile(
-                  key: ValueKey(SemanticsIds.sleepTimer(minutes)),
-                  leading: const WaxIcon(WaxIcons.sleepTimer),
-                  title: Text('$minutes minutes'),
-                  onTap: () => _startMinutes(minutes),
-                ),
+              WaxOptionRow(
+                key: ValueKey(SemanticsIds.sleepTimer(minutes)),
+                semanticsId: SemanticsIds.sleepTimer(minutes),
+                glyph: WaxIcons.sleepTimer,
+                title: '$minutes minutes',
+                onTap: () => _startMinutes(minutes),
               ),
             if (chapterEndMs != null)
-              Semantics(
-                identifier: SemanticsIds.sleepTimerChapter,
-                button: true,
-                child: ListTile(
-                  key: const Key(SemanticsIds.sleepTimerChapter),
-                  leading: const WaxIcon(WaxIcons.audiobooks),
-                  title: const Text('End of chapter'),
-                  onTap: () {
-                    ref
-                        .read(sleepTimerProvider.notifier)
-                        .startEndOfChapter(chapterEndMs);
-                    Navigator.of(context).pop();
-                  },
-                ),
+              WaxOptionRow(
+                key: const Key(SemanticsIds.sleepTimerChapter),
+                semanticsId: SemanticsIds.sleepTimerChapter,
+                glyph: WaxIcons.audiobooks,
+                title: 'End of chapter',
+                onTap: () {
+                  ref
+                      .read(sleepTimerProvider.notifier)
+                      .startEndOfChapter(chapterEndMs);
+                  Navigator.of(context).pop();
+                },
               ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
               child: Row(
                 children: [
                   Expanded(
@@ -1073,7 +1061,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: WaxSpace.s8),
                   Semantics(
                     identifier: SemanticsIds.sleepTimerCustomStart,
                     label: 'Start custom timer',
@@ -1092,7 +1080,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: WaxSpace.s8),
           ],
         ),
       ),

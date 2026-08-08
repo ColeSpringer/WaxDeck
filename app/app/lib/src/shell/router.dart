@@ -799,7 +799,7 @@ class _NotFoundScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('That page does not exist.'),
-            const SizedBox(height: 12),
+            const SizedBox(height: WaxSpace.s12),
             FilledButton(
               onPressed: () => context.go(WaxRoute.home),
               child: const Text('Go home'),

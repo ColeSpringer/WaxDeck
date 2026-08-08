@@ -536,17 +536,17 @@ Future<void> _showActions(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          ListTile(
-            leading: const WaxIcon(WaxIcons.playlists),
-            title: const Text('Add to playlist'),
+          WaxOptionRow(
+            glyph: WaxIcons.playlists,
+            title: 'Add to playlist',
             onTap: () {
               Navigator.of(sheetContext).pop();
               unawaited(showAddToPlaylistSheet(rootContext, item: item));
             },
           ),
-          ListTile(
-            leading: const WaxIcon(WaxIcons.share),
-            title: const Text('Share link'),
+          WaxOptionRow(
+            glyph: WaxIcons.share,
+            title: 'Share link',
             onTap: () {
               Navigator.of(sheetContext).pop();
               unawaited(
@@ -562,9 +562,9 @@ Future<void> _showActions(
               );
             },
           ),
-          ListTile(
-            leading: const WaxIcon(WaxIcons.expand),
-            title: const Text('Open the player'),
+          WaxOptionRow(
+            glyph: WaxIcons.expand,
+            title: 'Open the player',
             onTap: () {
               Navigator.of(sheetContext).pop();
               router.pushOnce(WaxRoute.nowPlaying);
@@ -574,20 +574,17 @@ Future<void> _showActions(
           // sheet's other rows are true everywhere, and a row that
           // opened nothing on a phone would be the one exception.
           if (ref.read(miniWindowProvider).available)
-            Semantics(
+            WaxOptionRow(
               // A registered id that never reaches the tree is a spec
               // that matches nothing (rule 8).
-              identifier: SemanticsIds.deckMiniWindow,
-              button: true,
-              child: ListTile(
-                key: const ValueKey(SemanticsIds.deckMiniWindow),
-                leading: const WaxIcon(WaxIcons.collapse),
-                title: const Text('Mini player window'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  unawaited(ref.read(miniWindowProvider.notifier).enter());
-                },
-              ),
+              key: const ValueKey(SemanticsIds.deckMiniWindow),
+              semanticsId: SemanticsIds.deckMiniWindow,
+              glyph: WaxIcons.collapse,
+              title: 'Mini player window',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(ref.read(miniWindowProvider.notifier).enter());
+              },
             ),
         ],
       ),

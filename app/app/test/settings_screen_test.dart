@@ -1,11 +1,13 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart'
-    show WaxButton, WaxChoice, WaxTextField;
+    show WaxButton, WaxCaptionMode, WaxChoice, WaxTextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_screen.dart';
@@ -45,6 +47,26 @@ ProviderContainer _container(WidgetTester tester, Type screen) =>
 
 Future<void> _show(WidgetTester tester, Finder target) => tester
     .scrollUntilVisible(target, 200, scrollable: find.byType(Scrollable).first);
+
+/// Puts the session in the input mode where hovering means something.
+///
+/// A test binding starts in touch mode - the mode a phone is in, and a
+/// tablet whose keyboard case is off - which is exactly the state the
+/// caption setting is not honoured in.
+void _withPointerHighlight() =>
+    _highlight(FocusHighlightStrategy.alwaysTraditional);
+
+/// Puts it in the mode a tap leaves it in, which is where a hybrid
+/// machine spends every moment between reaching for the mouse.
+void _withTouchHighlight() => _highlight(FocusHighlightStrategy.alwaysTouch);
+
+void _highlight(FocusHighlightStrategy strategy) {
+  FocusManager.instance.highlightStrategy = strategy;
+  addTearDown(
+    () => FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.automatic,
+  );
+}
 
 /// A surface tall enough to hold a settings section.
 ///
@@ -502,6 +524,146 @@ void main() {
       // whole of what makes it a per-device setting.
       expect(repo.putPrefsCalls, isEmpty);
       expect(find.text('Compact'), findsOneWidget);
+    });
+
+    testWidgets('the artwork glow starts on and reaches the theme spec', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo();
+      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      await tester.pumpAndSettle();
+
+      final container = _container(tester, SettingsSectionScreen);
+      expect(container.read(waxThemeSpecProvider).artworkGlow, isTrue);
+
+      final glow = find.bySemanticsIdentifier(
+        SemanticsIds.setting('artwork-glow'),
+      );
+      await _show(tester, glow);
+      await tester.tap(glow);
+      await tester.pumpAndSettle();
+
+      // The spec is what the theme is built from, so this is the whole
+      // chain: a switch that flipped a provider nothing read would look
+      // identical on screen.
+      expect(container.read(waxThemeSpecProvider).artworkGlow, isFalse);
+      expect(repo.putPrefsCalls, isEmpty);
+    });
+
+    testWidgets('card captions are only offered where a pointer can ask for '
+        'them back', (tester) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo();
+      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      await tester.pumpAndSettle();
+
+      final container = _container(tester, SettingsSectionScreen);
+      WaxChoice<WaxCaptionMode> picker() => tester.widget(
+        find.byWidgetPredicate((w) => w is WaxChoice<WaxCaptionMode>),
+      );
+
+      // No mouse: the choice is refused outright rather than stored and
+      // then ignored, which is the only honest answer on a screen with
+      // no way to bring a hidden caption back.
+      expect(picker().onChanged, isNull);
+      expect(
+        find.text(
+          'Always shown: hiding them needs a pointer to bring '
+          'them back',
+        ),
+        findsOneWidget,
+      );
+
+      // A mouse is what makes the choice offerable at all.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      _withPointerHighlight();
+      await tester.pumpAndSettle();
+      expect(picker().onChanged, isNotNull);
+
+      final captions = find.bySemanticsIdentifier(
+        SemanticsIds.setting('card-captions'),
+      );
+      await _show(tester, captions);
+      await tester.tap(captions);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('On hover').last);
+      await tester.pumpAndSettle();
+
+      // Stored on the device, and reaching the theme the cards are
+      // built from - the whole chain, not just the provider.
+      expect(container.read(cardCaptionsProvider), WaxCaptionMode.onHover);
+      expect(
+        container.read(waxThemeSpecProvider).captions,
+        WaxCaptionMode.onHover,
+      );
+      expect(repo.putPrefsCalls, isEmpty);
+    });
+
+    testWidgets('a tap on a touchscreen laptop does not deny its mouse', (
+      tester,
+    ) async {
+      // Two questions, two answers. `mouseIsConnected` says whether the
+      // machine has a pointer, and the highlight mode says whether
+      // hovering is live this second; a touch-down flips the second and
+      // not the first. Answering the first with the second greyed the
+      // row and told a machine with a mouse on it that it had none.
+      _tallWindow(tester);
+      final repo = _signedInRepo();
+      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      _withTouchHighlight();
+      await tester.pumpAndSettle();
+
+      final container = _container(tester, SettingsSectionScreen);
+      container.read(cardCaptionsProvider.notifier).set(WaxCaptionMode.onHover);
+      await tester.pumpAndSettle();
+
+      WaxChoice<WaxCaptionMode> picker() => tester.widget(
+        find.byWidgetPredicate((w) => w is WaxChoice<WaxCaptionMode>),
+      );
+      // Touch mode, which is where a tap leaves a hybrid machine.
+      expect(picker().onChanged, isNotNull);
+      expect(find.text('The lines under a cover in a grid'), findsOneWidget);
+      // The cards still show their names, because a finger cannot hover.
+      expect(
+        container.read(waxThemeSpecProvider).captions,
+        WaxCaptionMode.always,
+      );
+
+      _withPointerHighlight();
+      await tester.pumpAndSettle();
+      expect(
+        container.read(waxThemeSpecProvider).captions,
+        WaxCaptionMode.onHover,
+      );
+    });
+
+    testWidgets('a stored hover choice is still ignored without a pointer', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo();
+      await tester.pumpWidget(_section(repo, SettingsSection.appearance));
+      await tester.pumpAndSettle();
+
+      // The device that stored it grew a mouse and lost it again, which
+      // the picker cannot prevent. What the cards are built from is
+      // resolved every time rather than trusted to the stored value.
+      _withTouchHighlight();
+      final container = _container(tester, SettingsSectionScreen);
+      container.read(cardCaptionsProvider.notifier).set(WaxCaptionMode.onHover);
+      await tester.pumpAndSettle();
+
+      expect(container.read(cardCaptionsProvider), WaxCaptionMode.onHover);
+      expect(
+        container.read(waxThemeSpecProvider).captions,
+        WaxCaptionMode.always,
+      );
     });
   });
 

@@ -4,6 +4,7 @@
     "item": "item-{pid}",
     "itemDelete": "item-delete",
     "itemDeleteConfirm": "item-delete-confirm",
+    "itemDeleteMode": "item-delete-mode-{mode}",
     "offlineBanner": "offline-banner"
   }
 }

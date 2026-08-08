@@ -180,23 +180,27 @@ class _SubscriptionSettingsSheetState
                 onChanged: (v) => setState(() => _speed = v),
               ),
             ),
-            SwitchListTile(
+            WaxSettingRow(
               key: const Key('podcast-settings-trim'),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Trim silence'),
-              subtitle: const Text(
-                'Needs the episode fetched: silence is mapped from the '
-                'audio this server holds.',
+              title: 'Trim silence',
+              help:
+                  'Needs the episode fetched: silence is mapped from the '
+                  'audio this server holds',
+              control: WaxSwitch(
+                value: _trimSilence,
+                label: 'Trim silence',
+                onChanged: (v) => setState(() => _trimSilence = v),
               ),
-              value: _trimSilence,
-              onChanged: (v) => setState(() => _trimSilence = v),
             ),
-            SwitchListTile(
+            WaxSettingRow(
               key: const Key('podcast-settings-boost'),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Voice boost'),
-              value: _voiceBoost,
-              onChanged: (v) => setState(() => _voiceBoost = v),
+              title: 'Voice boost',
+              help: 'Lifts speech over a noisy room',
+              control: WaxSwitch(
+                value: _voiceBoost,
+                label: 'Voice boost',
+                onChanged: (v) => setState(() => _voiceBoost = v),
+              ),
             ),
             Row(
               children: <Widget>[
@@ -224,12 +228,15 @@ class _SubscriptionSettingsSheetState
               ],
             ),
             const SizedBox(height: WaxSpace.s16),
-            SwitchListTile(
+            WaxSettingRow(
               key: const Key('podcast-settings-autodownload'),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Auto-download new episodes'),
-              value: _autoDownload,
-              onChanged: (v) => setState(() => _autoDownload = v),
+              title: 'Auto-download new episodes',
+              help: 'Keeps arrivals on this device as the feed refreshes',
+              control: WaxSwitch(
+                value: _autoDownload,
+                label: 'Auto-download new episodes',
+                onChanged: (v) => setState(() => _autoDownload = v),
+              ),
             ),
             // The filter is only consulted where auto-download decides
             // what a refresh just added, so it says so rather than

@@ -93,15 +93,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = WaxColors.of(context);
     final oidcProviders =
         ref.watch(oidcProvidersProvider).value ?? const <OidcProvider>[];
     final signupEnabled = ref.watch(signupEnabledProvider).value ?? false;
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(WaxSpace.s24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360),
             child: Form(
@@ -112,16 +111,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 children: [
                   Text(
                     'WaxDeck',
-                    style: textTheme.displaySmall,
+                    style: WaxType.titleScreen.copyWith(
+                      color: colors.textPrimary,
+                    ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: WaxSpace.s8),
                   Text(
                     'Music, podcasts, and audiobooks',
-                    style: textTheme.bodyLarge,
+                    style: WaxType.body.copyWith(color: colors.textPrimary),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: WaxSpace.s32),
                   Semantics(
                     identifier: SemanticsIds.loginUsername,
                     child: TextFormField(
@@ -138,7 +139,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           : null,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: WaxSpace.s16),
                   Semantics(
                     identifier: SemanticsIds.loginPassword,
                     child: TextFormField(
@@ -156,20 +157,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       onFieldSubmitted: (_) => _submit(),
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: WaxSpace.s24),
                   if (_error != null) ...[
                     Semantics(
                       identifier: SemanticsIds.loginError,
                       child: Text(
                         _error!,
                         key: const Key(SemanticsIds.loginError),
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.error,
-                        ),
+                        style: WaxType.body.copyWith(color: colors.error),
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: WaxSpace.s16),
                   ],
                   Semantics(
                     identifier: SemanticsIds.loginSubmit,
@@ -185,7 +184,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           : const Text('Log in'),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: WaxSpace.s12),
                   // Open signup gets the louder wording; without it the
                   // link still serves people holding an invite token.
                   Semantics(
@@ -201,19 +200,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ),
                   if (oidcProviders.isNotEmpty) ...[
-                    const SizedBox(height: 24),
+                    const SizedBox(height: WaxSpace.s24),
                     Row(
                       children: [
                         const Expanded(child: Divider()),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('or', style: textTheme.bodySmall),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: WaxSpace.s12,
+                          ),
+                          child: Text(
+                            'or',
+                            style: WaxType.bodySmall.copyWith(
+                              color: colors.textSecondary,
+                            ),
+                          ),
                         ),
                         const Expanded(child: Divider()),
                       ],
                     ),
                     for (final provider in oidcProviders) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: WaxSpace.s16),
                       Semantics(
                         identifier: SemanticsIds.oidcLogin(provider.id),
                         child: OutlinedButton.icon(
@@ -221,7 +227,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           onPressed: _submitting
                               ? null
                               : () => _oidcSubmit(provider),
-                          icon: const Icon(Icons.login),
+                          icon: const WaxIcon(WaxIcons.signIn),
                           label: Text('Continue with ${provider.displayName}'),
                         ),
                       ),

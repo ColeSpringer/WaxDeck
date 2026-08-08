@@ -402,7 +402,82 @@ abstract final class WaxIcons {
     IconData(0xE036, fontFamily: _fillFamily, fontPackage: _fontPackage),
   );
 
+  /// Phosphor `upload-simple`.
+  static const upload = WaxGlyph(
+    IconData(0xE4C0, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE4C0, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `arrow-square-out`. A link that leaves WaxDeck.
+  static const openExternal = WaxGlyph(
+    IconData(0xE5DE, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE5DE, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `sign-in`.
+  static const signIn = WaxGlyph(
+    IconData(0xE428, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE428, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `user-plus`.
+  static const addPerson = WaxGlyph(
+    IconData(0xE4D0, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE4D0, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  // Server and administration.
+  /// Phosphor `archive`. A backup, taken or listed.
+  static const archive = WaxGlyph(
+    IconData(0xE00C, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE00C, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `key`. An app password or a credential.
+  static const key = WaxGlyph(
+    IconData(0xE2D6, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE2D6, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `ticket`. An invitation to the server.
+  static const ticket = WaxGlyph(
+    IconData(0xE490, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE490, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `webhooks-logo`.
+  static const webhook = WaxGlyph(
+    IconData(0xECAE, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xECAE, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `chat-circle`. A notification target that speaks into a
+  /// conversation.
+  static const chat = WaxGlyph(
+    IconData(0xE168, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE168, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
   // States and signals.
+  /// Phosphor `clock`. What time it is somewhere, as against [recent],
+  /// which is time that has passed.
+  static const clock = WaxGlyph(
+    IconData(0xE19A, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE19A, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `hourglass`. Something waiting on somebody else.
+  static const hourglass = WaxGlyph(
+    IconData(0xE2B2, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE2B2, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
+  /// Phosphor `power`. A subsystem that is not switched on.
+  static const power = WaxGlyph(
+    IconData(0xE3DA, fontFamily: _regularFamily, fontPackage: _fontPackage),
+    IconData(0xE3DA, fontFamily: _fillFamily, fontPackage: _fontPackage),
+  );
+
   /// Phosphor `cloud-slash`.
   static const offline = WaxGlyph(
     IconData(0xE1B6, fontFamily: _regularFamily, fontPackage: _fontPackage),
@@ -516,6 +591,18 @@ abstract final class WaxIcons {
     'share': share,
     'bookmark': bookmark,
     'refresh': refresh,
+    'upload': upload,
+    'openExternal': openExternal,
+    'signIn': signIn,
+    'addPerson': addPerson,
+    'archive': archive,
+    'key': key,
+    'ticket': ticket,
+    'webhook': webhook,
+    'chat': chat,
+    'clock': clock,
+    'hourglass': hourglass,
+    'power': power,
     'offline': offline,
     'warning': warning,
     'errorCircle': errorCircle,

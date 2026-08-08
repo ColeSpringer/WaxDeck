@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/migrate_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxSwitch;
 
 import 'fakes.dart';
 import 'routed_host.dart';
@@ -54,7 +55,12 @@ void main() {
       find.byKey(const Key('migrate-password')),
       'butterbur',
     );
-    await tester.tap(find.byKey(const Key('migrate-dry-run')));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('migrate-dry-run')),
+        matching: find.byType(WaxSwitch),
+      ),
+    );
     await tester.tap(find.byKey(const Key('migrate-submit')));
     await tester.pumpAndSettle();
 

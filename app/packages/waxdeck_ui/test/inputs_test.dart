@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -362,6 +363,120 @@ void main() {
         expect(tester.takeException(), isNull, reason: 'at ${scale}x');
       });
     }
+  });
+
+  group('MediaCard captions', () {
+    const tile = MediaTileData(
+      title: 'Salt Harbour',
+      subtitle: 'Nightjar',
+      trailingText: '4:05',
+    );
+
+    Finder captions() => find.ancestor(
+      of: find.text('Nightjar'),
+      matching: find.byType(AnimatedOpacity),
+    );
+
+    testWidgets('hiding them changes no measurement at all', (tester) async {
+      // The invariant the whole mode rests on. A shelf commits to a
+      // height before it lays its cards out, so a caption that stopped
+      // taking room would resize the shelf under the pointer.
+      final sizes = <WaxCaptionMode, Size>{};
+      for (final mode in WaxCaptionMode.values) {
+        await tester.pumpWidget(
+          _host(
+            Align(
+              alignment: Alignment.topLeft,
+              child: MediaCard(width: 120, captions: mode, data: tile),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        sizes[mode] = tester.getSize(find.byType(MediaCard));
+      }
+      expect(sizes[WaxCaptionMode.onHover], sizes[WaxCaptionMode.always]);
+    });
+
+    testWidgets('always is what a card draws with no mode passed', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(const MediaCard(width: 120, data: tile)));
+      await tester.pumpAndSettle();
+      // Drawn plainly, and with no fade around it: an AnimatedOpacity
+      // carries a controller and a ticker apiece, and a full grid is a
+      // hundred cards animating a constant.
+      expect(find.text('Nightjar'), findsOneWidget);
+      expect(captions(), findsNothing);
+    });
+
+    testWidgets('on hover they are faded out until the pointer arrives', (
+      tester,
+    ) async {
+      // A test binding starts in touch highlight mode, where a detector
+      // reports no hover at all. This mode is the one the setting is
+      // offered on: a machine with a pointer.
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      await tester.pumpWidget(
+        _host(
+          MediaCard(
+            width: 120,
+            captions: WaxCaptionMode.onHover,
+            data: tile,
+            onTap: () {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<AnimatedOpacity>(captions()).opacity, 0);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      // A frame for the binding to notice a mouse exists at all: the
+      // detector reports no hover until one is connected.
+      await tester.pump();
+      await mouse.moveTo(tester.getCenter(find.byType(MediaCard)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<AnimatedOpacity>(captions()).opacity, 1);
+    });
+
+    testWidgets('a hidden caption is still announced', (tester) async {
+      // The label is built from the data rather than from what is drawn,
+      // so a screen reader hears the same card either way. Written down
+      // because the obvious implementation - dropping the widgets -
+      // would have taken the announcement with them.
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _host(
+          const MediaCard(
+            width: 120,
+            captions: WaxCaptionMode.onHover,
+            data: tile,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Salt Harbour, Nightjar, 4:05'), findsOne);
+      handle.dispose();
+    });
+
+    testWidgets('the theme is where the mode comes from', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildWaxTheme(captions: WaxCaptionMode.onHover),
+          home: const Scaffold(
+            body: Center(child: MediaCard(width: 120, data: tile)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<AnimatedOpacity>(captions()).opacity, 0);
+    });
   });
 
   group('formatSpan', () {

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/library/item_delete.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'fakes.dart';
@@ -53,7 +54,9 @@ void main() {
     expect(repo.libraryItems, hasLength(1));
     expect(find.text('This removes 3 files, 5.0 MB.'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('item-delete-mode-permanent')));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemDeleteMode('permanent')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('item-delete-confirm')));
     await tester.pumpAndSettle();

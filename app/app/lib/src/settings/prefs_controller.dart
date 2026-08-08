@@ -167,24 +167,39 @@ class WaxThemeSpec {
     required this.mode,
     required this.oled,
     required this.density,
+    required this.artworkGlow,
+    required this.captions,
   });
 
   final ThemeMode mode;
   final bool oled;
   final WaxDensity density;
 
+  /// Whether the built theme carries the artwork glow. Per device like
+  /// [density], and part of the spec rather than applied further down
+  /// because it is a token the theme is built from.
+  final bool artworkGlow;
+
+  /// When cards draw their captions. Already resolved against what this
+  /// device can hover, so the theme takes it as given.
+  final WaxCaptionMode captions;
+
   WaxThemeVariant get dark =>
       oled ? WaxThemeVariant.oled : WaxThemeVariant.dark;
 
+  // Every field, or the theme is rebuilt from a spec that compares equal
+  // to the old one and the change never reaches the screen.
   @override
   bool operator ==(Object other) =>
       other is WaxThemeSpec &&
       other.mode == mode &&
       other.oled == oled &&
-      other.density == density;
+      other.density == density &&
+      other.artworkGlow == artworkGlow &&
+      other.captions == captions;
 
   @override
-  int get hashCode => Object.hash(mode, oled, density);
+  int get hashCode => Object.hash(mode, oled, density, artworkGlow, captions);
 }
 
 final waxThemeSpecProvider = Provider<WaxThemeSpec>((ref) {
@@ -193,5 +208,7 @@ final waxThemeSpecProvider = Provider<WaxThemeSpec>((ref) {
     mode: ref.watch(themeModeProvider),
     oled: prefs?.theme == ThemePref.oled,
     density: ref.watch(densityProvider),
+    artworkGlow: ref.watch(artworkGlowProvider),
+    captions: ref.watch(cardCaptionsEffectiveProvider),
   );
 });

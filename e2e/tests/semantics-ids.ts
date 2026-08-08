@@ -283,6 +283,7 @@ export const SemanticsIds = {
   item: (pid: string | number) => `item-${pid}`,
   itemDelete: 'item-delete',
   itemDeleteConfirm: 'item-delete-confirm',
+  itemDeleteMode: (mode: string | number) => `item-delete-mode-${mode}`,
   offlineBanner: 'offline-banner',
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
@@ -787,6 +788,7 @@ export const SemanticsIdPrefixes = {
 
   // library: The complete item listings and the per-item rows the sync specs drive.
   item: 'item-',
+  itemDeleteMode: 'item-delete-mode-',
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
   artSlot: 'art-slot-',

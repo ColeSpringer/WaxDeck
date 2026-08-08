@@ -38,9 +38,17 @@ enum WaxThemeVariant {
 ThemeData buildWaxTheme({
   WaxThemeVariant variant = WaxThemeVariant.dark,
   WaxDensity density = WaxDensity.comfortable,
+  bool artworkGlow = true,
+  WaxCaptionMode captions = WaxCaptionMode.always,
 }) {
-  final colors = variant.colors;
-  final layout = WaxLayout.forDensity(density);
+  // Glow strength is a token, so turning it off is zeroing the token
+  // rather than a parameter threaded through the backdrop and every
+  // caller of it. Light already ships at zero, which makes the off state
+  // a rendering that has always been drawn rather than a new one.
+  final colors = artworkGlow
+      ? variant.colors
+      : variant.colors.copyWith(glowOpacity: 0);
+  final layout = WaxLayout.forDensity(density, captions: captions);
   final text = WaxType.textTheme(colors.textPrimary, colors.textSecondary);
 
   final scheme = ColorScheme(

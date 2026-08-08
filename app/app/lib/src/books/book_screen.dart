@@ -799,19 +799,25 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
               onChanged: (v) => setState(() => _speed = v),
             ),
           ),
-          SwitchListTile(
+          WaxSettingRow(
             key: const Key('book-settings-boost'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Voice boost'),
-            value: _voiceBoost,
-            onChanged: (v) => setState(() => _voiceBoost = v),
+            title: 'Voice boost',
+            help: 'Lifts speech over a noisy room',
+            control: WaxSwitch(
+              value: _voiceBoost,
+              label: 'Voice boost',
+              onChanged: (v) => setState(() => _voiceBoost = v),
+            ),
           ),
-          SwitchListTile(
+          WaxSettingRow(
             key: const Key('book-settings-trim'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Trim silence'),
-            value: _trimSilence,
-            onChanged: (v) => setState(() => _trimSilence = v),
+            title: 'Trim silence',
+            help: 'Shortens the pauses between sentences',
+            control: WaxSwitch(
+              value: _trimSilence,
+              label: 'Trim silence',
+              onChanged: (v) => setState(() => _trimSilence = v),
+            ),
           ),
           const SizedBox(height: WaxSpace.s16),
           Align(

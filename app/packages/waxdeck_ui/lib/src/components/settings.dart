@@ -88,6 +88,224 @@ class WaxSettingRow extends StatelessWidget {
   }
 }
 
+/// One choice in a [WaxRadioGroup].
+@immutable
+class WaxRadioOption<T> {
+  const WaxRadioOption({
+    required this.value,
+    required this.label,
+    this.help,
+    this.semanticsId,
+  });
+
+  final T value;
+
+  final String label;
+
+  /// The one line under the label, where a choice has a consequence
+  /// worth spelling out - "Restorable from the trash screen" against
+  /// "Gone for good".
+  final String? help;
+
+  final String? semanticsId;
+}
+
+/// A short list of choices with every one of them, and its consequence,
+/// on screen at once.
+///
+/// The counterpart to [WaxChoice] rather than a duplicate of it, and the
+/// line between them is whether the options have to be read to be
+/// chosen between. A settings row picks from a list of speeds, where
+/// only the current one matters and the rest can wait behind a tap; a
+/// destructive dialog asks "trash or permanent", where hiding the second
+/// answer behind a tap is how somebody deletes a library by mistake.
+///
+/// Built the way [WaxSwitch] is built - one semantics node per option
+/// carrying its own name, a handle the suite can steer by, the focus
+/// ring - and announcing with `inMutuallyExclusiveGroup` and `checked`,
+/// which is what tells a screen reader that choosing one un-chooses the
+/// rest. Each option is its own tab stop, as each switch is.
+class WaxRadioGroup<T> extends StatelessWidget {
+  const WaxRadioGroup({
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    super.key,
+  });
+
+  final T value;
+  final List<WaxRadioOption<T>> options;
+
+  /// Null disables every option, reported as well as drawn.
+  final ValueChanged<T>? onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      for (final option in options)
+        _WaxRadioRow<T>(
+          option: option,
+          selected: option.value == value,
+          onSelect: onChanged == null ? null : () => onChanged!(option.value),
+        ),
+    ],
+  );
+}
+
+class _WaxRadioRow<T> extends StatefulWidget {
+  const _WaxRadioRow({
+    required this.option,
+    required this.selected,
+    required this.onSelect,
+    super.key,
+  });
+
+  final WaxRadioOption<T> option;
+  final bool selected;
+  final VoidCallback? onSelect;
+
+  @override
+  State<_WaxRadioRow<T>> createState() => _WaxRadioRowState<T>();
+}
+
+class _WaxRadioRowState<T> extends State<_WaxRadioRow<T>> {
+  bool _focused = false;
+  final FocusNode _focus = FocusNode(debugLabel: 'wax-radio');
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final layout = WaxLayout.of(context);
+    final option = widget.option;
+    final enabled = widget.onSelect != null;
+    final mark = !enabled
+        ? colors.textDisabled
+        : (widget.selected ? colors.accent : colors.outline);
+
+    return Semantics(
+      identifier: option.semanticsId,
+      // The pair that makes a radio a radio: in a group, and checked or
+      // not. A button that happened to look round would announce as a
+      // button and say nothing about what choosing it un-chooses.
+      inMutuallyExclusiveGroup: true,
+      checked: widget.selected,
+      enabled: enabled,
+      label: <String?>[option.label, option.help].nonNulls.join(', '),
+      excludeSemantics: true,
+      onTap: widget.onSelect,
+      focusable: enabled,
+      focused: _focused,
+      // See WaxTappable: a focus action makes a node focusable whatever
+      // the flag says, so a disabled option would still be a tab stop.
+      onFocus: enabled ? _focus.requestFocus : null,
+      child: FocusableActionDetector(
+        enabled: enabled,
+        focusNode: _focus,
+        mouseCursor: enabled
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onSelect?.call();
+              return null;
+            },
+          ),
+        },
+        child: WaxFocusRing(
+          focused: _focused,
+          surface: colors.canvas,
+          child: GestureDetector(
+            onTap: widget.onSelect,
+            behavior: HitTestBehavior.opaque,
+            child: ConstrainedBox(
+              // The whole row is the target, not the mark on the end of
+              // it: a 20-pixel circle is not something to aim at.
+              constraints: BoxConstraints(minHeight: layout.rowHeightDense),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Padding(
+                    padding: const EdgeInsets.only(top: WaxSpace.s12),
+                    child: _Mark(selected: widget.selected, color: mark),
+                  ),
+                  const SizedBox(width: WaxSpace.s12),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: WaxSpace.s8,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            option.label,
+                            style: WaxType.body.copyWith(
+                              color: enabled
+                                  ? colors.textPrimary
+                                  : colors.textDisabled,
+                            ),
+                          ),
+                          if (option.help != null)
+                            Text(
+                              option.help!,
+                              style: WaxType.bodySmall.copyWith(
+                                color: enabled
+                                    ? colors.textTertiary
+                                    : colors.textDisabled,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The ring, and the dot inside it when this is the one chosen.
+class _Mark extends StatelessWidget {
+  const _Mark({required this.selected, required this.color});
+
+  final bool selected;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 20,
+    height: 20,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(color: color, width: 2),
+    ),
+    child: selected
+        ? Center(
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+            ),
+          )
+        : null,
+  );
+}
+
 /// The house switch.
 ///
 /// Material's [Switch] underneath, painted by the theme, with the three

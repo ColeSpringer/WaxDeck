@@ -61,12 +61,11 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = WaxColors.of(context);
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(WaxSpace.s24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360),
             child: Form(
@@ -77,16 +76,18 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                 children: [
                   Text(
                     'Welcome to WaxDeck',
-                    style: textTheme.displaySmall,
+                    style: WaxType.titleScreen.copyWith(
+                      color: colors.textPrimary,
+                    ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: WaxSpace.s8),
                   Text(
                     'Create the first administrator account',
-                    style: textTheme.bodyLarge,
+                    style: WaxType.body.copyWith(color: colors.textPrimary),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: WaxSpace.s32),
                   Semantics(
                     identifier: SemanticsIds.setupUsername,
                     child: TextFormField(
@@ -103,7 +104,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                           : null,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: WaxSpace.s16),
                   Semantics(
                     identifier: SemanticsIds.setupPassword,
                     child: TextFormField(
@@ -120,7 +121,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                           : null,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: WaxSpace.s16),
                   Semantics(
                     identifier: SemanticsIds.setupConfirm,
                     child: TextFormField(
@@ -137,7 +138,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                       onFieldSubmitted: (_) => _submit(),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: WaxSpace.s16),
                   Semantics(
                     identifier: SemanticsIds.setupDisplayName,
                     child: TextFormField(
@@ -150,20 +151,18 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                       onFieldSubmitted: (_) => _submit(),
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: WaxSpace.s24),
                   if (_error != null) ...[
                     Semantics(
                       identifier: SemanticsIds.setupError,
                       child: Text(
                         _error!,
                         key: const Key(SemanticsIds.setupError),
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.error,
-                        ),
+                        style: WaxType.body.copyWith(color: colors.error),
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: WaxSpace.s16),
                   ],
                   Semantics(
                     identifier: SemanticsIds.setupSubmit,

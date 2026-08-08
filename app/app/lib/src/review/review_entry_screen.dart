@@ -602,7 +602,7 @@ class _TrackDiffRow extends StatelessWidget {
                     ),
             ),
             SizedBox(
-              width: WaxSpace.s40,
+              width: 40,
               child: pid == null
                   ? null
                   : WaxMenuButton<String>(

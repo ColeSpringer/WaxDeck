@@ -318,15 +318,19 @@ class WaxColors extends ThemeExtension<WaxColors> {
     grainOpacity: 0.02,
   );
 
-  /// Only the accent family is ever overridden at runtime (artwork never
-  /// touches these tokens: extracted colour is atmosphere, and rides
-  /// `WaxAccent` instead).
+  /// The accent family and the glow strength are the only tokens ever
+  /// overridden at runtime. Artwork never touches any of them: extracted
+  /// colour is atmosphere, and rides `WaxAccent` instead. [glowOpacity]
+  /// is here because a listener can ask for no artwork glow at all, and
+  /// zeroing the token is what turns it off everywhere the backdrop
+  /// draws rather than at each of its call sites.
   @override
   WaxColors copyWith({
     Color? accent,
     Color? onAccent,
     Color? accentContainer,
     Color? onAccentContainer,
+    double? glowOpacity,
   }) => WaxColors(
     brightness: brightness,
     canvas: canvas,
@@ -352,7 +356,7 @@ class WaxColors extends ThemeExtension<WaxColors> {
     podcasts: podcasts,
     audiobooks: audiobooks,
     radio: radio,
-    glowOpacity: glowOpacity,
+    glowOpacity: glowOpacity ?? this.glowOpacity,
     washOpacity: washOpacity,
     grainOpacity: grainOpacity,
   );

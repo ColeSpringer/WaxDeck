@@ -327,39 +327,35 @@ class _RequestsTab extends ConsumerWidget {
         AsyncData(:final value) => ListView(
           children: [
             for (final user in value)
-              Semantics(
-                identifier: SemanticsIds.requestRow(user.id),
-                child: ListTile(
-                  key: ValueKey(SemanticsIds.requestRow(user.id)),
-                  leading: const Icon(Icons.person_add_alt),
-                  title: Text(user.username),
-                  subtitle: Text(
-                    user.displayName == null
-                        ? 'Requested ${_date(user.createdAt)}'
-                        : '${user.displayName}, requested '
-                              '${_date(user.createdAt)}',
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Semantics(
-                        identifier: SemanticsIds.requestApprove(user.id),
-                        child: TextButton(
-                          key: Key(SemanticsIds.requestApprove(user.id)),
-                          onPressed: () => _approve(context, ref, user),
-                          child: const Text('Approve'),
-                        ),
+              WaxOptionRow(
+                key: ValueKey(SemanticsIds.requestRow(user.id)),
+                semanticsId: SemanticsIds.requestRow(user.id),
+                glyph: WaxIcons.addPerson,
+                title: user.username,
+                subtitle: user.displayName == null
+                    ? 'Requested ${_date(user.createdAt)}'
+                    : '${user.displayName}, requested '
+                          '${_date(user.createdAt)}',
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Semantics(
+                      identifier: SemanticsIds.requestApprove(user.id),
+                      child: TextButton(
+                        key: Key(SemanticsIds.requestApprove(user.id)),
+                        onPressed: () => _approve(context, ref, user),
+                        child: const Text('Approve'),
                       ),
-                      Semantics(
-                        identifier: SemanticsIds.requestReject(user.id),
-                        child: TextButton(
-                          key: Key(SemanticsIds.requestReject(user.id)),
-                          onPressed: () => _reject(context, ref, user),
-                          child: const Text('Reject'),
-                        ),
+                    ),
+                    Semantics(
+                      identifier: SemanticsIds.requestReject(user.id),
+                      child: TextButton(
+                        key: Key(SemanticsIds.requestReject(user.id)),
+                        onPressed: () => _reject(context, ref, user),
+                        child: const Text('Reject'),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
           ],
@@ -413,7 +409,7 @@ class _InvitesTab extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Share this token; it is shown exactly once.'),
-              const SizedBox(height: 12),
+              const SizedBox(height: WaxSpace.s12),
               Semantics(
                 identifier: SemanticsIds.inviteToken,
                 child: SelectableText(
@@ -482,7 +478,7 @@ class _InvitesTab extends ConsumerWidget {
           key: const Key(SemanticsIds.inviteCreate),
           tooltip: 'Create invite',
           onPressed: () => _create(context, ref),
-          child: const Icon(Icons.person_add),
+          child: const WaxIcon(WaxIcons.addPerson),
         ),
       ),
       body: switch (invites) {
@@ -516,56 +512,32 @@ class _InviteRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final spent = invite.revoked || invite.expired;
-    return Semantics(
-      identifier: SemanticsIds.inviteRow(invite.id),
-      child: ListTile(
-        key: ValueKey(SemanticsIds.inviteRow(invite.id)),
-        leading: const Icon(Icons.local_activity_outlined),
-        title: Row(
-          children: [
-            Flexible(
-              child: Text(
-                invite.note ?? invite.id,
-                overflow: TextOverflow.ellipsis,
-              ),
+    return WaxOptionRow(
+      key: ValueKey(SemanticsIds.inviteRow(invite.id)),
+      semanticsId: SemanticsIds.inviteRow(invite.id),
+      glyph: WaxIcons.ticket,
+      // Not `enabled: false`, though a spent invite is spent: that flag
+      // greys the title and the subtitle to the disabled tone, which is
+      // held to a visibility floor rather than to reading contrast -
+      // and "revoked" is the one word an administrator scans this list
+      // for. It leads the line at full contrast instead, and the absent
+      // revoke button is what says the invite is done with.
+      title: invite.note ?? invite.id,
+      subtitle: <String>[
+        if (invite.revoked) 'revoked' else if (invite.expired) 'expired',
+        invite.roles.join(', '),
+        'uses ${invite.usedCount}/${invite.maxUses}',
+      ].join(', '),
+      trailing: spent
+          ? null
+          : WaxIconButton(
+              key: Key(SemanticsIds.inviteRevoke(invite.id)),
+              glyph: WaxIcons.delete,
+              label: 'Revoke invite',
+              semanticsId: SemanticsIds.inviteRevoke(invite.id),
+              onPressed: onRevoke,
             ),
-            if (invite.revoked) ...[
-              const SizedBox(width: 8),
-              Chip(
-                label: const Text('revoked'),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                backgroundColor: colorScheme.errorContainer,
-                labelStyle: TextStyle(color: colorScheme.onErrorContainer),
-              ),
-            ] else if (invite.expired) ...[
-              const SizedBox(width: 8),
-              const Chip(
-                label: Text('expired'),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ],
-          ],
-        ),
-        subtitle: Text(
-          '${invite.roles.join(', ')}, uses ${invite.usedCount}/'
-          '${invite.maxUses}',
-        ),
-        trailing: spent
-            ? null
-            : Semantics(
-                identifier: SemanticsIds.inviteRevoke(invite.id),
-                child: IconButton(
-                  key: Key(SemanticsIds.inviteRevoke(invite.id)),
-                  tooltip: 'Revoke invite',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: onRevoke,
-                ),
-              ),
-      ),
     );
   }
 }
@@ -652,35 +624,51 @@ class _CreateInviteDialogState extends ConsumerState<_CreateInviteDialog> {
                 helperText: 'Who this invite is for',
               ),
             ),
-            SwitchListTile(
+            WaxSettingRow(
               key: const Key('invite-admin-role'),
-              title: const Text('Administrator'),
-              value: _admin,
-              onChanged: (value) => setState(() => _admin = value),
+              title: 'Administrator',
+              help: 'Server-wide authority: settings, users, and libraries',
+              control: WaxSwitch(
+                value: _admin,
+                label: 'Administrator',
+                onChanged: (value) => setState(() => _admin = value),
+              ),
             ),
-            SwitchListTile(
+            WaxSettingRow(
               key: const Key('invite-access-all'),
-              title: const Text('All libraries'),
-              value: _accessAll,
-              onChanged: (value) => setState(() => _accessAll = value),
+              title: 'All libraries',
+              help: 'Off picks the libraries this invite can see',
+              control: WaxSwitch(
+                value: _accessAll,
+                label: 'All libraries',
+                onChanged: (value) => setState(() => _accessAll = value),
+              ),
             ),
             if (!_accessAll)
               for (final library in libraries)
-                CheckboxListTile(
+                WaxSettingRow(
                   key: Key('invite-library-${library.pid}'),
-                  title: Text(library.name),
-                  value: _grantedPids.contains(library.pid),
-                  onChanged: (checked) => setState(() {
-                    checked ?? false
-                        ? _grantedPids.add(library.pid)
-                        : _grantedPids.remove(library.pid);
-                  }),
+                  title: library.name,
+                  help: 'Include this library',
+                  control: WaxSwitch(
+                    value: _grantedPids.contains(library.pid),
+                    label: library.name,
+                    onChanged: (checked) => setState(() {
+                      checked
+                          ? _grantedPids.add(library.pid)
+                          : _grantedPids.remove(library.pid);
+                    }),
+                  ),
                 ),
-            SwitchListTile(
+            WaxSettingRow(
               key: const Key('invite-upload-enabled'),
-              title: const Text('May upload'),
-              value: _uploadEnabled,
-              onChanged: (value) => setState(() => _uploadEnabled = value),
+              title: 'May upload',
+              help: 'Whether this account can add files to the library',
+              control: WaxSwitch(
+                value: _uploadEnabled,
+                label: 'May upload',
+                onChanged: (value) => setState(() => _uploadEnabled = value),
+              ),
             ),
             TextField(
               key: const Key('invite-max-uses'),
@@ -731,7 +719,7 @@ class _ErrorRetry extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
+          const SizedBox(height: WaxSpace.s12),
           OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),

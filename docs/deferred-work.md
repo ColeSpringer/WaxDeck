@@ -116,13 +116,19 @@ here waits on upstream.
   which is a pinned dependency and a decision of its own for one number.
   Worth taking with the next plugin that lands for another reason. See
   ADR-0033.
-- `[in-repo]` **Settings the layout blueprint specifies and Settings does
-  not draw.** Three remain, and all three have nothing to wire to: the
-  artwork-glow toggle (`WaxBackdrop`'s glow is drawn by one screen and
-  takes no parameter), always-show captions on cards (`MediaCard` has no
-  caption mode to force), and language, which is further off -
-  `Prefs.locale` is stored and the app has no localization behind it, so
-  a picker there would change nothing.
+- `[in-repo]` **The language picker the layout blueprint specifies and
+  Settings does not draw.** Blocked on the app being localized at all,
+  which nothing here has started: no `flutter_localizations` in any
+  pubspec in the workspace, no `l10n.yaml`, no `.arb`, and around 1,200
+  user-facing string literals in `app/app/lib` by a conservative count -
+  an undercount, because the help lines are written as multi-line
+  concatenations a grep reads as several. `Prefs.locale` is carried
+  through `PrefsController` so a write preserves it, and read by nothing.
+  The size is not the whole of it: extraction is code and finishes,
+  translation is people and does not, so a picker offered before there is
+  a second language to pick is the same empty control as one offered
+  before extraction. Worth taking when somebody is ready to own the
+  translations, not before.
 - `[in-repo]` **The web build's per-device settings binding is not covered
   by an automated test.** `BrowserClientSettingsStore` - the probe, the
   fallback to memory, the write-through shadow, the key semantics - is

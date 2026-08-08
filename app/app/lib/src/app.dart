@@ -21,8 +21,15 @@ class WaxDeckApp extends ConsumerWidget {
       theme: buildWaxTheme(
         variant: WaxThemeVariant.light,
         density: spec.density,
+        artworkGlow: spec.artworkGlow,
+        captions: spec.captions,
       ),
-      darkTheme: buildWaxTheme(variant: spec.dark, density: spec.density),
+      darkTheme: buildWaxTheme(
+        variant: spec.dark,
+        density: spec.density,
+        artworkGlow: spec.artworkGlow,
+        captions: spec.captions,
+      ),
       themeMode: spec.mode,
       routerConfig: ref.watch(routerProvider),
       // The session probes decide which locations exist at all, so the

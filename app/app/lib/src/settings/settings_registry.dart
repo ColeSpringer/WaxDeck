@@ -419,6 +419,18 @@ const settingsRegistry = <SettingEntry>[
     section: SettingsSection.appearance,
     keywords: <String>['grid', 'tiles', 'covers', 'large', 'small'],
   ),
+  SettingEntry(
+    id: 'artwork-glow',
+    title: 'Artwork glow',
+    section: SettingsSection.appearance,
+    keywords: <String>['backdrop', 'colour', 'color', 'player', 'wash'],
+  ),
+  SettingEntry(
+    id: 'card-captions',
+    title: 'Card captions',
+    section: SettingsSection.appearance,
+    keywords: <String>['labels', 'titles', 'hover', 'grid', 'covers'],
+  ),
 
   // Accessibility
   SettingEntry(

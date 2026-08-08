@@ -180,8 +180,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.revokeInviteCalls, ['iv-1']);
+    // The state leads the row's own line rather than riding a coloured
+    // chip, and at full reading contrast: this is the word an
+    // administrator scans the list for.
     expect(
-      find.descendant(of: row, matching: find.text('revoked')),
+      find.descendant(of: row, matching: find.text('revoked, user, uses 2/5')),
       findsOneWidget,
     );
   });

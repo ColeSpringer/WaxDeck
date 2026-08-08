@@ -25,6 +25,10 @@ import 'view_data.dart';
 /// listener who set the app to paper did not set their car to it. The
 /// density setting travels with them, because that one is about their
 /// eyes rather than about the room.
+///
+/// The artwork-glow setting does not travel either: the glow is what
+/// keeps a cover from sitting on flat black at arm's length, and this
+/// screen is built to be read at a glance.
 class CarModeTheme extends StatelessWidget {
   const CarModeTheme({required this.child, super.key});
 

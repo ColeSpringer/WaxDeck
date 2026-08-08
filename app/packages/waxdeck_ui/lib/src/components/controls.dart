@@ -234,12 +234,19 @@ class WaxButton extends StatelessWidget {
     required this.onPressed,
     this.kind = WaxButtonKind.filled,
     this.icon,
+    this.spokenLabel,
     this.semanticsId,
     this.expand = false,
     super.key,
   });
 
   final String label;
+
+  /// What a screen reader hears, where the drawn label is short for the
+  /// room it has: "New app password" on a button that reads "New". A
+  /// button reached through the rotor arrives with no heading above it
+  /// to lend it a subject, so the name has to carry one.
+  final String? spokenLabel;
 
   /// Null disables the button. Disabled is never signalled by colour
   /// alone: the control also reports itself disabled to assistive tech.
@@ -311,7 +318,7 @@ class WaxButton extends StatelessWidget {
       identifier: semanticsId,
       button: true,
       enabled: enabled,
-      label: label,
+      label: spokenLabel ?? label,
       // The action rides the semantics node: a screen reader's double tap
       // and the e2e suite's click both land here, not on the canvas.
       // excludeSemantics collapses the inner Material's own node so the

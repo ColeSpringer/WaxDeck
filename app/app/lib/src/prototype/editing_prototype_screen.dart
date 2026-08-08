@@ -118,8 +118,8 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
                       ),
                     ),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
+                      horizontal: WaxSpace.s12,
+                      vertical: WaxSpace.s4,
                     ),
                     child: Row(
                       children: [
@@ -143,7 +143,7 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: WaxSpace.s8),
                         Expanded(
                           flex: 2,
                           child: Semantics(
@@ -167,7 +167,10 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
                           child: IconButton(
                             key: Key(SemanticsIds.protoKebab(i)),
                             visualDensity: VisualDensity.compact,
-                            icon: const Icon(Icons.more_vert, size: 18),
+                            icon: const WaxIcon(
+                              WaxIcons.moreVertical,
+                              size: 18,
+                            ),
                             onPressed: () => _kebabMenu(i),
                           ),
                         ),
@@ -184,15 +187,20 @@ class _EditingPrototypeScreenState extends State<EditingPrototypeScreen> {
   }
 
   Widget _headerRow(ThemeData theme) {
-    final style = theme.textTheme.labelLarge;
+    final style = WaxType.label.copyWith(
+      color: WaxColors.of(context).textPrimary,
+    );
     return Container(
       color: theme.colorScheme.surfaceContainerHighest,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: WaxSpace.s12,
+        vertical: WaxSpace.s8,
+      ),
       child: Row(
         children: [
           Expanded(flex: 3, child: Text('Current title', style: style)),
           Expanded(flex: 3, child: Text('Proposed title', style: style)),
-          const SizedBox(width: 8),
+          const SizedBox(width: WaxSpace.s8),
           Expanded(flex: 2, child: Text('Artist', style: style)),
           SizedBox(width: 48, child: Text('Match', style: style)),
         ],

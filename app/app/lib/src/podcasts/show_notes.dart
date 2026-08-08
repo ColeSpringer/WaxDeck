@@ -28,7 +28,7 @@ class ShowNotesView extends StatelessWidget {
       children: [
         for (final block in blocks)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: WaxSpace.s8),
             child: _blockWidget(context, block, () => linkIndex++),
           ),
       ],
@@ -41,35 +41,38 @@ class ShowNotesView extends StatelessWidget {
     int Function() nextLinkIndex,
   ) {
     final theme = Theme.of(context);
-    final textTheme = theme.textTheme;
+    final colors = WaxColors.of(context);
+    // The notes' own heading ramp, mapped onto the type scale: three
+    // sizes and then a floor, because HTML nests six levels and a
+    // reader can tell three apart.
     final baseStyle = switch (block.kind) {
-      ShowNotesBlockKind.heading1 => textTheme.headlineSmall,
-      ShowNotesBlockKind.heading2 => textTheme.titleLarge,
-      ShowNotesBlockKind.heading3 => textTheme.titleMedium,
+      ShowNotesBlockKind.heading1 => WaxType.headline,
+      ShowNotesBlockKind.heading2 => WaxType.titleEntity,
+      ShowNotesBlockKind.heading3 => WaxType.titleItem,
       ShowNotesBlockKind.heading4 ||
       ShowNotesBlockKind.heading5 ||
-      ShowNotesBlockKind.heading6 => textTheme.titleSmall,
-      _ => textTheme.bodyMedium,
-    };
+      ShowNotesBlockKind.heading6 => WaxType.label,
+      _ => WaxType.body,
+    }.copyWith(color: colors.textPrimary);
     switch (block.kind) {
       case ShowNotesBlockKind.rule:
         return const Divider();
       case ShowNotesBlockKind.pre:
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(WaxSpace.s8),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: WaxRadius.chip,
           ),
           child: Text(
             block.runs.map((r) => r.text).join(),
-            style: baseStyle?.copyWith(fontFamily: 'monospace'),
+            style: WaxType.monoData.copyWith(color: colors.textPrimary),
           ),
         );
       case ShowNotesBlockKind.listItem:
         return Padding(
-          padding: const EdgeInsets.only(left: 16),
+          padding: const EdgeInsets.only(left: WaxSpace.s16),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -82,7 +85,7 @@ class ShowNotesView extends StatelessWidget {
         );
       case ShowNotesBlockKind.blockquote:
         return Container(
-          padding: const EdgeInsets.only(left: 12),
+          padding: const EdgeInsets.only(left: WaxSpace.s12),
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
@@ -94,7 +97,7 @@ class ShowNotesView extends StatelessWidget {
           child: _richText(
             context,
             block,
-            baseStyle?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            baseStyle.copyWith(color: colors.textSecondary),
             nextLinkIndex,
           ),
         );
@@ -106,7 +109,7 @@ class ShowNotesView extends StatelessWidget {
   Widget _richText(
     BuildContext context,
     ShowNotesBlock block,
-    TextStyle? baseStyle,
+    TextStyle baseStyle,
     int Function() nextLinkIndex,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -123,7 +126,7 @@ class ShowNotesView extends StatelessWidget {
 
   InlineSpan _runSpan(
     ColorScheme colorScheme,
-    TextStyle? baseStyle,
+    TextStyle baseStyle,
     ShowNotesRun run,
     int Function() nextLinkIndex,
   ) {
@@ -154,10 +157,7 @@ class ShowNotesView extends StatelessWidget {
         label: run.text,
         child: GestureDetector(
           onTap: onOpenLink == null ? null : () => onOpenLink!(href),
-          child: Text(
-            run.text,
-            style: (baseStyle ?? const TextStyle()).merge(style),
-          ),
+          child: Text(run.text, style: baseStyle.merge(style)),
         ),
       ),
     );

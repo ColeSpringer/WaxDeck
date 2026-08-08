@@ -1,6 +1,8 @@
+import 'package:flutter/widgets.dart'
+    show FocusHighlightMode, FocusManager, WidgetsBinding;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_data/waxdeck_data.dart' show ClientSettingKeys;
-import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxDensity;
+import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxCaptionMode, WaxDensity;
 
 import '../auth/auth_controller.dart';
 import '../player/smart_rewind.dart';
@@ -475,8 +477,99 @@ class GridSize extends EnumSetting<WaxGridSize> {
   List<WaxGridSize> get options => WaxGridSize.values;
 }
 
+/// Whether the artwork glow is drawn behind players and entity headers.
+///
+/// On by default: it is the house look, and light mode has always drawn
+/// it at zero, so the off state is a rendering the design system already
+/// ships rather than a second one to maintain. What it turns off is the
+/// radial wash in the dark themes - the scrim, the wash, and the grain
+/// are unaffected, and text contrast is computed against whatever is
+/// behind it either way.
+class ArtworkGlow extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.artworkGlow;
+
+  @override
+  bool get defaultValue => true;
+}
+
+/// When cards draw the caption lines under their titles.
+///
+/// [WaxCaptionMode.always] by default, which is what every grid has
+/// always drawn. The other choice is offered because a wall of covers
+/// reads better as covers, and it is honoured only where a pointer can
+/// ask the caption back - see [cardCaptionsEffectiveProvider].
+class CardCaptions extends EnumSetting<WaxCaptionMode> {
+  @override
+  String get settingKey => ClientSettingKeys.cardCaptions;
+
+  @override
+  WaxCaptionMode get defaultValue => WaxCaptionMode.always;
+
+  @override
+  List<WaxCaptionMode> get options => WaxCaptionMode.values;
+}
+
 final densityProvider = NotifierProvider<Density, WaxDensity>(Density.new);
 final gridSizeProvider = NotifierProvider<GridSize, WaxGridSize>(GridSize.new);
+final artworkGlowProvider = NotifierProvider<ArtworkGlow, bool>(
+  ArtworkGlow.new,
+);
+final cardCaptionsProvider = NotifierProvider<CardCaptions, WaxCaptionMode>(
+  CardCaptions.new,
+);
+
+/// Whether this machine has a pointer at all.
+///
+/// The device question, as against [pointerHighlightProvider]'s "is
+/// hovering live this second". They are not the same, and answering one
+/// with the other is what made the caption row tell a touchscreen laptop
+/// it had no pointer the moment somebody tapped the screen.
+final mouseConnectedProvider = Provider<bool>((ref) {
+  final tracker = WidgetsBinding.instance.mouseTracker;
+  void changed() => ref.invalidateSelf();
+  tracker.addListener(changed);
+  ref.onDispose(() => tracker.removeListener(changed));
+  return tracker.mouseIsConnected;
+});
+
+/// Whether this session is in the input mode where hover and focus
+/// highlights are reported at all.
+///
+/// Not "is a mouse plugged in", which is the tempting and wrong
+/// question. `FocusableActionDetector` - the thing that reveals a
+/// hidden caption - reports no hover while the highlight mode is touch,
+/// and a Windows touchscreen laptop, a Chromebook, or a tablet with a
+/// mouse paired sits in touch mode for as long as the last input was a
+/// finger. Watching the mode rather than the hardware makes the guard
+/// exact: it is true precisely when hovering or focusing can bring a
+/// caption back, and it flips the moment the pointer moves.
+///
+/// It flips to touch on any touch-down, which is right for the question
+/// it answers and wrong for the question of whether the setting is worth
+/// offering: a hybrid machine is in touch mode for as long as the last
+/// input was a finger, and it still has the mouse it had a second ago.
+/// [mouseConnectedProvider] is the one to ask about the hardware.
+final pointerHighlightProvider = Provider<bool>((ref) {
+  void changed(FocusHighlightMode _) => ref.invalidateSelf();
+  FocusManager.instance.addHighlightModeListener(changed);
+  ref.onDispose(
+    () => FocusManager.instance.removeHighlightModeListener(changed),
+  );
+  return FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
+});
+
+/// The caption mode the themes are actually built with.
+///
+/// Hover is the only way back to a hidden caption, so where hovering
+/// reports nothing the setting is not honoured. Deliberately
+/// one-directional: the failure mode of guessing wrong here is a caption
+/// that shows when somebody asked for it to hide, never a name nobody
+/// can reach.
+final cardCaptionsEffectiveProvider = Provider<WaxCaptionMode>((ref) {
+  if (!ref.watch(pointerHighlightProvider)) return WaxCaptionMode.always;
+  return ref.watch(cardCaptionsProvider);
+});
 
 /// What every artwork grid multiplies its own base tile extent by.
 ///

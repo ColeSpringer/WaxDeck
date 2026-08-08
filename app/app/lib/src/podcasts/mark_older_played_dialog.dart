@@ -240,28 +240,21 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
             style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
           ),
           const SizedBox(height: WaxSpace.s16),
-          RadioGroup<MarkOlderPreset>(
-            groupValue: _preset,
-            onChanged: (chosen) {
-              if (_running) return;
-              setState(() => _preset = chosen ?? _preset);
-            },
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                for (final preset in MarkOlderPreset.values)
-                  Semantics(
-                    identifier: SemanticsIds.markOlderPreset(preset.name),
-                    child: RadioListTile<MarkOlderPreset>(
-                      key: Key(SemanticsIds.markOlderPreset(preset.name)),
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      value: preset,
-                      title: Text(preset.label),
-                    ),
-                  ),
-              ],
-            ),
+          WaxRadioGroup<MarkOlderPreset>(
+            value: _preset,
+            // Null while a run is in flight, which reports the whole
+            // group disabled rather than swallowing the tap.
+            onChanged: _running
+                ? null
+                : (chosen) => setState(() => _preset = chosen),
+            options: <WaxRadioOption<MarkOlderPreset>>[
+              for (final preset in MarkOlderPreset.values)
+                WaxRadioOption<MarkOlderPreset>(
+                  value: preset,
+                  label: preset.label,
+                  semanticsId: SemanticsIds.markOlderPreset(preset.name),
+                ),
+            ],
           ),
           if (_running) ...<Widget>[
             const SizedBox(height: WaxSpace.s16),

@@ -264,6 +264,32 @@ class _ComponentsPageState extends State<ComponentsPage> {
         ),
         const SizedBox(height: WaxSpace.s24),
 
+        const SectionHeader(
+          overline: 'Content',
+          title: 'Cards with captions on hover',
+        ),
+        Text(
+          'The same cards in the other caption mode. Hover one: the lines '
+          'fade in without the cell changing size, which is what lets a '
+          'shelf commit to a height before it lays them out.',
+          style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+        ),
+        const SizedBox(height: WaxSpace.s12),
+        Wrap(
+          spacing: WaxSpace.s16,
+          runSpacing: WaxSpace.s16,
+          children: <Widget>[
+            for (final item in SampleLibrary.continueListening(art).take(3))
+              MediaCard(
+                data: item,
+                captions: WaxCaptionMode.onHover,
+                onTap: () {},
+                onPlay: () {},
+              ),
+          ],
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
         const SectionHeader(overline: 'Content', title: 'Rows'),
         DecoratedBox(
           decoration: BoxDecoration(

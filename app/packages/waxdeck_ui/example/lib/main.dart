@@ -141,11 +141,9 @@ class _CatalogShell extends StatelessWidget {
             child: ListView(
               children: <Widget>[
                 for (var i = 0; i < _pages.length; i++)
-                  ListTile(
-                    dense: true,
+                  WaxOptionRow(
+                    title: _pages[i],
                     selected: i == page,
-                    selectedColor: colors.accent,
-                    title: Text(_pages[i], style: WaxType.label),
                     onTap: () => onPage(i),
                   ),
               ],
@@ -161,30 +159,24 @@ class _CatalogShell extends StatelessWidget {
                   'THEME',
                   style: WaxType.overline.copyWith(color: colors.textTertiary),
                 ),
-                for (final v in WaxThemeVariant.values)
-                  RadioListTile<WaxThemeVariant>(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: v,
-                    // ignore: deprecated_member_use
-                    groupValue: variant,
-                    // ignore: deprecated_member_use
-                    onChanged: (value) => onVariant(value!),
-                    title: Text(v.name, style: WaxType.bodySmall),
-                  ),
+                WaxChoice<WaxThemeVariant>(
+                  value: variant,
+                  options: WaxThemeVariant.values,
+                  labelFor: (v) => v.name,
+                  label: 'Theme',
+                  onChanged: onVariant,
+                ),
                 const SizedBox(height: WaxSpace.s8),
                 Text(
                   'DENSITY',
                   style: WaxType.overline.copyWith(color: colors.textTertiary),
                 ),
-                SwitchListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
+                WaxSwitch(
                   value: density == WaxDensity.compact,
+                  label: 'Compact',
                   onChanged: (value) => onDensity(
                     value ? WaxDensity.compact : WaxDensity.comfortable,
                   ),
-                  title: Text('Compact', style: WaxType.bodySmall),
                 ),
                 Text(
                   'TEXT SCALE ${textScale.toStringAsFixed(1)}',

@@ -100,7 +100,7 @@ class BackupsScreen extends ConsumerWidget {
               }
             },
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(WaxSpace.s16),
               children: [
                 if (staged != null)
                   _RestoreBanner(
@@ -116,29 +116,29 @@ class BackupsScreen extends ConsumerWidget {
                         onPressed: anyRunning
                             ? null
                             : () => _createBackup(context, ref),
-                        icon: const Icon(Icons.archive_outlined),
+                        icon: const WaxIcon(WaxIcons.archive),
                         label: Text(
                           anyRunning ? 'Backing up...' : 'Back up now',
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: WaxSpace.s8),
                     if (picker != null)
                       Semantics(
                         identifier: SemanticsIds.backupImport,
                         child: OutlinedButton.icon(
                           key: const Key(SemanticsIds.backupImport),
                           onPressed: () => _pickAndImport(context, ref),
-                          icon: const Icon(Icons.unarchive_outlined),
+                          icon: const WaxIcon(WaxIcons.upload),
                           label: const Text('Import archive'),
                         ),
                       ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: WaxSpace.s8),
                 switch (backups) {
                   AsyncData(:final value) when value.isEmpty => const Padding(
-                    padding: EdgeInsets.all(16),
+                    padding: EdgeInsets.all(WaxSpace.s16),
                     child: Text('No backups yet'),
                   ),
                   AsyncData(:final value) => Column(
@@ -147,7 +147,7 @@ class BackupsScreen extends ConsumerWidget {
                     ],
                   ),
                   AsyncError(:final error) => Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(WaxSpace.s16),
                     child: Text(
                       error is WaxDeckApiException
                           ? error.message
@@ -156,12 +156,8 @@ class BackupsScreen extends ConsumerWidget {
                   ),
                   _ => const Center(child: CircularProgressIndicator()),
                 },
-                const SizedBox(height: 16),
-                Text(
-                  'Retention',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: WaxSpace.s24),
+                const SectionHeader(title: 'Retention'),
                 const _RetentionFields(),
               ],
             ),
@@ -187,11 +183,11 @@ class _RestoreBanner extends StatelessWidget {
         key: const Key(SemanticsIds.restoreBanner),
         color: colorScheme.tertiaryContainer,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(WaxSpace.s12),
           child: Row(
             children: [
-              Icon(Icons.restore, color: colorScheme.onTertiaryContainer),
-              const SizedBox(width: 12),
+              WaxIcon(WaxIcons.recent, color: colorScheme.onTertiaryContainer),
+              const SizedBox(width: WaxSpace.s12),
               Expanded(
                 child: Text(
                   'A restore of ${plan.backupId} is staged; it applies at '
@@ -295,7 +291,6 @@ class _BackupRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colorScheme = Theme.of(context).colorScheme;
     final size = backup.sizeBytes;
     final subtitle = [
       if (size != null) formatBytes(size),
@@ -303,55 +298,50 @@ class _BackupRow extends ConsumerWidget {
       backup.trigger,
       _date(backup.createdAt),
     ].join(', ');
-    return Semantics(
-      identifier: SemanticsIds.backupRow(backup.id),
-      child: ListTile(
-        key: ValueKey(SemanticsIds.backupRow(backup.id)),
-        leading: Icon(
-          backup.state == 'failed'
-              ? Icons.error_outline
-              : Icons.archive_outlined,
-          color: backup.state == 'failed' ? colorScheme.error : null,
-        ),
-        title: Text(backup.fileName, overflow: TextOverflow.ellipsis),
-        subtitle: Text(backup.error == null ? subtitle : backup.error!),
-        trailing: PopupMenuButton<String>(
-          key: Key('backup-menu-${backup.id}'),
-          tooltip: 'Backup actions',
-          onSelected: (action) {
-            switch (action) {
-              case 'download':
-                ref
-                    .read(urlOpenerProvider)
-                    .open(
-                      ref.read(repositoryProvider).backupArchiveUrl(backup.id),
-                    );
-              case 'restore':
-                _stageRestore(context, ref);
-              case 'delete':
-                _delete(context, ref);
-            }
-          },
-          itemBuilder: (context) => [
-            if (backup.state == 'done')
-              PopupMenuItem(
-                key: Key('backup-download-${backup.id}'),
-                value: 'download',
-                child: const Text('Download'),
-              ),
-            if (backup.state == 'done')
-              PopupMenuItem(
-                key: Key('backup-restore-${backup.id}'),
-                value: 'restore',
-                child: const Text('Stage restore...'),
-              ),
+    return WaxOptionRow(
+      key: ValueKey(SemanticsIds.backupRow(backup.id)),
+      semanticsId: SemanticsIds.backupRow(backup.id),
+      glyph: backup.state == 'failed' ? WaxIcons.errorCircle : WaxIcons.archive,
+      title: backup.fileName,
+      subtitle: backup.error ?? subtitle,
+      // The error branch is the server's own sentence, not a summary.
+      subtitleMaxLines: 6,
+      trailing: PopupMenuButton<String>(
+        key: Key('backup-menu-${backup.id}'),
+        tooltip: 'Backup actions',
+        onSelected: (action) {
+          switch (action) {
+            case 'download':
+              ref
+                  .read(urlOpenerProvider)
+                  .open(
+                    ref.read(repositoryProvider).backupArchiveUrl(backup.id),
+                  );
+            case 'restore':
+              _stageRestore(context, ref);
+            case 'delete':
+              _delete(context, ref);
+          }
+        },
+        itemBuilder: (context) => [
+          if (backup.state == 'done')
             PopupMenuItem(
-              key: Key('backup-delete-${backup.id}'),
-              value: 'delete',
-              child: const Text('Delete...'),
+              key: Key('backup-download-${backup.id}'),
+              value: 'download',
+              child: const Text('Download'),
             ),
-          ],
-        ),
+          if (backup.state == 'done')
+            PopupMenuItem(
+              key: Key('backup-restore-${backup.id}'),
+              value: 'restore',
+              child: const Text('Stage restore...'),
+            ),
+          PopupMenuItem(
+            key: Key('backup-delete-${backup.id}'),
+            value: 'delete',
+            child: const Text('Delete...'),
+          ),
+        ],
       ),
     );
   }
@@ -365,7 +355,7 @@ class _RestorePlanDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
+    final colors = WaxColors.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     final keyfileVerdict = !plan.keyfilePresent
         ? 'The archive has no secrets keyfile; sealed secrets are lost.'
@@ -383,29 +373,30 @@ class _RestorePlanDialog extends StatelessWidget {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(WaxSpace.s8),
               color: colorScheme.tertiaryContainer,
               child: Text(
                 'The restore applies at the next server restart.',
                 style: TextStyle(color: colorScheme.onTertiaryContainer),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: WaxSpace.s12),
             Text(keyfileVerdict),
             if (plan.sealedCasualties.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text('Lost with the restore', style: textTheme.titleSmall),
+              const SizedBox(height: WaxSpace.s12),
+              Text(
+                'Lost with the restore',
+                style: WaxType.label.copyWith(color: colors.textPrimary),
+              ),
               for (final casualty in plan.sealedCasualties)
                 Text('• ${casualty.kind}: ${casualty.name}'),
             ],
             if (plan.warnings.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: WaxSpace.s12),
               for (final warning in plan.warnings)
                 Text(
                   warning,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.error,
-                  ),
+                  style: WaxType.bodySmall.copyWith(color: colors.error),
                 ),
             ],
           ],
@@ -496,7 +487,7 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
             helperText: '0 keeps all',
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: WaxSpace.s8),
         TextField(
           key: const Key('backup-keep-mb'),
           controller: _keepMb,
@@ -506,7 +497,7 @@ class _RetentionFieldsState extends ConsumerState<_RetentionFields> {
             helperText: '0 keeps all',
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: WaxSpace.s8),
         FilledButton.tonal(
           key: const Key('backup-retention-save'),
           onPressed: _busy ? null : () => _save(settings),

@@ -117,16 +117,12 @@ class ScrobblingSection extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         action,
-        Semantics(
-          identifier: SemanticsIds.scrobblerSetupLastfm,
-          button: true,
-          child: IconButton(
-            key: const ValueKey(SemanticsIds.scrobblerSetupLastfm),
-            tooltip: 'Server API credentials',
-            icon: const Icon(Icons.settings_outlined),
-            visualDensity: VisualDensity.compact,
-            onPressed: () => _openLastfmSetup(context),
-          ),
+        WaxIconButton(
+          key: const ValueKey(SemanticsIds.scrobblerSetupLastfm),
+          glyph: WaxIcons.settings,
+          label: 'Server API credentials',
+          semanticsId: SemanticsIds.scrobblerSetupLastfm,
+          onPressed: () => _openLastfmSetup(context),
         ),
       ],
     );
@@ -154,38 +150,37 @@ class ScrobblingSection extends ConsumerWidget {
     final scrobblers = ref.watch(scrobblersProvider);
     final user = ref.watch(authControllerProvider).value?.user;
     final isAdmin = user?.roles.contains('admin') ?? false;
-    final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Scrobbling', style: textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const SectionHeader(title: 'Scrobbling'),
         switch (scrobblers) {
           AsyncData(:final value) => Column(
             children: [
               for (final slot in value)
-                Semantics(
-                  identifier: SemanticsIds.scrobbler(slot.service),
-                  child: ListTile(
-                    key: ValueKey(SemanticsIds.scrobbler(slot.service)),
-                    leading: const Icon(Icons.multitrack_audio),
-                    title: Text(_label(slot.service)),
-                    subtitle: Text(
-                      _slotStatus(slot),
-                      style: slot.lastError == null
-                          ? null
-                          : TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                    ),
-                    trailing: _trailing(context, ref, slot, isAdmin: isAdmin),
-                  ),
+                WaxOptionRow(
+                  key: ValueKey(SemanticsIds.scrobbler(slot.service)),
+                  semanticsId: SemanticsIds.scrobbler(slot.service),
+                  // A standing delivery failure changes the glyph rather
+                  // than reddening the line it is written on: the line
+                  // already says "Delivery failing", and colour that
+                  // repeats words is the half of the signal a screen
+                  // reader and a colour-blind reader both lose.
+                  glyph: slot.lastError == null
+                      ? WaxIcons.waveform
+                      : WaxIcons.warning,
+                  title: _label(slot.service),
+                  subtitle: _slotStatus(slot),
+                  // The status can carry a whole server error; two
+                  // lines would ellipse the half that says why.
+                  subtitleMaxLines: 6,
+                  trailing: _trailing(context, ref, slot, isAdmin: isAdmin),
                 ),
             ],
           ),
           AsyncError() => const Text('Could not load scrobbling connections'),
           _ => const Padding(
-            padding: EdgeInsets.all(8),
+            padding: EdgeInsets.all(WaxSpace.s8),
             child: LinearProgressIndicator(),
           ),
         },
@@ -253,7 +248,7 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
             ),
             autofocus: true,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: WaxSpace.s8),
           TextField(
             key: const Key('listenbrainz-api-field'),
             controller: _apiUrlController,
@@ -362,7 +357,7 @@ class _LastfmCredentialsDialogState
                   ),
                   autofocus: true,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: WaxSpace.s8),
                 TextField(
                   key: const Key('lastfm-secret-field'),
                   controller: _secretController,
@@ -380,7 +375,7 @@ class _LastfmCredentialsDialogState
         ),
         AsyncError() => const Text('Could not load the credential state'),
         _ => const Padding(
-          padding: EdgeInsets.all(8),
+          padding: EdgeInsets.all(WaxSpace.s8),
           child: LinearProgressIndicator(),
         ),
       },
@@ -464,12 +459,11 @@ class _DiscordPresenceSectionState
   @override
   Widget build(BuildContext context) {
     final on = ref.watch(discordPresenceEnabledProvider);
-    final textTheme = Theme.of(context).textTheme;
+    final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('Discord', style: textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const SectionHeader(title: 'Discord'),
         WaxSettingRow(
           title: 'Show what I am listening to',
           help:
@@ -484,7 +478,7 @@ class _DiscordPresenceSectionState
         ),
         if (on)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: WaxSpace.s8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
@@ -511,13 +505,15 @@ class _DiscordPresenceSectionState
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.only(top: WaxSpace.s8),
                   child: Text(
                     'The cover is one image for every track, uploaded to '
                     'that application rather than taken from your library: '
                     'Discord fetches art through its own servers, which '
                     'cannot reach a private one.',
-                    style: textTheme.bodySmall,
+                    style: WaxType.bodySmall.copyWith(
+                      color: colors.textSecondary,
+                    ),
                   ),
                 ),
               ],
@@ -580,7 +576,7 @@ class AppPasswordsSection extends ConsumerWidget {
                 'Copy it now; the server stores it sealed and never '
                 'shows it again.',
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: WaxSpace.s12),
               SelectableText(
                 created.secret,
                 key: const Key('app-password-secret'),
@@ -611,70 +607,60 @@ class AppPasswordsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final passwords = ref.watch(appPasswordsProvider);
-    final textTheme = Theme.of(context).textTheme;
+    final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('App passwords', style: textTheme.titleMedium),
-            ),
-            Semantics(
-              identifier: SemanticsIds.appPasswordAdd,
-              label: 'New app password',
-              button: true,
-              child: IconButton(
-                key: const Key(SemanticsIds.appPasswordAdd),
-                tooltip: 'New app password',
-                icon: const Icon(Icons.add),
-                onPressed: () => _create(context, ref),
-              ),
-            ),
-          ],
+        SectionHeader(
+          title: 'App passwords',
+          actionLabel: 'New',
+          spokenActionLabel: 'New app password',
+          semanticsId: SemanticsIds.appPasswordAdd,
+          onAction: () => _create(context, ref),
         ),
         Text(
           'For Subsonic apps and podcast sync clients. Your login '
           'password never works there.',
-          style: textTheme.bodySmall,
+          style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: WaxSpace.s8),
         switch (passwords) {
           AsyncData(:final value) =>
             value.isEmpty
                 ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
+                    padding: EdgeInsets.symmetric(vertical: WaxSpace.s8),
                     child: Text('No app passwords yet'),
                   )
                 : Column(
                     children: [
                       for (final ap in value)
-                        ListTile(
+                        WaxOptionRow(
                           key: ValueKey('app-password-${ap.id}'),
-                          leading: const Icon(Icons.key),
-                          title: Text(
-                            ap.label.isEmpty ? 'Unlabeled' : ap.label,
-                          ),
-                          trailing: Semantics(
-                            identifier: SemanticsIds.appPasswordRevoke(ap.id),
-                            button: true,
-                            child: IconButton(
-                              key: ValueKey(
-                                SemanticsIds.appPasswordRevoke(ap.id),
-                              ),
-                              tooltip: 'Revoke',
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => ref
-                                  .read(appPasswordsProvider.notifier)
-                                  .revoke(ap.id),
+                          glyph: WaxIcons.key,
+                          title: ap.label.isEmpty ? 'Unlabeled' : ap.label,
+                          trailing: WaxIconButton(
+                            key: ValueKey(
+                              SemanticsIds.appPasswordRevoke(ap.id),
                             ),
+                            glyph: WaxIcons.delete,
+                            // The same fallback the title takes: an
+                            // unlabelled password would otherwise give
+                            // two identical "Revoke" buttons with a
+                            // trailing space and no subject.
+                            label:
+                                'Revoke '
+                                '${ap.label.isEmpty ? 'Unlabeled' : ap.label}',
+                            semanticsId: SemanticsIds.appPasswordRevoke(ap.id),
+                            onPressed: () => ref
+                                .read(appPasswordsProvider.notifier)
+                                .revoke(ap.id),
                           ),
                         ),
                     ],
                   ),
           AsyncError() => const Text('Could not load app passwords'),
           _ => const Padding(
-            padding: EdgeInsets.all(8),
+            padding: EdgeInsets.all(WaxSpace.s8),
             child: LinearProgressIndicator(),
           ),
         },
@@ -781,11 +767,11 @@ String _kindLabel(String kind) => switch (kind) {
   _ => kind,
 };
 
-IconData _kindIcon(String kind) => switch (kind) {
-  'unifiedpush' => Icons.smartphone_outlined,
-  'discord' => Icons.forum_outlined,
-  'webhook' => Icons.webhook_outlined,
-  _ => Icons.notifications_outlined,
+WaxGlyph _kindIcon(String kind) => switch (kind) {
+  'unifiedpush' => WaxIcons.devices,
+  'discord' => WaxIcons.chat,
+  'webhook' => WaxIcons.webhook,
+  _ => WaxIcons.bell,
 };
 
 /// The per-target event checklist, driven by the server's catalog and
@@ -807,7 +793,7 @@ class _EventChecklist extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catalog = ref.watch(notifyEventCatalogProvider);
-    final textTheme = Theme.of(context).textTheme;
+    final colors = WaxColors.of(context);
     return switch (catalog) {
       AsyncData(:final value) => Builder(
         builder: (context) {
@@ -829,30 +815,32 @@ class _EventChecklist extends ConsumerWidget {
               group = event.scope;
               children.add(
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.only(top: WaxSpace.s8),
                   child: Text(
                     event.scope == 'server' ? 'Server events' : 'My events',
-                    style: textTheme.labelMedium,
+                    style: WaxType.label.copyWith(color: colors.textSecondary),
                   ),
                 ),
               );
             }
             children.add(
-              CheckboxListTile(
+              WaxSettingRow(
                 key: ValueKey('notify-event-${event.name}'),
-                title: Text(event.name),
-                subtitle: Text(event.description),
-                value: selected.contains(event.name),
-                contentPadding: EdgeInsets.zero,
-                onChanged: (checked) {
-                  final next = {...selected};
-                  if (checked ?? false) {
-                    next.add(event.name);
-                  } else {
-                    next.remove(event.name);
-                  }
-                  onChanged(next);
-                },
+                title: event.name,
+                help: event.description,
+                control: WaxSwitch(
+                  value: selected.contains(event.name),
+                  label: event.name,
+                  onChanged: (checked) {
+                    final next = {...selected};
+                    if (checked) {
+                      next.add(event.name);
+                    } else {
+                      next.remove(event.name);
+                    }
+                    onChanged(next);
+                  },
+                ),
               ),
             );
           }
@@ -864,7 +852,7 @@ class _EventChecklist extends ConsumerWidget {
       ),
       AsyncError() => const Text('Could not load the event catalog'),
       _ => const Padding(
-        padding: EdgeInsets.all(8),
+        padding: EdgeInsets.all(WaxSpace.s8),
         child: LinearProgressIndicator(),
       ),
     };
@@ -1042,10 +1030,12 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
                     helperText: field.helper,
                   ),
                 ),
-              const SizedBox(height: 12),
+              const SizedBox(height: WaxSpace.s12),
               Text(
                 'Notify me about',
-                style: Theme.of(context).textTheme.labelLarge,
+                style: WaxType.label.copyWith(
+                  color: WaxColors.of(context).textPrimary,
+                ),
               ),
               _EventChecklist(
                 serverScope: widget.serverScope,
@@ -1055,7 +1045,7 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
               ),
               if (_error != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.only(top: WaxSpace.s8),
                   child: Text(
                     _error!,
                     key: const Key('notify-target-error'),
@@ -1141,84 +1131,73 @@ class _TargetList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(child: Text(title, style: textTheme.titleMedium)),
-            Semantics(
-              identifier: addKey,
-              label: 'Add notification target',
-              button: true,
-              child: IconButton(
-                key: Key(addKey),
-                tooltip: 'Add notification target',
-                icon: const Icon(Icons.add),
-                onPressed: () => _edit(context, ref),
-              ),
-            ),
-          ],
+        SectionHeader(
+          title: title,
+          actionLabel: 'Add',
+          spokenActionLabel: 'Add notification target',
+          semanticsId: addKey,
+          onAction: () => _edit(context, ref),
         ),
-        Text(subtitle, style: textTheme.bodySmall),
-        const SizedBox(height: 8),
+        Text(
+          subtitle,
+          style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+        ),
+        const SizedBox(height: WaxSpace.s8),
         switch (targets) {
           AsyncData(:final value) =>
             value.isEmpty
                 ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
+                    padding: EdgeInsets.symmetric(vertical: WaxSpace.s8),
                     child: Text('No notification targets yet'),
                   )
                 : Column(
                     children: [
                       for (final target in value)
-                        ListTile(
+                        WaxOptionRow(
                           key: ValueKey('notify-target-${target.pid}'),
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(_kindIcon(target.kind)),
-                          title: Text(
-                            target.label?.isNotEmpty ?? false
-                                ? target.label!
-                                : _kindLabel(target.kind),
-                          ),
-                          subtitle: Text(
-                            [
-                              _kindLabel(target.kind),
-                              if (_healthLine(target).isNotEmpty)
-                                _healthLine(target),
-                            ].join('\n'),
-                            style: target.lastError != null
-                                ? TextStyle(color: colorScheme.error)
-                                : null,
-                          ),
+                          // The failing target says so in its glyph as
+                          // well as in its line, for the reason the
+                          // scrobbler rows above record.
+                          glyph: target.lastError != null
+                              ? WaxIcons.warning
+                              : _kindIcon(target.kind),
+                          title: target.label?.isNotEmpty ?? false
+                              ? target.label!
+                              : _kindLabel(target.kind),
+                          subtitle: [
+                            _kindLabel(target.kind),
+                            if (_healthLine(target).isNotEmpty)
+                              _healthLine(target),
+                          ].join('\n'),
+                          // Two lines are the kind and the health line;
+                          // a failing delivery adds the server's own
+                          // words to the second and needs the room.
+                          subtitleMaxLines: 6,
                           onTap: () => _edit(context, ref, existing: target),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Semantics(
-                                identifier: SemanticsIds.notifyTargetTest(
+                              WaxIconButton(
+                                key: ValueKey(
+                                  SemanticsIds.notifyTargetTest(target.pid),
+                                ),
+                                glyph: WaxIcons.bell,
+                                label: 'Send test',
+                                semanticsId: SemanticsIds.notifyTargetTest(
                                   target.pid,
                                 ),
-                                button: true,
-                                child: IconButton(
-                                  key: ValueKey(
-                                    SemanticsIds.notifyTargetTest(target.pid),
-                                  ),
-                                  tooltip: 'Send test',
-                                  icon: const Icon(
-                                    Icons.notification_add_outlined,
-                                  ),
-                                  onPressed: () => _test(context, target),
-                                ),
+                                onPressed: () => _test(context, target),
                               ),
-                              IconButton(
+                              WaxIconButton(
                                 key: ValueKey(
                                   'notify-target-remove-${target.pid}',
                                 ),
-                                tooltip: 'Remove',
-                                icon: const Icon(Icons.delete_outline),
+                                glyph: WaxIcons.delete,
+                                label: 'Remove',
                                 onPressed: () => controller.remove(target.pid),
                               ),
                             ],
@@ -1228,7 +1207,7 @@ class _TargetList extends ConsumerWidget {
                   ),
           AsyncError() => const Text('Could not load notification targets'),
           _ => const Padding(
-            padding: EdgeInsets.all(8),
+            padding: EdgeInsets.all(WaxSpace.s8),
             child: LinearProgressIndicator(),
           ),
         },

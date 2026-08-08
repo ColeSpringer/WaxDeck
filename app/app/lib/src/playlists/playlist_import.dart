@@ -344,7 +344,9 @@ class _ImportReportDialog extends StatelessWidget {
                     children: <Widget>[
                       for (final miss in result.missing)
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: WaxSpace.s4,
+                          ),
                           child: Text(
                             miss.artist == null
                                 ? miss.title
