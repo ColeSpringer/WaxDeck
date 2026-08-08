@@ -77,6 +77,7 @@ class PrefsController extends AsyncNotifier<Prefs> {
       theme: current.theme,
       sharedStatsOptOut: current.sharedStatsOptOut,
       radioFavorites: current.radioFavorites,
+      pinned: current.pinned,
       crossfadeSeconds: current.crossfadeSeconds,
       replayGain: current.replayGain,
       radioScrobbleOptOut: current.radioScrobbleOptOut,
@@ -114,6 +115,12 @@ class PrefsController extends AsyncNotifier<Prefs> {
   /// out of an absent list.
   Future<void> setRadioFavorites(List<String> pids) =>
       _write((current) => current.copyWith(radioFavorites: pids));
+
+  /// Stores what is pinned to home, in shelf order. Same replace
+  /// semantics and the same empty-list-is-a-value rule as
+  /// [setRadioFavorites].
+  Future<void> setPinned(List<String> pids) =>
+      _write((current) => current.copyWith(pinned: pids));
 
   /// Stores whether a browse index draws the bucket for the items a
   /// dimension is absent from.

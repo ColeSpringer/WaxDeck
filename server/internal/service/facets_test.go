@@ -13,13 +13,13 @@ import (
 // position, so an assertion about what is cached needs it to hold still
 // -- and the sweeper's own rewrites keep it moving for a moment after
 // the sweep returns.
-func settleCatalogFeed(t *testing.T, f genreFixture) int64 {
+func settleCatalogFeed(t *testing.T, svc *Library) int64 {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
-	last, stable := f.svc.CatalogTailSeq(), 0
+	last, stable := svc.CatalogTailSeq(), 0
 	for time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
-		switch now := f.svc.CatalogTailSeq(); {
+		switch now := svc.CatalogTailSeq(); {
 		case now == last:
 			if stable++; stable >= 5 {
 				return now
@@ -255,7 +255,7 @@ func servesFromCache(l *Library, dimension string) bool {
 func TestVocabularyEditInvalidatesTheEnumerationCache(t *testing.T) {
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
-	tail := settleCatalogFeed(t, f)
+	tail := settleCatalogFeed(t, f.svc)
 
 	before := facetsOf(t, f, "genre")
 	facetsOf(t, f, "artist")
@@ -317,7 +317,7 @@ func TestVocabularyEditInvalidatesTheEnumerationCache(t *testing.T) {
 func TestStaleEnumerationCannotEvictACurrentOne(t *testing.T) {
 	f := newGenreFixture(t)
 	f.sweepToQuiet(t)
-	settleCatalogFeed(t, f)
+	settleCatalogFeed(t, f.svc)
 
 	// The slow reader's work: computed and held, not yet published.
 	stale := f.svc.facetGeneration()
@@ -436,7 +436,7 @@ func TestTagDimensionsCanonicalize(t *testing.T) {
 	}
 	// The tag write moves the catalog feed; let it land before asserting
 	// on a cache that keys on where the feed is.
-	settleCatalogFeed(t, f)
+	settleCatalogFeed(t, f.svc)
 
 	for _, spelling := range []string{"tag.MOOD", "tag.mood", "tag.MoOd", "tag. mood "} {
 		page, err := f.svc.Facets(f.ctx, f.uc, FacetQuery{Dimension: spelling, Limit: 10})

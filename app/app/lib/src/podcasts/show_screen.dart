@@ -6,6 +6,8 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../home/pin_action.dart';
+import '../home/pinned_controller.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
@@ -523,13 +525,27 @@ class _ShowOverflow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final subscribed =
-        ref.watch(podcastDetailProvider(pid)).value?.subscribed ?? false;
+    final detail = ref.watch(podcastDetailProvider(pid)).value;
+    final subscribed = detail?.subscribed ?? false;
     return WaxMenuButton<String>(
       glyph: WaxIcons.more,
       label: 'More for this show',
       semanticsId: SemanticsIds.showOverflow,
       items: <WaxMenuItem<String>>[
+        // Offered to a subscriber, because the resolver answers pinned
+        // shows through the caller's subscriptions: pinning a show this
+        // account does not follow would put a card on home that nothing
+        // can draw. Offered to a non-subscriber who has it pinned
+        // anyway, because unsubscribing is routine and reversible, and
+        // hiding the row there would strand the pid in the document
+        // holding a slot of the cap with nowhere left to remove it.
+        if (subscribed || ref.watch(pinnedEntitiesProvider).contains(pid))
+          pinMenuItem<String>(
+            ref,
+            pid,
+            value: 'pin',
+            semanticsId: SemanticsIds.showPin,
+          ),
         const WaxMenuItem<String>(
           value: 'refresh',
           label: 'Check for new episodes',
@@ -545,6 +561,10 @@ class _ShowOverflow extends ConsumerWidget {
       ],
       onSelected: (choice) {
         switch (choice) {
+          case 'pin':
+            unawaited(
+              togglePin(context, ref, pid, label: detail?.show.title ?? 'show'),
+            );
           case 'refresh':
             unawaited(_refresh(context, ref));
           case 'mark-older':

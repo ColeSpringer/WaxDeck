@@ -40,4 +40,47 @@ void main() {
       expect(repo.prefs.locale, 'en-US');
     },
   );
+
+  // clearTimezone is the one write that rebuilds the document by hand,
+  // because copyWith cannot null a field. Every field added to Prefs has
+  // to be added to that literal too, or clearing a timezone silently
+  // deletes it - which for a pin list is a home shelf emptying itself.
+  test('clearing the timezone keeps every other stored field', () async {
+    final repo = FakeRepository()
+      ..sessionState = const SessionState(authenticated: true, user: _user)
+      ..prefs = const Prefs(
+        timezone: 'America/Denver',
+        locale: 'en-US',
+        theme: ThemePref.oled,
+        sharedStatsOptOut: true,
+        radioFavorites: <String>['rs-01JZX5N8QW3F4V9T2B7KD3M9R6'],
+        pinned: <String>['al-01JZX5N8QW3F4V9T2B7KD3M9R6'],
+        crossfadeSeconds: 4.5,
+        replayGain: true,
+        radioScrobbleOptOut: true,
+        browseShowUnknown: false,
+        browseSorts: <String, String>{'artist': 'label'},
+        autoplay: false,
+      );
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(prefsControllerProvider.notifier).clearTimezone();
+
+    final stored = repo.prefs;
+    expect(stored.timezone, isNull);
+    expect(stored.locale, 'en-US');
+    expect(stored.theme, ThemePref.oled);
+    expect(stored.sharedStatsOptOut, isTrue);
+    expect(stored.radioFavorites, <String>['rs-01JZX5N8QW3F4V9T2B7KD3M9R6']);
+    expect(stored.pinned, <String>['al-01JZX5N8QW3F4V9T2B7KD3M9R6']);
+    expect(stored.crossfadeSeconds, 4.5);
+    expect(stored.replayGain, isTrue);
+    expect(stored.radioScrobbleOptOut, isTrue);
+    expect(stored.browseShowUnknown, isFalse);
+    expect(stored.browseSorts, <String, String>{'artist': 'label'});
+    expect(stored.autoplay, isFalse);
+  });
 }

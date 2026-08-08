@@ -316,11 +316,17 @@ func (s *Server) ListFacets(ctx context.Context, req ListFacetsRequestObject) (L
 	if err != nil {
 		return ListFacets400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 	}
+	facet := ""
+	if req.Params.Facet != nil {
+		facet = string(*req.Params.Facet)
+	}
 	page, err := s.svc.Facets(ctx, uc, service.FacetQuery{
 		Dimension: string(req.Params.Dimension),
 		Order:     order,
 		Cursor:    deref(req.Params.Cursor),
 		StartsAt:  deref(req.Params.StartsAt),
+		Facet:     facet,
+		FacetKey:  deref(req.Params.FacetKey),
 		Limit:     limit,
 	})
 	if err != nil {
@@ -412,6 +418,89 @@ func (s *Server) Search(ctx context.Context, req SearchRequestObject) (SearchRes
 		Episodes:  searchHitsJSON(res.Episodes),
 		Truncated: ptr(res.Truncated),
 	}, nil
+}
+
+func (s *Server) ResolveEntities(ctx context.Context, req ResolveEntitiesRequestObject) (ResolveEntitiesResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return ResolveEntities400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	cards, err := s.svc.EntityCards(ctx, uc, req.Body.Pids)
+	if err != nil {
+		if service.KindOf(err) == service.KindInvalid {
+			return ResolveEntities400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	out := EntityCardList{Entities: make([]EntityCard, 0, len(cards))}
+	for _, c := range cards {
+		card := EntityCard{
+			Pid:   c.PID,
+			Kind:  EntityCardKind(c.Kind),
+			Title: c.Title,
+		}
+		if c.Artist != "" {
+			card.Artist = ptr(c.Artist)
+		}
+		if c.Year != 0 {
+			card.Year = ptr(c.Year)
+		}
+		card.ItemCount = c.ItemCount
+		out.Entities = append(out.Entities, card)
+	}
+	return ResolveEntities200JSONResponse(out), nil
+}
+
+func (s *Server) GetAlbum(ctx context.Context, req GetAlbumRequestObject) (GetAlbumResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	d, err := s.svc.Album(ctx, uc, req.Pid)
+	if err != nil {
+		if service.KindOf(err) == service.KindNotFound {
+			return GetAlbum404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no album with pid "+req.Pid))}, nil
+		}
+		return nil, err
+	}
+	return GetAlbum200JSONResponse(albumJSON(d)), nil
+}
+
+// albumJSON omits every empty identity field. Most releases carry none of
+// the five, and a header that draws a row per absent value would be
+// mostly blank labels.
+func albumJSON(d service.AlbumDetail) AlbumDetail {
+	out := AlbumDetail{Pid: d.PID, Title: d.Title}
+	for _, f := range []struct {
+		value string
+		into  **string
+	}{
+		{d.SortKey, &out.SortKey},
+		{d.MBID, &out.Mbid},
+		{d.ReleaseGroupPID, &out.ReleaseGroupPid},
+		{d.Barcode, &out.Barcode},
+		{d.Label, &out.Label},
+		{d.CatalogNumber, &out.CatalogNumber},
+		{d.Media, &out.Media},
+		{d.Country, &out.Country},
+	} {
+		if f.value != "" {
+			*f.into = ptr(f.value)
+		}
+	}
+	if d.Year != 0 {
+		out.Year = ptr(d.Year)
+	}
+	if d.ItemCount != 0 {
+		out.ItemCount = ptr(d.ItemCount)
+	}
+	if d.TotalDurationMS != 0 {
+		out.TotalDurationMs = ptr(d.TotalDurationMS)
+	}
+	return out
 }
 
 func (s *Server) GetItem(ctx context.Context, req GetItemRequestObject) (GetItemResponseObject, error) {

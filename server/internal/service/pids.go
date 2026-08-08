@@ -111,12 +111,19 @@ func parseAPIPID(s string) (prefix string, pid model.PID, ok bool) {
 
 // entityKindForPrefix maps an API entity prefix to the catalog entity
 // kind it addresses. Item prefixes have no entity kind and report false.
+//
+// Wider than what an entity *edit* or a play-state accepts, which is
+// artists and albums only: this answers what can be read, and a release
+// group can be read (a pinned card resolves through it). The narrower
+// surfaces gate on mergeEntityForPrefix before they ever reach this.
 func entityKindForPrefix(prefix string) (read.EntityKind, bool) {
 	switch prefix {
 	case PrefixArtist:
 		return read.EntityArtist, true
 	case PrefixAlbum:
 		return read.EntityAlbum, true
+	case PrefixReleaseGroup:
+		return read.EntityReleaseGroup, true
 	default:
 		return "", false
 	}

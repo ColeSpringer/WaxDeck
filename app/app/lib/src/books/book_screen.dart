@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
+import '../home/pin_action.dart';
 import '../player/download_action.dart';
 import '../player/item_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
@@ -24,7 +25,15 @@ import '../tools/tasks_screen.dart' show toolTasksProvider;
 import 'books_controller.dart';
 
 /// What the book's overflow can do.
-enum _BookAction { markFinished, startOver, share, editMetadata, merge, split }
+enum _BookAction {
+  pin,
+  markFinished,
+  startOver,
+  share,
+  editMetadata,
+  merge,
+  split,
+}
 
 /// One audiobook: its cover, who made it, where the listener is in it,
 /// and its chapters.
@@ -483,6 +492,12 @@ class _BookOverflow extends ConsumerWidget {
       label: 'More',
       semanticsId: SemanticsIds.bookOverflow,
       items: <WaxMenuItem<_BookAction>>[
+        pinMenuItem<_BookAction>(
+          ref,
+          book.pid,
+          value: _BookAction.pin,
+          semanticsId: SemanticsIds.bookPin,
+        ),
         WaxMenuItem<_BookAction>(
           value: _BookAction.markFinished,
           label: 'Mark finished',
@@ -526,6 +541,8 @@ class _BookOverflow extends ConsumerWidget {
 
   void _run(BuildContext context, WidgetRef ref, _BookAction action) {
     switch (action) {
+      case _BookAction.pin:
+        unawaited(togglePin(context, ref, book.pid, label: book.title));
       case _BookAction.markFinished:
         unawaited(
           _writePosition(context, ref, book.durationMs, 'Marked finished'),

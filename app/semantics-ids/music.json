@@ -3,6 +3,8 @@
   "ids": {
     "entityAlbum": "entity-album-{pid}",
     "entityAllTracks": "entity-all-tracks",
+    "entityOverflow": "entity-overflow",
+    "entityPin": "entity-pin",
     "entityPlay": "entity-play",
     "entityShuffle": "entity-shuffle",
     "indexBucket": "index-bucket-{index}",

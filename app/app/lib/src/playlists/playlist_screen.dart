@@ -10,6 +10,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../home/pin_action.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
@@ -26,6 +27,7 @@ import 'rule_vocabulary.dart';
 /// What the playlist overflow can do. The synced-playlist feature adds
 /// its settings sheet here, beside the cover verbs.
 enum _PlaylistAction {
+  pin,
   rename,
   visibility,
   shareLink,
@@ -726,6 +728,12 @@ class _Overflow extends ConsumerWidget {
       label: 'More',
       semanticsId: SemanticsIds.playlistOverflow,
       items: <WaxMenuItem<_PlaylistAction>>[
+        pinMenuItem<_PlaylistAction>(
+          ref,
+          playlist.pid,
+          value: _PlaylistAction.pin,
+          semanticsId: SemanticsIds.playlistPin,
+        ),
         if (isOwner) ...<WaxMenuItem<_PlaylistAction>>[
           WaxMenuItem<_PlaylistAction>(
             value: _PlaylistAction.rename,
@@ -796,6 +804,8 @@ class _Overflow extends ConsumerWidget {
   ) async {
     final pid = view.playlist.pid;
     switch (action) {
+      case _PlaylistAction.pin:
+        await togglePin(context, ref, pid, label: view.playlist.name);
       case _PlaylistAction.rename:
         await _rename(context, ref);
       case _PlaylistAction.visibility:

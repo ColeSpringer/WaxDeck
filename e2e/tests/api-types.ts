@@ -1263,7 +1263,7 @@ export interface paths {
         /**
          * Enumerate a browse dimension
          * @description Keyset-paginated buckets of one browse dimension, each with the number of matching items: the "all genres" and "all artists" lists a browse index is built from. Buckets come biggest first by default, ties broken by label, so the list leads with what is worth opening and paging stays stable; `sort=label` orders them A to Z instead, for an index with an alphabet rail. Drill a bucket by passing its `key` back as `listItems`' `facetKey` together with the same `facet`.
-         *     A cursor is only valid for the `sort` it was issued under: the two orders interleave differently, so resuming one from the other's boundary would skip or repeat buckets. Sending a mismatched pair is `invalid-request` rather than a silently wrong page.
+         *     A cursor is only valid for the `sort` and the scope it was issued under: the two orders interleave differently, so resuming one from the other's boundary would skip or repeat buckets, and a scope change is a different bucket list entirely. Sending a mismatched pair is `invalid-request` rather than a silently wrong page.
          *     The `genre`, `artist`, `credit-artist`, `album-artist`, `album`, `release-group`, and `year` dimensions each carry a bucket for the items the dimension is absent from (`[No Genre]`, `[Unknown Artist]`, `[Non-Album]`, `[No Release Group]`, `[Unknown Year]`), with an empty `key` and `unknown` true. `[No Release Group]` is not `[Non-Album]`: a track on an album whose release group is unresolved is in the first and not the second.
          *     `genre` and `credit-artist` are the two many-per-item dimensions: an item contributes a count to every bucket it belongs to, so their bucket counts sum to more than the number of items. Every other dimension buckets an item exactly once. `kind` has none, because an item's kind is never absent, and a custom tag dimension has none, because only items carrying the key contribute at all; on those two, drilling an empty `facetKey` is `invalid-request` rather than an empty page. Podcast episodes are excluded from the music dimensions, which they have no artist, album, genre, or year for; the `kind` dimension counts them.
          *     Counts are scoped to the libraries the caller may see. The per-item rules the drill list also applies (podcast subscriptions, content rules) are per-item decisions no aggregation can express, so a bucket can read higher than the list it opens, the same way any restricted listing can return a short page.
@@ -1289,6 +1289,56 @@ export interface paths {
          * @description Full-text search across artists, albums, tracks, books, and episodes. Results are grouped by kind and ranked within each group; each group is capped at `limit` hits.
          */
         get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/library/entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve a list of entity PIDs to cards
+         * @description Batch read of the display facts behind a list of entity PIDs: what a shelf needs to draw a card for something a client holds only a handle for. A POST because the PID list rides the body (as `/play-states`); nothing changes server-side.
+         *
+         *     Albums (`al-`), artists (`ar-`), release groups (`rg-`), playlists (`pl-`), podcast shows (`pc-`), and books (`bk-`) may be asked for, in any mix. A book is an item and the rest are entities; the response flattens that difference, because a card does not have one.
+         *
+         *     Answers are in request order, and that is the contract rather than an implementation detail: the caller's list is already ordered (a pinned shelf), so preserving it here is what keeps the shelf from reshuffling under a thumb.
+         *
+         *     PIDs the caller cannot be answered for are silently omitted rather than erroring: unknown, deleted, merged away, or in a library outside the caller's grant all leave the list one card shorter, which is what `Prefs.pinned` describes for a departed entity. A response shorter than the request is normal, and an empty request is an empty response.
+         */
+        post: operations["resolveEntities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/albums/{pid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one album's identity
+         * @description The release facts that belong to the album entity rather than to any of its tracks: barcode, label, catalog number, media, and country, beside the title and counts a header already derives.
+         *
+         *     These live on the entity because that is where the catalog keeps them - an item row carries what the file is, and an edition is what the release is - so a screen deriving an album from its tracks can reach the first set and not the second. This is the read half of the `editEntity` write surface.
+         *
+         *     The `pid` must be an album (`al-`); anything else is `not-found` rather than a wrong-shaped answer. Absent fields are omitted: most releases carry none of the five, and an album with nothing to say answers the identity fields empty rather than blank.
+         */
+        get: operations["getAlbum"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1650,7 +1700,9 @@ export interface paths {
         head?: never;
         /**
          * Edit entity fields
-         * @description Edits an entity's own fields: sort name and MusicBrainz id for artists; sort name, MusicBrainz id, and type for release groups; sort name, MusicBrainz id, barcode, label, and catalog number for albums. Entity edits carry their own provenance, readable below. `writeBack` pushes the values that have tag forms into member files.
+         * @description Edits an entity's own fields: `sort` and `mbid` for artists; `sort`, `mbid`, and `type` for release groups; `sort`, `mbid`, `barcode`, `label`, `catalog_number`, `media`, and `country` for albums. Entity edits carry their own provenance, readable below. `writeBack` pushes the values that have tag forms into member files.
+         *
+         *     `barcode` and `country` are normalized on the way in, where a scan stores the tag verbatim, so an edit refuses values `GET /albums/{pid}` will happily show ("US &amp; Europe" is a country a scan can store and an edit cannot). `media` has no normalizer and is stored as typed.
          */
         patch: operations["editEntity"];
         trace?: never;
@@ -5811,6 +5863,85 @@ export interface components {
             /** @description True when any group was capped at the limit. */
             truncated?: boolean;
         };
+        /** @description The entity PIDs to resolve. */
+        EntityCardQuery: {
+            /**
+             * @description Type-prefixed entity PIDs, in the order the answers should come back in. Duplicates answer once per occurrence, so a caller's list maps positionally onto the response it can still resolve.
+             * @example [
+             *       "al-01JZX5N8QW3F4V9T2B7KD3M9R6"
+             *     ]
+             */
+            pids: string[];
+        };
+        /** @description Display facts for one entity: what a card draws. Artwork is not a field - `/items/{pid}/art` takes every prefix this endpoint answers for except `rg-`, which statically has none, so a client builds the URL from the pid rather than being handed it. */
+        EntityCard: {
+            /**
+             * @description The type-prefixed PID this card answers for.
+             * @example al-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            pid: string;
+            /**
+             * @description What the card is about, which is what a tap opens.
+             * @enum {string}
+             */
+            kind: "album" | "artist" | "release-group" | "playlist" | "podcast" | "book";
+            /** @description Display title - the album, artist, show, or book name. */
+            title: string;
+            /** @description The context line: an album's or book's artist, a show's author. Absent for an artist (whose title is the name) and wherever the catalog has none. */
+            artist?: string;
+            /** @description Release year, where the entity carries one. */
+            year?: number;
+            /** @description Member items: an album's tracks, a playlist's entries, a show's episodes, an artist's tracks. Absent where counting costs a read the card does not need. */
+            itemCount?: number;
+        };
+        /** @description Cards for the requested PIDs, in request order, minus the ones that could not be resolved. */
+        EntityCardList: {
+            entities: components["schemas"]["EntityCard"][];
+        };
+        /** @description One album entity's identity and counts. */
+        AlbumDetail: {
+            /**
+             * @description Type-prefixed album PID.
+             * @example al-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            pid: string;
+            /** @description The release title. */
+            title: string;
+            /** @description The collation key the catalog files this album under. */
+            sortKey?: string;
+            /** @description MusicBrainz release ID, when the release is identified. */
+            mbid?: string;
+            /** @description Release year. */
+            year?: number;
+            /**
+             * @description The release group this edition belongs to, when the catalog resolved one.
+             * @example rg-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            releaseGroupPid?: string;
+            /** @description The release's barcode (UPC/EAN). */
+            barcode?: string;
+            /** @description The issuing label. */
+            label?: string;
+            /** @description The label's catalog number for this release. */
+            catalogNumber?: string;
+            /**
+             * @description What the release was pressed on, as tagged - "CD", "2xVinyl", "Digital Media". Stored as written: a scan keeps the tag verbatim, so this is a description rather than an enum.
+             * @example 2xVinyl
+             */
+            media?: string;
+            /**
+             * @description Release country, as tagged. A scan stores the tag verbatim, so this can hold a value an edit would refuse ("US & Europe") as well as a plain ISO code.
+             * @example US
+             */
+            country?: string;
+            /** @description Tracks on the release, within the caller's libraries. */
+            itemCount?: number;
+            /**
+             * Format: int64
+             * @description Total running time of those tracks, in milliseconds.
+             */
+            totalDurationMs?: number;
+        };
         /** @description Full detail for a single library item. */
         Item: components["schemas"]["ItemSummary"] & {
             /** @description Display genres. */
@@ -9108,6 +9239,19 @@ export interface components {
              */
             radioFavorites?: string[];
             /**
+             * @description What this user has pinned to home, in the order the shelf presents them. The same shape and the same rules as `radioFavorites`, for the same reason: a pin is about the listener rather than the machine they made it on, so it follows the account.
+             *
+             *     Ordered, and the order is the client's to set - new pins go on the end. Entries are entity PIDs and are not resolved on write: an album another household member deleted leaves its pid here, and a client draws only the pids it can still resolve, because failing a whole preference write over one departed release would be worse than a shelf one card shorter. Resolve them with `POST /library/entities`, which silently drops what it cannot answer for.
+             *
+             *     Albums (`al-`), artists (`ar-`), release groups (`rg-`), playlists (`pl-`), podcast shows (`pc-`), and books (`bk-`) may be pinned. Radio stations may not: the dial is already radio's pin surface, and two pin gestures for one station would be two places to unpin it from. Tracks and episodes may not either: a card opens a surface, and a kept set of tracks is a playlist - which pins.
+             *
+             *     Capped at 64, a bound on the document rather than on the feature. Stored in the canonical upper-case form the pattern declares, whatever case a write used. Absent when nothing is pinned: unpinning everything drops the field rather than storing `[]`.
+             * @example [
+             *       "al-01JZX5N8QW3F4V9T2B7KD3M9R6"
+             *     ]
+             */
+            pinned?: string[];
+            /**
              * Format: double
              * @description Equal-power crossfade applied at every seam of a queue the server renders as one stream, in seconds. Zero or absent is a gapless butt join.
              *
@@ -11400,6 +11544,16 @@ export interface operations {
             query: {
                 /** @description Which browse dimension to enumerate. */
                 dimension: components["schemas"]["BrowseDimension"];
+                /**
+                 * @description Restrict the enumeration to one bucket of a *second* browse dimension, taking the same dimension names this endpoint enumerates. The albums an artist is credited on are `dimension=album` scoped by `facet=credit-artist`: album buckets, counted over that artist's items only.
+                 *
+                 *     The pair is keyed on `facet` alone: an absent or empty `facetKey` selects the scope dimension's unknown bucket, exactly as it does on `/library/items`. Scoping by the dimension being enumerated is `invalid-request` - it would answer the one bucket it was given.
+                 *
+                 *     A scoped enumeration is computed per request rather than served from the enumeration cache, since the scopes are per-entity and unbounded; it is bounded instead by the scope, which is what makes it cheap.
+                 */
+                facet?: components["schemas"]["BrowseDimension"];
+                /** @description The scope bucket, as returned in that dimension's `key`. Send it empty to scope to the dimension's unknown bucket; `kind` and custom tag dimensions have no unknown bucket and reject an empty key. Ignored without `facet`. */
+                facetKey?: string;
                 /** @description Bucket order. `count` (the default) is biggest first, ties broken by label then key. `label` is A to Z by the bucket's display label, ties broken by key; the unknown bucket sorts last under it, since a sentinel has no place in an alphabet. */
                 sort?: components["schemas"]["FacetSort"];
                 /** @description Opaque cursor from a previous page's `nextCursor`. Omit for the first page. Valid only with the `sort` it was issued under. */
@@ -11457,6 +11611,59 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    resolveEntities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityCardQuery"];
+            };
+        };
+        responses: {
+            /** @description Cards for the PIDs that resolved, in request order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityCardList"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    getAlbum: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The album. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumDetail"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };

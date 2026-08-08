@@ -929,6 +929,7 @@ class ShelfRow extends StatelessWidget {
     this.actionSemanticsId,
     this.onTapItem,
     this.onPlayItem,
+    this.onMoreItem,
     this.cardWidth,
     this.padding,
     super.key,
@@ -945,6 +946,13 @@ class ShelfRow extends StatelessWidget {
   final String? actionSemanticsId;
   final void Function(MediaTileData item)? onTapItem;
   final void Function(MediaTileData item)? onPlayItem;
+
+  /// The card's own overflow gesture: long press on touch, right-click
+  /// with a pointer. For the shelves whose cards are the surface a thing
+  /// is managed from - a pinned shelf is where somebody will try to
+  /// unpin - rather than for shelves that are only a view of a listing.
+  final void Function(MediaTileData item)? onMoreItem;
+
   final double? cardWidth;
   final EdgeInsets? padding;
 
@@ -985,6 +993,7 @@ class ShelfRow extends StatelessWidget {
                 width: width,
                 onTap: onTapItem == null ? null : () => onTapItem!(item),
                 onPlay: onPlayItem == null ? null : () => onPlayItem!(item),
+                onMore: onMoreItem == null ? null : () => onMoreItem!(item),
               );
             },
           ),

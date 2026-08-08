@@ -46,48 +46,33 @@ here waits on upstream.
   the pointer wants a sliver-relative hit test, which is real work.
   Panel only either way, since the `/queue` screen covers what would be
   dragged from. See ADR-0029.
-- `[in-repo]` **"Appears on" reads items where it wants album buckets.**
-  The shelf draws album cards but the only scoped read available is
-  `listItems(facet: credit-artist)`, so it downloads item rows and
-  collapses them client-side. The dimension buckets an artist's own
-  tracks too, so a prolific artist's first page can be entirely
-  self-releases; the shelf pages past that, bounded at four, which fixes
-  the empty shelf and makes the worst case a larger download. The real
-  fix is a scope on `GET /library/facets` -- album buckets where
-  `credit_artist_pid` is this artist -- which is bounded by construction
-  and returns albums directly. Server-side that is `facetScopeQuery` plus
-  `applyFacetFilter` on a dimension other than the one enumerated; the
-  spec change is one optional facet/facetKey pair.
 - `[in-repo]` **An artist screen has no biography.** "Appears on" landed
   on the `credit-artist` browse dimension. The biography still needs an
   enrichment field nothing writes yet - the same provider gap that keeps
   artist artwork from existing - so it stays sequenced behind that
   rather than behind a query.
-- `[in-repo]` **The album screen and the metadata editor cannot show a
-  release's identity.** The catalog carries barcode, label, catalog
-  number, media, and country on the album entity, and WaxDeck reaches
-  them two ways already: smart rules filter on `albumBarcode` and its
-  four siblings, and an entity edit writes barcode, label, and catalog
-  number. What is missing is a *read* surface. Upstream keeps these off
-  `model.ItemView` on purpose - rows.go budgets its columns and these
-  are entity-scoped - so they are served by `entity info album`, and
-  WaxDeck exposes no album-entity endpoint at all: `AlbumFacts.of`
-  derives the whole header from the tracks, with the comment "there is
-  no album endpoint to ask". Surfacing them means adding one
-  (`GET /albums/{pid}`, over `Library.EntityByPIDs`), which is a new
-  route and DTO rather than a field on an existing one, and the editor's
-  album panel then reads it. Media and country would join the entity
-  edit's vocabulary in the same change: the catalog accepts them and the
-  spec's `editEntity` prose still lists only the first three.
-- `[in-repo]` **Nothing can be pinned to home.** Section 6.1's second
-  shelf is user-curated - long-press any entity, "Pin to Home" - and is
-  marked optional there, which is why the shelf home shipped without it
-  (ADR-0038). It wants two things neither of which is a shelf: a list of
-  pids that follows the account rather than the device, which is a
-  `Prefs` field and a spec delta (the shape radio favourites already
-  took), and a pin affordance on every entity surface in the app, which
-  is where the work actually is. The shelf itself is one more `ItemShelf`
-  over a provider that resolves pids to items.
+- `[in-repo]` **A new enum kind breaks the client rather than being
+  dropped.** The generated Dart enums carry no `fallback` member, so
+  `valueOf` throws while deserializing and one unknown value fails the
+  whole page - `resolveEntities` would fail the pinned shelf entirely
+  rather than dropping one card. Every enum in the client shares this;
+  the fix is a spec-wide sentinel (`unknown_default_open_api`) plus the
+  generator flag that emits it, which is one decision across the whole
+  contract rather than a per-endpoint patch. `entityCardKindFromGen`
+  already has the drop-shaped guard for the day it lands.
+- `[in-repo]` **A pin can only be made where a thing has its own
+  screen.** Home's curated shelf landed (ADR-0054), and the affordance
+  is an overflow row on the five entity screens plus the pinned cards
+  themselves. A listing row, an index bucket, and a search hit still
+  offer nothing, so pinning an album found by scrolling means opening it
+  first. It is the same `WaxMenuItem` in more places rather than a
+  different feature, and it wants one decision it does not have: those
+  surfaces draw rows and tiles with no overflow at all today, so each
+  one is a new affordance rather than a new entry in an existing menu.
+  The resolver's departed-versus-invisible distinction rides here too -
+  a pinned entity that is deleted is display-dropped and its pid keeps a
+  slot of the cap with no card to unpin it from, and pruning exactly
+  those needs the response to say which is which.
 - `[in-repo]` **The book player draws no waveform.** The server half
   landed: `GET /items/{pid}/waveform` takes a `partIndex` and answers
   the requested part's own envelope, so a multi-file audiobook is

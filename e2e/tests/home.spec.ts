@@ -70,3 +70,40 @@ test('the shares list is a location under settings', async ({ app }) => {
   await app.nav.reload(app.sharing.list());
   expect(app.nav.location()).toMatch(/\/settings\/shares$/);
 });
+
+test('an album pinned from its own screen turns up on home', async ({
+  app,
+}) => {
+  // Per-account state, so this needs no serialization against the other
+  // workers: a pin is in this worker's preference document and nobody
+  // else's. Started from a known state rather than an assumed one -
+  // accounts are minted from the test title and reused across runs, so a
+  // run that failed after pinning would otherwise leave the next one
+  // starting pinned, where the first toggle unpins and the assertion
+  // fails for a reason that has nothing to do with the code.
+  const prefs = await app.api.get('/users/me/prefs');
+  await app.api.put('/users/me/prefs', {
+    data: { ...prefs, pinned: [] },
+  });
+
+  await app.nav.enter('albums');
+  await app.music.openEntity();
+  const title = app.nav.location();
+
+  await app.music.togglePin();
+  await app.nav.enter('home');
+  await app.home.revealShelf('pinned');
+
+  // The pid is what the shelf card is addressed by, and it is the last
+  // segment of the album's own location - which is the round trip the
+  // whole thing rests on: a pid stored, resolved, and drawn.
+  const pid = decodeURIComponent(title.split('/').pop()!);
+  await expect(app.home.card('pinned', pid)).toBeVisible();
+
+  // And unpinning from the album screen takes it away again, so the
+  // shelf never accumulates what a listener meant to remove.
+  await app.nav.open(title, app.music.entityShuffle());
+  await app.music.togglePin();
+  await app.nav.enter('home');
+  await expect(app.home.shelf('pinned')).toBeHidden();
+});

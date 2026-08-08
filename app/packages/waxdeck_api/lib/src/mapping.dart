@@ -127,6 +127,7 @@ Prefs prefsFromGen(gen.Prefs prefs) {
     radioFavorites: favorites == null
         ? null
         : favorites.toList(growable: false),
+    pinned: prefs.pinned?.toList(growable: false),
     crossfadeSeconds: prefs.crossfadeSeconds,
     replayGain: prefs.replayGain,
     radioScrobbleOptOut: prefs.radioScrobbleOptOut,
@@ -145,6 +146,7 @@ Prefs prefsFromGen(gen.Prefs prefs) {
 gen.Prefs prefsToGen(Prefs prefs) {
   final theme = prefs.theme;
   final favorites = prefs.radioFavorites;
+  final pinned = prefs.pinned;
   final sorts = prefs.browseSorts;
   return gen.Prefs(
     (b) => b
@@ -159,6 +161,7 @@ gen.Prefs prefsToGen(Prefs prefs) {
       ..radioFavorites = favorites == null
           ? null
           : ListBuilder<String>(favorites)
+      ..pinned = pinned == null ? null : ListBuilder<String>(pinned)
       ..crossfadeSeconds = prefs.crossfadeSeconds
       ..replayGain = prefs.replayGain
       ..radioScrobbleOptOut = prefs.radioScrobbleOptOut
@@ -243,6 +246,57 @@ ItemDetail itemDetailFromGen(gen.Item item, {String baseUrl = ''}) {
     addedAt: item.addedAt,
   );
 }
+
+/// Null for a kind this build does not know: a card whose kind names no
+/// screen has nowhere to tap, and dropping it is better than drawing it,
+/// which is a shape callers already handle because the endpoint omits
+/// what it cannot resolve.
+///
+/// It does not, today, protect against a server that adds a kind. The
+/// generated enum carries no `fallback` member, so `valueOf` throws
+/// while deserializing and the whole page fails before this runs - true
+/// of every generated enum in this client, not of this one. Kept as the
+/// shape the guard should have, and as the place the fix lands if the
+/// generator ever emits a sentinel.
+EntityCardKind? entityCardKindFromGen(gen.EntityCardKindEnum kind) =>
+    switch (kind) {
+      gen.EntityCardKindEnum.album => EntityCardKind.album,
+      gen.EntityCardKindEnum.artist => EntityCardKind.artist,
+      gen.EntityCardKindEnum.releaseGroup => EntityCardKind.releaseGroup,
+      gen.EntityCardKindEnum.playlist => EntityCardKind.playlist,
+      gen.EntityCardKindEnum.podcast => EntityCardKind.podcast,
+      gen.EntityCardKindEnum.book => EntityCardKind.book,
+      _ => null,
+    };
+
+EntityCard? entityCardFromGen(gen.EntityCard card) {
+  final kind = entityCardKindFromGen(card.kind);
+  if (kind == null) return null;
+  return EntityCard(
+    pid: card.pid,
+    kind: kind,
+    title: card.title,
+    artist: card.artist,
+    year: card.year,
+    itemCount: card.itemCount,
+  );
+}
+
+AlbumDetail albumDetailFromGen(gen.AlbumDetail album) => AlbumDetail(
+  pid: album.pid,
+  title: album.title,
+  sortKey: album.sortKey,
+  mbid: album.mbid,
+  year: album.year,
+  releaseGroupPid: album.releaseGroupPid,
+  barcode: album.barcode,
+  label: album.label,
+  catalogNumber: album.catalogNumber,
+  media: album.media,
+  country: album.country,
+  itemCount: album.itemCount,
+  totalDurationMs: album.totalDurationMs,
+);
 
 PlayInfo playInfoFromGen(gen.PlayInfo info, {String baseUrl = ''}) {
   return PlayInfo(

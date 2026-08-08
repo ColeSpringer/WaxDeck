@@ -387,12 +387,14 @@ Class | Method | HTTP request | Description
 [*HealthApi*](doc/HealthApi.md) | [**sweepLibraryHealth**](doc/HealthApi.md#sweeplibraryhealth) | **POST** /library/health/sweep | Re-sweep health now
 [*LibraryApi*](doc/LibraryApi.md) | [**browseList**](doc/LibraryApi.md#browselist) | **GET** /library/browse | Browse a discovery list
 [*LibraryApi*](doc/LibraryApi.md) | [**deleteLibraryItems**](doc/LibraryApi.md#deletelibraryitems) | **POST** /library/items/delete | Delete library items
+[*LibraryApi*](doc/LibraryApi.md) | [**getAlbum**](doc/LibraryApi.md#getalbum) | **GET** /albums/{pid} | Get one album&#39;s identity
 [*LibraryApi*](doc/LibraryApi.md) | [**getItem**](doc/LibraryApi.md#getitem) | **GET** /items/{pid} | Get one item&#39;s detail
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemArt**](doc/LibraryApi.md#getitemart) | **GET** /items/{pid}/art | Get artwork
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemArtRoles**](doc/LibraryApi.md#getitemartroles) | **GET** /items/{pid}/art-roles | List the artwork slots an entity holds
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemLyrics**](doc/LibraryApi.md#getitemlyrics) | **GET** /items/{pid}/lyrics | Get an item&#39;s lyrics
 [*LibraryApi*](doc/LibraryApi.md) | [**listFacets**](doc/LibraryApi.md#listfacets) | **GET** /library/facets | Enumerate a browse dimension
 [*LibraryApi*](doc/LibraryApi.md) | [**listItems**](doc/LibraryApi.md#listitems) | **GET** /library/items | Browse library items
+[*LibraryApi*](doc/LibraryApi.md) | [**resolveEntities**](doc/LibraryApi.md#resolveentities) | **POST** /library/entities | Resolve a list of entity PIDs to cards
 [*LibraryApi*](doc/LibraryApi.md) | [**search**](doc/LibraryApi.md#search) | **GET** /library/search | Search the library
 [*MetadataApi*](doc/MetadataApi.md) | [**bulkEditMetadata**](doc/MetadataApi.md#bulkeditmetadata) | **POST** /items/bulk-edit | Edit fields on many items
 [*MetadataApi*](doc/MetadataApi.md) | [**clearEntityArtwork**](doc/MetadataApi.md#clearentityartwork) | **DELETE** /entities/{entityType}/{entityPid}/artwork | Clear entity artwork
@@ -574,6 +576,7 @@ Class | Method | HTTP request | Description
  - [AcquisitionFormat](doc/AcquisitionFormat.md)
  - [AcquisitionRequest](doc/AcquisitionRequest.md)
  - [AdminSettings](doc/AdminSettings.md)
+ - [AlbumDetail](doc/AlbumDetail.md)
  - [AppPassword](doc/AppPassword.md)
  - [AppPasswordCreate](doc/AppPasswordCreate.md)
  - [AppPasswordCreated](doc/AppPasswordCreated.md)
@@ -637,6 +640,9 @@ Class | Method | HTTP request | Description
  - [EnrichmentRunRequest](doc/EnrichmentRunRequest.md)
  - [EnrichmentRunResult](doc/EnrichmentRunResult.md)
  - [EnrichmentStatus](doc/EnrichmentStatus.md)
+ - [EntityCard](doc/EntityCard.md)
+ - [EntityCardList](doc/EntityCardList.md)
+ - [EntityCardQuery](doc/EntityCardQuery.md)
  - [EntityCuratedField](doc/EntityCuratedField.md)
  - [EntityCuration](doc/EntityCuration.md)
  - [EntityEdit](doc/EntityEdit.md)

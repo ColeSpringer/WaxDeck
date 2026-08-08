@@ -145,6 +145,7 @@ abstract final class SemanticsIds {
   static const String bookMarkFinished = 'book-mark-finished';
   static const String bookOverflow = 'book-overflow';
   static const String bookPartsNote = 'book-parts-note';
+  static const String bookPin = 'book-pin';
   static const String bookResume = 'book-resume';
   static const String bookSettingsOpen = 'book-settings-open';
   static const String bookSettingsSave = 'book-settings-save';
@@ -295,6 +296,9 @@ abstract final class SemanticsIds {
   static const String offlineBanner = 'offline-banner';
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
+  static const String albumEditDetails = 'album-edit-details';
+  static const String albumEditor = 'album-editor';
+  static const String albumIdentity = 'album-identity';
   static String artSlot(Object role) => 'art-slot-$role';
   static String artSlotClear(Object role) => 'art-slot-clear-$role';
   static String artSlotDrop(Object role) => 'art-slot-drop-$role';
@@ -329,6 +333,8 @@ abstract final class SemanticsIds {
   // music: The music hub, its indexes, and the buckets they drill.
   static String entityAlbum(Object pid) => 'entity-album-$pid';
   static const String entityAllTracks = 'entity-all-tracks';
+  static const String entityOverflow = 'entity-overflow';
+  static const String entityPin = 'entity-pin';
   static const String entityPlay = 'entity-play';
   static const String entityShuffle = 'entity-shuffle';
   static String indexBucket(Object index) => 'index-bucket-$index';
@@ -462,6 +468,7 @@ abstract final class SemanticsIds {
       'playlist-import-source-$source';
   static const String playlistNameField = 'playlist-name-field';
   static const String playlistOverflow = 'playlist-overflow';
+  static const String playlistPin = 'playlist-pin';
   static const String playlistRename = 'playlist-rename';
   static const String playlistResetCover = 'playlist-reset-cover';
   static const String playlistRuleSummary = 'playlist-rule-summary';
@@ -510,14 +517,14 @@ abstract final class SemanticsIds {
   static const String podcastOpmlExport = 'podcast-opml-export';
   static const String podcastOpmlImport = 'podcast-opml-import';
   static const String podcastOverflow = 'podcast-overflow';
+  static String podcastSearchSubscribe(Object index) =>
+      'podcast-search-subscribe-$index';
   static const String podcastSettingsExclude = 'podcast-settings-exclude';
   static const String podcastSettingsInclude = 'podcast-settings-include';
   static const String podcastSettingsOpen = 'podcast-settings-open';
   static const String podcastSettingsRetention = 'podcast-settings-retention';
   static const String podcastSettingsSave = 'podcast-settings-save';
   static const String podcastSettingsSpeed = 'podcast-settings-speed';
-  static String podcastSearchSubscribe(Object index) =>
-      'podcast-search-subscribe-$index';
   static String podcastSort(Object name) => 'podcast-sort-$name';
   static const String podcastSubscribe = 'podcast-subscribe';
   static const String podcastSubscribeConfirm = 'podcast-subscribe-confirm';
@@ -529,6 +536,7 @@ abstract final class SemanticsIds {
   static String showEpisodeFilter(Object name) => 'show-episode-filter-$name';
   static const String showEpisodeSearch = 'show-episode-search';
   static const String showOverflow = 'show-overflow';
+  static const String showPin = 'show-pin';
   static String transcriptCue(Object index) => 'transcript-cue-$index';
   static const String transcriptOpen = 'transcript-open';
   static const String unsubscribeKeepFiles = 'unsubscribe-keep-files';

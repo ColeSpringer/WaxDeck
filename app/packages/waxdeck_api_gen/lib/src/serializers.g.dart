@@ -18,6 +18,7 @@ Serializers _$serializers =
           ..add(AcquisitionFormat.serializer)
           ..add(AcquisitionRequest.serializer)
           ..add(AdminSettings.serializer)
+          ..add(AlbumDetail.serializer)
           ..add(AppPasswordCreate.serializer)
           ..add(AppPasswordCreated.serializer)
           ..add(AppPasswordList.serializer)
@@ -83,6 +84,10 @@ Serializers _$serializers =
           ..add(EnrichmentRunRequest.serializer)
           ..add(EnrichmentRunResult.serializer)
           ..add(EnrichmentStatus.serializer)
+          ..add(EntityCard.serializer)
+          ..add(EntityCardKindEnum.serializer)
+          ..add(EntityCardList.serializer)
+          ..add(EntityCardQuery.serializer)
           ..add(EntityCuratedField.serializer)
           ..add(EntityCuration.serializer)
           ..add(EntityEdit.serializer)
@@ -463,6 +468,10 @@ Serializers _$serializers =
               const FullType(EnrichmentProvider),
             ]),
             () => ListBuilder<EnrichmentProvider>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(EntityCard)]),
+            () => ListBuilder<EntityCard>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [
@@ -1013,6 +1022,10 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
           )
@@ -1031,6 +1044,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(WriteBackFailure)]),
             () => ListBuilder<WriteBackFailure>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

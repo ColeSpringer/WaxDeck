@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/entity_facts.dart';
@@ -36,6 +37,8 @@ ItemSummary _track(
   durationMs: durationMs,
 );
 
+Finder _byId(String id) => find.bySemanticsIdentifier(id);
+
 Future<ProviderContainer> _pump(
   WidgetTester tester,
   Widget screen,
@@ -49,6 +52,10 @@ Future<ProviderContainer> _pump(
     overrides: [
       repositoryProvider.overrideWithValue(repository),
       audioEngineProvider.overrideWithValue(FakeEngine()),
+      // The preference document a pin lives in is only fetched for an
+      // authenticated session, and the session needs somewhere to keep a
+      // credential.
+      credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
     ],
   );
   addTearDown(container.dispose);
@@ -188,6 +195,101 @@ void main() {
 
       expect(find.text('Nothing in this album'), findsOneWidget);
     });
+
+    testWidgets('the release identity is drawn where the entity has one', (
+      tester,
+    ) async {
+      // The five columns a track row cannot carry. Not behind the
+      // technical-details switch: that line is file versus release, and a
+      // catalog number is printed on the sleeve.
+      final repository = FakeRepository()
+        ..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+      repository.albums['al-1'] = const AlbumDetail(
+        pid: 'al-1',
+        title: 'Gullwing',
+        barcode: '036000291452',
+        media: '2xVinyl',
+      );
+
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      expect(_byId(SemanticsIds.albumIdentity), findsOneWidget);
+      expect(find.text('036000291452'), findsOneWidget);
+      expect(find.text('2xVinyl'), findsOneWidget);
+      // Absent fields draw nothing rather than a blank row.
+      expect(find.text('Catalog number'), findsNothing);
+    });
+
+    testWidgets('an album carrying no identity draws no block at all', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+      repository.albums['al-1'] = const AlbumDetail(
+        pid: 'al-1',
+        title: 'Gullwing',
+      );
+
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      expect(_byId(SemanticsIds.albumIdentity), findsNothing);
+    });
+
+    testWidgets('the overflow pins the release and opens its editor', (
+      tester,
+    ) async {
+      final repository = FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(
+            id: 'us-1',
+            username: 'admin',
+            roles: <String>['admin'],
+          ),
+        ),
+      )..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      expect(find.text('Pin to Home'), findsOneWidget);
+      // The editor door is beside it for an administrator; the entity
+      // edit endpoint answers 403 to anyone else.
+      expect(find.text('Edit album details'), findsOneWidget);
+      await tester.tap(_byId(SemanticsIds.entityPin));
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+
+      expect(repository.putPrefsCalls.single.pinned, <String>['al-1']);
+
+      // And the label flips, because the same row is what unpins it.
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      expect(find.text('Unpin from Home'), findsOneWidget);
+    });
+
+    testWidgets('a member is offered the pin and not the editor', (
+      tester,
+    ) async {
+      final repository = FakeRepository(
+        sessionState: const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(
+            id: 'us-2',
+            username: 'listener',
+            roles: <String>['member'],
+          ),
+        ),
+      )..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      expect(find.text('Pin to Home'), findsOneWidget);
+      expect(find.text('Edit album details'), findsNothing);
+    });
   });
 
   group('the artist screen', () {
@@ -248,6 +350,81 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.widget<AlbumScreen>(find.byType(AlbumScreen)).pid, 'al-2');
+    });
+
+    testWidgets('Appears on asks for album buckets, scoped to the artist', (
+      tester,
+    ) async {
+      // One read, and it answers albums. This used to page the items
+      // endpoint and collapse track rows client-side, bounded at four
+      // pages because the dimension buckets the artist's own tracks too.
+      final repository = FakeRepository()
+        // One loaded track, so the Releases shelf above draws a single
+        // album. The artist's second release is deliberately outside that
+        // window: the exclusion must not depend on what the listing
+        // happened to page in.
+        ..facetItems['artist 1'] = <ItemSummary>[
+          _track('Own', album: 'Their Record', albumPid: 'al-own'),
+        ]
+        ..facets['album|credit-artist|1'] = const <FacetBucket>[
+          FacetBucket(
+            key: 'own',
+            label: 'Their Record',
+            count: 1,
+            entityPid: 'al-own',
+          ),
+          FacetBucket(
+            key: 'unloaded',
+            label: 'Past The Window',
+            count: 3,
+            entityPid: 'al-unloaded',
+          ),
+          FacetBucket(
+            key: 'guest',
+            label: 'Big Compilation',
+            count: 4,
+            entityPid: 'al-guest',
+          ),
+          FacetBucket(key: '', label: '[Non-Album]', count: 2, unknown: true),
+        ]
+        ..facets['album|artist|1'] = const <FacetBucket>[
+          FacetBucket(
+            key: 'own',
+            label: 'Their Record',
+            count: 1,
+            entityPid: 'al-own',
+          ),
+          FacetBucket(
+            key: 'unloaded',
+            label: 'Past The Window',
+            count: 3,
+            entityPid: 'al-unloaded',
+          ),
+        ];
+
+      await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
+
+      // Two scoped reads, and both are bucket reads: the credited albums,
+      // and the ones this artist heads. The second is what the exclusion
+      // is taken from, so it holds however little of the listing loaded.
+      expect(repository.facetScopes, <(String, String, String)>[
+        ('album', 'credit-artist', '1'),
+        ('album', 'artist', '1'),
+      ]);
+      expect(find.text('Appears on'), findsOneWidget);
+      // A release the artist heads is drawn above under Releases, and
+      // [Non-Album] has no entity to open, so neither is a card here -
+      // and neither is the own release whose tracks never loaded.
+      expect(find.text('Big Compilation'), findsOneWidget);
+      expect(find.text('4 tracks'), findsOneWidget);
+      expect(_byId(SemanticsIds.entityAlbum('al-guest')), findsOneWidget);
+      expect(_byId(SemanticsIds.entityAlbum('al-own')), findsOneWidget);
+      expect(
+        find.text('Past The Window'),
+        findsNothing,
+        reason: 'an own release outside the loaded window is still own',
+      );
+      expect(find.text('[Non-Album]'), findsNothing);
     });
 
     testWidgets('a top track queues the same window the header does', (

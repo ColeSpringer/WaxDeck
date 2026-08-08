@@ -17,6 +17,7 @@ import 'package:waxdeck_api_gen/src/model/date.dart';
 import 'package:waxdeck_api_gen/src/model/acquisition_format.dart';
 import 'package:waxdeck_api_gen/src/model/acquisition_request.dart';
 import 'package:waxdeck_api_gen/src/model/admin_settings.dart';
+import 'package:waxdeck_api_gen/src/model/album_detail.dart';
 import 'package:waxdeck_api_gen/src/model/app_password.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_create.dart';
 import 'package:waxdeck_api_gen/src/model/app_password_created.dart';
@@ -80,6 +81,9 @@ import 'package:waxdeck_api_gen/src/model/enrichment_provider.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_run_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_run_result.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_status.dart';
+import 'package:waxdeck_api_gen/src/model/entity_card.dart';
+import 'package:waxdeck_api_gen/src/model/entity_card_list.dart';
+import 'package:waxdeck_api_gen/src/model/entity_card_query.dart';
 import 'package:waxdeck_api_gen/src/model/entity_curated_field.dart';
 import 'package:waxdeck_api_gen/src/model/entity_curation.dart';
 import 'package:waxdeck_api_gen/src/model/entity_edit.dart';
@@ -352,6 +356,7 @@ part 'serializers.g.dart';
   AcquisitionFormat,
   AcquisitionRequest,
   AdminSettings,
+  AlbumDetail,
   AppPassword,$AppPassword,
   AppPasswordCreate,
   AppPasswordCreated,
@@ -415,6 +420,9 @@ part 'serializers.g.dart';
   EnrichmentRunRequest,
   EnrichmentRunResult,
   EnrichmentStatus,
+  EntityCard,
+  EntityCardList,
+  EntityCardQuery,
   EntityCuratedField,
   EntityCuration,
   EntityEdit,

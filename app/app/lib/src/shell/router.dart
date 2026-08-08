@@ -34,6 +34,7 @@ import '../health/diagnostics_screen.dart';
 import '../health/health_screen.dart';
 import '../home/home_screen.dart';
 import '../metadata/metadata_screen.dart';
+import '../music/album_editor_screen.dart';
 import '../music/album_screen.dart';
 import '../music/artist_screen.dart';
 import '../music/index_screen.dart';
@@ -574,10 +575,19 @@ List<RouteBase> shellRoutes() => <RouteBase>[
             path: WaxRoute.tasks,
             builder: (context, state) => const TasksScreen(),
           ),
+          // One location, two editors, chosen by what the pid names. An
+          // album's identity is entity-scoped and writes through a
+          // different endpoint than an item's fields, so it is its own
+          // screen; sharing the location keeps "edit this" one link
+          // rather than two a caller has to know how to pick between.
           GoRoute(
             path: '/metadata/:pid',
-            builder: (context, state) =>
-                MetadataScreen(pid: state.pathParameters['pid']!),
+            builder: (context, state) {
+              final pid = state.pathParameters['pid']!;
+              return pid.startsWith('al-')
+                  ? AlbumEditorScreen(pid: pid)
+                  : MetadataScreen(pid: pid);
+            },
           ),
           // The admin console. One nested shell around every `/admin`
           // location, so the section list keeps its place across a move

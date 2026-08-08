@@ -237,6 +237,7 @@ class Prefs {
     this.theme,
     this.sharedStatsOptOut,
     this.radioFavorites,
+    this.pinned,
     this.crossfadeSeconds,
     this.replayGain,
     this.radioScrobbleOptOut,
@@ -269,6 +270,14 @@ class Prefs {
   /// what makes the last unpin stick is that an empty list is a *value* on
   /// the way out, which [copyWith] carries and null does not.
   final List<String>? radioFavorites;
+
+  /// What this account has pinned to home, in shelf order.
+  ///
+  /// Entity pids (`al-`, `ar-`, `rg-`, `pl-`, `pc-`, `bk-`), resolved to
+  /// cards through `POST /library/entities`. Absent and empty are one
+  /// answer here for [radioFavorites]' reason, and the last unpin sticks
+  /// for the same one: an empty list is a value [copyWith] carries.
+  final List<String>? pinned;
 
   /// Equal-power crossfade at every seam of a queue the server renders as
   /// one stream, in seconds. Absent or zero is a gapless butt join.
@@ -321,6 +330,7 @@ class Prefs {
     ThemePref? theme,
     bool? sharedStatsOptOut,
     List<String>? radioFavorites,
+    List<String>? pinned,
     double? crossfadeSeconds,
     bool? replayGain,
     bool? radioScrobbleOptOut,
@@ -334,6 +344,7 @@ class Prefs {
       theme: theme ?? this.theme,
       sharedStatsOptOut: sharedStatsOptOut ?? this.sharedStatsOptOut,
       radioFavorites: radioFavorites ?? this.radioFavorites,
+      pinned: pinned ?? this.pinned,
       crossfadeSeconds: crossfadeSeconds ?? this.crossfadeSeconds,
       replayGain: replayGain ?? this.replayGain,
       radioScrobbleOptOut: radioScrobbleOptOut ?? this.radioScrobbleOptOut,
@@ -424,6 +435,91 @@ class ItemDetail extends ItemSummary {
   final int? sampleRate;
   final int? bitrate;
   final DateTime? addedAt;
+}
+
+/// What an [EntityCard] is about, which is what a tap opens.
+enum EntityCardKind { album, artist, releaseGroup, playlist, podcast, book }
+
+/// The display facts behind one entity pid: what a card draws for
+/// something a client holds only a handle for.
+///
+/// No artwork field, deliberately: the art endpoint takes every prefix
+/// this answers for except a release group, which statically has none, so
+/// a caller builds the URL from the pid it already had.
+class EntityCard {
+  const EntityCard({
+    required this.pid,
+    required this.kind,
+    required this.title,
+    this.artist,
+    this.year,
+    this.itemCount,
+  });
+
+  final String pid;
+  final EntityCardKind kind;
+  final String title;
+
+  /// The context line: an album's or book's artist, a show's author, a
+  /// playlist's owner. Absent for an artist, whose title is the name.
+  final String? artist;
+
+  final int? year;
+
+  /// Member items, where counting one is cheap. Absent is not zero: a
+  /// smart playlist's count is deliberately not taken.
+  final int? itemCount;
+}
+
+/// One album entity's identity: the release facts the catalog keeps on
+/// the entity rather than on any of its tracks.
+///
+/// A header derived from track rows can reach the title, the artist, and
+/// the year. It cannot reach the five below [releaseGroupPid], which
+/// describe the edition rather than the file.
+class AlbumDetail {
+  const AlbumDetail({
+    required this.pid,
+    required this.title,
+    this.sortKey,
+    this.mbid,
+    this.year,
+    this.releaseGroupPid,
+    this.barcode,
+    this.label,
+    this.catalogNumber,
+    this.media,
+    this.country,
+    this.itemCount,
+    this.totalDurationMs,
+  });
+
+  final String pid;
+  final String title;
+  final String? sortKey;
+  final String? mbid;
+  final int? year;
+  final String? releaseGroupPid;
+
+  final String? barcode;
+  final String? label;
+  final String? catalogNumber;
+
+  /// What the release was pressed on, as tagged ("CD", "2xVinyl"). A
+  /// scan stores the tag verbatim, so this is a description, not an enum.
+  final String? media;
+
+  /// Release country, as tagged. A scan can store a value an edit would
+  /// refuse ("US & Europe"), so it is displayed and never validated here.
+  final String? country;
+
+  final int? itemCount;
+  final int? totalDurationMs;
+
+  /// Whether the release carries any identity at all. Most do not, and a
+  /// header with five blank labels is worse than no block.
+  bool get hasIdentity =>
+      (barcode ?? label ?? catalogNumber ?? media ?? country) != null;
 }
 
 /// One bucket of a browse dimension: a value the library groups by, with

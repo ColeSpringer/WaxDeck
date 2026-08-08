@@ -1,6 +1,9 @@
 {
   "doc": "The metadata editor: fields, locks, candidates, and artwork.",
   "ids": {
+    "albumEditDetails": "album-edit-details",
+    "albumEditor": "album-editor",
+    "albumIdentity": "album-identity",
     "artSlot": "art-slot-{role}",
     "artSlotClear": "art-slot-clear-{role}",
     "artSlotDrop": "art-slot-drop-{role}",

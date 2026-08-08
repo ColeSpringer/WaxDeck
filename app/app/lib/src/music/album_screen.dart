@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../auth/auth_controller.dart';
+import '../home/pin_action.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
@@ -13,6 +17,7 @@ import '../settings/client_prefs.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import 'album_detail.dart';
 import 'entity_facts.dart';
 import 'music_controllers.dart';
 
@@ -134,7 +139,82 @@ class AlbumScreen extends ConsumerWidget {
         },
         if (tracks.isNotEmpty)
           SliverToBoxAdapter(child: _ReleaseDetail(track: tracks.first)),
+        SliverToBoxAdapter(child: _AlbumIdentity(pid: pid)),
       ],
+    );
+  }
+}
+
+/// The release's own identity: barcode, label, catalog number, media,
+/// country.
+///
+/// Deliberately not behind the technical-details switch that governs the
+/// codec chip above. That switch draws the line between what the *file*
+/// is and what the *release* is, and every one of these is the second: a
+/// catalog number is printed on the sleeve.
+///
+/// Renders nothing at all when the album carries none of the five, which
+/// is most of them - a header of five blank labels would be worse than
+/// no block, and the absence is not something a listener can act on.
+class _AlbumIdentity extends ConsumerWidget {
+  const _AlbumIdentity({required this.pid});
+
+  final String pid;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Silent while loading and silent on failure, like the "Appears on"
+    // shelf: identity is an extra, and the screen is complete without it.
+    final album = ref.watch(albumDetailProvider(pid)).value;
+    if (album == null || !album.hasIdentity) return const SizedBox.shrink();
+    final colors = WaxColors.of(context);
+    final sizeClass = WaxSizeClass.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        sizeClass.gutter.horizontal / 2,
+        0,
+        sizeClass.gutter.horizontal / 2,
+        WaxSpace.s32,
+      ),
+      child: Semantics(
+        container: true,
+        explicitChildNodes: true,
+        identifier: SemanticsIds.albumIdentity,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const SectionHeader(title: 'Release', overline: 'This edition'),
+            for (final field in albumIdentityFields)
+              if (albumIdentityValue(album, field.name) case final value
+                  when value.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      SizedBox(
+                        width: 140,
+                        child: Text(
+                          field.label,
+                          style: WaxType.caption.copyWith(
+                            color: colors.textTertiary,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          value,
+                          style: WaxType.body.copyWith(
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -173,6 +253,14 @@ class _Header extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isAdmin =
+        ref
+            .watch(authControllerProvider)
+            .value
+            ?.user
+            ?.roles
+            .contains('admin') ??
+        false;
     void play({bool shuffle = false}) => playAlbum(
       context,
       ref,
@@ -204,6 +292,33 @@ class _Header extends ConsumerWidget {
           semanticsId: SemanticsIds.entityShuffle,
         ),
         EntityStarRatingRow(pid: pid, label: 'album'),
+        WaxMenuButton<String>(
+          semanticsId: SemanticsIds.entityOverflow,
+          items: <WaxMenuItem<String>>[
+            pinMenuItem<String>(
+              ref,
+              pid,
+              value: 'pin',
+              semanticsId: SemanticsIds.entityPin,
+            ),
+            // Administrators only, like every other editing door: the
+            // entity edit endpoint answers 403 to anyone else, and a row
+            // that opens a form nobody can save is worse than no row.
+            if (isAdmin)
+              WaxMenuItem<String>(
+                value: 'edit',
+                label: 'Edit album details',
+                glyph: WaxIcons.edit,
+                semanticsId: SemanticsIds.albumEditDetails,
+              ),
+          ],
+          onSelected: (choice) => switch (choice) {
+            'pin' => unawaited(
+              togglePin(context, ref, pid, label: facts.title),
+            ),
+            _ => unawaited(context.push(WaxRoute.metadata(pid))),
+          },
+        ),
       ],
     );
   }

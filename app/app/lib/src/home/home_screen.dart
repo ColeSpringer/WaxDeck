@@ -23,6 +23,7 @@ import '../uploads/audio_drop_area.dart';
 import 'home_shelves.dart';
 import 'item_shelf.dart';
 import 'mix_shelf.dart';
+import 'pinned_shelf.dart';
 
 /// The landing surface: what you were listening to, what is new, and what
 /// is yours and still sealed.
@@ -158,6 +159,10 @@ class _Shelves extends StatelessWidget {
         provider: continueListeningShelfProvider,
         withProgress: true,
       ),
+      // Second, under what is half-finished: a pin is the strongest
+      // statement a listener makes about the library, and everything
+      // below is the server's opinion rather than theirs.
+      const PinnedShelf(),
       const _NewEpisodesShelf(),
       ItemShelf(
         shelf: 'recent',

@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../player/play_progress.dart';
 import '../podcasts/podcast_shelves.dart';
 import '../providers.dart';
+import 'pinned_controller.dart';
 
 /// How many cards a home shelf holds.
 ///
@@ -246,6 +247,7 @@ final libraryHasAnythingProvider = FutureProvider.autoDispose<bool>((
 /// fan-out: a scan changes what is on all of them at once.
 final List<ProviderBase<Object?>> homeShelfProviders = <ProviderBase<Object?>>[
   libraryHasAnythingProvider,
+  pinnedCardsProvider,
   continueListeningShelfProvider,
   recentlyAddedShelfProvider,
   neverPlayedShelfProvider,

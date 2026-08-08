@@ -10,7 +10,7 @@ import {
 } from '../../semantics-ids';
 import { Ctx } from '../context';
 import { T } from '../budgets';
-import { clickThrough } from '../gestures';
+import { chooseFromMenu, clickThrough } from '../gestures';
 
 /// The dimensions the hub offers, which are also the index locations.
 export type MusicDimension = 'artists' | 'albums' | 'tracks' | 'genres' | 'years';
@@ -74,6 +74,33 @@ export class Music {
       this.entry(nth),
       this.ctx.page.locator(sem(SemanticsIds.playerToggle)),
     );
+  }
+
+  /// The entity header's overflow, and the pin row inside it.
+  entityOverflow(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.entityOverflow));
+  }
+
+  entityPin(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.entityPin));
+  }
+
+  /// Pin or unpin whatever entity screen is open.
+  ///
+  /// `chooseFromMenu` rather than `clickThrough`: a retried click on an
+  /// overflow trigger lands on the modal barrier and closes the menu the
+  /// previous attempt opened. No `settled` locator, because the row
+  /// produces nothing on this screen - the shelf it changes is on home -
+  /// so the menu going away is the proof, which is what a value picker
+  /// leaves behind too.
+  async togglePin(): Promise<void> {
+    await chooseFromMenu(this.entityOverflow(), this.entityPin());
+  }
+
+  /// The release identity block, drawn only where the album entity
+  /// carries one of the five edition columns.
+  albumIdentity(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.albumIdentity));
   }
 
   /// Text on a listing or an entity screen - a section heading, a name.

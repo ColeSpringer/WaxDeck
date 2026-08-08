@@ -107,11 +107,19 @@ abstract interface class WaxDeckRepository {
   /// [startsAt] opens the page at the first bucket sorting at or after a
   /// display-label prefix, which is what an alphabet rail taps. Needs
   /// [FacetSort.label] and refuses a [cursor].
+  ///
+  /// [facet]/[facetKey] scope the enumeration to one bucket of a second
+  /// dimension: `dimension: 'album', facet: 'credit-artist'` answers the
+  /// albums one artist is credited on, as album buckets. Scoping a
+  /// dimension by itself is a request error, and a cursor belongs to the
+  /// scope it was issued under.
   Future<FacetPage> listFacets(
     String dimension, {
     FacetSort? sort,
     String? cursor,
     String? startsAt,
+    String? facet,
+    String? facetKey,
     int? limit,
   });
 
@@ -168,6 +176,20 @@ abstract interface class WaxDeckRepository {
     required String to,
     int? length,
   });
+
+  /// `POST /library/entities`: the display facts behind a list of entity
+  /// pids, in request order.
+  ///
+  /// What turns a stored handle back into a card - a pinned shelf holds
+  /// pids, not snapshots. Pids that cannot be resolved (departed,
+  /// unsubscribed, outside the caller's libraries) are silently dropped,
+  /// so a short answer is normal and the caller must not index into it
+  /// by request position.
+  Future<List<EntityCard>> resolveEntities(List<String> pids);
+
+  /// `GET /albums/{pid}`: one album entity's identity - barcode, label,
+  /// catalog number, media, country - which no track row carries.
+  Future<AlbumDetail> getAlbum(String pid);
 
   /// `GET /items/{pid}`: full detail for one item.
   Future<ItemDetail> getItem(String pid);
@@ -1668,6 +1690,8 @@ class WaxDeckClient implements WaxDeckRepository {
     FacetSort? sort,
     String? cursor,
     String? startsAt,
+    String? facet,
+    String? facetKey,
     int? limit,
   }) => _guard(() async {
     final response = await _gen.getLibraryApi().listFacets(
@@ -1675,6 +1699,10 @@ class WaxDeckClient implements WaxDeckRepository {
       sort: sort == null ? null : facetSortToGen(sort),
       cursor: cursor,
       startsAt: startsAt,
+      facet: facet,
+      // Empty included, as on the drill: an empty key is the unknown
+      // bucket, which is a real scope.
+      facetKey: facet == null ? null : facetKey ?? '',
       limit: limit,
     );
     return facetPageFromGen(_require(response.data));
@@ -1763,6 +1791,29 @@ class WaxDeckClient implements WaxDeckRepository {
       length: length,
     );
     return sonicPathFromGen(_require(response.data), baseUrl: _baseUrl);
+  });
+
+  @override
+  Future<List<EntityCard>> resolveEntities(List<String> pids) =>
+      _guard(() async {
+        // Nothing pinned is nothing to ask: the endpoint would answer an
+        // empty list, and a shelf that draws nothing should not spend a round
+        // trip finding that out.
+        if (pids.isEmpty) return const <EntityCard>[];
+        final response = await _gen.getLibraryApi().resolveEntities(
+          entityCardQuery: gen.EntityCardQuery(
+            (b) => b..pids = ListBuilder<String>(pids),
+          ),
+        );
+        return _require(
+          response.data,
+        ).entities.map(entityCardFromGen).nonNulls.toList();
+      });
+
+  @override
+  Future<AlbumDetail> getAlbum(String pid) => _guard(() async {
+    final response = await _gen.getLibraryApi().getAlbum(pid: pid);
+    return albumDetailFromGen(_require(response.data));
   });
 
   @override

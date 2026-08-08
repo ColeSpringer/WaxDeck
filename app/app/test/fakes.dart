@@ -346,8 +346,16 @@ class FakeRepository implements WaxDeckRepository {
     return _signIn(token: 'oidc-token');
   }
 
-  /// Buckets [listFacets] answers, keyed by dimension.
+  /// Buckets [listFacets] answers, keyed by dimension. A scoped read
+  /// takes the key "dimension|facet|facetKey" and falls back to the plain
+  /// dimension, so a test that does not care about the scope seeds one
+  /// list and a test that does seeds both.
   final Map<String, List<FacetBucket>> facets = {};
+
+  /// Every (dimension, facet, facetKey) triple [listFacets] was scoped
+  /// by, in call order, so a test can prove a shelf asked for buckets
+  /// rather than paging items.
+  final List<(String, String, String)> facetScopes = [];
 
   /// Items keyed by "dimension key", served when a listing drills a
   /// facet bucket. Missing keys answer an empty page.
@@ -409,15 +417,23 @@ class FakeRepository implements WaxDeckRepository {
     FacetSort? sort,
     String? cursor,
     String? startsAt,
+    String? facet,
+    String? facetKey,
     int? limit,
   }) async {
     final error = listError;
     if (error != null) throw error;
     facetSorts.add(sort);
     facetStartsAt.add(startsAt);
+    if (facet != null) {
+      facetScopes.add((dimension, facet, facetKey ?? ''));
+    }
     final gate = facetGate;
     if (gate != null) await gate.future;
-    final all = <FacetBucket>[...?facets[dimension]];
+    final scoped = facet == null
+        ? null
+        : facets['$dimension|$facet|${facetKey ?? ''}'];
+    final all = <FacetBucket>[...?(scoped ?? facets[dimension])];
     // The server serves the A-to-Z order itself; the fake sorts here so
     // a screen test sees the arrangement its rail is built on.
     if (sort == FacetSort.label) {
@@ -556,6 +572,43 @@ class FakeRepository implements WaxDeckRepository {
   /// hold an entry's resolution open - the window before any session
   /// exists - and act while it is in flight.
   Completer<void>? getItemGate;
+
+  /// Cards [resolveEntities] answers, keyed by pid. A pid with no entry
+  /// is dropped, which is the endpoint's own behaviour for anything it
+  /// cannot resolve.
+  final Map<String, EntityCard> entityCards = {};
+
+  /// Every pid list [resolveEntities] was asked for, in call order.
+  final List<List<String>> resolvedEntityPids = [];
+
+  @override
+  Future<List<EntityCard>> resolveEntities(List<String> pids) async {
+    resolvedEntityPids.add(List<String>.of(pids));
+    final error = listError;
+    if (error != null) throw error;
+    return <EntityCard>[for (final pid in pids) ?entityCards[pid]];
+  }
+
+  /// Albums [getAlbum] answers, keyed by pid.
+  final Map<String, AlbumDetail> albums = {};
+
+  /// Stands in for the server's own normalizers, which run on the way in
+  /// so a stored value can differ from what was typed (a barcode loses
+  /// its separators, a country upper-cases). Identity by default.
+  String Function(String field, String value)? normalizeEntityEdit;
+
+  @override
+  Future<AlbumDetail> getAlbum(String pid) async {
+    final album = albums[pid];
+    if (album == null) {
+      throw WaxDeckApiException(
+        statusCode: 404,
+        code: 'not-found',
+        message: 'no album with pid $pid',
+      );
+    }
+    return album;
+  }
 
   @override
   Future<ItemDetail> getItem(String pid) async {
@@ -2847,6 +2900,21 @@ class FakeRepository implements WaxDeckRepository {
 
   final List<({String pid, Map<String, String> fields, bool writeBack})>
   editItemMetadataCalls = [];
+
+  /// Every entity edit, with the flags it carried. The map above records
+  /// what an entity ends up holding; this records how each write asked
+  /// for it, which is what a sparse-edit or a Force test is about.
+  final List<
+    ({
+      String entityType,
+      String entityPid,
+      Map<String, String> edits,
+      bool writeBack,
+      bool lock,
+      bool force,
+    })
+  >
+  entityEdits = [];
   final List<({String entityType, String entityPid, int byteCount})>
   entityArtworkCalls = [];
   final List<({String entityType, String entityPid})> clearEntityArtworkCalls =
@@ -3137,7 +3205,44 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     final error = metadataError;
     if (error != null) throw error;
-    (entityEditsByKey['$entityType/$entityPid'] ??= {}).addAll(edits);
+    entityEdits.add((
+      entityType: entityType,
+      entityPid: entityPid,
+      edits: Map<String, String>.of(edits),
+      writeBack: writeBack,
+      lock: lock,
+      force: force,
+    ));
+    final normalize = normalizeEntityEdit;
+    final stored = <String, String>{
+      for (final entry in edits.entries)
+        entry.key: normalize == null
+            ? entry.value
+            : normalize(entry.key, entry.value),
+    };
+    (entityEditsByKey['$entityType/$entityPid'] ??= {}).addAll(stored);
+    // The edit lands in the album the read surface answers, so a test can
+    // save and then look at what a refetch brings back.
+    if (entityType == 'album') {
+      final album = albums[entityPid];
+      if (album != null) {
+        albums[entityPid] = AlbumDetail(
+          pid: album.pid,
+          title: album.title,
+          sortKey: album.sortKey,
+          mbid: stored['mbid'] ?? album.mbid,
+          year: album.year,
+          releaseGroupPid: album.releaseGroupPid,
+          barcode: stored['barcode'] ?? album.barcode,
+          label: stored['label'] ?? album.label,
+          catalogNumber: stored['catalog_number'] ?? album.catalogNumber,
+          media: stored['media'] ?? album.media,
+          country: stored['country'] ?? album.country,
+          itemCount: album.itemCount,
+          totalDurationMs: album.totalDurationMs,
+        );
+      }
+    }
     return const MetadataEditResult(applied: true);
   }
 

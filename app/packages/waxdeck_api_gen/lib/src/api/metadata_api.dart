@@ -396,7 +396,7 @@ class MetadataApi {
   }
 
   /// Edit entity fields
-  /// Edits an entity&#39;s own fields: sort name and MusicBrainz id for artists; sort name, MusicBrainz id, and type for release groups; sort name, MusicBrainz id, barcode, label, and catalog number for albums. Entity edits carry their own provenance, readable below. &#x60;writeBack&#x60; pushes the values that have tag forms into member files. 
+  /// Edits an entity&#39;s own fields: &#x60;sort&#x60; and &#x60;mbid&#x60; for artists; &#x60;sort&#x60;, &#x60;mbid&#x60;, and &#x60;type&#x60; for release groups; &#x60;sort&#x60;, &#x60;mbid&#x60;, &#x60;barcode&#x60;, &#x60;label&#x60;, &#x60;catalog_number&#x60;, &#x60;media&#x60;, and &#x60;country&#x60; for albums. Entity edits carry their own provenance, readable below. &#x60;writeBack&#x60; pushes the values that have tag forms into member files.  &#x60;barcode&#x60; and &#x60;country&#x60; are normalized on the way in, where a scan stores the tag verbatim, so an edit refuses values &#x60;GET /albums/{pid}&#x60; will happily show (\&quot;US &amp;amp; Europe\&quot; is a country a scan can store and an edit cannot). &#x60;media&#x60; has no normalizer and is stored as typed. 
   ///
   /// Parameters:
   /// * [entityType] - The entity kind an entity operation targets. `playlist` is a WaxDeck-side entity rather than a catalog one: it carries artwork and nothing else, and its operations are owner-gated instead of administrators-only. 

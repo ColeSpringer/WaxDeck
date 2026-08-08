@@ -6,6 +6,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../home/pin_action.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
@@ -173,6 +174,19 @@ class _Header extends ConsumerWidget {
           semanticsId: SemanticsIds.entityShuffle,
         ),
         EntityStarRatingRow(pid: pid, label: 'artist'),
+        WaxMenuButton<String>(
+          semanticsId: SemanticsIds.entityOverflow,
+          items: <WaxMenuItem<String>>[
+            pinMenuItem<String>(
+              ref,
+              pid,
+              value: 'pin',
+              semanticsId: SemanticsIds.entityPin,
+            ),
+          ],
+          onSelected: (_) =>
+              unawaited(togglePin(context, ref, pid, label: name)),
+        ),
       ],
     );
   }
@@ -188,45 +202,24 @@ class _Header extends ConsumerWidget {
 /// artist's own releases, because a credit shelf is an extra and the
 /// screen is complete without it.
 class _AppearsOn extends ConsumerWidget {
-  const _AppearsOn({required this.pid, required this.own});
+  const _AppearsOn({required this.pid});
 
   final String pid;
 
-  /// The releases already drawn above, so this one can exclude them.
-  final List<ArtistAlbum> own;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final credited = ref
-        .watch(
-          appearsOnProvider((
-            pid: pid,
-            ownAlbumKey: (<String>[
-              for (final album in own)
-                if (album.pid != null) album.pid!,
-            ]..sort()).join(','),
-          )),
-        )
-        .value;
-    if (credited == null) return const SizedBox.shrink();
-    final albums = appearsOnAlbums(credited, own);
-    if (albums.isEmpty) return const SizedBox.shrink();
+    final albums = ref.watch(appearsOnProvider(pid)).value;
+    if (albums == null || albums.isEmpty) return const SizedBox.shrink();
 
     final store = ref.watch(artworkStoreProvider);
     final repository = ref.watch(repositoryProvider);
     final tiles = <MediaTileData>[
       for (final album in albums)
         MediaTileData(
-          title: album.title,
-          subtitle: album.tracks.length == 1
-              ? album.tracks.first.title
-              : '${album.tracks.length} tracks',
-          artwork: album.pid == null
-              ? null
-              : store.source(repository.artUrlFor(album.pid!)),
-          semanticsId: album.pid == null
-              ? null
-              : SemanticsIds.entityAlbum(album.pid!),
+          title: album.label,
+          subtitle: '${album.count} ${album.count == 1 ? 'track' : 'tracks'}',
+          artwork: store.source(repository.artUrlFor(album.entityPid!)),
+          semanticsId: SemanticsIds.entityAlbum(album.entityPid!),
         ),
     ];
 
@@ -244,16 +237,18 @@ class _AppearsOn extends ConsumerWidget {
             // them twice.
             final at = tiles.indexOf(tile);
             if (at < 0) return;
-            final target = albums[at].pid;
-            if (target != null) {
-              // Pushed, not gone to: an album is declared under the
-              // albums index, so `go` would rebuild that ancestry and
-              // throw this artist away (ADR-0022).
+            // Pushed, not gone to: an album is declared under the albums
+            // index, so `go` would rebuild that ancestry and throw this
+            // artist away (ADR-0022).
+            unawaited(
               context.push(
-                WaxRoute.musicBucket(MusicDimension.albums, target),
-                extra: albums[at].title,
-              );
-            }
+                WaxRoute.musicBucket(
+                  MusicDimension.albums,
+                  albums[at].entityPid!,
+                ),
+                extra: albums[at].label,
+              ),
+            );
           },
         ),
       ],
@@ -331,7 +326,7 @@ class _Body extends ConsumerWidget {
             },
           ),
         ],
-        _AppearsOn(pid: pid, own: albums),
+        _AppearsOn(pid: pid),
         const SizedBox(height: WaxSpace.s16),
         Padding(
           padding: EdgeInsets.symmetric(
@@ -445,7 +440,18 @@ List<ArtistAlbum> albumsOf(List<ItemSummary> tracks) {
   ];
 }
 
-/// The releases an artist is credited on but does not head.
+/// How many credited releases the shelf will consider. A glance, not a
+/// listing: past this the shelf truncates silently, which is the same
+/// bargain every other shelf makes with its card cap.
+const _appearsOnLimit = 100;
+
+/// The dimension that buckets a track under every artist its credit
+/// names. Not a [MusicDimension]: the hub offers no index over it, and
+/// this shelf is its only reader.
+const _creditArtistDimension = 'credit-artist';
+
+/// The releases an artist is credited on but does not head, as album
+/// buckets.
 ///
 /// The artist screen above reads the `artist` dimension, which buckets a
 /// track once under its primary artist, so a feature is invisible there.
@@ -454,77 +460,73 @@ List<ArtistAlbum> albumsOf(List<ItemSummary> tracks) {
 /// the two overlap by construction, and the overlap is what the section
 /// has to remove before it draws anything.
 ///
-/// Auto-disposed and per-artist, like the bucket listing it sits beside.
+/// One read, and it answers albums directly. This used to page the
+/// *items* endpoint - the only scoped read that existed - and collapse
+/// track rows into albums client-side, bounded at four pages because the
+/// dimension buckets an artist's own tracks too and a prolific artist's
+/// first page could be entirely self-releases. The facet endpoint takes a
+/// scope now, so the question is asked the way it was always meant to
+/// be: album buckets, counted over this artist's credits, bounded by
+/// construction.
 ///
-/// Paged rather than one shot, because the dimension buckets an artist's
-/// own tracks too: a prolific artist's first page can be entirely
-/// self-releases, which the caller then filters to nothing and draws as
-/// no shelf at all. So it keeps pulling until a page carries an album
-/// the artist does not head, bounded so a big library cannot turn one
-/// screen into a walk of the catalog.
-const _appearsOnMaxPages = 4;
-
-/// Keyed on a string, not a record carrying a list: Dart compares record
-/// fields with ==, and a List's == is identity, so a list key would mint
-/// a fresh provider on every rebuild and never settle.
+/// Buckets come back count-ordered, so the shelf leads with the release
+/// this artist plays most on rather than with whichever sorted first.
+///
+/// Two reads, because the exclusion has to be exact. The albums the
+/// artist *heads* come from the same facet space rather than from the
+/// rows the screen happens to have loaded: the listing above pages at
+/// five hundred tracks and the credited side is now a complete
+/// enumeration, so a prolific artist's own release whose tracks sort past
+/// the loaded window would be missing from the exclusion set and drawn
+/// here - the duplication this shelf exists to prevent, appearing exactly
+/// where a big catalogue makes it hardest to notice.
+///
+/// Concurrent: they are the same shape against the same index and neither
+/// needs the other's answer.
+///
+/// Auto-disposed and per-artist, like the bucket listing it sits beside.
 final appearsOnProvider = FutureProvider.autoDispose
-    .family<List<ItemSummary>, ({String pid, String ownAlbumKey})>((
-      ref,
-      key,
-    ) async {
+    .family<List<FacetBucket>, String>((ref, pid) async {
       final repository = ref.watch(repositoryProvider);
-      final own = key.ownAlbumKey.split(',').where((s) => s.isNotEmpty).toSet();
-      final collected = <ItemSummary>[];
-      String? cursor;
-      for (var page = 0; page < _appearsOnMaxPages; page++) {
-        final got = await repository.listItems(
-          facet: 'credit-artist',
-          facetKey: musicFacetKey(MusicDimension.artists, key.pid),
-          cursor: cursor,
-          limit: MusicItemsController.pageSize,
-        );
-        collected.addAll(got.items);
-        cursor = got.nextCursor;
-        final foreign = collected.any(
-          (it) => it.albumPid == null || !own.contains(it.albumPid),
-        );
-        if (foreign || cursor == null) break;
-      }
-      return collected;
+      final key = musicFacetKey(MusicDimension.artists, pid);
+      final pages = await Future.wait(<Future<FacetPage>>[
+        repository.listFacets(
+          MusicDimension.albums.wireName,
+          facet: _creditArtistDimension,
+          facetKey: key,
+          limit: _appearsOnLimit,
+        ),
+        repository.listFacets(
+          MusicDimension.albums.wireName,
+          facet: MusicDimension.artists.wireName,
+          facetKey: key,
+          limit: _appearsOnLimit,
+        ),
+      ]);
+      return appearsOnBuckets(pages[0].buckets, <String>{
+        for (final bucket in pages[1].buckets) ?bucket.entityPid,
+      });
     });
 
-/// The albums an artist appears on, minus the ones that are already
-/// their own.
+/// The album buckets worth drawing: the ones that name a real release
+/// this artist does not already head.
 ///
-/// Two collapses, in this order and both necessary. The query answers
-/// items, and the section shows albums, so six credited tracks off one
-/// compilation are one card and not six. And a release the artist heads
-/// is already drawn above under Releases, so leaving it here would make
-/// the screen repeat itself - a self-titled record appearing twice reads
-/// as a duplicate in the library rather than as two ways of counting.
+/// Two drops. The unknown bucket ([Non-Album]) is a real bucket the
+/// enumeration returns and carries no entity behind it, so there is
+/// nothing for a card to open. And a release the artist heads is already
+/// drawn above under Releases, so leaving it here would make the screen
+/// repeat itself - a self-titled record appearing twice reads as a
+/// duplicate in the library rather than as two ways of counting.
 ///
-/// Excluding by album pid rather than by title: two releases can share a
-/// title, and dropping both because one matched is the same mistake the
-/// Releases shelf avoids by opening tiles positionally.
-List<ArtistAlbum> appearsOnAlbums(
-  List<ItemSummary> credited,
-  List<ArtistAlbum> own,
-) {
-  final ownPids = <String>{
-    for (final album in own)
-      if (album.pid != null) album.pid!,
-  };
-  // Pid-less only: two records called "Greatest Hits" are two records,
-  // and matching every own title would drop the loose one.
-  final ownTitles = <String>{
-    for (final album in own)
-      if (album.pid == null) album.title,
-  };
-  return <ArtistAlbum>[
-    for (final album in albumsOf(credited))
-      if (!(album.pid != null
-          ? ownPids.contains(album.pid)
-          : ownTitles.contains(album.title)))
-        album,
-  ];
-}
+/// By entity pid rather than by title: two releases can share a title,
+/// and dropping both because one matched is the same mistake the
+/// Releases shelf avoids by opening tiles positionally. Every real album
+/// bucket carries one, so there is no title fallback to keep.
+List<FacetBucket> appearsOnBuckets(
+  List<FacetBucket> buckets,
+  Set<String> ownPids,
+) => <FacetBucket>[
+  for (final bucket in buckets)
+    if (bucket.entityPid case final pid?)
+      if (!ownPids.contains(pid)) bucket,
+];

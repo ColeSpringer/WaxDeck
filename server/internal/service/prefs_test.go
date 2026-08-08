@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -8,9 +9,64 @@ import (
 // reading as unset.
 func isZeroPrefs(p Prefs) bool {
 	return p.Timezone == "" && p.Locale == "" && p.Theme == "" &&
-		!p.SharedStatsOptOut && len(p.RadioFavorites) == 0 &&
+		!p.SharedStatsOptOut && len(p.RadioFavorites) == 0 && len(p.Pinned) == 0 &&
 		p.CrossfadeSeconds == 0 && !p.ReplayGain && !p.RadioScrobbleOptOut &&
 		p.BrowseShowUnknown == nil && len(p.BrowseSorts) == 0 && p.Autoplay == nil
+}
+
+// TestPutPrefsCanonicalizesPins covers the shared pid-list validator on
+// the list that has more than one accepted prefix. The stored form is the
+// contract's pattern, whatever case a write used, and it is what makes
+// the duplicate check work at all: Crockford base32 parses either case,
+// so two spellings of one album must not become two shelf cards.
+func TestPutPrefsCanonicalizesPins(t *testing.T) {
+	ctx, svc, admin := newAdminFixture(t)
+
+	const album = "al-01JZX5N8QW3F4V9T2B7KD3M9R6"
+	stored, err := svc.PutPrefs(ctx, admin, Prefs{Pinned: []string{
+		strings.ToLower(album),
+		"pl-01JZX5N8QW3F4V9T2B7KD3M9R7",
+		"bk-01JZX5N8QW3F4V9T2B7KD3M9R8",
+		"rg-01JZX5N8QW3F4V9T2B7KD3M9R9",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Pinned) != 4 || stored.Pinned[0] != album {
+		t.Fatalf("stored pins = %v", stored.Pinned)
+	}
+
+	for _, bad := range []struct {
+		why  string
+		pins []string
+	}{
+		{"a station is radio's own pin surface", []string{"rs-01JZX5N8QW3F4V9T2B7KD3M9R6"}},
+		{"a track opens no surface", []string{"tr-01JZX5N8QW3F4V9T2B7KD3M9R6"}},
+		{"a malformed pid", []string{"al-nope"}},
+		{"the same album twice", []string{album, strings.ToLower(album)}},
+	} {
+		if _, err := svc.PutPrefs(ctx, admin, Prefs{Pinned: bad.pins}); err == nil {
+			t.Fatalf("%s was accepted", bad.why)
+		}
+	}
+
+	over := make([]string, maxPinned+1)
+	for i := range over {
+		over[i] = "al-01JZX5N8QW3F4V9T2B7KD3M9" + string(rune('A'+i%26))
+	}
+	if _, err := svc.PutPrefs(ctx, admin, Prefs{Pinned: over}); err == nil {
+		t.Fatal("a list over the cap was accepted")
+	}
+
+	// Unpinning everything drops the field rather than storing an empty
+	// list, so absent and empty stay one answer on the way back.
+	cleared, err := svc.PutPrefs(ctx, admin, Prefs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cleared.Pinned) != 0 {
+		t.Fatalf("cleared pins = %v", cleared.Pinned)
+	}
 }
 
 // TestPrefsRoundTripsTheServerAppliedFields pins the three preferences

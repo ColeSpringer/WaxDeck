@@ -49,6 +49,26 @@ type ItemDetail struct {
 	AddedAt    time.Time
 }
 
+// AlbumDetail is one album entity's identity and counts. Everything
+// after ReleaseGroupPID is edition-scoped and lives nowhere else in the
+// API: the item row carries what the file is, this carries what the
+// release is.
+type AlbumDetail struct {
+	PID             string
+	Title           string
+	SortKey         string
+	MBID            string
+	Year            int
+	ReleaseGroupPID string
+	Barcode         string
+	Label           string
+	CatalogNumber   string
+	Media           string
+	Country         string
+	ItemCount       int
+	TotalDurationMS int64
+}
+
 // Page is one keyset page of items.
 type Page struct {
 	Items []ItemSummary

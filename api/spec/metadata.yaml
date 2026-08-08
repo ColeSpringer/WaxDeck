@@ -593,12 +593,19 @@ paths:
       operationId: editEntity
       summary: Edit entity fields
       description: >
-        Edits an entity's own fields: sort name and MusicBrainz id
-        for artists; sort name, MusicBrainz id, and type for release
-        groups; sort name, MusicBrainz id, barcode, label, and
-        catalog number for albums. Entity edits carry their own
-        provenance, readable below. `writeBack` pushes the values
-        that have tag forms into member files.
+        Edits an entity's own fields: `sort` and `mbid` for artists;
+        `sort`, `mbid`, and `type` for release groups; `sort`, `mbid`,
+        `barcode`, `label`, `catalog_number`, `media`, and `country`
+        for albums. Entity edits carry their own provenance, readable
+        below. `writeBack` pushes the values that have tag forms into
+        member files.
+
+
+        `barcode` and `country` are normalized on the way in, where a
+        scan stores the tag verbatim, so an edit refuses values
+        `GET /albums/{pid}` will happily show ("US &amp; Europe" is a
+        country a scan can store and an edit cannot). `media` has no
+        normalizer and is stored as typed.
       tags: [metadata]
       requestBody:
         required: true

@@ -229,8 +229,28 @@ type FacetQuery struct {
 	// prefix, which is what an alphabet rail taps. Requires
 	// FacetSortLabel and refuses a Cursor.
 	StartsAt string
+	// Facet and FacetKey scope the enumeration to one bucket of a second
+	// dimension: album buckets counted over one artist's credits. Absent
+	// Facet is the whole-library enumeration.
+	Facet    string
+	FacetKey string
 	Limit    int
 }
+
+// facetScope is the canonical form of the scope pair, carried separately
+// from FacetQuery because everything below the validator works in
+// canonical dimension names.
+//
+// The zero value is "no scope", which is what every caller before this
+// asked for and what keeps the cache path unchanged for them.
+type facetScope struct {
+	Facet string
+	Key   string
+}
+
+// scoped reports whether an enumeration is narrowed to a bucket, which is
+// what decides both cache participation and cursor compatibility.
+func (s facetScope) scoped() bool { return s.Facet != "" }
 
 // Facets enumerates one browse dimension's buckets, paged: most items
 // first by default, A to Z under FacetSortLabel.
@@ -245,6 +265,10 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, q FacetQuery) (FacetP
 	// biggest-first to a caller who asked for A to Z puts the wrong
 	// letters under the rail.
 	order, err := ParseFacetSort(string(q.Order))
+	if err != nil {
+		return FacetPage{}, err
+	}
+	scope, err := facetScopeFor(q.Facet, q.FacetKey, canonical)
 	if err != nil {
 		return FacetPage{}, err
 	}
@@ -263,6 +287,13 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, q FacetQuery) (FacetP
 	if after != nil && after.Dim != "" && after.Dim != canonical {
 		return FacetPage{}, errInvalid("cursor was issued for dimension " + after.Dim)
 	}
+	// A scope change is a different bucket list, not a different window
+	// onto one, so a cursor minted under another scope names no position
+	// here. Refused for the reason the dimension mismatch is: an empty
+	// page with no error is the silent wrong window.
+	if after != nil && (after.Facet != scope.Facet || after.FacetKey != scope.Key) {
+		return FacetPage{}, errInvalid("cursor was issued for a different scope")
+	}
 	if q.StartsAt != "" {
 		if order != FacetSortLabel {
 			return FacetPage{}, errInvalid("startsAt needs sort=label")
@@ -278,6 +309,15 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, q FacetQuery) (FacetP
 		// would never advance.
 		limit = facetDefaultLimit
 	}
+	// Built once, here, rather than once to validate and again to run.
+	// Before the empty-grant short-circuit below, because a malformed
+	// scope is a request error for every caller: answering an ungranted
+	// one with an empty page instead would make the refusal depend on who
+	// asked.
+	scoped, err := l.facetScopeQuery(uc, scope)
+	if err != nil {
+		return FacetPage{}, err
+	}
 	// A restricted caller with no granted libraries can see nothing, and
 	// an empty disjunction would compile to a match-nothing predicate
 	// anyway; answer without touching the catalog.
@@ -285,7 +325,7 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, q FacetQuery) (FacetP
 		return FacetPage{Dimension: canonical, Buckets: []FacetBucket{}}, nil
 	}
 
-	buckets, err := l.facetBuckets(ctx, uc, canonical, group, order)
+	buckets, err := l.facetBuckets(ctx, uc, canonical, group, order, scope, scoped)
 	if err != nil {
 		return FacetPage{}, err
 	}
@@ -296,12 +336,38 @@ func (l *Library) Facets(ctx context.Context, uc *UserCtx, q FacetQuery) (FacetP
 	out := FacetPage{Dimension: canonical, Buckets: []FacetBucket{}}
 	for i := from; i < len(buckets); i++ {
 		if len(out.Buckets) == limit {
-			out.Next = encodeFacetCursor(buckets[i-1], canonical, order)
+			out.Next = encodeFacetCursor(buckets[i-1], canonical, order, scope)
 			break
 		}
 		out.Buckets = append(out.Buckets, buckets[i])
 	}
 	return out, nil
+}
+
+// facetScopeFor validates the scope pair and returns it canonicalized.
+// An empty facet is no scope, whatever facetKey says: the pair is keyed
+// on the dimension, exactly as it is on the drill list.
+func facetScopeFor(facet, key, dimension string) (facetScope, error) {
+	if facet == "" {
+		return facetScope{}, nil
+	}
+	_, canonical, err := facetGroupFor(facet)
+	if err != nil {
+		return facetScope{}, err
+	}
+	// Compared in canonical form, so `tag.mood` cannot scope `tag.MOOD`.
+	// Scoping a dimension by itself would answer the one bucket it was
+	// handed, which is a question the caller has already answered.
+	if canonical == dimension {
+		return facetScope{}, errInvalid("cannot scope the " + dimension + " enumeration by itself")
+	}
+	// The key itself is not checked here. Building the real query is what
+	// checks it, and doing it twice would be two builders that can drift:
+	// a validation applyFacetFilter grew from the incoming builder (a
+	// library predicate, a media narrowing) would be asked of a bare
+	// visibleItems() here and of the caller's own scope there, and one
+	// would accept what the other refused.
+	return facetScope{Facet: canonical, Key: key}, nil
 }
 
 // facetSeekPrefix returns the first bucket sorting at or after the
@@ -322,9 +388,19 @@ func facetSeekPrefix(buckets []FacetBucket, prefix string) int {
 
 // facetBuckets computes (or serves from cache) a dimension's whole
 // bucket list for the caller, in the requested order.
-func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension string, group read.GroupBy, order FacetSort) ([]FacetBucket, error) {
+func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension string, group read.GroupBy, order FacetSort, scope facetScope, scoped query.Query) ([]FacetBucket, error) {
 	gen := l.facetGeneration()
-	if uc.AllLibraries {
+	// A scoped enumeration takes part in the cache in neither direction.
+	// Not read, because the cached entry is the whole library's and
+	// answering it here would hand an artist page every album there is.
+	// Not published either, and that is the load-bearing half: the key
+	// names a dimension and an order, so a scoped result published under
+	// it would poison the unscoped read for everyone until the catalog
+	// moved. Keying the scope in instead would mint an unbounded number
+	// of entries, one per entity, which is what the bound on the scoped
+	// read makes unnecessary - it is cheap because it is scoped.
+	cacheable := uc.AllLibraries && !scope.scoped()
+	if cacheable {
 		l.facets.mu.Lock()
 		if l.facets.gen == gen {
 			if cached, ok := l.facets.byDimension[facetCacheKey{dimension, order}]; ok {
@@ -339,7 +415,7 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 	// is applied here because facetFolded folds the display label while
 	// FacetOrderLabel collates sort_key, so "The Beatles" files under B
 	// there and T here, and the rail follows this file.
-	res, err := l.lib.Facet(ctx, l.facetScopeQuery(uc), group, read.FacetOrderLabel, 0, model.PID(uc.CatalogPID))
+	res, err := l.lib.Facet(ctx, scoped, group, read.FacetOrderLabel, 0, model.PID(uc.CatalogPID))
 	if err != nil {
 		return nil, classify(err)
 	}
@@ -379,9 +455,10 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 	}
 
 	sortFacetBuckets(out, order)
-	if !uc.AllLibraries {
-		// Nothing a restricted caller computes is published, so the other
-		// order would be sorted for a cache it can never reach.
+	if !cacheable {
+		// Nothing a restricted caller or a scoped read computes is
+		// published, so the other order would be sorted for a cache it can
+		// never reach.
 		return out, nil
 	}
 	l.publishFacetBuckets(gen, dimension, order, out)
@@ -470,6 +547,12 @@ type facetCursor struct {
 	// with no error, which is the silent wrong window every other cursor
 	// in this service refuses.
 	Dim string `json:"d,omitempty"`
+	// Facet and FacetKey are the scope the cursor was issued under, for
+	// Dim's reason: a scoped page and an unscoped one are two bucket
+	// lists, not two windows onto one. Both absent on an unscoped cursor,
+	// so the encoding this endpoint has always served does not change.
+	Facet    string `json:"f,omitempty"`
+	FacetKey string `json:"fk,omitempty"`
 }
 
 // order is the sort the cursor was issued under.
@@ -480,9 +563,10 @@ func (c *facetCursor) order() FacetSort {
 	return FacetSort(c.Sort)
 }
 
-func encodeFacetCursor(b FacetBucket, dimension string, order FacetSort) string {
+func encodeFacetCursor(b FacetBucket, dimension string, order FacetSort, scope facetScope) string {
 	cur := facetCursor{
 		Count: b.Count, Label: b.Label, Key: b.Key, Unknown: b.Unknown, Dim: dimension,
+		Facet: scope.Facet, FacetKey: scope.Key,
 	}
 	if order != FacetSortCount {
 		cur.Sort = string(order)
@@ -570,15 +654,20 @@ func facetLess(a, b FacetBucket) bool {
 	return a.Key < b.Key
 }
 
-// facetScopeQuery is the enumeration's base query: everything for a
+// facetScopeBuilder is the enumeration's base query: everything for a
 // full-visibility caller, and the caller's granted libraries otherwise.
 // A different builder from the drill's, so it has to carry the same
 // state predicate or a bucket's count and the listing it opens disagree
 // (TestFacetDimensionsDrillToTheirCount).
-func (l *Library) facetScopeQuery(uc *UserCtx) query.Query {
+//
+// A builder rather than a finished query so applyFacetFilter can narrow
+// it further: the two never met before this, and composing them is what
+// answers "the albums this artist is credited on" as album buckets
+// rather than as a download of item rows.
+func (l *Library) facetScopeBuilder(uc *UserCtx) *query.Builder {
 	b := visibleItems()
 	if uc.AllLibraries {
-		return b.Build()
+		return b
 	}
 	libs := make([]string, 0, len(uc.Libraries))
 	for lib := range uc.Libraries {
@@ -590,7 +679,22 @@ func (l *Library) facetScopeQuery(uc *UserCtx) query.Query {
 	// compiles to `1=0`. Deliberately not `notIn` over the complement -
 	// that is an anti-join scanning the catalog, and it keeps fileless
 	// items, which ADR-0051 attributes to no library.
-	return b.WhereValues("library", query.OpIn, query.Values(libs)...).Build()
+	return b.WhereValues("library", query.OpIn, query.Values(libs)...)
+}
+
+// facetScopeQuery is facetScopeBuilder narrowed by an optional scope
+// bucket and built. An empty scope.Facet is the whole-library
+// enumeration this endpoint has always answered.
+func (l *Library) facetScopeQuery(uc *UserCtx, scope facetScope) (query.Query, error) {
+	b := l.facetScopeBuilder(uc)
+	if scope.Facet == "" {
+		return b.Build(), nil
+	}
+	b, err := applyFacetFilter(b, scope.Facet, scope.Key)
+	if err != nil {
+		return query.Query{}, err
+	}
+	return b.Build(), nil
 }
 
 // facetGroupFor validates a dimension name and returns its catalog

@@ -840,6 +840,45 @@ components:
             pattern: "^rs-[0-9A-HJKMNP-TV-Z]{26}$"
           maxItems: 64
           example: [rs-01JZX5N8QW3F4V9T2B7KD3M9R6]
+        pinned:
+          type: array
+          description: >
+            What this user has pinned to home, in the order the shelf
+            presents them. The same shape and the same rules as
+            `radioFavorites`, for the same reason: a pin is about the
+            listener rather than the machine they made it on, so it
+            follows the account.
+
+
+            Ordered, and the order is the client's to set - new pins go
+            on the end. Entries are entity PIDs and are not resolved on
+            write: an album another household member deleted leaves its
+            pid here, and a client draws only the pids it can still
+            resolve, because failing a whole preference write over one
+            departed release would be worse than a shelf one card
+            shorter. Resolve them with `POST /library/entities`, which
+            silently drops what it cannot answer for.
+
+
+            Albums (`al-`), artists (`ar-`), release groups (`rg-`),
+            playlists (`pl-`), podcast shows (`pc-`), and books (`bk-`)
+            may be pinned. Radio stations may not: the dial is already
+            radio's pin surface, and two pin gestures for one station
+            would be two places to unpin it from. Tracks and episodes
+            may not either: a card opens a surface, and a kept set of
+            tracks is a playlist - which pins.
+
+
+            Capped at 64, a bound on the document rather than on the
+            feature. Stored in the canonical upper-case form the pattern
+            declares, whatever case a write used. Absent when nothing is
+            pinned: unpinning everything drops the field rather than
+            storing `[]`.
+          items:
+            type: string
+            pattern: "^(al|ar|rg|pl|pc|bk)-[0-9A-HJKMNP-TV-Z]{26}$"
+          maxItems: 64
+          example: [al-01JZX5N8QW3F4V9T2B7KD3M9R6]
         crossfadeSeconds:
           type: number
           format: double

@@ -25,6 +25,10 @@ type Prefs struct {
 	// order. The station library is shared by the household, so this is
 	// the only per-user station state there is.
 	RadioFavorites []string `json:"radioFavorites,omitempty"`
+	// Pinned are the entity PIDs this user has pinned to home, in shelf
+	// order. The same shape and the same rules as RadioFavorites: a pin
+	// is about the listener, not the machine they made it on.
+	Pinned []string `json:"pinned,omitempty"`
 	// CrossfadeSeconds and ReplayGain shape a queue the server renders
 	// as one stream (a cast timeline today). They live on the account
 	// rather than on the device because the reload path has no client
@@ -58,9 +62,62 @@ var validThemes = map[string]bool{"system": true, "dark": true, "light": true, "
 // cannot be grown without limit.
 const maxRadioFavorites = 64
 
+// maxPinned bounds the pinned-to-home list, for maxRadioFavorites'
+// reason. The shelf draws all of them, so this one is the feature's cap
+// as well as the document's.
+const maxPinned = 64
+
+// pinnablePrefixes are the entity kinds a card can be drawn for and a tap
+// can open. Radio stations are absent because the dial is already radio's
+// pin surface; tracks and episodes are absent because a kept set of
+// tracks is a playlist, and playlists pin.
+var pinnablePrefixes = map[string]bool{
+	PrefixAlbum:        true,
+	PrefixArtist:       true,
+	PrefixReleaseGroup: true,
+	PrefixPlaylist:     true,
+	PrefixPodcast:      true,
+	PrefixBook:         true,
+}
+
 // maxBrowseSorts bounds the document, like maxRadioFavorites: seven
 // named dimensions plus room for custom-tag ones.
 const maxBrowseSorts = 32
+
+// canonicalPIDList validates one of the document's ordered pid lists and
+// returns it in the canonical form the contract's pattern declares.
+//
+// Shape only. Deliberately not resolved: a station or an album another
+// household member deleted leaves its pid in somebody's list, and failing
+// the whole document over it would make one departed entity cost a
+// listener their theme. Clients render the pids they can still find.
+//
+// Upper-cased, which is two separate things at once. It is the pattern
+// the contract declares, so what is read back matches what the schema
+// says. And it is what makes the duplicate check work: Crockford base32
+// parses either case, so `rs-01H...` and `rs-01h...` name one station and
+// would otherwise be two entries - two slots for one thing, and a star
+// that cannot unpin the one it drew.
+//
+// noun names the entry in a duplicate message ("duplicate pin al-..."),
+// want names what the list accepts in a rejection ("not a station pid").
+func canonicalPIDList(pids []string, prefixes map[string]bool, noun, want string) ([]string, error) {
+	seen := make(map[string]bool, len(pids))
+	out := make([]string, 0, len(pids))
+	for _, pid := range pids {
+		prefix, id, ok := parseAPIPID(pid)
+		if !ok || !prefixes[prefix] {
+			return nil, errInvalid("not " + want + ": " + pid)
+		}
+		canonical := prefix + "-" + strings.ToUpper(string(id))
+		if seen[canonical] {
+			return nil, errInvalid("duplicate " + noun + " " + canonical)
+		}
+		seen[canonical] = true
+		out = append(out, canonical)
+	}
+	return out, nil
+}
 
 // Prefs returns the acting user's stored preferences.
 func (l *Library) Prefs(ctx context.Context, uc *UserCtx) (Prefs, error) {
@@ -119,6 +176,9 @@ func (l *Library) PutPrefs(ctx context.Context, uc *UserCtx, p Prefs) (Prefs, er
 	if len(p.RadioFavorites) > maxRadioFavorites {
 		return Prefs{}, errInvalid(fmt.Sprintf("at most %d radio favorites", maxRadioFavorites))
 	}
+	if len(p.Pinned) > maxPinned {
+		return Prefs{}, errInvalid(fmt.Sprintf("at most %d pins", maxPinned))
+	}
 	if p.CrossfadeSeconds < 0 || p.CrossfadeSeconds > maxCrossfadeSeconds {
 		return Prefs{}, errInvalid(fmt.Sprintf("crossfadeSeconds must be between 0 and %d", maxCrossfadeSeconds))
 	}
@@ -149,34 +209,23 @@ func (l *Library) PutPrefs(ctx context.Context, uc *UserCtx, p Prefs) (Prefs, er
 		}
 		p.BrowseSorts = sorts
 	}
-	seen := make(map[string]bool, len(p.RadioFavorites))
-	favorites := make([]string, 0, len(p.RadioFavorites))
-	for _, pid := range p.RadioFavorites {
-		// Shape only. Deliberately not resolved: a station another
-		// household member deleted leaves its pid in somebody's dial, and
-		// failing the whole document over it would make one departed
-		// station cost a listener their theme. Clients render the pids
-		// they can still find.
-		prefix, id, ok := parseAPIPID(pid)
-		if !ok || prefix != PrefixRadioStation {
-			return Prefs{}, errInvalid("not a station pid: " + pid)
-		}
-		// Stored upper-case, which is the only form this list may hold and
-		// two separate things at once. It is the pattern the contract
-		// declares, so what is read back matches what the schema says. And
-		// it is what makes the duplicate check work: Crockford base32
-		// parses either case, so `rs-01H...` and `rs-01h...` name one station
-		// and would otherwise be two entries - two dial slots for the same
-		// station, and a star that cannot unpin the one it drew.
-		canonical := prefix + "-" + strings.ToUpper(string(id))
-		if seen[canonical] {
-			return Prefs{}, errInvalid("duplicate radio favorite " + canonical)
-		}
-		seen[canonical] = true
-		favorites = append(favorites, canonical)
+	favorites, err := canonicalPIDList(
+		p.RadioFavorites,
+		map[string]bool{PrefixRadioStation: true},
+		"radio favorite", "a station pid",
+	)
+	if err != nil {
+		return Prefs{}, err
 	}
 	if len(favorites) > 0 {
 		p.RadioFavorites = favorites
+	}
+	pinned, err := canonicalPIDList(p.Pinned, pinnablePrefixes, "pin", "a pinnable entity pid")
+	if err != nil {
+		return Prefs{}, err
+	}
+	if len(pinned) > 0 {
+		p.Pinned = pinned
 	}
 	doc, err := json.Marshal(p)
 	if err != nil {

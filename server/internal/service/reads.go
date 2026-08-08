@@ -590,6 +590,58 @@ func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (Ite
 	return d, nil
 }
 
+// Album returns one album entity's identity: the release facts the
+// catalog keeps on the entity rather than on any of its tracks.
+//
+// A screen deriving an album from its tracks (AlbumFacts, client side)
+// can reach the title, the artist, and the year, because every track
+// carries them. It cannot reach the barcode, the label, the catalog
+// number, the media, or the country, because those describe the edition
+// and upstream keeps them off the item row on purpose. This is the read
+// half of the editEntity write surface.
+func (l *Library) Album(ctx context.Context, uc *UserCtx, apiAlbumPID string) (AlbumDetail, error) {
+	prefix, pid, ok := parseAPIPID(apiAlbumPID)
+	if !ok || prefix != PrefixAlbum {
+		// A track pid presented as an album is a not-found rather than a
+		// wrong-shaped answer, the rule getItem applies to its own prefixes.
+		return AlbumDetail{}, errNotFound("no album with pid " + apiAlbumPID)
+	}
+	info, err := l.lib.EntityByPID(ctx, read.EntityAlbum, pid)
+	if err != nil {
+		return AlbumDetail{}, classify(err)
+	}
+	if info == nil {
+		return AlbumDetail{}, errNotFound("no album with pid " + apiAlbumPID)
+	}
+	if !uc.AllLibraries && !l.entityInLibraries(info, uc) {
+		return AlbumDetail{}, errNotFound("no album with pid " + apiAlbumPID)
+	}
+	out := AlbumDetail{
+		PID:             apiPID(PrefixAlbum, info.PID),
+		Title:           info.Name,
+		SortKey:         info.SortKey,
+		MBID:            info.MBID,
+		Year:            info.Year,
+		ReleaseGroupPID: entityAPIPID(PrefixReleaseGroup, info.ReleaseGroupPID),
+		Barcode:         info.Barcode,
+		Label:           info.Label,
+		CatalogNumber:   info.CatalogNumber,
+		Media:           info.Media,
+		Country:         info.Country,
+	}
+	// The catalog's counts are catalog-wide: EntityByPID takes no library
+	// scope, so they describe the release rather than the caller's reach.
+	// Handing them to a restricted caller would advertise nine tracks on
+	// a screen that can open three, so they are answered only where they
+	// are true. Left absent rather than recomputed: nothing draws them
+	// today (a header counts the rows it listed), and a per-album scoped
+	// count is a read spent on a number nobody reads.
+	if uc.AllLibraries {
+		out.ItemCount, out.TotalDurationMS = info.ItemCount, info.TotalDurationMS
+	}
+	return out, nil
+}
+
 // artMimes maps the catalog's stored art formats to media types. An
 // unknown format falls back to jpeg, the dominant case.
 var artMimes = map[string]string{

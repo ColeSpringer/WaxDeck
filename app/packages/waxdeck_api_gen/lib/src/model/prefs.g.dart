@@ -143,6 +143,8 @@ class _$Prefs extends Prefs {
   @override
   final BuiltList<String>? radioFavorites;
   @override
+  final BuiltList<String>? pinned;
+  @override
   final double? crossfadeSeconds;
   @override
   final bool? replayGain;
@@ -164,6 +166,7 @@ class _$Prefs extends Prefs {
     this.theme,
     this.sharedStatsOptOut,
     this.radioFavorites,
+    this.pinned,
     this.crossfadeSeconds,
     this.replayGain,
     this.browseShowUnknown,
@@ -187,6 +190,7 @@ class _$Prefs extends Prefs {
         theme == other.theme &&
         sharedStatsOptOut == other.sharedStatsOptOut &&
         radioFavorites == other.radioFavorites &&
+        pinned == other.pinned &&
         crossfadeSeconds == other.crossfadeSeconds &&
         replayGain == other.replayGain &&
         browseShowUnknown == other.browseShowUnknown &&
@@ -203,6 +207,7 @@ class _$Prefs extends Prefs {
     _$hash = $jc(_$hash, theme.hashCode);
     _$hash = $jc(_$hash, sharedStatsOptOut.hashCode);
     _$hash = $jc(_$hash, radioFavorites.hashCode);
+    _$hash = $jc(_$hash, pinned.hashCode);
     _$hash = $jc(_$hash, crossfadeSeconds.hashCode);
     _$hash = $jc(_$hash, replayGain.hashCode);
     _$hash = $jc(_$hash, browseShowUnknown.hashCode);
@@ -221,6 +226,7 @@ class _$Prefs extends Prefs {
           ..add('theme', theme)
           ..add('sharedStatsOptOut', sharedStatsOptOut)
           ..add('radioFavorites', radioFavorites)
+          ..add('pinned', pinned)
           ..add('crossfadeSeconds', crossfadeSeconds)
           ..add('replayGain', replayGain)
           ..add('browseShowUnknown', browseShowUnknown)
@@ -256,6 +262,10 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       _$this._radioFavorites ??= ListBuilder<String>();
   set radioFavorites(ListBuilder<String>? radioFavorites) =>
       _$this._radioFavorites = radioFavorites;
+
+  ListBuilder<String>? _pinned;
+  ListBuilder<String> get pinned => _$this._pinned ??= ListBuilder<String>();
+  set pinned(ListBuilder<String>? pinned) => _$this._pinned = pinned;
 
   double? _crossfadeSeconds;
   double? get crossfadeSeconds => _$this._crossfadeSeconds;
@@ -298,6 +308,7 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       _theme = $v.theme;
       _sharedStatsOptOut = $v.sharedStatsOptOut;
       _radioFavorites = $v.radioFavorites?.toBuilder();
+      _pinned = $v.pinned?.toBuilder();
       _crossfadeSeconds = $v.crossfadeSeconds;
       _replayGain = $v.replayGain;
       _browseShowUnknown = $v.browseShowUnknown;
@@ -333,6 +344,7 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
             theme: theme,
             sharedStatsOptOut: sharedStatsOptOut,
             radioFavorites: _radioFavorites?.build(),
+            pinned: _pinned?.build(),
             crossfadeSeconds: crossfadeSeconds,
             replayGain: replayGain,
             browseShowUnknown: browseShowUnknown,
@@ -345,6 +357,8 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
       try {
         _$failedField = 'radioFavorites';
         _radioFavorites?.build();
+        _$failedField = 'pinned';
+        _pinned?.build();
 
         _$failedField = 'browseSorts';
         _browseSorts?.build();

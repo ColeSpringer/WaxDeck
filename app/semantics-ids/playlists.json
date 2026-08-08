@@ -28,6 +28,7 @@
     "playlistImportSource": "playlist-import-source-{source}",
     "playlistNameField": "playlist-name-field",
     "playlistOverflow": "playlist-overflow",
+    "playlistPin": "playlist-pin",
     "playlistRename": "playlist-rename",
     "playlistResetCover": "playlist-reset-cover",
     "playlistRuleSummary": "playlist-rule-summary",
