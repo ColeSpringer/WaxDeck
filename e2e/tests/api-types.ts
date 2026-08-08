@@ -5866,7 +5866,9 @@ export interface components {
         /** @description The entity PIDs to resolve. */
         EntityCardQuery: {
             /**
-             * @description Type-prefixed entity PIDs, in the order the answers should come back in. Duplicates answer once per occurrence, so a caller's list maps positionally onto the response it can still resolve.
+             * @description Type-prefixed entity PIDs, in the order the answers should come back in. Duplicates answer once per occurrence.
+             *
+             *     The response preserves this order but not these positions: a PID that cannot be resolved is omitted, so the two lists line up only when everything resolved. Match a card to its handle by `pid`, never by index.
              * @example [
              *       "al-01JZX5N8QW3F4V9T2B7KD3M9R6"
              *     ]
@@ -5891,7 +5893,11 @@ export interface components {
             artist?: string;
             /** @description Release year, where the entity carries one. */
             year?: number;
-            /** @description Member items: an album's tracks, a playlist's entries, a show's episodes, an artist's tracks. Absent where counting costs a read the card does not need. */
+            /**
+             * @description Member items: an album's tracks, a playlist's entries, a show's episodes, an artist's tracks.
+             *
+             *     Absent in two cases, and both are deliberate. A smart playlist's count is not taken, because evaluating every stored rule to draw a card is work a listing row skips too. And a catalog entity's count is catalog-wide rather than scoped to what the caller may see, so it is answered only to a caller who can see the whole library - a card advertising nine tracks that opens onto three would be worse than a card with no count on it.
+             */
             itemCount?: number;
         };
         /** @description Cards for the requested PIDs, in request order, minus the ones that could not be resolved. */
@@ -5934,11 +5940,11 @@ export interface components {
              * @example US
              */
             country?: string;
-            /** @description Tracks on the release, within the caller's libraries. */
+            /** @description Tracks on the release as the catalog holds it. Absent for a caller with restricted library visibility, because the count is not scoped to their grant and a number larger than what they can open would be worse than none. */
             itemCount?: number;
             /**
              * Format: int64
-             * @description Total running time of those tracks, in milliseconds.
+             * @description Total running time of those tracks, in milliseconds. Absent alongside `itemCount`, and for its reason.
              */
             totalDurationMs?: number;
         };

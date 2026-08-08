@@ -57,6 +57,13 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# C++/WinRT falls back to the deprecated <experimental/coroutine> under
+# C++17, which current MSVC refuses to compile. C++20 gives it the standard
+# <coroutine> instead. Scoped to this target rather than raised in
+# apply_standard_settings, which every other plugin inherits, and PRIVATE so
+# it stops at this plugin's own sources rather than reaching the runner.
+target_compile_features(audio_service_win_plugin PRIVATE cxx_std_20)
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

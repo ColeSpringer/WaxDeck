@@ -17,7 +17,7 @@ part 'entity_card.g.dart';
 /// * [title] - Display title - the album, artist, show, or book name.
 /// * [artist] - The context line: an album's or book's artist, a show's author. Absent for an artist (whose title is the name) and wherever the catalog has none. 
 /// * [year] - Release year, where the entity carries one.
-/// * [itemCount] - Member items: an album's tracks, a playlist's entries, a show's episodes, an artist's tracks. Absent where counting costs a read the card does not need. 
+/// * [itemCount] - Member items: an album's tracks, a playlist's entries, a show's episodes, an artist's tracks.  Absent in two cases, and both are deliberate. A smart playlist's count is not taken, because evaluating every stored rule to draw a card is work a listing row skips too. And a catalog entity's count is catalog-wide rather than scoped to what the caller may see, so it is answered only to a caller who can see the whole library - a card advertising nine tracks that opens onto three would be worse than a card with no count on it. 
 @BuiltValue()
 abstract class EntityCard implements Built<EntityCard, EntityCardBuilder> {
   /// The type-prefixed PID this card answers for.
@@ -41,7 +41,7 @@ abstract class EntityCard implements Built<EntityCard, EntityCardBuilder> {
   @BuiltValueField(wireName: r'year')
   int? get year;
 
-  /// Member items: an album's tracks, a playlist's entries, a show's episodes, an artist's tracks. Absent where counting costs a read the card does not need. 
+  /// Member items: an album's tracks, a playlist's entries, a show's episodes, an artist's tracks.  Absent in two cases, and both are deliberate. A smart playlist's count is not taken, because evaluating every stored rule to draw a card is work a listing row skips too. And a catalog entity's count is catalog-wide rather than scoped to what the caller may see, so it is answered only to a caller who can see the whole library - a card advertising nine tracks that opens onto three would be worse than a card with no count on it. 
   @BuiltValueField(wireName: r'itemCount')
   int? get itemCount;
 

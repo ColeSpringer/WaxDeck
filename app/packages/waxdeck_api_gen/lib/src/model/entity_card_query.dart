@@ -12,10 +12,10 @@ part 'entity_card_query.g.dart';
 /// The entity PIDs to resolve.
 ///
 /// Properties:
-/// * [pids] - Type-prefixed entity PIDs, in the order the answers should come back in. Duplicates answer once per occurrence, so a caller's list maps positionally onto the response it can still resolve. 
+/// * [pids] - Type-prefixed entity PIDs, in the order the answers should come back in. Duplicates answer once per occurrence.  The response preserves this order but not these positions: a PID that cannot be resolved is omitted, so the two lists line up only when everything resolved. Match a card to its handle by `pid`, never by index. 
 @BuiltValue()
 abstract class EntityCardQuery implements Built<EntityCardQuery, EntityCardQueryBuilder> {
-  /// Type-prefixed entity PIDs, in the order the answers should come back in. Duplicates answer once per occurrence, so a caller's list maps positionally onto the response it can still resolve. 
+  /// Type-prefixed entity PIDs, in the order the answers should come back in. Duplicates answer once per occurrence.  The response preserves this order but not these positions: a PID that cannot be resolved is omitted, so the two lists line up only when everything resolved. Match a card to its handle by `pid`, never by index. 
   @BuiltValueField(wireName: r'pids')
   BuiltList<String> get pids;
 

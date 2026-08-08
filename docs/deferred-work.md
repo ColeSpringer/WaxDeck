@@ -317,6 +317,24 @@ here waits on upstream.
 
 ## Infrastructure
 
+- `[in-repo]` **The Windows plugin targets still compile as C++17, with
+  one target lifted out of it.** `apply_standard_settings` is Flutter's
+  stock template function and pins `cxx_std_17`; eleven third-party
+  plugins and the runner inherit it, warnings-as-errors (`/W4 /WX`)
+  included. `audio_service_win` had to leave C++17 because C++/WinRT
+  falls back to the deprecated `<experimental/coroutine>` there and
+  current MSVC refuses to compile it, so that one target is raised to
+  C++20 privately in `app/app/windows/CMakeLists.txt` rather than the
+  shared function being moved. Raising the floor for everything is the
+  tidier end state, but under `/WX` a standard bump turns any fresh
+  C++20 deprecation - implicit `this` capture in `[=]`, `u8""` becoming
+  `char8_t`, deprecated `volatile` compound assignment - into a build
+  failure inside sources nobody here owns. Ten of those eleven compile
+  today, and the likeliest to trip is `media_kit_libs_windows_audio`,
+  untouched upstream since September 2023; expect to deal with it, or
+  replace it, in the same pass. Deferred so it happens deliberately
+  rather than while the packaging jobs are already red.
+
 - `[in-repo]` **The app installs no top-level error handler, so the
   defects its controllers deliberately rethrow reach nothing.** Every
   paged controller catches the expected transport failure, keeps what it

@@ -22,8 +22,8 @@ part 'album_detail.g.dart';
 /// * [catalogNumber] - The label's catalog number for this release.
 /// * [media] - What the release was pressed on, as tagged - \"CD\", \"2xVinyl\", \"Digital Media\". Stored as written: a scan keeps the tag verbatim, so this is a description rather than an enum. 
 /// * [country] - Release country, as tagged. A scan stores the tag verbatim, so this can hold a value an edit would refuse (\"US & Europe\") as well as a plain ISO code. 
-/// * [itemCount] - Tracks on the release, within the caller's libraries.
-/// * [totalDurationMs] - Total running time of those tracks, in milliseconds.
+/// * [itemCount] - Tracks on the release as the catalog holds it. Absent for a caller with restricted library visibility, because the count is not scoped to their grant and a number larger than what they can open would be worse than none. 
+/// * [totalDurationMs] - Total running time of those tracks, in milliseconds. Absent alongside `itemCount`, and for its reason. 
 @BuiltValue()
 abstract class AlbumDetail implements Built<AlbumDetail, AlbumDetailBuilder> {
   /// Type-prefixed album PID.
@@ -70,11 +70,11 @@ abstract class AlbumDetail implements Built<AlbumDetail, AlbumDetailBuilder> {
   @BuiltValueField(wireName: r'country')
   String? get country;
 
-  /// Tracks on the release, within the caller's libraries.
+  /// Tracks on the release as the catalog holds it. Absent for a caller with restricted library visibility, because the count is not scoped to their grant and a number larger than what they can open would be worse than none. 
   @BuiltValueField(wireName: r'itemCount')
   int? get itemCount;
 
-  /// Total running time of those tracks, in milliseconds.
+  /// Total running time of those tracks, in milliseconds. Absent alongside `itemCount`, and for its reason. 
   @BuiltValueField(wireName: r'totalDurationMs')
   int? get totalDurationMs;
 
