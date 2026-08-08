@@ -351,6 +351,33 @@ const baselineSchema = `
 		created_by    TEXT    NOT NULL DEFAULT '',
 		created_at_ns INTEGER NOT NULL
 	);
+	-- Songs a listener caught on the air and means to hunt down.
+	-- Deliberately not items: nothing here is in the library, so
+	-- nothing here plays, and the rows exist to be acquired and
+	-- crossed off. identity_key is what makes the heart idempotent
+	-- and what one indexed read per play-info poll asks for; the
+	-- station and the announced line are snapshots, so a row outlives
+	-- the station being renamed or removed. The cover is a snapshot
+	-- too: whatever the artwork ladder held at save time, copied into
+	-- the row so the list never turns into a pile of lookups against
+	-- a rung an operator may have switched off. It is excluded from
+	-- every listing SELECT, so only the art endpoint pays for it.
+	CREATE TABLE radio_saved_songs (
+		id            TEXT    PRIMARY KEY,
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		identity_key  TEXT    NOT NULL,
+		raw_line      TEXT    NOT NULL,
+		artist        TEXT    NOT NULL DEFAULT '',
+		title         TEXT    NOT NULL DEFAULT '',
+		station_pid   TEXT    NOT NULL DEFAULT '',
+		station_name  TEXT    NOT NULL DEFAULT '',
+		art           BLOB,
+		art_mime      TEXT    NOT NULL DEFAULT '',
+		art_etag      TEXT    NOT NULL DEFAULT '',
+		created_at_ns INTEGER NOT NULL,
+		UNIQUE (user_id, identity_key)
+	);
+	CREATE INDEX radio_saved_songs_by_user ON radio_saved_songs (user_id, id DESC);
 	CREATE TABLE scrobble_connections (
 		user_id            TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		service            TEXT    NOT NULL,

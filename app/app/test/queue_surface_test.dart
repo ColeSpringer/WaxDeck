@@ -1,11 +1,16 @@
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_panel.dart';
 import 'package:waxdeck/src/queue/queue_screen.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/queue/queue_state.dart' as queue_state;
+import 'package:waxdeck/src/queue/queue_view.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -69,6 +74,32 @@ Future<ProviderContainer> _pump(
   );
   await tester.pumpAndSettle();
   return container;
+}
+
+/// The queue screen over a router arranged the way the app arranges it,
+/// which the plain [routedHost] cannot be: the key map has to sit inside
+/// the router and above the navigator the screen is on, and a shell
+/// route is where the app satisfies both.
+Widget _keyboardHost(Widget screen) {
+  final router = GoRouter(
+    initialLocation: '/under-test/queue',
+    routes: <RouteBase>[
+      ShellRoute(
+        builder: (context, state, child) => CommandShortcuts(child: child),
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/under-test',
+            builder: (context, state) => const Scaffold(),
+            routes: <RouteBase>[
+              GoRoute(path: 'queue', builder: (context, state) => screen),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+  addTearDown(router.dispose);
+  return MaterialApp.router(routerConfig: router);
 }
 
 List<String> _rowTitles(WidgetTester tester) => tester
@@ -295,6 +326,418 @@ void main() {
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.queueClear));
       await tester.pumpAndSettle();
       expect(container.read(queueControllerProvider).isEmpty, isTrue);
+    });
+  });
+
+  group('picking a set of up-next rows', () {
+    /// The queue ids of the entries at [positions].
+    List<String> idsAt(ProviderContainer container, List<int> positions) {
+      final entries = container.read(queueControllerProvider).entries;
+      return [for (final at in positions) entries[at].queueId];
+    }
+
+    /// A press and hold on one up-next row, which is the way in.
+    ///
+    /// `warnIfMissed` off throughout this group: the row's identifier
+    /// sits on its content region, a wrapper the hit test walks past
+    /// rather than into, so the warning is about the finder rather than
+    /// about the gesture. What proves each press landed is the count the
+    /// selection bar draws.
+    Future<void> longPress(WidgetTester tester, String queueId) async {
+      await tester.longPress(
+        find.bySemanticsIdentifier(SemanticsIds.queueEntry(queueId)),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a long press starts a selection and the bar counts it', (
+      tester,
+    ) async {
+      final container = await _pump(tester);
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+        'tr-3',
+        'tr-4',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      // Nothing picked means no bar: an empty set is not a mode.
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.queueSelectionRemove),
+        findsNothing,
+      );
+
+      await longPress(tester, idsAt(container, [1]).single);
+      expect(find.text('1 selected'), findsOneWidget);
+
+      // The current entry is out of scope: the batch verbs are about
+      // what has not played yet.
+      expect(
+        find.bySemanticsIdentifier(
+          SemanticsIds.queueEntrySelect(idsAt(container, [0]).single),
+        ),
+        findsNothing,
+      );
+
+      // While selecting, a tap picks rather than jumps.
+      await tester.tap(
+        find.bySemanticsIdentifier(
+          SemanticsIds.queueEntry(idsAt(container, [3]).single),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('2 selected'), findsOneWidget);
+      expect(container.read(queueControllerProvider).currentIndex, 0);
+
+      // And the checkbox is its own control beside the row.
+      await tester.tap(
+        find.bySemanticsIdentifier(
+          SemanticsIds.queueEntrySelect(idsAt(container, [3]).single),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('1 selected'), findsOneWidget);
+    });
+
+    testWidgets('the bar removes the set and moves it in one go', (
+      tester,
+    ) async {
+      final container = await _pump(tester);
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+        'tr-3',
+        'tr-4',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      await longPress(tester, idsAt(container, [2]).single);
+      await longPress(tester, idsAt(container, [3]).single);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.queueSelectionTop),
+      );
+      await tester.pumpAndSettle();
+
+      // Gathered at the top of up-next, under what is playing, in their
+      // own order - and the selection survives, so a second move works.
+      expect(container.read(queueControllerProvider).pids, [
+        'tr-1',
+        'tr-3',
+        'tr-4',
+        'tr-2',
+      ]);
+      expect(find.text('2 selected'), findsOneWidget);
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.queueSelectionBottom),
+      );
+      await tester.pumpAndSettle();
+      expect(container.read(queueControllerProvider).pids, [
+        'tr-1',
+        'tr-2',
+        'tr-3',
+        'tr-4',
+      ]);
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.queueSelectionRemove),
+      );
+      await tester.pumpAndSettle();
+
+      // Removing clears the selection: what was picked is gone.
+      expect(container.read(queueControllerProvider).pids, ['tr-1', 'tr-2']);
+      expect(find.textContaining('selected'), findsNothing);
+    });
+
+    testWidgets('shift+click extends a range from the last row touched', (
+      tester,
+    ) async {
+      final container = await _pump(tester);
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+        'tr-3',
+        'tr-4',
+        'tr-5',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      Future<void> shiftTap(String queueId) async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.queueEntry(queueId)),
+          // The row's identifier sits on its content region, which is a
+          // wrapper the hit test walks past rather than into. What proves
+          // the tap landed is the count below.
+          warnIfMissed: false,
+        );
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+        await tester.pumpAndSettle();
+      }
+
+      // The first shift+click is a way *into* selection: the row becomes
+      // the anchor and the range is itself, rather than the gesture
+      // doing nothing until something is already picked.
+      await shiftTap(idsAt(container, [1]).single);
+      expect(find.text('1 selected'), findsOneWidget);
+      // Nothing jumped: a plain click is what plays a row.
+      expect(container.read(queueControllerProvider).currentIndex, 0);
+
+      // And the second covers everything between the anchor and it,
+      // in either direction.
+      await shiftTap(idsAt(container, [4]).single);
+      expect(find.text('4 selected'), findsOneWidget);
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.queueSelectionRemove),
+      );
+      await tester.pumpAndSettle();
+      expect(container.read(queueControllerProvider).pids, ['tr-1']);
+    });
+
+    // Where a dragged block lands, at the edges of the coordinate space
+    // the reorderable list hands out. `onReorderItem` has already
+    // subtracted one for the row leaving its old slot - it does so
+    // whenever the drop is below the drag origin, which a drop past the
+    // last row always is - so `to` tops out at one less than the row
+    // count, and the anchor it looks up is always inside the list.
+    test('a drop target is resolved at both ends of the list', () {
+      // Named through the queue's own library: `waxdeck_data` exports a
+      // `QueueEntry` too - the persisted row - so the bare name is
+      // ambiguous in this file.
+      final entries = [
+        for (final id in ['q0', 'q1', 'q2', 'q3'])
+          queue_state.QueueEntry(queueId: id, pid: 'tr-$id'),
+      ];
+      const upNext = ['q1', 'q2', 'q3'];
+      int target(Set<String> moving, int from, int to) => queueDropTarget(
+        entries: entries,
+        currentIndex: 0,
+        upNextIds: upNext,
+        moving: moving,
+        from: from,
+        to: to,
+      );
+
+      // The far end: three up-next rows, so `to` arrives as 2 at most.
+      // One past that is what a raw drop index would be, and it never
+      // reaches here - the list subtracts it away first.
+      expect(target({'q1'}, 0, 2), 3);
+      // The top of up-next, which is the entry after the current one.
+      expect(target({'q1'}, 0, 0), 1);
+      // A block whose every anchor is travelling with it walks off the
+      // front of the list and lands at the top, rather than reading past
+      // it.
+      expect(target({'q1', 'q2', 'q3'}, 0, 2), 1);
+      // And one that lands after a row staying put sits behind it.
+      expect(target({'q1', 'q3'}, 0, 1), 2);
+    });
+
+    testWidgets('a selected block dragged to the end lands there', (
+      tester,
+    ) async {
+      // The same edge through the real widget: a synthetic drag past the
+      // last row is what produces the largest index the list ever hands
+      // out, and nothing about resolving it may read off the end.
+      final container = await _pump(tester);
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+        'tr-3',
+        'tr-4',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      await longPress(tester, idsAt(container, [1]).single);
+      await longPress(tester, idsAt(container, [2]).single);
+
+      final handle = find.bySemanticsIdentifier(
+        SemanticsIds.queueEntryDrag(idsAt(container, [1]).single),
+      );
+      final gesture = await tester.startGesture(tester.getCenter(handle));
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveBy(const Offset(0, 400));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // The whole set travelled, contiguous and in its own order.
+      expect(container.read(queueControllerProvider).pids, [
+        'tr-1',
+        'tr-4',
+        'tr-2',
+        'tr-3',
+      ]);
+    });
+
+    testWidgets('un-ticking the last row leaves no anchor behind', (
+      tester,
+    ) async {
+      final container = await _pump(tester);
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+        'tr-3',
+        'tr-4',
+        'tr-5',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      // In and straight back out through the row, rather than through
+      // Clear. Both leave the surface not selecting, so both have to
+      // leave the next shift+click with nothing to extend from.
+      final second = idsAt(container, [2]).single;
+      await longPress(tester, second);
+      await longPress(tester, second);
+      expect(find.textContaining('selected'), findsNothing);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.tap(
+        find.bySemanticsIdentifier(
+          SemanticsIds.queueEntry(idsAt(container, [4]).single),
+        ),
+        warnIfMissed: false,
+      );
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.pumpAndSettle();
+
+      // Just the row clicked - not a range running back to a row that
+      // was un-ticked out of the previous selection.
+      expect(find.text('1 selected'), findsOneWidget);
+    });
+
+    testWidgets('a swipe is inert while a set is picked', (tester) async {
+      final container = await _pump(tester);
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+        'tr-3',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      await longPress(tester, idsAt(container, [1]).single);
+      await tester.drag(
+        find.bySemanticsIdentifier(
+          SemanticsIds.queueEntry(idsAt(container, [2]).single),
+        ),
+        const Offset(500, 0),
+      );
+      await tester.pumpAndSettle();
+
+      // The row-shaped verbs belong to the bar while a set is picked, and
+      // a swipe landing on a checkbox is the likeliest accident there is.
+      expect(container.read(queueControllerProvider).pids, [
+        'tr-1',
+        'tr-2',
+        'tr-3',
+      ]);
+    });
+
+    testWidgets('the clear button and Escape both end the selection', (
+      tester,
+    ) async {
+      final container = await _pump(tester);
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+        'tr-3',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      await longPress(tester, idsAt(container, [1]).single);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.queueSelectionClear),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('selected'), findsNothing);
+    });
+
+    testWidgets('Escape ends the selection, and only while there is one', (
+      tester,
+    ) async {
+      // Over a router arranged the way the app arranges it: the key map
+      // has to be inside the router and above the navigator, which is
+      // what the plain host cannot give.
+      tester.view.physicalSize = const Size(500, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final container = ProviderContainer(
+        overrides: [
+          repositoryProvider.overrideWithValue(FakeRepository()),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: _keyboardHost(const QueueScreen()),
+        ),
+      );
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+        'tr-3',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      // Registered so it prints in the palette and the shortcut sheet
+      // for free, which a local key map would not.
+      container.listen(commandRegistryProvider, (_, _) {});
+      await tester.pumpAndSettle();
+      expect(
+        container.read(commandRegistryProvider).map((c) => c.id),
+        contains('queue-clear-selection'),
+      );
+
+      await longPress(tester, idsAt(container, [1]).single);
+      expect(find.text('1 selected'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('selected'), findsNothing);
+      // Still on the queue: Escape ended a mode rather than the screen.
+      expect(find.byType(QueueScreen), findsOneWidget);
+    });
+
+    testWidgets('the same selection drives the panel', (tester) async {
+      // One provider behind both surfaces: the panel and the screen are
+      // the same queue, so picking rows on one is picking them on the
+      // other.
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final container = ProviderContainer(
+        overrides: [
+          repositoryProvider.overrideWithValue(FakeRepository()),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: routedHost(const QueuePanel()),
+        ),
+      );
+      container.read(queueControllerProvider.notifier).playNow([
+        'tr-1',
+        'tr-2',
+        'tr-3',
+      ], source: _album);
+      await tester.pumpAndSettle();
+
+      await tester.longPress(
+        find.bySemanticsIdentifier(
+          SemanticsIds.queueEntry(idsAt(container, [1]).single),
+        ),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('1 selected'), findsOneWidget);
+      expect(container.read(queueSelectionProvider), hasLength(1));
     });
   });
 

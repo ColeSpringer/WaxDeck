@@ -30,6 +30,10 @@ const (
 	PrefixTrash        = "th"
 	PrefixShare        = "sh"
 	PrefixBookmark     = "bm"
+	// PrefixRadioSaved names a song kept off the air. Its own prefix
+	// because it is deliberately not an item: nothing behind one is in
+	// the library, and nothing behind one plays.
+	PrefixRadioSaved = "rw"
 )
 
 // prefixForKind maps an item kind to its API prefix.

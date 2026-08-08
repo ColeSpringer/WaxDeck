@@ -311,6 +311,99 @@ class QueueController extends Notifier<QueueState> {
     );
   }
 
+  /// Drops every entry in [queueIds] in one rebuild.
+  ///
+  /// One state write rather than a loop of [removeAt], because a loop
+  /// invalidates its own indices after the first removal and rebuilds
+  /// the whole surface per row. The current entry is dropped from the
+  /// set defensively: multi-select is offered on the up-next rows only,
+  /// and taking the queue out from under what is playing is not
+  /// something a batch verb should be able to do by accident.
+  void removeSet(Set<String> queueIds) {
+    if (queueIds.isEmpty || state.isEmpty) return;
+    final currentId = state.currentEntry!.queueId;
+    final dropping = queueIds.where((id) => id != currentId).toSet();
+    final entries = [
+      for (final e in state.entries)
+        if (!dropping.contains(e.queueId)) e,
+    ];
+    // Never empty by construction: the current entry is held back above,
+    // so a set naming the whole queue leaves what is playing behind.
+    // Emptying the queue is [clear]'s job and stays a deliberate verb.
+    if (entries.length == state.length) return;
+    state = state.copyWith(
+      entries: entries,
+      sourceOrder: [
+        for (final id in state.sourceOrder)
+          if (!dropping.contains(id)) id,
+      ],
+      // Re-derived rather than adjusted: the removals can straddle the
+      // current entry, and counting them is one more thing to get wrong
+      // than looking the entry back up.
+      currentIndex: entries.indexWhere((e) => e.queueId == currentId),
+    );
+  }
+
+  /// Gathers every entry in [queueIds] and lands the block at [to].
+  ///
+  /// The set arrives wherever it was and leaves contiguous, keeping its
+  /// own play order: a selection of tracks 1, 4, and 7 moved to the top
+  /// arrives as 1, 4, 7 rather than interleaved with what it passed.
+  ///
+  /// [to] is an index into the queue **without the moved entries**, the
+  /// same convention [reorder] documents, and clamps - so the whole
+  /// length means the end.
+  ///
+  /// A move that lands the set where it already sits writes nothing, for
+  /// the reason [reorder] guards its own version: the source order is
+  /// what un-shuffling restores, and rebuilding it for a move nobody can
+  /// see changes where shuffle-off puts things back.
+  ///
+  /// Which entries a caller may move is the caller's to decide, as it is
+  /// for [reorder] - the surface offers this on the up-next rows. Unlike
+  /// [removeSet] there is no guard on the current entry, because moving
+  /// what is playing is coherent where removing it is not: the index is
+  /// re-derived from the entry rather than counted.
+  void moveSetTo(Set<String> queueIds, int to) {
+    if (queueIds.isEmpty || state.isEmpty) return;
+    final moving = [
+      for (final e in state.entries)
+        if (queueIds.contains(e.queueId)) e,
+    ];
+    if (moving.isEmpty) return;
+    final currentId = state.currentEntry!.queueId;
+    final rest = [
+      for (final e in state.entries)
+        if (!queueIds.contains(e.queueId)) e,
+    ];
+    final at = to.clamp(0, rest.length);
+    final entries = [...rest]..insertAll(at, moving);
+    // Nothing moved, so nothing is written. Compared by play order
+    // rather than by the target index: a set already contiguous at the
+    // target arrives at the same arrangement whichever arithmetic got
+    // it there.
+    if (Iterable<int>.generate(
+      entries.length,
+    ).every((i) => entries[i].queueId == state.entries[i].queueId)) {
+      return;
+    }
+    // The source order follows the play order, as it does for a single
+    // hand-placed entry: the block sits after whatever now precedes it,
+    // so turning shuffle off keeps the placement.
+    final movedIds = <String>{for (final e in moving) e.queueId};
+    final sourceOrder = [
+      for (final id in state.sourceOrder)
+        if (!movedIds.contains(id)) id,
+    ];
+    final anchor = at == 0 ? -1 : sourceOrder.indexOf(rest[at - 1].queueId);
+    sourceOrder.insertAll(anchor + 1, [for (final e in moving) e.queueId]);
+    state = state.copyWith(
+      entries: entries,
+      sourceOrder: sourceOrder,
+      currentIndex: entries.indexWhere((e) => e.queueId == currentId),
+    );
+  }
+
   /// Moves the entry at [from] so it lands at [to] in play order.
   ///
   /// Plain list semantics: the entry is removed and re-inserted, so [to]

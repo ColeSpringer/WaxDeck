@@ -649,6 +649,30 @@ abstract interface class WaxDeckRepository {
   /// a station whose titles never resolve.
   String radioNowPlayingArtUrlFor(String pid, String key);
 
+  /// `GET /radio/saved`: the caller's own saved songs, newest first.
+  Future<RadioSavedSongPage> listRadioSavedSongs({String? cursor, int? limit});
+
+  /// `POST /radio/saved`: keeps the announcement the listener is looking
+  /// at. [nowPlaying] is the line they saw rather than whatever the
+  /// station is announcing by the time the request lands, because a
+  /// station rolls over between polls. Idempotent on the song's
+  /// identity, so a second save answers the row already held - which is
+  /// what makes the heart a toggle.
+  Future<RadioSavedSong> saveRadioSong({
+    required String stationPid,
+    required String nowPlaying,
+  });
+
+  /// `DELETE /radio/saved/{pid}`: drops a saved song. Dropping one that
+  /// is already gone succeeds.
+  Future<void> deleteRadioSavedSong(String pid);
+
+  /// The snapshot cover for the saved song at [pid], resolved the way
+  /// [artUrlFor] resolves a cover. Ask only when
+  /// [RadioSavedSong.hasArt]: the endpoint 404s otherwise, and a row
+  /// with no cover is the ordinary case rather than a failure.
+  String radioSavedArtUrlFor(String pid);
+
   /// `GET /radio/directory`: searches the public station directory.
   Future<List<RadioDirectoryEntry>> searchRadioDirectory(
     String query, {
@@ -2647,6 +2671,8 @@ class WaxDeckClient implements WaxDeckRepository {
       nowPlaying: info.nowPlaying,
       nowPlayingItemPid: info.nowPlayingItemPid,
       nowPlayingArtKey: info.nowPlayingArtKey,
+      nowPlayingSaved: info.nowPlayingSaved ?? false,
+      nowPlayingSavedPid: info.nowPlayingSavedPid,
     );
   });
 
@@ -2661,6 +2687,44 @@ class WaxDeckClient implements WaxDeckRepository {
     _baseUrl,
     '/api/v1/radio/stations/${Uri.encodeComponent(pid)}'
     '/now-playing-art?v=${Uri.encodeQueryComponent(key)}',
+  );
+
+  @override
+  Future<RadioSavedSongPage> listRadioSavedSongs({
+    String? cursor,
+    int? limit,
+  }) => _guard(() async {
+    final response = await _gen.getRadioApi().listRadioSavedSongs(
+      cursor: cursor,
+      limit: limit,
+    );
+    return radioSavedSongPageFromGen(_require(response.data));
+  });
+
+  @override
+  Future<RadioSavedSong> saveRadioSong({
+    required String stationPid,
+    required String nowPlaying,
+  }) => _guard(() async {
+    final response = await _gen.getRadioApi().saveRadioSong(
+      radioSavedSongCreate: gen.RadioSavedSongCreate(
+        (b) => b
+          ..stationPid = stationPid
+          ..nowPlaying = nowPlaying,
+      ),
+    );
+    return radioSavedSongFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> deleteRadioSavedSong(String pid) => _guard(() async {
+    await _gen.getRadioApi().deleteRadioSavedSong(pid: pid);
+  });
+
+  @override
+  String radioSavedArtUrlFor(String pid) => resolveMediaUrl(
+    _baseUrl,
+    '/api/v1/radio/saved/${Uri.encodeComponent(pid)}/art',
   );
 
   @override

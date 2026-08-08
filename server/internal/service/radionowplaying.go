@@ -123,7 +123,19 @@ func (l *Library) resolveNowPlayingItem(ctx context.Context, uc *UserCtx, statio
 	if !ok {
 		return ""
 	}
-	artist, title = normalizeRadioField(artist), normalizeRadioField(title)
+	return l.matchLibraryTrack(ctx, uc, artist, title)
+}
+
+// matchLibraryTrack looks an announced artist and title up in this
+// caller's library, answering a track pid or nothing.
+//
+// Split out from the resolution above because the saved-songs list runs
+// exactly this search against rows that were parsed once, months ago:
+// what marks a saved song "in your library now" has to be the same
+// judgement that drew its cover on the face, or the two surfaces would
+// disagree about whether the same announcement matches.
+func (l *Library) matchLibraryTrack(ctx context.Context, uc *UserCtx, rawArtist, rawTitle string) string {
+	artist, title := normalizeRadioField(rawArtist), normalizeRadioField(rawTitle)
 	// Both halves have to survive normalization. A title alone matches
 	// every cover version there is, and the artist is what makes the
 	// answer this recording - so an artist that normalized away (a name

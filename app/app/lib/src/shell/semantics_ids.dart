@@ -204,6 +204,7 @@ abstract final class SemanticsIds {
   static const String deckShuffle = 'deck-shuffle';
   static const String deckSkipBack = 'deck-skip-back';
   static const String deckSkipForward = 'deck-skip-forward';
+  static const String deckSaveSong = 'deck-save-song';
   static const String deckStar = 'deck-star';
   static const String deckVolume = 'deck-volume';
   static const String panel = 'panel';
@@ -215,10 +216,16 @@ abstract final class SemanticsIds {
       'queue-entry-remove-$queueId';
   static const String queueHistory = 'queue-history';
   static String queueHistoryEntry(Object id) => 'queue-history-$id';
+  static String queueEntrySelect(Object queueId) =>
+      'queue-entry-select-$queueId';
   static const String queueRepeat = 'queue-repeat';
   static const String queueReplaceUndo = 'queue-replace-undo';
   static String queueRestoreSession(Object id) => 'queue-restore-session-$id';
   static const String queueScreen = 'queue-screen';
+  static const String queueSelectionBottom = 'queue-selection-bottom';
+  static const String queueSelectionClear = 'queue-selection-clear';
+  static const String queueSelectionRemove = 'queue-selection-remove';
+  static const String queueSelectionTop = 'queue-selection-top';
   static const String queueShuffle = 'queue-shuffle';
 
   // desktop: The desktop shell surfaces: the mini player window and the deck bar's way into it. The tray has no semantics tree of its own.
@@ -384,6 +391,7 @@ abstract final class SemanticsIds {
   static String playerRegion(Object name) => 'player-region-$name';
   static const String playerRepeat = 'player-repeat';
   static const String playerRetry = 'player-retry';
+  static const String playerSaveSong = 'player-save-song';
   static const String playerSeek = 'player-seek';
   static const String playerShow = 'player-show';
   static const String playerShuffle = 'player-shuffle';
@@ -553,6 +561,11 @@ abstract final class SemanticsIds {
   static const String radioMute = 'radio-mute';
   static const String radioNameField = 'radio-name-field';
   static const String radioNowPlaying = 'radio-now-playing';
+  static const String radioSaved = 'radio-saved';
+  static String radioSavedEntry(Object pid) => 'radio-saved-entry-$pid';
+  static String radioSavedFind(Object pid) => 'radio-saved-find-$pid';
+  static const String radioSavedOpen = 'radio-saved-open';
+  static String radioSavedRemove(Object pid) => 'radio-saved-remove-$pid';
   static String radioSearchAdd(Object index) => 'radio-search-add-$index';
   static const String radioSearchField = 'radio-search-field';
   static const String radioSearchRun = 'radio-search-run';

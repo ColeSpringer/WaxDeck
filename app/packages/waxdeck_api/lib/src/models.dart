@@ -1769,6 +1769,8 @@ class RadioPlayInfo {
     this.nowPlaying,
     this.nowPlayingItemPid,
     this.nowPlayingArtKey,
+    this.nowPlayingSaved = false,
+    this.nowPlayingSavedPid,
   });
 
   final String url;
@@ -1792,6 +1794,78 @@ class RadioPlayInfo {
   /// - so it appears on a later poll rather than on the one that started
   /// it - and null forever while the operator has the rung switched off.
   final String? nowPlayingArtKey;
+
+  /// Whether the caller has already kept what the station is announcing,
+  /// so the heart draws filled. Riding the poll is what keeps it honest
+  /// across devices: a save made on the phone fills the desktop's heart
+  /// within one poll, and a rollover empties it.
+  final bool nowPlayingSaved;
+
+  /// The saved song's pid, present exactly when [nowPlayingSaved] is
+  /// true, so an untap needs no list fetch first.
+  final String? nowPlayingSavedPid;
+}
+
+/// One song a listener kept off the air.
+///
+/// Deliberately not a library item: nothing here plays, and the rows
+/// exist to be hunted down and crossed off. [inLibraryPid] is the
+/// crossing-off - a read-time match against the caller's own library,
+/// never stored, so a row saved before an album arrived marks itself the
+/// day it does.
+class RadioSavedSong {
+  const RadioSavedSong({
+    required this.pid,
+    required this.nowPlaying,
+    required this.stationName,
+    required this.heardAt,
+    required this.hasArt,
+    this.artist,
+    this.title,
+    this.stationPid,
+    this.inLibraryPid,
+  });
+
+  final String pid;
+
+  /// The announcement as the station sent it. Plain display text from an
+  /// untrusted host, and what a row draws when nothing parsed out of it.
+  final String nowPlaying;
+
+  /// The artist and song where the announced line split into them.
+  /// Absent is ordinary: stations announce in every shape there is.
+  ///
+  /// There is deliberately no album. ICY metadata is one line, so a row
+  /// naming an album would be guessing.
+  final String? artist;
+  final String? title;
+
+  /// The station it was heard on, absent once that station is gone from
+  /// the library - the row outlives it, because what was kept is the
+  /// song. [stationName] is the snapshot and is always there.
+  final String? stationPid;
+  final String stationName;
+
+  final DateTime heardAt;
+
+  /// A library track the server matched this row to, resolved at read
+  /// time. Present means the hunt is over; the match is best-effort text
+  /// and is a marker rather than a playable handle.
+  final String? inLibraryPid;
+
+  /// Whether a cover was snapshotted with this row, and so whether the
+  /// art endpoint has bytes. False is ordinary - draw a monogram.
+  final bool hasArt;
+}
+
+/// One keyset page of saved songs, newest first.
+class RadioSavedSongPage {
+  const RadioSavedSongPage({required this.songs, this.nextCursor});
+
+  final List<RadioSavedSong> songs;
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
 }
 
 /// One outbound scrobbling connection slot.

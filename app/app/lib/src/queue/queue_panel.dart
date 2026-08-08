@@ -20,22 +20,24 @@ class QueuePanel extends ConsumerWidget {
     final queued = ref.watch(
       queueControllerProvider.select((q) => q.isNotEmpty),
     );
-    return WaxSidePanel(
-      title: WaxPanel.queue.title,
-      semanticsId: SemanticsIds.panel,
-      closeSemanticsId: SemanticsIds.panelClose,
-      onClose: ref.read(sidePanelProvider.notifier).close,
-      actions: <Widget>[
-        if (queued)
-          WaxIconButton(
-            glyph: WaxIcons.delete,
-            label: 'Clear queue',
-            size: 18,
-            onPressed: ref.read(queueControllerProvider.notifier).clear,
-            semanticsId: SemanticsIds.queueClear,
-          ),
-      ],
-      child: CustomScrollView(slivers: queueSlivers(context, ref)),
+    return QueueCommands(
+      child: WaxSidePanel(
+        title: WaxPanel.queue.title,
+        semanticsId: SemanticsIds.panel,
+        closeSemanticsId: SemanticsIds.panelClose,
+        onClose: ref.read(sidePanelProvider.notifier).close,
+        actions: <Widget>[
+          if (queued)
+            WaxIconButton(
+              glyph: WaxIcons.delete,
+              label: 'Clear queue',
+              size: 18,
+              onPressed: ref.read(queueControllerProvider.notifier).clear,
+              semanticsId: SemanticsIds.queueClear,
+            ),
+        ],
+        child: CustomScrollView(slivers: queueSlivers(context, ref)),
+      ),
     );
   }
 }

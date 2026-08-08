@@ -200,6 +200,8 @@ class RadioPlayback {
     this.nowPlaying,
     this.nowPlayingItemPid,
     this.nowPlayingArtKey,
+    this.nowPlayingSaved = false,
+    this.nowPlayingSavedPid,
   });
 
   /// The station currently loaded through the engine, if any.
@@ -225,6 +227,30 @@ class RadioPlayback {
   /// either way. It changes with the announced title, which is what
   /// makes the image URL built from it change too.
   final String? nowPlayingArtKey;
+
+  /// Whether this listener has kept [nowPlaying], which is what the
+  /// heart draws. The server answers it on every poll, so a save made on
+  /// the phone fills the desktop's heart within fifteen seconds and a
+  /// rollover empties it.
+  final bool nowPlayingSaved;
+
+  /// The saved song's pid, so an untap needs no list fetch. Null while
+  /// [nowPlayingSaved] is only an optimistic tap that has not landed
+  /// yet - which is why the two are separate fields rather than one
+  /// nullable pid.
+  final String? nowPlayingSavedPid;
+
+  /// The same playback with the saved half replaced, which is all an
+  /// optimistic tap changes.
+  RadioPlayback withSaved({required bool saved, String? pid}) => RadioPlayback(
+    station: station,
+    starting: starting,
+    nowPlaying: nowPlaying,
+    nowPlayingItemPid: nowPlayingItemPid,
+    nowPlayingArtKey: nowPlayingArtKey,
+    nowPlayingSaved: saved,
+    nowPlayingSavedPid: pid,
+  );
 }
 
 /// Drives live radio through the shared audio engine. Radio has no
@@ -234,6 +260,21 @@ class RadioPlayback {
 class RadioPlaybackController extends Notifier<RadioPlayback> {
   Timer? _titlePoll;
   Timer? _firstTitleTick;
+
+  /// Which save tap the heart's state belongs to, and whether one is
+  /// still in flight. Together they keep a poll that crosses a tap - and
+  /// a tap that crosses a rollover - from putting the wrong answer on
+  /// the wrong song.
+  int _saveGen = 0;
+  bool _saving = false;
+
+  /// The save this announcement has in flight, so an untap that crosses
+  /// it has a row to remove rather than leaving one behind.
+  ///
+  /// Scoped to the line it belongs to: a rollover mid-flight means the
+  /// row being created is a different song's, and not the next tap's to
+  /// take back.
+  ({String line, Future<RadioSavedSong> save})? _pendingSave;
 
   /// Which tune owns the engine.
   ///
@@ -304,6 +345,8 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         nowPlaying: info.nowPlaying,
         nowPlayingItemPid: info.nowPlayingItemPid,
         nowPlayingArtKey: info.nowPlayingArtKey,
+        nowPlayingSaved: info.nowPlayingSaved,
+        nowPlayingSavedPid: info.nowPlayingSavedPid,
       );
       _startTitlePoll(station.pid);
     } on Object {
@@ -427,6 +470,8 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         nowPlaying: held.nowPlaying,
         nowPlayingItemPid: held.nowPlayingItemPid,
         nowPlayingArtKey: held.nowPlayingArtKey,
+        nowPlayingSaved: held.nowPlayingSaved,
+        nowPlayingSavedPid: held.nowPlayingSavedPid,
       );
       _startTitlePoll(station.pid);
       rethrow;
@@ -469,17 +514,124 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
       // visible tile, and the deck bar for the same words.
       if (info.nowPlaying == state.nowPlaying &&
           info.nowPlayingItemPid == state.nowPlayingItemPid &&
-          info.nowPlayingArtKey == state.nowPlayingArtKey) {
+          info.nowPlayingArtKey == state.nowPlayingArtKey &&
+          info.nowPlayingSaved == state.nowPlayingSaved &&
+          info.nowPlayingSavedPid == state.nowPlayingSavedPid) {
         return;
       }
+      // A tap still in flight outranks the poll that crossed it: the
+      // server has not seen the save yet, so adopting its answer would
+      // empty a heart the listener just filled and fill it again a
+      // moment later. Only the heart, though - the title, the match and
+      // the art key are the poll's to deliver, and holding the whole
+      // answer back froze what is playing for as long as a save took,
+      // which with no timeout on the client is as long as it takes.
+      //
+      // And only while the song has not moved: a rollover mid-save makes
+      // the poll's flags the new song's, which the in-flight tap knows
+      // nothing about and has no claim on.
+      final holdHeart = _saving && info.nowPlaying == state.nowPlaying;
       state = RadioPlayback(
         station: state.station,
         nowPlaying: info.nowPlaying,
         nowPlayingItemPid: info.nowPlayingItemPid,
         nowPlayingArtKey: info.nowPlayingArtKey,
+        nowPlayingSaved: holdHeart
+            ? state.nowPlayingSaved
+            : info.nowPlayingSaved,
+        nowPlayingSavedPid: holdHeart
+            ? state.nowPlayingSavedPid
+            : info.nowPlayingSavedPid,
       );
     } on WaxDeckApiException {
       // Metadata is decoration; playback carries on without it.
+    }
+  }
+
+  /// Keeps the announcement on screen, or drops the one already kept.
+  ///
+  /// Optimistic, because the heart is a toggle and a fifteen-second poll
+  /// is not a response time. The state flips first and reverts if the
+  /// call fails; the caller surfaces the message, since neither playing
+  /// surface can.
+  ///
+  /// The line sent is the one the listener is looking at rather than
+  /// whatever the station is announcing by the time the request lands: a
+  /// station rolls over between polls, and a save resolved server-side
+  /// against the live title would sometimes keep the next song.
+  Future<void> toggleSaveNowPlaying() async {
+    final station = state.station;
+    final line = state.nowPlaying;
+    if (station == null || line == null || line.isEmpty) return;
+    final generation = ++_saveGen;
+    // True from the tap until the call settles, so the title poll cannot
+    // overwrite a flip the server has not been told about yet.
+    _saving = true;
+    // The song this tap is about. A rollover mid-call means the answer
+    // belongs to a song nobody is looking at, so it is dropped rather
+    // than applied to whatever replaced it.
+    bool stillTheSameSong() =>
+        generation == _saveGen &&
+        state.station?.pid == station.pid &&
+        state.nowPlaying == line;
+
+    final held = state;
+    final wasSaved = held.nowPlayingSaved;
+    final heldPid = held.nowPlayingSavedPid;
+    state = held.withSaved(saved: !wasSaved);
+    try {
+      if (wasSaved) {
+        // An untap crossing its own save has no pid yet, so it waits for
+        // the row that save is creating. Leaving it instead would put
+        // the row on the server with nothing left pointing at it: the
+        // next poll finds it, fills the heart back in, and the song
+        // stays kept - the opposite of what the last tap asked for.
+        final pid = heldPid ?? await _pendingSavePID(line);
+        if (pid != null) {
+          await ref.read(repositoryProvider).deleteRadioSavedSong(pid);
+        }
+      } else {
+        final save = ref
+            .read(repositoryProvider)
+            .saveRadioSong(stationPid: station.pid, nowPlaying: line);
+        _pendingSave = (line: line, save: save);
+        try {
+          final song = await save;
+          if (stillTheSameSong()) {
+            state = state.withSaved(saved: true, pid: song.pid);
+          }
+        } finally {
+          // Only if it is still this save's turn: a later tap has
+          // already published its own.
+          if (_pendingSave?.save == save) _pendingSave = null;
+        }
+      }
+    } on Object {
+      if (stillTheSameSong()) {
+        state = state.withSaved(saved: wasSaved, pid: heldPid);
+      }
+      rethrow;
+    } finally {
+      if (generation == _saveGen) _saving = false;
+    }
+  }
+
+  /// The pid of the save in flight for [line], once it lands.
+  ///
+  /// Null when there is none, when the one in flight belongs to another
+  /// announcement, or when it failed - all three mean there is no row to
+  /// take back. A third tap inside one round trip is still the poll's to
+  /// settle: this pairs a tap with the save it crossed, not a run of
+  /// them with each other.
+  Future<String?> _pendingSavePID(String line) async {
+    final pending = _pendingSave;
+    if (pending == null || pending.line != line) return null;
+    try {
+      return (await pending.save).pid;
+    } on Object {
+      // The save the untap was waiting on failed, so nothing was stored.
+      // Its own caller reports it; this one has nothing to say.
+      return null;
     }
   }
 }

@@ -37,6 +37,7 @@ class DeckBarActions {
     this.onMute,
     this.onMore,
     this.onStar,
+    this.onSaveSong,
     this.onSeek,
   });
 
@@ -87,6 +88,15 @@ class DeckBarActions {
 
   final VoidCallback? onMore;
   final ValueChanged<bool>? onStar;
+
+  /// Keeps the song a live stream just named, or drops the one already
+  /// kept. Null hides the heart, which is the ordinary case: only radio
+  /// has an announcement to keep. It is drawn in the left zone beside
+  /// [onStar], so it exists only on the three-zone desktop bar - the
+  /// compact one has no slot for it, and the host wires this at sidebar
+  /// width for that reason.
+  final ValueChanged<bool>? onSaveSong;
+
   final ValueChanged<Duration>? onSeek;
 }
 
@@ -343,6 +353,24 @@ class DeckBar extends StatelessWidget {
                       size: 16,
                       onChanged: actions.onStar,
                       semanticsId: ids.star,
+                    ),
+                  ],
+                  // Radio's half of the same slot, beside the star and
+                  // under the same rule: a stream has no item to star,
+                  // and what it has instead is the song it just named.
+                  // The label says song, never favourite - the face's
+                  // star already means "pin this station".
+                  if (actions.onSaveSong != null) ...<Widget>[
+                    const SizedBox(width: WaxSpace.s8),
+                    WaxIconButton(
+                      glyph: WaxIcons.heart,
+                      label: now.songSaved
+                          ? 'Forget this song'
+                          : 'Save this song',
+                      size: 16,
+                      active: now.songSaved,
+                      semanticsId: ids.saveSong,
+                      onPressed: () => actions.onSaveSong!(!now.songSaved),
                     ),
                   ],
                   if (now.playing) ...<Widget>[

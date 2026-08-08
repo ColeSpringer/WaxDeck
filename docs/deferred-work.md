@@ -32,14 +32,20 @@ here waits on upstream.
   and settings surface shipped; the client still needs the
   distributor plugin wrapped behind a WaxDeck-owned interface and a
   real device to verify against. Blocked on hardware access.
-- `[in-repo]` **The queue surface has no multi-select.** Rows reorder by
-  drag (or by the move actions a screen reader gets), remove by swipe or
-  by their own button, and jump on tap - one at a time. Long-pressing to
-  select several and moving or dropping the set together is the half
-  that is not built, and neither is dragging a row out of a listing and
-  into the panel. Both are additions to `queueSlivers`, which is the one
-  body the panel and the `/queue` screen share, so either lands in both
-  at once. See ADR-0029.
+- `[in-repo]` **A row cannot be dragged from a listing into the queue
+  panel.** Multi-select landed (long press or a checkbox picks up-next
+  rows; the set removes, moves to top, moves to bottom, and travels
+  together under a drag), so what remains of ADR-0029's open half is the
+  other gesture: picking a row up on an album, artist, listing, or index
+  screen and dropping it on the panel. Pointer only when it lands -
+  `LongPressDraggable` collides with the long press that starts a
+  selection, and touch already has a path (pick the rows, or "Add to
+  queue" from the row's own menu), so a touch drag would be a second
+  gesture for a job that has one. Where a drop lands is the other
+  decision: appending is the cheap answer and inserting at the row under
+  the pointer wants a sliver-relative hit test, which is real work.
+  Panel only either way, since the `/queue` screen covers what would be
+  dragged from. See ADR-0029.
 - `[in-repo]` **"Appears on" reads items where it wants album buckets.**
   The shelf draws album cards but the only scoped read available is
   `listItems(facet: credit-artist)`, so it downloads item rows and
@@ -259,94 +265,12 @@ here waits on upstream.
   and "how far ahead" are numbers worth setting against the perf run's
   measurements rather than before them - so take it with the entry above.
 
-- `[in-repo]` **A song heard on the radio cannot be kept.** The radio
-  face names what the station is playing and can even search the
-  library for it, but a listener who likes it has nowhere to put it:
-  leave the player, remember the line, hope. Wanted, two halves of one
-  feature. A heart on the playing surfaces - the full radio face and
-  the radio deck bar - that saves the announced song to a per-user
-  list, drawn filled when the current announcement is already on it.
-  And the list itself, reachable from the radio hub: the songs a
-  listener caught on air and means to hunt down, a playlist in shape
-  but deliberately not in kind - nothing on it is in the library, so
-  nothing on it plays, and the rows exist to be acquired and crossed
-  off. (Naming is open. "Radio wishlist" was the working title;
-  "Saved from the radio" is the discoverable plain name; "Airchecks"
-  is the radio-native word - a recording made off the air - and fits
-  the dial-and-platter vocabulary if a glossary term is acceptable.)
-
-  What an entry can honestly carry: the announced line as the station
-  sent it (`nowPlaying`, best-effort text from an untrusted host), the
-  parsed artist and title where `parseRadioTitle` recognises the shape
-  (radioscrobble.go - the strict parse scrobbling already trusts), the
-  station, and when it was heard. **Album is not in the stream**: ICY
-  metadata is one line, so an album reaches an entry only two ways,
-  both best-effort - the announced track matched this library
-  (`nowPlayingItemPid`, the case a wishlist needs least), or the
-  external-art lookup is widened to report the release it picked
-  beside the cover (`radioArtResolver.FrontCover` returns bytes and
-  mime today; the lookup already resolves a MusicBrainz release to
-  reach the archive and returns only the picture). Absent-by-default
-  album is the design, not a gap.
-
-  Artwork is a snapshot problem. Whatever cover exists at save time
-  lives in the ladder's caches: the matched item's own art, or the
-  in-memory `radioArtCache` bytes keyed by normalized artist+title -
-  bounded, evicted oldest-first, gone on restart - or nothing. So the
-  save copies what it has when the heart is tapped (a blob beside the
-  row, or a sidecar under the file-write rule), or the list accepts
-  monograms; "resolve it again later" quietly turns the list into a
-  pile of lookups against a rung most operators keep off
-  (`radioExternalArt` defaults off, so most entries will have no art,
-  and the monogram row is a designed state).
-
-  Where it lives: a per-user table in `server/internal/db` beside
-  `radio_stations`, a new pid prefix, keyset pagination per the
-  convention, and a bounded size with a `conflict` refusal like the
-  station library's 500 cap. Not a `Prefs` field - favourites are a
-  bounded pid list and this is unbounded rows with fields. Endpoints
-  join `api/spec/radio.yaml`. **No upstream work**: waxbin holds
-  library items and these deliberately are not items; the parse, the
-  art ladder, the store, and every surface are WaxDeck-owned. Do not
-  file an ask.
-
-  The heart's filled state rides the poll that already exists: a
-  `nowPlayingSaved` flag on `RadioPlayInfo` beside `nowPlayingArt`,
-  computed per caller per poll - membership is one indexed lookup on
-  the normalized artist+title identity (the `radioArtKey` shape).
-  Play-info is polled every fifteen seconds during playback, so the
-  heart stays honest across devices for free: a save made on the
-  phone fills the desktop's heart on its next poll. Saving is
-  idempotent on that same identity (the raw line where nothing
-  parsed), so a filled heart's tap removes and a double tap never
-  duplicates; an announcement that does not parse still saves as its
-  raw line rather than refusing the tap.
-
-  Client seams, all present. The full face's title block already
-  holds `_FindInLibrary` (radio_face.dart) and the heart sits beside
-  it; the bar's half is `_RadioDeckBar` (deck_bar_host.dart), where
-  room is the constraint and the heart may reasonably appear only
-  where a wide layout gives it space. The hub (radio_screen.dart)
-  takes the list's entry point, and the list screen is a declared
-  route in the table (`go`: a stranger opening the location gets
-  their own list, as with `/queue`); ids join `app/semantics-ids/`
-  and the e2e driver's Radio surface. `WaxIcons.heart` is already in
-  the vendored set, so no icon regeneration. One wording trap: the
-  face already carries a star meaning "pin the station to the dial",
-  so the heart's label must say song, not favourite, or the two
-  affordances blur.
-
-  Decisions recorded so they are not re-litigated. Saving a song the
-  server matched to the library is allowed: the match is a
-  best-effort text lookup and never authoritative, and refusing the
-  tap on its say-so would lose real saves. The list resolves its rows
-  against the library at read time and marks the ones that now match
-  ("in your library now", the lookup `RadioNowPlayingItem` already
-  runs), because the list exists to be worked through and a row that
-  crosses itself off is the feature working. Per-row actions start at
-  find-in-library (the search shortcut the face already has) and
-  remove; handing a row to Add-from-URL or the identify search is a
-  later nicety over surfaces that already exist.
+- `[in-repo]` **The saved-radio list has no way in from a row.** Songs
+  kept off the air list, mark themselves once the library holds them,
+  search, and remove. What a row cannot do is hand itself to
+  Add-from-URL or to the review queue's identify search - both are
+  surfaces that already exist, and neither has a caller from here. A
+  nicety over shipped machinery rather than new machinery.
 
 ## Connect and casting
 
@@ -407,6 +331,25 @@ here waits on upstream.
   gpodder) are the automated stand-in and fail on missing endpoints.
 
 ## Infrastructure
+
+- `[in-repo]` **The app installs no top-level error handler, so the
+  defects its controllers deliberately rethrow reach nothing.** Every
+  paged controller catches the expected transport failure, keeps what it
+  has, and rethrows anything else - a decode failure, a bad cast - with
+  a comment saying the error is left to "reach the zone's handler
+  instead of vanishing here". There is no such handler: `main.dart` sets
+  neither `PlatformDispatcher.instance.onError` nor `FlutterError.onError`
+  and runs no guarded zone, and the nine call sites drop the future
+  besides. So the rethrow is caught by the root zone, printed in debug,
+  and silently discarded in release - the opposite of what the comments
+  promise. Wrapping the call sites in `unawaited` would change nothing;
+  what is missing is the handler, and what it should *do* is the
+  decision: there is no logging or telemetry surface for it to report
+  into, so "print it" and "show the listener something" and "send it
+  somewhere" are three different products. Left for that decision rather
+  than guessed at, and the comments corrected with it - they are the
+  part actively misleading today. Found during phase 3 review; the
+  pattern is older, and the saved-radio list shares it exactly.
 
 - `[in-repo]` **Scripts outside the owned font set render tofu on web,
   online and off alike.** The owned chain covers Latin, Greek,

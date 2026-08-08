@@ -81,6 +81,34 @@ export class Radio {
     return this.ctx.page.locator(sem(SemanticsIds.deckStar));
   }
 
+  /// The hub's row into the songs kept off the air.
+  savedDoor(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.radioSavedOpen));
+  }
+
+  /// The saved-songs screen itself.
+  saved(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.radioSaved));
+  }
+
+  /// One kept song's row.
+  savedEntry(pid: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.radioSavedEntry(pid)));
+  }
+
+  /// The row's way into the library, which is what the list is for.
+  savedFind(pid: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.radioSavedFind(pid)));
+  }
+
+  /// Cross a row off. Forced: the row leaves optimistically, so what the
+  /// removal did is the spec's assertion rather than anything here.
+  async forgetSaved(pid: string): Promise<void> {
+    await this.ctx.page
+      .locator(sem(SemanticsIds.radioSavedRemove(pid)))
+      .click({ force: true });
+  }
+
   /// Stop the stream. Radio never enters the queue, so this puts the bar
   /// away entirely.
   async stop(): Promise<void> {

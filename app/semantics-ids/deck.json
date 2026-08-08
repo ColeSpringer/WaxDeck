@@ -22,6 +22,7 @@
     "deckShuffle": "deck-shuffle",
     "deckSkipBack": "deck-skip-back",
     "deckSkipForward": "deck-skip-forward",
+    "deckSaveSong": "deck-save-song",
     "deckStar": "deck-star",
     "deckVolume": "deck-volume",
     "panel": "panel",
@@ -32,10 +33,15 @@
     "queueEntryRemove": "queue-entry-remove-{queueId}",
     "queueHistory": "queue-history",
     "queueHistoryEntry": "queue-history-{id}",
+    "queueEntrySelect": "queue-entry-select-{queueId}",
     "queueRepeat": "queue-repeat",
     "queueReplaceUndo": "queue-replace-undo",
     "queueRestoreSession": "queue-restore-session-{id}",
     "queueScreen": "queue-screen",
+    "queueSelectionBottom": "queue-selection-bottom",
+    "queueSelectionClear": "queue-selection-clear",
+    "queueSelectionRemove": "queue-selection-remove",
+    "queueSelectionTop": "queue-selection-top",
     "queueShuffle": "queue-shuffle"
   }
 }

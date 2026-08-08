@@ -106,22 +106,33 @@ test('the hub sorts, filters, and marks a book finished', async ({ app }) => {
     )
     .toBe(0);
 
-  // The filters, checked against the state this test just established
-  // rather than against a fresh account's. They used to run before the
-  // mark, on the premise that a book nobody has heard is unfinished -
-  // which is true once and never again, because the undo above gives
-  // the position back and leaves the book marked finished with no way
-  // to unmark it (docs/bugs.md, "Undoing mark finished"). So this
-  // account's book is finished from its first run onwards, and a spec
-  // that assumed otherwise passed once per stack.
+  // The filters, against state this test establishes on purpose rather
+  // than inherits. The undo above really does undo: it puts the flags
+  // back beside the position, so the book is unfinished again by the
+  // time the filters run. (This block used to lean on the opposite -
+  // that marking finished could not be taken back - which stopped being
+  // true when that bug was fixed, and left the spec asserting a state
+  // nothing produced any more.)
   //
-  // The library holds a second audiobook, and the empty state only
-  // appears when a filter matches nothing at all - which is a claim
-  // about every book, not about this one. So the other is finished too,
-  // through the seeder: it is a precondition for the empty state having
-  // anything to say, and it is per-account state this test wholly owns.
+  // So both books are finished through the seeder. The empty state
+  // below is the reason it has to be both: it appears only when a
+  // filter matches nothing at all, which is a claim about every book in
+  // the library rather than about this one. Per-account state, wholly
+  // this test's.
   const other = await app.seed.book('The Chaptered Fixture');
   await app.seed.setPosition(other.pid, other.durationMs);
+  await app.seed.setPosition(book.pid, book.durationMs);
+  // Polled rather than assumed: "finished" is derived from the position
+  // a write lands at, so this is the one place the filter's input is
+  // worth confirming before the filter is judged on it.
+  await expect
+    .poll(
+      async () =>
+        (await app.api.tryGet('/items/{pid}/play-state', { path: { pid: book.pid } }))
+          ?.finished ?? false,
+      { timeout: T.fetch, message: 'a position at the end should read as finished' },
+    )
+    .toBeTruthy();
 
   // Finished holds it; unfinished does not, and says so rather than
   // leaving an empty grid with no way out.

@@ -223,6 +223,9 @@ import 'package:waxdeck_api_gen/src/model/push_registration_list.dart';
 import 'package:waxdeck_api_gen/src/model/radio_directory_entry.dart';
 import 'package:waxdeck_api_gen/src/model/radio_directory_results.dart';
 import 'package:waxdeck_api_gen/src/model/radio_play_info.dart';
+import 'package:waxdeck_api_gen/src/model/radio_saved_song.dart';
+import 'package:waxdeck_api_gen/src/model/radio_saved_song_create.dart';
+import 'package:waxdeck_api_gen/src/model/radio_saved_song_page.dart';
 import 'package:waxdeck_api_gen/src/model/radio_station.dart';
 import 'package:waxdeck_api_gen/src/model/radio_station_edit.dart';
 import 'package:waxdeck_api_gen/src/model/radio_station_list.dart';
@@ -555,6 +558,9 @@ part 'serializers.g.dart';
   RadioDirectoryEntry,
   RadioDirectoryResults,
   RadioPlayInfo,
+  RadioSavedSong,
+  RadioSavedSongCreate,
+  RadioSavedSongPage,
   RadioStation,
   RadioStationEdit,
   RadioStationList,

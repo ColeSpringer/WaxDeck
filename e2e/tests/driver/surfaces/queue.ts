@@ -1,15 +1,16 @@
 // The queue: a screen of its own, reached from the player.
 
-import { Locator } from '@playwright/test';
+import { expect, Locator } from '@playwright/test';
 import {
   SemanticsIds,
   SemanticsIdPrefixes,
+  SEMANTICS_ATTRIBUTE,
   sem,
   semPrefix,
 } from '../../semantics-ids';
 import { Ctx } from '../context';
 import { T } from '../budgets';
-import { clickInView } from '../gestures';
+import { clickInView, longPressOn } from '../gestures';
 
 export class Queue {
   constructor(private readonly ctx: Ctx) {}
@@ -57,6 +58,50 @@ export class Queue {
       settled: this.shuffle(),
     });
     await this.shuffle().waitFor({ timeout: T.nav });
+  }
+
+  /// Every up-next row's checkbox, which exists only while a set is
+  /// picked - so its count is also how many rows the mode reaches.
+  selectBoxes(): Locator {
+    return this.ctx.page.locator(
+      semPrefix(SemanticsIdPrefixes.queueEntrySelect),
+    );
+  }
+
+  /// The verbs a picked set has.
+  selectionRemove(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.queueSelectionRemove));
+  }
+
+  selectionTop(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.queueSelectionTop));
+  }
+
+  selectionClear(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.queueSelectionClear));
+  }
+
+  /// Start a selection on one up-next row, the way a hand does.
+  async pick(queueId: string): Promise<void> {
+    await longPressOn(this.ctx.page, this.entry(queueId));
+  }
+
+  /// End a selection with the key that ends it.
+  async escape(): Promise<void> {
+    await this.ctx.page.keyboard.press('Escape');
+  }
+
+  /// The queue id of the first row after the current entry.
+  ///
+  /// Read off its drag handle rather than guessed: queue ids are minted
+  /// by the client and count up across a session, so the first up-next
+  /// row is `q1` only on a queue nothing has been added to.
+  async firstUpNextId(): Promise<string> {
+    const handle = this.dragHandles().first();
+    await handle.waitFor({ timeout: T.nav });
+    const id = await handle.getAttribute(SEMANTICS_ATTRIBUTE);
+    expect(id, 'the first up-next row carries a drag handle').toBeTruthy();
+    return id!.slice(SemanticsIdPrefixes.queueEntryDrag.length);
   }
 
   /// Text the queue surface is showing - where it is playing from, or

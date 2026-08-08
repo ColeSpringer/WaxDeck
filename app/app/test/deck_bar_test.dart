@@ -320,6 +320,47 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
     });
 
+    testWidgets('offers the heart for a named song, at sidebar width only', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final station = RadioStation(
+        pid: 'ra-1',
+        name: 'Coastal FM',
+        streamUrl: 'https://radio.example/stream',
+        createdAt: DateTime.utc(2026, 7, 1),
+      );
+      repo.radioStationsByPid[station.pid] = station;
+      repo.radioNowPlaying[station.pid] = 'Salt Harbour - The Bree Trio';
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      await harness.container
+          .read(radioPlaybackProvider.notifier)
+          .play(station);
+      await tester.pumpAndSettle();
+
+      final heart = _byId(SemanticsIds.deckSaveSong);
+      expect(heart, findsOneWidget);
+      await tester.tap(heart);
+      await tester.pumpAndSettle();
+      expect(repo.savedSongRequests, hasLength(1));
+      expect(
+        harness.container.read(radioPlaybackProvider).nowPlayingSaved,
+        isTrue,
+      );
+
+      // The compact bar has no right cluster to put it in, and the full
+      // face's own heart is one tap away through expand - the same
+      // bargain the star and the level already make here.
+      tester.view.physicalSize = const Size(600, 900);
+      await tester.pumpAndSettle();
+      expect(heart, findsNothing);
+
+      await harness.container.read(radioPlaybackProvider.notifier).stop();
+      await tester.pumpAndSettle();
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('follows live radio onto the station', (tester) async {
       final repo = FakeRepository(items: [testItem('tr-A')]);
       final station = RadioStation(

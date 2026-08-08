@@ -115,6 +115,17 @@ multi-select for batch moves, and dragging a row from a listing into the
 panel - are recorded in `docs/deferred-work.md`; neither is on the path
 of anything else.
 
+Multi-select has since landed, in `queueSlivers` as this predicted, so
+the panel and `/queue` got it together. Scope is the up-next rows: the
+current entry and the history keep the behaviour they had, because the
+batch verbs are all about what has not played yet. A long press or a
+checkbox picks; shift+click extends a range from the last row touched;
+the set removes, moves to top, moves to bottom, and travels together
+when any of its rows is dragged. Escape ends the mode through a scoped
+command, so it prints in the palette and the shortcut sheet and yields
+to whatever route is on top. Dragging a listing row into the panel is
+still open and is what the deferred entry now names.
+
 An album's track order is now the client's to compute, because
 `QueryPage` orders by the catalog's own sort key and ignores the query's
 sorts. Sorting by disc and track locally is complete for any album the

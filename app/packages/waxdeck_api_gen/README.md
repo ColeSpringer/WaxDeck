@@ -491,12 +491,16 @@ Class | Method | HTTP request | Description
 [*PodcastsApi*](doc/PodcastsApi.md) | [**subscribePodcast**](doc/PodcastsApi.md#subscribepodcast) | **POST** /podcasts | Subscribe to a podcast
 [*PodcastsApi*](doc/PodcastsApi.md) | [**unsubscribePodcast**](doc/PodcastsApi.md#unsubscribepodcast) | **DELETE** /podcasts/{pid} | Unsubscribe from a show
 [*RadioApi*](doc/RadioApi.md) | [**createRadioStation**](doc/RadioApi.md#createradiostation) | **POST** /radio/stations | Add a radio station
+[*RadioApi*](doc/RadioApi.md) | [**deleteRadioSavedSong**](doc/RadioApi.md#deleteradiosavedsong) | **DELETE** /radio/saved/{pid} | Drop a saved song
 [*RadioApi*](doc/RadioApi.md) | [**deleteRadioStation**](doc/RadioApi.md#deleteradiostation) | **DELETE** /radio/stations/{pid} | Delete a radio station
 [*RadioApi*](doc/RadioApi.md) | [**getRadioNowPlayingArt**](doc/RadioApi.md#getradionowplayingart) | **GET** /radio/stations/{pid}/now-playing-art | Get cover art for a station&#39;s announced track
 [*RadioApi*](doc/RadioApi.md) | [**getRadioPlayInfo**](doc/RadioApi.md#getradioplayinfo) | **GET** /radio/stations/{pid}/play-info | Resolve a playable station stream
+[*RadioApi*](doc/RadioApi.md) | [**getRadioSavedSongArt**](doc/RadioApi.md#getradiosavedsongart) | **GET** /radio/saved/{pid}/art | Get a saved song&#39;s snapshot cover
 [*RadioApi*](doc/RadioApi.md) | [**getRadioStation**](doc/RadioApi.md#getradiostation) | **GET** /radio/stations/{pid} | Get one radio station
 [*RadioApi*](doc/RadioApi.md) | [**getRadioStationLogo**](doc/RadioApi.md#getradiostationlogo) | **GET** /radio/stations/{pid}/logo | Get a station logo
+[*RadioApi*](doc/RadioApi.md) | [**listRadioSavedSongs**](doc/RadioApi.md#listradiosavedsongs) | **GET** /radio/saved | List songs kept off the air
 [*RadioApi*](doc/RadioApi.md) | [**listRadioStations**](doc/RadioApi.md#listradiostations) | **GET** /radio/stations | List radio stations
+[*RadioApi*](doc/RadioApi.md) | [**saveRadioSong**](doc/RadioApi.md#saveradiosong) | **POST** /radio/saved | Keep the song a station is playing
 [*RadioApi*](doc/RadioApi.md) | [**searchRadioDirectory**](doc/RadioApi.md#searchradiodirectory) | **GET** /radio/directory | Search the station directory
 [*RadioApi*](doc/RadioApi.md) | [**updateRadioStation**](doc/RadioApi.md#updateradiostation) | **PUT** /radio/stations/{pid} | Update a radio station
 [*ReviewApi*](doc/ReviewApi.md) | [**decideReviewBulk**](doc/ReviewApi.md#decidereviewbulk) | **POST** /review/decide | Decide many review entries
@@ -776,6 +780,9 @@ Class | Method | HTTP request | Description
  - [RadioDirectoryEntry](doc/RadioDirectoryEntry.md)
  - [RadioDirectoryResults](doc/RadioDirectoryResults.md)
  - [RadioPlayInfo](doc/RadioPlayInfo.md)
+ - [RadioSavedSong](doc/RadioSavedSong.md)
+ - [RadioSavedSongCreate](doc/RadioSavedSongCreate.md)
+ - [RadioSavedSongPage](doc/RadioSavedSongPage.md)
  - [RadioStation](doc/RadioStation.md)
  - [RadioStationEdit](doc/RadioStationEdit.md)
  - [RadioStationList](doc/RadioStationList.md)

@@ -93,7 +93,7 @@ test.describe('leaving the full-screen player', () => {
   test.use({ session: 'planted' });
 
   test('a pointer gets out without the pull-down', async ({ app }) => {
-    const { pid } = await app.seed.item('Escape Hatch');
+    const { pid } = await app.seed.item('Alpha Song');
     await app.nav.to('tracks');
 
     await app.music.play(pid);

@@ -140,6 +140,7 @@ class NowPlayingData {
     this.buffered,
     this.live = false,
     this.starred = false,
+    this.songSaved = false,
     this.shuffled = false,
     this.repeat = WaxRepeat.off,
     this.remoteEndpoint,
@@ -171,6 +172,11 @@ class NowPlayingData {
   final bool live;
 
   final bool starred;
+
+  /// Whether the announcement a live stream is playing has been kept, so
+  /// the heart draws filled. Separate from [starred]: that is per-item
+  /// state, and a station has no item to hold any.
+  final bool songSaved;
 
   /// The queue's standing modes, so the two controls that cycle them can
   /// show which state they are in. Radio draws neither.

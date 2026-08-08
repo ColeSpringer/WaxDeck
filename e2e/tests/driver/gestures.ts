@@ -160,6 +160,22 @@ export async function wheelIntoView(
   }).toPass({ timeout: T.nav });
 }
 
+// Press and hold, which is how a canvas list starts a multi-select.
+//
+// Coordinates and a real delay rather than a synthesized event: Flutter
+// recognizes a long press from the pointer staying down past its own
+// timeout, and a click helper releases far too soon for that. The
+// default clears the framework's 500 ms threshold with room for a busy
+// frame.
+export async function longPressOn(page: Page, target: Locator, holdMs = 900) {
+  const box = await target.boundingBox();
+  expect(box, 'the row to press is on screen').toBeTruthy();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(holdMs);
+  await page.mouse.up();
+}
+
 // Drag one row of a canvas list onto another.
 //
 // Coordinates rather than a drop target: a flutter reorderable list

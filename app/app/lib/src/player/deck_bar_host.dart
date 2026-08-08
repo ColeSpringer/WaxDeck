@@ -25,6 +25,7 @@ import '../shell/semantics_ids.dart';
 import 'autoplay_gate.dart';
 import 'lyrics.dart';
 import 'now_playing_controller.dart';
+import 'radio_face.dart';
 import 'output_volume.dart';
 import 'play_state_controller.dart';
 import 'playback_session.dart';
@@ -52,6 +53,7 @@ const _ids = DeckBarIds(
   shuffle: SemanticsIds.deckShuffle,
   repeat: SemanticsIds.deckRepeat,
   star: SemanticsIds.deckStar,
+  saveSong: SemanticsIds.deckSaveSong,
   seek: SemanticsIds.deckSeek,
   queue: SemanticsIds.deckQueue,
   lyrics: SemanticsIds.deckLyrics,
@@ -331,6 +333,7 @@ class _RadioDeckBar extends ConsumerWidget {
           // would offer "Play" during the wait and stop the stream when
           // it was pressed.
           playing: (playing || playback.starting) && !blocked,
+          songSaved: playback.nowPlayingSaved,
           volume: volume,
         ),
         autoplayBlocked: blocked,
@@ -351,6 +354,15 @@ class _RadioDeckBar extends ConsumerWidget {
               ? () => unawaited(
                   ref.read(outputVolumeProvider.notifier).toggleMute(),
                 )
+              : null,
+          // Only where a station has named something, and only on the
+          // three-zone bar: the heart is drawn in its left zone beside
+          // the star, and the compact bar has no such slot. The full
+          // face's heart is one tap away through expand - the same
+          // bargain the star and the level already make here.
+          onSaveSong:
+              playback.nowPlaying != null && WaxSizeClass.of(context).hasSidebar
+              ? (_) => unawaited(saveNowPlayingSong(context, ref))
               : null,
           // The player, like every other face of this bar: expanding
           // means "show me what is playing", and since P19 that is a

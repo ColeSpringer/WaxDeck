@@ -110,6 +110,11 @@ abstract final class WaxRoute {
 
   static const radio = '/radio';
 
+  /// Songs kept off the air. A location a stranger can open and get
+  /// their own list, like `/queue`, so it is gone to rather than pushed,
+  /// and its declared parent is the hub it is reached from.
+  static const radioSaved = '$radio/saved';
+
   /// What this device holds offline. Native only: the web build has no
   /// download manager, so the destination is not offered there.
   static const downloads = '/downloads';

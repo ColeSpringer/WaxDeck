@@ -38,6 +38,7 @@
     "playerRegion": "player-region-{name}",
     "playerRepeat": "player-repeat",
     "playerRetry": "player-retry",
+    "playerSaveSong": "player-save-song",
     "playerSeek": "player-seek",
     "playerShow": "player-show",
     "playerShuffle": "player-shuffle",

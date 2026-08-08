@@ -59,6 +59,7 @@ import '../prototype/editing_prototype_screen.dart';
 import '../queue/queue_persistence.dart';
 import '../queue/queue_refiller.dart';
 import '../queue/queue_screen.dart';
+import '../radio/radio_saved_screen.dart';
 import '../radio/radio_screen.dart';
 import '../review/review_screen.dart';
 import '../search/search_screen.dart';
@@ -456,6 +457,12 @@ List<RouteBase> shellRoutes() => <RouteBase>[
           GoRoute(
             path: WaxRoute.radio,
             builder: (context, state) => const RadioScreen(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: 'saved',
+                builder: (context, state) => const RadioSavedScreen(),
+              ),
+            ],
           ),
         ],
       ),

@@ -69,3 +69,48 @@ test('the queue is a place, and it reorders and clears', async ({ app }) => {
   await app.nav.enter('queue');
   await expect(app.queue.text('Nothing queued')).toBeVisible();
 });
+
+test('a set of up-next rows can be picked, moved, and dropped', async ({
+  app,
+}) => {
+  // The queue is client-local, so this needs no serialization against
+  // the shared server: what it picks belongs to this browser.
+  await app.nav.enter('albums');
+  await app.music.openBucket(0);
+  await app.music.playEntry(0);
+  await app.queue.openFromPlayer();
+
+  const handles = app.queue.dragHandles();
+  await expect(handles).not.toHaveCount(0);
+  const upNext = await handles.count();
+  // Nothing picked means no mode: an empty set is not a selection.
+  await expect(app.queue.selectBoxes()).toHaveCount(0);
+  await expect(app.queue.selectionRemove()).toHaveCount(0);
+
+  // A long press on an up-next row starts one, and every up-next row
+  // joins in - the current entry and the history stay out of scope.
+  const first = await app.queue.firstUpNextId();
+  await app.queue.pick(first);
+  await expect(app.queue.selectBoxes()).toHaveCount(upNext);
+  await expect(app.queue.text('1 selected')).toBeVisible();
+
+  // The set's verbs act on the whole of it in one go. Move to top is
+  // the one worth driving here: it is the reorder a selection exists
+  // for, and the row it moves is still there afterwards.
+  await app.queue.selectionTop().click();
+  await expect(app.queue.entry(first)).toBeVisible();
+  await expect(app.queue.text('1 selected')).toBeVisible();
+
+  // Removing takes the set and ends the mode.
+  await app.queue.selectionRemove().click();
+  await expect(app.queue.entry(first)).toHaveCount(0);
+  await expect(app.queue.selectBoxes()).toHaveCount(0);
+
+  // And Escape ends a selection without leaving the screen.
+  const next = await app.queue.firstUpNextId();
+  await app.queue.pick(next);
+  await expect(app.queue.selectBoxes()).not.toHaveCount(0);
+  await app.queue.escape();
+  await expect(app.queue.selectBoxes()).toHaveCount(0);
+  await expect(app.queue.screen()).toBeVisible();
+});

@@ -568,6 +568,162 @@ void main() {
     });
   });
 
+  // The batch verbs behind multi-select. Their index arithmetic is the
+  // risky part of the feature, so it is pinned here rather than reached
+  // through a surface: a set is gathered out of the queue and put back
+  // somewhere else, and every direction the target can sit relative to
+  // the set is a chance to be off by one.
+  group('moving and removing a set', () {
+    /// The ids of the entries at [positions], which is how a selection
+    /// is named: queue ids outlive positions and indices do not.
+    Set<String> idsAt(List<int> positions) => <String>{
+      for (final at in positions) get_().entries[at].queueId,
+    };
+
+    test('a discontiguous set lands contiguous above all of it', () {
+      queue.playNow(_tracks(9), source: _album);
+      queue.moveSetTo(idsAt([1, 4, 7]), 1);
+
+      // Gathered, in their own play order, with everything they passed
+      // closing up behind them.
+      expect(pids(), [
+        'tr-0',
+        'tr-1',
+        'tr-4',
+        'tr-7',
+        'tr-2',
+        'tr-3',
+        'tr-5',
+        'tr-6',
+        'tr-8',
+      ]);
+    });
+
+    test('a discontiguous set lands contiguous below all of it', () {
+      queue.playNow(_tracks(9), source: _album);
+      // The whole length: past the end of the queue-without-the-set, so
+      // it clamps to the end, which is what "move to bottom" sends.
+      queue.moveSetTo(idsAt([1, 4, 7]), 99);
+
+      expect(pids(), [
+        'tr-0',
+        'tr-2',
+        'tr-3',
+        'tr-5',
+        'tr-6',
+        'tr-8',
+        'tr-1',
+        'tr-4',
+        'tr-7',
+      ]);
+    });
+
+    test('a discontiguous set lands between its own members', () {
+      queue.playNow(_tracks(9), source: _album);
+      // Three in the without-the-set coordinates the verb documents:
+      // tr-0, tr-2, tr-3 stay above the block and the rest below it.
+      queue.moveSetTo(idsAt([1, 4, 7]), 3);
+
+      expect(pids(), [
+        'tr-0',
+        'tr-2',
+        'tr-3',
+        'tr-1',
+        'tr-4',
+        'tr-7',
+        'tr-5',
+        'tr-6',
+        'tr-8',
+      ]);
+    });
+
+    test('a moved set follows the current entry rather than its index', () {
+      queue.playNow(_tracks(6), source: _album, startIndex: 2);
+      queue.moveSetTo(idsAt([3, 5]), 0);
+
+      expect(pids(), ['tr-3', 'tr-5', 'tr-0', 'tr-1', 'tr-2', 'tr-4']);
+      expect(get_().currentPid, 'tr-2');
+      expect(get_().currentIndex, 4);
+    });
+
+    test('a moved set outranks the source order when shuffle goes off', () {
+      queue.playNow(_tracks(6), source: _album);
+      queue.setShuffle(true);
+      final moved = idsAt([3, 5]);
+      queue.moveSetTo(moved, 1);
+      final placed = [for (final e in get_().entries) e.pid].sublist(1, 3);
+
+      queue.setShuffle(false);
+
+      // The block sits where the hand put it, still contiguous and
+      // still in the order it was moved in.
+      expect(pids().sublist(1, 3), placed);
+    });
+
+    test('removing a set is one rebuild and keeps what is playing', () {
+      queue.playNow(_tracks(6), source: _album, startIndex: 2);
+      queue.removeSet(idsAt([1, 3, 5]));
+
+      expect(pids(), ['tr-0', 'tr-2', 'tr-4']);
+      expect(get_().currentPid, 'tr-2');
+      expect(get_().currentIndex, 1);
+      expect(get_().sourceOrder, hasLength(3));
+    });
+
+    test('removing a set never takes what is playing with it', () {
+      queue.playNow(_tracks(4), source: _album, startIndex: 1);
+      // A set that names the current entry drops everything but it: the
+      // verb is offered on the up-next rows, and pulling the queue out
+      // from under playback is not something it may do by accident.
+      queue.removeSet(idsAt([1, 2]));
+
+      expect(pids(), ['tr-0', 'tr-1', 'tr-3']);
+      expect(get_().currentPid, 'tr-1');
+    });
+
+    test('a set naming the whole queue leaves what is playing', () {
+      queue.playNow(_tracks(3), source: _album);
+      queue.removeSet(idsAt([0, 1, 2]));
+
+      // Emptying the queue stays a deliberate verb of its own; a batch
+      // remove can never arrive there by accident.
+      expect(pids(), ['tr-0']);
+      expect(get_().currentPid, 'tr-0');
+    });
+
+    test('a move that lands where it already is changes nothing', () {
+      queue.playNow(_tracks(6), source: _album);
+      queue.setShuffle(true);
+      final order = pids();
+      final sourceOrder = [...get_().sourceOrder];
+      // The two rows already at the top of up-next, sent to the top of
+      // up-next. The play order cannot move - and neither may the source
+      // order, which is what un-shuffling restores: rewriting it for a
+      // move nobody can see changes what shuffle-off puts back.
+      final settled = <String>{
+        get_().entries[1].queueId,
+        get_().entries[2].queueId,
+      };
+      queue.moveSetTo(settled, 1);
+
+      expect(pids(), order);
+      expect(get_().sourceOrder, sourceOrder);
+    });
+
+    test('an empty or unknown set changes nothing', () {
+      queue.playNow(_tracks(3), source: _album);
+      final before = pids();
+
+      queue.removeSet(const <String>{});
+      queue.removeSet(<String>{'q-nope'});
+      queue.moveSetTo(const <String>{}, 0);
+      queue.moveSetTo(<String>{'q-nope'}, 0);
+
+      expect(pids(), before);
+      expect(get_().currentIndex, 0);
+    });
+  });
+
   group('shuffle', () {
     test('shuffling leaves the current entry and its history alone', () {
       queue.playNow(_tracks(10), source: _album, startIndex: 3);

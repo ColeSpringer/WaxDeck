@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
@@ -140,6 +142,173 @@ void main() {
 
     expect(
       find.bySemanticsIdentifier(SemanticsIds.playerFindInLibrary),
+      findsNothing,
+    );
+    await _stop(container);
+  });
+
+  testWidgets('the heart keeps the song the station named', (tester) async {
+    final repo = FakeRepository()
+      ..radioStationsByPid[_stationPid] = _station()
+      ..radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio';
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    final heart = find.bySemanticsIdentifier(SemanticsIds.playerSaveSong);
+    expect(heart, findsOneWidget);
+    // The wording says song, never favourite: the star two rows up means
+    // "pin this station", and two affordances that both read as
+    // favouriting would blur into each other.
+    expect(tester.getSemantics(heart).label, 'Save this song');
+
+    await tester.tap(heart);
+    await tester.pumpAndSettle();
+
+    // The line the listener saw, sent as they saw it: a station rolls
+    // over between polls, so resolving it server-side would sometimes
+    // keep the next song.
+    expect(repo.savedSongRequests, hasLength(1));
+    expect(
+      repo.savedSongRequests.single.nowPlaying,
+      'Salt Harbour - The Bree Trio',
+    );
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isTrue);
+    expect(tester.getSemantics(heart).label, 'Forget this song');
+
+    // And the same tap takes it back off.
+    await tester.tap(heart);
+    await tester.pumpAndSettle();
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isFalse);
+    expect(
+      await repo.listRadioSavedSongs(),
+      isA<RadioSavedSongPage>().having((p) => p.songs, 'songs', isEmpty),
+    );
+    await _stop(container);
+  });
+
+  testWidgets('an untap that crosses its own save takes the row back', (
+    tester,
+  ) async {
+    // The double tap: the second one lands while the first one's save is
+    // still in flight, so it has no pid to remove. Leaving the row would
+    // put it on the server with nothing pointing at it, and the next
+    // poll would fill the heart back in against what the last tap asked
+    // for.
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..radioStationsByPid[_stationPid] = _station()
+      ..radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio'
+      ..saveSongGate = gate.future;
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+    final notifier = container.read(radioPlaybackProvider.notifier);
+
+    final first = notifier.toggleSaveNowPlaying();
+    await tester.pump();
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isTrue);
+    expect(container.read(radioPlaybackProvider).nowPlayingSavedPid, isNull);
+
+    // Untapped before the save answers.
+    final second = notifier.toggleSaveNowPlaying();
+    await tester.pump();
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isFalse);
+
+    gate.complete();
+    await first;
+    await second;
+    await tester.pumpAndSettle();
+
+    // The row the first tap created is gone, so the poll has nothing to
+    // fill the heart back in with.
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isFalse);
+    expect((await repo.listRadioSavedSongs()).songs, isEmpty);
+    await _stop(container);
+  });
+
+  testWidgets('a save in flight does not freeze what is playing', (
+    tester,
+  ) async {
+    // The heart is the poll's to leave alone while a tap is in flight;
+    // the title, the match and the art key are not. Holding the whole
+    // answer back stopped now-playing dead for as long as a save took.
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..radioStationsByPid[_stationPid] = _station()
+      ..radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio'
+      ..saveSongGate = gate.future;
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+    final notifier = container.read(radioPlaybackProvider.notifier);
+
+    final tap = notifier.toggleSaveNowPlaying();
+    await tester.pump();
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isTrue);
+
+    // The station rolls over while the save is still out, and the poll's
+    // own first tick - four seconds after a tune - brings it.
+    repo.radioNowPlaying[_stationPid] = 'Nightjar - Long Way Down';
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(radioPlaybackProvider).nowPlaying,
+      'Nightjar - Long Way Down',
+    );
+    // And the heart belongs to the new song, not to the tap that was
+    // about the old one.
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isFalse);
+
+    gate.complete();
+    await tap;
+    await _stop(container);
+  });
+
+  testWidgets('a refused save puts the heart back and says why', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..radioStationsByPid[_stationPid] = _station()
+      ..radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio'
+      ..saveSongError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'the saved songs list is full; remove something first',
+      );
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerSaveSong));
+    await tester.pumpAndSettle();
+
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isFalse);
+    expect(
+      find.text('the saved songs list is full; remove something first'),
+      findsOneWidget,
+    );
+    await _stop(container);
+  });
+
+  testWidgets('a station nobody has named offers no heart', (tester) async {
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playerSaveSong),
       findsNothing,
     );
     await _stop(container);

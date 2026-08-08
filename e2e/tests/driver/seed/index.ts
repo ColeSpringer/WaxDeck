@@ -263,6 +263,43 @@ export class Seed {
     return made.pid;
   }
 
+  /// A song kept off the air, as the heart keeps it.
+  ///
+  /// Per account rather than server-global, unlike the station library,
+  /// so a test's rows are its own and need no name claim.
+  async radioSavedSong(stationPid: string, nowPlaying: string): Promise<string> {
+    const made = await this.api.post('/radio/saved', {
+      data: { stationPid, nowPlaying },
+    });
+    return made.pid;
+  }
+
+  /// This account's saved songs, cleared.
+  ///
+  /// The rows outlive a browser context, so a run against a stack this
+  /// account has used before would find yesterday's saves - which the
+  /// empty-state assertion is precisely about.
+  /// Bounded, and by progress rather than by a round count: DELETE is
+  /// absent-is-success and answers 204 for a row it did not remove, so a
+  /// scoping regression would leave this spinning forever and turn a red
+  /// assertion into a hung worker. A pass that removes nothing is a
+  /// failure worth reading.
+  async clearRadioSaved(): Promise<void> {
+    for (;;) {
+      const page = await this.api.get('/radio/saved', { query: { limit: 200 } });
+      const songs = page.songs ?? [];
+      if (songs.length === 0) return;
+      for (const song of songs) {
+        await this.api.delete('/radio/saved/{pid}', { path: { pid: song.pid } });
+      }
+      const left = (await this.api.get('/radio/saved', { query: { limit: 200 } })).songs ?? [];
+      expect(
+        left.length,
+        'deleting saved songs should remove them; the account still holds as many',
+      ).toBeLessThan(songs.length);
+    }
+  }
+
   /// Set some keys of this account's preference document, leaving the
   /// rest as they are.
   ///

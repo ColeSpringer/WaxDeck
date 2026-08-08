@@ -204,6 +204,7 @@ export const SemanticsIds = {
   deckShuffle: 'deck-shuffle',
   deckSkipBack: 'deck-skip-back',
   deckSkipForward: 'deck-skip-forward',
+  deckSaveSong: 'deck-save-song',
   deckStar: 'deck-star',
   deckVolume: 'deck-volume',
   panel: 'panel',
@@ -214,10 +215,15 @@ export const SemanticsIds = {
   queueEntryRemove: (queueId: string | number) => `queue-entry-remove-${queueId}`,
   queueHistory: 'queue-history',
   queueHistoryEntry: (id: string | number) => `queue-history-${id}`,
+  queueEntrySelect: (queueId: string | number) => `queue-entry-select-${queueId}`,
   queueRepeat: 'queue-repeat',
   queueReplaceUndo: 'queue-replace-undo',
   queueRestoreSession: (id: string | number) => `queue-restore-session-${id}`,
   queueScreen: 'queue-screen',
+  queueSelectionBottom: 'queue-selection-bottom',
+  queueSelectionClear: 'queue-selection-clear',
+  queueSelectionRemove: 'queue-selection-remove',
+  queueSelectionTop: 'queue-selection-top',
   queueShuffle: 'queue-shuffle',
 
   // desktop: The desktop shell surfaces: the mini player window and the deck bar's way into it. The tray has no semantics tree of its own.
@@ -382,6 +388,7 @@ export const SemanticsIds = {
   playerRegion: (name: string | number) => `player-region-${name}`,
   playerRepeat: 'player-repeat',
   playerRetry: 'player-retry',
+  playerSaveSong: 'player-save-song',
   playerSeek: 'player-seek',
   playerShow: 'player-show',
   playerShuffle: 'player-shuffle',
@@ -546,6 +553,11 @@ export const SemanticsIds = {
   radioMute: 'radio-mute',
   radioNameField: 'radio-name-field',
   radioNowPlaying: 'radio-now-playing',
+  radioSaved: 'radio-saved',
+  radioSavedEntry: (pid: string | number) => `radio-saved-entry-${pid}`,
+  radioSavedFind: (pid: string | number) => `radio-saved-find-${pid}`,
+  radioSavedOpen: 'radio-saved-open',
+  radioSavedRemove: (pid: string | number) => `radio-saved-remove-${pid}`,
   radioSearchAdd: (index: string | number) => `radio-search-add-${index}`,
   radioSearchField: 'radio-search-field',
   radioSearchRun: 'radio-search-run',
@@ -756,6 +768,7 @@ export const SemanticsIdPrefixes = {
   queueEntryDrag: 'queue-entry-drag-',
   queueEntryRemove: 'queue-entry-remove-',
   queueHistoryEntry: 'queue-history-',
+  queueEntrySelect: 'queue-entry-select-',
   queueRestoreSession: 'queue-restore-session-',
 
   // downloads: The downloads manager: what this device holds and the transfers in flight.
@@ -872,6 +885,9 @@ export const SemanticsIdPrefixes = {
   radioEdit: 'radio-edit-',
   radioFavorite: 'radio-favorite-',
   radioMenu: 'radio-menu-',
+  radioSavedEntry: 'radio-saved-entry-',
+  radioSavedFind: 'radio-saved-find-',
+  radioSavedRemove: 'radio-saved-remove-',
   radioSearchAdd: 'radio-search-add-',
 
   // review: The review queue and its keyboard-first controls.

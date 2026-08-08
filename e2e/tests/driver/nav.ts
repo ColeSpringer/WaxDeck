@@ -196,6 +196,18 @@ export const DEST = {
     arrival: at(SemanticsIds.radioHub),
     walk: railTo('radio', at(SemanticsIds.radioHub)),
   },
+  // Declared under the hub, so a stranger opening the link gets the dial
+  // underneath it. Its walk is the hub's own row rather than the rail.
+  radioSaved: {
+    path: '/radio/saved',
+    arrival: at(SemanticsIds.radioSaved),
+    walk: async (page) => {
+      await page.goto('/radio');
+      await at(SemanticsIds.radioHub)(page).waitFor({ timeout: T.nav });
+      await page.locator(sem(SemanticsIds.radioSavedOpen)).click();
+      await at(SemanticsIds.radioSaved)(page).waitFor({ timeout: T.nav });
+    },
+  },
   downloads: {
     path: '/downloads',
     arrival: at(SemanticsIds.downloadsScreen),

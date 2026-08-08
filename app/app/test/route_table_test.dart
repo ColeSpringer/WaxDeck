@@ -37,6 +37,7 @@ import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/radio/radio_saved_screen.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
 import 'package:waxdeck/src/search/search_screen.dart';
@@ -119,6 +120,7 @@ final _locations = <String, Type>{
   WaxRoute.books: BooksScreen,
   WaxRoute.book('bk-1'): BookScreen,
   WaxRoute.radio: RadioScreen,
+  WaxRoute.radioSaved: RadioSavedScreen,
   WaxRoute.downloads: DownloadsScreen,
   // Views of whatever is playing, so none carries a payload and a
   // reload lands back on it.
@@ -204,6 +206,9 @@ final _stackedInShell = <String>{
   // lands on the row that opened it - which is what let the Account
   // section stop pushing.
   WaxRoute.shares,
+  // Declared beneath the hub, so a stranger opening the link gets the
+  // dial underneath and back lands on the row that opened it.
+  WaxRoute.radioSaved,
   WaxRoute.healthRule('missing-artwork'),
 };
 

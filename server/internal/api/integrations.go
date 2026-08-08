@@ -101,6 +101,14 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 	// and a second read could land on the next track.
 	if title, artURL := s.svc.RadioNowPlayingMeta(req.Pid); title != "" {
 		out.NowPlaying = ptr(title)
+		// One indexed read, and what keeps the heart honest across
+		// devices: a save made on the phone fills the desktop's heart on
+		// its next poll. Absent rather than false when nothing is kept,
+		// which the contract says means the same thing.
+		if savedPID := s.svc.RadioSavedPIDForNowPlaying(ctx, uc, station.Name, title); savedPID != "" {
+			out.NowPlayingSaved = ptr(true)
+			out.NowPlayingSavedPid = ptr(savedPID)
+		}
 		// Resolved against this caller's own visibility, since the pid
 		// is going to be used to fetch cover art. Absent is the ordinary
 		// answer and the client falls back to the rungs below.
@@ -254,6 +262,137 @@ func (s *Server) GetRadioNowPlayingArt(ctx context.Context, req GetRadioNowPlayi
 	default:
 		return GetRadioNowPlayingArt200ImagejpegResponse{Body: body, ContentLength: length, Headers: headers}, nil
 	}
+}
+
+func (s *Server) ListRadioSavedSongs(ctx context.Context, req ListRadioSavedSongsRequestObject) (ListRadioSavedSongsResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limit, ok := pageLimit(req.Params.Limit, 50, 200)
+	if !ok {
+		return ListRadioSavedSongs400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "limit must be between 1 and 200"))}, nil
+	}
+	cursor := ""
+	if req.Params.Cursor != nil {
+		cursor = *req.Params.Cursor
+	}
+	page, err := s.svc.ListRadioSaved(ctx, uc, cursor, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := RadioSavedSongPage{Songs: make([]RadioSavedSong, 0, len(page.Songs))}
+	for _, sg := range page.Songs {
+		out.Songs = append(out.Songs, radioSavedSongJSON(sg))
+	}
+	if page.Next != "" {
+		out.NextCursor = ptr(page.Next)
+	}
+	return ListRadioSavedSongs200JSONResponse(out), nil
+}
+
+func (s *Server) SaveRadioSong(ctx context.Context, req SaveRadioSongRequestObject) (SaveRadioSongResponseObject, error) {
+	if req.Body == nil {
+		return SaveRadioSong400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	song, err := s.svc.SaveRadioSong(ctx, uc, req.Body.StationPid, req.Body.NowPlaying)
+	if err != nil {
+		if service.KindOf(err) == service.KindConflict {
+			return SaveRadioSong409JSONResponse(errObj("conflict", err.Error())), nil
+		}
+		return nil, err
+	}
+	return SaveRadioSong201JSONResponse(radioSavedSongJSON(song)), nil
+}
+
+func (s *Server) DeleteRadioSavedSong(ctx context.Context, req DeleteRadioSavedSongRequestObject) (DeleteRadioSavedSongResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.RemoveRadioSaved(ctx, uc, req.Pid); err != nil {
+		return nil, err
+	}
+	return DeleteRadioSavedSong204Response{}, nil
+}
+
+func (s *Server) GetRadioSavedSongArt(ctx context.Context, req GetRadioSavedSongArtRequestObject) (GetRadioSavedSongArtResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	art, err := s.svc.RadioSavedArt(ctx, uc, req.Pid)
+	if err != nil {
+		// No such row, another listener's row, or one saved with nothing
+		// to copy: the client draws a monogram for all three.
+		if service.KindOf(err) == service.KindNotFound {
+			return GetRadioSavedSongArt404JSONResponse(errObj("not-found", "no artwork for saved song "+req.Pid)), nil
+		}
+		return nil, err
+	}
+	// Varied by the credential, unlike the station logo beside it: a
+	// logo is shared library data and does not depend on who asked,
+	// where a saved song is one listener's and answers 404 to everyone
+	// else. A cache holding two credentials must not answer one from the
+	// other's copy - the same rule item artwork follows.
+	cacheControl, vary := radioLogoCacheControl, artVary
+	if req.Params.IfNoneMatch != nil && httpcache.ETagMatches(*req.Params.IfNoneMatch, art.ETag) {
+		return GetRadioSavedSongArt304Response{Headers: GetRadioSavedSongArt304ResponseHeaders{
+			ETag:         &art.ETag,
+			CacheControl: &cacheControl,
+			Vary:         &vary,
+		}}, nil
+	}
+	noSniff, csp := radioLogoNoSniff, radioLogoCSP
+	headers := GetRadioSavedSongArt200ResponseHeaders{
+		ETag:                  &art.ETag,
+		CacheControl:          &cacheControl,
+		Vary:                  &vary,
+		XContentTypeOptions:   &noSniff,
+		ContentSecurityPolicy: &csp,
+	}
+	body := bytes.NewReader(art.Bytes)
+	length := int64(len(art.Bytes))
+	// These bytes were snapshotted from a rung that had already decided
+	// the type by sniffing them, so there is no branch here for a type
+	// that can carry script.
+	switch art.MimeType {
+	case "image/png":
+		return GetRadioSavedSongArt200ImagepngResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	case "image/webp":
+		return GetRadioSavedSongArt200ImagewebpResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	case "image/gif":
+		return GetRadioSavedSongArt200ImagegifResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	default:
+		return GetRadioSavedSongArt200ImagejpegResponse{Body: body, ContentLength: length, Headers: headers}, nil
+	}
+}
+
+func radioSavedSongJSON(s service.RadioSavedSong) RadioSavedSong {
+	out := RadioSavedSong{
+		Pid:         s.PID,
+		NowPlaying:  s.NowPlaying,
+		StationName: s.StationName,
+		HeardAt:     s.HeardAt,
+		HasArt:      s.HasArt,
+	}
+	if s.Artist != "" {
+		out.Artist = ptr(s.Artist)
+	}
+	if s.Title != "" {
+		out.Title = ptr(s.Title)
+	}
+	if s.StationPID != "" {
+		out.StationPid = ptr(s.StationPID)
+	}
+	if s.InLibraryPID != "" {
+		out.InLibraryPid = ptr(s.InLibraryPID)
+	}
+	return out
 }
 
 func (s *Server) SearchRadioDirectory(ctx context.Context, req SearchRadioDirectoryRequestObject) (SearchRadioDirectoryResponseObject, error) {

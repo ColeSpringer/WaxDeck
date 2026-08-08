@@ -3105,6 +3105,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/radio/saved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List songs kept off the air
+         * @description The caller's own saved songs, newest first. Personal rather than shared, unlike the station library: what one listener kept is theirs.
+         *
+         *     A saved song is deliberately not a library item. Nothing on this list plays - the row is an announcement, not a file - and the list exists so a song heard on a station can be hunted down later. Rows are resolved against the library at read time and the ones that now match carry `inLibraryPid`, which is how a row gets crossed off.
+         */
+        get: operations["listRadioSavedSongs"];
+        put?: never;
+        /**
+         * Keep the song a station is playing
+         * @description Saves the announcement the listener is looking at. The request carries the line rather than naming the station alone, because the station's title rolls over between polls and a save resolved against the live one would sometimes keep the next song.
+         *
+         *     **Idempotent on identity**, which is what makes the heart a toggle rather than a counter: the same song saved twice answers 201 with the row already held. Identity is the parsed artist and title where the line splits, and the raw line where it does not, so the same song announced by two stations is one row.
+         *
+         *     A cover is snapshotted from whatever this server already holds for the announcement - the matched library item's own art, the cached lookup, or the picture the station announced. Nothing is fetched for a save: a list that resolved artwork later would become a pile of lookups against a rung an operator may have switched off, so a row saved with nothing to copy draws a monogram for good.
+         */
+        post: operations["saveRadioSong"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radio/saved/{pid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Drop a saved song
+         * @description Removes one of the caller's saved songs. Removing one that is already gone answers 204: the caller asked for it to be absent and it is, which is what lets an untap race a second device without an error.
+         */
+        delete: operations["deleteRadioSavedSong"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radio/saved/{pid}/art": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a saved song's snapshot cover
+         * @description The cover this server copied when the song was saved, served from this origin.
+         *
+         *     A snapshot rather than a lookup, and that is the design: the picture is whatever the artwork ladder held at the moment the heart was tapped, stored beside the row. It never changes and it never goes looking. A row saved with nothing to copy answers 404 for good and the client draws a monogram, which is the ordinary case rather than a failure.
+         *
+         *     The bytes went through the same raster-only check the station logo does - decided by inspecting them rather than by trusting the upstream `Content-Type` - and carry the same hardening headers.
+         */
+        get: operations["getRadioSavedSongArt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/radio/directory": {
         parameters: {
             query?: never;
@@ -7714,6 +7788,84 @@ export interface components {
              * @example f822426bccd53e012a220bbf972752dc
              */
             nowPlayingArtKey?: string;
+            /**
+             * @description Whether the caller has already kept what the station is announcing, so the heart on a playing surface draws filled. Per caller rather than per station: saved songs are personal. Absent means the same as false and is what a response with no `nowPlaying` carries.
+             *
+             *     This rides the poll the surfaces already run, which is what keeps the heart honest across devices: a save made on the phone fills the desktop's heart within one poll, and a rollover empties it. Membership is decided on the same identity the save uses - the parsed artist and title where the line splits, the raw line where it does not - so a listener who saved this song from another station sees it filled here too.
+             */
+            nowPlayingSaved?: boolean;
+            /**
+             * @description The saved song's pid, present exactly when `nowPlayingSaved` is true. Carried so an untap can `DELETE /radio/saved/{pid}` without first fetching the list.
+             * @example rw-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            nowPlayingSavedPid?: string;
+        };
+        /** @description One song a listener kept off the air. Deliberately not a library item: nothing here plays, and the rows exist to be hunted down and crossed off. */
+        RadioSavedSong: {
+            /**
+             * @description Type-prefixed ULID.
+             * @example rw-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            pid: string;
+            /**
+             * @description The announcement as the station sent it, snapshotted at save time. Best-effort UTF-8 from an untrusted host; treat as plain display text. This is what a row draws when nothing parsed out of it.
+             * @example Charlie Parker - Ornithology
+             */
+            nowPlaying: string;
+            /**
+             * @description The artist, where the announced line split into one. Absent is ordinary rather than a failure - stations announce in every shape there is - and a row without it still names the song by its raw line.
+             *
+             *     **Album is deliberately absent from this schema.** ICY metadata is one line, so there is nothing honest to put in one; a row that names an album would be guessing.
+             * @example Charlie Parker
+             */
+            artist?: string;
+            /**
+             * @description The song title, where the announced line split into one.
+             * @example Ornithology
+             */
+            title?: string;
+            /**
+             * @description The station this was heard on, when it is still in the library. Absent once the station is removed - the row outlives it, because what was kept is the song.
+             * @example rs-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            stationPid?: string;
+            /**
+             * @description The station's name as it was at save time, snapshotted so a row still says where it came from after a rename or a removal.
+             * @example FIP
+             */
+            stationName: string;
+            /**
+             * Format: date-time
+             * @description When the listener kept it.
+             */
+            heardAt: string;
+            /**
+             * @description A library track this server matched the row to, resolved at read time under the caller's own visibility. Present means the hunt is over and a client may say so; absent is the common case and the reason the list exists. The match is the same best-effort text lookup `nowPlayingItemPid` uses and is never authoritative, so it is a marker rather than a playable handle.
+             * @example tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            inLibraryPid?: string;
+            /** @description Whether a cover was snapshotted with this row, and so whether `GET /radio/saved/{pid}/art` has bytes to answer. False is ordinary: the picture is copied from whatever the artwork ladder held at save time, and most announcements have nothing on it. Draw a monogram, which is a designed state. */
+            hasArt: boolean;
+        };
+        /** @description One keyset-paginated page of saved songs. */
+        RadioSavedSongPage: {
+            /** @description Songs newest first. */
+            songs: components["schemas"]["RadioSavedSong"][];
+            /** @description Opaque cursor for the next page. Absent on the last page. */
+            nextCursor?: string;
+        };
+        /** @description The announcement a listener is keeping. Both fields describe what they saw rather than what the station is announcing by the time this request lands: a station rolls over every few minutes while a client polls every fifteen seconds, so a save resolved server-side against the live title would sometimes keep the next song instead of the tapped one. */
+        RadioSavedSongCreate: {
+            /**
+             * @description The station the song was heard on.
+             * @example rs-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            stationPid: string;
+            /**
+             * @description The announced line exactly as `nowPlaying` reported it. The server parses it the same way the scrobbler does and stores both the parse and the raw line.
+             * @example Charlie Parker - Ornithology
+             */
+            nowPlaying: string;
         };
         /** @description One station directory match. */
         RadioDirectoryEntry: {
@@ -14526,6 +14678,161 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             /** @description There is nothing to draw (code `not-found`): the station token is missing, unknown, or has aged out of the server's cache, the external rung is off, or there was never a cover under it. A client can act on none of those differences - it falls back to the local match, then to the station logo, then to the station mark. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listRadioSavedSongs: {
+        parameters: {
+            query?: {
+                /** @description Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. */
+                cursor?: string;
+                /** @description Maximum songs per page. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of saved songs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadioSavedSongPage"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    saveRadioSong: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RadioSavedSongCreate"];
+            };
+        };
+        responses: {
+            /** @description The saved song, whether this request created it or it was already held. A client can treat the two alike; the pid is what an untap needs either way. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadioSavedSong"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            /** @description No such station (code `not-found`). The list is snapshotted from a station that exists at save time. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The list is full (code `conflict`): 500 saved songs is the cap, and it is the only refusal this endpoint has. Remove something. A song already on a full list still answers 201 - nothing needed storing. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteRadioSavedSong: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gone. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getRadioSavedSongArt: {
+        parameters: {
+            query?: {
+                /** @description Accepted and ignored, like the logo endpoint's. */
+                size?: number;
+            };
+            header?: {
+                /** @description Previously returned `ETag`; a match answers 304 with no body. */
+                "If-None-Match"?: string;
+            };
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The snapshot cover, always one of the raster types below. */
+            200: {
+                headers: {
+                    /** @description Content-addressed validator for the returned bytes. */
+                    ETag?: string;
+                    /** @description `private, max-age=86400, stale-while-revalidate=604800`, as for the logo, and true without qualification here: the bytes behind a saved song's pid are a snapshot and cannot change. */
+                    "Cache-Control"?: string;
+                    /** @description `Cookie, Authorization`. Unlike the station logo, which is shared library data and carries no `Vary`, a saved song belongs to one listener: this endpoint answers 200 for its owner and 404 for everyone else, so a cache holding two credentials must not answer one from the other's copy. The same reason item artwork varies. */
+                    Vary?: string;
+                    /** @description `nosniff`, as for the logo. */
+                    "X-Content-Type-Options"?: string;
+                    /** @description The logo endpoint's policy, for the same reason. */
+                    "Content-Security-Policy"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                    "image/gif": string;
+                };
+            };
+            /** @description The cached copy is still current. */
+            304: {
+                headers: {
+                    ETag?: string;
+                    "Cache-Control"?: string;
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            /** @description There is nothing to draw (code `not-found`): no such saved song for this caller, or one saved with no cover to copy. Draw a monogram. */
             404: {
                 headers: {
                     [name: string]: unknown;

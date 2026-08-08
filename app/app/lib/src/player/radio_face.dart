@@ -85,7 +85,13 @@ class RadioFace extends ConsumerWidget {
           heroOverlay: PlatterRing(playing: playing),
           titleTrailing: playback.nowPlaying == null
               ? null
-              : _FindInLibrary(track: playback.nowPlaying!),
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    _SaveSong(saved: playback.nowPlayingSaved),
+                    _FindInLibrary(track: playback.nowPlaying!),
+                  ],
+                ),
           seek: const SeekCluster(
             now: NowPlayingData(
               title: '',
@@ -255,6 +261,45 @@ class _FindInLibrary extends StatelessWidget {
       // looked dead and the station's title went blank beside it.
       onPressed: () => context.go(WaxRoute.searchFor(track)),
     );
+  }
+}
+
+/// The heart that keeps the song a station just named.
+///
+/// It says *song*, never favourite, and that wording is load-bearing:
+/// the star two rows up means "pin this station to the dial", and two
+/// affordances on one face that both read as favouriting would blur into
+/// each other.
+class _SaveSong extends ConsumerWidget {
+  const _SaveSong({required this.saved});
+
+  final bool saved;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return WaxIconButton(
+      glyph: WaxIcons.heart,
+      label: saved ? 'Forget this song' : 'Save this song',
+      size: 18,
+      active: saved,
+      semanticsId: SemanticsIds.playerSaveSong,
+      onPressed: () => unawaited(saveNowPlayingSong(context, ref)),
+    );
+  }
+}
+
+/// Taps the heart and reports a refusal. The controller flips the state
+/// optimistically and reverts on failure, so the only thing left to do
+/// here is say what went wrong - a full list being the refusal worth
+/// reading, since nothing else on these surfaces explains it.
+Future<void> saveNowPlayingSong(BuildContext context, WidgetRef ref) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await ref.read(radioPlaybackProvider.notifier).toggleSaveNowPlaying();
+  } on WaxDeckApiException catch (e) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(e.message)));
   }
 }
 

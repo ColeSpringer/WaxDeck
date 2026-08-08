@@ -235,6 +235,9 @@ Serializers _$serializers =
           ..add(RadioDirectoryEntry.serializer)
           ..add(RadioDirectoryResults.serializer)
           ..add(RadioPlayInfo.serializer)
+          ..add(RadioSavedSong.serializer)
+          ..add(RadioSavedSongCreate.serializer)
+          ..add(RadioSavedSongPage.serializer)
           ..add(RadioStation.serializer)
           ..add(RadioStationEdit.serializer)
           ..add(RadioStationList.serializer)
@@ -694,6 +697,10 @@ Serializers _$serializers =
               const FullType(RadioDirectoryEntry),
             ]),
             () => ListBuilder<RadioDirectoryEntry>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(RadioSavedSong)]),
+            () => ListBuilder<RadioSavedSong>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(RadioStation)]),

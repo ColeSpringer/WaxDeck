@@ -1845,9 +1845,13 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<RadioPlayInfo> getRadioPlayInfo(String pid) async {
     await radioPlayInfoGates[pid]?.future;
+    final line = radioNowPlaying[pid];
+    final saved = line == null ? null : _savedByLine[line];
     return RadioPlayInfo(
       url: '/media/radio/$pid?mt=fake',
-      nowPlaying: radioNowPlaying[pid],
+      nowPlaying: line,
+      nowPlayingSaved: saved != null,
+      nowPlayingSavedPid: saved?.pid,
     );
   }
 
@@ -1861,6 +1865,71 @@ class FakeRepository implements WaxDeckRepository {
   @override
   String radioNowPlayingArtUrlFor(String pid, String key) =>
       '/api/v1/radio/stations/$pid/now-playing-art?v=$key';
+
+  /// The saved songs, newest first, keyed by the announced line so the
+  /// server's identity idempotence is modelled rather than mimicked.
+  final Map<String, RadioSavedSong> _savedByLine = {};
+  var _savedSeq = 0;
+
+  /// Every save request, in call order, so a test can see what line a
+  /// heart actually sent.
+  final List<({String stationPid, String nowPlaying})> savedSongRequests = [];
+
+  /// Thrown by [saveRadioSong] when set: a full list is the refusal the
+  /// heart has to render.
+  WaxDeckApiException? saveSongError;
+
+  /// Holds a save open until the test releases it, so a second tap can
+  /// be made while the first one is still in flight.
+  Future<void>? saveSongGate;
+
+  /// Seeds the list without going through the heart.
+  void seedSavedSong(RadioSavedSong song) {
+    _savedByLine[song.nowPlaying] = song;
+  }
+
+  @override
+  Future<RadioSavedSongPage> listRadioSavedSongs({
+    String? cursor,
+    int? limit,
+  }) async {
+    final rows = _savedByLine.values.toList(growable: false).reversed.toList();
+    return RadioSavedSongPage(songs: rows);
+  }
+
+  @override
+  Future<RadioSavedSong> saveRadioSong({
+    required String stationPid,
+    required String nowPlaying,
+  }) async {
+    savedSongRequests.add((stationPid: stationPid, nowPlaying: nowPlaying));
+    await saveSongGate;
+    final error = saveSongError;
+    if (error != null) throw error;
+    final held = _savedByLine[nowPlaying];
+    if (held != null) return held;
+    final parts = nowPlaying.split(' - ');
+    final song = RadioSavedSong(
+      pid: 'rw-FAKE${_savedSeq++}',
+      nowPlaying: nowPlaying,
+      artist: parts.length > 1 ? parts.first : null,
+      title: parts.length > 1 ? parts.sublist(1).join(' - ') : null,
+      stationPid: stationPid,
+      stationName: radioStationsByPid[stationPid]?.name ?? 'Station',
+      heardAt: DateTime.utc(2026),
+      hasArt: false,
+    );
+    _savedByLine[nowPlaying] = song;
+    return song;
+  }
+
+  @override
+  Future<void> deleteRadioSavedSong(String pid) async {
+    _savedByLine.removeWhere((_, song) => song.pid == pid);
+  }
+
+  @override
+  String radioSavedArtUrlFor(String pid) => '/api/v1/radio/saved/$pid/art';
 
   /// Every directory query, in call order, so a test can see which surface
   /// a keystroke actually reached.

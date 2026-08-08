@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -11,6 +12,7 @@ import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
+import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'add_station.dart';
 import 'radio_controller.dart';
@@ -56,6 +58,7 @@ class RadioScreen extends ConsumerWidget {
           ),
         if (playback.station != null)
           const SliverToBoxAdapter(child: _StationVolume()),
+        const SliverToBoxAdapter(child: _SavedSongsDoor()),
         switch (stations) {
           AsyncData(:final value) when value.isEmpty => SliverFillRemaining(
             hasScrollBody: false,
@@ -89,6 +92,31 @@ class RadioScreen extends ConsumerWidget {
         },
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
+    );
+  }
+}
+
+/// The way into the songs kept off the air.
+///
+/// Between the dial and the grid, which is where it belongs: the dial is
+/// the stations pinned, the grid is the stations there are, and this is
+/// what listening to them produced.
+class _SavedSongsDoor extends StatelessWidget {
+  const _SavedSongsDoor();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: WaxSizeClass.of(
+        context,
+      ).gutter.copyWith(top: WaxSpace.s8, bottom: WaxSpace.s8),
+      child: WaxOptionRow(
+        glyph: WaxIcons.heart,
+        title: 'Saved from the radio',
+        subtitle: 'Songs you caught on air and mean to hunt down',
+        semanticsId: SemanticsIds.radioSavedOpen,
+        onTap: () => context.go(WaxRoute.radioSaved),
+      ),
     );
   }
 }

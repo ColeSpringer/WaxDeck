@@ -25,6 +25,7 @@ class DeckBarIds {
     this.shuffle,
     this.repeat,
     this.star,
+    this.saveSong,
     this.seek,
     this.queue,
     this.lyrics,
@@ -49,6 +50,12 @@ class DeckBarIds {
   final String? shuffle;
   final String? repeat;
   final String? star;
+
+  /// Keeps the song a live stream just named. Distinct from [star],
+  /// which is per-item state a stream has none of: this one is about the
+  /// announcement, not the station.
+  final String? saveSong;
+
   final String? seek;
   final String? queue;
   final String? lyrics;

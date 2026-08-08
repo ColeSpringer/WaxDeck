@@ -947,6 +947,27 @@ gen.RadioStationEdit radioStationEditToGen({
   );
 }
 
+RadioSavedSong radioSavedSongFromGen(gen.RadioSavedSong s) {
+  return RadioSavedSong(
+    pid: s.pid,
+    nowPlaying: s.nowPlaying,
+    artist: s.artist,
+    title: s.title,
+    stationPid: s.stationPid,
+    stationName: s.stationName,
+    heardAt: s.heardAt.toUtc(),
+    inLibraryPid: s.inLibraryPid,
+    hasArt: s.hasArt,
+  );
+}
+
+RadioSavedSongPage radioSavedSongPageFromGen(gen.RadioSavedSongPage p) {
+  return RadioSavedSongPage(
+    songs: p.songs.map(radioSavedSongFromGen).toList(growable: false),
+    nextCursor: p.nextCursor,
+  );
+}
+
 RadioDirectoryEntry radioDirectoryEntryFromGen(gen.RadioDirectoryEntry e) {
   return RadioDirectoryEntry(
     name: e.name,

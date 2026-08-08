@@ -21,21 +21,23 @@ class QueueScreen extends ConsumerWidget {
     final queued = ref.watch(
       queueControllerProvider.select((q) => q.isNotEmpty),
     );
-    return WaxScaffold(
-      title: WaxPanel.queue.title,
-      largeTitle: false,
-      onBack: () => context.leave(),
-      semanticsId: SemanticsIds.queueScreen,
-      actions: <Widget>[
-        if (queued)
-          WaxIconButton(
-            glyph: WaxIcons.delete,
-            label: 'Clear queue',
-            onPressed: ref.read(queueControllerProvider.notifier).clear,
-            semanticsId: SemanticsIds.queueClear,
-          ),
-      ],
-      slivers: queueSlivers(context, ref),
+    return QueueCommands(
+      child: WaxScaffold(
+        title: WaxPanel.queue.title,
+        largeTitle: false,
+        onBack: () => context.leave(),
+        semanticsId: SemanticsIds.queueScreen,
+        actions: <Widget>[
+          if (queued)
+            WaxIconButton(
+              glyph: WaxIcons.delete,
+              label: 'Clear queue',
+              onPressed: ref.read(queueControllerProvider.notifier).clear,
+              semanticsId: SemanticsIds.queueClear,
+            ),
+        ],
+        slivers: queueSlivers(context, ref),
+      ),
     );
   }
 }
